@@ -29,6 +29,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/platform/httpserver"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/postgres"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/redis"
+	"github.com/DevOfPie/LinkCtrl/internal/store"
 )
 
 func main() {
@@ -124,6 +125,17 @@ func run(cfg config.Config, _ io.Writer) error {
 			"acceptable only for local HTTP development")
 	}
 
+	// Migrations run before the pools open and before the listener does, so a
+	// request can never reach a half-migrated schema. A Postgres session lock
+	// serializes replicas racing at startup.
+	if cfg.MigrateOnStart {
+		if err := store.Migrate(ctx, cfg.DB.URL.Reveal(), log); err != nil {
+			return fmt.Errorf("migrate: %w", err)
+		}
+	} else {
+		log.Info("migrations skipped (MIGRATE_ON_START=false); run: lctl migrate up")
+	}
+
 	pools, err := postgres.Open(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("connect to postgres: %w", err)
@@ -132,6 +144,27 @@ func run(cfg config.Config, _ io.Writer) error {
 
 	if err := postgres.VerifyUTC(ctx, pools.App); err != nil {
 		return err
+	}
+
+	if cfg.MigrateOnStart {
+		created, err := store.EnsurePartitions(ctx, pools.App, store.PartitionLookahead)
+		if err != nil {
+			return fmt.Errorf("ensure partitions: %w", err)
+		}
+		if created > 0 {
+			log.Info("partitions created", slog.Int("count", created))
+		}
+		// A non-empty default partition means rows arrived outside every
+		// explicit range, and attaching the partition that should have held
+		// them will fail until they are moved. Worth saying loudly.
+		if counts, err := store.DefaultPartitionCounts(ctx, pools.App); err == nil {
+			for table, n := range counts {
+				if n > 0 {
+					log.Warn("rows in default partition; new partitions may fail to attach",
+						slog.String("table", table), slog.Int64("rows", n))
+				}
+			}
+		}
 	}
 	log.Info("postgres connected",
 		slog.Int("app_pool_max", int(cfg.DB.MaxConns)),

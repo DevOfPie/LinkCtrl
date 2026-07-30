@@ -1,0 +1,85 @@
+version: "2"
+
+sql:
+  - engine: postgresql
+    # Migrations double as the schema description. Safe because no
+    # "CREATE TABLE ... PARTITION OF" appears in them: sqlc emits a duplicate
+    # junk model for every child partition it sees, which would add a dead
+    # struct to generated code every month. Partitions are created by
+    # internal/store/partitions.go instead.
+    # See docs/adr/0001-partitioning-and-sqlc.md.
+    schema: internal/store/migrations
+    queries: internal/store/query
+    gen:
+      go:
+        package: dbgen
+        out: internal/store/dbgen
+        sql_package: pgx/v5
+
+        # [] rather than null in API responses. Set before handler tests were
+        # written, because changing it later rewrites every golden file.
+        emit_empty_slices: true
+        emit_prepared_queries: false
+        emit_interface: true
+        emit_json_tags: false
+
+        overrides:
+          # Both forms of every override must be declared. A plain override
+          # applies only to the NOT NULL case; nullable columns otherwise fall
+          # back to pgtype wrappers even with emit_pointers_for_null_types,
+          # because the explicit override shadows it.
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: uuid
+            nullable: true
+            go_type:
+              type: "UUID"
+              import: "github.com/google/uuid"
+              pointer: true
+
+          - db_type: timestamptz
+            go_type: time.Time
+          - db_type: timestamptz
+            nullable: true
+            go_type:
+              type: "Time"
+              import: "time"
+              pointer: true
+
+          # Rollup tables key on date, not timestamptz. Mapped to time.Time so
+          # no pgtype wrapper reaches the domain layer. Always interpreted as a
+          # UTC calendar day; see the AT TIME ZONE rule in the ADR.
+          - db_type: date
+            go_type: time.Time
+          - db_type: date
+            nullable: true
+            go_type:
+              type: "Time"
+              import: "time"
+              pointer: true
+
+          - db_type: text
+            nullable: true
+            go_type:
+              type: "string"
+              pointer: true
+
+          - db_type: pg_catalog.int4
+            nullable: true
+            go_type:
+              type: "int32"
+              pointer: true
+          - db_type: pg_catalog.int8
+            nullable: true
+            go_type:
+              type: "int64"
+              pointer: true
+          - db_type: pg_catalog.bool
+            nullable: true
+            go_type:
+              type: "bool"
+              pointer: true
+
+# Query verification lives in sqlc-vet.yaml, because sqlc/db-prepare needs a
+# live database connection and `sqlc generate` must work offline.
+
