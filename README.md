@@ -104,9 +104,11 @@ answers, not the same ones with a domain name.
 | [docs/slo.md](docs/slo.md) | The redirect latency target, how it was measured, and what the measurement found |
 | [docs/releasing.md](docs/releasing.md) | What a version number means, how a release is cut, how to upgrade and roll back |
 | [CHANGELOG.md](CHANGELOG.md) | What changed, and what each version's limitations are |
-| [docs/claude/development.md](docs/claude/development.md) | Working on LinkCtrl itself |
+| [docs/build-notes/SECURITY.md](docs/build-notes/SECURITY.md) | The security model, what it does not defend, and how to report a vulnerability |
+| [docs/build-notes/development.md](docs/build-notes/development.md) | Working on LinkCtrl itself |
+| [docs/build-notes/workflow.md](docs/build-notes/workflow.md) | How work is done here: gates, commit rules, what happens when a defect turns up |
 | [Plan.md](Plan.md) | Scope contract: what is in Phase 1, what is deferred, what is measured |
-| [docs/claude/decisions.md](docs/claude/decisions.md) | Why it is built this way. Every non-obvious choice, with its trade-off |
+| [docs/build-notes/decisions.md](docs/build-notes/decisions.md) | Why it is built this way. Every non-obvious choice, with its trade-off |
 
 ## Privacy
 
@@ -160,7 +162,7 @@ The full list, with consequences, is in
 
 ## Contributing
 
-[docs/claude/development.md](docs/claude/development.md) covers the toolchain, the test
+[docs/build-notes/development.md](docs/build-notes/development.md) covers the toolchain, the test
 strategy and the platform quirks worth knowing (particularly if you develop on
 Windows). In short:
 
@@ -172,7 +174,13 @@ make lint
 ```
 
 New behaviour is expected to come with a test that fails without it, and any
-non-obvious decision with an entry in `docs/claude/decisions.md`.
+non-obvious decision with an entry in `docs/build-notes/decisions.md`. The gates a
+change has to clear before it is committed, and what happens to a defect found
+along the way, are in
+[docs/build-notes/workflow.md](docs/build-notes/workflow.md).
+
+Security issues do not go in an issue or a pull request — see
+[SECURITY.md](docs/build-notes/SECURITY.md).
 
 ## License
 

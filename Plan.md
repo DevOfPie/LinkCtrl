@@ -4,9 +4,11 @@ Scope contract and specification. States **what** is true, not why.
 
 | | |
 | --- | --- |
-| Rationale for every decision | `docs/claude/decisions.md` |
+| Rationale for every decision | `docs/build-notes/decisions.md` |
 | Investigations | `docs/adr/` |
-| Dev environment | `docs/claude/development.md` |
+| Dev environment | `docs/build-notes/development.md` |
+| How the work is done | `docs/build-notes/workflow.md` |
+| Security model and reporting | `docs/build-notes/SECURITY.md` |
 | Current progress | [Build Status](#build-status) |
 | Last updated | 2026-07-30 |
 
@@ -433,19 +435,18 @@ taste — one towards custom domains, the other towards a rewrite of the trash.
 | Milestone | Definition of done |
 | --- | --- |
 | **M18 — separate management and link hostnames** | One `BASE_URL` serves both route trees today, told apart by path, which is why every dashboard route must also appear in `internal/alias/reserved.txt`. Done means an app origin and a link origin, both defaulting to `BASE_URL` so a single-host deployment is byte-for-byte unaffected; routing on the `Host` header, with each tree answering the other's paths as `404` rather than redirecting across hosts; `short_url` built from the link origin everywhere one is produced, including `lctl`; the CSRF trusted origin following the management host; and a test asserting a session cookie is never sent to, nor accepted by, the link host. The reserved-alias list stays enforced on both hosts. |
-| **M19 — post-release defect fixes, and a demo seeder** | Four defects found by standing a fresh instance up and using it, plus the tool that found them. Done means: an expired link reports as expired everywhere, not only in the redirect; the `visitors` table and `is_first_visit` either work or stop pretending to; the deletion notice matches what recovery actually is; no doc comment cites a file that does not exist; and `make demo` fills an empty instance with a plausible workspace. Detailed below, because "fix the bugs" is not a definition of done. |
+| **M19 — post-release defect fixes, and a demo seeder** | Three defects found by standing a fresh instance up and using it, plus the tool that found them. Done means: an expired link reports as expired everywhere, not only in the redirect; the `visitors` table and `is_first_visit` either work or stop pretending to; the deletion notice matches what recovery actually is; and `make demo` fills an empty instance with a plausible workspace. Detailed below, because "fix the bugs" is not a definition of done. |
 
 Sequenced M18 then M19 only because the host split touches routing, configuration
 and every short URL the product emits, and is better done against a surface that
 is not also changing underneath it. Neither blocks the other.
 
-**M19 in detail.** The four defects, each with what "fixed" means:
+**M19 in detail.** The three defects, each with what "fixed" means:
 
 | Defect | Fix |
 | --- | --- |
 | `links.status` is never set to `expired` | Only `active` and `archived` are ever written. The redirect path is correct — it reads `expires_at` and answers `410` — but the management surface reports an expired link as `"status":"active"`, and the UI's *Expired* filter is an option that can never match a row. [operations.md](docs/operations.md#troubleshooting) tells an operator diagnosing an unexpected `410` to check the link's status, which will tell them the link is fine. Fixed by deriving effective status in one place that both the list and the resolver agree with, rather than by adding a job to write a column that is stale the moment it is written. `disabled` is in the same enum and the same position; it is out of scope only because nothing offers to set it either. |
 | The `visitors` table is dead | Nothing writes it and nothing reads it, yet it is in `PartitionedTables`, so the hourly job creates a partition a month for it forever, and in `RetainedTables`, so retention runs DDL to drop empty partitions of a table with no rows in it. `click_events.is_first_visit` is the same defect one column down: always `false`, under a comment claiming the rollup computes it, which no rollup does. Fixed by choosing — either they are populated and something displays them, or they leave the maintenance and retention lists and the comment stops describing work that does not happen. Dormant schema is a deliberate Phase 1 decision; dormant schema with a monthly DDL bill is not the same thing. |
-| `ValidateDestination` cites a file that has never existed | Its doc comment ends "Recorded in SECURITY.md rather than pretended away", and there is no `SECURITY.md` in the repository. The limitation itself — DNS rebinding, where a host resolves public at creation and private at click time — genuinely is recorded, in *Known limitations* below. So the substance is fine and the pointer sends a reader looking for a file that is not there, which is the same defect class as the advisory-lock comment the review corrected. Fixed by pointing at where the limitation actually lives, or by writing the `SECURITY.md` the comment assumes — the second being the larger decision, since a security policy file is also where vulnerability reporting goes. |
 | The deletion notice promises a button that does not exist | The UI says "Link deleted. It stays restorable for 30 days." [usage.md](docs/usage.md) is straight about the truth — "recovery inside the 30 days is a database operation, not a button" — and `RestoreLink` is guarded by `deleted_at IS NULL`, so it refuses soft-deleted rows by design. Fixed by making the notice say what recovery is. Adding a trash view instead would be a scope change, and Phase 1 already decided against it. |
 
 **The seeder.** `lctl seed` exists and is for load testing: a hundred thousand
@@ -462,6 +463,29 @@ column — no IP anywhere, referrers already reduced to a host, `is_first_visit`
 false, and the exact device and browser strings `Classify` emits. A seeder that
 writes rows the application could not have produced tests nothing and teaches the
 reader something false.
+
+#### Deferred findings
+
+Where out-of-spec issues go the moment they are found, instead of being fixed on
+the spot or forgotten. Anything discovered while a milestone is in flight that is
+not required by that milestone lands here as one row: what, where, the evidence
+it is real, and a suspected severity.
+
+**Nothing here is scheduled work.** The owner reviews each row and approves it
+individually; approved rows become the phase's final milestone. An unreviewed row
+is a report, not a commitment — which is what keeps "I noticed something" from
+turning into unplanned scope.
+
+Issues that make the *current* milestone's own claim false are in spec by
+definition and get fixed immediately, whatever subsystem they turn up in. The test
+is the claim, not the file.
+
+| Finding | Where | Evidence | Severity | Reviewed |
+| --- | --- | --- | --- | --- |
+| *(empty)* | | | | |
+
+The process around this — when to defer, what counts as work, what has to pass
+before a phase PR — is in [workflow.md](docs/build-notes/workflow.md).
 
 #### Accepted, unassigned
 

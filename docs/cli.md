@@ -34,7 +34,7 @@ It reads the same environment as the server. From a checkout that means
 `LINKCTRL_APP_ENV=development` must be in the *environment* for `.env` to be
 read at all — configuration loading checks that variable before it reads the
 file. `make migrate-status` and friends handle this; see
-[development.md](claude/development.md).
+[development.md](build-notes/development.md).
 
 ## Commands
 

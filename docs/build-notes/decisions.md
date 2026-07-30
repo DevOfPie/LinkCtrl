@@ -1486,3 +1486,85 @@ Whether the fix is to repoint the comment or to write the file is left open on
 purpose. A `SECURITY.md` is also where vulnerability reporting belongs, and this
 project does not have that yet either — which makes it a decision rather than a
 typo, and the wrong thing to settle in a defect row.
+
+---
+
+## 2026-07-30 — build-notes, a security policy, and the process written down
+
+### `docs/claude/` is now `docs/build-notes/`
+
+The folder never held anything model-specific. It held the decision log and the
+development setup — the notes taken while building, which is what the new name
+says. Naming a directory after the tool that happened to be typing dates it the
+moment the tool changes, and invites the reading that its contents are
+scaffolding rather than the primary record of why this codebase is shaped the way
+it is. `decisions.md` is arguably the most load-bearing file in the repository.
+
+Four files referenced the old path; all updated. Relative links inside the folder
+(`../adr/`) survive the move unchanged, since both directories sit under `docs/`.
+
+### SECURITY.md exists now, and one consequence of where it lives
+
+Written because a code comment has been citing it since the destination validator
+was built, and because a project telling operators to expose it to the internet
+should say what it defends and what it does not.
+
+It is in `docs/build-notes/` as instructed. The trade-off, recorded because it is
+invisible until it matters: GitHub detects a security policy only at the
+repository root, in `.github/`, or in `docs/` — not in a subdirectory of `docs/`.
+So the *Report a vulnerability* button and the advisory-creation prompt will not
+appear, and the file is found only by someone who goes looking. A one-line
+`SECURITY.md` at the root pointing here would restore that, and is not done
+without being asked for.
+
+The substance is split deliberately. What is defended is stated as testable
+claims, several of which name their tests. What is *not* defended gets the longer
+half, because that is the half a reader cannot derive from the source — DNS
+rebinding, per-instance limits that fail open, the unauthenticated metrics
+listener, the unrotatable pepper, the absence of any malicious-destination
+checking, and the audit log that records nothing. Each links to `Plan.md` rather
+than restating the trade-off, so the two cannot drift.
+
+The dangling-pointer defect that this fixes was on M19's list. It came off it:
+writing the file made repointing the comment in-spec for this change rather than
+a deferred finding. That is the rule working, not an exception to it.
+
+### The process is a file now, and it is written for a machine
+
+`workflow.md` collects what has until now been habit: one milestone per commit,
+tests before a commit completes, sabotage-verify anything that passes first try,
+full validation before a phase PR, re-validate if validation triggers work, and a
+documentation pass after validation but before the PR exists.
+
+It is written terse — tables, trigger-then-action, no rationale — because it is
+read at the start of every task, and every token it spends is spent again on each
+one. That is the opposite of the house style, and the file says so at the top so
+that nobody arrives later and helpfully rewrites it into paragraphs. Rationale
+lives here instead; the two files point at each other.
+
+The definition of "work" is the load-bearing part, and it exists because
+"revalidate if anything changed" collapses under a typo fix. Spelling, phrasing,
+formatting and documentation wording do not re-trigger validation. Anything
+touching code, SQL, config, tests, generated output or documented behaviour does.
+The line is drawn at *could this plausibly change what the software does*, and
+when the answer is unclear the rule is to revalidate, because the cost is minutes
+and the cost of the other mistake is a phase PR that was never actually validated.
+
+### Deferred findings are a queue, not an empty milestone
+
+Out-of-spec findings needed a destination that is neither "fix it now" nor
+"mention it and move on". The instruction was to collect them into a final
+milestone for the phase, gated on the owner reviewing each item.
+
+Implemented as a table in Plan.md rather than as a milestone row, because a
+milestone that exists before it has contents is a permanently-empty line in the
+build status and a number in a ratio that means nothing. The queue becomes the
+phase's final milestone when it has approved rows in it. Approval is per item,
+which is the part that makes the mechanism work: a batch approval is how a
+reported observation quietly becomes committed scope.
+
+The counterpart rule matters as much. An issue that makes the *current*
+milestone's own claim false is in spec no matter which subsystem it appears in,
+and gets fixed immediately. Without that, "out of spec" becomes a place to put
+inconvenient truths, and a milestone can be declared done while something it
+claims is untrue.

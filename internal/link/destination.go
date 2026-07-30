@@ -43,7 +43,7 @@ func DefaultDestinationPolicy() DestinationPolicy {
 // address at creation and a private one when a visitor follows the link.
 // Defending against that requires resolving at redirect time on the hot path,
 // which cannot be afforded, or an egress policy outside this process. Recorded
-// in SECURITY.md rather than pretended away.
+// in docs/build-notes/SECURITY.md rather than pretended away.
 func ValidateDestination(raw string, p DestinationPolicy) (string, error) {
 	var errs domain.ValidationErrors
 

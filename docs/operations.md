@@ -113,7 +113,7 @@ rate(linkctrl_db_pool_acquire_waits_total{pool="redirect"}[5m]) > 0
 One caveat on local numbers: **on a Windows host, latency measures as exactly
 zero** because Go's monotonic clock there cannot resolve intervals this short.
 Bucket counts stay correct; `_sum` and averages do not. Linux is unaffected. See
-[development.md](claude/development.md#latency-measured-on-a-windows-host-is-not-a-latency-measurement).
+[development.md](build-notes/development.md#latency-measured-on-a-windows-host-is-not-a-latency-measurement).
 
 ## Logs
 
