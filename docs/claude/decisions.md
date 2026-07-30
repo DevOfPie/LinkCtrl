@@ -6,7 +6,7 @@ states *why*, so the spec stays terse and the reasoning is still recoverable.
 Entries are append-only and dated. A later entry may correct an earlier one;
 the earlier text is left in place with a pointer rather than edited away.
 
-Longer investigations live in `docs/adr/`.
+Longer investigations live in `../adr/`.
 
 ---
 
@@ -84,7 +84,7 @@ and deep-link forwarding is Phase 2; new instances have signup closed.
 Windows host with Go, Docker Desktop and a C compiler installed natively. The
 working copy must not live in OneDrive: sync interferes with the Go build cache
 and with `.git`, and cloud-placeholder files bind-mount into containers as zero
-bytes. See `docs/development.md`.
+bytes. See `development.md`.
 
 ---
 
@@ -106,7 +106,7 @@ lines rather than a framework concept.
 
 ### Partitions are never declared in SQL that sqlc reads
 
-Tested before writing the schema (`docs/adr/0001-partitioning-and-sqlc.md`).
+Tested before writing the schema (`../adr/0001-partitioning-and-sqlc.md`).
 sqlc does not fail on a partitioned parent, which is what was expected — it
 silently emits a duplicate model struct for every child partition, so generated
 code would grow a dead type every month and `make generate` would produce a
@@ -585,5 +585,55 @@ resolve intervals this short. So a cache-served redirect lands in the zero
 bucket and `_sum` is useless locally — while bucket counts, and the ratio the
 SLO is stated as, stay correct. The same applies to `click_events.latency_us`.
 Both resolve on Linux, which is where the SLO is measured and where the service
-runs. Recorded in docs/development.md so nobody chases it as a bug or quotes a
+runs. Recorded in development.md so nobody chases it as a bug or quotes a
 local number as a result.
+
+---
+
+## 2026-07-30 — documentation (M14)
+
+### Writing the setup docs was an audit
+
+Documenting every environment variable meant checking whether anything reads it.
+Twelve do not. `LOGIN_RATE_PER_MIN`, `API_RATE_PER_MIN` and
+`REDIRECT_404_RATE_LIMIT` parse, validate and change nothing — so the rate
+limiting that *Scope by phase* lists as Phase 1 does not exist. Nor does GeoIP
+enrichment, nor retention enforcement: partitions are created and never dropped,
+so `ANALYTICS_RETENTION_DAYS` is decoration.
+
+None of that was hidden; it was just never stated in one place. It is now, in
+Plan.md under "Phase 1 scope not yet built", in the README under "Not built
+yet", and in a table at the end of the configuration reference. A knob that
+accepts a value and does nothing is worse than a missing one, because the
+operator believes they have configured something.
+
+The same pass found three dangling references — `.gitignore` pointing at a
+DEPLOY.md that never existed, compose pointing at a `docker-compose.prod.yml`
+and an "obs profile" that never existed — and one contradiction: the OpenAPI
+document claimed AGPL while LICENSE says MIT. Fixed rather than documented.
+
+### Every command in the docs was run before it was written down
+
+`docker compose run --rm app --check-config`, `migrate status` through the image,
+`lctl apikey create`, the `curl` examples, the `/readyz` body. One got corrected
+by doing it: `docker compose run app /lctl migrate up` cannot work, because the
+image's entrypoint is the server and the arguments append to it — it needs
+`--entrypoint /lctl`. That is exactly the kind of error a reader cannot debug,
+because it looks like it should work.
+
+Two examples were also wrong in detail until checked against the code: the
+validation error code is `private_address`, not the `blocked_host` first written,
+and the grantable scope list omitted `members.*` and `workspace.write`, which
+*are* grantable and gate nothing yet.
+
+### The audience decides the file, not the topic
+
+`deployment.md`, `configuration.md`, `usage.md`, `cli.md` and `operations.md` are
+each written for one person with one question: I am installing this; what does
+this variable do; how do I use it; what does this command do; it is 3am and
+something is wrong. The alternative — one long document ordered by subsystem —
+is the one nobody finishes reading.
+
+Each states what is *not* built where a reader would otherwise assume it is.
+Operations lists the missing rate limiting next to the alerts, because the moment
+someone needs alerts is the moment they need to know throttling is theirs to add.

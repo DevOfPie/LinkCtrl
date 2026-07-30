@@ -27,7 +27,7 @@ coverage.html
 # Tailwind standalone CLI, downloaded on demand by `make tailwind`.
 /bin/tailwindcss*
 
-# Optional GeoIP database — cannot be redistributed, see DEPLOY.md.
+# Optional GeoIP database — cannot be redistributed, see docs/deployment.md.
 *.mmdb
 
 # npm is only ever a fallback for the Tailwind build; it is never used in the

@@ -4,9 +4,9 @@ Scope contract and specification. States **what** is true, not why.
 
 | | |
 | --- | --- |
-| Rationale for every decision | `docs/decisions.md` |
+| Rationale for every decision | `docs/claude/decisions.md` |
 | Investigations | `docs/adr/` |
-| Dev environment | `docs/development.md` |
+| Dev environment | `docs/claude/development.md` |
 | Current progress | [Build Status](#build-status) |
 | Last updated | 2026-07-30 |
 
@@ -130,6 +130,7 @@ rendering empty charts.
 | --- | --- |
 | REST API, OpenAPI docs, CLI (`lctl`) | 1 |
 | Docker / Compose / Linux deployment | 1 |
+| Project documentation: README, setup, configuration, usage, operations | 1 |
 | Custom domains, QR codes, campaigns, webhooks, automation | 2 |
 | Advanced analytics, compliance features, high availability | 3 |
 | AI optimization, smart routing, predictive analytics, plugin system | 4 |
@@ -257,7 +258,7 @@ caveat with the data.
 
 ## Build status
 
-As of 2026-07-30. 14 of 16 milestones.
+As of 2026-07-30. 15 of 17 milestones.
 
 | Area | State |
 | --- | --- |
@@ -274,12 +275,33 @@ As of 2026-07-30. 14 of 16 milestones.
 | Dashboard UI | done, verified |
 | OpenAPI document and `/docs` | done, verified |
 | Prometheus metrics | done, verified |
+| Documentation: README, setup, configuration, usage, operations | done |
 | Load validation of the redirect target | not started |
 | Release packaging | not started |
 
 Verification: 72 integration tests against real Postgres and Redis — including
 a contract test that replays every OpenAPI operation against the live server —
 plus unit, property and fuzz tests. All run under the race detector.
+
+### Phase 1 scope not yet built
+
+Found while writing the configuration reference: these are listed as Phase 1 in
+*Scope by phase* and have configuration variables that are parsed and validated,
+but nothing reads them yet. The knobs accept values and change nothing. They are
+listed here rather than left to be discovered from a settings page that does
+nothing.
+
+| Capability | Variables with no effect yet |
+| --- | --- |
+| Rate limiting | `LOGIN_RATE_PER_MIN`, `API_RATE_PER_MIN` |
+| 404 probe limiting | `REDIRECT_404_RATE_LIMIT` |
+| Geographic analytics | `GEOIP_MMDB_PATH` — the UI already states that the data is unavailable |
+| Analytics retention enforcement | `ANALYTICS_RETENTION_DAYS` — partitions are created, never dropped |
+| Per-request timeout, Server-Timing | `HTTP_REQUEST_TIMEOUT`, `SERVER_TIMING`, `REDIRECT_TIMEOUT` |
+| Extra reserved aliases, profanity toggle | `ALIAS_RESERVED_EXTRA`, `ALIAS_PROFANITY_FILTER` (the built-in list is always applied) |
+| Parallel ingest workers | `INGEST_WORKERS` (one worker regardless) |
+| Salt rotation period | `VISITOR_SALT_ROTATION` (rotation is fixed at one UTC day) |
+| Bot filter toggle | `BOT_FILTER_ENABLED` (bots are always classified and recorded) |
 
 ---
 

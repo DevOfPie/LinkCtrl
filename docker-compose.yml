@@ -1,6 +1,8 @@
-# The "try it on localhost" stack. See docker-compose.prod.yml for the
-# TLS-terminated production topology, and docker-compose.override.yml (applied
-# automatically) for developer conveniences such as published database ports.
+# The "try it on localhost" stack, and the base for a real deployment. See
+# docs/deployment.md for the TLS-terminated topology (a reverse proxy in front of
+# this file, no second compose file needed) and docker-compose.override.yml
+# (applied automatically) for developer conveniences such as published database
+# ports.
 
 name: linkctrl
 
@@ -39,8 +41,8 @@ services:
       LINKCTRL_GEOIP_MMDB_PATH: ${LINKCTRL_GEOIP_MMDB_PATH:-}
     ports:
       - "${LINKCTRL_HTTP_PORT:-8080}:8080"
-      # :9090 is deliberately NOT published. Prometheus reaches it over the
-      # compose network via the obs profile.
+      # :9090 is deliberately NOT published. A Prometheus on this compose
+      # network scrapes http://app:9090/metrics; see docs/operations.md.
     healthcheck:
       # The binary healthchecks itself: the runtime image is distroless and has
       # no curl or shell.
