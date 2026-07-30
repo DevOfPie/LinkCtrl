@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"strings"
 	"testing"
@@ -140,3 +142,7 @@ func newDB(t *testing.T) *pgxpool.Pool {
 
 	return pool
 }
+
+// newCookieJar returns a cookie jar so a test client keeps its session across
+// requests, the way a browser does.
+func newCookieJar() (http.CookieJar, error) { return cookiejar.New(nil) }

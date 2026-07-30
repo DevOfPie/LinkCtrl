@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"testing"
@@ -60,7 +59,7 @@ func newAPI(t *testing.T) *apiFixture {
 	}))
 	t.Cleanup(srv.Close)
 
-	jar, _ := cookiejar.New(nil)
+	jar, _ := newCookieJar()
 	return &apiFixture{
 		t:      t,
 		server: srv,

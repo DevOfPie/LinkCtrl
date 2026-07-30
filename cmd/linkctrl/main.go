@@ -31,7 +31,9 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/platform/httpserver"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/postgres"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/redis"
+	"github.com/DevOfPie/LinkCtrl/internal/redirect"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
+	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 )
 
 func main() {
@@ -207,6 +209,16 @@ func run(cfg config.Config, _ io.Writer) error {
 		},
 	})
 
+	// The resolver runs on the dedicated redirect pool, so a slow analytics
+	// query on the application pool cannot leave a redirect waiting to acquire
+	// a connection.
+	resolver := redirect.NewResolver(pools.Redirect, rdb, redirect.Options{
+		TTL:          cfg.Redirect.TTL,
+		NegativeTTL:  cfg.Redirect.NegativeTTL,
+		RedisTimeout: cfg.Redis.ReadTimeout,
+		Logger:       log,
+	})
+
 	linkSvc := link.NewService(pools.App, link.Config{
 		Policy: link.DestinationPolicy{
 			Schemes:             cfg.Alias.DestSchemes,
@@ -215,10 +227,25 @@ func run(cfg config.Config, _ io.Writer) error {
 			BlockedHostSuffixes: cfg.Alias.DestBlocklist,
 		},
 		BaseURL: cfg.BaseURL,
-		// The redirect cache implements Invalidator in M7; until then there is
-		// nothing to invalidate.
-		Cache: nil,
+		// Editing a link must drop its cached snapshot, and creating one must
+		// drop any negative entry left by an earlier probe of the same alias.
+		Cache: resolver,
 	})
+
+	// Resolved once at boot. A per-request lookup would add a query to the
+	// path the whole cache design exists to keep short.
+	defaultDomain, err := dbgen.New(pools.App).ResolveDefaultDomain(ctx)
+	if err != nil {
+		return fmt.Errorf("resolve default domain: %w", err)
+	}
+
+	redirectHandler := &httpx.RedirectHandler{
+		Resolver:  resolver,
+		DomainID:  defaultDomain.ID,
+		Status:    cfg.Redirect.DefaultStatus,
+		Logger:    log,
+		LogSample: int64(cfg.Redirect.LogSample),
+	}
 
 	if needsSetup, err := authSvc.NeedsSetup(ctx); err == nil && needsSetup {
 		log.Warn("no users exist; claim this instance with " +
@@ -227,7 +254,7 @@ func run(cfg config.Config, _ io.Writer) error {
 
 	health := &httpx.Health{DB: pools.App, Redis: rdb}
 	handler := httpx.NewRouter(httpx.Deps{
-		Config: cfg, Health: health, Auth: authSvc, Links: linkSvc,
+		Config: cfg, Health: health, Auth: authSvc, Links: linkSvc, Redirect: redirectHandler,
 	})
 
 	srv := httpserver.New(httpserver.Options{
