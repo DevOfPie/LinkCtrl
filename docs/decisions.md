@@ -465,3 +465,56 @@ non-`/`-prefixed values, `//host` (scheme-relative, the classic bypass of a
 naive prefix check), and backslashes. Rejected values fall back to /dashboard
 rather than erroring, because a mangled `next` is noise, not an attack worth
 stopping a sign-in over.
+
+---
+
+## 2026-07-30 — OpenAPI contract (M12)
+
+### The spec is hand-maintained and test-enforced, not generated
+
+Planning said spec-first with oapi-codegen. By the time the document was
+written, the API already existed — built service-first, with handlers as thin
+skins over the service layer — and adopting the generated server interface
+would have rewritten working, tested handlers for zero behavioural change.
+Generation was the means; the end was always "the contract cannot lie". Tests
+deliver that end directly, twice over:
+
+- a parity test in internal/httpx asserts the router and the document describe
+  the same set of routes, in both directions;
+- an integration contract test replays a real request through every operation
+  in the document and validates request and response against its schemas, then
+  fails if any operation was never exercised. Response schemas carry
+  `additionalProperties: false`, so an undocumented field is a failure, not a
+  quiet extension.
+
+The enforcement was verified by sabotage before being trusted: a field added
+to the spec that the API does not return fails the suite.
+
+### Writing the contract found two real bugs
+
+Which is the argument for contract tests in one sentence. `ErrInvalidEmail`
+was unmapped in the problem writer, so registering with a malformed address
+returned a 500; and minimum password length was enforced only by the HTML
+form, so the JSON API accepted a one-character password. Both are fixed at the
+right layer — the error mapping and the service — because a policy one client
+can skip is not a policy.
+
+### The YAML is authored; the JSON is derived at first use
+
+Tooling asks for JSON, humans and diffs are better served by YAML. Committing
+both invites them to disagree; converting the embedded YAML once in memory
+makes disagreement impossible. Both forms are served under /api/v1, publicly,
+matching the existing "/docs is public" default.
+
+### Swagger UI, vendored like htmx, with a one-directive CSP waiver
+
+The try-it-out console is what earns Swagger UI its megabyte on a self-hosted
+product: paste an API key, exercise the API from the browser. Its two dist
+files are vendored and checksum-pinned (scripts/get-swagger.sh), served
+fingerprinted from the same embedded static tree as everything else.
+
+Swagger UI is React writing inline style attributes, which the strict CSP
+blocks. /docs alone gets `style-src 'unsafe-inline'`; script-src stays 'self',
+which works because the initializer lives in a real file
+(static/js/docs.js) instead of the inline <script> of the stock index.html. A
+test pins the waiver's shape so it cannot creep to scripts or to other pages.

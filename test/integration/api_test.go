@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
@@ -38,6 +39,7 @@ func newAPI(t *testing.T) *apiFixture {
 		AppEnv:        config.Development,
 		BaseURL:       "http://links.test",
 		SecureCookies: false,
+		DocsEnabled:   true,
 	}
 	cfg.Auth.SignupMode = config.SignupOpen
 	cfg.Auth.SessionAbsoluteTTL = 30 * 24 * time.Hour
@@ -66,6 +68,7 @@ func newAPI(t *testing.T) *apiFixture {
 		Auth:   authSvc,
 		Keys:   keySvc,
 		Links:  linkSvc,
+		Stats:  analytics.NewReader(pool),
 	}))
 	t.Cleanup(srv.Close)
 

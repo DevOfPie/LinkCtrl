@@ -3,6 +3,7 @@
 package integration
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -40,6 +41,7 @@ func newWeb(t *testing.T) *webFixture {
 		AppEnv:        config.Development,
 		BaseURL:       "http://links.test",
 		SecureCookies: false,
+		DocsEnabled:   true,
 	}
 	cfg.Auth.SessionAbsoluteTTL = 30 * 24 * time.Hour
 	cfg.Auth.SessionIdleTTL = 7 * 24 * time.Hour
@@ -474,6 +476,55 @@ func TestWebPasswordChange(t *testing.T) {
 	f.wantRedirect(f.postForm("/login", url.Values{
 		"email": {"owner@example.com"}, "password": {newPassword},
 	}, nil), "/dashboard")
+}
+
+func TestDocsPage(t *testing.T) {
+	f := newWeb(t)
+
+	// Public by default: no session required, per the documented choice.
+	page := f.get("/docs", nil)
+	body := f.body(page)
+	if page.StatusCode != http.StatusOK {
+		t.Fatalf("/docs returned %d", page.StatusCode)
+	}
+	for _, want := range []string{"swagger-ui", "vendor/swagger-ui-bundle.js", "js/docs.js", "/api/v1/openapi.json"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("/docs page is missing %q", want)
+		}
+	}
+	if strings.Contains(body, "<script>") {
+		t.Error("/docs contains an inline script; the CSP forbids it and the browser would refuse to boot the viewer")
+	}
+
+	// The one-page CSP waiver: inline styles allowed here, scripts still not.
+	csp := page.Header.Get("Content-Security-Policy")
+	if !strings.Contains(csp, "style-src 'self' 'unsafe-inline'") {
+		t.Errorf("/docs CSP does not permit inline styles; Swagger UI renders unstyled: %q", csp)
+	}
+	if !strings.Contains(csp, "script-src 'self';") {
+		t.Errorf("/docs CSP relaxed scripts too: %q", csp)
+	}
+
+	// The spec endpoints serve both forms, anonymously.
+	spec := f.get("/api/v1/openapi.json", nil)
+	specBody := f.body(spec)
+	if spec.StatusCode != http.StatusOK {
+		t.Fatalf("openapi.json returned %d", spec.StatusCode)
+	}
+	var doc struct {
+		OpenAPI string `json:"openapi"`
+		Info    struct{ Title string }
+	}
+	if err := json.Unmarshal([]byte(specBody), &doc); err != nil || doc.OpenAPI == "" {
+		t.Errorf("openapi.json is not the spec: %v", err)
+	}
+
+	// Swagger UI's assets come fingerprinted from the same static pipeline.
+	css := f.get("/static/vendor/swagger-ui.css", nil)
+	_ = f.body(css)
+	if css.StatusCode != http.StatusOK {
+		t.Errorf("swagger css returned %d", css.StatusCode)
+	}
 }
 
 func TestWebStaticAssetsAndHeaders(t *testing.T) {

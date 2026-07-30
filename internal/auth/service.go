@@ -171,6 +171,11 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*Identity, er
 	if err := ValidateEmail(in.Email); err != nil {
 		return nil, err
 	}
+	// Enforced here, not only in the HTML form: the API is a first-class
+	// surface, and a policy that one client can skip is not a policy.
+	if err := validatePasswordLength(in.Password, "password"); err != nil {
+		return nil, err
+	}
 	email := NormalizeEmail(in.Email)
 
 	hash, err := s.hasher.Hash(in.Password)
@@ -440,8 +445,24 @@ func (s *Service) Logout(ctx context.Context, sessionID uuid.UUID) error {
 	return s.q.RevokeSession(ctx, sessionID)
 }
 
+// validatePasswordLength applies the only password rule the product has.
+// Length and nothing else, per NIST SP 800-63B: composition rules push people
+// toward predictable substitutions without adding entropy.
+func validatePasswordLength(password, field string) error {
+	if len(password) < MinPasswordLength {
+		return domain.ValidationErrors{{
+			Field: field, Code: "too_short",
+			Message: fmt.Sprintf("the password must be at least %d characters", MinPasswordLength),
+		}}
+	}
+	return nil
+}
+
 // ChangePassword updates a password and logs out every other session.
 func (s *Service) ChangePassword(ctx context.Context, userID, keepSession uuid.UUID, current, next string) error {
+	if err := validatePasswordLength(next, "new_password"); err != nil {
+		return err
+	}
 	user, err := s.q.GetUserByID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("look up user: %w", err)

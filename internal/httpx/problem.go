@@ -126,6 +126,20 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 			Detail: "That email address is already registered.",
 		})
 
+	case errors.Is(err, auth.ErrInvalidEmail):
+		// Shaped like every other field failure, so a client's form-error
+		// handling covers it. Unmapped, this fell through to a 500 — found by
+		// the OpenAPI contract test, which is the kind of thing it is for.
+		WriteProblem(w, r, Problem{
+			Type:   problemBase + "validation-failed",
+			Title:  "Validation failed",
+			Status: http.StatusUnprocessableEntity,
+			Errors: []domain.FieldError{{
+				Field: "email", Code: "invalid",
+				Message: "that does not look like an email address",
+			}},
+		})
+
 	case errors.Is(err, domain.ErrNotImplemented):
 		WriteProblem(w, r, Problem{
 			Type: problemBase + "not-implemented", Title: "Not implemented",

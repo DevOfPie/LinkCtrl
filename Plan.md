@@ -42,7 +42,7 @@ Serves individuals, creators, businesses, developers and enterprises.
 | Passwords | `golang.org/x/crypto` argon2id |
 | IDs | UUIDv7, application-generated |
 | Frontend | Go `html/template`, HTMX, Tailwind standalone CLI (no Node in image) |
-| API contract | Spec-first OpenAPI; `oapi-codegen`; Swagger UI embedded |
+| API contract | Hand-maintained OpenAPI 3, contract-tested against the implementation; Swagger UI embedded |
 | Observability | `log/slog`, Prometheus |
 | Deployment | Docker + Compose; Caddy for TLS |
 | Load testing | k6 |
@@ -251,7 +251,7 @@ caveat with the data.
 
 ## Build status
 
-As of 2026-07-30. 12 of 16 milestones.
+As of 2026-07-30. 13 of 16 milestones.
 
 | Area | State |
 | --- | --- |
@@ -266,13 +266,14 @@ As of 2026-07-30. 12 of 16 milestones.
 | Background jobs | done, verified |
 | API keys and scopes | done, verified |
 | Dashboard UI | done, verified |
-| OpenAPI document and `/docs` | not started |
+| OpenAPI document and `/docs` | done, verified |
 | Prometheus metrics | not started |
 | Load validation of the redirect target | not started |
 | Release packaging | not started |
 
-Verification: 67 integration tests against real Postgres and Redis, plus unit,
-property and fuzz tests. All run under the race detector.
+Verification: 69 integration tests against real Postgres and Redis — including
+a contract test that replays every OpenAPI operation against the live server —
+plus unit, property and fuzz tests. All run under the race detector.
 
 ---
 

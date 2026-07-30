@@ -1,0 +1,1065 @@
+openapi: 3.0.3
+
+# The contract for /api/v1.
+#
+# This document is hand-maintained and enforced by tests rather than generated
+# or generating: internal/httpx has a parity test asserting every registered
+# API route appears here (and nothing more), and the integration suite replays
+# real requests through every operation, validating requests and responses
+# against these schemas. A drift between this file and the implementation is a
+# test failure, not a support ticket.
+
+info:
+  title: LinkCtrl API
+  version: "1.0"
+  description: |
+    Self-hostable link management. Every capability of the dashboard is
+    available here; the two surfaces call the same service layer.
+
+    ### Authentication
+    Two credentials work everywhere:
+    * **API key** — `Authorization: Bearer lk_live_…`. Keys are minted in the
+      dashboard or with `lctl apikey create`, and act as their owner limited to
+      the scopes granted at creation, intersected with the owner's current
+      role on every request.
+    * **Session cookie** — set by `POST /auth/login`, primarily for the
+      dashboard. Cookie-authenticated unsafe requests must be same-origin.
+
+    If a request carries both, the bearer key wins.
+
+    ### Errors
+    Every error is an RFC 9457 problem document
+    (`application/problem+json`). Validation failures carry a per-field
+    `errors` array shaped for form rendering.
+
+    ### Privacy
+    Unique-visitor figures are privacy-preserving estimates at daily
+    resolution, and multi-day totals sum daily figures. The caveat travels
+    with the data in every analytics response.
+  license:
+    name: AGPL-3.0-or-later
+    url: https://www.gnu.org/licenses/agpl-3.0.html
+
+servers:
+  - url: /api/v1
+
+security:
+  - bearerAuth: []
+  - cookieAuth: []
+
+tags:
+  - name: auth
+    description: Registration, sign-in and session lifecycle
+  - name: links
+    description: Short links and their lifecycle
+  - name: tags
+    description: Workspace tags
+  - name: analytics
+    description: Rollup-backed statistics and recent activity
+  - name: api-keys
+    description: Programmatic credentials
+  - name: meta
+    description: The API describing itself
+
+paths:
+  /auth/setup:
+    post:
+      tags: [auth]
+      operationId: setupInstance
+      summary: Claim a fresh instance by creating the first account
+      description: |
+        Exists only while the instance has no users, then returns 404 forever.
+        The first account is an owner and skips email verification: whoever can
+        reach a fresh instance's setup endpoint deployed it.
+      security: []
+      requestBody:
+        $ref: "#/components/requestBodies/Credentials"
+      responses:
+        "201":
+          description: Instance claimed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountCreated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: Create an account
+      description: Subject to the instance's signup mode; new instances are closed.
+      security: []
+      requestBody:
+        $ref: "#/components/requestBodies/Credentials"
+      responses:
+        "201":
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountCreated"
+        "403":
+          description: Registration is closed on this instance
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Sign in and receive a session cookie
+      description: |
+        Every credential failure returns the same 401, whatever the cause —
+        distinguishing them would reveal which addresses are registered.
+        Repeated failures lock the account briefly (429).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                name:
+                  type: string
+                  description: Ignored on login; accepted so one credentials shape serves register and login.
+      responses:
+        "200":
+          description: Signed in; the session cookie is on the response
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: "`__Host-linkctrl_session` (unprefixed over plain HTTP in development)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionCreated"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Validation"
+        "429":
+          description: Account temporarily locked after repeated failures
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Revoke the current session
+      description: Succeeds even without a valid session, and always clears the cookie.
+      security: []
+      responses:
+        "204":
+          description: Session revoked, cookie cleared
+
+  /auth/password:
+    post:
+      tags: [auth]
+      operationId: changePassword
+      summary: Change the password and sign out every other session
+      description: |
+        Requires an interactive session — an API key is refused, because a
+        leaked key must not be able to lock its owner out. The current session
+        survives; all others are revoked.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [current_password, new_password]
+              properties:
+                current_password:
+                  type: string
+                new_password:
+                  type: string
+                  minLength: 12
+      responses:
+        "204":
+          description: Password changed, other sessions revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: The authenticated identity and its effective permissions
+      description: |
+        For an API key, `permissions` is the key's scopes intersected with the
+        owner's current role — what this request can actually do, not what was
+        granted at creation.
+      responses:
+        "200":
+          description: The current identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /links:
+    get:
+      tags: [links]
+      operationId: listLinks
+      summary: List links with search, filters and keyset pagination
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+          description: Full-text over title/description, plus substring on alias and URL.
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/LinkStatus"
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [newest, oldest, clicks]
+            default: newest
+        - name: cursor
+          in: query
+          schema: { type: string }
+          description: Opaque, from `next_cursor` of the previous page.
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1 }
+          description: Page size; out-of-range values fall back to the server default.
+        - name: include_total
+          in: query
+          schema: { type: boolean }
+          description: Counting costs a scan, so the total is opt-in.
+        - name: tag
+          in: query
+          schema:
+            type: array
+            items: { type: string, format: uuid }
+          style: form
+          explode: true
+          description: Repeatable; links matching any given tag id.
+      responses:
+        "200":
+          description: One page of links
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [links]
+      operationId: createLink
+      summary: Create a link
+      description: |
+        Destinations are restricted to http/https and may not point at
+        private, loopback, link-local or cloud-metadata addresses. The
+        `password`, `max_clicks` and `one_time` fields exist in the schema but
+        are rejected with a 422 until Phase 2 — refusing loudly beats
+        accepting and doing nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLinkRequest"
+      responses:
+        "201":
+          description: Link created
+          headers:
+            Location:
+              schema: { type: string }
+              description: The public short URL.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Link"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /links/{id}:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+    get:
+      tags: [links]
+      operationId: getLink
+      summary: Fetch one link
+      responses:
+        "200":
+          description: The link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Link"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [links]
+      operationId: updateLink
+      summary: Edit a link without changing its identity
+      description: |
+        Partial update: absent fields are untouched. `expires_at` is
+        three-valued — absent leaves the expiry alone, an empty string clears
+        it, a timestamp sets it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLinkRequest"
+      responses:
+        "200":
+          description: The updated link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Link"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Validation"
+    delete:
+      tags: [links]
+      operationId: deleteLink
+      summary: Soft-delete a link
+      description: |
+        The link stops redirecting immediately and stays restorable for 30
+        days before it is purged. An alias that received traffic is never
+        reissued after the purge.
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /links/{id}/archive:
+    post:
+      tags: [links]
+      operationId: archiveLink
+      summary: Archive a link
+      description: Stops redirecting but keeps the alias reserved and the analytics visible.
+      parameters:
+        - $ref: "#/components/parameters/LinkID"
+      responses:
+        "200":
+          description: The archived link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Link"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /links/{id}/restore:
+    post:
+      tags: [links]
+      operationId: restoreLink
+      summary: Restore an archived link
+      parameters:
+        - $ref: "#/components/parameters/LinkID"
+      responses:
+        "200":
+          description: The restored link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Link"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /links/{id}/stats:
+    get:
+      tags: [analytics]
+      operationId: getLinkStats
+      summary: A link's analytics over a date window
+      parameters:
+        - $ref: "#/components/parameters/LinkID"
+        - $ref: "#/components/parameters/FromDay"
+        - $ref: "#/components/parameters/ToDay"
+      responses:
+        "200":
+          description: Totals, a day series and per-dimension breakdowns
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /links/{id}/clicks:
+    get:
+      tags: [analytics]
+      operationId: getLinkClicks
+      summary: Recent clicks on a link
+      description: |
+        The one endpoint that reads raw events rather than rollups; bounded
+        and index-backed, so its cost does not grow with history. No addresses
+        appear because none are stored.
+      parameters:
+        - $ref: "#/components/parameters/LinkID"
+      responses:
+        "200":
+          description: The most recent clicks, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RecentClick"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /stats/overview:
+    get:
+      tags: [analytics]
+      operationId: getOverview
+      summary: Workspace-wide totals and day series
+      parameters:
+        - $ref: "#/components/parameters/FromDay"
+        - $ref: "#/components/parameters/ToDay"
+      responses:
+        "200":
+          description: The workspace overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Overview"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /tags:
+    get:
+      tags: [tags]
+      operationId: listTags
+      summary: List the workspace's tags with usage counts
+      responses:
+        "200":
+          description: All tags
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Tag"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /tags/{id}:
+    delete:
+      tags: [tags]
+      operationId: deleteTag
+      summary: Delete a tag, detaching it from every link
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api-keys:
+    get:
+      tags: [api-keys]
+      operationId: listAPIKeys
+      summary: List your own API keys
+      description: |
+        Requires an interactive session. Revoked keys stay listed until a
+        reaper removes them, because "which keys existed" is the question
+        asked after an incident. The secret is never listed — only its hash
+        is stored.
+      responses:
+        "200":
+          description: Your keys, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/APIKey"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [api-keys]
+      operationId: createAPIKey
+      summary: Mint an API key
+      description: |
+        Requires an interactive session — a key cannot mint keys, or revoking
+        a leaked one would be meaningless. Scopes must be permissions you
+        yourself hold; key management and organization deletion are never
+        grantable. The response is the only time the token is shown.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAPIKeyRequest"
+      responses:
+        "201":
+          description: The key, including the token that will never be shown again
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedAPIKey"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /api-keys/{id}:
+    delete:
+      tags: [api-keys]
+      operationId: revokeAPIKey
+      summary: Revoke an API key
+      description: |
+        Takes effect on the key's next request; nothing about keys is cached.
+        Someone else's key returns 404, not 403, so ids cannot be probed.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Revoked (idempotent)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /openapi.json:
+    get:
+      tags: [meta]
+      operationId: getOpenAPIJSON
+      summary: This document, as JSON
+      security: []
+      responses:
+        "200":
+          description: The OpenAPI document
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /openapi.yaml:
+    get:
+      tags: [meta]
+      operationId: getOpenAPIYAML
+      summary: This document, as authored
+      security: []
+      responses:
+        "200":
+          description: The OpenAPI document
+          content:
+            application/yaml:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: An API key, `lk_live_…`. Scopes are intersected with the owner's role per request.
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: __Host-linkctrl_session
+      description: Set by `POST /auth/login`. Unsafe cross-origin requests are refused.
+
+  parameters:
+    LinkID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    FromDay:
+      name: from
+      in: query
+      schema: { type: string, format: date }
+      description: Inclusive, UTC. Defaults to 29 days before `to`. The window may not exceed 400 days.
+    ToDay:
+      name: to
+      in: query
+      schema: { type: string, format: date }
+      description: Inclusive, UTC. Defaults to today.
+
+  requestBodies:
+    Credentials:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [email, password]
+            properties:
+              email:
+                type: string
+                format: email
+              password:
+                type: string
+                minLength: 12
+                description: Length is the only rule (NIST SP 800-63B).
+              name:
+                type: string
+                description: Display name; defaults to the mailbox part of the email.
+
+  responses:
+    Unauthorized:
+      description: No valid credential, or the credential itself is being rejected
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Forbidden:
+      description: Authenticated, but this identity may not do that; the detail names the missing permission
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: Does not exist, or belongs to a workspace this identity cannot see
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Conflict:
+      description: The alias or resource already exists
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Validation:
+      description: One or more fields are invalid; `errors` names each one
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
+  schemas:
+    Problem:
+      type: object
+      description: RFC 9457 problem details. Clients should branch on `type`, not prose.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        errors:
+          type: array
+          description: Present on validation failures; one entry per invalid field.
+          items:
+            type: object
+            required: [field, code, message]
+            properties:
+              field: { type: string }
+              code: { type: string }
+              message: { type: string }
+
+    AccountCreated:
+      type: object
+      additionalProperties: false
+      required: [user_id, email, workspace_id]
+      properties:
+        user_id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        workspace_id:
+          type: string
+          format: uuid
+          description: The auto-provisioned personal workspace.
+
+    SessionCreated:
+      type: object
+      additionalProperties: false
+      required: [user_id, email, workspace_id, role, expires_at]
+      properties:
+        user_id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        workspace_id: { type: string, format: uuid }
+        role: { type: string }
+        expires_at:
+          type: string
+          format: date-time
+          description: The session's absolute deadline; idle expiry may end it sooner.
+
+    Me:
+      type: object
+      additionalProperties: false
+      required: [user_id, email, name, workspace_id, role, permissions]
+      properties:
+        user_id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        name: { type: string }
+        workspace_id: { type: string, format: uuid }
+        role: { type: string }
+        permissions:
+          type: array
+          items: { type: string }
+
+    LinkStatus:
+      type: string
+      enum: [active, archived, expired, disabled]
+
+    Tag:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        color: { type: string }
+        link_count: { type: integer, format: int64 }
+
+    Link:
+      type: object
+      additionalProperties: false
+      required:
+        [id, workspace_id, alias, short_url, url, status, tags, click_count,
+         created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        workspace_id: { type: string, format: uuid }
+        alias:
+          type: string
+          description: Lowercase-canonical; resolution is case-insensitive.
+        short_url: { type: string, format: uri }
+        url:
+          type: string
+          format: uri
+          description: The destination.
+        title: { type: string }
+        description: { type: string }
+        status:
+          $ref: "#/components/schemas/LinkStatus"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tag"
+        expires_at: { type: string, format: date-time }
+        click_count:
+          type: integer
+          format: int64
+          description: Approximate — written in batches with the click events, an unclean shutdown can lose one batch.
+        last_click_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        archived_at: { type: string, format: date-time }
+
+    LinkPage:
+      type: object
+      additionalProperties: false
+      required: [items, has_more]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Link"
+        next_cursor:
+          type: string
+          description: Opaque keyset cursor; present when `has_more`.
+        has_more: { type: boolean }
+        total:
+          type: integer
+          format: int64
+          description: Present only when `include_total=true` was requested.
+
+    CreateLinkRequest:
+      type: object
+      additionalProperties: false
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: http or https only; private and metadata address ranges are refused.
+        alias:
+          type: string
+          description: Optional; generated when absent. Lowercased, dots refused, reserved words refused.
+        title: { type: string }
+        description: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+          description: Tag names; created in the workspace as needed.
+        expires_at:
+          type: string
+          format: date-time
+          description: Must be in the future. The link answers 410 past it.
+        password:
+          type: string
+          description: Phase 2. Present in the schema, rejected with 422.
+        max_clicks:
+          type: integer
+          format: int64
+          description: Phase 2. Present in the schema, rejected with 422.
+        one_time:
+          type: boolean
+          description: Phase 2. Present in the schema, rejected with 422.
+
+    UpdateLinkRequest:
+      type: object
+      additionalProperties: false
+      description: Absent fields are untouched. An empty-string `expires_at` clears the expiry.
+      properties:
+        url: { type: string, format: uri }
+        alias:
+          type: string
+          description: Changing it breaks anything pointing at the old alias; the old one is freed.
+        title: { type: string }
+        description: { type: string }
+        expires_at:
+          type: string
+          description: RFC 3339 timestamp, or empty string to clear.
+        tags:
+          type: array
+          items: { type: string }
+          description: Replaces the full tag set.
+
+    DayPoint:
+      type: object
+      additionalProperties: false
+      required: [day, clicks, unique_visitors, bot_clicks]
+      properties:
+        day: { type: string, format: date }
+        clicks: { type: integer, format: int64 }
+        unique_visitors: { type: integer, format: int64 }
+        bot_clicks: { type: integer, format: int64 }
+
+    Totals:
+      type: object
+      additionalProperties: false
+      required: [clicks, unique_visitors, bot_clicks]
+      properties:
+        clicks: { type: integer, format: int64 }
+        unique_visitors: { type: integer, format: int64 }
+        bot_clicks: { type: integer, format: int64 }
+
+    DimensionValue:
+      type: object
+      additionalProperties: false
+      required: [value, clicks, unique_visitors]
+      properties:
+        value:
+          type: string
+          description: Empty string means unknown, stated rather than dropped.
+        clicks: { type: integer, format: int64 }
+        unique_visitors: { type: integer, format: int64 }
+
+    LinkStats:
+      type: object
+      additionalProperties: false
+      required: [link_id, from, to, totals, series, dimensions, caveat]
+      properties:
+        link_id: { type: string, format: uuid }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        totals:
+          $ref: "#/components/schemas/Totals"
+        series:
+          type: array
+          description: Only days with traffic appear; absent days are zero.
+          items:
+            $ref: "#/components/schemas/DayPoint"
+        dimensions:
+          type: object
+          description: Keyed by dimension (device, browser, os, country, referrer, language).
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/DimensionValue"
+        caveat:
+          type: string
+          description: The honest limitation of cookie-free counting, attached to the numbers it qualifies.
+
+    Overview:
+      type: object
+      additionalProperties: false
+      required: [from, to, totals, series, caveat]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        totals:
+          $ref: "#/components/schemas/Totals"
+        series:
+          type: array
+          items:
+            $ref: "#/components/schemas/DayPoint"
+        caveat: { type: string }
+
+    RecentClick:
+      type: object
+      additionalProperties: false
+      required: [occurred_at, is_bot]
+      properties:
+        occurred_at: { type: string, format: date-time }
+        device: { type: string }
+        browser: { type: string }
+        os: { type: string }
+        country:
+          type: string
+          description: Present only when a GeoIP database is configured.
+        referrer:
+          type: string
+          description: Host only; query strings are discarded at ingest.
+        is_bot: { type: boolean }
+
+    APIKey:
+      type: object
+      additionalProperties: false
+      required: [id, name, prefix, scopes, last_used_at, expires_at, revoked_at, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        prefix:
+          type: string
+          description: The public part, `lk_live_` plus eight characters. The secret is never shown again.
+        scopes:
+          type: array
+          items: { type: string }
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Written asynchronously on a coarse cadence; answers "is this key still in use".
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at: { type: string, format: date-time }
+
+    CreatedAPIKey:
+      type: object
+      additionalProperties: false
+      description: |
+        An APIKey plus the token. Spelled out rather than composed with allOf,
+        because `additionalProperties: false` on the base would reject the very
+        field this schema adds.
+      required: [id, name, prefix, scopes, last_used_at, expires_at, revoked_at, created_at, key]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        prefix: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+        last_used_at: { type: string, format: date-time, nullable: true }
+        expires_at: { type: string, format: date-time, nullable: true }
+        revoked_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        key:
+          type: string
+          description: The full token. This response is the only place it ever appears.
+
+    CreateAPIKeyRequest:
+      type: object
+      additionalProperties: false
+      required: [name, scopes]
+      properties:
+        name:
+          type: string
+          maxLength: 80
+        scopes:
+          type: array
+          minItems: 1
+          items: { type: string }
+          description: Permission slugs you hold. `apikeys.*` and `org.delete` are never grantable.
+        expires_at:
+          type: string
+          format: date-time
+          description: Optional; must be in the future. Absent means the key never expires.

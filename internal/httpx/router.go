@@ -113,6 +113,19 @@ func NewRouter(d Deps) http.Handler {
 		}
 	}
 
+	// The API reference. The spec endpoints need nothing but the embedded
+	// document, so they are served whenever docs are enabled; the Swagger UI
+	// page also needs the asset pipeline, so it additionally requires Web.
+	if d.Config.DocsEnabled {
+		docs := &DocsHandlers{}
+		app.HandleFunc("GET "+APIPrefix+"/openapi.json", docs.SpecJSON)
+		app.HandleFunc("GET "+APIPrefix+"/openapi.yaml", docs.SpecYAML)
+		if d.Web != nil {
+			docs.UI = d.Web.UI
+			app.HandleFunc("GET /docs", docs.Page)
+		}
+	}
+
 	if d.Web != nil {
 		web := d.Web
 
@@ -193,7 +206,7 @@ func NewRouter(d Deps) http.Handler {
 		// in internal/alias/reserved.txt; the reserved-list test enforces it
 		// via RegisteredTopLevelPaths.
 		for _, p := range []string{
-			"/{$}", "/login", "/logout", "/setup", "/dashboard",
+			"/{$}", "/login", "/logout", "/setup", "/dashboard", "/docs",
 			"/links", "/links/", "/keys", "/keys/", "/account", "/account/",
 		} {
 			root.Handle(p, appHandler)
@@ -233,7 +246,7 @@ func NewRouter(d Deps) http.Handler {
 // real route.
 func RegisteredTopLevelPaths() []string {
 	return []string{
-		"healthz", "readyz", "api",
+		"healthz", "readyz", "api", "docs",
 		"login", "logout", "setup", "dashboard", "links", "keys", "account", "static",
 	}
 }

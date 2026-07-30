@@ -109,10 +109,14 @@ sqlc: ## Generate the database layer from SQL
 sqlc-vet: require-db-password ## Prepare every query against a live database
 	@LINKCTRL_DATABASE_URL="$(DEV_DATABASE_URL)" sqlc vet -f sqlc-vet.yaml
 
+# No code is generated from the spec in either direction. The API was built
+# service-first with handlers as thin skins, so a generated server interface
+# would rewrite working code for zero behavioural change; the contract is
+# enforced by tests instead — a router↔spec parity check here, and a full
+# request/response replay in the integration suite.
 .PHONY: openapi
-openapi: ## Generate server and client code from the OpenAPI spec
-	oapi-codegen -config api/oapi-server.yaml api/openapi.yaml
-	oapi-codegen -config api/oapi-client.yaml api/openapi.yaml
+openapi: ## Validate the OpenAPI document against the implementation
+	go test ./internal/httpx/ -run TestOpenAPI -count=1
 
 ## ---- database -------------------------------------------------------------
 
@@ -159,6 +163,11 @@ TAILWIND_VERSION := v4.1.14
 HTMX_VERSION := v2.0.9
 HTMX_SHA256  := 57d9191515339922bd1356d7b2d80b1ee3b29f1b3a2c65a078bb8b2e8fd9ae5f
 
+# Swagger UI, vendored the same way for /docs.
+SWAGGER_UI_VERSION := v5.32.11
+SWAGGER_CSS_SHA256 := ca238f7d7c2cf4480c1e77a9c3b9da915ab216e96ffd354e69076560c650c6de
+SWAGGER_JS_SHA256  := fcb81e2c79e7e3b76ddb9bd7fc791552045040fde05c19d3f98f9213e7f7724d
+
 .PHONY: tailwind
 tailwind: ## Download the pinned Tailwind standalone CLI
 	@scripts/get-tailwind.sh "$(TAILWIND_VERSION)" "$(BIN)"
@@ -166,6 +175,10 @@ tailwind: ## Download the pinned Tailwind standalone CLI
 .PHONY: htmx
 htmx: ## Verify (or restore) the vendored htmx against its pinned checksum
 	@scripts/get-htmx.sh "$(HTMX_VERSION)" "$(HTMX_SHA256)" internal/ui/static/js/htmx.min.js
+
+.PHONY: swagger-ui
+swagger-ui: ## Verify (or restore) the vendored Swagger UI against its pinned checksums
+	@scripts/get-swagger.sh "$(SWAGGER_UI_VERSION)" "$(SWAGGER_CSS_SHA256)" "$(SWAGGER_JS_SHA256)" internal/ui/static/vendor
 
 .PHONY: css
 css: tailwind ## Build the stylesheet
@@ -176,7 +189,7 @@ css-watch: tailwind ## Rebuild the stylesheet on change
 	$(BIN)/tailwindcss -i internal/ui/static/css/input.css -o internal/ui/static/css/app.css --watch
 
 .PHONY: assets
-assets: htmx css ## Everything `go build` embeds
+assets: htmx swagger-ui css ## Everything `go build` embeds
 
 ## ---- containers -----------------------------------------------------------
 
