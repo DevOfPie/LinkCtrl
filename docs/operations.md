@@ -233,11 +233,15 @@ Deliberate gaps, so they are not discovered during an incident:
 - **No audit log behaviour.** The table exists and stays empty. Phase 2.
 - **Region and city are never stored**, even with a GeoIP database configured.
   Country only, deliberately.
-- **The redirect SLO is unverified.** The histogram is in place; the load test
-  that turns the target into a measured number has not been run. It is the next
-  milestone, and it was sequenced after throttling so it measures the path that
-  actually ships.
 - **Cache invalidation is single-replica.** Run one app instance until Phase 2
   adds pub/sub.
+- **The dimension rollup is expensive and gets worse.** It recomputes whole days
+  every 60 seconds; at 5.7M click events that measured 16–21 seconds per run, and
+  it will eventually exceed its own interval. Redirects are unaffected — the
+  measured SLO held throughout — but dashboards go stale when it falls behind.
+  Watch `linkctrl_job_last_success_timestamp_seconds{job="rollup"}`. Details and
+  the `EXPLAIN` output: [slo.md](slo.md).
+
+The redirect SLO itself is measured and met: [slo.md](slo.md).
 
 Full list: [Plan.md](../Plan.md#phase-1-scope-not-yet-built).

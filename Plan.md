@@ -207,25 +207,31 @@ Invariants:
 
 | Surface | Target | Status |
 | --- | --- | --- |
-| Redirect, cached | <20ms | design target, not yet verified |
-| Redirect, uncached | <100ms | design target, not yet verified |
+| Redirect, cached | <20ms | **met**: 100% of 240,001 requests under 20ms, generator p99 1.18ms |
+| Redirect, uncached | <100ms | **met**: generator p99 1.92ms at 500 rps |
 | API | <150ms typical | not yet measured |
 | Dashboard | <250ms load | not yet measured |
-| Analytics queries | <2s | not yet measured |
+| Analytics queries | <2s | not met for the dimension rollup: 16-21s per run at 5.7M events |
 
 The redirect target is defined as: **server-side p99, cache hits only, measured
 from a load generator on the same Docker network, excluding client RTT and TLS,
 at 2,000 rps sustained for 2 minutes, with 100k links and 5M click events
 seeded.** Both the generator's number and the server histogram are reported.
-See `docs/slo.md` *(not yet written)*.
+The measurement, how to reproduce it and what it found: [docs/slo.md](docs/slo.md).
 
-Measured so far — none of these is the SLO:
+Measured on one developer machine, so the shape transfers and the absolute values
+do not. Notably, the cached result held while the analytics rollup was recomputing
+whole days from 5.7M events every 60 seconds — which is the split pool and the
+two-tier cache doing what they exist for.
+
+Other measurements, none of them the SLO:
 
 | Measurement | Value | Note |
 | --- | --- | --- |
 | Cached redirect, in-process incl. loopback client | ~270µs avg | shows nothing queries per request |
 | Cached redirect through container, Windows host | ~13ms | Docker Desktop WSL2 bridge; not a useful signal |
 | Cold start to serving, incl. migrations | ~12s | from empty volume |
+| Seeding 100k links and 5M click events | ~85s | `lctl seed`, via COPY |
 
 The server-side histogram the SLO calls for now exists:
 `linkctrl_redirect_duration_seconds{cache,outcome}`, with a bucket boundary at
@@ -265,7 +271,7 @@ caveat with the data.
 
 ## Build status
 
-As of 2026-07-30. 16 of 18 milestones.
+As of 2026-07-30. 17 of 18 milestones.
 
 | Area | State |
 | --- | --- |
@@ -284,7 +290,7 @@ As of 2026-07-30. 16 of 18 milestones.
 | Prometheus metrics | done, verified |
 | Documentation: README, setup, configuration, usage, operations | done |
 | Enforcement: rate limits, 404 probe limits, GeoIP, retention | done, verified |
-| Load validation of the redirect target | not started |
+| Load validation of the redirect target | done, target met — [docs/slo.md](docs/slo.md) |
 | Release packaging | not started |
 
 Verification: 72 integration tests against real Postgres and Redis — including
@@ -299,8 +305,8 @@ Phase 1:
 
 | Capability | State |
 | --- | --- |
-| Load validation of the redirect target | Not started. The histogram exists; the number does not. |
 | Release packaging | Not started. |
+| Dimension rollup cost | The job recomputes whole days every 60s and takes 16-21s at 5.7M events, because 553k `(link, day, dimension, value)` tuples are re-upserted per run. Measured, not fixed: see [docs/slo.md](docs/slo.md#the-dimension-rollup-is-the-real-bottleneck-and-it-is-not-the-scan). The options are a narrower window, a longer cadence for dimensions than for totals, or accepting it with an alert. |
 | Audit log behavior | Table only, by design — Phase 1 scope says table, Phase 2 says behavior. |
 | Geographic region and city | Resolvable from the same database as the country and deliberately not stored. Nothing displays them, and city plus a timestamp approaches a location history. Storing them needs a UI and a reason, which makes it a Phase 2 decision. |
 
@@ -325,6 +331,7 @@ Deliberately accepted in Phase 1.
 | `api_keys.last_used_at` is approximate | Buffered and flushed on a 30s cadence, so an unclean shutdown loses the most recent timestamps. Authentication must not cost a write. |
 | API keys cannot manage API keys | `apikeys.*` is not delegable, so minting and revoking need a session. Automating key rotation is Phase 2 work. |
 | Analytics drops under overload | Bounded queue; drops counted and alertable. Backpressure would slow redirects. |
+| The dimension rollup grows with traffic | 16-21s per 60s run at 5.7M events, and the cost is the 553k upserts a whole-day recompute implies rather than the scan. It will exceed its own interval as data grows. Measured in [docs/slo.md](docs/slo.md); the cached redirect path is unaffected, which is what the split pool is for. |
 | Unique visitors are estimates | Carrier NAT merges people; network switches split one. Daily resolution. |
 | Multi-day unique totals over-count | Sum of daily figures; exact values unrecoverable once salts are purged. |
 

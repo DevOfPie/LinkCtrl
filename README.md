@@ -29,9 +29,11 @@ data and a weekend script with no analytics. LinkCtrl aims at the third option:
 - **Everything the dashboard does, the API does.** Both call the same service
   layer, and a contract test replays every documented operation against a live
   server to keep it that way.
-- **Fast on the path that matters.** A two-tier cache in front of a dedicated
-  connection pool, on an HTTP tree that carries no session lookup, no CSRF
-  check and no templates.
+- **Fast on the path that matters, and measured.** A two-tier cache in front of a
+  dedicated connection pool, on an HTTP tree that carries no session lookup, no
+  CSRF check and no templates. Every one of 240,001 cached redirects answered in
+  under 20ms at 2,000 rps, with 100k links and 5.7M click events in the database
+  and the analytics rollup running throughout — [docs/slo.md](docs/slo.md).
 
 ## Quick start
 
@@ -90,6 +92,7 @@ answers, not the same ones with a domain name.
 | [docs/usage.md](docs/usage.md) | Using the dashboard and the API, with worked `curl` examples |
 | [docs/cli.md](docs/cli.md) | `lctl` command reference |
 | [docs/operations.md](docs/operations.md) | Runbook: what to watch, what to alert on, what to do when it breaks |
+| [docs/slo.md](docs/slo.md) | The redirect latency target, how it was measured, and what the measurement found |
 | [docs/claude/development.md](docs/claude/development.md) | Working on LinkCtrl itself |
 | [Plan.md](Plan.md) | Scope contract: what is in Phase 1, what is deferred, what is measured |
 | [docs/claude/decisions.md](docs/claude/decisions.md) | Why it is built this way. Every non-obvious choice, with its trade-off |
@@ -120,12 +123,13 @@ every API response that includes them says so.
 
 Phase 1 is not finished:
 
-- **The redirect latency target is unverified.** <20ms p99 for cached redirects
-  is a design target with a histogram ready to measure it, not a result. The load
-  test is the next milestone.
 - **Single-instance cache invalidation.** Editing a link clears the cache on the
   replica that served the edit; others wait out the TTL. Run one app instance
   until Phase 2 adds pub/sub.
+- **The analytics dimension rollup gets expensive with traffic.** It recomputes
+  whole days every 60 seconds, which measured 16–21 seconds at 5.7M click events
+  and will eventually exceed its own interval. Redirects are unaffected — that is
+  what the dedicated pool is for — but dashboards go stale.
 - **Region and city are never stored.** With a GeoIP database configured, a
   country is resolved at ingest; region and city are available from the same file
   and deliberately left null. Nothing shows them, and city plus a timestamp is

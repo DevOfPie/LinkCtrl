@@ -297,6 +297,139 @@ func TestSaltRotationChangesVisitorHashes(t *testing.T) {
 	}
 }
 
+// The dimension rollup computes six breakdowns in one pass over click_events.
+// This checks that pass against a per-dimension aggregate written the other way
+// round — one query per dimension, the shape the rollup used to have — so the
+// two implementations have to agree about clicks, uniques, bot exclusion and
+// every coalesce rule.
+//
+// Without this, rewriting that query for speed is a change nothing verifies, and
+// a wrong breakdown looks exactly like a right one on a chart.
+func TestDimensionRollupMatchesAPerDimensionAggregate(t *testing.T) {
+	pool := newDB(t)
+	ctx := context.Background()
+	linkID, wsID := seedLink(t, pool)
+
+	ing := newIngester(t, pool, analytics.IngestConfig{BatchSize: 50, FlushInterval: 20 * time.Millisecond})
+	now := time.Now().UTC()
+
+	// A spread wide enough that every dimension has several distinct values, and
+	// some are empty so the coalesce rules are exercised rather than assumed.
+	agents := []string{
+		"Mozilla/5.0 (Windows NT 10.0) Chrome/120",
+		"Mozilla/5.0 (Macintosh) Safari/17",
+		"Mozilla/5.0 (iPhone) Safari/17",
+		"Mozilla/5.0 (Linux; Android 14) Chrome/120",
+		"curl/8.0",
+	}
+	languages := []string{"en-GB", "de", "", "ja-JP"}
+	referrers := []string{"https://news.example.com/a?x=1", "", "https://t.co/abc"}
+
+	for i := range 300 {
+		ing.Record(analytics.Event{
+			LinkID: linkID, WorkspaceID: wsID, OccurredAt: now,
+			IP:        netip.MustParseAddr("198.51.100." + itoa(i%17)),
+			UserAgent: agents[i%len(agents)],
+			Language:  languages[i%len(languages)],
+			Referrer:  referrers[i%len(referrers)],
+		})
+	}
+	// Bots must be excluded from every dimension, not only from the totals.
+	for i := range 40 {
+		ing.Record(analytics.Event{
+			LinkID: linkID, WorkspaceID: wsID, OccurredAt: now,
+			IP:        netip.MustParseAddr("203.0.113." + itoa(i%4)),
+			UserAgent: "Googlebot/2.1",
+			Language:  "en",
+		})
+	}
+	if err := ing.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := analytics.NewRoller(pool, quietLogger()).RunRecent(ctx, now); err != nil {
+		t.Fatal(err)
+	}
+
+	// expr is how the rollup derives each dimension's value. One query per
+	// dimension here, deliberately: the rollup does all six at once, so agreeing
+	// with six separate aggregates is evidence about the combining, not a
+	// restatement of it.
+	dimensions := map[string]string{
+		"device":   `coalesce(device, 'unknown')`,
+		"browser":  `coalesce(browser, 'Other')`,
+		"os":       `coalesce(os, 'Other')`,
+		"country":  `coalesce(country, 'unknown')`,
+		"referrer": `coalesce(nullif(referrer_host, ''), 'direct')`,
+		"language": `coalesce(nullif(language, ''), 'unknown')`,
+	}
+
+	type agg struct{ clicks, uniques int64 }
+
+	for dim, expr := range dimensions {
+		want := map[string]agg{}
+		rows, err := pool.Query(ctx, `
+			SELECT `+expr+` AS value, count(*), count(DISTINCT visitor_hash)
+			  FROM click_events
+			 WHERE link_id = $1 AND NOT is_bot
+			 GROUP BY 1`, linkID)
+		if err != nil {
+			t.Fatalf("%s: expectation query: %v", dim, err)
+		}
+		for rows.Next() {
+			var v string
+			var a agg
+			if err := rows.Scan(&v, &a.clicks, &a.uniques); err != nil {
+				t.Fatal(err)
+			}
+			want[v] = a
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		if len(want) == 0 {
+			t.Fatalf("%s: the fixture produced no values to compare", dim)
+		}
+
+		got := map[string]agg{}
+		rows, err = pool.Query(ctx, `
+			SELECT value, clicks, unique_visitors
+			  FROM link_dimension_daily
+			 WHERE link_id = $1 AND dimension = $2`, linkID, dim)
+		if err != nil {
+			t.Fatalf("%s: rollup query: %v", dim, err)
+		}
+		for rows.Next() {
+			var v string
+			var a agg
+			if err := rows.Scan(&v, &a.clicks, &a.uniques); err != nil {
+				t.Fatal(err)
+			}
+			got[v] = a
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+
+		if len(got) != len(want) {
+			t.Errorf("%s: rollup has %d values, aggregate has %d\ngot:  %v\nwant: %v",
+				dim, len(got), len(want), got, want)
+		}
+		for v, w := range want {
+			g, ok := got[v]
+			if !ok {
+				t.Errorf("%s: rollup is missing value %q", dim, v)
+				continue
+			}
+			if g != w {
+				t.Errorf("%s[%q] = %+v, want %+v", dim, v, g, w)
+			}
+		}
+	}
+}
+
 func TestRollupIsIdempotent(t *testing.T) {
 	pool := newDB(t)
 	ctx := context.Background()

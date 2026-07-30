@@ -311,41 +311,26 @@ func (q *Queries) PurgeExpiredSalts(ctx context.Context) (int64, error) {
 
 const rollupDimensionDaily = `-- name: RollupDimensionDaily :exec
 INSERT INTO link_dimension_daily (link_id, workspace_id, day, dimension, value, clicks, unique_visitors)
-SELECT link_id, workspace_id, day, dimension, value,
-       count(*)                     AS clicks,
-       count(DISTINCT visitor_hash) AS unique_visitors
-FROM (
-    SELECT ce.link_id, ce.workspace_id, (ce.occurred_at AT TIME ZONE 'UTC')::date AS day,
-           'device' AS dimension, coalesce(ce.device, 'unknown') AS value, ce.visitor_hash
-      FROM click_events ce
-     WHERE ce.occurred_at >= $1 AND ce.occurred_at < $2 AND NOT ce.is_bot
-    UNION ALL
-    SELECT ce.link_id, ce.workspace_id, (ce.occurred_at AT TIME ZONE 'UTC')::date,
-           'browser', coalesce(ce.browser, 'Other'), ce.visitor_hash
-      FROM click_events ce
-     WHERE ce.occurred_at >= $1 AND ce.occurred_at < $2 AND NOT ce.is_bot
-    UNION ALL
-    SELECT ce.link_id, ce.workspace_id, (ce.occurred_at AT TIME ZONE 'UTC')::date,
-           'os', coalesce(ce.os, 'Other'), ce.visitor_hash
-      FROM click_events ce
-     WHERE ce.occurred_at >= $1 AND ce.occurred_at < $2 AND NOT ce.is_bot
-    UNION ALL
-    SELECT ce.link_id, ce.workspace_id, (ce.occurred_at AT TIME ZONE 'UTC')::date,
-           'country', coalesce(ce.country, 'unknown'), ce.visitor_hash
-      FROM click_events ce
-     WHERE ce.occurred_at >= $1 AND ce.occurred_at < $2 AND NOT ce.is_bot
-    UNION ALL
-    SELECT ce.link_id, ce.workspace_id, (ce.occurred_at AT TIME ZONE 'UTC')::date,
-           'referrer', coalesce(nullif(ce.referrer_host, ''), 'direct'), ce.visitor_hash
-      FROM click_events ce
-     WHERE ce.occurred_at >= $1 AND ce.occurred_at < $2 AND NOT ce.is_bot
-    UNION ALL
-    SELECT ce.link_id, ce.workspace_id, (ce.occurred_at AT TIME ZONE 'UTC')::date,
-           'language', coalesce(nullif(ce.language, ''), 'unknown'), ce.visitor_hash
-      FROM click_events ce
-     WHERE ce.occurred_at >= $1 AND ce.occurred_at < $2 AND NOT ce.is_bot
-) d
-GROUP BY link_id, workspace_id, day, dimension, value
+SELECT ce.link_id,
+       ce.workspace_id,
+       (ce.occurred_at AT TIME ZONE 'UTC')::date AS day,
+       d.dimension,
+       d.value,
+       count(*)                        AS clicks,
+       count(DISTINCT ce.visitor_hash) AS unique_visitors
+  FROM click_events ce
+ CROSS JOIN LATERAL (VALUES
+        ('device',   coalesce(ce.device, 'unknown')),
+        ('browser',  coalesce(ce.browser, 'Other')),
+        ('os',       coalesce(ce.os, 'Other')),
+        ('country',  coalesce(ce.country, 'unknown')),
+        ('referrer', coalesce(nullif(ce.referrer_host, ''), 'direct')),
+        ('language', coalesce(nullif(ce.language, ''), 'unknown'))
+       ) AS d(dimension, value)
+ WHERE ce.occurred_at >= $1
+   AND ce.occurred_at <  $2
+   AND NOT ce.is_bot
+ GROUP BY ce.link_id, ce.workspace_id, day, d.dimension, d.value
 ON CONFLICT (link_id, day, dimension, value) DO UPDATE
    SET clicks = EXCLUDED.clicks,
        unique_visitors = EXCLUDED.unique_visitors
@@ -356,7 +341,24 @@ type RollupDimensionDailyParams struct {
 	WindowEnd   time.Time
 }
 
-// One statement per dimension via UNION ALL, rather than eight round trips.
+// Every dimension in one pass over click_events.
+//
+// This was six UNION ALL branches, one per dimension, reading the same rows six
+// times. Measured on the load-test dataset (5.7M events, ~830k inside the
+// recomputed window), that shape sorted 6.2M rows through an external merge that
+// spilled 471 MB of temp files, every 60 seconds. Reading once and expanding each
+// row with LATERAL VALUES lets the sort use the index's link_id ordering, so it
+// runs incrementally in memory instead — peak 152 kB per group, no temp files.
+//
+// Wall clock is unchanged (~20s either way), and that is the finding rather than a
+// disappointment: the time is in the 553k upserts a whole-day recompute implies,
+// not in reading the events. See docs/slo.md. This version is kept because
+// eliminating half a gigabyte of temp I/O per run is worth having on any host
+// smaller than the one it was measured on; it is not a fix for the job's cost.
+//
+// The output is identical: same grouping keys, same aggregates, same conflict
+// resolution. TestDimensionRollupMatchesAPerDimensionAggregate checks that
+// against a per-dimension aggregate written the other way round.
 func (q *Queries) RollupDimensionDaily(ctx context.Context, arg RollupDimensionDailyParams) error {
 	_, err := q.db.Exec(ctx, rollupDimensionDaily, arg.WindowStart, arg.WindowEnd)
 	return err

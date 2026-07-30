@@ -211,7 +211,14 @@ docker-build: ## Build the production image
 
 ## ---- load -----------------------------------------------------------------
 
+.PHONY: seed-slo
+seed-slo: require-db-password ## Seed the dataset the SLO is defined against (100k links, 5M clicks)
+	@$(DEV_ENV) go run ./cmd/lctl seed --reset --links 100000 --clicks 5000000
+
 .PHONY: load
-load: ## Run the redirect load test against a running stack
-	docker run --rm -i --network host -v "$(PWD)/test/load:/scripts" \
-		grafana/k6 run -e BASE=http://localhost:8080 /scripts/redirect.js
+load: ## Measure the cached redirect SLO against a running stack
+	./scripts/load-test.sh cached 2000 2m
+
+.PHONY: load-uncached
+load-uncached: ## Same, spread across the whole dataset so the cache cannot answer
+	./scripts/load-test.sh uncached 500 1m

@@ -141,15 +141,19 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		resolved, err := h.Resolver.Resolve(r.Context(), h.DomainID, canonical)
 		if err != nil {
-			// A resolution failure is a 404 to the visitor, not a 500. They cannot
-			// act on the difference, and an error page on a short link is a worse
-			// experience than "not found". It is also not charged to the probe
-			// limit: the failure is ours, and throttling someone for it would turn
-			// a database blip into a block.
+			// Unavailable, not 404. The load test made the difference concrete: a
+			// resolution failure here is overwhelmingly a timeout under load, and
+			// answering 404 is a claim that the link does not exist — which is
+			// exactly the signal 410-versus-404 exists to control. A crawler or
+			// link checker that believes it drops the link from its index, and a
+			// retry never happens. 503 says "ask again", which is true.
+			//
+			// Not charged to the probe limit either: the failure is ours, and
+			// throttling someone for it would turn a database blip into a block.
 			h.Logger.Error("redirect resolution failed",
 				slog.String("alias", canonical), slog.Any("error", err))
 			h.Metrics.ObserveRedirect("error", "none", time.Since(start))
-			h.notFound(w, r)
+			h.unavailable(w, r)
 			return
 		}
 		res = resolved
@@ -272,6 +276,23 @@ func (h *RedirectHandler) tooManyRequests(w http.ResponseWriter, r *http.Request
 
 func (h *RedirectHandler) notFound(w http.ResponseWriter, r *http.Request) {
 	h.errorPage(w, r, http.StatusNotFound, notFoundPage)
+}
+
+// unavailable answers a request the server could not resolve.
+//
+// Retry-After: 1 rather than a page: the alias may well be fine, and the honest
+// thing to publish is "ask again shortly". The body is deliberately tiny —
+// whatever is overloading the server should not also be asked to serve HTML.
+func (h *RedirectHandler) unavailable(w http.ResponseWriter, r *http.Request) {
+	head := w.Header()
+	head.Set("Content-Type", "text/plain; charset=utf-8")
+	head.Set("Retry-After", "1")
+	head.Set("X-Robots-Tag", "noindex, nofollow")
+	head.Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusServiceUnavailable)
+	if r.Method != http.MethodHead {
+		_, _ = w.Write([]byte("Temporarily unavailable\n"))
+	}
 }
 
 func (h *RedirectHandler) gone(w http.ResponseWriter, r *http.Request) {

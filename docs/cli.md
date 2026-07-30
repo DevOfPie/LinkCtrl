@@ -47,6 +47,7 @@ partitions ensure  Create partitions for the current and next months
 apikey create      Issue an API key   --user --name --scopes [--expires-in]
 apikey list        List a user's API keys                          --user
 apikey revoke      Revoke an API key                         --user --id
+seed               Generate a load-testing dataset  --links --clicks [--reset]
 version            Print version information
 ```
 
@@ -146,8 +147,34 @@ $ lctl version
 Version, commit and Go version, from build-time ldflags. `linkctrl version` and
 `linkctrl --version --json` report the same for the server.
 
-## Not implemented yet
+### `seed`
 
-`make seed` calls `lctl seed`, which does not exist — the target is there for the
-load-testing milestone that will need it. It fails with "unknown command" until
-then.
+Generates a dataset for load testing. The defaults are the numbers the redirect
+SLO is defined against, and seeding them takes about 90 seconds:
+
+```sh
+$ lctl seed --reset --links 100000 --clicks 5000000
+created 4 partitions covering the seeded range
+links: 100000/100000
+clicks: 5000000/5000000
+updating click counts…
+analyzing…
+seeded 100000 links and 5000000 click events in 1m25s
+aliases: ld0 … ld99999 on localhost:8080
+```
+
+`--reset` truncates `click_events` and `visitors` and deletes previously seeded
+links first. It refuses to run at all when `APP_ENV=production` unless `--force`
+is given, because a load-test dataset in a production database is not a mistake
+anyone should be able to make with the up-arrow key.
+
+Two things about seeded rows are worth knowing, because they are not quite real
+ones. Links carry their destination URL directly and have no `destinations` row:
+the redirect path reads `links.primary_url` and nothing else, so resolution is
+identical, but the editing surface is not exercised. Click events carry random
+visitor hashes rather than real HMACs, which is what a hash looks like to every
+query that reads one.
+
+`--seed N` fixes the PRNG, so two runs produce the same dataset and two load
+results are comparable. `make seed` is the small development variant; `make
+seed-slo` is the SLO dataset. See [slo.md](slo.md).

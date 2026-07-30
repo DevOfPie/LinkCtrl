@@ -36,6 +36,7 @@ Commands:
   apikey create      Issue an API key   --user --name --scopes [--expires-in]
   apikey list        List a user's API keys                          --user
   apikey revoke      Revoke an API key                         --user --id
+  seed               Generate a load-testing dataset  --links --clicks [--reset]
   version            Print version information
 `)
 }
@@ -73,6 +74,9 @@ func run(args []string) error {
 
 	case "apikey":
 		return apikeyCmd(args[1:])
+
+	case "seed":
+		return seedCmd(args[1:])
 
 	case "partitions":
 		if len(args) < 2 || args[1] != "ensure" {

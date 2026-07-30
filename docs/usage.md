@@ -246,6 +246,7 @@ dropped means you believe you set something you did not.
 | Expired | `410 Gone` — distinct from 404 so crawlers and link checkers stop retrying |
 | Unknown, archived or disabled | `404` |
 | Too many misses from one address | `429` with `Retry-After` — see [configuration.md](configuration.md#rate-limits). Links already in the cache keep resolving, and paths that could never be an alias are not counted. |
+| The server could not resolve it | `503` with `Retry-After: 1`. Deliberately not a `404`: that would claim the link does not exist, and a crawler or link checker believing it drops a live link. |
 
 Query forwarding is off by default and deep-link path forwarding is Phase 2.
 `HEAD` works and does not record a click.

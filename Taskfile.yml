@@ -175,6 +175,27 @@ tasks:
       LINKCTRL_APP_ENV: development
       LINKCTRL_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
 
+  seed-slo:
+    desc: Seed the dataset the SLO is defined against (100k links, 5M clicks)
+    preconditions:
+      - sh: 'test -n "{{.DB_PASSWORD}}"'
+        msg: "POSTGRES_PASSWORD is empty. Set it in .env (cp .env.example .env) or export it."
+    cmds:
+      - go run ./cmd/lctl seed --reset --links 100000 --clicks 5000000
+    env:
+      LINKCTRL_APP_ENV: development
+      LINKCTRL_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
+
+  load:
+    desc: Measure the cached redirect SLO against a running stack
+    cmds:
+      - bash scripts/load-test.sh cached 2000 2m
+
+  load-uncached:
+    desc: Same, spread across the whole dataset so the cache cannot answer
+    cmds:
+      - bash scripts/load-test.sh uncached 500 1m
+
   tailwind:
     desc: Download the pinned Tailwind standalone CLI
     cmds:

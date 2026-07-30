@@ -834,7 +834,7 @@ where the resolver would touch Postgres, and a 15-second ceiling there would be
 meaningless — a redirect that has been waiting a second has already missed its
 target and is holding a connection from the small redirect pool.
 
-### A newer gosec flagged five pre-existing lines
+### A newer gosec flagged five pre-existing lines (M15)
 
 The linter's own version moved, and gosec gained taint-analysis checks that flag
 the healthcheck's self-probe (G704), both session cookie constructors (G124, which
@@ -845,3 +845,115 @@ whereas the annotation says exactly why *this* call is safe: `safeNext` is the o
 path by which a caller-supplied destination reaches it, and it rejects anything
 that is not a local path, including the `//evil.com` form that beats a naive
 "starts with /" check.
+
+---
+
+## 2026-07-30 — load validation (M16)
+
+### The measurement is two numbers, and the harness has to earn both
+
+A load test that reports only what the generator saw is measuring the generator,
+the network and the server together and calling the sum the server's latency. So
+`scripts/load-test.sh` reports the generator's percentiles *and* the server's own
+histogram, and the second one takes work to be honest about: the histogram is
+cumulative since boot, so it is snapshotted before and after and reported as a
+delta, and the warm-up is a separate k6 invocation that finishes before the first
+snapshot. Otherwise a "cached p99" quietly contains every cold read the warm-up
+performed.
+
+The script also prints the cache mix and the redirect pool's acquire waits next to
+the latency, because those are what say whether the number means what it claims. A
+cached measurement with database reads in it is not a cached measurement, and the
+first run of this test was exactly that — 9,003 of 245,001 requests reached
+Postgres — with latency that looked perfectly fine.
+
+### k6's `__ITER` is per-VU, and the cache mix is what caught it
+
+The warm-up walked the hot alias set with `__ITER % HOT` across 20 VUs. Each VU has
+its own counter, so it covered the first 250 aliases twenty times instead of 5,000
+aliases once. It now runs on a single VU, sequentially: slower, and impossible to
+get wrong. A warm-up whose correctness depends on the executor's iteration
+semantics is a warm-up that will silently stop warming.
+
+Worth recording alongside it: `cache="database"` counts requests that reached the
+database *tier*, not queries executed. `singleflight` collapses concurrent misses
+for one alias into a single query and every waiter is still counted, which is why
+5,000 cold aliases produced 9,003 observations. The metric is not wrong, but it
+overstates queries and the histogram is the wrong place to look for them.
+
+### A resolve failure was answering 404, and 404 is a claim
+
+Under load at 500 rps uncached, an early run failed 38.7% of requests: the redirect
+pool queued 1,798 acquires totalling 229 seconds, `REDIRECT_TIMEOUT` fired, and
+every one of those requests was answered 404.
+
+The original comment defended that choice — a visitor cannot act on the difference,
+and an error page on a short link is worse than "not found". It was wrong, and the
+project's own reasoning elsewhere says why: 410 exists precisely so crawlers and
+link checkers stop retrying, which means 404 is understood as "this link is dead".
+Publishing it because a connection was briefly unavailable tells every crawler to
+drop a live link, and no retry follows. It is now 503 with `Retry-After: 1`, which
+is true.
+
+This is the finding that justifies the milestone. At development traffic that code
+path never executes.
+
+### The rollup rewrite did not do what it was for, and kept for a different reason
+
+`RollupDimensionDaily` takes 16-21 seconds and runs every 60. The obvious cause was
+that it read `click_events` six times, once per dimension, so it was rewritten to
+read once and expand each row with `CROSS JOIN LATERAL (VALUES ...)`. Wall clock did
+not move: ~20s either way.
+
+`EXPLAIN (ANALYZE, BUFFERS)` says why, and says something else too. 831,776 events
+in the window become 553,053 output rows and every one is a conflicting tuple, so
+the time is in the upsert — of ~8M buffer hits, the aggregate accounts for under a
+million. Recomputing whole days means rewriting every `(link, day, dimension,
+value)` tuple every run, and that choice was made deliberately: an incremental
+"add what arrived since the watermark" design double-counts on retry and, once it
+drifts, stays wrong invisibly. What the load test adds is the size at which the
+choice stops being free.
+
+The something else: the six-branch version sorted 6.2M rows through an **external
+merge that spilled 471 MB of temp files, every 60 seconds**. Reading once lets the
+sort use the index's `link_id` ordering and run incrementally in memory — peak
+152 kB per group, no temp files at all. That is a real measured improvement in
+resource consumption, invisible in wall clock only because this host's disk absorbs
+the spill.
+
+So the rewrite is kept, on that evidence rather than on the reason it was written.
+The decision was reversed twice while working through this, which is worth
+recording: first kept for its shape, then reverted for showing no wall-clock
+benefit, then kept once the plan showed the temp spill. "No faster" and "no better"
+are different claims, and only the second one justifies a revert.
+
+It is documented in slo.md as *not* a fix for the job's cost, because a change that
+looks like an optimisation and is not is worse than no change — the next person
+would assume the 20 seconds had been addressed.
+
+### Reverting a sabotage test can revert the change under test
+
+The dimension test was sabotage-checked by editing the generated `analytics.sql.go`
+directly and restoring it with `git checkout`. That restore also undid the sqlc
+regeneration, so the rollup measurement that followed was taken against the old
+query while the working tree said otherwise — a wrong number that agreed with the
+expected conclusion, which is the most dangerous kind.
+
+What caught it was reading `git status` before committing and noticing the
+generated file was absent from a change set that regenerated it. Generated code
+belongs in the diff review for exactly this reason.
+
+Sabotage-checking that new test was itself informative. Changing the `browser`
+fallback did not fail it: the only rows with a null browser are bots, and bots are
+excluded, so that `coalesce` is unreachable. Changing the `country` fallback and
+the bot filter both failed it. The test is sensitive to what the data actually
+exercises, which is not the same as sensitive to everything the query says.
+
+### What the cached result actually demonstrates
+
+Every measurement was taken while that 19-second rollup ran every minute on the
+same Postgres. The cached path recorded zero database reads and zero pool acquire
+waits, and 100% of 240,001 redirects answered under 20ms. That is the two-tier
+cache and the dedicated redirect pool doing exactly the job they were built for,
+under the load that would otherwise expose it. The isolation is the result worth
+keeping; the microsecond figures belong to one laptop.

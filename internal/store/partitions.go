@@ -36,6 +36,20 @@ var PartitionedTables = []string{"click_events", "visitors", "audit_logs"}
 func EnsurePartitions(ctx context.Context, pool *pgxpool.Pool, ahead int) (int, error) {
 	now := time.Now().UTC()
 	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	return EnsurePartitionRange(ctx, pool, start, start.AddDate(0, ahead, 0))
+}
+
+// EnsurePartitionRange creates monthly partitions covering every month from
+// `from` to `to` inclusive, plus a default partition per table.
+//
+// Separate from EnsurePartitions because the months that need to exist are not
+// always the ones around today: restoring a backup and seeding a load-test
+// dataset both write into the past, and an insert with no matching partition
+// lands in the default one, where it silently blocks attaching the partition
+// that should have held it.
+func EnsurePartitionRange(ctx context.Context, pool *pgxpool.Pool, from, to time.Time) (int, error) {
+	from = monthStart(from)
+	to = monthStart(to)
 
 	created := 0
 	for _, table := range PartitionedTables {
@@ -53,10 +67,8 @@ func EnsurePartitions(ctx context.Context, pool *pgxpool.Pool, ahead int) (int, 
 			created++
 		}
 
-		for i := 0; i <= ahead; i++ {
-			from := start.AddDate(0, i, 0)
-			to := from.AddDate(0, 1, 0)
-			ok, err := ensurePartition(ctx, pool, table, PartitionName(table, from), from, to)
+		for m := from; !m.After(to); m = m.AddDate(0, 1, 0) {
+			ok, err := ensurePartition(ctx, pool, table, PartitionName(table, m), m, m.AddDate(0, 1, 0))
 			if err != nil {
 				return created, err
 			}
@@ -66,6 +78,11 @@ func EnsurePartitions(ctx context.Context, pool *pgxpool.Pool, ahead int) (int, 
 		}
 	}
 	return created, nil
+}
+
+func monthStart(t time.Time) time.Time {
+	t = t.UTC()
+	return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
 }
 
 // ensurePartition creates one partition if it does not exist, reporting
