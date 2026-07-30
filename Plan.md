@@ -435,8 +435,10 @@ Method, so these are designs rather than intentions:
   and old salts are deleted. Deleting the salt is the de-identification step:
   once it is gone, the hashes cannot be linked back to an IP even with the
   original data in hand.
-- Salts are per-workspace, so the same visitor is not correlatable across
-  workspaces.
+- The workspace is part of the hashed message, so the same visitor produces a
+  different hash in each workspace and two workspaces. analytics cannot be
+  joined to follow one person across both. The salt itself is per-day and
+  shared; the non-correlation comes from the message, not the key.
 - Consequence worth stating plainly: the largest table in the system contains no
   personal data, so it is out of scope for subject-access and erasure requests
   entirely.

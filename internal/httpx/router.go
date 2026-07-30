@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
@@ -17,6 +18,7 @@ type Deps struct {
 	Auth     *auth.Service
 	Links    *link.Service
 	Redirect *RedirectHandler
+	Stats    *analytics.Reader
 
 	// Authenticator overrides how session cookies are resolved. Production
 	// leaves it nil and the auth service is used. The test that proves the
@@ -83,6 +85,17 @@ func NewRouter(d Deps) http.Handler {
 			"DELETE " + APIPrefix + "/tags/{id}":        api.DeleteTag,
 		}
 		for pattern, h := range protected {
+			app.Handle(pattern, RequireAuth(h))
+		}
+	}
+
+	if d.Stats != nil {
+		stats := &StatsAPI{Reader: d.Stats}
+		for pattern, h := range map[string]http.HandlerFunc{
+			"GET " + APIPrefix + "/links/{id}/stats":  stats.LinkStats,
+			"GET " + APIPrefix + "/links/{id}/clicks": stats.LinkClicks,
+			"GET " + APIPrefix + "/stats/overview":    stats.Overview,
+		} {
 			app.Handle(pattern, RequireAuth(h))
 		}
 	}

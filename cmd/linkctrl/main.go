@@ -22,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/build"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
@@ -239,12 +240,29 @@ func run(cfg config.Config, _ io.Writer) error {
 		return fmt.Errorf("resolve default domain: %w", err)
 	}
 
+	// Analytics. The ingester buffers clicks and writes them in batches, so
+	// recording never delays a redirect.
+	salts := analytics.NewSaltCache(pools.App)
+	ingester := analytics.NewIngester(pools.App, salts, analytics.IngestConfig{
+		QueueSize:     cfg.Ingest.QueueSize,
+		BatchSize:     cfg.Ingest.BatchSize,
+		FlushInterval: cfg.Ingest.FlushInterval,
+		Logger:        log,
+	})
+	ingester.Start()
+
+	roller := analytics.NewRoller(pools.App, log)
+	jobs := newJobRunner(pools.App, salts, roller, log)
+	jobs.start(ctx)
+	defer jobs.stop()
+
 	redirectHandler := &httpx.RedirectHandler{
 		Resolver:  resolver,
 		DomainID:  defaultDomain.ID,
 		Status:    cfg.Redirect.DefaultStatus,
 		Logger:    log,
 		LogSample: int64(cfg.Redirect.LogSample),
+		Recorder:  clickRecorder{ingester: ingester},
 	}
 
 	if needsSetup, err := authSvc.NeedsSetup(ctx); err == nil && needsSetup {
@@ -255,6 +273,7 @@ func run(cfg config.Config, _ io.Writer) error {
 	health := &httpx.Health{DB: pools.App, Redis: rdb}
 	handler := httpx.NewRouter(httpx.Deps{
 		Config: cfg, Health: health, Auth: authSvc, Links: linkSvc, Redirect: redirectHandler,
+		Stats: analytics.NewReader(pools.App),
 	})
 
 	srv := httpserver.New(httpserver.Options{
@@ -267,6 +286,10 @@ func run(cfg config.Config, _ io.Writer) error {
 	srv.OnDrain = health.StartDraining
 	srv.DrainDelay = cfg.Shutdown.DrainDelay
 	srv.ShutdownTimeout = cfg.Shutdown.Timeout
+	// Runs after the listener has closed and in-flight requests have finished,
+	// so no new clicks can arrive while the buffer drains. Without it every
+	// restart loses up to a full batch.
+	srv.OnShutdown = ingester.Close
 
 	if err := srv.Run(ctx); err != nil {
 		return fmt.Errorf("http server: %w", err)

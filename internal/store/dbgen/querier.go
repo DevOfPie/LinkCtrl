@@ -6,6 +6,7 @@ package dbgen
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -13,6 +14,7 @@ import (
 type Querier interface {
 	ArchiveLink(ctx context.Context, arg ArchiveLinkParams) (Link, error)
 	AttachTag(ctx context.Context, arg AttachTagParams) error
+	CountClickEvents(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	// Only issued when the caller explicitly asks for a total, because counting
 	// costs a scan the common page load should not pay for.
 	CountLinks(ctx context.Context, arg CountLinksParams) (int64, error)
@@ -24,6 +26,10 @@ type Querier interface {
 	CreateLink(ctx context.Context, arg CreateLinkParams) (Link, error)
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
 	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (Organization, error)
+	// ON CONFLICT DO NOTHING returns no row when another replica inserted first,
+	// which the caller detects and re-reads. Two replicas using different salts
+	// for the same day would split every visitor in two.
+	CreateSalt(ctx context.Context, arg CreateSaltParams) ([]byte, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	// --- tags -------------------------------------------------------------------
 	CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error)
@@ -43,8 +49,16 @@ type Querier interface {
 	// remember to reject.
 	GetLink(ctx context.Context, arg GetLinkParams) (Link, error)
 	GetLinkByAlias(ctx context.Context, arg GetLinkByAliasParams) (Link, error)
+	GetLinkDimensions(ctx context.Context, arg GetLinkDimensionsParams) ([]GetLinkDimensionsRow, error)
+	// Reads the rollup, never the raw events. This is what keeps analytics under
+	// the 2s target as click_events grows into the tens of millions.
+	GetLinkStats(ctx context.Context, arg GetLinkStatsParams) ([]GetLinkStatsRow, error)
 	GetLinkTags(ctx context.Context, linkID uuid.UUID) ([]GetLinkTagsRow, error)
+	// The live-activity feed. Bounded and index-backed on (link_id, occurred_at).
+	GetRecentClicks(ctx context.Context, arg GetRecentClicksParams) ([]GetRecentClicksRow, error)
 	GetRoleBySlug(ctx context.Context, slug string) (Role, error)
+	// Analytics: salts, rollups and reads.
+	GetSalt(ctx context.Context, validOn time.Time) ([]byte, error)
 	// Joined with the user so validating a session is one round trip on a path
 	// that runs for every authenticated request. Filters revoked and deleted here
 	// rather than in Go, so a revoked session cannot be resurrected by a caller
@@ -63,6 +77,12 @@ type Querier interface {
 	GetUserPermissions(ctx context.Context, arg GetUserPermissionsParams) ([]string, error)
 	GetUserRoleInWorkspace(ctx context.Context, arg GetUserRoleInWorkspaceParams) (GetUserRoleInWorkspaceRow, error)
 	GetWorkspaceDefaultDomain(ctx context.Context) (GetWorkspaceDefaultDomainRow, error)
+	GetWorkspaceStats(ctx context.Context, arg GetWorkspaceStatsParams) ([]GetWorkspaceStatsRow, error)
+	// Summing daily uniques over-counts anyone visiting on more than one day.
+	// Reported as "unique visitors per day, summed" in the UI rather than
+	// presented as a distinct-person count, because the exact figure cannot be
+	// recovered once the salts are purged. That is the intended trade.
+	GetWorkspaceTotals(ctx context.Context, arg GetWorkspaceTotalsParams) (GetWorkspaceTotalsRow, error)
 	// Used by alias generation before insert. The unique index remains the real
 	// guarantee; this only reduces how often the insert has to retry.
 	IsAliasTaken(ctx context.Context, arg IsAliasTakenParams) (bool, error)
@@ -80,6 +100,9 @@ type Querier interface {
 	ListTags(ctx context.Context, workspaceID uuid.UUID) ([]ListTagsRow, error)
 	ListUserSessions(ctx context.Context, userID uuid.UUID) ([]ListUserSessionsRow, error)
 	ListUsers(ctx context.Context) ([]ListUsersRow, error)
+	// The de-identification step. Once the salt is gone the day's hashes cannot be
+	// linked back to an address.
+	PurgeExpiredSalts(ctx context.Context) (int64, error)
 	// Returns the new count so the caller can apply the lockout policy without a
 	// second round trip and without a read-modify-write race between two
 	// concurrent attempts.
@@ -120,6 +143,16 @@ type Querier interface {
 	// still signed in.
 	RevokeAllUserSessions(ctx context.Context, arg RevokeAllUserSessionsParams) error
 	RevokeSession(ctx context.Context, id uuid.UUID) error
+	// One statement per dimension via UNION ALL, rather than eight round trips.
+	RollupDimensionDaily(ctx context.Context, arg RollupDimensionDailyParams) error
+	// Recompute per-link daily totals for a window.
+	//
+	// Idempotent by construction: it recomputes a whole day from the raw events
+	// and upserts, so running it twice, or after a crash mid-run, converges to the
+	// same numbers. An incremental "add what is new" design would double-count on
+	// any retry.
+	RollupLinkDaily(ctx context.Context, arg RollupLinkDailyParams) error
+	RollupWorkspaceDaily(ctx context.Context, arg RollupWorkspaceDailyParams) error
 	SetPrimaryDestination(ctx context.Context, arg SetPrimaryDestinationParams) error
 	// Soft delete with a purge deadline rather than an immediate DELETE. Restoring
 	// a link someone deleted by accident is a common request, and the alias stays
