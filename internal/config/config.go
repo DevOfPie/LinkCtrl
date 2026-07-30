@@ -1,0 +1,432 @@
+// Package config loads and validates runtime configuration from the
+// environment.
+//
+// Two properties matter more than the mechanics.
+//
+// Validation is aggregated rather than fail-on-first. An operator bringing up a
+// self-hosted instance for the first time should see every problem in one run,
+// not discover them one restart at a time.
+//
+// Secrets are typed as Secret, which refuses to print itself through fmt, slog
+// or JSON. A config dump or a formatted panic cannot leak the database password
+// or the API-key pepper.
+package config
+
+import (
+	"errors"
+	"fmt"
+	"net/netip"
+	"net/url"
+	"os"
+	"runtime"
+	"strings"
+	"time"
+
+	"github.com/caarlos0/env/v11"
+	"github.com/joho/godotenv"
+)
+
+// EnvPrefix is prepended to every variable name. POSTGRES_* variables consumed
+// by the Postgres container itself are deliberately outside this prefix.
+const EnvPrefix = "LINKCTRL_"
+
+type Environment string
+
+const (
+	Development Environment = "development"
+	Production  Environment = "production"
+)
+
+func (e Environment) IsProduction() bool { return e == Production }
+
+type Config struct {
+	AppEnv  Environment `env:"APP_ENV" envDefault:"production"`
+	BaseURL string      `env:"BASE_URL,required"`
+
+	HTTP      HTTPConfig
+	Log       LogConfig
+	DB        DBConfig
+	Redis     RedisConfig
+	Redirect  RedirectConfig
+	Alias     AliasConfig
+	Auth      AuthConfig
+	Ingest    IngestConfig
+	Analytics AnalyticsConfig
+	Shutdown  ShutdownConfig
+
+	SecretKey    Secret `env:"SECRET_KEY,required,unset"`
+	APIKeyPepper Secret `env:"API_KEY_PEPPER,required,unset"`
+
+	DocsEnabled    bool `env:"DOCS_ENABLED" envDefault:"true"`
+	SecureCookies  bool `env:"SECURE_COOKIES" envDefault:"true"`
+	MigrateOnStart bool `env:"MIGRATE_ON_START" envDefault:"true"`
+
+	// TrustedProxies must stay empty unless the app really is behind a proxy.
+	// A non-empty value makes the app believe X-Forwarded-For, which is how
+	// rate limiting and analytics get spoofed when it is set carelessly.
+	TrustedProxies []netip.Prefix `env:"TRUSTED_PROXIES" envSeparator:","`
+
+	// baseURL is the parsed form of BaseURL, computed once during Load.
+	baseURL *url.URL
+}
+
+type HTTPConfig struct {
+	Addr              string        `env:"HTTP_ADDR" envDefault:":8080"`
+	MetricsAddr       string        `env:"METRICS_ADDR" envDefault:":9090"`
+	ReadHeaderTimeout time.Duration `env:"HTTP_READ_HEADER_TIMEOUT" envDefault:"5s"`
+	WriteTimeout      time.Duration `env:"HTTP_WRITE_TIMEOUT" envDefault:"30s"`
+	RequestTimeout    time.Duration `env:"HTTP_REQUEST_TIMEOUT" envDefault:"15s"`
+	ServerTiming      bool          `env:"SERVER_TIMING" envDefault:"false"`
+}
+
+type LogConfig struct {
+	Level  string `env:"LOG_LEVEL" envDefault:"info"`
+	Format string `env:"LOG_FORMAT" envDefault:"json"`
+}
+
+type DBConfig struct {
+	URL Secret `env:"DATABASE_URL,required,unset"`
+
+	// Two pools. The redirect pool is small, separate, and exists so that a
+	// slow analytics query on the application pool cannot starve the hot path
+	// of connections. M13 asserts empirically that it does not.
+	MaxConns         int32         `env:"DB_MAX_CONNS" envDefault:"20"`
+	MinConns         int32         `env:"DB_MIN_CONNS" envDefault:"2"`
+	RedirectMaxConns int32         `env:"DB_REDIRECT_MAX_CONNS" envDefault:"6"`
+	MaxConnLifetime  time.Duration `env:"DB_MAX_CONN_LIFETIME" envDefault:"1h"`
+	MaxConnIdleTime  time.Duration `env:"DB_MAX_CONN_IDLE_TIME" envDefault:"15m"`
+	ConnectTimeout   time.Duration `env:"DB_CONNECT_TIMEOUT" envDefault:"10s"`
+}
+
+type RedisConfig struct {
+	URL          string        `env:"REDIS_URL" envDefault:"redis://redis:6379/0"`
+	DialTimeout  time.Duration `env:"REDIS_DIAL_TIMEOUT" envDefault:"1s"`
+	ReadTimeout  time.Duration `env:"REDIS_READ_TIMEOUT" envDefault:"50ms"`
+	PoolSize     int           `env:"REDIS_POOL_SIZE" envDefault:"50"`
+	CacheEnabled bool          `env:"CACHE_ENABLED" envDefault:"true"`
+}
+
+type RedirectConfig struct {
+	TTL           time.Duration `env:"REDIRECT_TTL" envDefault:"24h"`
+	NegativeTTL   time.Duration `env:"REDIRECT_NEGATIVE_TTL" envDefault:"60s"`
+	Timeout       time.Duration `env:"REDIRECT_TIMEOUT" envDefault:"250ms"`
+	DefaultStatus int           `env:"REDIRECT_DEFAULT_STATUS" envDefault:"302"`
+	LogSample     int           `env:"REDIRECT_LOG_SAMPLE" envDefault:"0"`
+	NotFoundLimit int           `env:"REDIRECT_404_RATE_LIMIT" envDefault:"60"`
+}
+
+type AliasConfig struct {
+	Length              int      `env:"ALIAS_LENGTH" envDefault:"7"`
+	MinUserLength       int      `env:"ALIAS_MIN_USER_LENGTH" envDefault:"3"`
+	ReservedExtra       []string `env:"ALIAS_RESERVED_EXTRA" envSeparator:","`
+	ProfanityFilter     bool     `env:"ALIAS_PROFANITY_FILTER" envDefault:"true"`
+	DestSchemes         []string `env:"DESTINATION_SCHEMES" envSeparator:"," envDefault:"http,https"`
+	DestMaxLength       int      `env:"DESTINATION_MAX_LENGTH" envDefault:"2048"`
+	DestBlockPrivateIPs bool     `env:"DESTINATION_BLOCK_PRIVATE_IPS" envDefault:"true"`
+	DestBlocklist       []string `env:"DESTINATION_BLOCKLIST" envSeparator:","`
+}
+
+type SignupMode string
+
+const (
+	SignupClosed SignupMode = "closed"
+	SignupInvite SignupMode = "invite"
+	SignupOpen   SignupMode = "open"
+)
+
+type AuthConfig struct {
+	SignupMode         SignupMode    `env:"SIGNUP_MODE" envDefault:"closed"`
+	SessionAbsoluteTTL time.Duration `env:"SESSION_ABSOLUTE_TTL" envDefault:"720h"`
+	SessionIdleTTL     time.Duration `env:"SESSION_IDLE_TTL" envDefault:"168h"`
+
+	// RFC 9106 recommends at least 19 MiB for the memory-constrained profile;
+	// 64 MiB is the comfortable default. Validate enforces the floor, because
+	// lowering this is the easiest way to silently weaken password storage.
+	Argon2MemoryKiB   uint32 `env:"ARGON2_MEMORY_KIB" envDefault:"65536"`
+	Argon2Iterations  uint32 `env:"ARGON2_ITERATIONS" envDefault:"3"`
+	Argon2Parallelism uint8  `env:"ARGON2_PARALLELISM" envDefault:"2"`
+
+	LoginRatePerMin  int `env:"LOGIN_RATE_PER_MIN" envDefault:"10"`
+	LockoutThreshold int `env:"LOGIN_LOCKOUT_THRESHOLD" envDefault:"5"`
+	APIRatePerMin    int `env:"API_RATE_PER_MIN" envDefault:"600"`
+}
+
+type IngestConfig struct {
+	QueueSize     int           `env:"INGEST_QUEUE_SIZE" envDefault:"16384"`
+	BatchSize     int           `env:"INGEST_BATCH_SIZE" envDefault:"500"`
+	FlushInterval time.Duration `env:"INGEST_FLUSH_INTERVAL" envDefault:"250ms"`
+	Workers       int           `env:"INGEST_WORKERS" envDefault:"1"`
+}
+
+type AnalyticsConfig struct {
+	RetentionDays int           `env:"ANALYTICS_RETENTION_DAYS" envDefault:"395"`
+	GeoIPPath     string        `env:"GEOIP_MMDB_PATH"`
+	BotFilter     bool          `env:"BOT_FILTER_ENABLED" envDefault:"true"`
+	SaltRotation  time.Duration `env:"VISITOR_SALT_ROTATION" envDefault:"24h"`
+}
+
+type ShutdownConfig struct {
+	DrainDelay time.Duration `env:"SHUTDOWN_DRAIN_DELAY" envDefault:"5s"`
+	Timeout    time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"15s"`
+}
+
+// Load reads configuration from the environment and validates it.
+//
+// A .env file is honoured only in development, and only when APP_ENV says so
+// before the file is read. A stray .env on a production host must not be able
+// to change how the service runs.
+func Load() (Config, error) {
+	if Environment(os.Getenv(EnvPrefix+"APP_ENV")) == Development {
+		if _, err := os.Stat(".env"); err == nil {
+			if err := godotenv.Load(); err != nil {
+				return Config{}, fmt.Errorf("load .env: %w", err)
+			}
+		}
+	}
+	return Parse()
+}
+
+// FileSecretVars are the variables that additionally support a _FILE suffix,
+// for Docker and Swarm secrets mounted under /run/secrets.
+var FileSecretVars = []string{
+	"SECRET_KEY",
+	"API_KEY_PEPPER",
+	"DATABASE_URL",
+	"SMTP_PASSWORD",
+}
+
+// resolveFileSecrets implements the LINKCTRL_X_FILE convention: when set, the
+// file at that path is read and its contents become LINKCTRL_X.
+//
+// This is hand-rolled rather than delegated to the env library's "file" option,
+// which has different semantics — there, the variable's own value is the path,
+// so there is no way to supply a secret inline. Both forms need to work: inline
+// for a plain .env, and _FILE for orchestrators that mount secrets as files.
+//
+// The trailing newline is trimmed deliberately. `echo secret > secret.txt` adds
+// one, and a password with a trailing newline fails authentication for exactly
+// the same invisible-character reason a CRLF in .env does.
+func resolveFileSecrets() error {
+	var errs []error
+	for _, name := range FileSecretVars {
+		fileVar := EnvPrefix + name + "_FILE"
+		path := os.Getenv(fileVar)
+		if path == "" {
+			continue
+		}
+		direct := EnvPrefix + name
+		if os.Getenv(direct) != "" {
+			errs = append(errs, fmt.Errorf(
+				"%s and %s are both set; supply the secret one way or the other", direct, fileVar))
+			continue
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: cannot read %q: %w", fileVar, path, err))
+			continue
+		}
+		if err := os.Setenv(direct, strings.TrimRight(string(b), "\r\n")); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", direct, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// Parse reads configuration from the current environment without consulting a
+// .env file. Tests use it directly.
+func Parse() (Config, error) {
+	if err := resolveFileSecrets(); err != nil {
+		return Config{}, err
+	}
+	var c Config
+	if err := env.ParseWithOptions(&c, env.Options{Prefix: EnvPrefix}); err != nil {
+		return Config{}, err
+	}
+	if err := c.Validate(); err != nil {
+		return Config{}, err
+	}
+	// Parsed during Validate; store it for BaseURLParsed.
+	u, _ := url.Parse(strings.TrimRight(c.BaseURL, "/"))
+	c.baseURL = u
+	c.BaseURL = strings.TrimRight(c.BaseURL, "/")
+	return c, nil
+}
+
+// BaseURLParsed returns the parsed canonical origin.
+func (c Config) BaseURLParsed() *url.URL { return c.baseURL }
+
+// Host returns the host of the canonical origin, used as the default domain
+// when resolving an alias.
+func (c Config) Host() string {
+	if c.baseURL == nil {
+		return ""
+	}
+	return c.baseURL.Host
+}
+
+// Validate collects every problem rather than returning at the first.
+//
+// The messages name the variable and say what to do about it. An operator
+// reading them should not need to consult the source.
+func (c Config) Validate() error {
+	var errs []error
+	add := func(format string, args ...any) {
+		errs = append(errs, fmt.Errorf(format, args...))
+	}
+
+	switch c.AppEnv {
+	case Development, Production:
+	default:
+		add("APP_ENV: must be %q or %q, got %q", Development, Production, c.AppEnv)
+	}
+
+	u, err := url.Parse(c.BaseURL)
+	switch {
+	case err != nil:
+		add("BASE_URL: not a valid URL: %v", err)
+	case u.Scheme != "http" && u.Scheme != "https":
+		add("BASE_URL: scheme must be http or https, got %q", u.Scheme)
+	case u.Host == "":
+		add("BASE_URL: must include a host, for example https://links.example.com")
+	case u.Path != "" && u.Path != "/":
+		add("BASE_URL: must not include a path, got %q", u.Path)
+	case u.RawQuery != "" || u.Fragment != "":
+		add("BASE_URL: must not include a query or fragment")
+	}
+
+	if c.SecretKey.Len() < 32 {
+		add("SECRET_KEY: must be at least 32 bytes, got %d (generate: openssl rand -base64 48)",
+			c.SecretKey.Len())
+	}
+	if c.APIKeyPepper.Len() < 32 {
+		add("API_KEY_PEPPER: must be at least 32 bytes, got %d (generate: openssl rand -base64 48). "+
+			"Changing this invalidates every existing API key.", c.APIKeyPepper.Len())
+	}
+	if c.DB.URL.IsZero() {
+		add("DATABASE_URL: is required")
+	}
+
+	// Production-only invariants. These exist because the failure they prevent
+	// is silent: cookies that never persist, or credentials sent in clear.
+	if c.AppEnv.IsProduction() {
+		if !c.SecureCookies {
+			add("SECURE_COOKIES: cannot be false when APP_ENV=production")
+		}
+		if u != nil && u.Scheme == "http" {
+			add("BASE_URL: must use https in production; session cookies use the " +
+				"__Host- prefix, which browsers only accept over TLS")
+		}
+	}
+
+	switch c.Log.Level {
+	case "debug", "info", "warn", "error":
+	default:
+		add("LOG_LEVEL: must be one of debug, info, warn, error; got %q", c.Log.Level)
+	}
+	switch c.Log.Format {
+	case "json", "text":
+	default:
+		add("LOG_FORMAT: must be json or text, got %q", c.Log.Format)
+	}
+
+	switch c.Auth.SignupMode {
+	case SignupClosed, SignupInvite, SignupOpen:
+	default:
+		add("SIGNUP_MODE: must be one of closed, invite, open; got %q", c.Auth.SignupMode)
+	}
+
+	if c.Auth.Argon2MemoryKiB < 19*1024 {
+		add("ARGON2_MEMORY_KIB: must be at least 19456 (RFC 9106 minimum), got %d",
+			c.Auth.Argon2MemoryKiB)
+	}
+	if c.Auth.Argon2Iterations < 2 {
+		add("ARGON2_ITERATIONS: must be at least 2, got %d", c.Auth.Argon2Iterations)
+	}
+	if c.Auth.Argon2Parallelism < 1 {
+		add("ARGON2_PARALLELISM: must be at least 1")
+	}
+	if c.Auth.SessionIdleTTL > c.Auth.SessionAbsoluteTTL {
+		add("SESSION_IDLE_TTL (%s): must not exceed SESSION_ABSOLUTE_TTL (%s)",
+			c.Auth.SessionIdleTTL, c.Auth.SessionAbsoluteTTL)
+	}
+
+	// A long negative TTL makes a newly created link look broken to anyone who
+	// probed the alias first. Create deletes the negative key, but a cap keeps
+	// the blast radius small if that path is ever missed.
+	if c.Redirect.NegativeTTL > 5*time.Minute {
+		add("REDIRECT_NEGATIVE_TTL: must not exceed 5m, got %s; a longer value makes "+
+			"a newly created link appear broken", c.Redirect.NegativeTTL)
+	}
+	switch c.Redirect.DefaultStatus {
+	case 301, 302, 307, 308:
+		if c.Redirect.DefaultStatus == 301 || c.Redirect.DefaultStatus == 308 {
+			add("REDIRECT_DEFAULT_STATUS: %d is a permanent redirect and will be cached "+
+				"by browsers and intermediaries, so later edits to a link will not take "+
+				"effect. Use 302 or 307.", c.Redirect.DefaultStatus)
+		}
+	default:
+		add("REDIRECT_DEFAULT_STATUS: must be 302 or 307, got %d", c.Redirect.DefaultStatus)
+	}
+
+	if c.DB.MinConns > c.DB.MaxConns {
+		add("DB_MIN_CONNS (%d): must not exceed DB_MAX_CONNS (%d)", c.DB.MinConns, c.DB.MaxConns)
+	}
+	if c.DB.RedirectMaxConns < 1 {
+		add("DB_REDIRECT_MAX_CONNS: must be at least 1")
+	}
+	if total := c.DB.MaxConns + c.DB.RedirectMaxConns; total > 90 {
+		add("DB pools total %d connections, which approaches the default Postgres "+
+			"max_connections of 100; lower them or raise the server limit", total)
+	}
+
+	if c.Ingest.QueueSize < 1 {
+		add("INGEST_QUEUE_SIZE: must be at least 1")
+	}
+	if c.Ingest.BatchSize < 1 {
+		add("INGEST_BATCH_SIZE: must be at least 1")
+	}
+	if c.Ingest.BatchSize > c.Ingest.QueueSize {
+		add("INGEST_BATCH_SIZE (%d): must not exceed INGEST_QUEUE_SIZE (%d)",
+			c.Ingest.BatchSize, c.Ingest.QueueSize)
+	}
+	if c.Ingest.Workers < 1 || c.Ingest.Workers > runtime.NumCPU()*4 {
+		add("INGEST_WORKERS: must be between 1 and %d, got %d", runtime.NumCPU()*4, c.Ingest.Workers)
+	}
+
+	if c.Analytics.RetentionDays < 0 {
+		add("ANALYTICS_RETENTION_DAYS: must be 0 (keep forever) or positive, got %d",
+			c.Analytics.RetentionDays)
+	}
+	if c.Analytics.GeoIPPath != "" {
+		if _, err := os.Stat(c.Analytics.GeoIPPath); err != nil {
+			add("GEOIP_MMDB_PATH: %q is not readable: %v; leave it empty to disable "+
+				"geographic reporting", c.Analytics.GeoIPPath, err)
+		}
+	}
+
+	if c.Alias.Length < 4 || c.Alias.Length > 12 {
+		add("ALIAS_LENGTH: must be between 4 and 12, got %d", c.Alias.Length)
+	}
+	if c.Alias.MinUserLength < 1 {
+		add("ALIAS_MIN_USER_LENGTH: must be at least 1")
+	}
+	for _, s := range c.Alias.DestSchemes {
+		switch strings.ToLower(strings.TrimSpace(s)) {
+		case "http", "https":
+		default:
+			add("DESTINATION_SCHEMES: %q is not allowed; only http and https are "+
+				"supported, and permitting others enables javascript: and data: "+
+				"redirect attacks", s)
+		}
+	}
+
+	// The drain delay plus the HTTP timeout must fit inside the container's
+	// stop grace period, or Docker sends SIGKILL mid-flush and the buffered
+	// click events that graceful shutdown exists to save are lost anyway.
+	if total := c.Shutdown.DrainDelay + c.Shutdown.Timeout; total > 25*time.Second {
+		add("SHUTDOWN_DRAIN_DELAY + SHUTDOWN_TIMEOUT = %s, which leaves no margin under "+
+			"the compose stop_grace_period of 30s; reduce them", total)
+	}
+
+	return errors.Join(errs...)
+}
