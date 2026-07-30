@@ -115,10 +115,9 @@ func (h *Health) check(ctx context.Context) (Report, bool) {
 	// Redis is not fatal. The redirect path falls through to Postgres and
 	// still meets the uncached target, so reporting unready here would remove
 	// a working instance from rotation because of a cache problem.
-	switch {
-	case h.Redis == nil:
+	if h.Redis == nil {
 		rep.Dependencies["redis"] = "disabled"
-	default:
+	} else {
 		pingCtx, cancel := context.WithTimeout(ctx, redis.PingTimeout)
 		err := h.Redis.Ping(pingCtx).Err()
 		cancel()

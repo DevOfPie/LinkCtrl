@@ -23,12 +23,19 @@ import (
 // most traffic — so a cleared shard refills from Redis almost immediately, and
 // avoiding a write lock on every read is worth far more than perfect recency.
 type memCache struct {
-	shards    []*memShard
-	mask      uint64
-	seed      maphash.Seed
-	perShard  int
-	ttlJitter time.Duration
+	shards   []*memShard
+	mask     uint64
+	seed     maphash.Seed
+	perShard int
 }
+
+// Shard counts, as untyped constants so both the count and its mask are
+// constant expressions rather than narrowing conversions of a variable.
+const (
+	shardsDefault = 32
+	shardsSmall   = 8
+	smallCacheMax = 1024
+)
 
 type memShard struct {
 	mu      sync.RWMutex
@@ -42,13 +49,13 @@ type memEntry struct {
 
 func newMemCache(size int) *memCache {
 	// Power-of-two shard count so the index is a mask rather than a modulo.
-	shardCount := 32
-	if size < 1024 {
-		shardCount = 8
+	shardCount, mask := shardsDefault, uint64(shardsDefault-1)
+	if size < smallCacheMax {
+		shardCount, mask = shardsSmall, uint64(shardsSmall-1)
 	}
 	c := &memCache{
 		shards:   make([]*memShard, shardCount),
-		mask:     uint64(shardCount - 1),
+		mask:     mask,
 		seed:     maphash.MakeSeed(),
 		perShard: max(size/shardCount, 64),
 	}
@@ -106,16 +113,6 @@ func (c *memCache) reap(s *memShard, now time.Time) {
 		if now.After(e.expires) {
 			delete(s.entries, k)
 		}
-	}
-}
-
-// clearAll drops everything. Used when a cross-process invalidation arrives
-// and the specific key is not known.
-func (c *memCache) clearAll() {
-	for _, s := range c.shards {
-		s.mu.Lock()
-		clear(s.entries)
-		s.mu.Unlock()
 	}
 }
 

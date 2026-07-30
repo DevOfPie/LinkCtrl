@@ -59,10 +59,23 @@ docker compose up -d --wait
 make test                 # unit tests, race detector on
 make lint
 make migrate-up
+make migrate-status
 make db-reset             # drop, recreate, re-migrate
+make test-integration     # needs the stack up
 ```
 
 `Taskfile.yml` mirrors the Makefile for contributors without `make`.
+
+Everything that connects to the database reads `POSTGRES_PASSWORD` out of
+`.env`, because that is where compose reads it and therefore what the database
+was initialised with. An exported `POSTGRES_PASSWORD` takes precedence, for CI.
+An empty one fails with a message saying so rather than with an authentication
+error several steps from the cause.
+
+Those targets also set `LINKCTRL_APP_ENV=development` explicitly. Configuration
+loading checks that variable *before* it reads `.env`, so without it in the
+environment the file is ignored and the command fails on missing secrets instead
+of doing anything about the database.
 
 ## The race detector
 

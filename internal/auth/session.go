@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math"
 	"net/netip"
 	"time"
 
@@ -138,6 +139,32 @@ type LockoutPolicy struct {
 }
 
 var DefaultLockout = LockoutPolicy{Threshold: 5, Window: 15 * time.Minute}
+
+// ThresholdParam and WindowSecondsParam narrow the policy for the SQL that
+// applies it.
+//
+// Clamped, not converted. A configured value large enough to wrap would arrive
+// in the query as a negative threshold, and `failed_login_count + 1 >= -3` is
+// true on the first attempt — a nonsense setting would lock every account out
+// on one typo instead of being ignored.
+func (p LockoutPolicy) ThresholdParam() int32 {
+	return clampInt32(p.Threshold)
+}
+
+func (p LockoutPolicy) WindowSecondsParam() int32 {
+	return clampInt32(int(p.Window.Seconds()))
+}
+
+func clampInt32(n int) int32 {
+	switch {
+	case n < 0:
+		return 0
+	case n > math.MaxInt32:
+		return math.MaxInt32
+	default:
+		return int32(n)
+	}
+}
 
 // LockedUntil returns when a lockout expires, or the zero time if the account
 // is not locked.

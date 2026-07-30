@@ -350,7 +350,7 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 		}
 	}
 
-	return s.toDomain(dbgen.Link(row), tags), nil
+	return s.toDomain(row, tags), nil
 }
 
 func (s *Service) Get(ctx context.Context, actor *auth.Identity, id uuid.UUID) (*domain.Link, error) {

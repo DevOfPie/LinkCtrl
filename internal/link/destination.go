@@ -165,20 +165,26 @@ func isRestricted(addr netip.Addr) bool {
 		addr.IsUnspecified():
 		return true
 	}
-	// 100.64.0.0/10, carrier-grade NAT. Not covered by IsPrivate.
-	if addr.Is4() {
-		b := addr.As4()
-		if b[0] == 100 && b[1] >= 64 && b[1] <= 127 {
-			return true
-		}
-		// 169.254.0.0/16 is link-local and already covered, but the cloud
-		// metadata endpoint 169.254.169.254 is the one that matters and is
-		// worth being explicit about.
-		if b[0] == 169 && b[1] == 254 {
+	// Ranges the standard predicates do not cover, or cover without saying so.
+	// Contains is family-aware, so an IPv6 address simply does not match.
+	for _, p := range extraRestrictedPrefixes {
+		if p.Contains(addr) {
 			return true
 		}
 	}
 	return false
+}
+
+// extraRestrictedPrefixes are written as CIDRs rather than byte comparisons, so
+// what they mean is legible and adding one is a single line.
+var extraRestrictedPrefixes = []netip.Prefix{
+	// Carrier-grade NAT. Not covered by IsPrivate.
+	netip.MustParsePrefix("100.64.0.0/10"),
+	// Link-local, so already caught above — but the cloud metadata endpoint
+	// 169.254.169.254 is the case that matters here and is worth naming: a
+	// short link pointing at it turns the shortener into a way to make someone
+	// else's browser probe their own infrastructure.
+	netip.MustParsePrefix("169.254.0.0/16"),
 }
 
 // HostOf extracts the lowercase host, stored alongside the URL so the hot path

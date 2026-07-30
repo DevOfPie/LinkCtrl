@@ -254,7 +254,7 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*Identity, er
 	return s.identityFor(ctx, user.ID, user.Email, user.Name, ws.ID, org.ID)
 }
 
-// Login verifies credentials and creates a session.
+// LoginInput is a sign-in attempt.
 type LoginInput struct {
 	Email     string
 	Password  string
@@ -309,8 +309,8 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 		}
 		res, rerr := s.q.RecordFailedLogin(ctx, dbgen.RecordFailedLoginParams{
 			ID:             user.ID,
-			Threshold:      int32(s.lockout.Threshold),
-			LockoutSeconds: int32(s.lockout.Window.Seconds()),
+			Threshold:      s.lockout.ThresholdParam(),
+			LockoutSeconds: s.lockout.WindowSecondsParam(),
 		})
 		if rerr == nil && res.LockedUntil != nil && res.LockedUntil.After(time.Now()) {
 			return nil, ErrAccountLocked

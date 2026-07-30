@@ -3,6 +3,7 @@ package httpx
 import (
 	_ "embed"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -94,6 +95,11 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case redirect.OutcomeNotFound:
 		h.notFound(w, r)
 		return
+	case redirect.OutcomeRedirect:
+		// Falls through to the redirect below. Listed rather than left to a
+		// default so that a new outcome is a compile-time-adjacent failure —
+		// the exhaustive linter flags the missing case — instead of silently
+		// being treated as "redirect anyway".
 	}
 
 	target := res.Snapshot.URL
@@ -116,7 +122,7 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			UserAgent:   r.UserAgent(),
 			Referrer:    r.Referer(),
 			Language:    r.Header.Get("Accept-Language"),
-			LatencyUS:   int32(time.Since(start).Microseconds()),
+			LatencyUS:   latencyUS(time.Since(start)),
 		})
 	}
 
@@ -167,6 +173,23 @@ func (h *RedirectHandler) errorPage(w http.ResponseWriter, r *http.Request, stat
 	if r.Method != http.MethodHead {
 		_, _ = w.Write(body)
 	}
+}
+
+// latencyUS narrows a duration to the microseconds column.
+//
+// Clamped rather than converted. click_events.latency_us is an int32, and a
+// request held open for longer than about 36 minutes would otherwise wrap to a
+// negative figure and quietly poison the latency percentiles — a saturated
+// value is obviously an outlier, a negative one looks like a fast request.
+func latencyUS(d time.Duration) int32 {
+	us := d.Microseconds()
+	if us < 0 {
+		return 0
+	}
+	if us > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	return int32(us)
 }
 
 // appendQuery merges the incoming query string into the destination.

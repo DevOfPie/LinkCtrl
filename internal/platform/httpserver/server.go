@@ -88,10 +88,10 @@ func (s *Server) Run(ctx context.Context) error {
 	case <-ctx.Done():
 	}
 
-	return s.shutdown(errCh)
+	return s.shutdown(ctx, errCh)
 }
 
-func (s *Server) shutdown(errCh <-chan error) error {
+func (s *Server) shutdown(ctx context.Context, errCh <-chan error) error {
 	if s.OnDrain != nil {
 		s.log.Info("shutdown: draining", slog.Duration("delay", s.DrainDelay))
 		s.OnDrain()
@@ -100,9 +100,12 @@ func (s *Server) shutdown(errCh <-chan error) error {
 		time.Sleep(s.DrainDelay)
 	}
 
-	// A detached context: the parent is already cancelled, and shutdown work
-	// needs its own budget rather than inheriting a dead deadline.
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), s.ShutdownTimeout)
+	// Detached from the parent's cancellation, which by this point has already
+	// fired — that is what got us here — but not from its values, so anything
+	// carried on the context still reaches the flush. Shutdown work needs its
+	// own budget rather than inheriting a dead deadline.
+	shutdownCtx, cancel := context.WithTimeout(
+		context.WithoutCancel(ctx), s.ShutdownTimeout)
 	defer cancel()
 
 	s.log.Info("shutdown: closing listener and finishing in-flight requests")

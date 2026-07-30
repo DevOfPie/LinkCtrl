@@ -113,7 +113,12 @@ func (r *Resolver) Resolve(ctx context.Context, domainID uuid.UUID, alias string
 	if err != nil {
 		return Result{}, err
 	}
-	snap := v.(*Snapshot)
+	// Checked rather than asserted: the hot path must not panic on a redirect,
+	// and a 404 is a survivable answer where a panic is not.
+	snap, ok := v.(*Snapshot)
+	if !ok {
+		return Result{}, fmt.Errorf("redirect: resolver returned %T, not a snapshot", v)
+	}
 	return Result{Snapshot: snap, Source: sourceFor(snap, SourceDatabase)}, nil
 }
 

@@ -220,7 +220,11 @@ func resolveFileSecrets() error {
 				"%s and %s are both set; supply the secret one way or the other", direct, fileVar))
 			continue
 		}
-		b, err := os.ReadFile(path)
+		// The path is the whole point: an operator sets LINKCTRL_X_FILE to say
+		// which file holds the secret, so reading a variable path is the
+		// feature. Anyone who can set the process environment can already read
+		// what the process reads.
+		b, err := os.ReadFile(path) //nolint:gosec // G304: operator-supplied path, by design
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: cannot read %q: %w", fileVar, path, err))
 			continue

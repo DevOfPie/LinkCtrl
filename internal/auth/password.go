@@ -13,7 +13,7 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// Argon2 parameters.
+// Params are the argon2 cost parameters.
 //
 // Stored in the hash string itself (PHC format), so changing these does not
 // invalidate existing passwords: an old hash still verifies against its own
@@ -54,6 +54,14 @@ const MaxPasswordLength = 4096
 // requirement — no composition rules, which push people toward predictable
 // substitutions without adding real entropy (NIST SP 800-63B).
 const MinPasswordLength = 12
+
+// maxHashFieldLen bounds the decoded salt and key of a stored hash.
+//
+// This project writes 16-byte salts and 32-byte keys, so anything approaching
+// this is a corrupt row rather than an old one. The bound exists so the lengths
+// can be narrowed to the uint32 argon2 wants without the conversion being an
+// act of faith.
+const maxHashFieldLen = 1024
 
 // Hasher hashes and verifies passwords.
 //
@@ -126,8 +134,10 @@ func (h *Hasher) Verify(password, encoded string) error {
 	h.acquire()
 	// Verification uses the parameters recorded in the hash, not the current
 	// defaults, so raising the cost does not lock existing users out.
+	// KeyLength rather than len(want): decode sets it from the same slice, and
+	// it is already bounded and already a uint32.
 	got := argon2.IDKey([]byte(password), salt,
-		params.Iterations, params.MemoryKiB, params.Parallelism, uint32(len(want)))
+		params.Iterations, params.MemoryKiB, params.Parallelism, params.KeyLength)
 	h.release()
 
 	if subtle.ConstantTimeCompare(got, want) != 1 {
@@ -140,7 +150,7 @@ func (h *Hasher) Verify(password, encoded string) error {
 // than the current policy. Callers rehash on the next successful login, which
 // is the only moment the plaintext is available.
 func (h *Hasher) NeedsRehash(encoded string) bool {
-	params, _, key, err := decode(encoded)
+	params, _, _, err := decode(encoded)
 	if err != nil {
 		// Unparseable: replace it at the next opportunity.
 		return true
@@ -148,7 +158,7 @@ func (h *Hasher) NeedsRehash(encoded string) bool {
 	return params.MemoryKiB < h.params.MemoryKiB ||
 		params.Iterations < h.params.Iterations ||
 		params.Parallelism < h.params.Parallelism ||
-		uint32(len(key)) < h.params.KeyLength
+		params.KeyLength < h.params.KeyLength
 }
 
 // DummyVerify performs a hash with the same cost as a real verification and
@@ -209,15 +219,18 @@ func decode(encoded string) (Params, []byte, []byte, error) {
 	}
 
 	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
-	if err != nil || len(salt) == 0 {
+	if err != nil || len(salt) == 0 || len(salt) > maxHashFieldLen {
 		return p, nil, nil, ErrInvalidHash
 	}
 	key, err := base64.RawStdEncoding.DecodeString(parts[5])
-	if err != nil || len(key) == 0 {
+	if err != nil || len(key) == 0 || len(key) > maxHashFieldLen {
 		return p, nil, nil, ErrInvalidHash
 	}
 
-	p.SaltLength = uint32(len(salt))
-	p.KeyLength = uint32(len(key))
+	// Both lengths are bounded by maxHashFieldLen immediately above, so
+	// narrowing them cannot wrap. Every caller uses these rather than taking
+	// len() again, which keeps that guarantee in one place.
+	p.SaltLength = uint32(len(salt)) //nolint:gosec // G115: bounded by maxHashFieldLen above
+	p.KeyLength = uint32(len(key))   //nolint:gosec // G115: bounded by maxHashFieldLen above
 	return p, salt, key, nil
 }

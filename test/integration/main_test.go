@@ -20,6 +20,9 @@ import (
 )
 
 const (
+	// Used only when TEST_DATABASE_URL is unset. `make test-integration` passes
+	// the DSN built from .env, so this literal is the last resort for someone
+	// running `go test` by hand — and it is a guess at their password.
 	fallbackDSN = "postgres://linkctrl:devpassword@localhost:55432/linkctrl?sslmode=disable"
 	// A template database of our own, rather than the application database.
 	//
@@ -59,7 +62,10 @@ func dsnFor(name string) string {
 func TestMain(m *testing.M) {
 	if err := ensureTemplate(); err != nil {
 		fmt.Fprintf(os.Stderr, "integration setup failed: %v\n\n"+
-			"These tests need Postgres. Start it with:\n  docker compose up -d\n", err)
+			"These tests need Postgres. Start it with:\n  docker compose up -d\n\n"+
+			"On an authentication failure, the DSN is wrong rather than absent:\n"+
+			"  make test-integration        # builds it from POSTGRES_PASSWORD in .env\n"+
+			"  TEST_DATABASE_URL=... go test -tags=integration ./test/integration/...\n", err)
 		os.Exit(1)
 	}
 	os.Exit(m.Run())

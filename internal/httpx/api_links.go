@@ -3,6 +3,7 @@ package httpx
 import (
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -88,8 +89,11 @@ func (a *LinkAPI) List(w http.ResponseWriter, r *http.Request) {
 		f.Status = domain.LinkStatus(s)
 	}
 	if l := q.Get("limit"); l != "" {
-		if n, err := strconv.Atoi(l); err == nil {
-			f.Limit = int32(n)
+		// Range-checked before narrowing. ?limit=2147483648 would otherwise
+		// wrap to a negative int32 and reach the query as a negative LIMIT;
+		// out-of-range values are dropped so the service default applies.
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= math.MaxInt32 {
+			f.Limit = int32(n) //nolint:gosec // G109: range-checked on the line above
 		}
 	}
 	for _, raw := range q["tag"] {

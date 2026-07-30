@@ -18,8 +18,24 @@ vars:
     -X '{{.MODULE}}/internal/build.commit={{.COMMIT}}'
     -X '{{.MODULE}}/internal/build.date={{.DATE}}'
 
-env:
-  DEV_DATABASE_URL: postgres://linkctrl:linkctrl@localhost:55432/linkctrl?sslmode=disable
+  # The dev database password is read from .env, which is where compose reads it
+  # too and therefore what the database was initialised with. A literal here is
+  # wrong for every developer who generated their own, and the resulting
+  # "password authentication failed" reads as a broken database rather than a
+  # stale variable. An exported POSTGRES_PASSWORD wins, for CI.
+  #
+  # A password with characters that are not URL-safe must be percent-encoded,
+  # since this is assembled into a DSN.
+  POSTGRES_USER: linkctrl
+  POSTGRES_DB: linkctrl
+  DB_PASSWORD:
+    sh: 'if [ -n "$POSTGRES_PASSWORD" ]; then printf %s "$POSTGRES_PASSWORD"; else sed -n "s/^POSTGRES_PASSWORD=//p" .env 2>/dev/null | tr -d "\r"; fi'
+
+  # Vars, not the global env block. Values there are not templated against these
+  # vars, so the DSN silently came out as postgres://:@localhost:55432/ — which
+  # is a valid URL, so it failed at connect time as the wrong Postgres user
+  # rather than at parse time.
+  DEV_DATABASE_URL: postgres://{{.POSTGRES_USER}}:{{.DB_PASSWORD}}@localhost:55432/{{.POSTGRES_DB}}?sslmode=disable
   DEV_REDIS_URL: redis://localhost:56379/0
 
 tasks:
@@ -43,8 +59,13 @@ tasks:
 
   test-integration:
     desc: Integration tests (needs Postgres and Redis)
+    preconditions:
+      - sh: 'test -n "{{.DB_PASSWORD}}"'
+        msg: "POSTGRES_PASSWORD is empty. Set it in .env (cp .env.example .env) or export it."
     cmds:
       - go test -race -tags=integration ./test/integration/...
+    env:
+      TEST_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
 
   lint:
     desc: Run golangci-lint
@@ -73,15 +94,79 @@ tasks:
   sqlc:
     cmds: [sqlc generate]
 
+  sqlc-vet:
+    desc: Prepare every query against a live database
+    preconditions:
+      - sh: 'test -n "{{.DB_PASSWORD}}"'
+        msg: "POSTGRES_PASSWORD is empty. Set it in .env (cp .env.example .env) or export it."
+    cmds:
+      - sqlc vet -f sqlc-vet.yaml
+    env:
+      LINKCTRL_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
+
   openapi:
     cmds:
       - oapi-codegen -config api/oapi-server.yaml api/openapi.yaml
       - oapi-codegen -config api/oapi-client.yaml api/openapi.yaml
 
+  # LINKCTRL_APP_ENV must be in the environment, not only in .env: config.Load
+  # consults it before reading the file, so without it .env is ignored and these
+  # tasks fail on the three required secrets rather than on anything to do with
+  # the database. LINKCTRL_DATABASE_URL is then overridden because the value in
+  # .env names the compose network host, which does not resolve from here.
   migrate-up:
+    desc: Apply all migrations
+    preconditions:
+      - sh: 'test -n "{{.DB_PASSWORD}}"'
+        msg: "POSTGRES_PASSWORD is empty. Set it in .env (cp .env.example .env) or export it."
     cmds:
       - go run ./cmd/lctl migrate up
     env:
+      LINKCTRL_APP_ENV: development
+      LINKCTRL_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
+
+  migrate-down:
+    desc: Roll back one migration
+    preconditions:
+      - sh: 'test -n "{{.DB_PASSWORD}}"'
+        msg: "POSTGRES_PASSWORD is empty. Set it in .env (cp .env.example .env) or export it."
+    cmds:
+      - go run ./cmd/lctl migrate down
+    env:
+      LINKCTRL_APP_ENV: development
+      LINKCTRL_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
+
+  migrate-status:
+    desc: Show applied and pending migrations
+    preconditions:
+      - sh: 'test -n "{{.DB_PASSWORD}}"'
+        msg: "POSTGRES_PASSWORD is empty. Set it in .env (cp .env.example .env) or export it."
+    cmds:
+      - go run ./cmd/lctl migrate status
+    env:
+      LINKCTRL_APP_ENV: development
+      LINKCTRL_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
+
+  db-reset:
+    desc: Drop and recreate the dev database, then migrate
+    preconditions:
+      - sh: 'test -n "{{.DB_PASSWORD}}"'
+        msg: "POSTGRES_PASSWORD is empty. Set it in .env (cp .env.example .env) or export it."
+    cmds:
+      - docker compose exec -T postgres psql -U {{.POSTGRES_USER}} -d postgres
+        -c "DROP DATABASE IF EXISTS {{.POSTGRES_DB}} WITH (FORCE);"
+        -c "CREATE DATABASE {{.POSTGRES_DB}};"
+      - task: migrate-up
+
+  seed:
+    desc: Seed development data
+    preconditions:
+      - sh: 'test -n "{{.DB_PASSWORD}}"'
+        msg: "POSTGRES_PASSWORD is empty. Set it in .env (cp .env.example .env) or export it."
+    cmds:
+      - go run ./cmd/lctl seed --links 1000 --clicks 20000
+    env:
+      LINKCTRL_APP_ENV: development
       LINKCTRL_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
 
   tailwind:

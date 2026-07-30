@@ -20,8 +20,32 @@ LDFLAGS := -s -w \
 # Postgres/Redis for local development come from the compose override, which
 # publishes on non-default ports so they do not collide with anything the
 # developer already has installed.
-DEV_DATABASE_URL ?= postgres://linkctrl:linkctrl@localhost:55432/linkctrl?sslmode=disable
+#
+# The password is read from .env rather than written here, because .env is where
+# compose reads it too and therefore what the database was initialised with. A
+# literal here is wrong for every developer who generated their own, and the
+# failure it produces — "password authentication failed" — reads as a broken
+# database rather than a stale variable. An exported POSTGRES_PASSWORD wins, so
+# CI can supply it without a file.
+#
+# A password containing characters that are not URL-safe must be
+# percent-encoded, since this is assembled into a DSN.
+POSTGRES_USER     ?= linkctrl
+POSTGRES_DB       ?= linkctrl
+POSTGRES_PASSWORD ?= $(shell sed -n 's/^POSTGRES_PASSWORD=//p' .env 2>/dev/null | tr -d '\r')
+
+DEV_DATABASE_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:55432/$(POSTGRES_DB)?sslmode=disable
 DEV_REDIS_URL    ?= redis://localhost:56379/0
+
+# Guard for the targets that connect. Without it an empty password produces the
+# same authentication error as a wrong one, several steps away from the cause.
+.PHONY: require-db-password
+require-db-password:
+	@test -n "$(POSTGRES_PASSWORD)" || { \
+		echo "POSTGRES_PASSWORD is empty."; \
+		echo "Set it in .env (cp .env.example .env) or export it in the environment."; \
+		exit 1; \
+	}
 
 .PHONY: help
 help: ## Show this help
@@ -49,8 +73,8 @@ test: ## Unit tests with the race detector
 	go test -race -covermode=atomic -coverprofile=cover.out ./...
 
 .PHONY: test-integration
-test-integration: ## Integration tests (needs Postgres and Redis)
-	go test -race -tags=integration ./test/integration/...
+test-integration: require-db-password ## Integration tests (needs Postgres and Redis)
+	@TEST_DATABASE_URL="$(DEV_DATABASE_URL)" go test -race -tags=integration ./test/integration/...
 
 .PHONY: cover
 cover: test ## Open the coverage report
@@ -82,8 +106,8 @@ sqlc: ## Generate the database layer from SQL
 	sqlc generate
 
 .PHONY: sqlc-vet
-sqlc-vet: ## Prepare every query against a live database
-	sqlc vet
+sqlc-vet: require-db-password ## Prepare every query against a live database
+	@LINKCTRL_DATABASE_URL="$(DEV_DATABASE_URL)" sqlc vet -f sqlc-vet.yaml
 
 .PHONY: openapi
 openapi: ## Generate server and client code from the OpenAPI spec
@@ -92,23 +116,38 @@ openapi: ## Generate server and client code from the OpenAPI spec
 
 ## ---- database -------------------------------------------------------------
 
+# APP_ENV must be in the environment, not only in .env: config.Load consults it
+# before reading the file, so without it .env is ignored and every target below
+# fails on the three required secrets rather than on anything to do with the
+# database. DATABASE_URL is then overridden because the value in .env names the
+# compose network host, which does not resolve from the developer's machine.
+#
+# Recipes carrying this are prefixed with @, so the assembled DSN — password
+# included — does not end up in terminal scrollback or a CI log.
+DEV_ENV := LINKCTRL_APP_ENV=development LINKCTRL_DATABASE_URL="$(DEV_DATABASE_URL)"
+
 .PHONY: migrate-up
-migrate-up: ## Apply all migrations
-	LINKCTRL_DATABASE_URL="$(DEV_DATABASE_URL)" go run ./cmd/lctl migrate up
+migrate-up: require-db-password ## Apply all migrations
+	@$(DEV_ENV) go run ./cmd/lctl migrate up
 
 .PHONY: migrate-down
-migrate-down: ## Roll back one migration
-	LINKCTRL_DATABASE_URL="$(DEV_DATABASE_URL)" go run ./cmd/lctl migrate down
+migrate-down: require-db-password ## Roll back one migration
+	@$(DEV_ENV) go run ./cmd/lctl migrate down
+
+.PHONY: migrate-status
+migrate-status: require-db-password ## Show applied and pending migrations
+	@$(DEV_ENV) go run ./cmd/lctl migrate status
 
 .PHONY: db-reset
-db-reset: ## Drop and recreate the dev database, then migrate
-	docker compose exec -T postgres psql -U linkctrl -d postgres \
-		-c "DROP DATABASE IF EXISTS linkctrl WITH (FORCE);" -c "CREATE DATABASE linkctrl;"
+db-reset: require-db-password ## Drop and recreate the dev database, then migrate
+	docker compose exec -T postgres psql -U "$(POSTGRES_USER)" -d postgres \
+		-c "DROP DATABASE IF EXISTS $(POSTGRES_DB) WITH (FORCE);" \
+		-c "CREATE DATABASE $(POSTGRES_DB);"
 	$(MAKE) migrate-up
 
 .PHONY: seed
-seed: ## Seed development data
-	LINKCTRL_DATABASE_URL="$(DEV_DATABASE_URL)" go run ./cmd/lctl seed --links 1000 --clicks 20000
+seed: require-db-password ## Seed development data
+	@$(DEV_ENV) go run ./cmd/lctl seed --links 1000 --clicks 20000
 
 ## ---- frontend -------------------------------------------------------------
 

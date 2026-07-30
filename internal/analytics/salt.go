@@ -13,7 +13,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 )
 
-// RetentionDays is how long a salt is kept before deletion.
+// SaltRetentionDays is how long a salt is kept before deletion.
 //
 // The salt must outlive the events it keyed for as long as unique-visitor
 // counting needs to recompute, but no longer — its deletion is what makes
@@ -59,7 +59,14 @@ func (c *SaltCache) For(ctx context.Context, day time.Time) ([]byte, error) {
 
 	// Serialize creation per day.
 	lock, _ := c.loading.LoadOrStore(day, &sync.Mutex{})
-	mu := lock.(*sync.Mutex)
+	// Checked rather than asserted: nothing else writes to this map, so a
+	// failure here would mean memory corruption, and taking no lock at all
+	// would be worse than saying so.
+	mu, ok := lock.(*sync.Mutex)
+	if !ok {
+		return nil, fmt.Errorf("analytics: salt lock for %s has unexpected type %T",
+			day.Format(time.DateOnly), lock)
+	}
 	mu.Lock()
 	defer mu.Unlock()
 
