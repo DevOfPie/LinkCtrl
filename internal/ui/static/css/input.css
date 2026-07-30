@@ -1,13 +1,13 @@
 /* Tailwind entry point.
  *
- * The dashboard arrives in M11; until then this exists so the stylesheet
- * pipeline — pinned CLI, checksum verification, Docker stage, embed target —
- * is proven end to end rather than discovered to be broken later.
- *
- * @source tells Tailwind v4 where to scan for class names. Templates do not
- * exist yet, so the generated file is currently just the preflight reset.
+ * @source tells Tailwind v4 where to scan for class names. funcs.go is listed
+ * because some class strings live in Go — the status badge map, for instance —
+ * and a utility that appears only there would otherwise be missing from the
+ * generated stylesheet. The vendored htmx build is deliberately NOT scanned:
+ * minified JavaScript is full of short strings that look like class names, and
+ * every false match becomes dead CSS.
  */
 @import "tailwindcss";
 
 @source "../../templates/**/*.html";
-@source "../js/**/*.js";
+@source "../../funcs.go";

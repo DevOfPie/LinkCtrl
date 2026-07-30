@@ -56,6 +56,7 @@ times by more than half: the repository, `%LOCALAPPDATA%\go-build`, and
 ```sh
 cp .env.example .env      # fill in the three required secrets
 docker compose up -d --wait
+make assets               # build app.css + verify vendored htmx (before first go build)
 make test                 # unit tests, race detector on
 make lint
 make migrate-up
@@ -63,6 +64,11 @@ make migrate-status
 make db-reset             # drop, recreate, re-migrate
 make test-integration     # needs the stack up
 ```
+
+`make assets` matters before the first build: the stylesheet is generated from
+the templates and embedded into the binary, so a build without it runs fine but
+serves unstyled pages (the server warns at boot). The vendored htmx is
+committed; the target just verifies it against its pinned checksum.
 
 `Taskfile.yml` mirrors the Makefile for contributors without `make`.
 

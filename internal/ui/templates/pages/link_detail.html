@@ -1,0 +1,146 @@
+{{define "content"}}
+<div class="mb-6">
+  <a href="/links" class="text-sm text-slate-500 hover:text-slate-900">← Links</a>
+  <div class="mt-2 flex flex-wrap items-center gap-3">
+    <h1 class="text-xl font-semibold tracking-tight">/{{.Link.Alias}}</h1>
+    <span class="{{statusBadge .Link.Status}}">{{.Link.Status}}</span>
+    <a href="{{.Link.ShortURL}}" target="_blank" rel="noopener" class="text-sm text-indigo-600 hover:underline">{{.Link.ShortURL}}</a>
+  </div>
+  <p class="mt-1 break-all text-sm text-slate-500">→ {{.Link.URL}}</p>
+</div>
+
+{{template "flash_ok" .Notice}}
+{{template "flash_error" .Error}}
+
+<div class="grid gap-4 sm:grid-cols-3">
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <p class="text-sm text-slate-500">Clicks ({{.Days}}d)</p>
+    <p class="mt-1 text-2xl font-semibold tabular-nums">{{fmtInt .Stats.Totals.Clicks}}</p>
+  </div>
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <p class="text-sm text-slate-500">Unique visitors <span class="cursor-help text-slate-300" title="{{.Stats.Caveat}}">ⓘ</span></p>
+    <p class="mt-1 text-2xl font-semibold tabular-nums">{{fmtInt .Stats.Totals.UniqueVisitors}}</p>
+  </div>
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <p class="text-sm text-slate-500">Bot clicks</p>
+    <p class="mt-1 text-2xl font-semibold tabular-nums">{{fmtInt .Stats.Totals.BotClicks}}</p>
+  </div>
+</div>
+
+<div class="mt-6 rounded-lg border border-slate-200 bg-white p-6">
+  <div class="mb-4 flex items-center justify-between">
+    <h2 class="text-sm font-medium text-slate-900">Clicks per day</h2>
+    <div class="flex gap-1 text-sm">
+      {{range .Windows}}
+      <a href="/links/{{$.Link.ID}}?days={{.}}"
+         class="{{if eq . $.Days}}rounded-md bg-indigo-50 px-2 py-1 font-medium text-indigo-700{{else}}rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100{{end}}">{{.}}d</a>
+      {{end}}
+    </div>
+  </div>
+  {{template "series_chart" (barChart .Series 720 160)}}
+</div>
+
+<div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+  {{template "breakdown" (dict "Title" "Devices"   "Items" .Stats.Dimensions.device   "Total" .Stats.Totals.Clicks)}}
+  {{template "breakdown" (dict "Title" "Browsers"  "Items" .Stats.Dimensions.browser  "Total" .Stats.Totals.Clicks)}}
+  {{template "breakdown" (dict "Title" "Operating systems" "Items" .Stats.Dimensions.os "Total" .Stats.Totals.Clicks)}}
+  {{template "breakdown" (dict "Title" "Referrers" "Items" .Stats.Dimensions.referrer "Total" .Stats.Totals.Clicks "Empty" "No referrers — direct traffic only")}}
+  {{template "breakdown" (dict "Title" "Languages" "Items" .Stats.Dimensions.language "Total" .Stats.Totals.Clicks)}}
+  {{template "breakdown" (dict "Title" "Countries" "Items" .Stats.Dimensions.country "Total" .Stats.Totals.Clicks "Empty" "Geographic data is unavailable: no GeoIP database is configured.")}}
+</div>
+
+{{if and .Identity (.Identity.Can "links.update")}}
+<div class="mt-6 rounded-lg border border-slate-200 bg-white p-6">
+  <h2 class="mb-4 text-sm font-medium text-slate-900">Edit link</h2>
+  <form method="post" action="/links/{{.Link.ID}}" class="grid gap-4 sm:grid-cols-2">
+    <div class="sm:col-span-2">
+      <label for="url" class="block text-sm font-medium text-slate-700">Destination URL</label>
+      <input id="url" name="url" type="url" required value="{{.Form.URL}}"
+             class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+      {{template "field_error" (index .FieldErrors "url")}}
+    </div>
+    <div>
+      <label for="alias" class="block text-sm font-medium text-slate-700">Alias</label>
+      <input id="alias" name="alias" type="text" required value="{{.Form.Alias}}"
+             class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+      {{template "field_error" (index .FieldErrors "alias")}}
+      <p class="mt-1 text-xs text-slate-400">Changing the alias breaks anything already pointing at the old one.</p>
+    </div>
+    <div>
+      <label for="title" class="block text-sm font-medium text-slate-700">Title</label>
+      <input id="title" name="title" type="text" value="{{.Form.Title}}"
+             class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+    </div>
+    <div class="sm:col-span-2">
+      <label for="description" class="block text-sm font-medium text-slate-700">Description</label>
+      <textarea id="description" name="description" rows="2"
+                class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">{{.Form.Description}}</textarea>
+    </div>
+    <div>
+      <label for="expires_at" class="block text-sm font-medium text-slate-700">Expires <span class="text-slate-400">(UTC, empty = never)</span></label>
+      <input id="expires_at" name="expires_at" type="datetime-local" value="{{.Form.ExpiresAt}}"
+             class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+      {{template "field_error" (index .FieldErrors "expires_at")}}
+    </div>
+    <div>
+      <label for="tags" class="block text-sm font-medium text-slate-700">Tags <span class="text-slate-400">(comma-separated)</span></label>
+      <input id="tags" name="tags" type="text" value="{{.Form.Tags}}" placeholder="marketing, launch"
+             class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+    </div>
+    <div class="sm:col-span-2">
+      <button type="submit" class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Save changes</button>
+    </div>
+  </form>
+</div>
+{{end}}
+
+{{if and .Identity (.Identity.Can "links.delete")}}
+<div class="mt-6 rounded-lg border border-rose-200 bg-white p-6">
+  <h2 class="mb-1 text-sm font-medium text-rose-700">Danger zone</h2>
+  <p class="mb-4 text-sm text-slate-500">Archiving keeps the alias but stops redirecting. Deleting keeps the link restorable for 30 days, then purges it.</p>
+  <div class="flex gap-3">
+    {{if eq (printf "%s" .Link.Status) "archived"}}
+    <form method="post" action="/links/{{.Link.ID}}/restore">
+      <button type="submit" class="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Restore</button>
+    </form>
+    {{else}}
+    <form method="post" action="/links/{{.Link.ID}}/archive">
+      <button type="submit" class="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Archive</button>
+    </form>
+    {{end}}
+    <form method="post" action="/links/{{.Link.ID}}/delete"
+          hx-confirm="Delete /{{.Link.Alias}}? It stops redirecting immediately and is purged after 30 days.">
+      <button type="submit" class="rounded-md bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-500">Delete</button>
+    </form>
+  </div>
+</div>
+{{end}}
+
+{{if .RecentClicks}}
+<div class="mt-6 rounded-lg border border-slate-200 bg-white p-6">
+  <h2 class="mb-4 text-sm font-medium text-slate-900">Recent activity</h2>
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-400">
+        <th class="py-2 pr-4 font-medium">When</th>
+        <th class="py-2 pr-4 font-medium">Device</th>
+        <th class="py-2 pr-4 font-medium">Browser</th>
+        <th class="py-2 pr-4 font-medium">OS</th>
+        <th class="py-2 font-medium">Referrer</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .RecentClicks}}
+      <tr class="border-b border-slate-100">
+        <td class="py-2 pr-4 text-slate-500">{{reltime .OccurredAt}}</td>
+        <td class="py-2 pr-4">{{.Device}}{{if .IsBot}} <span class="rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-700">bot</span>{{end}}</td>
+        <td class="py-2 pr-4">{{.Browser}}</td>
+        <td class="py-2 pr-4">{{.OS}}</td>
+        <td class="py-2 text-slate-500">{{if .Referrer}}{{.Referrer}}{{else}}direct{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}
+{{end}}

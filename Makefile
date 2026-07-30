@@ -153,9 +153,19 @@ seed: require-db-password ## Seed development data
 
 TAILWIND_VERSION := v4.1.14
 
+# htmx is vendored at internal/ui/static/js/htmx.min.js so a fresh clone builds
+# offline. This pin is what makes the committed blob verifiable: `make htmx`
+# checks it against the upstream release checksum and re-fetches on mismatch.
+HTMX_VERSION := v2.0.9
+HTMX_SHA256  := 57d9191515339922bd1356d7b2d80b1ee3b29f1b3a2c65a078bb8b2e8fd9ae5f
+
 .PHONY: tailwind
 tailwind: ## Download the pinned Tailwind standalone CLI
 	@scripts/get-tailwind.sh "$(TAILWIND_VERSION)" "$(BIN)"
+
+.PHONY: htmx
+htmx: ## Verify (or restore) the vendored htmx against its pinned checksum
+	@scripts/get-htmx.sh "$(HTMX_VERSION)" "$(HTMX_SHA256)" internal/ui/static/js/htmx.min.js
 
 .PHONY: css
 css: tailwind ## Build the stylesheet
@@ -164,6 +174,9 @@ css: tailwind ## Build the stylesheet
 .PHONY: css-watch
 css-watch: tailwind ## Rebuild the stylesheet on change
 	$(BIN)/tailwindcss -i internal/ui/static/css/input.css -o internal/ui/static/css/app.css --watch
+
+.PHONY: assets
+assets: htmx css ## Everything `go build` embeds
 
 ## ---- containers -----------------------------------------------------------
 

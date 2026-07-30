@@ -219,6 +219,19 @@ func ClearSessionCookie(secure bool) *http.Cookie {
 	}
 }
 
+// csp is the dashboard's content security policy.
+//
+// There is no 'unsafe-inline' anywhere in it, and the templates are written to
+// keep it that way: scripts and styles are external files, dynamic bar widths
+// are SVG attributes rather than style attributes, and the charts are inline
+// SVG markup, which CSP does not restrict. htmx runs under script-src 'self'
+// as long as none of its eval-based features (hx-on, js: expressions, bracket
+// event filters) are used — which is a constraint on the templates worth the
+// price, because 'unsafe-eval' would waive most of the policy's value.
+const csp = "default-src 'self'; script-src 'self'; style-src 'self'; " +
+	"img-src 'self' data:; font-src 'self'; connect-src 'self'; " +
+	"object-src 'none'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'"
+
 // SecurityHeaders sets the defensive headers every response carries.
 func SecurityHeaders(cfg config.Config) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -228,6 +241,7 @@ func SecurityHeaders(cfg config.Config) func(http.Handler) http.Handler {
 			h.Set("X-Frame-Options", "DENY")
 			h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 			h.Set("Permissions-Policy", "geolocation=(), microphone=(), camera=(), interest-cohort=()")
+			h.Set("Content-Security-Policy", csp)
 			if cfg.AppEnv.IsProduction() {
 				h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 			}

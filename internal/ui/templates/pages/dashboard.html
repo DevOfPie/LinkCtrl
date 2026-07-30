@@ -1,0 +1,57 @@
+{{define "content"}}
+<div class="mb-6 flex items-baseline justify-between">
+  <h1 class="text-xl font-semibold tracking-tight">Dashboard</h1>
+  <span class="text-sm text-slate-500">last 30 days</span>
+</div>
+
+<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <p class="text-sm text-slate-500">Clicks</p>
+    <p class="mt-1 text-2xl font-semibold tabular-nums">{{fmtInt .Overview.Totals.Clicks}}</p>
+  </div>
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <p class="text-sm text-slate-500">Unique visitors <span class="cursor-help text-slate-300" title="{{.Overview.Caveat}}">ⓘ</span></p>
+    <p class="mt-1 text-2xl font-semibold tabular-nums">{{fmtInt .Overview.Totals.UniqueVisitors}}</p>
+  </div>
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <p class="text-sm text-slate-500">Bot clicks</p>
+    <p class="mt-1 text-2xl font-semibold tabular-nums">{{fmtInt .Overview.Totals.BotClicks}}</p>
+  </div>
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <p class="text-sm text-slate-500">Links</p>
+    <p class="mt-1 text-2xl font-semibold tabular-nums">{{if .TotalLinks}}{{fmtInt .TotalLinks}}{{else}}0{{end}}</p>
+  </div>
+</div>
+
+<div class="mt-6 rounded-lg border border-slate-200 bg-white p-6">
+  <h2 class="mb-4 text-sm font-medium text-slate-900">Clicks per day</h2>
+  {{template "series_chart" (barChart .Series 720 160)}}
+</div>
+
+<div class="mt-6 rounded-lg border border-slate-200 bg-white p-6">
+  <div class="mb-4 flex items-baseline justify-between">
+    <h2 class="text-sm font-medium text-slate-900">Recent links</h2>
+    <a href="/links" class="text-sm font-medium text-indigo-600 hover:underline">All links →</a>
+  </div>
+  {{if .Recent}}
+  <ul class="divide-y divide-slate-100">
+    {{range .Recent}}
+    <li class="flex items-center justify-between gap-4 py-3">
+      <div class="min-w-0">
+        <a href="/links/{{.ID}}" class="font-medium text-indigo-600 hover:underline">/{{.Alias}}</a>
+        <p class="truncate text-xs text-slate-500">{{truncate .URL 80}}</p>
+      </div>
+      <div class="shrink-0 text-right text-sm">
+        <p class="tabular-nums">{{fmtInt .ClickCount}} clicks</p>
+        <p class="text-xs text-slate-400">{{reltime .LastClickAt}}</p>
+      </div>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="py-6 text-center text-sm text-slate-400">No links yet. <a href="/links" class="font-medium text-indigo-600 hover:underline">Create the first one.</a></p>
+  {{end}}
+</div>
+
+<p class="mt-4 text-xs text-slate-400">{{.Overview.Caveat}}</p>
+{{end}}

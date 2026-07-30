@@ -1,0 +1,30 @@
+{{define "content"}}
+<div class="mx-auto mt-16 max-w-sm">
+  <div class="mb-8 text-center">
+    <h1 class="text-2xl font-semibold tracking-tight">Welcome to LinkCtrl</h1>
+    <p class="mt-1 text-sm text-slate-500">Create the first account to claim this instance. This page disappears once it is used.</p>
+  </div>
+  <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+    {{template "flash_error" .Error}}
+    <form method="post" action="/setup" class="space-y-4">
+      <div>
+        <label for="name" class="block text-sm font-medium text-slate-700">Name</label>
+        <input id="name" name="name" type="text" autofocus autocomplete="name" value="{{.Name}}"
+               class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+      </div>
+      <div>
+        <label for="email" class="block text-sm font-medium text-slate-700">Email</label>
+        <input id="email" name="email" type="email" required autocomplete="username" value="{{.Email}}"
+               class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+      </div>
+      <div>
+        <label for="password" class="block text-sm font-medium text-slate-700">Password</label>
+        <input id="password" name="password" type="password" required minlength="12" autocomplete="new-password"
+               class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+        <p class="mt-1 text-xs text-slate-400">At least 12 characters. Length is the only rule.</p>
+      </div>
+      <button type="submit" class="w-full rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500">Create account</button>
+    </form>
+  </div>
+</div>
+{{end}}

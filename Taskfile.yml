@@ -6,6 +6,9 @@ vars:
   BIN: bin
   MODULE: github.com/DevOfPie/LinkCtrl
   TAILWIND_VERSION: v4.1.14
+  # Keep in sync with the Makefile, which is the reference.
+  HTMX_VERSION: v2.0.9
+  HTMX_SHA256: 57d9191515339922bd1356d7b2d80b1ee3b29f1b3a2c65a078bb8b2e8fd9ae5f
   VERSION:
     sh: git describe --tags --always --dirty 2>/dev/null || echo dev
   COMMIT:
@@ -181,6 +184,17 @@ tasks:
     deps: [tailwind]
     cmds:
       - "{{.BIN}}/tailwindcss -i internal/ui/static/css/input.css -o internal/ui/static/css/app.css --minify"
+
+  htmx:
+    desc: Verify (or restore) the vendored htmx against its pinned checksum
+    cmds:
+      - sh scripts/get-htmx.sh "{{.HTMX_VERSION}}" "{{.HTMX_SHA256}}" internal/ui/static/js/htmx.min.js
+
+  assets:
+    desc: Everything `go build` embeds
+    cmds:
+      - task: htmx
+      - task: css
 
   up:
     desc: Start the full stack

@@ -15,7 +15,11 @@ WORKDIR /src
 ARG TAILWIND_VERSION=v4.1.14
 ARG TARGETARCH
 
-COPY internal/ui/static/css/input.css ./input.css
+# The whole ui tree, not just input.css: Tailwind generates the stylesheet by
+# scanning the templates (and funcs.go, which holds the badge classes) for
+# class names. With only the entry point copied in, the scan finds nothing and
+# the "successful" build ships a stylesheet containing just the preflight reset.
+COPY internal/ui ./internal/ui
 
 RUN set -eux; \
     case "${TARGETARCH}" in \
@@ -32,7 +36,10 @@ RUN set -eux; \
     test -n "${expected}" || { echo "no checksum published for ${asset}" >&2; cat /tmp/sums.txt >&2; exit 1; }; \
     echo "${expected}  /tmp/tailwindcss" | sha256sum -c -; \
     chmod +x /tmp/tailwindcss; \
-    /tmp/tailwindcss -i ./input.css -o /out/app.css --minify
+    /tmp/tailwindcss -i internal/ui/static/css/input.css -o /out/app.css --minify; \
+    # A stylesheet that only contains the preflight reset means the @source
+    # globs matched nothing — fail here, not in a browser three deploys later.
+    test "$(wc -c < /out/app.css)" -gt 8192 || { echo "app.css is implausibly small; template scan found nothing" >&2; exit 1; }
 
 # ─── Stage 2: build ──────────────────────────────────────────────────────────
 FROM golang:1.26-alpine AS build

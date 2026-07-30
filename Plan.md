@@ -251,7 +251,7 @@ caveat with the data.
 
 ## Build status
 
-As of 2026-07-30. 11 of 16 milestones.
+As of 2026-07-30. 12 of 16 milestones.
 
 | Area | State |
 | --- | --- |
@@ -265,13 +265,13 @@ As of 2026-07-30. 11 of 16 milestones.
 | Analytics ingest, rollups, read API | done, verified |
 | Background jobs | done, verified |
 | API keys and scopes | done, verified |
-| Dashboard UI | not started |
+| Dashboard UI | done, verified |
 | OpenAPI document and `/docs` | not started |
 | Prometheus metrics | not started |
 | Load validation of the redirect target | not started |
 | Release packaging | not started |
 
-Verification: 59 integration tests against real Postgres and Redis, plus unit,
+Verification: 67 integration tests against real Postgres and Redis, plus unit,
 property and fuzz tests. All run under the race detector.
 
 ---

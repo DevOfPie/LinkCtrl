@@ -1,0 +1,7 @@
+{{define "navlink"}}<a href="{{.Href}}" class="{{if .Active}}text-sm font-medium text-indigo-600{{else}}text-sm font-medium text-slate-600 hover:text-slate-900{{end}}">{{.Label}}</a>{{end}}
+
+{{define "field_error"}}{{if .}}<p class="mt-1 text-sm text-rose-600">{{.}}</p>{{end}}{{end}}
+
+{{define "flash_error"}}{{if .}}<div class="mb-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{{.}}</div>{{end}}{{end}}
+
+{{define "flash_ok"}}{{if .}}<div class="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{{.}}</div>{{end}}{{end}}

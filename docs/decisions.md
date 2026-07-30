@@ -369,3 +369,99 @@ It exists because the first key on a headless instance has to come from
 somewhere, and creating one through the API needs a browser session. The token
 goes to stdout and everything else to stderr, so redirecting stdout captures
 the key and nothing else.
+
+---
+
+## 2026-07-30 — dashboard (M11)
+
+### The web tree is a skin over the same services
+
+Web handlers parse forms, call the identical service methods the JSON API
+calls, and render templates. No validation, authorization or behaviour lives in
+either surface, so they cannot diverge — which is the mechanism behind the
+"every UI feature has API support" success criterion, not a review checklist.
+The integration suite makes the point concrete: a key minted through the
+dashboard form authenticates against the JSON API in the same test.
+
+### CSRF is the stdlib's cross-origin check, not tokens
+
+`http.CrossOriginProtection` (Go 1.25+) rejects unsafe cross-site requests by
+reading `Sec-Fetch-Site`, falling back to comparing `Origin` against `Host`.
+Layered with `SameSite=Lax` cookies, that covers what a synchronizer token
+covers, with no token to generate, embed in every form, rotate, or forget.
+Non-browser API clients send neither header and pass untouched, so one wrapper
+protects the API and the dashboard together. The trade: pre-2020 browsers send
+neither header and are not protected — accepted, they are also unsupported for
+the dashboard generally.
+
+### The CSP has no unsafe- waivers, and the templates keep it that way
+
+`script-src 'self'; style-src 'self'` with no inline anything. Three
+consequences are load-bearing: dynamic bar widths are SVG attributes rather
+than `style=` (CSP does not govern presentation attributes); charts are
+server-rendered inline SVG rather than a JS charting library; and htmx is
+restricted to the feature subset that does not eval (`hx-on`, `js:`
+expressions and bracketed event filters are off limits in templates). A test
+fails if a waiver ever appears in the header.
+
+### Charts are computed in Go, drawn as SVG
+
+A charting library would be the product's only piece of custom JavaScript, for
+bars and an axis. Instead `ui.BarChart` lays out integer geometry and the
+template is a dumb loop over `<rect>`s. Day series are dense-filled before
+charting, because the rollup query returns only days that have rows and a
+sparse bar chart lies — a silent week between two busy days would vanish.
+
+### htmx is vendored and checksummed; the stylesheet is generated
+
+Opposite treatments for a reason. app.css is generated *from this repo's own
+templates*, so committing it means it goes stale invisibly; it is built by
+`make css` and embedded. htmx is a fixed upstream artifact, so committing it
+keeps a fresh clone building offline; `make htmx` verifies the blob against
+the pinned release checksum so it is verifiable rather than trusted. The
+Docker css stage copies the whole ui tree (Tailwind scans templates and
+funcs.go for class names) and fails the build if the output is implausibly
+small — a stylesheet of just the preflight reset means the scan found nothing.
+
+### Templates parse at boot; pages render into a buffer
+
+A syntax error fails startup, not the first visit to the unlucky page. Each
+page is parsed into a clone of the shared layout+partials set, so two pages
+defining "content" is the normal case rather than a collision. Rendering goes
+through a buffer because executing straight into the ResponseWriter commits a
+200 alongside half a page the moment a template hits a missing field. A
+missing stylesheet, by contrast, is a boot warning, not a failure: unstyled
+pages work, and refusing to start would turn a forgotten `make css` into an
+outage.
+
+### Static assets are fingerprinted and skip the session middleware
+
+Every URL the templates emit carries a content hash, so assets are served
+immutable-for-a-year and a new build busts the cache by changing the URL. The
+`/static/` mount bypasses session lookup entirely — public bytes must not cost
+a database round trip, and before this the session middleware would have run
+for every stylesheet request carrying a cookie.
+
+### htmx responses that must navigate use HX-Redirect
+
+htmx follows HTTP redirects transparently and swaps the *target* into the
+fragment it was updating — the classic symptom is a login page rendered inside
+a search-results table. Anywhere the browser must actually move (auth expiry
+mid-page, post-action navigation), htmx requests get an `HX-Redirect` header
+and everyone else gets a 303.
+
+### The key-creation form renders its POST response directly
+
+The token exists only in that response, and a redirect would drop it. The
+alternative — a flash cookie — would put a live credential into a Set-Cookie
+header to survive one hop. Rendering directly means a refresh re-submits and
+mints a second key; accepted, because the browser warns first and the extra
+key is visible in the list and revocable.
+
+### The login form's `next` parameter only accepts local paths
+
+Anything else makes the login page an open redirect. The check rejects
+non-`/`-prefixed values, `//host` (scheme-relative, the classic bypass of a
+naive prefix check), and backslashes. Rejected values fall back to /dashboard
+rather than erroring, because a mangled `next` is noise, not an attack worth
+stopping a sign-in over.

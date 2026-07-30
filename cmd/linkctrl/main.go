@@ -35,6 +35,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/ui"
 )
 
 func main() {
@@ -279,11 +280,30 @@ func run(cfg config.Config, _ io.Writer) error {
 			"POST " + httpx.APIPrefix + "/auth/setup")
 	}
 
+	// The dashboard. Template parsing happens here, at boot: a template error
+	// fails startup rather than the first request to reach that page.
+	renderer, err := ui.New()
+	if err != nil {
+		return fmt.Errorf("parse dashboard templates: %w", err)
+	}
+	// A missing stylesheet is a degraded start, not a failed one — the pages
+	// still work unstyled. Loud in the log, because the fix is one command.
+	for _, name := range renderer.MissingAssets() {
+		log.Warn("embedded asset missing; the dashboard will render unstyled",
+			slog.String("asset", name),
+			slog.String("fix", "run `make css` (or `task css`) before `go build`"))
+	}
+
+	stats := analytics.NewReader(pools.App)
 	health := &httpx.Health{DB: pools.App, Redis: rdb}
 	handler := httpx.NewRouter(httpx.Deps{
 		Config: cfg, Health: health, Auth: authSvc, Keys: keySvc,
 		Links: linkSvc, Redirect: redirectHandler,
-		Stats: analytics.NewReader(pools.App),
+		Stats: stats,
+		Web: &httpx.Web{
+			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
+			Links: linkSvc, Stats: stats,
+		},
 	})
 
 	srv := httpserver.New(httpserver.Options{

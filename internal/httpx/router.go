@@ -20,6 +20,7 @@ type Deps struct {
 	Links    *link.Service
 	Redirect *RedirectHandler
 	Stats    *analytics.Reader
+	Web      *Web
 
 	// Authenticator overrides how session cookies are resolved. Production
 	// leaves it nil and the auth service is used. The test that proves the
@@ -112,6 +113,38 @@ func NewRouter(d Deps) http.Handler {
 		}
 	}
 
+	if d.Web != nil {
+		web := d.Web
+
+		// Public: sign-in, first-run setup, and the root redirect.
+		app.HandleFunc("GET /{$}", web.Root)
+		app.HandleFunc("GET /login", web.LoginPage)
+		app.HandleFunc("POST /login", web.LoginSubmit)
+		app.HandleFunc("POST /logout", web.Logout)
+		app.HandleFunc("GET /setup", web.SetupPage)
+		app.HandleFunc("POST /setup", web.SetupSubmit)
+
+		// Everything else redirects anonymous visitors to the login form,
+		// where the API would return a problem document.
+		for pattern, fn := range map[string]http.HandlerFunc{
+			"GET /dashboard":           web.Dashboard,
+			"GET /links":               web.LinksPage,
+			"POST /links":              web.LinkCreate,
+			"GET /links/{id}":          web.LinkDetail,
+			"POST /links/{id}":         web.LinkUpdate,
+			"POST /links/{id}/archive": web.LinkArchive,
+			"POST /links/{id}/restore": web.LinkRestore,
+			"POST /links/{id}/delete":  web.LinkDelete,
+			"GET /keys":                web.KeysPage,
+			"POST /keys":               web.KeyCreate,
+			"POST /keys/{id}/revoke":   web.KeyRevoke,
+			"GET /account":             web.AccountPage,
+			"POST /account/password":   web.PasswordChange,
+		} {
+			app.Handle(pattern, web.RequireWebAuth(fn))
+		}
+	}
+
 	var appHandler http.Handler = app
 	if a := d.authenticator(); a != nil {
 		appHandler = Session(a, d.Config.SecureCookies)(appHandler)
@@ -120,6 +153,21 @@ func NewRouter(d Deps) http.Handler {
 	// and a cookie is authenticated by the explicit credential.
 	if d.Keys != nil {
 		appHandler = BearerAuth(d.Keys)(appHandler)
+	}
+	// CSRF protection for everything cookie-authenticated. The stdlib check
+	// reads Sec-Fetch-Site, falling back to comparing Origin against Host, so
+	// a cross-site form post is refused before any handler runs. Non-browser
+	// clients send neither header and pass untouched; safe methods are exempt.
+	// BaseURL is added as a trusted origin for deployments where a proxy makes
+	// the Host header disagree with the public origin.
+	csrf := http.NewCrossOriginProtection()
+	if err := csrf.AddTrustedOrigin(d.Config.BaseURL); err == nil {
+		appHandler = csrf.Handler(appHandler)
+	} else {
+		// An unparseable BaseURL cannot reach here — config validation refuses
+		// it — but if it somehow does, protect without the extra origin rather
+		// than not at all.
+		appHandler = http.NewCrossOriginProtection().Handler(appHandler)
 	}
 	appHandler = SecurityHeaders(d.Config)(appHandler)
 
@@ -139,10 +187,27 @@ func NewRouter(d Deps) http.Handler {
 	// the single-segment alias pattern below.
 	root.Handle(APIPrefix+"/", appHandler)
 
-	root.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = w.Write([]byte("LinkCtrl\n"))
-	})
+	if d.Web != nil {
+		// Dashboard prefixes, mounted one by one rather than at "/", because
+		// "/" belongs to the redirect catch-all. Every entry here must appear
+		// in internal/alias/reserved.txt; the reserved-list test enforces it
+		// via RegisteredTopLevelPaths.
+		for _, p := range []string{
+			"/{$}", "/login", "/logout", "/setup", "/dashboard",
+			"/links", "/links/", "/keys", "/keys/", "/account", "/account/",
+		} {
+			root.Handle(p, appHandler)
+		}
+
+		// Static assets bypass the session middleware: they are public bytes,
+		// and a stylesheet request must not cost a session lookup.
+		root.Handle("/static/", d.Web.UI.StaticHandler("/static/"))
+	} else {
+		root.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = w.Write([]byte("LinkCtrl\n"))
+		})
+	}
 
 	// The catch-all.
 	//
@@ -167,7 +232,10 @@ func NewRouter(d Deps) http.Handler {
 // router registers, for the test that guards against an alias shadowing a
 // real route.
 func RegisteredTopLevelPaths() []string {
-	return []string{"healthz", "readyz", "api"}
+	return []string{
+		"healthz", "readyz", "api",
+		"login", "logout", "setup", "dashboard", "links", "keys", "account", "static",
+	}
 }
 
 // methodFilter restricts a handler to the given methods, answering anything
