@@ -957,3 +957,84 @@ waits, and 100% of 240,001 redirects answered under 20ms. That is the two-tier
 cache and the dedicated redirect pool doing exactly the job they were built for,
 under the load that would otherwise expose it. The isolation is the result worth
 keeping; the microsecond figures belong to one laptop.
+
+---
+
+## 2026-07-30 — release packaging (M17)
+
+### 0.x, because the product surface is not settled and the API is
+
+Two contracts, versioned separately. The REST API is versioned by its path, so a
+breaking change there becomes `/api/v2` and never a change to `v1` — which means
+the release version says nothing about API stability and should not pretend to.
+The product version is `0.x` while Phase 2 is outstanding: shared workspaces,
+folders and custom domains will move the dashboard and add tables. `0.x` here means
+"the surface may still move", not "unfinished"; everything documented as built is
+tested and the SLO is measured.
+
+Calling it 1.0.0 would claim stability the project has not earned while
+single-replica cache invalidation is a documented limitation.
+
+### The changelog is the artifact, and the workflow refuses to publish without it
+
+Release notes assembled from commit subjects are written for the person who wrote
+the commits. `CHANGELOG.md` is written for the operator deciding whether to take an
+upgrade, which is why each version lists its *limitations* alongside its additions —
+"run one instance", "the pepper cannot be rotated", "the dimension rollup gets
+expensive" are what someone needs before deploying, and none of them appear in a
+diff.
+
+Both the local gate and the release workflow fail if there is no section for the
+version being tagged. A release with no notes is a release nobody can evaluate.
+
+### `lctl` was shipping unstamped, and CI now asserts it is not
+
+The Dockerfile built the server with version ldflags and `lctl` with `-s -w` alone,
+so a released image answered `lctl version` with "dev (commit unknown)". The first
+thing anyone does when a CLI misbehaves is ask it what it is, and it was lying.
+
+Both binaries now carry the same stamp, and CI greps for "commit unknown" in the
+output of both — a stamp that silently stops working is invisible until the moment
+someone needs it, which is the worst moment to discover it.
+
+### Multi-architecture builds were going to run the Go toolchain under emulation
+
+The build stage inherited the *target* platform, so an arm64 image built on an
+amd64 host ran the entire compile through QEMU. Pinning the stage to
+`$BUILDPLATFORM` and letting `GOARCH` do the work — which the Dockerfile was
+already set up for — took a two-architecture build to 34 seconds, measured. Go with
+CGO disabled cross-compiles as a matter of course, so the emulation was buying
+nothing at all.
+
+The stylesheet stage had the same problem for a different reason: it *runs* a
+downloaded Tailwind binary, so under a multi-architecture build it was executed
+once per target through emulation to produce a byte-identical stylesheet. It is now
+pinned to the build platform and selects its asset by `BUILDARCH`.
+
+### One archive format, including for Windows
+
+`.zip` for Windows would mean either a zip tool on every build host or an artifact
+whose format depends on where it was built. Windows 10 and later ship `tar`, so
+`.tar.gz` everywhere costs a Windows user nothing and removes both problems. The
+alternative was discovered the honest way: `zip` is not present in this
+environment's shell, and a target that only works in CI is a target nobody can
+verify.
+
+### The release gate checks what a machine can, and lists what it cannot
+
+`scripts/release-check.sh` verifies the tree is clean, the tag is free, the
+changelog has a section, sqlc output matches its SQL, vendored assets match their
+checksums, the stylesheet exists, everything builds and tests under the race
+detector, the OpenAPI document matches the routes, and every platform
+cross-compiles. Running it on a dirty tree during this milestone produced exactly
+one failure — the clean-tree check — which is the gate demonstrating itself.
+
+The clean-tree requirement is not fussiness: a release must be reproducible from
+the tag, and an uncommitted file means the artifacts contain something the tag does
+not. The sqlc check exists because this project has already shipped a measurement
+taken against a generated file that did not match its source.
+
+What a script cannot check is a list in releasing.md: that the changelog was written
+for an operator, that behaviour changes reached configuration.md and operations.md,
+that new limitations reached Plan.md, and that any performance claim was measured on
+the version making it.

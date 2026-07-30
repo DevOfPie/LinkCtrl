@@ -1,0 +1,244 @@
+# Publishes a release: a multi-architecture image, checksummed binaries, and notes.
+#
+# Triggered by a tag, because the tag is the thing being released — the version the
+# binaries report comes from it, so a release built from anything else would report
+# a version that does not exist. scripts/release-check.sh is the local gate that
+# should pass before the tag is pushed; this workflow re-runs the parts of it that
+# a machine can be trusted to run.
+#
+# Nothing here is destructive to a previous release: tags are immutable, the image
+# is pushed under the version and under `latest`, and `latest` moving is the only
+# mutation.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  # So the artifact path can be exercised without publishing anything.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (e.g. v1.2.3). Nothing is published."
+        required: true
+        default: v0.0.0-test
+
+permissions:
+  contents: write   # create the release and upload artifacts
+  packages: write   # push to ghcr.io
+
+env:
+  GO_VERSION: "1.26"
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  verify:
+    name: Verify before publishing
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: linkctrl
+          POSTGRES_PASSWORD: ci-password
+          POSTGRES_DB: linkctrl
+          TZ: UTC
+        options: >-
+          --health-cmd "pg_isready -U linkctrl -d linkctrl"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+        ports: ["5432:5432"]
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - id: version
+        name: Resolve the version being released
+        run: |
+          set -eu
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
+            version="${{ inputs.version }}"
+          else
+            version="${GITHUB_REF#refs/tags/}"
+          fi
+          case "$version" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "version must look like v1.2.3, got '$version'" >&2; exit 1 ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "releasing $version"
+
+      - name: The changelog documents this version
+        # A release with no notes is a release nobody can decide whether to take.
+        run: |
+          set -eu
+          v="${{ steps.version.outputs.version }}"
+          grep -qF "## [${v#v}]" CHANGELOG.md \
+            || { echo "CHANGELOG.md has no '## [${v#v}]' section" >&2; exit 1; }
+
+      - name: Assets, build and tests
+        run: |
+          set -eux
+          make htmx swagger-ui css
+          go build ./...
+          go vet ./...
+          go test -race -count=1 ./...
+          go test -count=1 -run TestOpenAPI ./internal/httpx/
+
+      - name: Integration tests
+        run: go test -tags=integration -race -count=1 ./test/integration/
+        env:
+          TEST_DATABASE_URL: postgres://linkctrl:ci-password@localhost:5432/linkctrl?sslmode=disable
+          LINKCTRL_REDIS_URL: redis://localhost:6379/0
+
+  image:
+    name: Image
+    needs: verify
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        if: github.event_name == 'push'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: date
+        name: Build date, from the commit rather than the clock
+        # The tagged commit's own timestamp, so the stamp is reproducible from the
+        # tag. github.event.repository.updated_at is repository metadata and
+        # changes for reasons that have nothing to do with this build.
+        run: echo "date=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          # Semver tags plus latest: an operator pins the exact version, and
+          # `latest` exists for the quick-start compose file.
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.verify.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.verify.outputs.version }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' }}
+
+      - id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          # Nothing is published by a manual run; the build still has to succeed.
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ needs.verify.outputs.version }}
+            COMMIT=${{ github.sha }}
+            DATE=${{ steps.date.outputs.date }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  binaries:
+    name: Binaries
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: Build the stylesheet the binaries embed
+        run: make htmx swagger-ui css
+
+      - name: Cross-compile with checksums
+        run: make dist VERSION=${{ needs.verify.outputs.version }} COMMIT=${{ github.sha }}
+
+      - name: The artifacts report the version they claim
+        run: |
+          set -eux
+          tar xzf dist/linkctrl_${{ needs.verify.outputs.version }}_linux_amd64.tar.gz \
+            -C /tmp --strip-components=1 --wildcards '*/linkctrl' '*/lctl'
+          /tmp/linkctrl version | grep -q "linkctrl ${{ needs.verify.outputs.version }}"
+          /tmp/lctl version     | grep -q "linkctrl ${{ needs.verify.outputs.version }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish
+    needs: [verify, image, binaries]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Extract this version's changelog section
+        run: |
+          set -eu
+          v="${{ needs.verify.outputs.version }}"
+          # From this version's heading to the next one, exclusive.
+          awk -v ver="## [${v#v}]" '
+            index($0, ver) == 1 { inside = 1; next }
+            inside && /^## \[/   { exit }
+            inside               { print }
+          ' CHANGELOG.md > notes.md
+          {
+            echo
+            echo "### Container image"
+            echo
+            echo '```'
+            echo "${{ env.IMAGE }}:${v#v}"
+            echo "${{ env.IMAGE }}@${{ needs.image.outputs.digest }}"
+            echo '```'
+            echo
+            echo "Pin the digest for a deployment you want to be reproducible; the"
+            echo "tag is convenient and the digest is exact."
+            echo
+            echo "### Verifying a download"
+            echo
+            echo '```sh'
+            echo "sha256sum -c SHA256SUMS --ignore-missing"
+            echo '```'
+          } >> notes.md
+          cat notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ needs.verify.outputs.version }}
+          body_path: notes.md
+          files: dist/*
+          fail_on_unmatched_files: true
+          # Every release is a real one until someone decides otherwise; a
+          # pre-release tag is the way to say otherwise.
+          prerelease: ${{ contains(needs.verify.outputs.version, '-') }}

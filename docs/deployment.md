@@ -209,16 +209,58 @@ Verify a restore somewhere else occasionally. An untested backup is a hope.
 
 ## 6. Upgrades
 
+**Pin a version.** `LINKCTRL_TAG` selects the image tag, and it defaults to
+`latest`, which means a `docker compose pull` can change what you are running
+without you choosing to:
+
 ```sh
-git pull
-docker compose pull        # or: docker compose build
+# In .env
+LINKCTRL_TAG=0.1.0
+```
+
+```sh
+docker compose pull app
 docker compose up -d --wait
 ```
+
+For a deployment that must be reproducible, pin the digest instead — every release
+publishes one, and unlike a tag it cannot be repointed:
+
+```yaml
+services:
+  app:
+    image: ghcr.io/devofpie/linkctrl@sha256:…
+```
+
+Read [CHANGELOG.md](../CHANGELOG.md) before upgrading. It is written for exactly
+this decision, and it lists the limitations of each version rather than only its
+additions.
 
 Migrations apply at boot. The compose file sets `stop_grace_period: 30s`, which
 must remain longer than `SHUTDOWN_DRAIN_DELAY + SHUTDOWN_TIMEOUT` plus the final
 click flush — otherwise Docker sends `SIGKILL` mid-flush and discards the
 buffered clicks that graceful shutdown exists to save.
+
+The schema only changes additively within a minor version, so rolling back inside
+a series is safe: point `LINKCTRL_TAG` at the previous version and bring it up
+again. Across a minor version it may not be — see
+[releasing.md](releasing.md#rolling-back).
+
+### Without Docker
+
+Every release also publishes static binaries for linux, macOS and Windows on
+amd64 and arm64, with a `SHA256SUMS` file:
+
+```sh
+tar xzf linkctrl_0.1.0_linux_amd64.tar.gz
+sha256sum -c SHA256SUMS --ignore-missing
+./linkctrl version
+```
+
+The archive carries `linkctrl`, `lctl`, `LICENSE`, `README.md`, `CHANGELOG.md` and
+`.env.example`. There is no installer and no service file: the binary reads its
+configuration from the environment and needs Postgres reachable. `linkctrl
+--check-config` validates a configuration before you wire up a unit file.
 
 For change-controlled environments, set `LINKCTRL_MIGRATE_ON_START=false` and run
 migrations deliberately:

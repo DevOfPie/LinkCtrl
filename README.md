@@ -60,6 +60,11 @@ Then:
 docker compose up -d --wait
 ```
 
+That runs `latest`. For anything you care about, pin a version — set
+`LINKCTRL_TAG=0.1.0` in `.env` — so that a later `pull` is a decision rather than a
+surprise. Releases also publish static binaries for linux, macOS and Windows if you
+would rather not use Docker; see [docs/releasing.md](docs/releasing.md).
+
 Open <http://localhost:8080>. The first visit lands on a setup form that creates
 the owner account and then disappears permanently. Migrations run at boot, so
 there is no separate install step.
@@ -93,6 +98,8 @@ answers, not the same ones with a domain name.
 | [docs/cli.md](docs/cli.md) | `lctl` command reference |
 | [docs/operations.md](docs/operations.md) | Runbook: what to watch, what to alert on, what to do when it breaks |
 | [docs/slo.md](docs/slo.md) | The redirect latency target, how it was measured, and what the measurement found |
+| [docs/releasing.md](docs/releasing.md) | What a version number means, how a release is cut, how to upgrade and roll back |
+| [CHANGELOG.md](CHANGELOG.md) | What changed, and what each version's limitations are |
 | [docs/claude/development.md](docs/claude/development.md) | Working on LinkCtrl itself |
 | [Plan.md](Plan.md) | Scope contract: what is in Phase 1, what is deferred, what is measured |
 | [docs/claude/decisions.md](docs/claude/decisions.md) | Why it is built this way. Every non-obvious choice, with its trade-off |

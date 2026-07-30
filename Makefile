@@ -207,7 +207,47 @@ logs: ## Follow application logs
 
 .PHONY: docker-build
 docker-build: ## Build the production image
-	docker build -t linkctrl:dev --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) .
+	docker build -t linkctrl:$(VERSION) -t linkctrl:dev \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg COMMIT=$(COMMIT) \
+		--build-arg DATE=$(DATE) .
+
+## ---- release --------------------------------------------------------------
+
+# The platforms a release publishes. linux/amd64 and linux/arm64 are the
+# deployment targets; the darwin and windows builds exist so an operator can run
+# lctl against a remote database from their own machine.
+RELEASE_PLATFORMS := linux/amd64 linux/arm64 darwin/arm64 darwin/amd64 windows/amd64
+DIST := dist
+
+# One archive format for every platform, tar.gz included for Windows. Windows 10
+# and later ship tar, so the format costs a Windows user nothing — while shipping
+# .zip would mean either a zip tool on every build host or an artifact whose format
+# depends on where it was built, and neither is worth it.
+
+.PHONY: dist
+dist: assets ## Cross-compile release binaries with checksums into dist/
+	@rm -rf $(DIST) && mkdir -p $(DIST)
+	@for platform in $(RELEASE_PLATFORMS); do \
+		os=$${platform%/*}; arch=$${platform#*/}; ext=""; \
+		[ "$$os" = windows ] && ext=".exe"; \
+		echo "  $$os/$$arch"; \
+		name="linkctrl_$(VERSION)_$${os}_$${arch}"; \
+		mkdir -p "$(DIST)/$$name"; \
+		for cmd in linkctrl lctl; do \
+			CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch \
+				go build -trimpath -ldflags "$(LDFLAGS)" \
+				-o "$(DIST)/$$name/$$cmd$$ext" ./cmd/$$cmd || exit 1; \
+		done; \
+		cp LICENSE README.md CHANGELOG.md .env.example "$(DIST)/$$name/"; \
+		( cd $(DIST) && tar czf "$$name.tar.gz" "$$name" ) || exit 1; \
+		rm -rf "$(DIST)/$$name"; \
+	done
+	@cd $(DIST) && sha256sum *.tar.gz > SHA256SUMS && cat SHA256SUMS
+
+.PHONY: release-check
+release-check: ## Everything that must hold before tagging a release
+	@scripts/release-check.sh
 
 ## ---- load -----------------------------------------------------------------
 

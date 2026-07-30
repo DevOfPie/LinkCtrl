@@ -5,7 +5,12 @@
 # image contains no Node runtime. The version is pinned and the download is
 # checksum-verified against the release's published sha256sums.txt, because
 # this pulls a third-party binary into the build path.
-FROM alpine:3.21 AS css
+#
+# Pinned to the *build* platform. This stage runs a downloaded binary, so under a
+# multi-architecture build it would otherwise be executed once per target
+# architecture through QEMU — and the stylesheet it produces is identical either
+# way. Pinning it means one native run instead of two, one of them emulated.
+FROM --platform=$BUILDPLATFORM alpine:3.21 AS css
 # The -musl Tailwind build is still dynamically linked against libstdc++ and
 # libgcc, which bare Alpine does not ship; without them it fails at exec with
 # "Error relocating ... symbol not found".
@@ -13,7 +18,9 @@ RUN apk add --no-cache curl libstdc++ libgcc
 WORKDIR /src
 
 ARG TAILWIND_VERSION=v4.1.14
-ARG TARGETARCH
+# BUILDARCH, not TARGETARCH: the asset has to run here, and its output does not
+# depend on the architecture that produced it.
+ARG BUILDARCH
 
 # The whole ui tree, not just input.css: Tailwind generates the stylesheet by
 # scanning the templates (and funcs.go, which holds the badge classes) for
@@ -22,10 +29,10 @@ ARG TARGETARCH
 COPY internal/ui ./internal/ui
 
 RUN set -eux; \
-    case "${TARGETARCH}" in \
+    case "${BUILDARCH}" in \
         amd64) asset="tailwindcss-linux-x64-musl" ;; \
         arm64) asset="tailwindcss-linux-arm64-musl" ;; \
-        *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+        *) echo "unsupported BUILDARCH=${BUILDARCH}" >&2; exit 1 ;; \
     esac; \
     base="https://github.com/tailwindlabs/tailwindcss/releases/download/${TAILWIND_VERSION}"; \
     curl -fsSL --retry 3 -o /tmp/tailwindcss "${base}/${asset}"; \
@@ -42,7 +49,12 @@ RUN set -eux; \
     test "$(wc -c < /out/app.css)" -gt 8192 || { echo "app.css is implausibly small; template scan found nothing" >&2; exit 1; }
 
 # ─── Stage 2: build ──────────────────────────────────────────────────────────
-FROM golang:1.26-alpine AS build
+#
+# Also pinned to the build platform, and it cross-compiles with GOARCH instead.
+# Without this, an arm64 image built on an amd64 host runs the entire Go toolchain
+# under QEMU — tens of minutes for a build that takes a couple natively. Go with
+# CGO disabled cross-compiles as a matter of course, so the emulation buys nothing.
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 WORKDIR /src
 
 # Dependencies first, so a source-only change does not re-download the module
@@ -60,17 +72,20 @@ ARG DATE=unknown
 ARG TARGETARCH
 
 # CGO off so the result is a static binary that runs on a distroless base.
+#
+# Both binaries carry the same stamp. lctl used to be built with `-s -w` alone,
+# which meant `lctl version` reported "dev (commit unknown)" in a released image —
+# and the first thing anyone does when a CLI misbehaves is ask it what it is.
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux GOARCH="${TARGETARCH}" \
-    go build -trimpath \
-      -ldflags "-s -w \
-        -X github.com/DevOfPie/LinkCtrl/internal/build.version=${VERSION} \
-        -X github.com/DevOfPie/LinkCtrl/internal/build.commit=${COMMIT} \
-        -X github.com/DevOfPie/LinkCtrl/internal/build.date=${DATE}" \
-      -o /out/linkctrl ./cmd/linkctrl \
- && CGO_ENABLED=0 GOOS=linux GOARCH="${TARGETARCH}" \
-    go build -trimpath -ldflags "-s -w" -o /out/lctl ./cmd/lctl
+    set -eux; \
+    ldflags="-s -w \
+      -X github.com/DevOfPie/LinkCtrl/internal/build.version=${VERSION} \
+      -X github.com/DevOfPie/LinkCtrl/internal/build.commit=${COMMIT} \
+      -X github.com/DevOfPie/LinkCtrl/internal/build.date=${DATE}"; \
+    export CGO_ENABLED=0 GOOS=linux GOARCH="${TARGETARCH}"; \
+    go build -trimpath -ldflags "${ldflags}" -o /out/linkctrl ./cmd/linkctrl; \
+    go build -trimpath -ldflags "${ldflags}" -o /out/lctl     ./cmd/lctl
 
 # ─── Stage 3: runtime ────────────────────────────────────────────────────────
 # distroless/static: no shell, no package manager, no curl. That is why the

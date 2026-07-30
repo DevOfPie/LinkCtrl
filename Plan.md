@@ -271,7 +271,7 @@ caveat with the data.
 
 ## Build status
 
-As of 2026-07-30. 17 of 18 milestones.
+As of 2026-07-30. 18 of 18 milestones — Phase 1 is complete.
 
 | Area | State |
 | --- | --- |
@@ -291,21 +291,21 @@ As of 2026-07-30. 17 of 18 milestones.
 | Documentation: README, setup, configuration, usage, operations | done |
 | Enforcement: rate limits, 404 probe limits, GeoIP, retention | done, verified |
 | Load validation of the redirect target | done, target met — [docs/slo.md](docs/slo.md) |
-| Release packaging | not started |
+| Release packaging | done, verified — [docs/releasing.md](docs/releasing.md) |
 
-Verification: 72 integration tests against real Postgres and Redis — including
+Verification: 82 integration tests against real Postgres and Redis — including
 a contract test that replays every OpenAPI operation against the live server —
-plus unit, property and fuzz tests. All run under the race detector.
+plus unit, property and fuzz tests. All run under the race detector, and all of it
+runs in CI alongside a two-architecture container build.
 
 ### Phase 1 scope not yet built
 
 Every configuration variable now either takes effect or no longer exists, which
-was the enforcement milestone's definition of done. What remains unbuilt in
-Phase 1:
+was the enforcement milestone's definition of done, and the redirect SLO is
+measured. What remains, none of it blocking a release:
 
 | Capability | State |
 | --- | --- |
-| Release packaging | Not started. |
 | Dimension rollup cost | The job recomputes whole days every 60s and takes 16-21s at 5.7M events, because 553k `(link, day, dimension, value)` tuples are re-upserted per run. Measured, not fixed: see [docs/slo.md](docs/slo.md#the-dimension-rollup-is-the-real-bottleneck-and-it-is-not-the-scan). The options are a narrower window, a longer cadence for dimensions than for totals, or accepting it with an alert. |
 | Audit log behavior | Table only, by design — Phase 1 scope says table, Phase 2 says behavior. |
 | Geographic region and city | Resolvable from the same database as the country and deliberately not stored. Nothing displays them, and city plus a timestamp approaches a location history. Storing them needs a UI and a reason, which makes it a Phase 2 decision. |
