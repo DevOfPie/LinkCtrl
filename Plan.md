@@ -251,7 +251,7 @@ caveat with the data.
 
 ## Build status
 
-As of 2026-07-30. 10 of 16 milestones.
+As of 2026-07-30. 11 of 16 milestones.
 
 | Area | State |
 | --- | --- |
@@ -264,14 +264,14 @@ As of 2026-07-30. 10 of 16 milestones.
 | Redirect hot path and caching | done, verified |
 | Analytics ingest, rollups, read API | done, verified |
 | Background jobs | done, verified |
-| API keys and scopes | not started |
+| API keys and scopes | done, verified |
 | Dashboard UI | not started |
 | OpenAPI document and `/docs` | not started |
 | Prometheus metrics | not started |
 | Load validation of the redirect target | not started |
 | Release packaging | not started |
 
-Verification: 47 integration tests against real Postgres and Redis, plus unit,
+Verification: 59 integration tests against real Postgres and Redis, plus unit,
 property and fuzz tests. All run under the race detector.
 
 ---
@@ -285,6 +285,8 @@ Deliberately accepted in Phase 1.
 | DNS rebinding not defended against | A host resolving public at creation and private at click time is not caught. Detection needs resolution on the hot path. |
 | Cache invalidation is single-replica | A second replica keeps its copy until TTL. Phase 2 adds pub/sub. |
 | `links.click_count` is approximate | Written with the click rows, but an unclean shutdown loses at most one batch of both. |
+| `api_keys.last_used_at` is approximate | Buffered and flushed on a 30s cadence, so an unclean shutdown loses the most recent timestamps. Authentication must not cost a write. |
+| API keys cannot manage API keys | `apikeys.*` is not delegable, so minting and revoking need a session. Automating key rotation is Phase 2 work. |
 | Analytics drops under overload | Bounded queue; drops counted and alertable. Backpressure would slow redirects. |
 | Unique visitors are estimates | Carrier NAT merges people; network switches split one. Daily resolution. |
 | Multi-day unique totals over-count | Sum of daily figures; exact values unrecoverable once salts are purged. |

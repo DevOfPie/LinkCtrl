@@ -21,6 +21,8 @@ type Querier interface {
 	// Users, sessions and tenancy provisioning.
 	// Drives the first-run setup flow: /setup exists only while this is zero.
 	CountUsers(ctx context.Context) (int64, error)
+	// API keys and the permission vocabulary their scopes are drawn from.
+	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error)
 	CreateDestination(ctx context.Context, arg CreateDestinationParams) (Destination, error)
 	// Links, destinations and tags.
 	CreateLink(ctx context.Context, arg CreateLinkParams) (Link, error)
@@ -38,8 +40,16 @@ type Querier interface {
 	// Reaper. Revoked rows are kept briefly so "sign out everywhere" is visible in
 	// the session list before it disappears.
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
+	// Reaper. Kept long enough to be visible in the key list after revocation, and
+	// long enough for the audit question above to be answerable.
+	DeleteRevokedAPIKeys(ctx context.Context) (int64, error)
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
 	DetachAllTags(ctx context.Context, linkID uuid.UUID) error
+	// The verification lookup, on the unique prefix index, joined with the user so
+	// authentication is one round trip. Revoked and expired keys are returned
+	// rather than filtered out: the caller distinguishes them so the response can
+	// say which it was, and a deleted user's key resolves to no row at all.
+	GetAPIKeyByPrefix(ctx context.Context, prefix string) (GetAPIKeyByPrefixRow, error)
 	// The workspace a user lands in with no explicit selection. Ordered so the
 	// result is deterministic rather than whatever the planner returns first.
 	GetDefaultWorkspaceForUser(ctx context.Context, userID uuid.UUID) (Workspace, error)
@@ -86,6 +96,10 @@ type Querier interface {
 	// Used by alias generation before insert. The unique index remains the real
 	// guarantee; this only reduces how often the insert has to retry.
 	IsAliasTaken(ctx context.Context, arg IsAliasTakenParams) (bool, error)
+	// Revoked keys are included. "Which keys existed and when were they revoked"
+	// is the question asked after an incident, so they are listed until the reaper
+	// removes them.
+	ListAPIKeysForUser(ctx context.Context, arg ListAPIKeysForUserParams) ([]ListAPIKeysForUserRow, error)
 	// Keyset pagination over (created_at, id).
 	//
 	// The cursor is a composite so ordering is total: created_at alone is not
@@ -97,6 +111,9 @@ type Querier interface {
 	// dynamic SQL. If plan stability becomes a problem this splits into
 	// ListLinksNewest/Oldest/Clicks; measure before doing that.
 	ListLinks(ctx context.Context, arg ListLinksParams) ([]ListLinksRow, error)
+	// The scope vocabulary. Scopes are validated against the permissions table
+	// rather than a list in Go, so RBAC and API keys cannot drift apart.
+	ListPermissionSlugs(ctx context.Context) ([]string, error)
 	ListTags(ctx context.Context, workspaceID uuid.UUID) ([]ListTagsRow, error)
 	ListUserSessions(ctx context.Context, userID uuid.UUID) ([]ListUserSessionsRow, error)
 	ListUsers(ctx context.Context) ([]ListUsersRow, error)
@@ -136,6 +153,10 @@ type Querier interface {
 	// host-scoped, so enabling it later needs no key change.
 	ResolveDomainByHostname(ctx context.Context, lower string) (ResolveDomainByHostnameRow, error)
 	RestoreLink(ctx context.Context, arg RestoreLinkParams) (Link, error)
+	// Idempotent: revoking an already-revoked key keeps the original timestamp and
+	// still reports one row, so a repeated call is a success rather than a 404
+	// while a genuinely unknown id is still distinguishable.
+	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (int64, error)
 	// Used on password change. Anyone who had the old password must be logged out,
 	// which is the entire point of changing it.
 	// keep_session is optional: pass NULL to revoke everything, or the current
@@ -158,6 +179,12 @@ type Querier interface {
 	// a link someone deleted by accident is a common request, and the alias stays
 	// reserved while the row exists.
 	SoftDeleteLink(ctx context.Context, arg SoftDeleteLinkParams) (SoftDeleteLinkRow, error)
+	// Batch write of last_used_at, from the coalescing tracker rather than from the
+	// request path: authenticating a key must not cost a synchronous write.
+	//
+	// GREATEST guards against a late batch moving the timestamp backwards, which
+	// two processes flushing out of order would otherwise do.
+	TouchAPIKeys(ctx context.Context, arg TouchAPIKeysParams) error
 	// Idle expiry is measured from last_seen_at. Updated at most once a minute by
 	// the caller, because writing on every request would turn a read-mostly path
 	// into a write on the hottest authenticated query.

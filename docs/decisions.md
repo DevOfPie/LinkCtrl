@@ -272,3 +272,100 @@ not.
 `httpx` imports `analytics` for the reader, so putting the adapter in
 `analytics` would create a cycle. It is pure wiring, so the composition root is
 where it belongs.
+
+### API key tokens are a fixed-length prefix plus a secret
+
+`lk_live_<8 chars>_<43 chars>`. The prefix is stored and uniquely indexed, so
+verification is a single-row lookup rather than a scan comparing every stored
+hash — the alternative gets slower with every key ever issued.
+
+Both parts are fixed length and taken by offset. Splitting on `_` would break
+the first time a base64url secret contained one, which is roughly one token in
+sixty. The public id is lowercase base32 because five random bytes encode as
+exactly eight characters with no padding, and the alphabet has nothing that
+needs quoting in a shell, a YAML file or a CI secret box.
+
+`live` has no meaning yet. It is there so a future test-mode key is
+distinguishable by eye instead of by asking the database.
+
+### Key hashes are HMAC with a configured pepper, not argon2
+
+The same reasoning as session tokens: the secret is full-entropy random, so
+key-stretching adds nothing, and 64 MiB of argon2 per request does not fit a
+150ms API budget. The pepper lives in configuration rather than the database,
+so a database dump alone does not permit offline verification.
+
+The prefix is part of the HMAC message, which binds a hash to its own row: a
+hash copied into another key's row stops verifying. NUL-separated from the
+secret, for the same reason the visitor hash separates its fields.
+
+Rotating `API_KEY_PEPPER` invalidates every existing key. That is stated in the
+config validation message, because it is the kind of thing an operator
+otherwise discovers from a support ticket.
+
+### A key's permissions are its scopes intersected with its owner's role
+
+Recomputed on every request, never stored. Demoting a user therefore weakens
+their keys immediately, and a scope the role no longer grants stops working
+without the key being reissued. Storing the effective set would leave keys
+holding permissions their owner has lost — which is exactly the state an
+attacker who briefly held an admin account would want to leave behind.
+
+Scopes are validated against the `permissions` table rather than a list in Go,
+so the vocabulary cannot drift from RBAC. A scope the creator does not hold is
+refused: otherwise minting a key would be a way to grant yourself permissions
+your role does not include.
+
+### `apikeys.*` is not delegable to a key
+
+A key that can mint keys makes revocation meaningless — whoever holds a leaked
+one issues a replacement before the original is cut off. So key management, and
+password changes, require a session. `org.delete` follows the same rule: an
+irreversible action should need an interactive sign-in rather than a token in a
+CI variable.
+
+The cost is that key rotation cannot be automated through the API in Phase 1.
+Accepted, and recorded as a known limitation.
+
+### One error for every invalid key
+
+Unknown, malformed, wrong secret, revoked, expired and inactive-owner all
+return the same 401. The distinction is of no use to a legitimate caller — the
+key list shows revocation and expiry, so an owner can already see which of
+theirs is which — and separate responses would tell whoever found a leaked key
+whether it is still worth trying somewhere else.
+
+Bearer authentication does reject, where a session cookie does not. A cookie
+that no longer resolves is ordinary, so the request continues anonymously; a
+bearer token is deliberate, and answering a dead key with "authentication
+required" sends the caller looking in the wrong place.
+
+### A bearer token beats a cookie on the same request
+
+The explicit credential wins. The alternative — a cookie silently upgrading a
+deliberately weak key's permissions — would make a scoped key untestable from a
+browser session and would hide the mistake.
+
+### `last_used_at` is coalesced in memory and flushed on a timer
+
+Authentication must not cost a write. A map keyed by key id collapses a
+thousand uses per second into one row update per interval, the map is bounded so
+a pathological case loses a timestamp rather than growing without limit, and the
+pending set is cleared before the write rather than retained for a retry.
+
+The value answers "is this key still in use", which does not need second
+resolution or durability. It is flushed on shutdown along with the click
+buffer.
+
+### The CLI acts as a named user, not as root
+
+`lctl apikey` resolves `--user` to an identity and then calls the same service
+methods the API does, so it cannot mint a key with scopes that user's role does
+not grant. An operator with database access could bypass RBAC by hand anyway;
+the point is that the supported path does not, because a CLI that quietly
+ignores permissions is where the exception becomes the habit.
+
+It exists because the first key on a headless instance has to come from
+somewhere, and creating one through the API needs a browser session. The token
+goes to stdout and everything else to stderr, so redirecting stdout captures
+the key and nothing else.

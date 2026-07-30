@@ -16,6 +16,7 @@ type Deps struct {
 	Config   config.Config
 	Health   *Health
 	Auth     *auth.Service
+	Keys     *auth.APIKeyService
 	Links    *link.Service
 	Redirect *RedirectHandler
 	Stats    *analytics.Reader
@@ -89,6 +90,17 @@ func NewRouter(d Deps) http.Handler {
 		}
 	}
 
+	if d.Keys != nil {
+		keys := &KeyAPI{Keys: d.Keys}
+		for pattern, h := range map[string]http.HandlerFunc{
+			"POST " + APIPrefix + "/api-keys":        keys.Create,
+			"GET " + APIPrefix + "/api-keys":         keys.List,
+			"DELETE " + APIPrefix + "/api-keys/{id}": keys.Revoke,
+		} {
+			app.Handle(pattern, RequireAuth(h))
+		}
+	}
+
 	if d.Stats != nil {
 		stats := &StatsAPI{Reader: d.Stats}
 		for pattern, h := range map[string]http.HandlerFunc{
@@ -103,6 +115,11 @@ func NewRouter(d Deps) http.Handler {
 	var appHandler http.Handler = app
 	if a := d.authenticator(); a != nil {
 		appHandler = Session(a, d.Config.SecureCookies)(appHandler)
+	}
+	// Outside Session, so it runs first: a request carrying both a bearer token
+	// and a cookie is authenticated by the explicit credential.
+	if d.Keys != nil {
+		appHandler = BearerAuth(d.Keys)(appHandler)
 	}
 	appHandler = SecurityHeaders(d.Config)(appHandler)
 

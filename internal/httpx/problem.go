@@ -93,6 +93,17 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 			Status: http.StatusUnauthorized,
 		})
 
+	case errors.Is(err, auth.ErrAPIKeyInvalid):
+		// One response for malformed, unknown, revoked and expired keys. The
+		// owner can see which of their keys is which in the key list, and
+		// whoever found a leaked one learns nothing about whether it is worth
+		// trying elsewhere.
+		WriteProblem(w, r, Problem{
+			Type: problemBase + "invalid-api-key", Title: "Invalid API key",
+			Status: http.StatusUnauthorized,
+			Detail: "The API key is unknown, revoked, expired, or malformed.",
+		})
+
 	case errors.Is(err, auth.ErrInvalidCredentials):
 		WriteProblem(w, r, Problem{
 			Type: problemBase + "invalid-credentials", Title: "Invalid credentials",

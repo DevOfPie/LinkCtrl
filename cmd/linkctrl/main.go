@@ -210,6 +210,15 @@ func run(cfg config.Config, _ io.Writer) error {
 		},
 	})
 
+	keySvc, err := auth.NewAPIKeyService(pools.App, authSvc, auth.APIKeyConfig{
+		Pepper: []byte(cfg.APIKeyPepper.Reveal()),
+		Logger: log,
+	})
+	if err != nil {
+		return err
+	}
+	keySvc.Start()
+
 	// The resolver runs on the dedicated redirect pool, so a slow analytics
 	// query on the application pool cannot leave a redirect waiting to acquire
 	// a connection.
@@ -272,7 +281,8 @@ func run(cfg config.Config, _ io.Writer) error {
 
 	health := &httpx.Health{DB: pools.App, Redis: rdb}
 	handler := httpx.NewRouter(httpx.Deps{
-		Config: cfg, Health: health, Auth: authSvc, Links: linkSvc, Redirect: redirectHandler,
+		Config: cfg, Health: health, Auth: authSvc, Keys: keySvc,
+		Links: linkSvc, Redirect: redirectHandler,
 		Stats: analytics.NewReader(pools.App),
 	})
 
@@ -287,9 +297,14 @@ func run(cfg config.Config, _ io.Writer) error {
 	srv.DrainDelay = cfg.Shutdown.DrainDelay
 	srv.ShutdownTimeout = cfg.Shutdown.Timeout
 	// Runs after the listener has closed and in-flight requests have finished,
-	// so no new clicks can arrive while the buffer drains. Without it every
-	// restart loses up to a full batch.
-	srv.OnShutdown = ingester.Close
+	// so no new clicks can arrive while the buffers drain. Without it every
+	// restart loses up to a full batch of clicks, and the last few minutes of
+	// API key usage timestamps.
+	srv.OnShutdown = func(ctx context.Context) error {
+		// Clicks first: they are the data a user would notice missing. A failed
+		// key flush must not skip it, so both run and the errors are joined.
+		return errors.Join(ingester.Close(ctx), keySvc.Close(ctx))
+	}
 
 	if err := srv.Run(ctx); err != nil {
 		return fmt.Errorf("http server: %w", err)

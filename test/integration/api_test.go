@@ -27,6 +27,7 @@ type apiFixture struct {
 	server *httptest.Server
 	client *http.Client
 	pool   *pgxpool.Pool
+	keys   *auth.APIKeyService
 }
 
 func newAPI(t *testing.T) *apiFixture {
@@ -51,10 +52,19 @@ func newAPI(t *testing.T) *apiFixture {
 		BaseURL: cfg.BaseURL,
 	})
 
+	// Not started: the usage tracker's ticker is not wanted in tests, and the
+	// tests that care about last_used_at call FlushUsage directly rather than
+	// sleeping through an interval.
+	keySvc, err := auth.NewAPIKeyService(pool, authSvc, auth.APIKeyConfig{Pepper: testPepper})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	srv := httptest.NewServer(httpx.NewRouter(httpx.Deps{
 		Config: cfg,
 		Health: &httpx.Health{DB: pool},
 		Auth:   authSvc,
+		Keys:   keySvc,
 		Links:  linkSvc,
 	}))
 	t.Cleanup(srv.Close)
@@ -65,6 +75,7 @@ func newAPI(t *testing.T) *apiFixture {
 		server: srv,
 		client: &http.Client{Jar: jar},
 		pool:   pool,
+		keys:   keySvc,
 	}
 }
 

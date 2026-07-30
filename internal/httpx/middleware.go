@@ -106,6 +106,14 @@ func Session(a Authenticator, secure bool) func(http.Handler) http.Handler {
 	name := auth.CookieName(secure)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// An API key already authenticated this request. The explicit
+			// credential wins, and a stale cookie riding along on the same
+			// request must not silently replace it with a stronger identity.
+			if IdentityFrom(r.Context()) != nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			cookie, err := r.Cookie(name)
 			if err == nil && cookie.Value != "" {
 				if id, err := a.Authenticate(r.Context(), cookie.Value); err == nil {
@@ -119,6 +127,52 @@ func Session(a Authenticator, secure bool) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// BearerAuth attaches an identity from an `Authorization: Bearer` API key.
+//
+// Unlike Session it does reject, and the asymmetry is deliberate. A cookie that
+// no longer resolves is an ordinary event — an expired login — so the request
+// continues anonymously and whatever it reaches decides. A bearer token is an
+// explicit, deliberate credential: continuing anonymously would answer a
+// revoked key with "authentication required", which reads as "the endpoint
+// needs auth" rather than "your key is dead", and sends the caller looking in
+// the wrong place.
+//
+// Runs before Session, so a request carrying both uses the key.
+func BearerAuth(a Authenticator) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			token, ok := bearerToken(r.Header.Get("Authorization"))
+			if !ok {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			id, err := a.Authenticate(r.Context(), token)
+			if err != nil {
+				w.Header().Set("WWW-Authenticate", `Bearer realm="linkctrl"`)
+				WriteError(w, r, err)
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxIdentity, id)))
+		})
+	}
+}
+
+// bearerToken extracts the credential from an Authorization header.
+//
+// Only the Bearer scheme is recognised. Anything else — Basic, a bare token
+// with no scheme — is left alone rather than guessed at, so a client sending
+// the wrong scheme gets "authentication required" rather than a confusing
+// report about an invalid key it never sent.
+func bearerToken(header string) (string, bool) {
+	const scheme = "bearer "
+	if len(header) <= len(scheme) || !strings.EqualFold(header[:len(scheme)], scheme) {
+		return "", false
+	}
+	token := strings.TrimSpace(header[len(scheme):])
+	return token, token != ""
 }
 
 // RequireAuth rejects requests with no identity.

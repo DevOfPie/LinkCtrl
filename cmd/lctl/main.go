@@ -33,6 +33,9 @@ Commands:
   migrate down       Roll back the most recent migration
   migrate status     Show applied and pending migrations
   partitions ensure  Create partitions for the current and next months
+  apikey create      Issue an API key   --user --name --scopes [--expires-in]
+  apikey list        List a user's API keys                          --user
+  apikey revoke      Revoke an API key                         --user --id
   version            Print version information
 `)
 }
@@ -61,6 +64,9 @@ func run(args []string) error {
 
 	case "migrate":
 		return migrate(args[1:])
+
+	case "apikey":
+		return apikeyCmd(args[1:])
 
 	case "partitions":
 		if len(args) < 2 || args[1] != "ensure" {

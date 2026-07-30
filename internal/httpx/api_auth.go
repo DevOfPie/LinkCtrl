@@ -140,6 +140,18 @@ type changePasswordRequest struct {
 func (a *AuthAPI) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	id := IdentityFrom(r.Context())
 
+	// Not with an API key. Changing the password revokes every other session,
+	// so allowing it from a token would let a leaked key lock its owner out of
+	// their own account.
+	if id.IsAPIKey() {
+		WriteProblem(w, r, Problem{
+			Type: problemBase + "forbidden", Title: "Forbidden",
+			Status: http.StatusForbidden,
+			Detail: "Changing a password requires a signed-in session, not an API key.",
+		})
+		return
+	}
+
 	var req changePasswordRequest
 	if err := decodeJSON(w, r, &req); err != nil {
 		WriteError(w, r, err)

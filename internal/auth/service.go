@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 )
 
@@ -36,6 +37,11 @@ type Identity struct {
 	OrgID       uuid.UUID
 	SessionID   uuid.UUID
 	Role        string
+	// APIKeyID is set when the request authenticated with an API key instead
+	// of a session cookie. Services consult it for the few operations that
+	// must require an interactive sign-in; everything else is deliberately
+	// blind to which credential was used.
+	APIKeyID    *uuid.UUID
 	permissions map[string]struct{}
 }
 
@@ -61,6 +67,25 @@ func (i *Identity) Permissions() []string {
 		out = append(out, p)
 	}
 	return out
+}
+
+// IsAPIKey reports whether the request authenticated with an API key.
+func (i *Identity) IsAPIKey() bool { return i != nil && i.APIKeyID != nil }
+
+// restrictTo intersects the identity's permissions with a set of scopes.
+//
+// Intersection, never replacement: a key cannot hold a permission its owner
+// lacks, so revoking a role revokes every key that leant on it. Called with
+// the key's scopes on every request rather than stored, so a role change takes
+// effect immediately.
+func (i *Identity) restrictTo(scopes []string) {
+	allowed := make(map[string]struct{}, len(scopes))
+	for _, s := range scopes {
+		if _, held := i.permissions[s]; held {
+			allowed[s] = struct{}{}
+		}
+	}
+	i.permissions = allowed
 }
 
 // Service owns registration, login and session lifecycle.
@@ -385,6 +410,29 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*Identity, er
 	}
 	identity.SessionID = row.ID
 	return identity, nil
+}
+
+// IdentityForEmail resolves a user to an identity without a session.
+//
+// For the CLI, which acts as a named user rather than as root: `lctl apikey
+// create` goes through the same service call and the same permission checks a
+// request would, so the CLI cannot mint a key the user could not.
+func (s *Service) IdentityForEmail(ctx context.Context, email string) (*Identity, error) {
+	user, err := s.q.GetUserByEmail(ctx, NormalizeEmail(email))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, fmt.Errorf("look up user: %w", err)
+	}
+	if user.Status != "active" {
+		return nil, ErrAccountInactive
+	}
+	ws, err := s.q.GetDefaultWorkspaceForUser(ctx, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve workspace: %w", err)
+	}
+	return s.identityFor(ctx, user.ID, user.Email, user.Name, ws.ID, ws.OrganizationID)
 }
 
 // Logout revokes one session.
