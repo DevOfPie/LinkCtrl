@@ -44,10 +44,12 @@ echo "get-tailwind: downloading ${asset} ${VERSION}"
 curl -fsSL --retry 3 -o "${tmp}/${asset}" "${base}/${asset}"
 curl -fsSL --retry 3 -o "${tmp}/sha256sums.txt" "${base}/sha256sums.txt"
 
-# The published sums file lists every asset; check only the one we fetched.
-expected="$(grep " ${asset}\$" "${tmp}/sha256sums.txt" | awk '{print $1}')"
+# The published sums file lists every asset, as "<hash>  ./<asset>". Match on a
+# leading slash or space rather than assuming either form.
+expected="$(grep -E "[ /]${asset}\$" "${tmp}/sha256sums.txt" | awk '{print $1}')"
 if [ -z "$expected" ]; then
 	echo "get-tailwind: ${asset} not listed in sha256sums.txt for ${VERSION}" >&2
+	cat "${tmp}/sha256sums.txt" >&2
 	exit 1
 fi
 

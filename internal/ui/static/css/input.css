@@ -1,0 +1,13 @@
+/* Tailwind entry point.
+ *
+ * The dashboard arrives in M11; until then this exists so the stylesheet
+ * pipeline — pinned CLI, checksum verification, Docker stage, embed target —
+ * is proven end to end rather than discovered to be broken later.
+ *
+ * @source tells Tailwind v4 where to scan for class names. Templates do not
+ * exist yet, so the generated file is currently just the preflight reset.
+ */
+@import "tailwindcss";
+
+@source "../../templates/**/*.html";
+@source "../js/**/*.js";

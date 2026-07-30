@@ -1,0 +1,23 @@
+# Developer conveniences. Compose applies this automatically on top of
+# docker-compose.yml; production uses `-f docker-compose.yml -f
+# docker-compose.prod.yml` and never picks it up.
+
+services:
+  app:
+    build:
+      context: .
+    environment:
+      LINKCTRL_APP_ENV: development
+      LINKCTRL_LOG_FORMAT: text
+      LINKCTRL_LOG_LEVEL: debug
+      LINKCTRL_SECURE_COOKIES: "false"
+
+  postgres:
+    # Published on a non-default port so it cannot collide with a Postgres the
+    # developer already has installed on 5432.
+    ports:
+      - "${POSTGRES_PORT:-55432}:5432"
+
+  redis:
+    ports:
+      - "${REDIS_PORT:-56379}:6379"

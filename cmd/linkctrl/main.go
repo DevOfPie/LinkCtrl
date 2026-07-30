@@ -8,30 +8,64 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"log/slog"
+	"net"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/DevOfPie/LinkCtrl/internal/build"
+	"github.com/DevOfPie/LinkCtrl/internal/config"
+	"github.com/DevOfPie/LinkCtrl/internal/httpx"
+	"github.com/DevOfPie/LinkCtrl/internal/observability"
+	"github.com/DevOfPie/LinkCtrl/internal/platform/httpserver"
+	"github.com/DevOfPie/LinkCtrl/internal/platform/postgres"
+	"github.com/DevOfPie/LinkCtrl/internal/platform/redis"
 )
 
 func main() {
-	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
+	if err := main2(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintf(os.Stderr, "linkctrl: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(args []string, stdout, stderr *os.File) error {
+func main2(args []string, stdout, stderr io.Writer) error {
+	// Subcommands are matched before flags so `linkctrl healthcheck` works in
+	// a distroless image, which has no shell or curl for the compose
+	// healthcheck to use.
+	if len(args) > 0 {
+		switch args[0] {
+		case "healthcheck":
+			return healthcheck(args[1:])
+		case "version":
+			fmt.Fprintln(stdout, build.Get())
+			return nil
+		}
+	}
+
 	fs := flag.NewFlagSet("linkctrl", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (
 		showVersion = fs.Bool("version", false, "print version information and exit")
 		asJSON      = fs.Bool("json", false, "with --version, print as JSON")
+		checkConfig = fs.Bool("check-config", false, "validate configuration and exit")
 	)
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: linkctrl [flags]\n\nFlags:\n")
+		fmt.Fprintf(stderr, `Usage: linkctrl [flags]
+       linkctrl healthcheck
+       linkctrl version
+
+Flags:
+`)
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -49,7 +83,140 @@ func run(args []string, stdout, stderr *os.File) error {
 		return nil
 	}
 
-	// The server is wired up in M1. Until then the binary exists so that the
-	// build, the Dockerfile, and the version stamping can all be verified.
-	return fmt.Errorf("server not implemented yet; run with --version")
+	cfg, err := config.Load()
+	if err != nil {
+		// Printed rather than wrapped, because Validate returns every problem
+		// joined by newlines and the operator should see them as a list.
+		fmt.Fprintf(stderr, "configuration is invalid:\n\n%v\n\n"+
+			"See .env.example for the full reference.\n", err)
+		return errors.New("invalid configuration")
+	}
+
+	if *checkConfig {
+		fmt.Fprintln(stdout, "configuration OK")
+		return nil
+	}
+
+	return run(cfg, stdout)
+}
+
+func run(cfg config.Config, _ io.Writer) error {
+	log := observability.NewLogger(cfg, os.Stdout)
+	slog.SetDefault(log)
+
+	info := build.Get()
+	// version is already on every record via the base logger; only the
+	// details that are not are repeated here.
+	log.Info("starting",
+		slog.String("commit", info.ShortCommit()),
+		slog.String("go", info.GoVersion),
+		slog.String("env", string(cfg.AppEnv)),
+		slog.String("base_url", cfg.BaseURL),
+	)
+
+	// Signals are trapped before any dependency is opened, so a Ctrl-C during
+	// a slow database connect still exits promptly.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if !cfg.SecureCookies {
+		log.Warn("insecure cookies enabled: sessions will not be protected in transit; " +
+			"acceptable only for local HTTP development")
+	}
+
+	pools, err := postgres.Open(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("connect to postgres: %w", err)
+	}
+	defer pools.Close()
+
+	if err := postgres.VerifyUTC(ctx, pools.App); err != nil {
+		return err
+	}
+	log.Info("postgres connected",
+		slog.Int("app_pool_max", int(cfg.DB.MaxConns)),
+		slog.Int("redirect_pool_max", int(cfg.DB.RedirectMaxConns)),
+	)
+
+	// A cache failure is not a startup failure. The service is fully correct
+	// without Redis, only slower, so this logs and continues.
+	var rdb *redis.Client
+	if cfg.Redis.CacheEnabled {
+		rdb, err = redis.Open(ctx, cfg)
+		if err != nil {
+			log.Warn("redis unavailable at startup; continuing without cache",
+				slog.Any("error", err))
+		} else {
+			log.Info("redis connected")
+		}
+		if rdb != nil {
+			defer func() { _ = rdb.Close() }()
+		}
+	} else {
+		log.Info("cache disabled by configuration")
+	}
+
+	health := &httpx.Health{DB: pools.App, Redis: rdb}
+	handler := httpx.NewRouter(httpx.Deps{Config: cfg, Health: health})
+
+	srv := httpserver.New(httpserver.Options{
+		Addr:              cfg.HTTP.Addr,
+		Handler:           handler,
+		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
+		WriteTimeout:      cfg.HTTP.WriteTimeout,
+		Logger:            log,
+	})
+	srv.OnDrain = health.StartDraining
+	srv.DrainDelay = cfg.Shutdown.DrainDelay
+	srv.ShutdownTimeout = cfg.Shutdown.Timeout
+
+	if err := srv.Run(ctx); err != nil {
+		return fmt.Errorf("http server: %w", err)
+	}
+	return nil
+}
+
+// healthcheck is the container healthcheck. The runtime image is distroless
+// and has neither a shell nor curl, so the binary probes itself.
+func healthcheck(args []string) error {
+	fs := flag.NewFlagSet("healthcheck", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	addr := fs.String("addr", "", "address to probe (default: from LINKCTRL_HTTP_ADDR)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	target := *addr
+	if target == "" {
+		target = os.Getenv("LINKCTRL_HTTP_ADDR")
+	}
+	if target == "" {
+		target = ":8080"
+	}
+	host, port, err := net.SplitHostPort(target)
+	if err != nil {
+		return fmt.Errorf("invalid address %q: %w", target, err)
+	}
+	if host == "" {
+		host = "127.0.0.1"
+	}
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	url := fmt.Sprintf("http://%s/readyz", net.JoinHostPort(host, port))
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("readyz returned %d", resp.StatusCode)
+	}
+	return nil
 }
