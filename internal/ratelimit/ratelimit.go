@@ -41,8 +41,12 @@ const (
 	// exactly the requests the split pool exists to keep parallel.
 	shardCount = 32
 
-	// defaultMaxKeys bounds the table across all shards. At roughly 64 bytes per
-	// entry this is a few megabytes — enough to track a large botnet, small
+	// defaultMaxKeys bounds the table across all shards. At roughly 100 bytes
+	// per entry — a heap-allocated bucket, the key string and its bytes, and the
+	// map's own per-slot overhead — a full table is about 10 MB. The cap is per
+	// limiter, and the server runs up to three (login, api, redirect_404), so
+	// the process-wide worst case is ~300k keys. linkctrl_rate_limit_tracked_keys
+	// is the number to watch; it is enough to track a large botnet and small
 	// enough that it cannot become the reason the process is killed.
 	defaultMaxKeys = 100_000
 

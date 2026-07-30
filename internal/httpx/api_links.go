@@ -30,12 +30,13 @@ type LinkAPI struct {
 }
 
 type createLinkRequest struct {
-	URL         string   `json:"url"`
-	Alias       string   `json:"alias"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Tags        []string `json:"tags"`
-	ExpiresAt   *string  `json:"expires_at"`
+	URL          string   `json:"url"`
+	Alias        string   `json:"alias"`
+	Title        string   `json:"title"`
+	Description  string   `json:"description"`
+	Tags         []string `json:"tags"`
+	ExpiresAt    *string  `json:"expires_at"`
+	ForwardQuery bool     `json:"forward_query"`
 
 	// Phase 2. Present so the service can reject them by name.
 	Password  string `json:"password"`
@@ -53,7 +54,8 @@ func (a *LinkAPI) Create(w http.ResponseWriter, r *http.Request) {
 	in := link.CreateInput{
 		URL: req.URL, Alias: req.Alias, Title: req.Title,
 		Description: req.Description, Tags: req.Tags,
-		Password: req.Password, MaxClicks: req.MaxClicks, OneTime: req.OneTime,
+		ForwardQuery: req.ForwardQuery,
+		Password:     req.Password, MaxClicks: req.MaxClicks, OneTime: req.OneTime,
 	}
 	if req.ExpiresAt != nil && *req.ExpiresAt != "" {
 		at, err := time.Parse(time.RFC3339, *req.ExpiresAt)
@@ -130,12 +132,13 @@ func (a *LinkAPI) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateLinkRequest struct {
-	URL         *string   `json:"url"`
-	Alias       *string   `json:"alias"`
-	Title       *string   `json:"title"`
-	Description *string   `json:"description"`
-	ExpiresAt   *string   `json:"expires_at"`
-	Tags        *[]string `json:"tags"`
+	URL          *string   `json:"url"`
+	Alias        *string   `json:"alias"`
+	Title        *string   `json:"title"`
+	Description  *string   `json:"description"`
+	ExpiresAt    *string   `json:"expires_at"`
+	Tags         *[]string `json:"tags"`
+	ForwardQuery *bool     `json:"forward_query"`
 }
 
 func (a *LinkAPI) Update(w http.ResponseWriter, r *http.Request) {
@@ -154,6 +157,7 @@ func (a *LinkAPI) Update(w http.ResponseWriter, r *http.Request) {
 	in := link.UpdateInput{
 		URL: req.URL, Alias: req.Alias, Title: req.Title,
 		Description: req.Description, Tags: req.Tags,
+		ForwardQuery: req.ForwardQuery,
 	}
 	if req.ExpiresAt != nil {
 		// An explicit null clears the expiry; an absent field leaves it alone.

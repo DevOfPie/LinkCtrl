@@ -30,6 +30,8 @@ short link is an editable, measurable, scriptable resource.
 ### Links
 
 - Create, edit, archive and soft-delete links, with a 30-day recovery window.
+  A trashed link holds its alias for the whole window; the hourly purge then
+  deletes it, permanently reserving any alias that ever received traffic.
   Editing a destination never changes the short URL — the reason redirects are
   always 302.
 - Custom or generated aliases, lowercase-canonical and case-insensitive. Dots are
@@ -37,6 +39,8 @@ short link is an editable, measurable, scriptable resource.
   of problem rather than pattern-matching for it.
 - Tags, titles, descriptions and expiry. An expired link answers `410 Gone`, not
   `404`, so crawlers and link checkers stop retrying.
+- Per-link query forwarding, off by default: the visitor's query string is merged
+  into the destination, whose own parameters win on conflict.
 - Full-text and substring search, filtering by status, sorting, and cursor
   pagination. Offsets are not offered: they re-scan skipped rows and silently
   duplicate or drop entries when links are created mid-page.

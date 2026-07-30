@@ -98,7 +98,10 @@ jobs:
       # the linter cannot type-check anything that imports internal/ui.
       - name: Build the stylesheet
         run: make htmx swagger-ui css
-      - uses: golangci/golangci-lint-action@v6
+      # Action major matters here: v6 and earlier run only golangci-lint v1.x and
+      # refuse the v2 config schema this repository uses — the job would fail on
+      # every run. v7 is where the action gained v2 support.
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           # Pinned: a linter that updates itself turns an unrelated release into a
           # red build, which is how nolint comments accumulate for the wrong reason.
@@ -169,13 +172,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: docker/setup-buildx-action@v3
+      # Third-party actions are pinned to commit SHAs, not tags, matching the
+      # project's bar for third-party build inputs (the Tailwind, htmx and
+      # Swagger downloads are all checksum-verified): a tag is a moving
+      # reference its owner can repoint under a workflow's token. GitHub-owned
+      # actions/* stay on tags.
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       # Both release platforms, because the Dockerfile selects a Tailwind asset by
       # TARGETARCH and an arm64-only failure would otherwise surface for the first
       # time during a release.
       - name: Build for both release platforms
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -187,7 +195,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Load the amd64 image and check it starts and reports itself
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           load: true

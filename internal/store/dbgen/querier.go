@@ -93,8 +93,14 @@ type Querier interface {
 	// presented as a distinct-person count, because the exact figure cannot be
 	// recovered once the salts are purged. That is the intended trade.
 	GetWorkspaceTotals(ctx context.Context, arg GetWorkspaceTotalsParams) (GetWorkspaceTotalsRow, error)
-	// Used by alias generation before insert. The unique index remains the real
-	// guarantee; this only reduces how often the insert has to retry.
+	// Consulted by BOTH create paths — generated aliases before insert, and
+	// user-supplied aliases as validation — and by alias changes.
+	//
+	// No deleted_at filter on the links branch, deliberately: a soft-deleted row
+	// holds its alias for the whole trash window, so a link deleted by accident can
+	// be restored under its own name. The partial unique index cannot enforce that
+	// (it ignores trashed rows), so this check is the enforcement and the index
+	// remains the guarantee against live-row races only.
 	IsAliasTaken(ctx context.Context, arg IsAliasTakenParams) (bool, error)
 	// Revoked keys are included. "Which keys existed and when were they revoked"
 	// is the question asked after an incident, so they are listed until the reaper
@@ -117,6 +123,20 @@ type Querier interface {
 	ListTags(ctx context.Context, workspaceID uuid.UUID) ([]ListTagsRow, error)
 	ListUserSessions(ctx context.Context, userID uuid.UUID) ([]ListUserSessionsRow, error)
 	ListUsers(ctx context.Context) ([]ListUsersRow, error)
+	// The end of the trash window: hard-delete links whose purge_after has passed.
+	//
+	// One statement, so the reservation and the deletion cannot be separated by a
+	// crash: an alias that ever received traffic is written to reserved_aliases in
+	// the same command that removes its row, and ON CONFLICT makes a retried run
+	// converge rather than fail. Aliases that never received a click are released —
+	// deliberately, per the reserved_aliases rationale: nothing in the wild points
+	// at them, so permanent reservation would only bleed the namespace.
+	//
+	// SKIP LOCKED so the purge can never block, or be blocked by, a concurrent
+	// restore-by-hand of the same row; a skipped row is caught on the next run.
+	// Destinations and link_tags follow by ON DELETE CASCADE. click_events rows
+	// carry no FK (partitioned) and are dropped by analytics retention instead.
+	PurgeExpiredLinks(ctx context.Context, batchSize int32) ([]PurgeExpiredLinksRow, error)
 	// The de-identification step. Once the salt is gone the day's hashes cannot be
 	// linked back to an address.
 	PurgeExpiredSalts(ctx context.Context) (int64, error)

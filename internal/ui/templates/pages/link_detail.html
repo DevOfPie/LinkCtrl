@@ -88,6 +88,15 @@
              class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
     </div>
     <div class="sm:col-span-2">
+      <label class="flex items-start gap-2 text-sm text-slate-700">
+        <input type="checkbox" name="forward_query" value="1" class="mt-0.5 rounded border-slate-300"
+               {{if .Form.ForwardQuery}}checked{{end}}>
+        <span>Forward query parameters
+          <span class="block text-xs text-slate-400">Visitors' <code>?utm_source=…</code> and friends are merged into the destination. The destination's own parameters win on conflict.</span>
+        </span>
+      </label>
+    </div>
+    <div class="sm:col-span-2">
       <button type="submit" class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Save changes</button>
     </div>
   </form>

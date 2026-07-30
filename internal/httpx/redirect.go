@@ -99,26 +99,26 @@ type ClickEvent struct {
 func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	code := strings.TrimSpace(r.PathValue("alias"))
-
-	// Has this address been probing? Checked, not charged: only a miss pays.
-	probing, retryAfter := h.probeStatus(r)
-
 	canonical := alias.Canonical(code)
 
 	// Anything that cannot be a stored alias is refused on shape, before the
-	// cache or the database is touched. A scanner spraying paths would otherwise
-	// turn each one into a query and a negative cache entry.
+	// limiter, the cache or the database is touched. A scanner spraying paths
+	// would otherwise turn each one into a query and a negative cache entry.
 	//
-	// Deliberately not charged to the probe limit: refusing this costs a byte
-	// scan, so there is nothing here to protect. It is also what keeps favicon.ico
-	// and robots.txt — which every browser asks for and which land on this tree —
-	// from spending a real visitor's allowance.
+	// Deliberately not charged to the probe limit — refusing this costs a byte
+	// scan, so there is nothing here to protect — and deliberately ahead of the
+	// limiter check, so favicon.ico and robots.txt (which every browser asks
+	// for, and which land on this tree) never touch the limiter's shards at
+	// all, not even to read them.
 	if !alias.WellFormed(canonical) {
 		// Rejected before any lookup, so there is no cache tier to report.
 		h.Metrics.ObserveRedirect("not_found", "rejected", time.Since(start))
 		h.notFound(w, r)
 		return
 	}
+
+	// Has this address been probing? Checked, not charged: only a miss pays.
+	probing, retryAfter := h.probeStatus(r)
 
 	var res redirect.Result
 	if probing {
@@ -265,6 +265,7 @@ func (h *RedirectHandler) chargeProbe(r *http.Request) {
 func (h *RedirectHandler) tooManyRequests(w http.ResponseWriter, r *http.Request, retry time.Duration) {
 	head := w.Header()
 	head.Set("Content-Type", "text/plain; charset=utf-8")
+	head.Set("X-Content-Type-Options", "nosniff")
 	head.Set("X-Robots-Tag", "noindex, nofollow")
 	head.Set("Cache-Control", "no-store")
 	setRetryAfter(w, retry)
@@ -286,6 +287,7 @@ func (h *RedirectHandler) notFound(w http.ResponseWriter, r *http.Request) {
 func (h *RedirectHandler) unavailable(w http.ResponseWriter, r *http.Request) {
 	head := w.Header()
 	head.Set("Content-Type", "text/plain; charset=utf-8")
+	head.Set("X-Content-Type-Options", "nosniff")
 	head.Set("Retry-After", "1")
 	head.Set("X-Robots-Tag", "noindex, nofollow")
 	head.Set("Cache-Control", "no-store")
@@ -304,6 +306,10 @@ func (h *RedirectHandler) gone(w http.ResponseWriter, r *http.Request) {
 func (h *RedirectHandler) errorPage(w http.ResponseWriter, r *http.Request, status int, body []byte) {
 	head := w.Header()
 	head.Set("Content-Type", "text/html; charset=utf-8")
+	// The redirect tree is outside the security-header chain, so every response
+	// it writes sets nosniff itself — the same rule writeTooManyRequests
+	// documents for the API limiter's refusals.
+	head.Set("X-Content-Type-Options", "nosniff")
 	// Error pages must never be indexed: a shortener accumulates thousands of
 	// dead aliases, and letting a crawler index them is pure noise.
 	head.Set("X-Robots-Tag", "noindex, nofollow")

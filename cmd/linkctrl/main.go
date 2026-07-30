@@ -305,7 +305,13 @@ func run(cfg config.Config, _ io.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = geo.Close() }()
+	// Deliberately never closed. Close unmaps the file and is not safe against
+	// concurrent lookups, and on the one shutdown path where it would run with
+	// work still in flight — an analytics flush timing out, Ingester.Close
+	// returning while its worker is still enriching a draining batch — a
+	// deferred Close here turned an orderly error exit into a potential
+	// segfault. The mapping's lifetime is the process's lifetime; the OS
+	// reclaims it at exit, which is the only moment it stops being needed.
 	if geo.Enabled() {
 		log.Info("geoip database loaded", slog.String("database", geo.Description()))
 	} else {

@@ -848,8 +848,8 @@ components:
       type: object
       additionalProperties: false
       required:
-        [id, workspace_id, alias, short_url, url, status, tags, click_count,
-         created_at, updated_at]
+        [id, workspace_id, alias, short_url, url, status, tags, forward_query,
+         click_count, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         workspace_id: { type: string, format: uuid }
@@ -869,6 +869,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Tag"
+        forward_query:
+          type: boolean
+          description: When true, a visitor's query string is merged into the destination on redirect. The destination's own parameters win on conflict.
         expires_at: { type: string, format: date-time }
         click_count:
           type: integer
@@ -919,6 +922,9 @@ components:
           type: string
           format: date-time
           description: Must be in the future. The link answers 410 past it.
+        forward_query:
+          type: boolean
+          description: Off by default. Merges the visitor's query string into the destination on redirect; the destination's own parameters win.
         password:
           type: string
           description: Phase 2. Present in the schema, rejected with 422.
@@ -948,6 +954,9 @@ components:
           type: array
           items: { type: string }
           description: Replaces the full tag set.
+        forward_query:
+          type: boolean
+          description: Toggles query forwarding for the link.
 
     DayPoint:
       type: object

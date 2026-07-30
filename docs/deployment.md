@@ -62,8 +62,24 @@ Four things about that file are worth more than a glance:
 - **`TRUSTED_PROXIES` must list your proxy and nothing else.** It is empty by
   default, and that default is the safe one: with it set, `X-Forwarded-For` is
   believed, and anything in that list can claim any client address — which
-  corrupts analytics and would defeat rate limiting if there were any. See
+  corrupts analytics and defeats the per-address rate limits. See
   [step 3](#3-put-tls-in-front).
+
+One more file matters here: **`docker-compose.override.yml` is applied
+automatically** whenever `docker compose` runs in the checkout, and it carries
+development conveniences — published database ports among them. Its values are
+written as defaults, so your `.env` settings above win either way, but for
+production run compose with the base file only:
+
+```sh
+docker compose -f docker-compose.yml up -d --wait
+```
+
+That skips the override entirely, which is also what keeps Postgres and Redis
+off the host's network interfaces. (An earlier version of the override
+hard-coded `APP_ENV: development`, which silently overrode the `.env` above and
+deployed dev mode; the values are defaults now precisely so forgetting `-f`
+cannot do that again.)
 
 Secrets can come from files instead of the environment, for Docker or Swarm
 secrets:
@@ -90,10 +106,10 @@ Validation is aggregated: if six values are wrong you get six messages, each
 naming the variable and what to do about it. This is much cheaper than reading a
 crash loop.
 
-Then bring the stack up:
+Then bring the stack up (base file only, per step 1):
 
 ```sh
-docker compose up -d --wait
+docker compose -f docker-compose.yml up -d --wait
 ```
 
 `--wait` blocks until the healthchecks pass. The app waits for Postgres to be
@@ -219,8 +235,8 @@ LINKCTRL_TAG=0.1.0
 ```
 
 ```sh
-docker compose pull app
-docker compose up -d --wait
+docker compose -f docker-compose.yml pull app
+docker compose -f docker-compose.yml up -d --wait
 ```
 
 For a deployment that must be reproducible, pin the digest instead — every release
@@ -248,8 +264,8 @@ again. Across a minor version it may not be — see
 
 ### Without Docker
 
-Every release also publishes static binaries for linux, macOS and Windows on
-amd64 and arm64, with a `SHA256SUMS` file:
+Every release also publishes static binaries — linux amd64/arm64, macOS
+amd64/arm64, and Windows amd64 — with a `SHA256SUMS` file:
 
 ```sh
 tar xzf linkctrl_0.1.0_linux_amd64.tar.gz

@@ -96,6 +96,11 @@ type Link struct {
 	Status      LinkStatus `json:"status"`
 	Tags        []Tag      `json:"tags"`
 
+	// ForwardQuery merges the incoming query string into the destination on
+	// redirect. Off by default: destinations were configured deliberately, and
+	// most callers do not expect ?utm_source to reach them.
+	ForwardQuery bool `json:"forward_query"`
+
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 
 	// Approximate: updated in batches with the click events, so it lags by up

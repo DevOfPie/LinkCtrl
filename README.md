@@ -6,11 +6,11 @@ measure, script and revoke — not a row you create once and hope about.
 Runs as one Go binary with Postgres and Redis beside it. No Node in the image,
 no SaaS dependency, no telemetry leaving the box.
 
-> **Status: Phase 1, near complete.** Everything below is built, tested and
-> exercised end to end. What is *not* built is listed plainly in
-> [Not built yet](#not-built-yet) — including a few settings that currently
-> accept a value and do nothing. Check that list before deploying anything you
-> care about.
+> **Status: Phase 1 complete.** Everything below is built, tested and exercised
+> end to end; every configuration setting takes effect, and the redirect latency
+> target is measured, not aspirational. What is deferred to Phase 2 is listed
+> plainly in [Not built yet](#not-built-yet). Check that list before deploying
+> anything you care about.
 
 ---
 
@@ -128,7 +128,7 @@ every API response that includes them says so.
 
 ## Not built yet
 
-Phase 1 is not finished:
+Known limitations and deferred work, so nobody discovers them in production:
 
 - **Single-instance cache invalidation.** Editing a link clears the cache on the
   replica that served the edit; others wait out the TTL. Run one app instance
@@ -144,12 +144,6 @@ Phase 1 is not finished:
 - **No audit log behaviour, no folders, no custom domains, no QR codes, no
   password/one-time links.** The tables exist; the features are Phase 2.
 
-Rate limiting, geographic analytics and retention enforcement used to be listed
-here as settings that accepted a value and did nothing. They are implemented now,
-and three variables that were never going to be implemented — an ingest worker
-count, a salt rotation period, a bot-filter switch — were removed instead, because
-in each case the fixed behaviour was the design. Startup warns if you still have
-one set.
 
 The full list, with consequences, is in
 [Plan.md](Plan.md#phase-1-scope-not-yet-built) and

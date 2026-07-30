@@ -44,7 +44,13 @@ func RealIP(trusted []netip.Prefix) func(http.Handler) http.Handler {
 			addr := directAddr(r)
 
 			if len(trusted) > 0 && isTrusted(addr, trusted) {
-				if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+				// Values, not Get: some proxies (HAProxy among them) append the
+				// client as a NEW header line rather than extending the first,
+				// and Get returns only the first line — which is the one the
+				// client sent. Joining every occurrence in order reconstructs
+				// the full hop list; the rightmost entries are the ones the
+				// trusted proxy wrote.
+				if fwd := strings.Join(r.Header.Values("X-Forwarded-For"), ","); fwd != "" {
 					// Right to left, taking the last address not itself a
 					// trusted proxy. Reading left to right would take the
 					// client-supplied value, which is trivially forged.
@@ -54,6 +60,11 @@ func RealIP(trusted []netip.Prefix) func(http.Handler) http.Handler {
 						if err != nil {
 							continue
 						}
+						// Unmap before the trust check: a proxy that writes its
+						// upstream hop as ::ffff:10.0.0.5 must match a 10.0.0.0/8
+						// trust entry, and netip.Prefix.Contains never matches a
+						// mapped address against an IPv4 prefix.
+						candidate = candidate.Unmap()
 						if !isTrusted(candidate, trusted) {
 							addr = candidate
 							break

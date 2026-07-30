@@ -154,6 +154,7 @@ SLO is defined against, and seeding them takes about 90 seconds:
 
 ```sh
 $ lctl seed --reset --links 100000 --clicks 5000000
+reset: previous seed removed
 created 4 partitions covering the seeded range
 links: 100000/100000
 clicks: 5000000/5000000
@@ -163,10 +164,13 @@ seeded 100000 links and 5000000 click events in 1m25s
 aliases: ld0 … ld99999 on localhost:8080
 ```
 
-`--reset` truncates `click_events` and `visitors` and deletes previously seeded
-links first. It refuses to run at all when `APP_ENV=production` unless `--force`
-is given, because a load-test dataset in a production database is not a mistake
-anyone should be able to make with the up-arrow key.
+`--reset` truncates `click_events` and `visitors` — **all of them**, not only
+seeded ones — and hard-deletes links matching the prefix *in the seeded
+workspace only*. The prefix is restricted to lowercase letters, digits and
+hyphens, so it cannot smuggle `LIKE` wildcards into that delete. The command
+refuses to run at all when `APP_ENV=production` unless `--force` is given,
+because a load-test dataset in a production database is not a mistake anyone
+should be able to make with the up-arrow key.
 
 Two things about seeded rows are worth knowing, because they are not quite real
 ones. Links carry their destination URL directly and have no `destinations` row:

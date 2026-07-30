@@ -271,7 +271,11 @@ caveat with the data.
 
 ## Build status
 
-As of 2026-07-30. 18 of 18 milestones — Phase 1 is complete.
+As of 2026-07-30. 18 of 18 milestones, then re-reviewed: a six-dimension audit
+with adversarial verification confirmed 30 findings — among them a missing purge
+job that inverted the alias-reservation promise, and query forwarding with no
+write surface — all fixed the same day. Phase 1 is complete because the review
+says so, not because the milestone counter reached its end.
 
 | Area | State |
 | --- | --- |
@@ -293,7 +297,7 @@ As of 2026-07-30. 18 of 18 milestones — Phase 1 is complete.
 | Load validation of the redirect target | done, target met — [docs/slo.md](docs/slo.md) |
 | Release packaging | done, verified — [docs/releasing.md](docs/releasing.md) |
 
-Verification: 86 integration tests against real Postgres and Redis — including
+Verification: 92 integration tests against real Postgres and Redis — including
 a contract test that replays every OpenAPI operation against the live server —
 plus unit, property and fuzz tests. All run under the race detector, and all of it
 runs in CI alongside a two-architecture container build.

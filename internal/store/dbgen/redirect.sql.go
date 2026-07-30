@@ -15,7 +15,7 @@ import (
 const isAliasTaken = `-- name: IsAliasTaken :one
 SELECT EXISTS (
     SELECT 1 FROM links l
-    WHERE l.domain_id = $1 AND l.alias = $2 AND l.deleted_at IS NULL
+    WHERE l.domain_id = $1 AND l.alias = $2
     UNION ALL
     -- Aliases of purged links that had traffic. Reissuing one would silently
     -- redirect somebody else's printed QR code to a new destination.
@@ -29,8 +29,14 @@ type IsAliasTakenParams struct {
 	Alias    string
 }
 
-// Used by alias generation before insert. The unique index remains the real
-// guarantee; this only reduces how often the insert has to retry.
+// Consulted by BOTH create paths — generated aliases before insert, and
+// user-supplied aliases as validation — and by alias changes.
+//
+// No deleted_at filter on the links branch, deliberately: a soft-deleted row
+// holds its alias for the whole trash window, so a link deleted by accident can
+// be restored under its own name. The partial unique index cannot enforce that
+// (it ignores trashed rows), so this check is the enforcement and the index
+// remains the guarantee against live-row races only.
 func (q *Queries) IsAliasTaken(ctx context.Context, arg IsAliasTakenParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isAliasTaken, arg.DomainID, arg.Alias)
 	var exists bool

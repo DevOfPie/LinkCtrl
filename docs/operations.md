@@ -101,7 +101,7 @@ rate(linkctrl_db_pool_acquire_waits_total{pool="redirect"}[5m]) > 0
 | --- | --- | --- |
 | Clicks being dropped | `rate(linkctrl_analytics_events_dropped_total[5m]) > 0` | Analytics is losing data to protect latency. Bounded queue working as designed — but you want to know. |
 | Queue climbing | `linkctrl_analytics_queue_depth > 8000` for 5m | The database is falling behind. Fires minutes before drops start. |
-| Redirect errors | `rate(linkctrl_redirects_total{outcome="error"}[5m]) > 0` | Resolution is failing; visitors get 404s for links that exist. |
+| Redirect errors | `rate(linkctrl_redirects_total{outcome="error"}[5m]) > 0` | Resolution is failing; visitors get `503 Retry-After: 1` for links that exist. Usually the redirect pool or Postgres. |
 | Redirect pool starved | `linkctrl_db_pool_acquire_waits_total{pool="redirect"}` increasing | The split pool is not absorbing load; the hot path is queueing. |
 | Job stalled | `time() - linkctrl_job_last_success_timestamp_seconds{job="rollup"} > 600` | Dashboards are going stale. |
 | Job erroring | `rate(linkctrl_job_runs_total{result="error"}[15m]) > 0` | |
@@ -148,6 +148,7 @@ a follower whose scheduler has stopped.
 | `retention` | 1h | Drops monthly partitions of `click_events` and `visitors` that are entirely outside `ANALYTICS_RETENTION_DAYS`. Runs after `partitions`, so a run can never drop what it just created. |
 | `salt-purge` | 1h | Deletes analytics salts older than two days. **This is the de-identification step, not housekeeping**: once a salt is gone, that day's visitor hashes cannot be linked to an address by anyone. |
 | `partition-check` | 1h | Warns if rows landed in a default partition. |
+| `housekeeping` | 1h | The reapers. Hard-deletes links whose 30-day trash window has passed — reserving any alias that ever received traffic in the same statement, so it is never reissued — and deletes sessions and revoked API keys past their retention. Each purged link is logged by alias; that log line is the only record of the deletion. |
 
 All of them run once at startup rather than waiting a full interval, so a fresh
 instance has current numbers.

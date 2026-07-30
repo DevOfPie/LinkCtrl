@@ -132,20 +132,84 @@ func TestRetentionOfZeroKeepsEverything(t *testing.T) {
 func TestRetentionIgnoresPartitionsItDoesNotRecognise(t *testing.T) {
 	pool := newDB(t)
 
-	const name = "click_events_archive_2019"
-	if _, err := pool.Exec(t.Context(), fmt.Sprintf(
-		`CREATE TABLE %s PARTITION OF click_events
-		 FOR VALUES FROM ('2019-01-01 00:00:00+00') TO ('2019-02-01 00:00:00+00')`, name)); err != nil {
-		t.Fatal(err)
+	// Two shapes of hand-attached partition: one whose name does not match the
+	// generated pattern at all, and one that DOES match the _YYYY_MM pattern but
+	// with a prefix that is not the parent table. The second is the trap — it
+	// was droppable until the prefix comparison existed.
+	for name, bounds := range map[string][2]string{
+		"click_events_archive_2019":   {"2019-01-01", "2019-02-01"},
+		"click_events_backup_2024_01": {"2019-02-01", "2019-03-01"},
+		"click_events_import_2020_06": {"2019-03-01", "2019-04-01"},
+	} {
+		if _, err := pool.Exec(t.Context(), fmt.Sprintf(
+			`CREATE TABLE %s PARTITION OF click_events
+			 FOR VALUES FROM ('%s 00:00:00+00') TO ('%s 00:00:00+00')`,
+			name, bounds[0], bounds[1])); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if _, err := store.DropExpiredPartitions(t.Context(), pool, 30,
 		time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC)); err != nil {
 		t.Fatalf("DropExpiredPartitions: %v", err)
 	}
-	if !tableExists(t, pool, name) {
-		t.Errorf("%s was dropped; only partitions matching the generated naming "+
-			"scheme are ours to delete", name)
+	for _, name := range []string{
+		"click_events_archive_2019", "click_events_backup_2024_01", "click_events_import_2020_06",
+	} {
+		if !tableExists(t, pool, name) {
+			t.Errorf("%s was dropped; only partitions matching the generated naming "+
+				"scheme — parent table prefix included — are ours to delete", name)
+		}
+	}
+}
+
+// EnsurePartitionRange must cover every month from `from` to `to` inclusive,
+// across a year boundary — the December→January rollover is where month
+// arithmetic goes wrong, and a missed month silently routes rows to the
+// default partition where they block that month's real partition forever.
+func TestEnsurePartitionRangeCoversYearRollover(t *testing.T) {
+	pool := newDB(t)
+	ctx := t.Context()
+
+	from := time.Date(2030, time.November, 15, 8, 0, 0, 0, time.UTC)
+	to := time.Date(2031, time.February, 3, 8, 0, 0, 0, time.UTC)
+	if _, err := store.EnsurePartitionRange(ctx, pool, from, to); err != nil {
+		t.Fatalf("EnsurePartitionRange: %v", err)
+	}
+
+	for _, want := range []string{
+		"click_events_2030_11", "click_events_2030_12",
+		"click_events_2031_01", "click_events_2031_02",
+		"visitors_2030_12", "audit_logs_2031_01",
+	} {
+		if !tableExists(t, pool, want) {
+			t.Errorf("partition %s was not created", want)
+		}
+	}
+
+	// A row on the first instant of the rollover month lands in an explicit
+	// partition, not the default — the failure mode the default partition
+	// exists to catch, and the one that blocks attaching the real partition.
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO click_events (id, link_id, workspace_id, occurred_at)
+		VALUES ($1, $2, $3, '2031-01-01 00:00:00+00')`,
+		uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())); err != nil {
+		t.Fatal(err)
+	}
+	var inDefault int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM click_events_default`).Scan(&inDefault); err != nil {
+		t.Fatal(err)
+	}
+	if inDefault != 0 {
+		t.Errorf("%d rows landed in the default partition; the explicit range has a gap", inDefault)
+	}
+
+	// Idempotent: a second call creates nothing.
+	if n, err := store.EnsurePartitionRange(ctx, pool, from, to); err != nil {
+		t.Fatal(err)
+	} else if n != 0 {
+		t.Errorf("second run created %d partitions, want 0", n)
 	}
 }
 

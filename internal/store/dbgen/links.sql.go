@@ -148,22 +148,23 @@ const createLink = `-- name: CreateLink :one
 
 INSERT INTO links (
     id, workspace_id, domain_id, alias, primary_url,
-    title, description, status, expires_at, created_by
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    title, description, status, expires_at, created_by, forward_query
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id
 `
 
 type CreateLinkParams struct {
-	ID          uuid.UUID
-	WorkspaceID uuid.UUID
-	DomainID    uuid.UUID
-	Alias       string
-	PrimaryUrl  string
-	Title       string
-	Description string
-	Status      string
-	ExpiresAt   *time.Time
-	CreatedBy   *uuid.UUID
+	ID           uuid.UUID
+	WorkspaceID  uuid.UUID
+	DomainID     uuid.UUID
+	Alias        string
+	PrimaryUrl   string
+	Title        string
+	Description  string
+	Status       string
+	ExpiresAt    *time.Time
+	CreatedBy    *uuid.UUID
+	ForwardQuery bool
 }
 
 // Links, destinations and tags.
@@ -179,6 +180,7 @@ func (q *Queries) CreateLink(ctx context.Context, arg CreateLinkParams) (Link, e
 		arg.Status,
 		arg.ExpiresAt,
 		arg.CreatedBy,
+		arg.ForwardQuery,
 	)
 	var i Link
 	err := row.Scan(
@@ -634,6 +636,68 @@ func (q *Queries) ListTags(ctx context.Context, workspaceID uuid.UUID) ([]ListTa
 	return items, nil
 }
 
+const purgeExpiredLinks = `-- name: PurgeExpiredLinks :many
+WITH doomed AS (
+    SELECT id, domain_id, alias, click_count
+      FROM links
+     WHERE deleted_at IS NOT NULL
+       AND purge_after IS NOT NULL
+       AND purge_after < now()
+     ORDER BY purge_after
+     LIMIT $1::int
+       FOR UPDATE SKIP LOCKED
+),
+reserve AS (
+    INSERT INTO reserved_aliases (domain_id, alias, reason)
+    SELECT domain_id, alias, 'purged with traffic'
+      FROM doomed
+     WHERE click_count > 0
+    ON CONFLICT DO NOTHING
+)
+DELETE FROM links l
+ USING doomed d
+ WHERE l.id = d.id
+RETURNING l.alias, (d.click_count > 0)::boolean AS reserved
+`
+
+type PurgeExpiredLinksRow struct {
+	Alias    string
+	Reserved bool
+}
+
+// The end of the trash window: hard-delete links whose purge_after has passed.
+//
+// One statement, so the reservation and the deletion cannot be separated by a
+// crash: an alias that ever received traffic is written to reserved_aliases in
+// the same command that removes its row, and ON CONFLICT makes a retried run
+// converge rather than fail. Aliases that never received a click are released —
+// deliberately, per the reserved_aliases rationale: nothing in the wild points
+// at them, so permanent reservation would only bleed the namespace.
+//
+// SKIP LOCKED so the purge can never block, or be blocked by, a concurrent
+// restore-by-hand of the same row; a skipped row is caught on the next run.
+// Destinations and link_tags follow by ON DELETE CASCADE. click_events rows
+// carry no FK (partitioned) and are dropped by analytics retention instead.
+func (q *Queries) PurgeExpiredLinks(ctx context.Context, batchSize int32) ([]PurgeExpiredLinksRow, error) {
+	rows, err := q.db.Query(ctx, purgeExpiredLinks, batchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PurgeExpiredLinksRow{}
+	for rows.Next() {
+		var i PurgeExpiredLinksRow
+		if err := rows.Scan(&i.Alias, &i.Reserved); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const reserveAlias = `-- name: ReserveAlias :exec
 INSERT INTO reserved_aliases (domain_id, alias, reason)
 VALUES ($1, $2, $3)
@@ -777,24 +841,26 @@ func (q *Queries) UpdateDestinationURL(ctx context.Context, arg UpdateDestinatio
 
 const updateLink = `-- name: UpdateLink :one
 UPDATE links
-   SET title       = COALESCE($1, title),
-       description = COALESCE($2, description),
-       expires_at  = CASE WHEN $3::boolean THEN NULL
-                          ELSE COALESCE($4, expires_at) END,
-       alias       = COALESCE($5, alias),
-       updated_at  = now()
- WHERE id = $6 AND workspace_id = $7 AND deleted_at IS NULL
+   SET title         = COALESCE($1, title),
+       description   = COALESCE($2, description),
+       expires_at    = CASE WHEN $3::boolean THEN NULL
+                            ELSE COALESCE($4, expires_at) END,
+       alias         = COALESCE($5, alias),
+       forward_query = COALESCE($6, forward_query),
+       updated_at    = now()
+ WHERE id = $7 AND workspace_id = $8 AND deleted_at IS NULL
 RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id
 `
 
 type UpdateLinkParams struct {
-	Title       *string
-	Description *string
-	ClearExpiry bool
-	ExpiresAt   *time.Time
-	Alias       *string
-	ID          uuid.UUID
-	WorkspaceID uuid.UUID
+	Title        *string
+	Description  *string
+	ClearExpiry  bool
+	ExpiresAt    *time.Time
+	Alias        *string
+	ForwardQuery *bool
+	ID           uuid.UUID
+	WorkspaceID  uuid.UUID
 }
 
 // COALESCE with sqlc.narg gives partial update: a NULL argument leaves the
@@ -806,6 +872,7 @@ func (q *Queries) UpdateLink(ctx context.Context, arg UpdateLinkParams) (Link, e
 		arg.ClearExpiry,
 		arg.ExpiresAt,
 		arg.Alias,
+		arg.ForwardQuery,
 		arg.ID,
 		arg.WorkspaceID,
 	)

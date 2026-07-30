@@ -230,6 +230,13 @@ func expiredPartitions(ctx context.Context, pool *pgxpool.Pool, table string, cu
 			// hand-made partition is not ours to delete.
 			continue
 		}
+		// The prefix must be exactly the parent table, not merely end in a
+		// month. Without this, a hand-attached "click_events_backup_2024_01"
+		// matches the pattern and gets dropped — precisely the partition the
+		// rule above promises to leave alone.
+		if m[1] != table {
+			continue
+		}
 		year, _ := strconv.Atoi(m[2])
 		month, _ := strconv.Atoi(m[3])
 		if month < 1 || month > 12 {

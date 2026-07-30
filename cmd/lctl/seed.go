@@ -85,6 +85,13 @@ Flags:
 	if *days < 1 {
 		return fmt.Errorf("--days must be at least 1")
 	}
+	// The prefix reaches a LIKE pattern in --reset, where % and _ are
+	// wildcards; restricting it to alias-legal characters closes that off
+	// entirely rather than escaping case by case. It also guarantees the
+	// generated aliases are valid.
+	if !seedPrefixOK(*prefix) {
+		return fmt.Errorf("--prefix must be 1-16 lowercase letters, digits or hyphens, got %q", *prefix)
+	}
 
 	cfg, err := loadConfig()
 	if err != nil {
@@ -114,6 +121,21 @@ type seedOptions struct {
 	prefix, user        string
 	reset               bool
 	prng                uint64
+}
+
+// seedPrefixOK admits exactly the characters that are both alias-legal and
+// inert inside a LIKE pattern.
+func seedPrefixOK(p string) bool {
+	if len(p) < 1 || len(p) > 16 {
+		return false
+	}
+	for i := 0; i < len(p); i++ {
+		c := p[i]
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 func seed(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, opt seedOptions) error {
@@ -149,8 +171,13 @@ func seed(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, opt seedOp
 		if _, err := pool.Exec(ctx, `TRUNCATE click_events, visitors`); err != nil {
 			return fmt.Errorf("reset click events: %w", err)
 		}
+		// Scoped to the resolved workspace as well as the prefix, and a hard
+		// delete on purpose (no trash detour for synthetic rows). The prefix is
+		// wildcard-free by flag validation, so a real link named "ldn-blog" in
+		// another workspace can no longer be caught by the default "ld".
 		if _, err := pool.Exec(ctx,
-			`DELETE FROM links WHERE alias LIKE $1 || '%'`, opt.prefix); err != nil {
+			`DELETE FROM links WHERE workspace_id = $1 AND alias LIKE $2 || '%'`,
+			workspaceID, opt.prefix); err != nil {
 			return fmt.Errorf("reset links: %w", err)
 		}
 		fmt.Fprintln(os.Stderr, "reset: previous seed removed")
@@ -158,9 +185,13 @@ func seed(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, opt seedOp
 
 	// Clicks land in the past, and an insert with no matching partition goes to
 	// the default one — where it blocks attaching the partition that should have
-	// held it. So the months are created first.
-	from := time.Now().UTC().AddDate(0, 0, -opt.days)
-	if n, err := store.EnsurePartitionRange(ctx, pool, from, time.Now().UTC()); err != nil {
+	// held it. So the months are created first, and `until` is captured ONCE and
+	// passed to click generation too: computing "now" again after a minute of
+	// link seeding would let click timestamps cross into a month the range was
+	// never asked to cover.
+	until := time.Now().UTC()
+	from := until.AddDate(0, 0, -opt.days)
+	if n, err := store.EnsurePartitionRange(ctx, pool, from, until); err != nil {
 		return fmt.Errorf("ensure partitions: %w", err)
 	} else if n > 0 {
 		fmt.Fprintf(os.Stderr, "created %d partitions covering the seeded range\n", n)
@@ -170,7 +201,7 @@ func seed(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, opt seedOp
 	if err != nil {
 		return err
 	}
-	if err := seedClicks(ctx, pool, opt, workspaceID, linkIDs, from); err != nil {
+	if err := seedClicks(ctx, pool, opt, workspaceID, linkIDs, from, until); err != nil {
 		return err
 	}
 
@@ -228,7 +259,7 @@ func seedLinks(ctx context.Context, pool *pgxpool.Pool, opt seedOptions,
 }
 
 func seedClicks(ctx context.Context, pool *pgxpool.Pool, opt seedOptions,
-	workspaceID uuid.UUID, linkIDs []uuid.UUID, from time.Time,
+	workspaceID uuid.UUID, linkIDs []uuid.UUID, from, until time.Time,
 ) error {
 	if opt.clicks == 0 {
 		return nil
@@ -246,7 +277,10 @@ func seedClicks(ctx context.Context, pool *pgxpool.Pool, opt seedOptions,
 	countries := []string{"GB", "DE", "US", "JP", "FR"}
 
 	hot := max(1, int(float64(len(linkIDs))*seedHotShare))
-	window := time.Since(from)
+	// Bounded by the range partitions were created for, not by the wall clock
+	// at this point — link seeding took time, and a timestamp past `until`
+	// could land in a month with no explicit partition.
+	window := until.Sub(from)
 
 	cols := []string{
 		"id", "link_id", "workspace_id", "occurred_at", "visitor_hash",

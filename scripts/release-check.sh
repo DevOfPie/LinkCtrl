@@ -36,10 +36,13 @@ step "version"
 if [ -z "$VERSION" ]; then
   printf '  skip  no version given; pass one to check the tag and changelog\n'
 else
-  case "$VERSION" in
-    v[0-9]*.[0-9]*.[0-9]*) ok "shape ($VERSION)" ;;
-    *) bad "version must look like v1.2.3, got $VERSION" ;;
-  esac
+  # Anchored regex, the same one the release workflow enforces — a case glob
+  # accepts trailing garbage ('v1.2.3;evil' matches v[0-9]*.[0-9]*.[0-9]*).
+  if printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+    ok "shape ($VERSION)"
+  else
+    bad "version must look like v1.2.3, got $VERSION"
+  fi
   if git rev-parse "$VERSION" >/dev/null 2>&1; then
     bad "tag $VERSION already exists"
   else

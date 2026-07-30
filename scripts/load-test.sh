@@ -77,7 +77,9 @@ cached_bucket() {
   echo $(( $(bucket "$1" memory "$2") + $(bucket "$1" redis "$2") ))
 }
 
-# k6 PHASE [extra args...] — one invocation of the generator.
+# k6 PHASE [k6 flags...] — one invocation of the generator. Extra arguments are
+# k6 flags and go after `run`, never before the image name: an earlier version
+# put them among the docker arguments, where docker consumed --quiet itself.
 k6() {
   local phase="$1"; shift
   docker run --rm -i --network "$NETWORK" \
@@ -86,8 +88,7 @@ k6() {
     -e "PHASE=${phase}" \
     -e "MODE=${MODE}" -e "RATE=${RATE}" -e "DURATION=${DURATION}" \
     -e "PREFIX=${PREFIX}" -e "TOTAL=${links}" \
-    "$@" \
-    grafana/k6 run /scripts/redirect.js
+    grafana/k6 run "$@" /scripts/redirect.js
 }
 
 # Warm-up is its own invocation, and the snapshot is taken after it. The server's

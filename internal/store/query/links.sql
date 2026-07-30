@@ -3,8 +3,8 @@
 -- name: CreateLink :one
 INSERT INTO links (
     id, workspace_id, domain_id, alias, primary_url,
-    title, description, status, expires_at, created_by
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    title, description, status, expires_at, created_by, forward_query
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING *;
 
 -- name: CreateDestination :one
@@ -31,12 +31,13 @@ WHERE domain_id = $1 AND alias = $2 AND deleted_at IS NULL;
 -- COALESCE with sqlc.narg gives partial update: a NULL argument leaves the
 -- column alone, so PATCH semantics need no dynamic SQL.
 UPDATE links
-   SET title       = COALESCE(sqlc.narg(title), title),
-       description = COALESCE(sqlc.narg(description), description),
-       expires_at  = CASE WHEN sqlc.arg(clear_expiry)::boolean THEN NULL
-                          ELSE COALESCE(sqlc.narg(expires_at), expires_at) END,
-       alias       = COALESCE(sqlc.narg(alias), alias),
-       updated_at  = now()
+   SET title         = COALESCE(sqlc.narg(title), title),
+       description   = COALESCE(sqlc.narg(description), description),
+       expires_at    = CASE WHEN sqlc.arg(clear_expiry)::boolean THEN NULL
+                            ELSE COALESCE(sqlc.narg(expires_at), expires_at) END,
+       alias         = COALESCE(sqlc.narg(alias), alias),
+       forward_query = COALESCE(sqlc.narg(forward_query), forward_query),
+       updated_at    = now()
  WHERE id = sqlc.arg(id) AND workspace_id = sqlc.arg(workspace_id) AND deleted_at IS NULL
 RETURNING *;
 
@@ -158,6 +159,42 @@ ORDER BY t.name;
 INSERT INTO reserved_aliases (domain_id, alias, reason)
 VALUES ($1, $2, $3)
 ON CONFLICT DO NOTHING;
+
+-- name: PurgeExpiredLinks :many
+-- The end of the trash window: hard-delete links whose purge_after has passed.
+--
+-- One statement, so the reservation and the deletion cannot be separated by a
+-- crash: an alias that ever received traffic is written to reserved_aliases in
+-- the same command that removes its row, and ON CONFLICT makes a retried run
+-- converge rather than fail. Aliases that never received a click are released —
+-- deliberately, per the reserved_aliases rationale: nothing in the wild points
+-- at them, so permanent reservation would only bleed the namespace.
+--
+-- SKIP LOCKED so the purge can never block, or be blocked by, a concurrent
+-- restore-by-hand of the same row; a skipped row is caught on the next run.
+-- Destinations and link_tags follow by ON DELETE CASCADE. click_events rows
+-- carry no FK (partitioned) and are dropped by analytics retention instead.
+WITH doomed AS (
+    SELECT id, domain_id, alias, click_count
+      FROM links
+     WHERE deleted_at IS NOT NULL
+       AND purge_after IS NOT NULL
+       AND purge_after < now()
+     ORDER BY purge_after
+     LIMIT sqlc.arg(batch_size)::int
+       FOR UPDATE SKIP LOCKED
+),
+reserve AS (
+    INSERT INTO reserved_aliases (domain_id, alias, reason)
+    SELECT domain_id, alias, 'purged with traffic'
+      FROM doomed
+     WHERE click_count > 0
+    ON CONFLICT DO NOTHING
+)
+DELETE FROM links l
+ USING doomed d
+ WHERE l.id = d.id
+RETURNING l.alias, (d.click_count > 0)::boolean AS reserved;
 
 -- --- tags -------------------------------------------------------------------
 

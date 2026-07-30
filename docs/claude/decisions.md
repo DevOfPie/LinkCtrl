@@ -1038,3 +1038,120 @@ What a script cannot check is a list in releasing.md: that the changelog was wri
 for an operator, that behaviour changes reached configuration.md and operations.md,
 that new limitations reached Plan.md, and that any performance claim was measured on
 the version making it.
+
+---
+
+## 2026-07-30 — the Phase 1 completeness review, and what it found
+
+"18 of 18 milestones" was reviewed rather than trusted: six parallel reviewers
+(scope parity, M15 code, M16/17 infrastructure, test gaps, documentation claims,
+security), every finding adversarially verified against the code before being
+accepted. Thirty confirmed, one refuted. Phase 1 was not complete, and two of the
+gaps were the kind that live in production for years.
+
+### The purge job did not exist, and the alias promise was inverted
+
+The schema promised it twice ("the purge job deletes the row after this passes"),
+ReserveAlias was written for it, the docs and the changelog described it as real —
+and no job called any of it. Worse than rows accumulating: the unique index is
+partial on deleted_at IS NULL, so soft-deleting a link freed its alias *instantly*.
+The documented promise — a trafficked alias is never reissued, because it is on
+printed material and in other people's bookmarks — was not merely unenforced; the
+opposite was true, and anyone could take over a deleted link's audience the moment
+its owner trashed it. The SQL comment "the alias stays reserved while the row
+exists" was false, and a test comment cited it while testing something else.
+
+The fix has three parts because the index cannot express the rule. IsAliasTaken
+now counts trashed rows and reservations as taken; BOTH create paths consult it —
+the user-supplied path previously relied on the index alone, so a populated
+reservation table would still not have stopped a custom-alias re-registration —
+and alias changes do too, because a rename is a creation as far as the namespace
+is concerned. The purge itself is one statement: a writable CTE that inserts the
+reservation and deletes the row, so a crash cannot separate them, with SKIP LOCKED
+so it can never block a concurrent restore-by-hand. Untrafficked aliases are
+released deliberately — nothing in the wild points at them. The check-then-insert
+race (a delete committing between check and insert) is accepted: its window is
+milliseconds, its worst case is what used to be the *permanent* behavior.
+
+The reapers came along in the same housekeeping job: DeleteExpiredSessions and
+DeleteRevokedAPIKeys were both written, commented as active, and never called.
+Three dead maintenance queries is not a coincidence — it is a missing job.
+
+### Query forwarding existed only on the read side
+
+Plan.md lists it as Phase 1; the redirect handler merged the query string; the
+column, the snapshot field and the cache encoding all carried it — and nothing
+could set it. No API field, no form control, and zero tests on the merge path, so
+the feature was unreachable except by hand-written SQL and its gap invisible to
+the suite. Now: field on both API shapes and the OpenAPI schemas, a checkbox on
+the edit form, and an end-to-end test that asserts the merge, the
+destination-wins conflict rule, the default staying off, and the toggle
+invalidating the cached snapshot.
+
+### The review paid for itself on the infrastructure too
+
+CI's lint job pinned golangci-lint v2.12.2 on golangci-lint-action@v6, which runs
+only v1.x — the job would have failed on every run, discovered the first time
+anyone pushed. The release workflow interpolated the dispatch input into shell
+text and shape-checked it with a glob that accepts 'v1.2.3;evil'; versions now
+arrive via env, validated by an anchored regex, under least-privilege per-job
+permissions. Third-party actions are pinned to commit SHAs — the project
+checksum-pins every other third-party build input, and a mutable tag under a
+write-scoped token is the same class of thing. And the dispatch dry-run path
+could never pass its own changelog check with its own documented default input.
+
+The worst documentation finding was operational: docker-compose.override.yml
+hard-coded APP_ENV=development, and compose applies the override automatically —
+so the documented production procedure silently deployed a dev-mode instance,
+insecure cookies and all. The override's values are interpolated defaults now
+(an operator's .env wins), and the production docs say `-f docker-compose.yml`,
+which also keeps the override's published database ports off the host.
+
+### Smaller confirmed findings, all fixed
+
+RealIP read only the first X-Forwarded-For header line, so a proxy that appends
+the client as a separate line (HAProxy-style) left the client's own forged first
+line as the winner — Values() joined now, with the previously-untested
+trusted-proxy parsing under eight unit tests including IPv4-mapped hops, which
+Prefix.Contains silently never matched. The retention job's name regex never
+compared its table-prefix capture to the parent table, so a hand-attached
+"click_events_backup_2024_01" was droppable despite the code's promise to leave
+foreign partitions alone. lctl seed --reset deleted any link sharing the prefix
+in ANY workspace, with LIKE wildcards accepted in the prefix; it is now
+workspace-scoped with a wildcard-free prefix charset. The seeder computed its
+click-time window from the wall clock after minutes of link seeding, so a run
+crossing a month boundary could write into the default partition. A deferred
+geo.Close() could unmap the MaxMind file under an in-flight lookup on the
+flush-timeout shutdown path; the mapping now lives as long as the process, which
+is exactly as long as it is needed. The redirect tree's 429/503/404/410 responses
+gained the nosniff header its own sibling documents as the rule. And the advisory
+lock comment claimed the key was hashtext('linkctrl_jobs') when it is a
+hand-picked constant — an operator following the comment into psql would have
+locked a different key and concluded no leader exists. The first draft of the
+corrected comment had the wrong decimal value in it, which is the finding
+demonstrating itself.
+
+### Test gaps closed where the risk was
+
+internal/redirect had no tests at all — the package the SLO stands on. Decide and
+CacheTTL (including the 1s floor that keeps a dead-but-popular expired link from
+becoming a permanent database query, and the clamp that keeps a soon-expiring
+link from outliving its expiry in cache) and the memcache tiers (expiry,
+reap-before-clear eviction, the small-cache shard path, concurrent access) are
+unit-tested now. EnsurePartitionRange has a December→January rollover test that
+asserts a boundary row lands in an explicit partition. The purge cluster and
+query forwarding got the integration tests described above. Sabotage-verified
+where a first-try pass proved nothing: disabling the availability check turned
+the 409 into a 201, and removing the prefix guard dropped the hand-attached
+partitions.
+
+### Process note, twice is a pattern
+
+Reverting a sabotage with `git checkout` destroyed uncommitted work in the same
+file for the second time in this project — last time it silently reverted a sqlc
+regeneration, this time the whole ForwardQuery/availability wiring, caught by the
+build breaking rather than by anything smart. The rule that follows: sabotage
+with an edit that can be reverted by a counter-edit, never with checkout, unless
+the file is committed. Separately, editing Go sources through PowerShell's
+Get-Content/Set-Content mangled em-dashes into mojibake (UTF-8 read as ANSI);
+byte-safe tools only for in-place source edits.

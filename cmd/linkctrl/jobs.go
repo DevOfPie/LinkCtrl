@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
+	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 )
 
 // jobRunner runs the periodic maintenance work.
@@ -30,8 +33,11 @@ type jobRunner struct {
 	done          chan struct{}
 }
 
-// advisoryLockKey is hashtext('linkctrl_jobs'), computed once so the value is
-// stable across processes and versions.
+// advisoryLockKey is a hand-picked constant — the ASCII bytes "lcjobs" plus a
+// version suffix — NOT a hash of anything. To inspect or hold the leader lock
+// from psql, use the literal value:
+//
+//	SELECT pg_try_advisory_lock(7810203205416189953);
 const advisoryLockKey int64 = 0x6c63_6a6f_6273_0001
 
 func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analytics.Roller,
@@ -178,4 +184,59 @@ func (j *jobRunner) runMaintenance(ctx context.Context) {
 		}
 		return nil
 	})
+
+	// The reapers: the end of the link trash window, expired sessions, and
+	// long-revoked API keys. One job because they share a shape — rows whose
+	// deadline passed — and none is time-critical: a missed run means rows
+	// linger an hour longer, nothing more.
+	//
+	// The link purge is the one with teeth. It is what makes the 30-day
+	// recovery window a window rather than forever, and it is where a
+	// trafficked alias enters reserved_aliases — the same statement that
+	// deletes the row, so a crash cannot separate the two.
+	j.withLeadership(runCtx, "housekeeping", func(ctx context.Context) error {
+		return j.housekeeping(ctx)
+	})
+}
+
+// purgeBatch bounds one purge statement. Purging is hourly housekeeping, not a
+// backlog race: a burst of ten thousand deletions drains over a few runs
+// rather than holding row locks for one long one.
+const purgeBatch = 1000
+
+func (j *jobRunner) housekeeping(ctx context.Context) error {
+	q := dbgen.New(j.pool)
+	var errs []error
+
+	purged, err := q.PurgeExpiredLinks(ctx, purgeBatch)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("purge links: %w", err))
+	}
+	reserved := 0
+	for _, p := range purged {
+		if p.Reserved {
+			reserved++
+		}
+	}
+	if len(purged) > 0 {
+		// Info, not Debug: this is irreversible deletion of user data, and the
+		// log is the only record of which aliases went.
+		j.log.Info("purged links past their recovery window",
+			slog.Int("links", len(purged)),
+			slog.Int("aliases_reserved", reserved))
+	}
+
+	if n, err := q.DeleteExpiredSessions(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("delete expired sessions: %w", err))
+	} else if n > 0 {
+		j.log.Debug("expired sessions deleted", slog.Int64("count", n))
+	}
+
+	if n, err := q.DeleteRevokedAPIKeys(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("delete revoked api keys: %w", err))
+	} else if n > 0 {
+		j.log.Debug("long-revoked api keys deleted", slog.Int64("count", n))
+	}
+
+	return errors.Join(errs...)
 }

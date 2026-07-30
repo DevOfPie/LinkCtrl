@@ -75,6 +75,9 @@ type CreateInput struct {
 	Description string
 	Tags        []string
 	ExpiresAt   *time.Time
+	// ForwardQuery merges the visitor's query string into the destination.
+	// Off by default; the destination's own parameters always win on conflict.
+	ForwardQuery bool
 
 	// Phase 2 fields. Accepted by the parser so the API can reject them with a
 	// specific message rather than ignoring them silently, which would look
@@ -146,6 +149,22 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 			}
 			return nil, err
 		}
+		// Availability is checked here, not left to the unique index, because
+		// the index cannot see two of the states that make an alias unavailable:
+		// it is partial on deleted_at IS NULL, so a trashed row holding its
+		// alias through the recovery window does not block an insert, and
+		// reserved_aliases — trafficked aliases of purged links — is a separate
+		// table entirely. The index remains the guarantee against live-row
+		// races; this is the enforcement of "the alias stays reserved while the
+		// row exists". One message for all three causes, deliberately: which of
+		// them applies is not the caller's business.
+		if taken, err := s.q.IsAliasTaken(ctx, dbgen.IsAliasTakenParams{
+			DomainID: dom.ID, Alias: code,
+		}); err != nil {
+			return nil, fmt.Errorf("check alias: %w", err)
+		} else if taken {
+			return nil, fmt.Errorf("%w: alias %q is already in use", domain.ErrConflict, code)
+		}
 	} else {
 		code, err = alias.Generate(ctx, func(ctx context.Context, candidate string) (bool, error) {
 			return s.q.IsAliasTaken(ctx, dbgen.IsAliasTakenParams{
@@ -166,16 +185,17 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 
 	linkID := uuid.Must(uuid.NewV7())
 	row, err := q.CreateLink(ctx, dbgen.CreateLinkParams{
-		ID:          linkID,
-		WorkspaceID: actor.WorkspaceID,
-		DomainID:    dom.ID,
-		Alias:       code,
-		PrimaryUrl:  normalizedURL,
-		Title:       in.Title,
-		Description: in.Description,
-		Status:      string(domain.StatusActive),
-		ExpiresAt:   in.ExpiresAt,
-		CreatedBy:   &actor.UserID,
+		ID:           linkID,
+		WorkspaceID:  actor.WorkspaceID,
+		DomainID:     dom.ID,
+		Alias:        code,
+		PrimaryUrl:   normalizedURL,
+		Title:        in.Title,
+		Description:  in.Description,
+		Status:       string(domain.StatusActive),
+		ExpiresAt:    in.ExpiresAt,
+		CreatedBy:    &actor.UserID,
+		ForwardQuery: in.ForwardQuery,
 	})
 	if err != nil {
 		// The unique index is the real guarantee; the pre-check only makes
@@ -227,13 +247,14 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 
 // UpdateInput is a partial update; nil fields are left unchanged.
 type UpdateInput struct {
-	URL         *string
-	Alias       *string
-	Title       *string
-	Description *string
-	ExpiresAt   *time.Time
-	ClearExpiry bool
-	Tags        *[]string
+	URL          *string
+	Alias        *string
+	Title        *string
+	Description  *string
+	ExpiresAt    *time.Time
+	ClearExpiry  bool
+	Tags         *[]string
+	ForwardQuery *bool
 }
 
 func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID, in UpdateInput) (*domain.Link, error) {
@@ -276,6 +297,17 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 				return nil, aerr
 			}
 		} else {
+			// Same availability rule as Create, for the same reason: the
+			// partial unique index cannot see trashed rows or reserved
+			// aliases, and an alias change is a creation as far as the
+			// namespace is concerned.
+			if taken, err := s.q.IsAliasTaken(ctx, dbgen.IsAliasTakenParams{
+				DomainID: existing.DomainID, Alias: code,
+			}); err != nil {
+				return nil, fmt.Errorf("check alias: %w", err)
+			} else if taken {
+				return nil, fmt.Errorf("%w: alias %q is already in use", domain.ErrConflict, code)
+			}
 			newAlias = &code
 		}
 	}
@@ -297,13 +329,14 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 	q := s.q.WithTx(tx)
 
 	row, err := q.UpdateLink(ctx, dbgen.UpdateLinkParams{
-		ID:          id,
-		WorkspaceID: actor.WorkspaceID,
-		Title:       in.Title,
-		Description: in.Description,
-		ExpiresAt:   in.ExpiresAt,
-		ClearExpiry: in.ClearExpiry,
-		Alias:       newAlias,
+		ID:           id,
+		WorkspaceID:  actor.WorkspaceID,
+		Title:        in.Title,
+		Description:  in.Description,
+		ExpiresAt:    in.ExpiresAt,
+		ClearExpiry:  in.ClearExpiry,
+		Alias:        newAlias,
+		ForwardQuery: in.ForwardQuery,
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -444,20 +477,21 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 		// ListLinksRow is flat rather than embedding dbgen.Link, because the
 		// aggregated tag columns are part of the same select.
 		page.Items = append(page.Items, *s.toDomain(dbgen.Link{
-			ID:          r.ID,
-			WorkspaceID: r.WorkspaceID,
-			DomainID:    r.DomainID,
-			Alias:       r.Alias,
-			PrimaryUrl:  r.PrimaryUrl,
-			Title:       r.Title,
-			Description: r.Description,
-			Status:      r.Status,
-			ExpiresAt:   r.ExpiresAt,
-			ClickCount:  r.ClickCount,
-			LastClickAt: r.LastClickAt,
-			CreatedAt:   r.CreatedAt,
-			UpdatedAt:   r.UpdatedAt,
-			ArchivedAt:  r.ArchivedAt,
+			ID:           r.ID,
+			WorkspaceID:  r.WorkspaceID,
+			DomainID:     r.DomainID,
+			Alias:        r.Alias,
+			PrimaryUrl:   r.PrimaryUrl,
+			Title:        r.Title,
+			Description:  r.Description,
+			Status:       r.Status,
+			ExpiresAt:    r.ExpiresAt,
+			ForwardQuery: r.ForwardQuery,
+			ClickCount:   r.ClickCount,
+			LastClickAt:  r.LastClickAt,
+			CreatedAt:    r.CreatedAt,
+			UpdatedAt:    r.UpdatedAt,
+			ArchivedAt:   r.ArchivedAt,
 		}, tags))
 	}
 	if page.HasMore && len(page.Items) > 0 {
@@ -632,21 +666,22 @@ func (s *Service) toDomain(l dbgen.Link, tags []domain.Tag) *domain.Link {
 		tags = []domain.Tag{}
 	}
 	return &domain.Link{
-		ID:          l.ID,
-		WorkspaceID: l.WorkspaceID,
-		Alias:       l.Alias,
-		ShortURL:    s.baseURL + "/" + l.Alias,
-		URL:         l.PrimaryUrl,
-		Title:       l.Title,
-		Description: l.Description,
-		Status:      domain.LinkStatus(l.Status),
-		Tags:        tags,
-		ExpiresAt:   l.ExpiresAt,
-		ClickCount:  l.ClickCount,
-		LastClickAt: l.LastClickAt,
-		CreatedAt:   l.CreatedAt,
-		UpdatedAt:   l.UpdatedAt,
-		ArchivedAt:  l.ArchivedAt,
+		ID:           l.ID,
+		WorkspaceID:  l.WorkspaceID,
+		Alias:        l.Alias,
+		ShortURL:     s.baseURL + "/" + l.Alias,
+		URL:          l.PrimaryUrl,
+		Title:        l.Title,
+		Description:  l.Description,
+		Status:       domain.LinkStatus(l.Status),
+		Tags:         tags,
+		ForwardQuery: l.ForwardQuery,
+		ExpiresAt:    l.ExpiresAt,
+		ClickCount:   l.ClickCount,
+		LastClickAt:  l.LastClickAt,
+		CreatedAt:    l.CreatedAt,
+		UpdatedAt:    l.UpdatedAt,
+		ArchivedAt:   l.ArchivedAt,
 	}
 }
 

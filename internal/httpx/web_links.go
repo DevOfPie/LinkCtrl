@@ -86,6 +86,7 @@ func (h *Web) Dashboard(w http.ResponseWriter, r *http.Request) {
 
 type linkFormData struct {
 	URL, Alias, Title, Description, ExpiresAt, Tags string
+	ForwardQuery                                    bool
 }
 
 type linksPageData struct {
@@ -264,10 +265,11 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 	}
 
 	form := linkFormData{
-		URL:         l.URL,
-		Alias:       l.Alias,
-		Title:       l.Title,
-		Description: l.Description,
+		URL:          l.URL,
+		Alias:        l.Alias,
+		Title:        l.Title,
+		Description:  l.Description,
+		ForwardQuery: l.ForwardQuery,
 	}
 	if l.ExpiresAt != nil {
 		form.ExpiresAt = l.ExpiresAt.UTC().Format("2006-01-02T15:04")
@@ -329,9 +331,14 @@ func (h *Web) LinkUpdate(w http.ResponseWriter, r *http.Request) {
 	title := strings.TrimSpace(r.PostFormValue("title"))
 	desc := strings.TrimSpace(r.PostFormValue("description"))
 	tags := splitTags(r.PostFormValue("tags"))
+	// A checkbox is absent when unchecked, so its mere presence is the value —
+	// and since this form posts every field, absence really does mean "off"
+	// rather than "leave alone".
+	forward := r.PostFormValue("forward_query") != ""
 
 	in := link.UpdateInput{
 		URL: &urlv, Alias: &alias, Title: &title, Description: &desc, Tags: &tags,
+		ForwardQuery: &forward,
 	}
 
 	rerender := func(fields map[string]string, general string) {
@@ -341,8 +348,9 @@ func (h *Web) LinkUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		data.Form = linkFormData{
 			URL: urlv, Alias: alias, Title: title, Description: desc,
-			ExpiresAt: r.PostFormValue("expires_at"),
-			Tags:      r.PostFormValue("tags"),
+			ExpiresAt:    r.PostFormValue("expires_at"),
+			Tags:         r.PostFormValue("tags"),
+			ForwardQuery: forward,
 		}
 		data.FieldErrors = fields
 		data.Error = general

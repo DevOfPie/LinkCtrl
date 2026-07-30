@@ -40,10 +40,12 @@ else's browser probe their own network.
   frees it for reuse. The form says so.
 - **Archiving** stops redirecting but keeps the alias reserved and the analytics
   readable.
-- **Deleting** is soft, with a 30-day window. It stops redirecting immediately.
-  After the purge, an alias that ever received traffic is never reissued —
-  it exists on printed material and in other people's bookmarks, and handing it
-  to someone else would redirect their audience.
+- **Deleting** is soft, with a 30-day window. It stops redirecting immediately,
+  and the alias stays reserved for the whole window — nobody can register it
+  while the link is restorable. After the purge, an alias that ever received
+  traffic is never reissued — it exists on printed material and in other
+  people's bookmarks, and handing it to someone else would redirect their
+  audience. An alias that never received a click is released.
 
 There is no trash view in Phase 1: recovery inside the 30 days is a database
 operation, not a button.
@@ -248,8 +250,11 @@ dropped means you believe you set something you did not.
 | Too many misses from one address | `429` with `Retry-After` — see [configuration.md](configuration.md#rate-limits). Links already in the cache keep resolving, and paths that could never be an alias are not counted. |
 | The server could not resolve it | `503` with `Retry-After: 1`. Deliberately not a `404`: that would claim the link does not exist, and a crawler or link checker believing it drops a live link. |
 
-Query forwarding is off by default and deep-link path forwarding is Phase 2.
-`HEAD` works and does not record a click.
+Query forwarding is per-link and off by default: set `forward_query` (a checkbox
+on the link's edit form, a boolean in the API) and the visitor's query string is
+merged into the destination, with the destination's own parameters winning on
+conflict. Deep-link path forwarding is Phase 2. `HEAD` works and does not record
+a click.
 
 ## Roles
 
