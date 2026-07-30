@@ -1568,3 +1568,89 @@ milestone's own claim false is in spec no matter which subsystem it appears in,
 and gets fixed immediately. Without that, "out of spec" becomes a place to put
 inconvenient truths, and a milestone can be declared done while something it
 claims is untrue.
+
+---
+
+## 2026-07-30 — M18: two hostnames, one listener
+
+### Dispatch on Host rather than ServeMux host patterns
+
+Go's ServeMux has taken host patterns since 1.22, so `mux.Handle("lnk.example.com/{alias}", h)`
+is available and was the first thing tried. It was dropped for two reasons. It
+would mean registering every route twice, once per host, which makes the route
+table the place a split-host bug hides. And its matching is exact against the
+request's host including port, so whether a proxy appends `:443` silently changes
+which handler runs.
+
+An explicit dispatcher instead: two muxes, one comparison, and a
+`CanonicalHost` that lowercases and strips a default port from both sides before
+comparing. The two sides of that comparison are written by different people — the
+operator types the origin, the proxy decides about the port — and the router must
+not care which choice they made.
+
+### The wrong host gets 404, not a redirect
+
+Redirecting `manage.example.com/somealias` to `lnk.example.com/somealias` is the
+friendlier behavior and is wrong. The alias namespace is user-controlled, so a
+cross-host redirect driven by it is an open redirector operated by anyone who can
+create a link. Reserved words do not help: they constrain what an alias may be
+called, not where a redirect may point.
+
+The same reasoning applies to an unrecognized host, which gets nothing but the
+health endpoints. Serving links under any name pointed at the listener would let
+a stranger's DNS decide what this instance publishes — and that is exactly the
+decision Phase 2's custom domains has to make deliberately, with verification
+behind it.
+
+### Health answers on every host, including ones never configured
+
+Discovered by asking what breaks, which is a better question than what works. The
+container's own healthcheck runs `/linkctrl healthcheck` against `127.0.0.1`, a
+host no operator will ever configure. Had ops endpoints been host-gated with
+everything else, the split would have made every container permanently unhealthy,
+and the failure would have appeared in production rather than in a test, because
+nothing in the test suite runs the Docker healthcheck.
+
+Load balancers and orchestrators are the same case. Anything that probes does so
+by address, not by the name in `.env`.
+
+### `__Host-` was already the right cookie, which is the whole point
+
+No cookie code changed for this milestone. `__Host-` forbids a `Domain`
+attribute, so the session was already locked to the host that set it, and the
+split therefore makes the link host structurally unable to receive it. That is
+the security property the milestone exists for and it cost nothing to obtain.
+
+Which is exactly why it needed a test. A property that holds by accident of an
+earlier decision is one a later change deletes without noticing — someone adds
+`Domain` to "make cookies work across subdomains", every test still passes, and
+the reason the hosts were separated is quietly gone.
+
+The first version of that test asserted over the cookies of `GET /login`. The
+login *page* sets no cookie, so the loop ran zero times and the test passed
+against a deliberately domain-scoped cookie. Sabotage caught it; without sabotage
+it would have sat there looking like protection. It performs a real sign-in now.
+
+### Backward compatibility is the requirement, not a courtesy
+
+0.1.0 is released, so `APP_BASE_URL` and `LINK_BASE_URL` default to `BASE_URL`
+and an instance that sets neither takes the single-mux path — the same
+registrations, in the same order, with no host comparison at all. Verified by
+running the new binary both ways against a scratch database: split, each host
+answered only its own paths; single, both trees answered on one host and a
+request by IP still resolved a link, as it always has.
+
+The accessors carry the fallback (`AppOrigin`, `LinkOrigin`) rather than every
+caller re-deriving it, because tests build `config.Config` as a literal and never
+go through `Parse`. Without the fallback, every one of them would silently become
+an instance with no dashboard origin, and the CSRF trusted origin would have gone
+missing in exactly the tests meant to prove CSRF works.
+
+### What this deliberately did not do
+
+`domains.hostname` is still ignored; resolution still matches `is_default`. The
+temptation with a milestone about hostnames is to start matching on that column
+and arrive most of the way at per-workspace custom domains without having planned
+verification, certificates, or what happens when a workspace points a CNAME at
+you and then deletes it. One instance, two hosts, chosen by the operator. Custom
+domains remain Phase 2 with their machinery untouched.

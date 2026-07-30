@@ -141,6 +141,37 @@ links.example.com {
 }
 ```
 
+To serve the dashboard and short links on separate hostnames, give both names to
+the same backend and set the two origins in `.env`:
+
+```caddyfile
+manage.example.com, lnk.example.com {
+	encode zstd gzip
+
+	reverse_proxy localhost:8080 {
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
+```
+
+```sh
+LINKCTRL_BASE_URL=https://manage.example.com
+LINKCTRL_APP_BASE_URL=https://manage.example.com
+LINKCTRL_LINK_BASE_URL=https://lnk.example.com
+```
+
+One listener and one process either way — the routing is by `Host`. Caddy will
+get a certificate for both names. The dashboard host then refuses to resolve
+aliases and the link host refuses everything except links and the health
+endpoints, so a session cookie is never sent to the host serving other people's
+destinations. See [configuration.md](configuration.md#two-hostnames) for what
+changes and what does not.
+
+**Do not switch the link host on an instance that already has traffic.** Every
+short URL already printed, bookmarked or embedded names the old host, and nothing
+in the product can rewrite somebody else's copy.
+
 With nginx, the equivalent essentials:
 
 ```nginx

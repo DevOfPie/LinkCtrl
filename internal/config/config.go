@@ -15,6 +15,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/netip"
 	"net/url"
 	"os"
@@ -43,6 +44,15 @@ type Config struct {
 	AppEnv  Environment `env:"APP_ENV" envDefault:"production"`
 	BaseURL string      `env:"BASE_URL,required"`
 
+	// AppBaseURL and LinkBaseURL split the instance across two hostnames: the
+	// dashboard and API on one, short links on the other. Both default to
+	// BaseURL, so leaving them unset is the single-host deployment unchanged.
+	//
+	// After Load they are always populated, so callers use them rather than
+	// deciding for themselves whether the split is configured.
+	AppBaseURL  string `env:"APP_BASE_URL"`
+	LinkBaseURL string `env:"LINK_BASE_URL"`
+
 	HTTP      HTTPConfig
 	Log       LogConfig
 	DB        DBConfig
@@ -68,6 +78,10 @@ type Config struct {
 
 	// baseURL is the parsed form of BaseURL, computed once during Load.
 	baseURL *url.URL
+	// appBaseURL and linkBaseURL are the parsed effective origins. Never nil
+	// after Load; both fall back to baseURL.
+	appBaseURL  *url.URL
+	linkBaseURL *url.URL
 }
 
 type HTTPConfig struct {
@@ -295,19 +309,97 @@ func Parse() (Config, error) {
 	u, _ := url.Parse(strings.TrimRight(c.BaseURL, "/"))
 	c.baseURL = u
 	c.BaseURL = strings.TrimRight(c.BaseURL, "/")
+
+	// Unset means "the same host as everything else", which is the deployment
+	// this product shipped with and must keep working untouched.
+	if c.AppBaseURL == "" {
+		c.AppBaseURL = c.BaseURL
+	}
+	if c.LinkBaseURL == "" {
+		c.LinkBaseURL = c.BaseURL
+	}
+	c.AppBaseURL = strings.TrimRight(c.AppBaseURL, "/")
+	c.LinkBaseURL = strings.TrimRight(c.LinkBaseURL, "/")
+	c.appBaseURL, _ = url.Parse(c.AppBaseURL)
+	c.linkBaseURL, _ = url.Parse(c.LinkBaseURL)
 	return c, nil
 }
 
 // BaseURLParsed returns the parsed canonical origin.
 func (c Config) BaseURLParsed() *url.URL { return c.baseURL }
 
-// Host returns the host of the canonical origin, used as the default domain
+// AppOrigin returns the origin serving the dashboard and the API.
+//
+// Falls back to BaseURL, so a Config assembled by hand — every test does this
+// rather than going through Load — behaves as a single-host deployment instead
+// of as one with no dashboard origin at all.
+func (c Config) AppOrigin() string {
+	if c.AppBaseURL != "" {
+		return c.AppBaseURL
+	}
+	return c.BaseURL
+}
+
+// LinkOrigin returns the origin short links are published under.
+func (c Config) LinkOrigin() string {
+	if c.LinkBaseURL != "" {
+		return c.LinkBaseURL
+	}
+	return c.BaseURL
+}
+
+// AppBaseURLParsed returns the origin serving the dashboard and the API.
+func (c Config) AppBaseURLParsed() *url.URL { return c.appBaseURL }
+
+// LinkBaseURLParsed returns the origin serving short links.
+func (c Config) LinkBaseURLParsed() *url.URL { return c.linkBaseURL }
+
+// Host returns the host short links are served on, which is the default domain
 // when resolving an alias.
 func (c Config) Host() string {
+	if c.linkBaseURL != nil {
+		return c.linkBaseURL.Host
+	}
 	if c.baseURL == nil {
 		return ""
 	}
 	return c.baseURL.Host
+}
+
+// SplitHosts reports whether the dashboard and short links are served on
+// different hostnames.
+//
+// Compared on host rather than on the whole origin: the routing decision and
+// the cookie boundary are both about the host, and an instance configured with
+// two schemes on one host has neither.
+func (c Config) SplitHosts() bool {
+	if c.appBaseURL == nil || c.linkBaseURL == nil {
+		return false
+	}
+	return CanonicalHost(c.appBaseURL.Host) != CanonicalHost(c.linkBaseURL.Host)
+}
+
+// CanonicalHost normalizes a Host header or a URL host for comparison:
+// lowercased, with an explicit default HTTP(S) port removed.
+//
+// The port matters because the two sides of the comparison come from different
+// places. The configured value is written by an operator ("manage.example.com")
+// and the request value is written by a proxy, which may or may not append
+// ":443". Comparing them raw makes the router's behavior depend on that choice.
+func CanonicalHost(host string) string {
+	host = strings.ToLower(strings.TrimSpace(host))
+	h, port, err := net.SplitHostPort(host)
+	if err != nil {
+		return host
+	}
+	if port != "80" && port != "443" {
+		return host
+	}
+	// SplitHostPort strips the brackets an IPv6 literal needs to stay parseable.
+	if strings.Contains(h, ":") {
+		return "[" + h + "]"
+	}
+	return h
 }
 
 // Validate collects every problem rather than returning at the first.
@@ -326,18 +418,33 @@ func (c Config) Validate() error {
 		add("APP_ENV: must be %q or %q, got %q", Development, Production, c.AppEnv)
 	}
 
-	u, err := url.Parse(c.BaseURL)
-	switch {
-	case err != nil:
-		add("BASE_URL: not a valid URL: %v", err)
-	case u.Scheme != "http" && u.Scheme != "https":
-		add("BASE_URL: scheme must be http or https, got %q", u.Scheme)
-	case u.Host == "":
-		add("BASE_URL: must include a host, for example https://links.example.com")
-	case u.Path != "" && u.Path != "/":
-		add("BASE_URL: must not include a path, got %q", u.Path)
-	case u.RawQuery != "" || u.Fragment != "":
-		add("BASE_URL: must not include a query or fragment")
+	// The three origins share one rule set, so a mistake in APP_BASE_URL reads
+	// the same way as the same mistake in BASE_URL.
+	checkOrigin := func(name, raw string) *url.URL {
+		u, err := url.Parse(raw)
+		switch {
+		case err != nil:
+			add("%s: not a valid URL: %v", name, err)
+			return nil
+		case u.Scheme != "http" && u.Scheme != "https":
+			add("%s: scheme must be http or https, got %q", name, u.Scheme)
+		case u.Host == "":
+			add("%s: must include a host, for example https://links.example.com", name)
+		case u.Path != "" && u.Path != "/":
+			add("%s: must not include a path, got %q", name, u.Path)
+		case u.RawQuery != "" || u.Fragment != "":
+			add("%s: must not include a query or fragment", name)
+		}
+		return u
+	}
+
+	u := checkOrigin("BASE_URL", c.BaseURL)
+	var appU, linkU *url.URL
+	if c.AppBaseURL != "" {
+		appU = checkOrigin("APP_BASE_URL", c.AppBaseURL)
+	}
+	if c.LinkBaseURL != "" {
+		linkU = checkOrigin("LINK_BASE_URL", c.LinkBaseURL)
 	}
 
 	if c.SecretKey.Len() < 32 {
@@ -358,9 +465,13 @@ func (c Config) Validate() error {
 		if !c.SecureCookies {
 			add("SECURE_COOKIES: cannot be false when APP_ENV=production")
 		}
-		if u != nil && u.Scheme == "http" {
-			add("BASE_URL: must use https in production; session cookies use the " +
-				"__Host- prefix, which browsers only accept over TLS")
+		for name, o := range map[string]*url.URL{
+			"BASE_URL": u, "APP_BASE_URL": appU, "LINK_BASE_URL": linkU,
+		} {
+			if o != nil && o.Scheme == "http" {
+				add("%s: must use https in production; session cookies use the "+
+					"__Host- prefix, which browsers only accept over TLS", name)
+			}
 		}
 	}
 

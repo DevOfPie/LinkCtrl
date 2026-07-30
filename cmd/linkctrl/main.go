@@ -127,6 +127,13 @@ func run(cfg config.Config, _ io.Writer) error {
 		slog.String("env", string(cfg.AppEnv)),
 		slog.String("base_url", cfg.BaseURL),
 	)
+	// Logged only when the two differ. On a single-host instance this would be
+	// the same string twice, in every startup.
+	if cfg.SplitHosts() {
+		log.Info("serving the dashboard and short links on separate hostnames",
+			slog.String("app_base_url", cfg.AppBaseURL),
+			slog.String("link_base_url", cfg.LinkBaseURL))
+	}
 
 	// Signals are trapped before any dependency is opened, so a Ctrl-C during
 	// a slow database connect still exits promptly.
@@ -284,7 +291,9 @@ func run(cfg config.Config, _ io.Writer) error {
 			// than in the policy keeps the zero Policy the safe one.
 			ProfanityDisabled: !cfg.Alias.ProfanityFilter,
 		},
-		BaseURL: cfg.BaseURL,
+		// Short URLs are built from the link origin, which is the same as
+		// BaseURL unless the deployment splits the two hosts.
+		BaseURL: cfg.LinkOrigin(),
 		// Editing a link must drop its cached snapshot, and creating one must
 		// drop any negative entry left by an earlier probe of the same alias.
 		Cache: resolver,

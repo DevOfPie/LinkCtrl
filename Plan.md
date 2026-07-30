@@ -379,14 +379,14 @@ caveat with the data.
 
 ## Build status
 
-As of 2026-07-30. 18 of 20 milestones. The first eighteen shipped as 0.1.0 and
+As of 2026-07-30. 19 of 20 milestones. The first eighteen shipped as 0.1.0 and
 were then re-reviewed: a six-dimension audit with adversarial verification
 confirmed 30 findings — among them a missing purge job that inverted the
 alias-reservation promise, and query forwarding with no write surface — all fixed
 the same day. That release is complete against the scope it was released under,
 and it was the review that said so rather than the milestone counter reaching its
-end. Phase 1 scope has since grown by two milestones, so Phase 1 itself is not
-complete; 0.1.0 does not become retroactively unfinished.
+end. Phase 1 scope has since grown by two milestones, one of them now built, so
+Phase 1 itself is not complete; 0.1.0 does not become retroactively unfinished.
 
 One of those two exists because a fresh instance was then stood up and used, which
 found three defects the review had not — all of them places where the code is
@@ -412,7 +412,7 @@ intent and using the thing reach different bugs.
 | Enforcement: rate limits, 404 probe limits, GeoIP, retention | done, verified |
 | Load validation of the redirect target | done, target met — [docs/slo.md](docs/slo.md) |
 | Release packaging | done, verified — [docs/releasing.md](docs/releasing.md) |
-| Separate management and link hostnames | not started |
+| Separate management and link hostnames | done, verified |
 | Post-release defect fixes, and a demo seeder | not started |
 
 Verification: 92 integration tests against real Postgres and Redis — including
@@ -428,18 +428,14 @@ measured. What is left divides into work that is assigned and work that is not.
 
 #### Assigned
 
-Two milestones, neither started. Each carries its definition of done here because
-both are the kind of change whose scope drifts pleasantly outwards if left to
-taste — one towards custom domains, the other towards a rewrite of the trash.
+M18 is done. M19 carries its definition of done here because "fix the bugs" is
+not one, and because its scope drifts pleasantly outwards towards a rewrite of
+the trash if left to taste.
 
-| Milestone | Definition of done |
+| Milestone | State |
 | --- | --- |
-| **M18 — separate management and link hostnames** | One `BASE_URL` serves both route trees today, told apart by path, which is why every dashboard route must also appear in `internal/alias/reserved.txt`. Done means an app origin and a link origin, both defaulting to `BASE_URL` so a single-host deployment is byte-for-byte unaffected; routing on the `Host` header, with each tree answering the other's paths as `404` rather than redirecting across hosts; `short_url` built from the link origin everywhere one is produced, including `lctl`; the CSRF trusted origin following the management host; and a test asserting a session cookie is never sent to, nor accepted by, the link host. The reserved-alias list stays enforced on both hosts. |
-| **M19 — post-release defect fixes, and a demo seeder** | Three defects found by standing a fresh instance up and using it, plus the tool that found them. Done means: an expired link reports as expired everywhere, not only in the redirect; the `visitors` table and `is_first_visit` either work or stop pretending to; the deletion notice matches what recovery actually is; and `make demo` fills an empty instance with a plausible workspace. Detailed below, because "fix the bugs" is not a definition of done. |
-
-Sequenced M18 then M19 only because the host split touches routing, configuration
-and every short URL the product emits, and is better done against a surface that
-is not also changing underneath it. Neither blocks the other.
+| **M18 — separate management and link hostnames** | **Done.** `APP_BASE_URL` and `LINK_BASE_URL` both default to `BASE_URL`, so an existing single-host deployment is unaffected; set to different hosts, the router dispatches on `Host` and each tree answers only its own paths. A wrong-host request is `404`, never a cross-host redirect. `short_url` is built from the link origin, the CSRF trusted origin follows the dashboard host, and `/healthz` and `/readyz` answer on every hostname including ones never configured, because probes do not know the operator's names. Reserved aliases stay enforced on both hosts. |
+| **M19 — post-release defect fixes, and a demo seeder** | Three defects found by standing a fresh instance up and using it, plus the tool that found them. Done means: an expired link reports as expired everywhere, not only in the redirect; the `visitors` table and `is_first_visit` either work or stop pretending to; the deletion notice matches what recovery actually is; and `make demo` fills an empty instance with a plausible workspace. Detailed below. |
 
 **M19 in detail.** The three defects, each with what "fixed" means:
 

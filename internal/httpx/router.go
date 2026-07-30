@@ -194,13 +194,16 @@ func NewRouter(d Deps) http.Handler {
 	// reads Sec-Fetch-Site, falling back to comparing Origin against Host, so
 	// a cross-site form post is refused before any handler runs. Non-browser
 	// clients send neither header and pass untouched; safe methods are exempt.
-	// BaseURL is added as a trusted origin for deployments where a proxy makes
-	// the Host header disagree with the public origin.
+	// The dashboard's own origin is added as trusted, for deployments where a
+	// proxy makes the Host header disagree with the public origin. It is the app
+	// origin specifically: the link host never receives an unsafe method, and
+	// trusting it here would widen the set of origins allowed to post to the
+	// dashboard for no gain.
 	csrf := http.NewCrossOriginProtection()
-	if err := csrf.AddTrustedOrigin(d.Config.BaseURL); err == nil {
+	if err := csrf.AddTrustedOrigin(d.Config.AppOrigin()); err == nil {
 		appHandler = csrf.Handler(appHandler)
 	} else {
-		// An unparseable BaseURL cannot reach here — config validation refuses
+		// An unparseable origin cannot reach here — config validation refuses
 		// it — but if it somehow does, protect without the extra origin rather
 		// than not at all.
 		appHandler = http.NewCrossOriginProtection().Handler(appHandler)
@@ -213,51 +216,64 @@ func NewRouter(d Deps) http.Handler {
 	appHandler = RequestTimeout(d.Config.HTTP.RequestTimeout)(appHandler)
 
 	// --- root tree --------------------------------------------------------
-	root := http.NewServeMux()
+	//
+	// One mux when the dashboard and short links share a hostname, which is the
+	// default and the only deployment 0.1.0 had. Two when they do not, and then
+	// each host answers only its own paths.
 
 	// Operational endpoints. No session middleware: a readiness probe should
 	// not perform a session lookup, and these must answer while the database
 	// is down.
-	if d.Health != nil {
-		root.HandleFunc("GET /healthz", d.Health.Live)
-		root.HandleFunc("GET /readyz", d.Health.Ready)
+	//
+	// Registered on every host, including hostnames this instance was never
+	// configured with. Probes come from load balancers, orchestrators and the
+	// container runtime, none of which send the operator's chosen name — the
+	// image's own healthcheck asks 127.0.0.1.
+	registerOps := func(mux *http.ServeMux) {
+		if d.Health == nil {
+			return
+		}
+		mux.HandleFunc("GET /healthz", d.Health.Live)
+		mux.HandleFunc("GET /readyz", d.Health.Ready)
 	}
 
-	// The API subtree. Registered as a prefix so every method and path under
-	// it reaches the application tree; more specific patterns still win over
-	// the single-segment alias pattern below.
-	//
-	// The API limit wraps here rather than inside the application chain, so a
-	// throttled call costs a map lookup instead of a session query and a CSRF
-	// check. The trade is that its response does not carry the dashboard's
-	// security headers, which is why the refusal sets nosniff itself — the rest
-	// of that policy is about HTML, and this is a problem document.
-	//
-	// Dashboard page loads are deliberately not counted against API_RATE_PER_MIN:
-	// the name says API, and a person clicking around a server-rendered UI would
-	// otherwise consume the budget their own scripts need.
-	root.Handle(APIPrefix+"/", RateLimit(d.Limits.API, "api", d.Metrics, nil)(appHandler))
+	registerApp := func(root *http.ServeMux) {
+		// The API subtree. Registered as a prefix so every method and path under
+		// it reaches the application tree; more specific patterns still win over
+		// the single-segment alias pattern below.
+		//
+		// The API limit wraps here rather than inside the application chain, so a
+		// throttled call costs a map lookup instead of a session query and a CSRF
+		// check. The trade is that its response does not carry the dashboard's
+		// security headers, which is why the refusal sets nosniff itself — the rest
+		// of that policy is about HTML, and this is a problem document.
+		//
+		// Dashboard page loads are deliberately not counted against API_RATE_PER_MIN:
+		// the name says API, and a person clicking around a server-rendered UI would
+		// otherwise consume the budget their own scripts need.
+		root.Handle(APIPrefix+"/", RateLimit(d.Limits.API, "api", d.Metrics, nil)(appHandler))
 
-	if d.Web != nil {
-		// Dashboard prefixes, mounted one by one rather than at "/", because
-		// "/" belongs to the redirect catch-all. Every entry here must appear
-		// in internal/alias/reserved.txt; the reserved-list test enforces it
-		// via RegisteredTopLevelPaths.
-		for _, p := range []string{
-			"/{$}", "/login", "/logout", "/setup", "/dashboard", "/docs",
-			"/links", "/links/", "/keys", "/keys/", "/account", "/account/",
-		} {
-			root.Handle(p, appHandler)
+		if d.Web != nil {
+			// Dashboard prefixes, mounted one by one rather than at "/", because
+			// "/" belongs to the redirect catch-all. Every entry here must appear
+			// in internal/alias/reserved.txt; the reserved-list test enforces it
+			// via RegisteredTopLevelPaths.
+			for _, p := range []string{
+				"/{$}", "/login", "/logout", "/setup", "/dashboard", "/docs",
+				"/links", "/links/", "/keys", "/keys/", "/account", "/account/",
+			} {
+				root.Handle(p, appHandler)
+			}
+
+			// Static assets bypass the session middleware: they are public bytes,
+			// and a stylesheet request must not cost a session lookup.
+			root.Handle("/static/", d.Web.UI.StaticHandler("/static/"))
+		} else {
+			root.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+				_, _ = w.Write([]byte("LinkCtrl\n"))
+			})
 		}
-
-		// Static assets bypass the session middleware: they are public bytes,
-		// and a stylesheet request must not cost a session lookup.
-		root.Handle("/static/", d.Web.UI.StaticHandler("/static/"))
-	} else {
-		root.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			_, _ = w.Write([]byte("LinkCtrl\n"))
-		})
 	}
 
 	// The catch-all.
@@ -269,9 +285,42 @@ func NewRouter(d Deps) http.Handler {
 	// specific routes take precedence and the handler filters methods itself.
 	//
 	// Precedence is structural, but the reserved-word list is what stops a
-	// user creating an alias that collides with a route added later.
-	if d.Redirect != nil {
-		root.Handle("/{alias}", methodFilter(d.Redirect, http.MethodGet, http.MethodHead))
+	// user creating an alias that collides with a route added later. That stays
+	// true on a split-host deployment, where the collision is impossible: an
+	// instance can be merged back onto one host, and an alias created as
+	// "login" during the split would break the dashboard on the day it is.
+	registerRedirect := func(root *http.ServeMux) {
+		if d.Redirect != nil {
+			root.Handle("/{alias}", methodFilter(d.Redirect, http.MethodGet, http.MethodHead))
+		}
+	}
+
+	var root http.Handler
+	if d.Config.SplitHosts() {
+		appMux := http.NewServeMux()
+		registerOps(appMux)
+		registerApp(appMux)
+
+		linkMux := http.NewServeMux()
+		registerOps(linkMux)
+		registerRedirect(linkMux)
+
+		opsMux := http.NewServeMux()
+		registerOps(opsMux)
+
+		root = hostRouter{
+			appHost:  config.CanonicalHost(d.Config.AppBaseURLParsed().Host),
+			linkHost: config.CanonicalHost(d.Config.LinkBaseURLParsed().Host),
+			app:      appMux,
+			link:     linkMux,
+			ops:      opsMux,
+		}
+	} else {
+		mux := http.NewServeMux()
+		registerOps(mux)
+		registerApp(mux)
+		registerRedirect(mux)
+		root = mux
 	}
 
 	// RealIP wraps both trees: analytics and rate limiting need the client
@@ -281,6 +330,34 @@ func NewRouter(d Deps) http.Handler {
 	// server does — the outside view. The redirect path measures itself more
 	// precisely inside its own handler, where the SLO is defined.
 	return d.Metrics.HTTPMiddleware(RealIP(d.Config.TrustedProxies)(root))
+}
+
+// hostRouter dispatches on the request's Host when the dashboard and short
+// links are served on different hostnames.
+//
+// A request for the wrong host is answered 404, never redirected to the right
+// one. A cross-host redirect reachable through the alias namespace is an open
+// redirector for anybody who can create a link, and the reserved-word list is
+// no defence against that — it constrains what an alias may be called, not
+// where a redirect may point.
+type hostRouter struct {
+	appHost, linkHost string
+	app, link, ops    http.Handler
+}
+
+func (h hostRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	switch config.CanonicalHost(r.Host) {
+	case h.appHost:
+		h.app.ServeHTTP(w, r)
+	case h.linkHost:
+		h.link.ServeHTTP(w, r)
+	default:
+		// An unrecognized host gets the operational endpoints and nothing
+		// else. Serving links here would let any name pointed at this address
+		// publish them, which is precisely the decision Phase 2's custom
+		// domains have to make deliberately, with verification behind it.
+		h.ops.ServeHTTP(w, r)
+	}
 }
 
 // RegisteredTopLevelPaths lists the first path segment of every route the

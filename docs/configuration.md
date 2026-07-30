@@ -25,7 +25,7 @@ No defaults. The process refuses to start without them.
 
 | Variable | Notes |
 | --- | --- |
-| `LINKCTRL_BASE_URL` | Public origin, e.g. `https://links.example.com`. Builds every short URL, scopes cookies, and is trusted as a CSRF origin. No path, query or fragment. Must be `https` when `APP_ENV=production`. |
+| `LINKCTRL_BASE_URL` | Public origin, e.g. `https://links.example.com`. Builds every short URL, scopes cookies, and is trusted as a CSRF origin. No path, query or fragment. Must be `https` when `APP_ENV=production`. Also the default for the two variables below. |
 | `LINKCTRL_SECRET_KEY` | ≥32 bytes. `openssl rand -base64 48`. |
 | `LINKCTRL_API_KEY_PEPPER` | ≥32 bytes. Keys the HMAC that protects every API key hash, so **changing it invalidates every existing API key**. Not rotatable in place. |
 | `LINKCTRL_DATABASE_URL` | pgx-compatible DSN. Compose builds it from the `POSTGRES_*` variables. |
@@ -39,7 +39,9 @@ same secret is an error, not a precedence rule.
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `LINKCTRL_APP_ENV` | `production` | `development` or `production`. Production refuses insecure cookies and an http base URL. Only `development` reads a `.env` file, and only when the variable is already set in the environment — a stray `.env` on a production host cannot change how the service runs. |
-| `LINKCTRL_HTTP_ADDR` | `:8080` | Public listener. |
+| `LINKCTRL_APP_BASE_URL` | `BASE_URL` | Origin serving the dashboard, the API and `/docs`. Set it, with the next variable, to put management and short links on separate hostnames. |
+| `LINKCTRL_LINK_BASE_URL` | `BASE_URL` | Origin serving short links. Every `short_url` the product emits is built from this. |
+| `LINKCTRL_HTTP_ADDR` | `:8080` | Public listener. One listener regardless: the split is by `Host` header, not by port. |
 | `LINKCTRL_METRICS_ADDR` | `:9090` | Prometheus listener, unauthenticated. Do not expose it. |
 | `LINKCTRL_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`. |
 | `LINKCTRL_LOG_FORMAT` | `json` | `json` or `text`. |
@@ -51,6 +53,42 @@ same secret is an error, not a precedence rule.
 | `LINKCTRL_HTTP_WRITE_TIMEOUT` | `30s` | Socket-level backstop; the connection is closed regardless of what the handler is doing. |
 | `LINKCTRL_HTTP_REQUEST_TIMEOUT` | `15s` | Context deadline on the application tree. Queries abort and the client gets `504`. Not applied to the redirect tree, which has `REDIRECT_TIMEOUT` instead. `0` disables it. |
 | `LINKCTRL_SERVER_TIMING` | `false` | Emits a `Server-Timing` header on the application tree, measuring server time to headers. Off by default because it publishes internal timings to anyone who asks — on a service where "does this alias exist" is the interesting question, a timing difference is an answer. |
+
+### Two hostnames
+
+Leave `APP_BASE_URL` and `LINK_BASE_URL` unset and the instance behaves exactly
+as it always has: one origin, both trees, told apart by path.
+
+Set them to different hosts and each answers only its own paths. The dashboard
+host stops resolving aliases; the link host stops serving the dashboard, the API
+and the static assets. Both keep answering `/healthz` and `/readyz`, as does any
+other hostname pointed at the listener — probes come from load balancers and
+container runtimes that do not know the operator's names.
+
+```sh
+LINKCTRL_BASE_URL=https://manage.example.com
+LINKCTRL_APP_BASE_URL=https://manage.example.com
+LINKCTRL_LINK_BASE_URL=https://lnk.example.com
+```
+
+Worth understanding before choosing:
+
+- **Session cookies cannot reach the link host.** They carry the `__Host-`
+  prefix, which forbids a `Domain` attribute, so the browser locks them to the
+  host that set them. This is the reason to do it: short links are the surface
+  that gets pasted into forums and probed by strangers, and it needs no
+  credentials at all.
+- **A request to the wrong host is `404`, never a redirect.** A cross-host
+  redirect reachable through the alias namespace would be an open redirector for
+  anyone able to create a link.
+- **Both names must resolve to this listener** and, behind a proxy, both need a
+  certificate. There is still one listener and one process.
+- **Existing short links keep working only if the old host stays the link host.**
+  Moving links to a new hostname breaks every URL already printed or bookmarked;
+  the product cannot fix that, because the old host is what people have.
+- **Reserved aliases stay reserved** even though nothing on the link host could
+  collide with them. An instance can be merged back onto one host later, and an
+  alias called `login` created in the meantime would break the dashboard.
 
 ## Database
 

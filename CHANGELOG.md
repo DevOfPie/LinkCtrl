@@ -20,7 +20,30 @@ migrations run at boot.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **The dashboard and short links can be served on separate hostnames**, via
+  `LINKCTRL_APP_BASE_URL` and `LINKCTRL_LINK_BASE_URL`. Both default to
+  `LINKCTRL_BASE_URL`, so an existing single-host instance is unaffected and no
+  configuration change is required to upgrade.
+
+  Set to different hosts, each answers only its own paths: the dashboard host
+  stops resolving aliases, the link host stops serving the dashboard, the API
+  and the static assets. A request to the wrong host is `404`, never a redirect
+  to the right one — a cross-host redirect reachable through the alias namespace
+  would be an open redirector for anyone able to create a link.
+
+  The point is the session cookie. It carries the `__Host-` prefix, which
+  forbids a `Domain` attribute, so once the hosts differ a browser will not send
+  it to the host serving short links — the half of the product that gets pasted
+  into forums and probed by strangers, and the half that needs no credentials.
+
+  `/healthz` and `/readyz` answer on every hostname, including ones never
+  configured: probes come from load balancers and container runtimes that do not
+  know the operator's names.
+
+  Still one listener and one process. See
+  [docs/configuration.md](docs/configuration.md#two-hostnames).
 
 ## [0.1.0] - 2026-07-30
 
