@@ -137,8 +137,10 @@ looks like it works:
 - **No audit log behaviour, no folders, no custom domains, no QR codes, no
   password/one-time links.** The tables exist; the features are Phase 2.
 
-The full list, with consequences, is in
-[Plan.md](Plan.md#phase-1-scope-not-yet-built) and
+The first three are the next milestone, deliberately ahead of the load test:
+throttling adds work to the redirect path, so a latency number measured before it
+lands would describe a path that is about to change. The full list, with
+consequences, is in [Plan.md](Plan.md#phase-1-scope-not-yet-built) and
 [Known limitations](Plan.md#known-limitations).
 
 ## Contributing

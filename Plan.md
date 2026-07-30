@@ -258,7 +258,7 @@ caveat with the data.
 
 ## Build status
 
-As of 2026-07-30. 15 of 17 milestones.
+As of 2026-07-30. 15 of 18 milestones.
 
 | Area | State |
 | --- | --- |
@@ -276,6 +276,7 @@ As of 2026-07-30. 15 of 17 milestones.
 | OpenAPI document and `/docs` | done, verified |
 | Prometheus metrics | done, verified |
 | Documentation: README, setup, configuration, usage, operations | done |
+| Enforcement: rate limits, 404 probe limits, GeoIP, retention | not started |
 | Load validation of the redirect target | not started |
 | Release packaging | not started |
 
@@ -286,22 +287,40 @@ plus unit, property and fuzz tests. All run under the race detector.
 ### Phase 1 scope not yet built
 
 Found while writing the configuration reference: these are listed as Phase 1 in
-*Scope by phase* and have configuration variables that are parsed and validated,
-but nothing reads them yet. The knobs accept values and change nothing. They are
-listed here rather than left to be discovered from a settings page that does
-nothing.
+*Scope by phase*, or promised by a configuration variable, and nothing reads them
+yet. The knobs parse, validate and change nothing.
 
-| Capability | Variables with no effect yet |
+All of it belongs to the **enforcement** milestone, sequenced *before* load
+validation: rate limiting and 404 probe limiting add work to the redirect hot
+path, so measuring the SLO first measures a path that is about to change.
+
+**Done when the *Accepted but not yet in effect* table in
+[configuration.md](docs/configuration.md#accepted-but-not-yet-in-effect) is
+empty and this section is deleted** — every variable below either takes effect or
+no longer exists.
+
+#### To implement
+
+| Capability | Variables | Done when |
+| --- | --- | --- |
+| Rate limiting | `LOGIN_RATE_PER_MIN`, `API_RATE_PER_MIN` | Login and API throttled per address; `429` with `Retry-After`. Per-IP limits are added *alongside* the existing per-account lockout, not in place of it — both remain enforced. |
+| 404 probe limiting | `REDIRECT_404_RATE_LIMIT` | Repeated misses from one address throttled on the redirect tree, adding no round trip to the hit path. |
+| Geographic analytics | `GEOIP_MMDB_PATH` | Country resolved at ingest, before the address is discarded. No address column appears. A missing database keeps today's "unavailable" behavior. |
+| Analytics retention | `ANALYTICS_RETENTION_DAYS` | A job drops monthly partitions past the window. Rollups survive, so charts outlive the raw events. |
+| Per-request deadline | `HTTP_REQUEST_TIMEOUT`, `REDIRECT_TIMEOUT` | Applied on the application tree, and to the redirect path's Postgres fallback. |
+| `Server-Timing` | `SERVER_TIMING` | Emitted on the application tree only, never the redirect tree. Default stays off. |
+| Alias filters | `ALIAS_RESERVED_EXTRA`, `ALIAS_PROFANITY_FILTER` | Operator extras merge into the built-in reserved list; the profanity filter can be switched off. |
+
+#### To remove
+
+Here the fixed behavior is the contract, so the variable goes rather than the
+behavior becoming configurable. Startup warns if a removed variable is still set.
+
+| Variable | Behavior that becomes fixed |
 | --- | --- |
-| Rate limiting | `LOGIN_RATE_PER_MIN`, `API_RATE_PER_MIN` |
-| 404 probe limiting | `REDIRECT_404_RATE_LIMIT` |
-| Geographic analytics | `GEOIP_MMDB_PATH` — the UI already states that the data is unavailable |
-| Analytics retention enforcement | `ANALYTICS_RETENTION_DAYS` — partitions are created, never dropped |
-| Per-request timeout, Server-Timing | `HTTP_REQUEST_TIMEOUT`, `SERVER_TIMING`, `REDIRECT_TIMEOUT` |
-| Extra reserved aliases, profanity toggle | `ALIAS_RESERVED_EXTRA`, `ALIAS_PROFANITY_FILTER` (the built-in list is always applied) |
-| Parallel ingest workers | `INGEST_WORKERS` (one worker regardless) |
-| Salt rotation period | `VISITOR_SALT_ROTATION` (rotation is fixed at one UTC day) |
-| Bot filter toggle | `BOT_FILTER_ENABLED` (bots are always classified and recorded) |
+| `INGEST_WORKERS` | One ingest consumer. |
+| `VISITOR_SALT_ROTATION` | One UTC day, matching the purge window. |
+| `BOT_FILTER_ENABLED` | Bots are always classified and recorded; headline figures exclude them. |
 
 ---
 

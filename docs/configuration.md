@@ -155,6 +155,11 @@ Read by the Postgres image, not by LinkCtrl.
 These parse and validate. Nothing reads them. Setting one changes no behaviour,
 and they are listed so that is discovered here rather than in production.
 
+The next milestone empties this section. Each variable below either starts taking
+effect or is removed — which one it is, is decided, and is the split here.
+
+### Will start taking effect
+
 | Variable | What is missing |
 | --- | --- |
 | `LINKCTRL_LOGIN_RATE_PER_MIN` | Per-IP rate limiting is not implemented. Per-account lockout is. |
@@ -167,8 +172,17 @@ and they are listed so that is discovered here rather than in production.
 | `LINKCTRL_SERVER_TIMING` | No `Server-Timing` header is emitted. |
 | `LINKCTRL_ALIAS_RESERVED_EXTRA` | The built-in reserved list applies; extras are not merged in. |
 | `LINKCTRL_ALIAS_PROFANITY_FILTER` | The built-in filter always applies; this cannot switch it off. |
-| `LINKCTRL_INGEST_WORKERS` | One ingest worker regardless of the value. |
-| `LINKCTRL_VISITOR_SALT_ROTATION` | Rotation is fixed at one UTC day. |
-| `LINKCTRL_BOT_FILTER_ENABLED` | Bots are always classified and recorded; charts exclude them by default. |
+
+### Will be removed
+
+Do not set these. The fixed behaviour is the design, not a limitation waiting to
+be lifted, so the variable is going rather than the behaviour changing. Startup
+will warn if one is still set.
+
+| Variable | Fixed behaviour that stays |
+| --- | --- |
+| `LINKCTRL_INGEST_WORKERS` | One ingest worker. A single consumer is what makes batch coalescing work. |
+| `LINKCTRL_VISITOR_SALT_ROTATION` | One UTC day. The purge is keyed to it, and a longer period would weaken de-identification. |
+| `LINKCTRL_BOT_FILTER_ENABLED` | Bots are always classified and recorded; charts already exclude them from headline figures. |
 
 Tracked in [Plan.md](../Plan.md#phase-1-scope-not-yet-built).

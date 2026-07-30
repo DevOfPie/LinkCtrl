@@ -637,3 +637,56 @@ is the one nobody finishes reading.
 Each states what is *not* built where a reader would otherwise assume it is.
 Operations lists the missing rate limiting next to the alerts, because the moment
 someone needs alerts is the moment they need to know throttling is theirs to add.
+
+---
+
+## 2026-07-30 — planning: the enforcement milestone (M15)
+
+### The gap the docs found gets one milestone, not four
+
+Rate limiting, 404 probe limiting, GeoIP enrichment and retention enforcement are
+four unrelated subsystems — middleware, hot-path middleware, ingest, a background
+job — and splitting them into four milestones is the defensible-looking choice.
+They are one milestone because they share the only property that matters here:
+each is a configuration variable that lies. The acceptance criterion is therefore
+also one thing, and it is mechanical rather than a judgment call — *the "Accepted
+but not yet in effect" table in the configuration reference is empty*. Four
+milestones would let three of them sit indefinitely at "next", which is how a
+knob that does nothing survives a second release.
+
+### It goes before load validation, not after
+
+Load validation was the obvious next milestone: the histogram exists, the target
+is written down, the plan has said "not yet verified" for weeks. But rate limiting
+and 404 probe limiting both add work to the redirect tree, and probe limiting adds
+it to the *miss* path that a public shortener is mostly asked for. Measuring the
+SLO first produces a number for a path that is about to change, and a measured
+number is exactly the kind of artifact nobody re-measures. Throttle first, then
+measure once, honestly.
+
+### Three knobs get deleted instead of implemented
+
+`INGEST_WORKERS`, `VISITOR_SALT_ROTATION` and `BOT_FILTER_ENABLED` were in the
+same list of variables-that-do-nothing, but they are a different defect. Nothing
+reads them because the fixed behavior is the design: a single ingest consumer is
+what makes batch coalescing work, daily salt rotation is what the purge is keyed
+to, and bots are always classified because the control that matters — keeping them
+out of headline figures — lives in the queries. Implementing them would mean
+shipping three ways to make the system worse, one of which (`VISITOR_SALT_ROTATION`)
+weakens de-identification by setting an environment variable. Removal is the fix.
+
+Startup will warn when a removed variable is still set. Silent removal reproduces
+the original defect from the other direction: the operator still believes the
+value does something.
+
+### Two spec details worth their reasons
+
+**Per-IP limits are added alongside the per-account lockout, not instead of it.**
+One address attacking many accounts and many addresses attacking one account are
+different attacks; each limit is blind to the other's. Replacing the lockout with
+per-IP throttling would be a regression that looks like a feature.
+
+**`Server-Timing` stays default-off and application-tree-only.** It publishes
+internal phase timings to anyone who asks, which is a side channel on a service
+where the interesting timing question is whether an alias exists. On the redirect
+tree it would also mean measuring the path it is reporting on.

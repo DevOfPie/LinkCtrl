@@ -200,10 +200,14 @@ Deliberate gaps, so they are not discovered during an incident:
 
 - **No rate limiting** of any kind on requests. Per-account login lockout exists;
   per-IP throttling does not. Rate-limit at your reverse proxy.
-- **No audit log behaviour.** The table exists and stays empty.
 - **No retention enforcement** (above).
 - **No geographic enrichment.**
+- **No audit log behaviour.** The table exists and stays empty. Phase 2.
 - **The redirect SLO is unverified.** The histogram is in place; the load test
-  that turns the target into a measured number is the next milestone.
+  that turns the target into a measured number has not been run.
+
+The first three are the next milestone, and it is deliberately ahead of the load
+test: throttling adds work to the redirect path, so an SLO measured before it
+lands would measure a path that is about to change.
 
 Full list: [Plan.md](../Plan.md#phase-1-scope-not-yet-built).
