@@ -690,3 +690,158 @@ per-IP throttling would be a regression that looks like a feature.
 internal phase timings to anyone who asks, which is a side channel on a service
 where the interesting timing question is whether an alias exists. On the redirect
 tree it would also mean measuring the path it is reporting on.
+
+---
+
+## 2026-07-30 — enforcement (M15)
+
+### The 404 probe limit charges misses, and only misses that cost something
+
+The obvious design — check a limiter at the top of the redirect handler and refuse
+when it is empty — has a failure mode that is worse than the abuse it prevents.
+Buckets are keyed on the client address, so behind a proxy with `TRUSTED_PROXIES`
+unset every visitor shares one, and the ~60 favicon 404s a modest site produces per
+minute would then refuse *every* redirect, including working links. A limiter that
+turns one configuration mistake into a total outage is not a mitigation.
+
+Three rules fix it, and each one narrows what the limiter can break:
+
+**Only a miss is charged.** A hit never spends a token, so a popular link cannot
+throttle its own audience, and a bucket can only empty by asking for things that
+are not there.
+
+**Only a miss that cost a lookup is charged.** `/favicon.ico`, `/robots.txt`,
+`/wp-login.php` — anything that could not be a stored alias — is refused on shape
+by a byte scan, before the cache or the database. That was already most of the
+protection: a request rejected on shape costs nothing, so there is nothing to
+throttle. It also removes the main source of legitimate 404s from the limiter's
+view, since those paths are exactly what browsers and scanners ask for. The check
+became `alias.WellFormed`, shape only, no list lookups, no allocation.
+
+**A throttled request is still served from the in-process cache.** `ResolveCached`
+answers from memory or not at all — one map lookup, no I/O — so an address that
+tripped the limit keeps following links that are actually in use, while an alias
+nobody is using still cannot be turned into a database query by asking again. The
+cost a prober imposes is the query, and that is precisely what is refused.
+
+What survives is a limit that stops alias enumeration and cannot take a working
+link off the air. The integration test asserts the last property directly, because
+it is the one a future refactor would quietly break.
+
+### Rate limiting is in-process, and IPv6 is keyed by /64
+
+Redis-backed limits are the textbook answer and the wrong one here. The redirect
+path's entire budget is 20ms, so spending a network round trip to decide whether to
+allow a request costs more than the limit saves — and Redis is optional at runtime
+by design, so a limiter that stops limiting when the cache goes away is worse than
+one whose numbers are per-instance. With N replicas the effective limit is N times
+the configured one; that is in Known limitations rather than hidden.
+
+IPv6 keys on the /64 prefix, not the address. A single host is routinely handed a
+/64 or larger, so per-address keying would let one machine present effectively
+unlimited identities — defeating the limit and growing the key table without bound
+while doing it. The table is capped and fails open when full, counted by
+`linkctrl_rate_limit_overflow_total`: a limiter is abuse mitigation, not an
+authorization boundary, and refusing real traffic because bookkeeping ran out of
+room would turn a memory ceiling into an outage. Failing open silently would be
+the real defect, which is why the counter is a documented alert.
+
+Sweeping is amortized across calls rather than run from a goroutine. A limiter
+cannot then outlive its owner or leak a goroutine into a test binary, and the
+buckets it reclaims are the ones that have refilled to full — they hold no pending
+penalty, so dropping them loses nothing. A spent bucket is never swept, or an
+attacker could clear their own penalty by generating unrelated traffic.
+
+### Per-address limits are added to the lockout, not substituted for it
+
+One address guessing across a leaked credential list never trips a per-account
+counter, and one account under attack from a botnet never trips a per-address one.
+They are different attacks and both limits stay. The two answer `429` with
+different problem types for the same reason: a client that cannot tell "you are
+going too fast" from "this account is frozen" will retry the wrong one.
+
+Dashboard page loads are deliberately outside `API_RATE_PER_MIN`. The variable says
+API, and a person clicking around a server-rendered UI should not consume the
+budget their own scripts need.
+
+### Country only, and resolved at ingest
+
+The schema has `country`, `region` and `city`, and the MaxMind database supplies all
+three. Only the country is stored. Nothing in the product displays a region or a
+city, so writing them would be collecting personal data for no purpose — and city
+plus timestamp is close to a location history, on the one table the privacy design
+is proudest of holding nothing personal. This narrows *Scope by phase*, which listed
+country/region/city as Phase 1; the row was split rather than quietly satisfied.
+
+Resolution happens in `prepare`, beside the visitor hash, because that is the last
+moment the address exists. There is no stored address to enrich later — which is
+also why an operator adding a database later changes only future clicks.
+
+The reader is `oschwald/maxminddb-golang`, one module with no transitive
+dependencies. The fixture the tests read is a synthetic database built by MaxMind's
+own writer and committed, with the generator kept under `testdata` behind a
+`//go:build ignore` tag: an independent implementation writes the file and ours
+reads it, which is a better test than round-tripping our own encoder, and the
+writer does not become a dependency of the module. Every network in it is a
+documentation range and every country is invented.
+
+### Retention drops months, and only whole ones
+
+`DELETE FROM click_events WHERE occurred_at < ...` on the largest table in the
+system, followed by a `VACUUM`, forever, is the alternative to what the
+partitioning was for. Dropping a partition is instant, reclaims the space
+immediately, and cannot half-finish.
+
+A partition goes only once its *newest possible* row is outside the window, so data
+survives up to a month past the nominal number. That is the right way to be wrong:
+keeping data slightly too long is recoverable and deleting it early is not. The
+boundary case has a test, because an off-by-one here deletes retained analytics.
+
+`audit_logs` is partitioned identically and exempt. Audit retention is a different
+policy — the reason to keep an audit trail is that someone may ask what happened
+long afterwards — and deleting it on the analytics setting would be a surprise of
+the wrong kind. Partitions whose names this code did not generate are also left
+alone: an operator who attached a table by hand had a reason.
+
+Each drop runs in its own transaction with `lock_timeout = 5s`. Detaching a
+partition needs a brief exclusive lock on the parent, which the ingester takes on
+every batch; without the timeout the drop would sit in the lock queue and
+everything arriving behind it would queue too, turning housekeeping into a stall on
+the write path. Failing is cheap — it runs again in an hour.
+
+### The removed knobs, and why the removal is announced
+
+`INGEST_WORKERS`, `VISITOR_SALT_ROTATION` and `BOT_FILTER_ENABLED` are gone rather
+than implemented, for the reason recorded when the milestone was planned. What is
+new is the announcement: `config.Removed` keeps them as data, startup logs a
+warning naming each one still set, and `lctl config check` prints the same. Silent
+removal reproduces the original defect from the other side — the operator still has
+the line and still believes it does something. A reflective test asserts nothing in
+that map still has an `env` tag, so the list cannot start lying.
+
+### The per-request deadline is a context, not a TimeoutHandler
+
+`http.TimeoutHandler` buffers the entire response in memory so it can replace it
+with a 503. That is a real cost on every request, to gain a guarantee this service
+does not need: every database call takes a context, so the deadline is what
+actually stops the work. The client gets a `504` from the error mapper instead of a
+fabricated one from middleware, and `context.Canceled` — a disconnect — now maps to
+499 rather than falling through to a 500. Counting people closing tabs as server
+faults is how a 5xx alert becomes noise.
+
+The redirect tree is deliberately not covered. It has `REDIRECT_TIMEOUT`, applied
+where the resolver would touch Postgres, and a 15-second ceiling there would be
+meaningless — a redirect that has been waiting a second has already missed its
+target and is holding a connection from the small redirect pool.
+
+### A newer gosec flagged five pre-existing lines
+
+The linter's own version moved, and gosec gained taint-analysis checks that flag
+the healthcheck's self-probe (G704), both session cookie constructors (G124, which
+wants `Secure` hardcoded) and `seeOther` (G710). All five are false positives, and
+each is now annotated with the reason rather than silenced by excluding the rule —
+excluding G710 wholesale would hide a real open redirect if one were ever added,
+whereas the annotation says exactly why *this* call is safe: `safeNext` is the only
+path by which a caller-supplied destination reaches it, and it rejects anything
+that is not a local path, including the `//evil.com` form that beats a naive
+"starts with /" check.

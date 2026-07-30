@@ -91,9 +91,9 @@ Creates monthly partitions for `click_events`, `visitors` and `audit_logs` for
 the current and next month. The background scheduler runs this hourly, so it is
 normally only needed after a restore or when investigating.
 
-Nothing here *drops* partitions: retention is not enforced yet, so old months
-accumulate until you drop them yourself. See
-[operations.md](operations.md#retention-is-manual-for-now).
+Nothing here *drops* partitions. Retention is enforced by the hourly `retention`
+job instead, which drops whole months once they are entirely outside the window —
+see [operations.md](operations.md#retention).
 
 ### `apikey`
 

@@ -194,7 +194,11 @@ func RequireAuth(next http.Handler) http.Handler {
 // dashboard from elsewhere does not appear signed out, which users read as a
 // bug.
 func NewSessionCookie(token string, secure bool, maxAge int) *http.Cookie {
-	return &http.Cookie{
+	// G124 wants Secure hardcoded true. It is configuration here because local
+	// HTTP development needs it false, and the compensating control is stronger
+	// than a constant: config validation refuses SECURE_COOKIES=false whenever
+	// APP_ENV is production, and refuses an http BaseURL there too.
+	return &http.Cookie{ //nolint:gosec // G124: Secure is config-driven and forced on in production
 		Name:     auth.CookieName(secure),
 		Value:    token,
 		Path:     "/",
@@ -208,7 +212,7 @@ func NewSessionCookie(token string, secure bool, maxAge int) *http.Cookie {
 // ClearSessionCookie expires the session cookie. Attributes must match the
 // original or the browser will not replace it.
 func ClearSessionCookie(secure bool) *http.Cookie {
-	return &http.Cookie{
+	return &http.Cookie{ //nolint:gosec // G124: mirrors NewSessionCookie; attributes must match to replace it
 		Name:     auth.CookieName(secure),
 		Value:    "",
 		Path:     "/",

@@ -59,6 +59,12 @@ func run(args []string) error {
 		if _, err := loadConfig(); err != nil {
 			return err
 		}
+		// Warnings go to stderr and do not change the exit status: a stale line in
+		// a .env is worth saying out loud and is not a reason to fail a deploy
+		// check.
+		for _, w := range config.RemovedInUse() {
+			fmt.Fprintf(os.Stderr, "warning: %s\n", w)
+		}
 		fmt.Println("configuration OK")
 		return nil
 

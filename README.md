@@ -72,8 +72,9 @@ answers, not the same ones with a domain name.
 | --- | --- |
 | **Links** | Create, edit, archive, soft-delete with a 30-day window. Custom or generated aliases, tags, titles, expiry (410 past it). Full-text and substring search, cursor pagination. |
 | **Redirects** | In-process cache → Redis → Postgres, with negative caching for the unknown aliases a public shortener is mostly asked for. Redis is optional: lose it and redirects get slower, not wrong. |
-| **Analytics** | Clicks, estimated unique visitors, bots, device, browser, OS, language, referrer host. Daily rollups, server-rendered charts, a bounded recent-activity feed. |
-| **Auth** | Email/password with argon2id, server-side sessions in `__Host-` cookies, account lockout, real RBAC with four built-in roles and a working permission evaluator. |
+| **Analytics** | Clicks, estimated unique visitors, bots, device, browser, OS, language, referrer host, and country with an optional GeoIP database. Daily rollups, server-rendered charts, a bounded recent-activity feed, retention enforced by dropping whole months. |
+| **Auth** | Email/password with argon2id, server-side sessions in `__Host-` cookies, per-account lockout and per-address rate limiting, real RBAC with four built-in roles and a working permission evaluator. |
+| **Abuse limits** | Per-address limits on credential endpoints, the API, and 404 probing. The last charges misses only, so a working link is never throttled by anyone's scanning. |
 | **API keys** | `lk_live_…` bearer tokens, scoped to permissions you hold, intersected with your current role on every request. Revocable, with usage timestamps. |
 | **Dashboard** | Server-rendered HTML with htmx. Works without JavaScript; no build step at runtime. |
 | **API** | REST with RFC 9457 problem responses, an OpenAPI 3 document, and Swagger UI at `/docs`. |
@@ -117,30 +118,30 @@ every API response that includes them says so.
 
 ## Not built yet
 
-Phase 1 is not finished, and some of what is missing has configuration that
-looks like it works:
+Phase 1 is not finished:
 
-- **No rate limiting.** `LOGIN_RATE_PER_MIN`, `API_RATE_PER_MIN` and
-  `REDIRECT_404_RATE_LIMIT` are parsed, validated, and ignored. Per-account
-  lockout after repeated failed logins *is* enforced; per-IP throttling is not.
-  Put a rate limit in your reverse proxy.
-- **No geographic analytics.** `GEOIP_MMDB_PATH` is validated but unused; the
-  dashboard says the data is unavailable rather than drawing an empty chart.
-- **Retention is not enforced.** Monthly partitions are created automatically
-  and never dropped, so `ANALYTICS_RETENTION_DAYS` does nothing yet. Click data
-  grows until you drop partitions yourself.
 - **The redirect latency target is unverified.** <20ms p99 for cached redirects
-  is a design target with a histogram ready to measure it, not a result.
+  is a design target with a histogram ready to measure it, not a result. The load
+  test is the next milestone.
 - **Single-instance cache invalidation.** Editing a link clears the cache on the
   replica that served the edit; others wait out the TTL. Run one app instance
   until Phase 2 adds pub/sub.
+- **Region and city are never stored.** With a GeoIP database configured, a
+  country is resolved at ingest; region and city are available from the same file
+  and deliberately left null. Nothing shows them, and city plus a timestamp is
+  close to a location history.
 - **No audit log behaviour, no folders, no custom domains, no QR codes, no
   password/one-time links.** The tables exist; the features are Phase 2.
 
-The first three are the next milestone, deliberately ahead of the load test:
-throttling adds work to the redirect path, so a latency number measured before it
-lands would describe a path that is about to change. The full list, with
-consequences, is in [Plan.md](Plan.md#phase-1-scope-not-yet-built) and
+Rate limiting, geographic analytics and retention enforcement used to be listed
+here as settings that accepted a value and did nothing. They are implemented now,
+and three variables that were never going to be implemented — an ingest worker
+count, a salt rotation period, a bot-filter switch — were removed instead, because
+in each case the fixed behaviour was the design. Startup warns if you still have
+one set.
+
+The full list, with consequences, is in
+[Plan.md](Plan.md#phase-1-scope-not-yet-built) and
 [Known limitations](Plan.md#known-limitations).
 
 ## Contributing

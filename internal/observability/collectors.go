@@ -145,3 +145,62 @@ func (c *ingestCollector) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(c.failed, prometheus.CounterValue, float64(failed))
 	ch <- prometheus.MustNewConstMetric(c.batches, prometheus.CounterValue, float64(batches))
 }
+
+// LimiterStats is what a rate limiter reports about its own bookkeeping.
+//
+// An interface for the same reason as IngestStats: observability must not import
+// the packages it observes.
+type LimiterStats interface {
+	// Len is tracked keys, which is the memory the limiter is using.
+	Len() int
+	// Overflows counts requests allowed because the key table was full — the
+	// number that says the limiter has stopped limiting.
+	Overflows() int64
+}
+
+type limiterCollector struct {
+	limiters map[string]LimiterStats
+
+	keys      *prometheus.Desc
+	overflows *prometheus.Desc
+}
+
+// NewLimiterCollector reports the named limiters' bookkeeping.
+//
+// Neither series is about throttling — linkctrl_rate_limited_total covers that.
+// These two answer a different question: is the limiter still able to do its
+// job. A climbing overflow count means it is not, and that failure is otherwise
+// completely silent, because the design choice on a full table is to allow the
+// request.
+//
+// Disabled limits must be left out of the map by the caller rather than passed
+// as a nil pointer: a nil pointer inside an interface is not a nil interface, so
+// it would be collected as a working limiter reporting zeros — which reads as
+// "enforcing, and nothing to report" instead of "off".
+func NewLimiterCollector(limiters map[string]LimiterStats) prometheus.Collector {
+	const ns = "linkctrl_rate_limit_"
+	label := []string{"limit"}
+	return &limiterCollector{
+		limiters: limiters,
+		keys: prometheus.NewDesc(ns+"tracked_keys",
+			"Client keys currently tracked by each limiter.", label, nil),
+		overflows: prometheus.NewDesc(ns+"overflow_total",
+			"Requests allowed without being counted because the key table was full. Nonzero means the limit is no longer being enforced.",
+			label, nil),
+	}
+}
+
+func (c *limiterCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- c.keys
+	ch <- c.overflows
+}
+
+func (c *limiterCollector) Collect(ch chan<- prometheus.Metric) {
+	for name, l := range c.limiters {
+		if l == nil {
+			continue
+		}
+		ch <- prometheus.MustNewConstMetric(c.keys, prometheus.GaugeValue, float64(l.Len()), name)
+		ch <- prometheus.MustNewConstMetric(c.overflows, prometheus.CounterValue, float64(l.Overflows()), name)
+	}
+}

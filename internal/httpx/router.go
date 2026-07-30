@@ -27,6 +27,10 @@ type Deps struct {
 	// cannot collide.
 	Metrics *observability.Metrics
 
+	// Limits are the rate limits. The zero value enforces none, so a test that
+	// does not care about throttling does not have to opt out of it.
+	Limits Limiters
+
 	// Authenticator overrides how session cookies are resolved. Production
 	// leaves it nil and the auth service is used. The test that proves the
 	// redirect path performs no session lookup substitutes a tripwire here.
@@ -69,12 +73,20 @@ func NewRouter(d Deps) http.Handler {
 
 	if d.Auth != nil {
 		authAPI := &AuthAPI{Auth: d.Auth, Config: d.Config}
-		app.HandleFunc("POST "+APIPrefix+"/auth/setup", authAPI.Setup)
-		app.HandleFunc("POST "+APIPrefix+"/auth/register", authAPI.Register)
-		app.HandleFunc("POST "+APIPrefix+"/auth/login", authAPI.Login)
+		// Credential endpoints carry the login limit rather than the API one.
+		// Per-account lockout already exists and is not enough on its own: it
+		// answers "many guesses at one account", while this answers "many guesses
+		// from one address", which is what credential stuffing across a leaked
+		// list looks like.
+		guard := RateLimit(d.Limits.Login, "login", d.Metrics, nil)
+		app.Handle("POST "+APIPrefix+"/auth/setup", guard(http.HandlerFunc(authAPI.Setup)))
+		app.Handle("POST "+APIPrefix+"/auth/register", guard(http.HandlerFunc(authAPI.Register)))
+		app.Handle("POST "+APIPrefix+"/auth/login", guard(http.HandlerFunc(authAPI.Login)))
 		app.HandleFunc("POST "+APIPrefix+"/auth/logout", authAPI.Logout)
+		// Changing a password needs the current one, so this endpoint verifies a
+		// credential too — and the lockout does not cover it.
 		app.Handle("POST "+APIPrefix+"/auth/password",
-			RequireAuth(http.HandlerFunc(authAPI.ChangePassword)))
+			guard(RequireAuth(http.HandlerFunc(authAPI.ChangePassword))))
 	}
 
 	if d.Links != nil {
@@ -134,13 +146,20 @@ func NewRouter(d Deps) http.Handler {
 	if d.Web != nil {
 		web := d.Web
 
+		// The same login limit as the API, answering with a page instead of a
+		// problem document. Sharing the limiter is the point: an attacker must not
+		// be able to double their budget by alternating between the two surfaces.
+		guard := RateLimit(d.Limits.Login, "login", d.Metrics, web.tooManyRequests)
+
 		// Public: sign-in, first-run setup, and the root redirect.
 		app.HandleFunc("GET /{$}", web.Root)
 		app.HandleFunc("GET /login", web.LoginPage)
-		app.HandleFunc("POST /login", web.LoginSubmit)
+		app.Handle("POST /login", guard(http.HandlerFunc(web.LoginSubmit)))
 		app.HandleFunc("POST /logout", web.Logout)
 		app.HandleFunc("GET /setup", web.SetupPage)
-		app.HandleFunc("POST /setup", web.SetupSubmit)
+		app.Handle("POST /setup", guard(http.HandlerFunc(web.SetupSubmit)))
+		app.Handle("POST /account/password",
+			guard(web.RequireWebAuth(http.HandlerFunc(web.PasswordChange))))
 
 		// Everything else redirects anonymous visitors to the login form,
 		// where the API would return a problem document.
@@ -157,7 +176,6 @@ func NewRouter(d Deps) http.Handler {
 			"POST /keys":               web.KeyCreate,
 			"POST /keys/{id}/revoke":   web.KeyRevoke,
 			"GET /account":             web.AccountPage,
-			"POST /account/password":   web.PasswordChange,
 		} {
 			app.Handle(pattern, web.RequireWebAuth(fn))
 		}
@@ -188,6 +206,11 @@ func NewRouter(d Deps) http.Handler {
 		appHandler = http.NewCrossOriginProtection().Handler(appHandler)
 	}
 	appHandler = SecurityHeaders(d.Config)(appHandler)
+	// Outermost in the application chain: the deadline covers the session lookup
+	// and the CSRF check as well as the handler, and the timing header measures
+	// what the client actually waited for rather than what the handler alone did.
+	appHandler = ServerTiming(d.Config.HTTP.ServerTiming)(appHandler)
+	appHandler = RequestTimeout(d.Config.HTTP.RequestTimeout)(appHandler)
 
 	// --- root tree --------------------------------------------------------
 	root := http.NewServeMux()
@@ -203,7 +226,17 @@ func NewRouter(d Deps) http.Handler {
 	// The API subtree. Registered as a prefix so every method and path under
 	// it reaches the application tree; more specific patterns still win over
 	// the single-segment alias pattern below.
-	root.Handle(APIPrefix+"/", appHandler)
+	//
+	// The API limit wraps here rather than inside the application chain, so a
+	// throttled call costs a map lookup instead of a session query and a CSRF
+	// check. The trade is that its response does not carry the dashboard's
+	// security headers, which is why the refusal sets nosniff itself — the rest
+	// of that policy is about HTML, and this is a problem document.
+	//
+	// Dashboard page loads are deliberately not counted against API_RATE_PER_MIN:
+	// the name says API, and a person clicking around a server-rendered UI would
+	// otherwise consume the budget their own scripts need.
+	root.Handle(APIPrefix+"/", RateLimit(d.Limits.API, "api", d.Metrics, nil)(appHandler))
 
 	if d.Web != nil {
 		// Dashboard prefixes, mounted one by one rather than at "/", because

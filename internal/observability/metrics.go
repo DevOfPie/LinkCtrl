@@ -31,6 +31,8 @@ type Metrics struct {
 	redirectDuration *prometheus.HistogramVec
 	redirects        *prometheus.CounterVec
 
+	throttled *prometheus.CounterVec
+
 	jobRuns    *prometheus.CounterVec
 	jobLastRun *prometheus.GaugeVec
 }
@@ -83,6 +85,14 @@ func NewMetrics() *Metrics {
 			Help: "Short-link requests by outcome and cache tier.",
 		}, []string{"outcome", "cache"}),
 
+		// Labelled by which limit fired rather than by client, deliberately: a
+		// label per address would let anyone mint unbounded series, and the
+		// question an alert asks is "is something being throttled", not "who".
+		throttled: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "linkctrl_rate_limited_total",
+			Help: "Requests refused by a rate limit, by limit name.",
+		}, []string{"limit"}),
+
 		jobRuns: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "linkctrl_job_runs_total",
 			Help: "Background job executions by name and result. Only the leader runs them.",
@@ -104,6 +114,7 @@ func NewMetrics() *Metrics {
 	reg.MustRegister(
 		m.httpRequests, m.httpDuration,
 		m.redirectDuration, m.redirects,
+		m.throttled,
 		m.jobRuns, m.jobLastRun,
 		buildInfo,
 		// Go runtime and process collectors: memory, goroutines, GC, file
@@ -291,6 +302,21 @@ func (m *Metrics) ObserveRedirect(outcome, cache string, d time.Duration) {
 	}
 	m.redirectDuration.WithLabelValues(outcome, cache).Observe(d.Seconds())
 	m.redirects.WithLabelValues(outcome, cache).Inc()
+}
+
+// --- rate limits ------------------------------------------------------------
+
+// ObserveThrottled records one request refused by a rate limit.
+//
+// The label names the limit — "login", "api", "redirect_404" — not the client.
+// That is what makes the series bounded, and it is also the more useful cut: an
+// operator wants to know that logins are being throttled, and finds out who from
+// the log if it matters.
+func (m *Metrics) ObserveThrottled(limit string) {
+	if m == nil {
+		return
+	}
+	m.throttled.WithLabelValues(limit).Inc()
 }
 
 // --- jobs -------------------------------------------------------------------

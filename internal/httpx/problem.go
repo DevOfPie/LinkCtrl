@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -144,6 +145,30 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 		WriteProblem(w, r, Problem{
 			Type: problemBase + "not-implemented", Title: "Not implemented",
 			Status: http.StatusUnprocessableEntity, Detail: err.Error(),
+		})
+
+	case errors.Is(err, context.DeadlineExceeded):
+		// The per-request deadline fired. A gateway timeout rather than a 500,
+		// because the request may well succeed on a retry and the caller can act
+		// on the difference — which is the whole test for whether a status code
+		// is the right one.
+		WriteProblem(w, r, Problem{
+			Type: problemBase + "timeout", Title: "Request timed out",
+			Status: http.StatusGatewayTimeout,
+			Detail: "The server took too long to answer. Retry, and narrow the request if it persists.",
+		})
+
+	case errors.Is(err, context.Canceled):
+		// The client went away. Nothing is going to read this response, so the
+		// only thing that matters is not calling it an internal error: logging a
+		// disconnect as a server fault buries real 500s, and counting it as one
+		// makes the 5xx alert fire for people closing tabs.
+		//
+		// 499 is nginx's convention rather than an IANA code, chosen because it
+		// classifies as 4xx in the metrics, which is where a disconnect belongs.
+		WriteProblem(w, r, Problem{
+			Type: problemBase + "client-closed", Title: "Client closed request",
+			Status: 499,
 		})
 
 	default:

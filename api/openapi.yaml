@@ -32,6 +32,18 @@ info:
     (`application/problem+json`). Validation failures carry a per-field
     `errors` array shaped for form rendering.
 
+    ### Rate limits
+    **Any** operation here may answer `429` with a `Retry-After` header once
+    the per-address API limit is exceeded, so it is documented once rather
+    than repeated on every path; the endpoints that verify a credential carry
+    a second, much tighter limit and list it explicitly. Two problem types
+    return `429` and mean different things: `rate-limited` is "you are going
+    too fast", `account-locked` is "this account is frozen for a while".
+    Retrying the first is fine; retrying the second is not.
+
+    Any operation may also answer `504` if it exceeds the server's
+    per-request deadline.
+
     ### Privacy
     Unique-visitor figures are privacy-preserving estimates at daily
     resolution, and multi-day totals sum daily figures. The caveat travels
@@ -85,6 +97,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/Validation"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /auth/register:
     post:
@@ -112,6 +126,8 @@ paths:
           $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/Validation"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /auth/login:
     post:
@@ -121,7 +137,13 @@ paths:
       description: |
         Every credential failure returns the same 401, whatever the cause —
         distinguishing them would reveal which addresses are registered.
-        Repeated failures lock the account briefly (429).
+
+        Two independent limits guard this endpoint, and both answer 429 with
+        different problem types: repeated failures against one account lock it
+        briefly (`account-locked`), and too many attempts from one address are
+        throttled whatever accounts they name (`rate-limited`). The second is
+        what credential stuffing across a leaked list looks like, and the first
+        would never see it.
       security: []
       requestBody:
         required: true
@@ -157,7 +179,10 @@ paths:
         "422":
           $ref: "#/components/responses/Validation"
         "429":
-          description: Account temporarily locked after repeated failures
+          description: |
+            Either the account is temporarily locked after repeated failures
+            (`account-locked`), or this address is being throttled
+            (`rate-limited`). `Retry-After` is present in the second case.
           content:
             application/problem+json:
               schema:
@@ -206,6 +231,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/Validation"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /me:
     get:
@@ -715,6 +742,21 @@ components:
             $ref: "#/components/schemas/Problem"
     Validation:
       description: One or more fields are invalid; `errors` names each one
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    RateLimited:
+      description: |
+        Too many requests from this address. `Retry-After` carries the number of
+        seconds to wait; it is a floor, not a promise.
+      headers:
+        Retry-After:
+          description: Seconds until a request from this address will be accepted
+          required: true
+          schema:
+            type: integer
+            minimum: 1
       content:
         application/problem+json:
           schema:

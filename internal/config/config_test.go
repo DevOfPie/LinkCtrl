@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -21,6 +22,30 @@ func validEnv() map[string]string {
 		"LINKCTRL_API_KEY_PEPPER": strings.Repeat("p", 48),
 		"LINKCTRL_DATABASE_URL":   "postgres://u:p@localhost:5432/linkctrl?sslmode=disable",
 	}
+}
+
+// configTags collects the env variable name of every field on Config, nested
+// structs included.
+//
+// Reflection rather than a hand-kept list, so "this variable no longer exists"
+// is checked against the struct that actually drives parsing.
+func configTags() string {
+	var b strings.Builder
+	var walk func(reflect.Type)
+	walk = func(t reflect.Type) {
+		for i := range t.NumField() {
+			f := t.Field(i)
+			if tag, ok := f.Tag.Lookup("env"); ok {
+				name, _, _ := strings.Cut(tag, ",")
+				b.WriteString(`env:"` + name + `" `)
+			}
+			if f.Type.Kind() == reflect.Struct {
+				walk(f.Type)
+			}
+		}
+	}
+	walk(reflect.TypeOf(Config{}))
+	return b.String()
 }
 
 func setEnv(t *testing.T, env map[string]string) {
@@ -64,6 +89,52 @@ func TestParseValidConfig(t *testing.T) {
 	}
 	if c.Host() != "links.example.com" {
 		t.Errorf("Host() = %q, want links.example.com", c.Host())
+	}
+}
+
+// A removed variable must be a warning, never an error. An upgrade that refuses
+// to boot because a stale line survived in someone's .env is a worse outcome
+// than the knob it is complaining about.
+func TestRemovedVariablesWarnButDoNotFailParsing(t *testing.T) {
+	env := validEnv()
+	env["LINKCTRL_INGEST_WORKERS"] = "4"
+	env["LINKCTRL_BOT_FILTER_ENABLED"] = "false"
+	setEnv(t, env)
+
+	if _, err := Parse(); err != nil {
+		t.Fatalf("Parse rejected a config carrying removed variables: %v", err)
+	}
+
+	warnings := RemovedInUse()
+	if len(warnings) != 2 {
+		t.Fatalf("RemovedInUse() = %v, want one warning per set variable", warnings)
+	}
+	for _, w := range warnings {
+		// The message has to name the variable and say what is fixed instead,
+		// or the reader learns only that something they set is being ignored.
+		if !strings.Contains(w, "no longer read") {
+			t.Errorf("warning does not explain itself: %q", w)
+		}
+	}
+	if !strings.Contains(warnings[0], "BOT_FILTER_ENABLED") {
+		t.Errorf("warnings are not sorted: %v", warnings)
+	}
+}
+
+func TestRemovedVariablesAreSilentWhenUnset(t *testing.T) {
+	setEnv(t, validEnv())
+	if got := RemovedInUse(); len(got) != 0 {
+		t.Errorf("RemovedInUse() = %v, want none", got)
+	}
+}
+
+// Every entry in Removed must be absent from the parsed struct, or the map would
+// be claiming a variable is gone while the code still reads it.
+func TestRemovedVariablesHaveNoRemainingTag(t *testing.T) {
+	for name := range Removed {
+		if strings.Contains(configTags(), `env:"`+name+`"`) {
+			t.Errorf("%s is listed as removed but still has an env tag", name)
+		}
 	}
 }
 
@@ -174,7 +245,11 @@ func TestValidateIndividualRules(t *testing.T) {
 		{"batch exceeds queue", map[string]string{
 			"LINKCTRL_INGEST_BATCH_SIZE": "100", "LINKCTRL_INGEST_QUEUE_SIZE": "10",
 		}, "INGEST_BATCH_SIZE"},
-		{"zero workers", map[string]string{"LINKCTRL_INGEST_WORKERS": "0"}, "INGEST_WORKERS"},
+		// Zero disables a rate limit, so only a negative value is a mistake —
+		// and it is one worth naming, because -1 reads like "unlimited".
+		{"negative login rate", map[string]string{"LINKCTRL_LOGIN_RATE_PER_MIN": "-1"}, "LOGIN_RATE_PER_MIN"},
+		{"negative api rate", map[string]string{"LINKCTRL_API_RATE_PER_MIN": "-5"}, "API_RATE_PER_MIN"},
+		{"negative 404 limit", map[string]string{"LINKCTRL_REDIRECT_404_RATE_LIMIT": "-1"}, "REDIRECT_404_RATE_LIMIT"},
 
 		{"negative retention", map[string]string{"LINKCTRL_ANALYTICS_RETENTION_DAYS": "-1"}, "ANALYTICS_RETENTION_DAYS"},
 		{"missing geoip file", map[string]string{"LINKCTRL_GEOIP_MMDB_PATH": "/nope/missing.mmdb"}, "GEOIP_MMDB_PATH"},

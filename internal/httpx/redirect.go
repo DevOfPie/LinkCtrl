@@ -14,6 +14,7 @@ import (
 
 	"github.com/DevOfPie/LinkCtrl/internal/alias"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
+	"github.com/DevOfPie/LinkCtrl/internal/ratelimit"
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
 )
 
@@ -48,6 +49,15 @@ type RedirectHandler struct {
 	// middleware: the outer view includes the router's dispatch, and the
 	// number the target names is the time to resolve and answer.
 	Metrics *observability.Metrics
+
+	// NotFoundLimiter throttles addresses that keep asking for aliases which do
+	// not exist. Optional; nil disables it and costs nothing.
+	//
+	// It lives here rather than in middleware because only a miss may be charged.
+	// A hit must never spend a token — otherwise a popular link would throttle
+	// its own audience — and middleware cannot tell a hit from a miss without
+	// intercepting the response.
+	NotFoundLimiter *ratelimit.Limiter
 
 	counter atomic.Int64
 }
@@ -90,27 +100,59 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	code := strings.TrimSpace(r.PathValue("alias"))
 
-	// Reject anything that cannot be a valid alias before touching the cache
-	// or the database. A scanner spraying long random paths would otherwise
-	// turn each one into a lookup.
-	if len(code) < alias.MinLength || len(code) > alias.MaxLength {
+	// Has this address been probing? Checked, not charged: only a miss pays.
+	probing, retryAfter := h.probeStatus(r)
+
+	canonical := alias.Canonical(code)
+
+	// Anything that cannot be a stored alias is refused on shape, before the
+	// cache or the database is touched. A scanner spraying paths would otherwise
+	// turn each one into a query and a negative cache entry.
+	//
+	// Deliberately not charged to the probe limit: refusing this costs a byte
+	// scan, so there is nothing here to protect. It is also what keeps favicon.ico
+	// and robots.txt — which every browser asks for and which land on this tree —
+	// from spending a real visitor's allowance.
+	if !alias.WellFormed(canonical) {
 		// Rejected before any lookup, so there is no cache tier to report.
 		h.Metrics.ObserveRedirect("not_found", "rejected", time.Since(start))
 		h.notFound(w, r)
 		return
 	}
-	canonical := alias.Canonical(code)
 
-	res, err := h.Resolver.Resolve(r.Context(), h.DomainID, canonical)
-	if err != nil {
-		// A resolution failure is a 404 to the visitor, not a 500. They cannot
-		// act on the difference, and an error page on a short link is a worse
-		// experience than "not found".
-		h.Logger.Error("redirect resolution failed",
-			slog.String("alias", canonical), slog.Any("error", err))
-		h.Metrics.ObserveRedirect("error", "none", time.Since(start))
-		h.notFound(w, r)
-		return
+	var res redirect.Result
+	if probing {
+		// Throttled. Answer from the in-process cache or not at all: a live link
+		// keeps working for the cost of one map lookup, and an alias nobody is
+		// using cannot be turned into a database query by asking for it again.
+		// This is the whole reason the limit does not simply refuse the request.
+		cached, ok := h.Resolver.ResolveCached(h.DomainID, canonical)
+		if !ok || cached.Snapshot.NotFound {
+			h.Metrics.ObserveRedirect("throttled", "rejected", time.Since(start))
+			// Counted under the same series as the other limits, not only as a
+			// redirect outcome: an operator asking "is anything being throttled"
+			// should get one answer, and the alert on that series would otherwise
+			// never fire for the limit most likely to trip.
+			h.Metrics.ObserveThrottled("redirect_404")
+			h.tooManyRequests(w, r, retryAfter)
+			return
+		}
+		res = cached
+	} else {
+		resolved, err := h.Resolver.Resolve(r.Context(), h.DomainID, canonical)
+		if err != nil {
+			// A resolution failure is a 404 to the visitor, not a 500. They cannot
+			// act on the difference, and an error page on a short link is a worse
+			// experience than "not found". It is also not charged to the probe
+			// limit: the failure is ours, and throttling someone for it would turn
+			// a database blip into a block.
+			h.Logger.Error("redirect resolution failed",
+				slog.String("alias", canonical), slog.Any("error", err))
+			h.Metrics.ObserveRedirect("error", "none", time.Since(start))
+			h.notFound(w, r)
+			return
+		}
+		res = resolved
 	}
 
 	outcome := res.Snapshot.Decide(start)
@@ -121,9 +163,12 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch outcome {
 	case redirect.OutcomeGone:
+		// Not charged to the probe limit: the alias really exists, so asking for
+		// it is not probing. A link checker following a dead link is not abuse.
 		h.gone(w, r)
 		return
 	case redirect.OutcomeNotFound:
+		h.chargeProbe(r)
 		h.notFound(w, r)
 		return
 	case redirect.OutcomeRedirect:
@@ -181,6 +226,48 @@ func (h *RedirectHandler) status() int {
 		return http.StatusFound
 	}
 	return h.Status
+}
+
+// probeStatus reports whether this address has spent its 404 allowance.
+//
+// Nothing happens at all when the limit is off — not even a context lookup — so
+// the default hot path is exactly what it was before probe limiting existed.
+func (h *RedirectHandler) probeStatus(r *http.Request) (bool, time.Duration) {
+	if h.NotFoundLimiter == nil {
+		return false, 0
+	}
+	ok, retry := h.NotFoundLimiter.Check(ClientIPFrom(r.Context()))
+	return !ok, retry
+}
+
+// chargeProbe bills one miss to the client's 404 allowance.
+//
+// Called only where a miss cost a lookup. Two rules follow from that, and
+// together they are what keep the limit from throttling real traffic: a bucket
+// can only empty by asking for well-formed aliases that are not there, and a hit
+// never spends anything.
+func (h *RedirectHandler) chargeProbe(r *http.Request) {
+	if h.NotFoundLimiter == nil {
+		return
+	}
+	h.NotFoundLimiter.Charge(ClientIPFrom(r.Context()))
+}
+
+// tooManyRequests refuses a request from an address that has been probing.
+//
+// A bare status and one line of text, not the 404 page: the recipient has just
+// been told they are asking for too much, and sending them a kilobyte of HTML to
+// say so rewards the behaviour being limited.
+func (h *RedirectHandler) tooManyRequests(w http.ResponseWriter, r *http.Request, retry time.Duration) {
+	head := w.Header()
+	head.Set("Content-Type", "text/plain; charset=utf-8")
+	head.Set("X-Robots-Tag", "noindex, nofollow")
+	head.Set("Cache-Control", "no-store")
+	setRetryAfter(w, retry)
+	w.WriteHeader(http.StatusTooManyRequests)
+	if r.Method != http.MethodHead {
+		_, _ = w.Write([]byte("Too many requests\n"))
+	}
 }
 
 func (h *RedirectHandler) notFound(w http.ResponseWriter, r *http.Request) {

@@ -233,15 +233,41 @@ loses whatever those columns held.
 
 ## Optional: geographic analytics
 
-**Not implemented yet.** `LINKCTRL_GEOIP_MMDB_PATH` is validated at startup — a
-path that does not exist fails the check — but nothing reads the database, and
-country breakdowns stay empty. The dashboard states that geographic data is
-unavailable rather than drawing an empty chart.
+Off unless you supply a database. MaxMind's licence does not allow redistributing
+one in the image, which is why this is optional at runtime rather than built in —
+without it the dashboard says geographic data is unavailable instead of drawing an
+empty chart.
 
-When it lands, the shape will be: mount a MaxMind GeoLite2-Country `.mmdb`
-read-only into the container and point the variable at it. The file cannot be
-redistributed in the image, which is why the feature is optional at runtime
-rather than built in.
+Download a **GeoLite2-Country** `.mmdb` (a free MaxMind account; the City database
+also works), mount it read-only, and point the variable at it:
+
+```yaml
+services:
+  app:
+    volumes:
+      - ./geoip/GeoLite2-Country.mmdb:/geoip/country.mmdb:ro
+    environment:
+      LINKCTRL_GEOIP_MMDB_PATH: /geoip/country.mmdb
+```
+
+Startup logs the database's own type and build date, so a wrong or stale file is
+visible in the log rather than as thin data weeks later. An unreadable path fails
+configuration validation; a file that is not a MaxMind database fails at startup
+rather than resolving nothing forever.
+
+Two things worth knowing:
+
+- **The country is resolved at ingest**, from the address, in the same place the
+  visitor hash is derived — because that is the last moment the address exists.
+  There is no stored address to enrich later, by design.
+- **Only the country is stored.** Region and city are in the same database and
+  have columns in the schema, and are deliberately left null. Nothing in the
+  product displays them, and city plus a timestamp is close to a location history.
+  That is a decision, not an omission.
+
+Updating the database is a file replacement plus a restart. Nothing is
+pre-computed, so a newer database changes only future clicks; historical rows keep
+the country they were resolved with.
 
 ## Hardening already in place
 

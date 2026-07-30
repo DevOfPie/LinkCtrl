@@ -46,6 +46,13 @@ type Options struct {
 	// up and going to Postgres. Short by design: a stalled Redis should cost a
 	// few milliseconds, not the request.
 	RedisTimeout time.Duration
+
+	// DBTimeout bounds the Postgres fallback. Zero leaves it bounded only by the
+	// request context, which for a redirect is no bound worth having: the target
+	// is 100ms uncached, and a query still running after a second is not going to
+	// produce a useful answer — it is going to hold a connection from the small
+	// redirect pool while more requests queue behind it.
+	DBTimeout    time.Duration
 	MemCacheSize int
 	Logger       *slog.Logger
 }
@@ -122,6 +129,26 @@ func (r *Resolver) Resolve(ctx context.Context, domainID uuid.UUID, alias string
 	return Result{Snapshot: snap, Source: sourceFor(snap, SourceDatabase)}, nil
 }
 
+// ResolveCached answers only from the in-process cache. It never touches Redis
+// or Postgres, and never populates anything.
+//
+// This exists for one caller: the redirect handler serving a request that the
+// 404-probe limit has throttled. Refusing such a request outright would mean an
+// address that tripped the limit could no longer follow a working link — and
+// with a proxy misconfigured so that every visitor shares one address, that is
+// the whole site. Serving from memory keeps live links working at the cost of a
+// single map lookup, while an alias nobody is using still cannot be turned into
+// a database query. It is the cheapest operation in the package, which is what
+// makes it safe to offer to a client being throttled.
+func (r *Resolver) ResolveCached(domainID uuid.UUID, alias string) (Result, bool) {
+	k := key(domainID, alias)
+	snap, ok := r.mem.get(k, time.Now())
+	if !ok {
+		return Result{}, false
+	}
+	return Result{Snapshot: snap, Source: sourceFor(snap, SourceMemory)}, true
+}
+
 func sourceFor(s *Snapshot, src Source) Source {
 	if s != nil && s.NotFound {
 		return SourceNegative
@@ -166,6 +193,12 @@ func (r *Resolver) fromRedis(ctx context.Context, k string, now time.Time) *Snap
 }
 
 func (r *Resolver) fromDatabase(ctx context.Context, domainID uuid.UUID, alias, k string, now time.Time) (*Snapshot, error) {
+	if r.opts.DBTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, r.opts.DBTimeout)
+		defer cancel()
+	}
+
 	row, err := r.q.ResolveAliasForRedirect(ctx, dbgen.ResolveAliasForRedirectParams{
 		DomainID: domainID, Alias: alias,
 	})

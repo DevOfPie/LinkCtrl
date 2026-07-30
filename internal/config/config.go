@@ -18,7 +18,7 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
-	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -151,18 +151,28 @@ type AuthConfig struct {
 	APIRatePerMin    int `env:"API_RATE_PER_MIN" envDefault:"600"`
 }
 
+// IngestConfig tunes the click pipeline.
+//
+// There is deliberately no worker count. One consumer is what makes batch
+// coalescing work — a second would split every batch and interleave the writes —
+// so the knob that used to be here was removed rather than implemented. See
+// Removed.
 type IngestConfig struct {
 	QueueSize     int           `env:"INGEST_QUEUE_SIZE" envDefault:"16384"`
 	BatchSize     int           `env:"INGEST_BATCH_SIZE" envDefault:"500"`
 	FlushInterval time.Duration `env:"INGEST_FLUSH_INTERVAL" envDefault:"250ms"`
-	Workers       int           `env:"INGEST_WORKERS" envDefault:"1"`
 }
 
+// AnalyticsConfig tunes analytics storage and enrichment.
+//
+// Salt rotation and bot classification are not configurable, and that is a
+// design decision rather than an omission: the daily rotation is what the purge
+// window de-identifies against, and bots are always classified because the
+// control that matters — keeping them out of headline figures — is in the
+// queries. See Removed.
 type AnalyticsConfig struct {
-	RetentionDays int           `env:"ANALYTICS_RETENTION_DAYS" envDefault:"395"`
-	GeoIPPath     string        `env:"GEOIP_MMDB_PATH"`
-	BotFilter     bool          `env:"BOT_FILTER_ENABLED" envDefault:"true"`
-	SaltRotation  time.Duration `env:"VISITOR_SALT_ROTATION" envDefault:"24h"`
+	RetentionDays int    `env:"ANALYTICS_RETENTION_DAYS" envDefault:"395"`
+	GeoIPPath     string `env:"GEOIP_MMDB_PATH"`
 }
 
 type ShutdownConfig struct {
@@ -234,6 +244,38 @@ func resolveFileSecrets() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// Removed names variables that once existed and no longer do, each with the
+// behaviour that is now fixed.
+//
+// Kept as data rather than deleted quietly, because silent removal reproduces
+// the defect it is fixing from the other side: the operator still has the line
+// in their .env and still believes it does something. Startup reports these as
+// warnings rather than errors — an upgrade must not refuse to boot over a stale
+// line in a file.
+var Removed = map[string]string{
+	"INGEST_WORKERS": "the ingester runs a single consumer, which is what makes " +
+		"batch coalescing work; a worker count would break it",
+	"VISITOR_SALT_ROTATION": "visitor salts rotate once per UTC day, which is the " +
+		"period the purge window de-identifies against",
+	"BOT_FILTER_ENABLED": "bots are always classified and recorded; headline " +
+		"figures exclude them in the queries instead",
+}
+
+// RemovedInUse reports removed variables that are still set, ready to log.
+//
+// Sorted, so the output is stable across runs and diffable in a log.
+func RemovedInUse() []string {
+	var out []string
+	for name, why := range Removed {
+		if os.Getenv(EnvPrefix+name) != "" {
+			out = append(out, fmt.Sprintf("%s%s is set but no longer read: %s",
+				EnvPrefix, name, why))
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Parse reads configuration from the current environment without consulting a
@@ -393,8 +435,19 @@ func (c Config) Validate() error {
 		add("INGEST_BATCH_SIZE (%d): must not exceed INGEST_QUEUE_SIZE (%d)",
 			c.Ingest.BatchSize, c.Ingest.QueueSize)
 	}
-	if c.Ingest.Workers < 1 || c.Ingest.Workers > runtime.NumCPU()*4 {
-		add("INGEST_WORKERS: must be between 1 and %d, got %d", runtime.NumCPU()*4, c.Ingest.Workers)
+
+	// Rate limits. Zero is a legal value meaning "no limit", so only a negative
+	// number is a mistake — and it is worth catching, because a limit of -1 reads
+	// like "unlimited" and would otherwise silently disable throttling.
+	for name, v := range map[string]int{
+		"LOGIN_RATE_PER_MIN":      c.Auth.LoginRatePerMin,
+		"API_RATE_PER_MIN":        c.Auth.APIRatePerMin,
+		"REDIRECT_404_RATE_LIMIT": c.Redirect.NotFoundLimit,
+		"LOGIN_LOCKOUT_THRESHOLD": c.Auth.LockoutThreshold,
+	} {
+		if v < 0 {
+			add("%s: must be 0 (no limit) or positive, got %d", name, v)
+		}
 	}
 
 	if c.Analytics.RetentionDays < 0 {

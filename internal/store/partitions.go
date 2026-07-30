@@ -2,9 +2,14 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -111,6 +116,149 @@ func ensurePartition(ctx context.Context, pool *pgxpool.Pool, table, name string
 		return false, fmt.Errorf("create partition %s: %w", name, err)
 	}
 	return true, nil
+}
+
+// RetainedTables are the partitioned tables that the analytics retention window
+// applies to.
+//
+// audit_logs is partitioned identically and is deliberately not here. Audit
+// retention is a different policy from analytics retention — the reason to keep
+// an audit trail is that someone may need to ask what happened a long time
+// afterwards — and quietly deleting it on the analytics setting would be a
+// surprise of exactly the wrong kind. It grows until Phase 2 gives it a policy
+// of its own.
+var RetainedTables = []string{"click_events", "visitors"}
+
+// partitionMonth matches the names EnsurePartitions creates. Anything else is
+// left alone: a partition this code did not create is not one it should drop.
+var partitionMonth = regexp.MustCompile(`^(.+)_(\d{4})_(\d{2})$`)
+
+// DropExpiredPartitions drops monthly partitions whose entire range is older
+// than the retention window, and reports what it dropped.
+//
+// A retentionDays of zero or less keeps everything, matching the configuration
+// contract that 0 means "forever".
+//
+// Retention is enforced at month granularity, and only when the newest row a
+// partition could hold is already outside the window. The alternative — deleting
+// rows older than exactly N days — would mean a DELETE across the largest table
+// in the system, then a VACUUM to reclaim the space, on a schedule. Dropping a
+// partition is instant, reclaims the space immediately, and cannot half-finish.
+// The cost is that data survives up to a month past the nominal window, which is
+// the right way to be wrong: keeping data slightly too long is recoverable, and
+// deleting it slightly too early is not.
+//
+// Daily rollups live in their own unpartitioned tables and are untouched, so
+// historical charts keep working after the raw events are gone.
+func DropExpiredPartitions(ctx context.Context, pool *pgxpool.Pool, retentionDays int, now time.Time) ([]string, error) {
+	if retentionDays <= 0 {
+		return nil, nil
+	}
+	cutoff := now.UTC().AddDate(0, 0, -retentionDays)
+
+	var dropped []string
+	var errs []error
+	for _, table := range RetainedTables {
+		names, err := expiredPartitions(ctx, pool, table, cutoff)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		for _, name := range names {
+			if err := dropPartition(ctx, pool, name); err != nil {
+				// One partition failing must not stop the others. The usual cause
+				// is a lock timeout, and the next run will pick it up.
+				errs = append(errs, err)
+				continue
+			}
+			dropped = append(dropped, name)
+		}
+	}
+	return dropped, errors.Join(errs...)
+}
+
+// expiredPartitions lists the partitions of one table that are entirely older
+// than the cutoff.
+func expiredPartitions(ctx context.Context, pool *pgxpool.Pool, table string, cutoff time.Time) ([]string, error) {
+	// Read from the catalogue rather than guessing which partitions exist, and
+	// take the bound expression along so the DEFAULT partition can be excluded by
+	// what it is rather than by what it is called.
+	rows, err := pool.Query(ctx, `
+		SELECT c.relname, pg_get_expr(c.relpartbound, c.oid)
+		  FROM pg_inherits i
+		  JOIN pg_class c ON c.oid = i.inhrelid
+		  JOIN pg_class p ON p.oid = i.inhparent
+		 WHERE p.relname = $1
+		   AND c.relispartition`, table)
+	if err != nil {
+		return nil, fmt.Errorf("list partitions of %s: %w", table, err)
+	}
+	defer rows.Close()
+
+	var expired []string
+	for rows.Next() {
+		var name, bound string
+		if err := rows.Scan(&name, &bound); err != nil {
+			return nil, fmt.Errorf("scan partition of %s: %w", table, err)
+		}
+		// The default partition holds anything outside every explicit range, so
+		// its contents cannot be dated from its bounds. Dropping it would also
+		// remove the safety net that keeps a misrouted click recoverable.
+		if strings.Contains(bound, "DEFAULT") {
+			continue
+		}
+		m := partitionMonth.FindStringSubmatch(name)
+		if m == nil {
+			// Not a name this code created. Left alone deliberately: an operator's
+			// hand-made partition is not ours to delete.
+			continue
+		}
+		year, _ := strconv.Atoi(m[2])
+		month, _ := strconv.Atoi(m[3])
+		if month < 1 || month > 12 {
+			continue
+		}
+		// The instant after the last one the partition can hold. Comparing this
+		// against the cutoff is what guarantees nothing inside the window goes.
+		end := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC).AddDate(0, 1, 0)
+		if !end.After(cutoff) {
+			expired = append(expired, name)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list partitions of %s: %w", table, err)
+	}
+	return expired, nil
+}
+
+// dropPartition removes one partition under a short lock timeout.
+//
+// Detaching a partition needs an exclusive lock on the parent, which the click
+// ingester holds briefly on every batch. Without a timeout the drop would sit in
+// the lock queue — and everything arriving behind it would queue too, turning a
+// housekeeping job into a stall on the write path. Five seconds is long enough
+// to win the lock between batches and short enough that failing is cheap: the
+// job runs again in an hour.
+func dropPartition(ctx context.Context, pool *pgxpool.Pool, name string) error {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin drop of %s: %w", name, err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, "SET LOCAL lock_timeout = '5s'"); err != nil {
+		return fmt.Errorf("set lock timeout: %w", err)
+	}
+	// Identifier interpolation, because a table name cannot be a bind parameter.
+	// The value came from pg_class and matched partitionMonth, and Sanitize is the
+	// belt to that braces.
+	if _, err := tx.Exec(ctx, "DROP TABLE "+pgx.Identifier{name}.Sanitize()); err != nil {
+		return fmt.Errorf("drop partition %s: %w", name, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit drop of %s: %w", name, err)
+	}
+	return nil
 }
 
 // PartitionName returns the partition a timestamp belongs to.

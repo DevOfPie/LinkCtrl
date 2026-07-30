@@ -70,7 +70,11 @@ func seeOther(w http.ResponseWriter, r *http.Request, to string) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	http.Redirect(w, r, to, http.StatusSeeOther)
+	// gosec's taint analysis cannot see through safeNext, which is the only path
+	// by which a caller-supplied destination reaches here — it rejects anything
+	// that is not a local path, including the "//evil.com" form that beats a naive
+	// "starts with /" check. Every other call site passes a literal.
+	http.Redirect(w, r, to, http.StatusSeeOther) //nolint:gosec // G710: destinations are literals or pass safeNext
 }
 
 // render writes a page, downgrading a template failure to a plain 500.
@@ -110,6 +114,16 @@ func (h *Web) errorPage(w http.ResponseWriter, r *http.Request, code int, headin
 		Heading: heading,
 		Message: message,
 	})
+}
+
+// tooManyRequests is the dashboard's counterpart of writeTooManyRequests: a
+// page rather than a problem document, because the client is a person.
+//
+// Rendered rather than redirected back to the form, so the browser does not
+// resubmit whatever was refused when the reader reloads.
+func (h *Web) tooManyRequests(w http.ResponseWriter, r *http.Request) {
+	h.errorPage(w, r, http.StatusTooManyRequests, "Too many attempts",
+		"Too many attempts from your address. Wait a moment and try again.")
 }
 
 // webError maps a service error to an HTML response, the counterpart of

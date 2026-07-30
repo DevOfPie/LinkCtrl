@@ -42,12 +42,16 @@ type Service struct {
 	pool    *pgxpool.Pool
 	q       *dbgen.Queries
 	policy  DestinationPolicy
+	aliases alias.Policy
 	baseURL string
 	cache   Invalidator
 }
 
 type Config struct {
-	Policy  DestinationPolicy
+	Policy DestinationPolicy
+	// Aliases carries the operator's reserved-word additions and the profanity
+	// switch. The zero value is the safe default: built-in list, filter on.
+	Aliases alias.Policy
 	BaseURL string
 	Cache   Invalidator
 }
@@ -57,6 +61,7 @@ func NewService(pool *pgxpool.Pool, cfg Config) *Service {
 		pool:    pool,
 		q:       dbgen.New(pool),
 		policy:  cfg.Policy,
+		aliases: cfg.Aliases,
 		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
 		cache:   cfg.Cache,
 	}
@@ -131,7 +136,7 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 	// loop does not hold one open.
 	var code string
 	if in.Alias != "" {
-		code, err = alias.Validate(in.Alias)
+		code, err = s.aliases.Validate(in.Alias)
 		if err != nil {
 			var ae *alias.Error
 			if errors.As(err, &ae) {
@@ -260,7 +265,7 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 
 	var newAlias *string
 	if in.Alias != nil && *in.Alias != existing.Alias {
-		code, aerr := alias.Validate(*in.Alias)
+		code, aerr := s.aliases.Validate(*in.Alias)
 		if aerr != nil {
 			var ae *alias.Error
 			if errors.As(aerr, &ae) {

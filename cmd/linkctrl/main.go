@@ -24,10 +24,12 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/DevOfPie/LinkCtrl/internal/alias"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/build"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
+	"github.com/DevOfPie/LinkCtrl/internal/geoip"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
@@ -102,6 +104,9 @@ Flags:
 	}
 
 	if *checkConfig {
+		for _, w := range config.RemovedInUse() {
+			fmt.Fprintf(stderr, "warning: %s\n", w)
+		}
 		fmt.Fprintln(stdout, "configuration OK")
 		return nil
 	}
@@ -131,6 +136,13 @@ func run(cfg config.Config, _ io.Writer) error {
 	if !cfg.SecureCookies {
 		log.Warn("insecure cookies enabled: sessions will not be protected in transit; " +
 			"acceptable only for local HTTP development")
+	}
+
+	// Variables that used to exist. Warned about rather than ignored: an operator
+	// who still has the line believes it does something, which is the same defect
+	// as a knob that parses and changes nothing.
+	for _, w := range config.RemovedInUse() {
+		log.Warn(w)
 	}
 
 	// Migrations run before the pools open and before the listener does, so a
@@ -205,6 +217,23 @@ func run(cfg config.Config, _ io.Writer) error {
 		"redirect": pools.Redirect,
 	}))
 
+	// Request limits. Built once here and shared: the router enforces two of
+	// them, the redirect handler the third, and the collector reports on all
+	// three, so none of them re-derives a limit from configuration.
+	limits := httpx.NewLimiters(cfg)
+	metrics.Register(observability.NewLimiterCollector(limits.Stats()))
+	for name, on := range map[string]bool{
+		"login":        limits.Login != nil,
+		"api":          limits.API != nil,
+		"redirect_404": limits.NotFound != nil,
+	} {
+		if !on {
+			// Said out loud, because a limit silently set to zero is exactly the
+			// kind of thing an operator means to change back and forgets.
+			log.Warn("rate limit disabled by configuration", slog.String("limit", name))
+		}
+	}
+
 	authSvc := auth.NewService(pools.App, auth.ServiceConfig{
 		Params: auth.Params{
 			MemoryKiB:   cfg.Auth.Argon2MemoryKiB,
@@ -237,6 +266,7 @@ func run(cfg config.Config, _ io.Writer) error {
 		TTL:          cfg.Redirect.TTL,
 		NegativeTTL:  cfg.Redirect.NegativeTTL,
 		RedisTimeout: cfg.Redis.ReadTimeout,
+		DBTimeout:    cfg.Redirect.Timeout,
 		Logger:       log,
 	})
 
@@ -246,6 +276,13 @@ func run(cfg config.Config, _ io.Writer) error {
 			MaxLength:           cfg.Alias.DestMaxLength,
 			BlockPrivateIPs:     cfg.Alias.DestBlockPrivateIPs,
 			BlockedHostSuffixes: cfg.Alias.DestBlocklist,
+		},
+		Aliases: alias.Policy{
+			ReservedExtra: cfg.Alias.ReservedExtra,
+			// The configuration variable names the state an operator wants, and
+			// the policy field names the state it disables. Inverting here rather
+			// than in the policy keeps the zero Policy the safe one.
+			ProfanityDisabled: !cfg.Alias.ProfanityFilter,
 		},
 		BaseURL: cfg.BaseURL,
 		// Editing a link must drop its cached snapshot, and creating one must
@@ -260,31 +297,55 @@ func run(cfg config.Config, _ io.Writer) error {
 		return fmt.Errorf("resolve default domain: %w", err)
 	}
 
+	// Geographic enrichment, if an operator supplied a database. Opened before
+	// the ingester because the ingester needs it, and opened rather than trusted:
+	// config validation only checks the file is readable, and a truncated
+	// database would otherwise show up as permanently empty countries.
+	geo, err := geoip.Open(cfg.Analytics.GeoIPPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = geo.Close() }()
+	if geo.Enabled() {
+		log.Info("geoip database loaded", slog.String("database", geo.Description()))
+	} else {
+		log.Info("geographic analytics disabled (GEOIP_MMDB_PATH is empty)")
+	}
+
 	// Analytics. The ingester buffers clicks and writes them in batches, so
 	// recording never delays a redirect.
 	salts := analytics.NewSaltCache(pools.App)
-	ingester := analytics.NewIngester(pools.App, salts, analytics.IngestConfig{
+	ingestCfg := analytics.IngestConfig{
 		QueueSize:     cfg.Ingest.QueueSize,
 		BatchSize:     cfg.Ingest.BatchSize,
 		FlushInterval: cfg.Ingest.FlushInterval,
 		Logger:        log,
-	})
+	}
+	// Assigned only when there is a database. Handing over a nil *Resolver would
+	// still satisfy the interface — a nil pointer in an interface is not a nil
+	// interface — and the ingester's "is geography configured" check would then
+	// depend on the resolver's nil-tolerance rather than saying what it means.
+	if geo.Enabled() {
+		ingestCfg.Geo = geo
+	}
+	ingester := analytics.NewIngester(pools.App, salts, ingestCfg)
 	ingester.Start()
 	metrics.Register(observability.NewIngestCollector(ingester))
 
 	roller := analytics.NewRoller(pools.App, log)
-	jobs := newJobRunner(pools.App, salts, roller, log, metrics)
+	jobs := newJobRunner(pools.App, salts, roller, log, metrics, cfg.Analytics.RetentionDays)
 	jobs.start(ctx)
 	defer jobs.stop()
 
 	redirectHandler := &httpx.RedirectHandler{
-		Resolver:  resolver,
-		DomainID:  defaultDomain.ID,
-		Status:    cfg.Redirect.DefaultStatus,
-		Logger:    log,
-		LogSample: int64(cfg.Redirect.LogSample),
-		Recorder:  clickRecorder{ingester: ingester},
-		Metrics:   metrics,
+		Resolver:        resolver,
+		DomainID:        defaultDomain.ID,
+		Status:          cfg.Redirect.DefaultStatus,
+		Logger:          log,
+		LogSample:       int64(cfg.Redirect.LogSample),
+		Recorder:        clickRecorder{ingester: ingester},
+		Metrics:         metrics,
+		NotFoundLimiter: limits.NotFound,
 	}
 
 	if needsSetup, err := authSvc.NeedsSetup(ctx); err == nil && needsSetup {
@@ -313,6 +374,7 @@ func run(cfg config.Config, _ io.Writer) error {
 		Links: linkSvc, Redirect: redirectHandler,
 		Stats:   stats,
 		Metrics: metrics,
+		Limits:  limits,
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
 			Links: linkSvc, Stats: stats,
@@ -411,11 +473,15 @@ func healthcheck(args []string) error {
 	client := &http.Client{Timeout: 3 * time.Second}
 	url := fmt.Sprintf("http://%s/readyz", net.JoinHostPort(host, port))
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	// G704 reads the address as attacker-controlled input. It is this process's own
+	// listen address, and probing itself is the entire purpose: the runtime image
+	// is distroless, with no shell and no curl for the container healthcheck to
+	// use. Anyone able to set the environment already controls the process.
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil) //nolint:gosec // G704: self-probe of our own listener
 	if err != nil {
 		return err
 	}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //nolint:gosec // G704: same request, same reason
 	if err != nil {
 		return err
 	}

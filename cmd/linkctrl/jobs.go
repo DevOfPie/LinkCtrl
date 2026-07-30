@@ -24,8 +24,10 @@ type jobRunner struct {
 	roller  *analytics.Roller
 	log     *slog.Logger
 	metrics *observability.Metrics
-	cancel  context.CancelFunc
-	done    chan struct{}
+	// retentionDays is the analytics window. Zero keeps raw events forever.
+	retentionDays int
+	cancel        context.CancelFunc
+	done          chan struct{}
 }
 
 // advisoryLockKey is hashtext('linkctrl_jobs'), computed once so the value is
@@ -33,11 +35,12 @@ type jobRunner struct {
 const advisoryLockKey int64 = 0x6c63_6a6f_6273_0001
 
 func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analytics.Roller,
-	log *slog.Logger, metrics *observability.Metrics,
+	log *slog.Logger, metrics *observability.Metrics, retentionDays int,
 ) *jobRunner {
 	return &jobRunner{
 		pool: pool, salts: salts, roller: roller, log: log, metrics: metrics,
-		done: make(chan struct{}),
+		retentionDays: retentionDays,
+		done:          make(chan struct{}),
 	}
 }
 
@@ -142,6 +145,22 @@ func (j *jobRunner) runMaintenance(ctx context.Context) {
 		n, err := j.salts.Purge(ctx)
 		if err == nil && n > 0 {
 			j.log.Info("expired analytics salts purged", slog.Int64("count", n))
+		}
+		return err
+	})
+
+	// Retention. Dropping a whole month is instant and reclaims the space, which
+	// is the reason these tables are partitioned by month in the first place —
+	// and it runs after partition creation so a run can never drop the partition
+	// the same run just made.
+	j.withLeadership(runCtx, "retention", func(ctx context.Context) error {
+		dropped, err := store.DropExpiredPartitions(ctx, j.pool, j.retentionDays, time.Now())
+		for _, name := range dropped {
+			// Info, not Debug: this is irreversible deletion of click data, and
+			// the log is the only record that it happened.
+			j.log.Info("dropped expired analytics partition",
+				slog.String("partition", name),
+				slog.Int("retention_days", j.retentionDays))
 		}
 		return err
 	})

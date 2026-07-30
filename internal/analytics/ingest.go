@@ -40,11 +40,25 @@ type Stats struct {
 	Batches  atomic.Int64
 }
 
+// CountryResolver turns an address into an ISO 3166-1 alpha-2 country code, or
+// "" when it cannot.
+//
+// An interface, not the geoip package, for two reasons: analytics should not
+// depend on how geography is looked up, and a test needs to enrich events
+// without a MaxMind database on disk.
+type CountryResolver interface {
+	Country(netip.Addr) string
+}
+
 type IngestConfig struct {
 	QueueSize     int
 	BatchSize     int
 	FlushInterval time.Duration
 	Logger        *slog.Logger
+
+	// Geo is optional. Nil leaves the country column null, which is the default
+	// state: the MaxMind database cannot be shipped in the image.
+	Geo CountryResolver
 }
 
 // Ingester buffers click events and writes them in batches.
@@ -274,16 +288,22 @@ func (i *Ingester) prepare(ctx context.Context, batch []Event) ([][]any, map[uui
 		cls := Classify(ev.UserAgent)
 		hash := VisitorHash(salt, ev.IP, ev.UserAgent, ev.WorkspaceID)
 
+		// Country is derived here, in the same place and from the same value as
+		// the visitor hash, and for the same reason: this is the last point at
+		// which the address exists. It is not stored, so a country has to be
+		// resolved now or never.
+		country := i.country(ev.IP)
+
 		rows = append(rows, []any{
 			uuid.Must(uuid.NewV7()),
 			ev.LinkID,
 			ev.WorkspaceID,
 			ev.OccurredAt,
 			hash,
-			false, // is_first_visit, computed by the rollup job
-			nil,   // country  — GeoIP is optional and arrives in M9
-			nil,   // region
-			nil,   // city
+			false,   // is_first_visit, computed by the rollup job
+			country, // nil unless a GeoIP database is configured
+			nil,     // region — resolvable, deliberately not stored; see internal/geoip
+			nil,     // city
 			string(cls.Device),
 			cls.Browser,
 			cls.OS,
@@ -302,6 +322,23 @@ func (i *Ingester) prepare(ctx context.Context, batch []Event) ([][]any, map[uui
 	}
 
 	return rows, counts, nil
+}
+
+// country resolves an address, returning nil rather than an empty string when
+// there is no answer.
+//
+// The distinction matters at the column: NULL means "not resolved", and ” would
+// be a country whose code is the empty string. Grouping analytics by the latter
+// produces a bucket that looks like data.
+func (i *Ingester) country(addr netip.Addr) *string {
+	if i.cfg.Geo == nil {
+		return nil
+	}
+	code := i.cfg.Geo.Country(addr)
+	if code == "" {
+		return nil
+	}
+	return &code
 }
 
 // QueueDepth reports buffered events.

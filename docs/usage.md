@@ -64,8 +64,11 @@ Every API response carrying these numbers includes that caveat as a `caveat`
 field. Bots are recorded and counted separately, and excluded from the headline
 figures.
 
-Country breakdowns are empty: geographic enrichment is not implemented yet, and
-the page states that rather than drawing a blank chart.
+Country breakdowns need a GeoIP database, which cannot be shipped in the image —
+see [deployment.md](deployment.md#optional-geographic-analytics). Without one the page says the data is
+unavailable rather than drawing a blank chart. Region and city are not stored even
+with a database configured: nothing shows them, and city plus a timestamp is close
+to a location history.
 
 ## The API
 
@@ -229,7 +232,8 @@ Every failure is `application/problem+json`. Branch on `type`, never on prose:
 | `404` | Does not exist, or belongs to a workspace you cannot see. Someone else's resource is never a `403`, so ids cannot be probed. |
 | `409` | Alias already taken. |
 | `422` | Validation failed; `errors` names each field. Also how Phase 2 fields (`password`, `max_clicks`, `one_time`) are refused — loudly, rather than accepted and ignored. |
-| `429` | Account locked after repeated failed logins. |
+| `429` | Two different things, told apart by `type`: `account-locked` after repeated failed logins for one account, or `rate-limited` when your address is going too fast. The second carries `Retry-After`; the first is a fixed 15 minutes. Retrying the second is fine — retrying the first just extends it. |
+| `504` | The request exceeded the server's deadline. Retry; narrow the window if it is an analytics query. |
 
 Unknown JSON fields are rejected rather than ignored: a misspelled field silently
 dropped means you believe you set something you did not.
@@ -241,6 +245,7 @@ dropped means you believe you set something you did not.
 | Active link | `302` with `Location`, `Cache-Control: private, no-store` |
 | Expired | `410 Gone` — distinct from 404 so crawlers and link checkers stop retrying |
 | Unknown, archived or disabled | `404` |
+| Too many misses from one address | `429` with `Retry-After` — see [configuration.md](configuration.md#rate-limits). Links already in the cache keep resolving, and paths that could never be an alias are not counted. |
 
 Query forwarding is off by default and deep-link path forwarding is Phase 2.
 `HEAD` works and does not record a click.

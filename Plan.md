@@ -44,6 +44,8 @@ Serves individuals, creators, businesses, developers and enterprises.
 | Frontend | Go `html/template`, HTMX, Tailwind standalone CLI (no Node in image) |
 | API contract | Hand-maintained OpenAPI 3, contract-tested against the implementation; Swagger UI embedded |
 | Observability | `log/slog`, Prometheus |
+| GeoIP | MaxMind DB reader, optional at runtime; database supplied by the operator |
+| Rate limiting | In-process token buckets, no external dependency |
 | Deployment | Docker + Compose; Caddy for TLS |
 | Load testing | k6 |
 
@@ -91,13 +93,16 @@ Authoritative. Where this table and prose elsewhere disagree, this table wins.
 | Device, browser, OS, referrer, language | 1 |
 | Bot detection | 1 |
 | Dashboards, trends | 1 |
-| Geographic (country/region/city) — optional at runtime | 1 |
+| Geographic (country) — optional at runtime | 1 |
+| Geographic (region/city) — resolvable, deliberately not stored | 2 |
 | ASN, VPN/proxy detection, response latency | 2+ |
 | Campaign analytics, conversion tracking, live activity | 2+ |
 
 GeoIP is optional because the MaxMind database cannot be redistributed in the
 image. Without it the UI states that geographic data is unavailable rather than
-rendering empty charts.
+rendering empty charts. The country is resolved at ingest, from the address, in
+the same place the visitor hash is derived — there is no stored address to enrich
+afterwards.
 
 ### Security
 
@@ -107,7 +112,8 @@ rendering empty charts.
 | Server-side sessions, `__Host-` cookies | 1 |
 | RBAC: roles, permissions, working evaluator | 1 |
 | API keys with scopes | 1 |
-| Rate limiting | 1 |
+| Rate limiting: per address, in-process, on credentials and the API | 1 |
+| Rate limiting: shared across replicas | 2 |
 | Abuse prevention: scheme allowlist, private-IP block, reserved/profanity alias filters, 404 probe limiting | 1 |
 | Audit log — table only | 1 |
 | Audit log — behavior | 2 |
@@ -245,7 +251,8 @@ Implementation:
 | Referrers | Host only; query strings discarded at ingest |
 | Language | Primary subtag only (`en`, not `en-GB`) |
 | Session/audit IPs | Prefix only: /24 IPv4, /48 IPv6 |
-| Analytics retention | 395 days default, enforced by dropping monthly partitions |
+| Analytics retention | 395 days default, enforced hourly by dropping monthly partitions of `click_events` and `visitors`; a partition goes only once its newest possible row is outside the window, so data survives up to a month longer. `audit_logs` is exempt. |
+| Geographic detail | Country only. Region and city are resolvable and deliberately not stored. |
 | Regional storage | One instance per region via `organizations.data_region`; no row-level routing |
 
 Consequence: the largest table holds no personal data and is out of scope for
@@ -258,7 +265,7 @@ caveat with the data.
 
 ## Build status
 
-As of 2026-07-30. 15 of 18 milestones.
+As of 2026-07-30. 16 of 18 milestones.
 
 | Area | State |
 | --- | --- |
@@ -276,7 +283,7 @@ As of 2026-07-30. 15 of 18 milestones.
 | OpenAPI document and `/docs` | done, verified |
 | Prometheus metrics | done, verified |
 | Documentation: README, setup, configuration, usage, operations | done |
-| Enforcement: rate limits, 404 probe limits, GeoIP, retention | not started |
+| Enforcement: rate limits, 404 probe limits, GeoIP, retention | done, verified |
 | Load validation of the redirect target | not started |
 | Release packaging | not started |
 
@@ -286,41 +293,20 @@ plus unit, property and fuzz tests. All run under the race detector.
 
 ### Phase 1 scope not yet built
 
-Found while writing the configuration reference: these are listed as Phase 1 in
-*Scope by phase*, or promised by a configuration variable, and nothing reads them
-yet. The knobs parse, validate and change nothing.
+Every configuration variable now either takes effect or no longer exists, which
+was the enforcement milestone's definition of done. What remains unbuilt in
+Phase 1:
 
-All of it belongs to the **enforcement** milestone, sequenced *before* load
-validation: rate limiting and 404 probe limiting add work to the redirect hot
-path, so measuring the SLO first measures a path that is about to change.
-
-**Done when the *Accepted but not yet in effect* table in
-[configuration.md](docs/configuration.md#accepted-but-not-yet-in-effect) is
-empty and this section is deleted** — every variable below either takes effect or
-no longer exists.
-
-#### To implement
-
-| Capability | Variables | Done when |
-| --- | --- | --- |
-| Rate limiting | `LOGIN_RATE_PER_MIN`, `API_RATE_PER_MIN` | Login and API throttled per address; `429` with `Retry-After`. Per-IP limits are added *alongside* the existing per-account lockout, not in place of it — both remain enforced. |
-| 404 probe limiting | `REDIRECT_404_RATE_LIMIT` | Repeated misses from one address throttled on the redirect tree, adding no round trip to the hit path. |
-| Geographic analytics | `GEOIP_MMDB_PATH` | Country resolved at ingest, before the address is discarded. No address column appears. A missing database keeps today's "unavailable" behavior. |
-| Analytics retention | `ANALYTICS_RETENTION_DAYS` | A job drops monthly partitions past the window. Rollups survive, so charts outlive the raw events. |
-| Per-request deadline | `HTTP_REQUEST_TIMEOUT`, `REDIRECT_TIMEOUT` | Applied on the application tree, and to the redirect path's Postgres fallback. |
-| `Server-Timing` | `SERVER_TIMING` | Emitted on the application tree only, never the redirect tree. Default stays off. |
-| Alias filters | `ALIAS_RESERVED_EXTRA`, `ALIAS_PROFANITY_FILTER` | Operator extras merge into the built-in reserved list; the profanity filter can be switched off. |
-
-#### To remove
-
-Here the fixed behavior is the contract, so the variable goes rather than the
-behavior becoming configurable. Startup warns if a removed variable is still set.
-
-| Variable | Behavior that becomes fixed |
+| Capability | State |
 | --- | --- |
-| `INGEST_WORKERS` | One ingest consumer. |
-| `VISITOR_SALT_ROTATION` | One UTC day, matching the purge window. |
-| `BOT_FILTER_ENABLED` | Bots are always classified and recorded; headline figures exclude them. |
+| Load validation of the redirect target | Not started. The histogram exists; the number does not. |
+| Release packaging | Not started. |
+| Audit log behavior | Table only, by design — Phase 1 scope says table, Phase 2 says behavior. |
+| Geographic region and city | Resolvable from the same database as the country and deliberately not stored. Nothing displays them, and city plus a timestamp approaches a location history. Storing them needs a UI and a reason, which makes it a Phase 2 decision. |
+
+The last row narrows *Scope by phase*, which lists geographic analytics as
+country/region/city in Phase 1. Country is delivered; the other two are
+reclassified rather than quietly skipped.
 
 ---
 
@@ -332,6 +318,9 @@ Deliberately accepted in Phase 1.
 | --- | --- |
 | DNS rebinding not defended against | A host resolving public at creation and private at click time is not caught. Detection needs resolution on the hot path. |
 | Cache invalidation is single-replica | A second replica keeps its copy until TTL. Phase 2 adds pub/sub. |
+| Rate limits are per instance | In-memory buckets, so N replicas allow N times the configured limit, and a restart resets them. Redis-backed limits would add a network round trip to the redirect path and make an optional dependency load-bearing. |
+| Rate limits fail open | A full key table allows requests rather than refusing them, counted by `linkctrl_rate_limit_overflow_total`. A limiter is abuse mitigation, not an authorization boundary. |
+| Behind a proxy, limits need `TRUSTED_PROXIES` | Otherwise every request carries the proxy's address and all traffic shares one bucket. This is a correctness requirement once a limit is on, not only an analytics one. |
 | `links.click_count` is approximate | Written with the click rows, but an unclean shutdown loses at most one batch of both. |
 | `api_keys.last_used_at` is approximate | Buffered and flushed on a 30s cadence, so an unclean shutdown loses the most recent timestamps. Authentication must not cost a write. |
 | API keys cannot manage API keys | `apikeys.*` is not delegable, so minting and revoking need a session. Automating key rotation is Phase 2 work. |

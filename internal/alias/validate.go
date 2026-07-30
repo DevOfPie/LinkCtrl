@@ -42,13 +42,38 @@ func Canonical(input string) string {
 	return strings.ToLower(strings.TrimSpace(input))
 }
 
-// Validate canonicalizes a user-supplied alias and reports whether it is
-// acceptable, returning the canonical form on success.
+// Policy carries the operator-supplied part of alias validation.
+//
+// Both fields are named for their non-default state so that the zero Policy is
+// the safe one: no extra reservations, profanity filtering on. A struct whose
+// zero value quietly disabled the filter would be wrong in the direction that
+// matters, and Policy{} appears in tests and in the package-level Validate.
+type Policy struct {
+	// ReservedExtra are additional words an operator wants refused, merged with
+	// the built-in list rather than replacing it. Compared canonically, so entries
+	// need no particular casing.
+	ReservedExtra []string
+
+	// ProfanityDisabled switches the built-in profanity filter off.
+	//
+	// Worth having as a switch: the list cannot know the context it is applied in,
+	// and an instance used internally for engineering links has different needs
+	// from a public shortener. It does not affect the reserved list.
+	ProfanityDisabled bool
+}
+
+// Validate canonicalizes a user-supplied alias under the default policy.
 //
 // It is idempotent: Validate(Validate(x)) == Validate(x) for any x that
 // validates. The property test relies on this, and so does the service layer,
 // which validates on both create and update.
 func Validate(input string) (string, error) {
+	return Policy{}.Validate(input)
+}
+
+// Validate canonicalizes a user-supplied alias and reports whether it is
+// acceptable, returning the canonical form on success.
+func (p Policy) Validate(input string) (string, error) {
 	s := Canonical(input)
 
 	if s == "" {
@@ -78,15 +103,63 @@ func Validate(input string) (string, error) {
 			"alias must not begin or end with a hyphen or underscore")
 	}
 
-	if IsReserved(s) {
+	if p.IsReserved(s) {
 		return "", newError(ReasonReserved, "alias %q is reserved", s)
 	}
 
-	if IsProfane(s) {
+	if !p.ProfanityDisabled && IsProfane(s) {
 		return "", newError(ReasonProfane, "alias contains disallowed language")
 	}
 
 	return s, nil
+}
+
+// IsReserved reports whether an alias is reserved under this policy: on the
+// built-in list, or in the operator's additions.
+//
+// The built-in list is always consulted. Operator additions extend it and cannot
+// shrink it, because every route the router registers is on that list and an
+// alias shadowing one of them would take a working page out of service.
+func (p Policy) IsReserved(s string) bool {
+	if IsReserved(s) {
+		return true
+	}
+	canonical := Canonical(s)
+	for _, extra := range p.ReservedExtra {
+		// Canonicalized on both sides at comparison time rather than at
+		// construction: a Policy is a plain struct that anything may build, so
+		// normalizing here means no caller can get it wrong.
+		if Canonical(extra) == canonical {
+			return true
+		}
+	}
+	return false
+}
+
+// WellFormed reports whether a string has the shape of a stored alias: allowed
+// length, allowed characters, no separator at either end.
+//
+// Shape only. It says nothing about reserved words or profanity, which are
+// policies about what may be *created* rather than what may exist, and it
+// performs no list lookups and no allocation.
+//
+// The redirect path uses it to answer "could this possibly be in the database"
+// before touching the database. /favicon.ico, /robots.txt, /apple-touch-icon.png
+// and every /wp-login.php-style scan fail here, so ordinary browser noise and
+// bulk scanning cost one byte scan each instead of a query and a negative cache
+// entry — and cannot be mistaken for probing, since refusing them costs nothing
+// to begin with.
+func WellFormed(s string) bool {
+	// Byte length rather than rune count, which would allocate. A multi-byte
+	// string that slips through this bound fails the character check below, and a
+	// stored alias is ASCII by construction.
+	if len(s) < MinLength || len(s) > MaxLength {
+		return false
+	}
+	if !isAllowedASCII(s) {
+		return false
+	}
+	return !isSeparator(s[0]) && !isSeparator(s[len(s)-1])
 }
 
 // isAllowedASCII reports whether every byte is in [a-z0-9_-].
