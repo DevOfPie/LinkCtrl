@@ -293,7 +293,7 @@ As of 2026-07-30. 18 of 18 milestones — Phase 1 is complete.
 | Load validation of the redirect target | done, target met — [docs/slo.md](docs/slo.md) |
 | Release packaging | done, verified — [docs/releasing.md](docs/releasing.md) |
 
-Verification: 82 integration tests against real Postgres and Redis — including
+Verification: 86 integration tests against real Postgres and Redis — including
 a contract test that replays every OpenAPI operation against the live server —
 plus unit, property and fuzz tests. All run under the race detector, and all of it
 runs in CI alongside a two-architecture container build.
