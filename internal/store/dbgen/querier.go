@@ -11,26 +11,46 @@ import (
 )
 
 type Querier interface {
+	ArchiveLink(ctx context.Context, arg ArchiveLinkParams) (Link, error)
+	AttachTag(ctx context.Context, arg AttachTagParams) error
+	// Only issued when the caller explicitly asks for a total, because counting
+	// costs a scan the common page load should not pay for.
+	CountLinks(ctx context.Context, arg CountLinksParams) (int64, error)
 	// Users, sessions and tenancy provisioning.
 	// Drives the first-run setup flow: /setup exists only while this is zero.
 	CountUsers(ctx context.Context) (int64, error)
+	CreateDestination(ctx context.Context, arg CreateDestinationParams) (Destination, error)
+	// Links, destinations and tags.
+	CreateLink(ctx context.Context, arg CreateLinkParams) (Link, error)
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
 	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (Organization, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
+	// --- tags -------------------------------------------------------------------
+	CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error)
 	// Reaper. Revoked rows are kept briefly so "sign out everywhere" is visible in
 	// the session list before it disappears.
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
+	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
+	DetachAllTags(ctx context.Context, linkID uuid.UUID) error
 	// The workspace a user lands in with no explicit selection. Ordered so the
 	// result is deterministic rather than whatever the planner returns first.
 	GetDefaultWorkspaceForUser(ctx context.Context, userID uuid.UUID) (Workspace, error)
+	// Workspace-scoped by design. Passing the workspace here rather than checking
+	// it after the fetch makes cross-tenant reads impossible to write by accident:
+	// the wrong workspace returns no rows rather than a row the caller must
+	// remember to reject.
+	GetLink(ctx context.Context, arg GetLinkParams) (Link, error)
+	GetLinkByAlias(ctx context.Context, arg GetLinkByAliasParams) (Link, error)
+	GetLinkTags(ctx context.Context, linkID uuid.UUID) ([]GetLinkTagsRow, error)
 	GetRoleBySlug(ctx context.Context, slug string) (Role, error)
 	// Joined with the user so validating a session is one round trip on a path
 	// that runs for every authenticated request. Filters revoked and deleted here
 	// rather than in Go, so a revoked session cannot be resurrected by a caller
 	// that forgets to check.
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (GetSessionByTokenHashRow, error)
+	GetTagByName(ctx context.Context, arg GetTagByNameParams) (Tag, error)
 	// Comparison is on the generated email_lower column, so callers cannot
 	// accidentally do a case-sensitive lookup and create a duplicate account.
 	GetUserByEmail(ctx context.Context, email string) (User, error)
@@ -42,9 +62,22 @@ type Querier interface {
 	// in the organization, which is what Phase 1 always creates.
 	GetUserPermissions(ctx context.Context, arg GetUserPermissionsParams) ([]string, error)
 	GetUserRoleInWorkspace(ctx context.Context, arg GetUserRoleInWorkspaceParams) (GetUserRoleInWorkspaceRow, error)
+	GetWorkspaceDefaultDomain(ctx context.Context) (GetWorkspaceDefaultDomainRow, error)
 	// Used by alias generation before insert. The unique index remains the real
 	// guarantee; this only reduces how often the insert has to retry.
 	IsAliasTaken(ctx context.Context, arg IsAliasTakenParams) (bool, error)
+	// Keyset pagination over (created_at, id).
+	//
+	// The cursor is a composite so ordering is total: created_at alone is not
+	// unique, and a tie at the page boundary would drop or duplicate rows.
+	// Comparing the pair with row-value syntax lets the composite index serve it
+	// directly.
+	//
+	// Sorting is a CASE rather than three separate queries because sqlc has no
+	// dynamic SQL. If plan stability becomes a problem this splits into
+	// ListLinksNewest/Oldest/Clicks; measure before doing that.
+	ListLinks(ctx context.Context, arg ListLinksParams) ([]ListLinksRow, error)
+	ListTags(ctx context.Context, workspaceID uuid.UUID) ([]ListTagsRow, error)
 	ListUserSessions(ctx context.Context, userID uuid.UUID) ([]ListUserSessionsRow, error)
 	ListUsers(ctx context.Context) ([]ListUsersRow, error)
 	// Returns the new count so the caller can apply the lockout policy without a
@@ -52,6 +85,10 @@ type Querier interface {
 	// concurrent attempts.
 	RecordFailedLogin(ctx context.Context, arg RecordFailedLoginParams) (RecordFailedLoginRow, error)
 	RecordSuccessfulLogin(ctx context.Context, id uuid.UUID) error
+	// Called before purging a link that has clicks. The alias is in the wild — on
+	// printed material and in other people's bookmarks — so handing it to a new
+	// destination would be a redirect hijack.
+	ReserveAlias(ctx context.Context, arg ReserveAliasParams) error
 	// The redirect hot path.
 	//
 	// Everything here runs under a 20ms budget on the dedicated redirect pool.
@@ -75,6 +112,7 @@ type Querier interface {
 	// PHASE 2: custom domains. Present now because the cache key is already
 	// host-scoped, so enabling it later needs no key change.
 	ResolveDomainByHostname(ctx context.Context, lower string) (ResolveDomainByHostnameRow, error)
+	RestoreLink(ctx context.Context, arg RestoreLinkParams) (Link, error)
 	// Used on password change. Anyone who had the old password must be logged out,
 	// which is the entire point of changing it.
 	// keep_session is optional: pass NULL to revoke everything, or the current
@@ -82,10 +120,21 @@ type Querier interface {
 	// still signed in.
 	RevokeAllUserSessions(ctx context.Context, arg RevokeAllUserSessionsParams) error
 	RevokeSession(ctx context.Context, id uuid.UUID) error
+	SetPrimaryDestination(ctx context.Context, arg SetPrimaryDestinationParams) error
+	// Soft delete with a purge deadline rather than an immediate DELETE. Restoring
+	// a link someone deleted by accident is a common request, and the alias stays
+	// reserved while the row exists.
+	SoftDeleteLink(ctx context.Context, arg SoftDeleteLinkParams) (SoftDeleteLinkRow, error)
 	// Idle expiry is measured from last_seen_at. Updated at most once a minute by
 	// the caller, because writing on every request would turn a read-mostly path
 	// into a write on the hottest authenticated query.
 	TouchSession(ctx context.Context, id uuid.UUID) error
+	// The trigger on destinations mirrors this into links.primary_url, so the hot
+	// path never joins.
+	UpdateDestinationURL(ctx context.Context, arg UpdateDestinationURLParams) error
+	// COALESCE with sqlc.narg gives partial update: a NULL argument leaves the
+	// column alone, so PATCH semantics need no dynamic SQL.
+	UpdateLink(ctx context.Context, arg UpdateLinkParams) (Link, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 }
 

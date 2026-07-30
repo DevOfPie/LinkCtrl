@@ -22,9 +22,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/build"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
+	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/httpserver"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/postgres"
@@ -189,8 +191,44 @@ func run(cfg config.Config, _ io.Writer) error {
 		log.Info("cache disabled by configuration")
 	}
 
+	authSvc := auth.NewService(pools.App, auth.ServiceConfig{
+		Params: auth.Params{
+			MemoryKiB:   cfg.Auth.Argon2MemoryKiB,
+			Iterations:  cfg.Auth.Argon2Iterations,
+			Parallelism: cfg.Auth.Argon2Parallelism,
+		},
+		TTL: auth.SessionTTL{
+			Absolute: cfg.Auth.SessionAbsoluteTTL,
+			Idle:     cfg.Auth.SessionIdleTTL,
+		},
+		Lockout: auth.LockoutPolicy{
+			Threshold: cfg.Auth.LockoutThreshold,
+			Window:    15 * time.Minute,
+		},
+	})
+
+	linkSvc := link.NewService(pools.App, link.Config{
+		Policy: link.DestinationPolicy{
+			Schemes:             cfg.Alias.DestSchemes,
+			MaxLength:           cfg.Alias.DestMaxLength,
+			BlockPrivateIPs:     cfg.Alias.DestBlockPrivateIPs,
+			BlockedHostSuffixes: cfg.Alias.DestBlocklist,
+		},
+		BaseURL: cfg.BaseURL,
+		// The redirect cache implements Invalidator in M7; until then there is
+		// nothing to invalidate.
+		Cache: nil,
+	})
+
+	if needsSetup, err := authSvc.NeedsSetup(ctx); err == nil && needsSetup {
+		log.Warn("no users exist; claim this instance with " +
+			"POST " + httpx.APIPrefix + "/auth/setup")
+	}
+
 	health := &httpx.Health{DB: pools.App, Redis: rdb}
-	handler := httpx.NewRouter(httpx.Deps{Config: cfg, Health: health})
+	handler := httpx.NewRouter(httpx.Deps{
+		Config: cfg, Health: health, Auth: authSvc, Links: linkSvc,
+	})
 
 	srv := httpserver.New(httpserver.Options{
 		Addr:              cfg.HTTP.Addr,

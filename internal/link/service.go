@@ -1,0 +1,679 @@
+package link
+
+import (
+	"context"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/DevOfPie/LinkCtrl/internal/alias"
+	"github.com/DevOfPie/LinkCtrl/internal/auth"
+	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+)
+
+// Permissions this service enforces. Named constants so a typo is a compile
+// error rather than a silently-always-false check.
+const (
+	PermRead      = "links.read"
+	PermCreate    = "links.create"
+	PermUpdate    = "links.update"
+	PermDelete    = "links.delete"
+	PermTagsRead  = "tags.read"
+	PermTagsWrite = "tags.write"
+)
+
+// TrashRetentionDays is how long a soft-deleted link stays restorable.
+const TrashRetentionDays = 30
+
+// Invalidator clears cached snapshots when a link changes. The redirect cache
+// implements it in M7; a nil Invalidator is valid and means "no cache".
+type Invalidator interface {
+	InvalidateAlias(ctx context.Context, domainID uuid.UUID, alias string)
+}
+
+type Service struct {
+	pool    *pgxpool.Pool
+	q       *dbgen.Queries
+	policy  DestinationPolicy
+	baseURL string
+	cache   Invalidator
+}
+
+type Config struct {
+	Policy  DestinationPolicy
+	BaseURL string
+	Cache   Invalidator
+}
+
+func NewService(pool *pgxpool.Pool, cfg Config) *Service {
+	return &Service{
+		pool:    pool,
+		q:       dbgen.New(pool),
+		policy:  cfg.Policy,
+		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
+		cache:   cfg.Cache,
+	}
+}
+
+// CreateInput describes a new link.
+type CreateInput struct {
+	URL         string
+	Alias       string // optional; generated when empty
+	Title       string
+	Description string
+	Tags        []string
+	ExpiresAt   *time.Time
+
+	// Phase 2 fields. Accepted by the parser so the API can reject them with a
+	// specific message rather than ignoring them silently, which would look
+	// like the feature works.
+	Password  string
+	MaxClicks *int64
+	OneTime   bool
+}
+
+// Create makes a link, generating an alias when none is supplied.
+func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInput) (*domain.Link, error) {
+	if !actor.Can(PermCreate) {
+		return nil, fmt.Errorf("%w: creating links requires %s", domain.ErrForbidden, PermCreate)
+	}
+
+	var errs domain.ValidationErrors
+
+	// Phase 2 guards. Refusing loudly beats accepting and doing nothing.
+	if in.Password != "" {
+		errs = append(errs, domain.FieldError{
+			Field: "password", Code: "not_implemented",
+			Message: "password-protected links are not available in this version",
+		})
+	}
+	if in.MaxClicks != nil || in.OneTime {
+		errs = append(errs, domain.FieldError{
+			Field: "max_clicks", Code: "not_implemented",
+			Message: "click-limited and one-time links are not available in this version",
+		})
+	}
+
+	normalizedURL, err := ValidateDestination(in.URL, s.policy)
+	if err != nil {
+		var ve domain.ValidationErrors
+		if errors.As(err, &ve) {
+			errs = append(errs, ve...)
+		} else {
+			return nil, err
+		}
+	}
+
+	if in.ExpiresAt != nil && !in.ExpiresAt.After(time.Now()) {
+		errs = append(errs, domain.FieldError{
+			Field: "expires_at", Code: "in_past",
+			Message: "expiry must be in the future",
+		})
+	}
+
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	dom, err := s.q.GetWorkspaceDefaultDomain(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolve default domain: %w", err)
+	}
+
+	// Resolve the alias before opening a transaction, so a long generation
+	// loop does not hold one open.
+	var code string
+	if in.Alias != "" {
+		code, err = alias.Validate(in.Alias)
+		if err != nil {
+			var ae *alias.Error
+			if errors.As(err, &ae) {
+				return nil, domain.ValidationErrors{{
+					Field: "alias", Code: string(ae.Reason), Message: ae.Message,
+				}}
+			}
+			return nil, err
+		}
+	} else {
+		code, err = alias.Generate(ctx, func(ctx context.Context, candidate string) (bool, error) {
+			return s.q.IsAliasTaken(ctx, dbgen.IsAliasTakenParams{
+				DomainID: dom.ID, Alias: candidate,
+			})
+		})
+		if err != nil {
+			return nil, fmt.Errorf("generate alias: %w", err)
+		}
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+
+	linkID := uuid.Must(uuid.NewV7())
+	row, err := q.CreateLink(ctx, dbgen.CreateLinkParams{
+		ID:          linkID,
+		WorkspaceID: actor.WorkspaceID,
+		DomainID:    dom.ID,
+		Alias:       code,
+		PrimaryUrl:  normalizedURL,
+		Title:       in.Title,
+		Description: in.Description,
+		Status:      string(domain.StatusActive),
+		ExpiresAt:   in.ExpiresAt,
+		CreatedBy:   &actor.UserID,
+	})
+	if err != nil {
+		// The unique index is the real guarantee; the pre-check only makes
+		// this rare. A user-supplied alias that collides is a 409, while a
+		// generated one that collides is a bug worth surfacing as such.
+		if isUniqueViolation(err) {
+			if in.Alias != "" {
+				return nil, fmt.Errorf("%w: alias %q is already in use", domain.ErrConflict, code)
+			}
+			return nil, fmt.Errorf("%w: generated alias collided", domain.ErrConflict)
+		}
+		return nil, fmt.Errorf("create link: %w", err)
+	}
+
+	destID := uuid.Must(uuid.NewV7())
+	if _, err := q.CreateDestination(ctx, dbgen.CreateDestinationParams{
+		ID:          destID,
+		LinkID:      linkID,
+		WorkspaceID: actor.WorkspaceID,
+		Url:         normalizedURL,
+		UrlHost:     HostOf(normalizedURL),
+	}); err != nil {
+		return nil, fmt.Errorf("create destination: %w", err)
+	}
+	if err := q.SetPrimaryDestination(ctx, dbgen.SetPrimaryDestinationParams{
+		ID: linkID, PrimaryDestinationID: &destID,
+	}); err != nil {
+		return nil, fmt.Errorf("set primary destination: %w", err)
+	}
+
+	tags, err := s.applyTags(ctx, q, actor.WorkspaceID, linkID, in.Tags)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+
+	// Clear any negative cache entry for this alias. Without this, an alias
+	// somebody probed before it existed stays 404 for the whole negative TTL,
+	// and the link looks broken immediately after creation.
+	if s.cache != nil {
+		s.cache.InvalidateAlias(ctx, dom.ID, code)
+	}
+
+	return s.toDomain(row, tags), nil
+}
+
+// UpdateInput is a partial update; nil fields are left unchanged.
+type UpdateInput struct {
+	URL         *string
+	Alias       *string
+	Title       *string
+	Description *string
+	ExpiresAt   *time.Time
+	ClearExpiry bool
+	Tags        *[]string
+}
+
+func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID, in UpdateInput) (*domain.Link, error) {
+	if !actor.Can(PermUpdate) {
+		return nil, fmt.Errorf("%w: editing links requires %s", domain.ErrForbidden, PermUpdate)
+	}
+
+	existing, err := s.q.GetLink(ctx, dbgen.GetLinkParams{ID: id, WorkspaceID: actor.WorkspaceID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, fmt.Errorf("load link: %w", err)
+	}
+
+	var errs domain.ValidationErrors
+	var normalizedURL string
+	if in.URL != nil {
+		normalizedURL, err = ValidateDestination(*in.URL, s.policy)
+		if err != nil {
+			var ve domain.ValidationErrors
+			if errors.As(err, &ve) {
+				errs = append(errs, ve...)
+			} else {
+				return nil, err
+			}
+		}
+	}
+
+	var newAlias *string
+	if in.Alias != nil && *in.Alias != existing.Alias {
+		code, aerr := alias.Validate(*in.Alias)
+		if aerr != nil {
+			var ae *alias.Error
+			if errors.As(aerr, &ae) {
+				errs = append(errs, domain.FieldError{
+					Field: "alias", Code: string(ae.Reason), Message: ae.Message,
+				})
+			} else {
+				return nil, aerr
+			}
+		} else {
+			newAlias = &code
+		}
+	}
+
+	if in.ExpiresAt != nil && !in.ExpiresAt.After(time.Now()) {
+		errs = append(errs, domain.FieldError{
+			Field: "expires_at", Code: "in_past", Message: "expiry must be in the future",
+		})
+	}
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+
+	row, err := q.UpdateLink(ctx, dbgen.UpdateLinkParams{
+		ID:          id,
+		WorkspaceID: actor.WorkspaceID,
+		Title:       in.Title,
+		Description: in.Description,
+		ExpiresAt:   in.ExpiresAt,
+		ClearExpiry: in.ClearExpiry,
+		Alias:       newAlias,
+	})
+	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, fmt.Errorf("%w: alias is already in use", domain.ErrConflict)
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, fmt.Errorf("update link: %w", err)
+	}
+
+	if in.URL != nil {
+		// Updates the destination; the trigger mirrors it into
+		// links.primary_url. Editing the destination without changing the
+		// alias is the core promise of the product, so this path matters.
+		if err := q.UpdateDestinationURL(ctx, dbgen.UpdateDestinationURLParams{
+			LinkID: id, WorkspaceID: actor.WorkspaceID,
+			Url: normalizedURL, UrlHost: HostOf(normalizedURL),
+		}); err != nil {
+			return nil, fmt.Errorf("update destination: %w", err)
+		}
+		row.PrimaryUrl = normalizedURL
+	}
+
+	var tags []domain.Tag
+	if in.Tags != nil {
+		if err := q.DetachAllTags(ctx, id); err != nil {
+			return nil, fmt.Errorf("detach tags: %w", err)
+		}
+		if tags, err = s.applyTags(ctx, q, actor.WorkspaceID, id, *in.Tags); err != nil {
+			return nil, err
+		}
+	} else {
+		if tags, err = s.loadTags(ctx, q, id); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+
+	// Both the old and new alias must be invalidated: the old one so it stops
+	// resolving, the new one so a stale negative entry does not shadow it.
+	if s.cache != nil {
+		s.cache.InvalidateAlias(ctx, existing.DomainID, existing.Alias)
+		if newAlias != nil {
+			s.cache.InvalidateAlias(ctx, existing.DomainID, *newAlias)
+		}
+	}
+
+	return s.toDomain(dbgen.Link(row), tags), nil
+}
+
+func (s *Service) Get(ctx context.Context, actor *auth.Identity, id uuid.UUID) (*domain.Link, error) {
+	if !actor.Can(PermRead) {
+		return nil, domain.ErrForbidden
+	}
+	row, err := s.q.GetLink(ctx, dbgen.GetLinkParams{ID: id, WorkspaceID: actor.WorkspaceID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, fmt.Errorf("load link: %w", err)
+	}
+	tags, err := s.loadTags(ctx, s.q, id)
+	if err != nil {
+		return nil, err
+	}
+	return s.toDomain(row, tags), nil
+}
+
+// List returns a keyset-paginated page of links.
+func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkFilter) (*domain.Page[domain.Link], error) {
+	if !actor.Can(PermRead) {
+		return nil, domain.ErrForbidden
+	}
+
+	limit := f.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 25
+	}
+
+	params := dbgen.ListLinksParams{
+		WorkspaceID: actor.WorkspaceID,
+		Sort:        string(f.Sort),
+		// One extra row tells us whether another page exists without a second
+		// query and without a count.
+		PageLimit: limit + 1,
+	}
+	if f.Status != "" {
+		st := string(f.Status)
+		params.Status = &st
+	}
+	// An empty or punctuation-only search must mean "no filter", not "match
+	// nothing": websearch_to_tsquery yields an empty query for input like "!!"
+	// and would otherwise return zero rows for a harmless keystroke.
+	if q := strings.TrimSpace(f.Search); q != "" {
+		params.Search = &q
+	}
+	if len(f.TagIDs) > 0 {
+		params.TagIds = f.TagIDs
+	}
+	if f.Cursor != "" {
+		at, id, err := decodeCursor(f.Cursor)
+		if err != nil {
+			return nil, domain.ValidationErrors{{
+				Field: "cursor", Code: "invalid", Message: "pagination cursor is not valid",
+			}}
+		}
+		params.CursorCreated = &at
+		params.CursorID = &id
+	}
+
+	rows, err := s.q.ListLinks(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("list links: %w", err)
+	}
+
+	page := &domain.Page[domain.Link]{Items: make([]domain.Link, 0, limit)}
+	if len(rows) > int(limit) {
+		page.HasMore = true
+		rows = rows[:limit]
+	}
+	for _, r := range rows {
+		tags := make([]domain.Tag, 0, len(r.TagIds))
+		for i, idStr := range r.TagIds {
+			id, err := uuid.Parse(idStr)
+			if err != nil {
+				continue
+			}
+			name := ""
+			if i < len(r.TagNames) {
+				name = r.TagNames[i]
+			}
+			tags = append(tags, domain.Tag{ID: id, Name: name})
+		}
+		// ListLinksRow is flat rather than embedding dbgen.Link, because the
+		// aggregated tag columns are part of the same select.
+		page.Items = append(page.Items, *s.toDomain(dbgen.Link{
+			ID:          r.ID,
+			WorkspaceID: r.WorkspaceID,
+			DomainID:    r.DomainID,
+			Alias:       r.Alias,
+			PrimaryUrl:  r.PrimaryUrl,
+			Title:       r.Title,
+			Description: r.Description,
+			Status:      r.Status,
+			ExpiresAt:   r.ExpiresAt,
+			ClickCount:  r.ClickCount,
+			LastClickAt: r.LastClickAt,
+			CreatedAt:   r.CreatedAt,
+			UpdatedAt:   r.UpdatedAt,
+			ArchivedAt:  r.ArchivedAt,
+		}, tags))
+	}
+	if page.HasMore && len(page.Items) > 0 {
+		last := page.Items[len(page.Items)-1]
+		page.NextCursor = encodeCursor(last.CreatedAt, last.ID)
+	}
+
+	if f.IncludeTotal {
+		total, err := s.q.CountLinks(ctx, dbgen.CountLinksParams{
+			WorkspaceID: actor.WorkspaceID,
+			Status:      params.Status,
+			Search:      params.Search,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("count links: %w", err)
+		}
+		page.Total = &total
+	}
+
+	return page, nil
+}
+
+func (s *Service) Archive(ctx context.Context, actor *auth.Identity, id uuid.UUID) (*domain.Link, error) {
+	return s.setArchived(ctx, actor, id, true)
+}
+
+func (s *Service) Restore(ctx context.Context, actor *auth.Identity, id uuid.UUID) (*domain.Link, error) {
+	return s.setArchived(ctx, actor, id, false)
+}
+
+func (s *Service) setArchived(ctx context.Context, actor *auth.Identity, id uuid.UUID, archive bool) (*domain.Link, error) {
+	if !actor.Can(PermDelete) {
+		return nil, fmt.Errorf("%w: archiving links requires %s", domain.ErrForbidden, PermDelete)
+	}
+
+	var row dbgen.Link
+	var err error
+	if archive {
+		row, err = s.q.ArchiveLink(ctx, dbgen.ArchiveLinkParams{ID: id, WorkspaceID: actor.WorkspaceID})
+	} else {
+		row, err = s.q.RestoreLink(ctx, dbgen.RestoreLinkParams{ID: id, WorkspaceID: actor.WorkspaceID})
+	}
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, fmt.Errorf("archive link: %w", err)
+	}
+
+	if s.cache != nil {
+		s.cache.InvalidateAlias(ctx, row.DomainID, row.Alias)
+	}
+	tags, err := s.loadTags(ctx, s.q, id)
+	if err != nil {
+		return nil, err
+	}
+	return s.toDomain(row, tags), nil
+}
+
+// Delete soft-deletes a link, keeping it restorable for TrashRetentionDays.
+func (s *Service) Delete(ctx context.Context, actor *auth.Identity, id uuid.UUID) error {
+	if !actor.Can(PermDelete) {
+		return fmt.Errorf("%w: deleting links requires %s", domain.ErrForbidden, PermDelete)
+	}
+
+	row, err := s.q.SoftDeleteLink(ctx, dbgen.SoftDeleteLinkParams{
+		ID: id, WorkspaceID: actor.WorkspaceID, RetentionDays: TrashRetentionDays,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		}
+		return fmt.Errorf("delete link: %w", err)
+	}
+
+	if s.cache != nil {
+		s.cache.InvalidateAlias(ctx, row.DomainID, row.Alias)
+	}
+	return nil
+}
+
+// --- tags -------------------------------------------------------------------
+
+func (s *Service) ListTags(ctx context.Context, actor *auth.Identity) ([]domain.Tag, error) {
+	if !actor.Can(PermTagsRead) {
+		return nil, domain.ErrForbidden
+	}
+	rows, err := s.q.ListTags(ctx, actor.WorkspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("list tags: %w", err)
+	}
+	out := make([]domain.Tag, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, domain.Tag{ID: r.ID, Name: r.Name, Color: r.Color, LinkCount: r.LinkCount})
+	}
+	return out, nil
+}
+
+func (s *Service) DeleteTag(ctx context.Context, actor *auth.Identity, id uuid.UUID) error {
+	if !actor.Can(PermTagsWrite) {
+		return domain.ErrForbidden
+	}
+	n, err := s.q.DeleteTag(ctx, dbgen.DeleteTagParams{ID: id, WorkspaceID: actor.WorkspaceID})
+	if err != nil {
+		return fmt.Errorf("delete tag: %w", err)
+	}
+	if n == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+// applyTags resolves tag names to rows, creating any that do not exist.
+//
+// Tags are created implicitly rather than requiring a separate call: typing a
+// new tag on a link is the common case, and making it a two-step operation
+// serves nobody.
+func (s *Service) applyTags(ctx context.Context, q *dbgen.Queries, wsID, linkID uuid.UUID, names []string) ([]domain.Tag, error) {
+	out := make([]domain.Tag, 0, len(names))
+	seen := map[string]bool{}
+
+	for _, raw := range names {
+		name := strings.TrimSpace(raw)
+		if name == "" || len(name) > 64 {
+			continue
+		}
+		key := strings.ToLower(name)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		tag, err := q.GetTagByName(ctx, dbgen.GetTagByNameParams{WorkspaceID: wsID, Lower: name})
+		if errors.Is(err, pgx.ErrNoRows) {
+			tag, err = q.CreateTag(ctx, dbgen.CreateTagParams{
+				ID: uuid.Must(uuid.NewV7()), WorkspaceID: wsID, Name: name,
+			})
+			// A concurrent create is fine: re-read the winner rather than
+			// failing the whole link creation over a tag race.
+			if err != nil && isUniqueViolation(err) {
+				tag, err = q.GetTagByName(ctx, dbgen.GetTagByNameParams{WorkspaceID: wsID, Lower: name})
+			}
+		}
+		if err != nil {
+			return nil, fmt.Errorf("resolve tag %q: %w", name, err)
+		}
+
+		if err := q.AttachTag(ctx, dbgen.AttachTagParams{
+			LinkID: linkID, TagID: tag.ID, WorkspaceID: wsID,
+		}); err != nil {
+			return nil, fmt.Errorf("attach tag: %w", err)
+		}
+		out = append(out, domain.Tag{ID: tag.ID, Name: tag.Name, Color: tag.Color})
+	}
+	return out, nil
+}
+
+func (s *Service) loadTags(ctx context.Context, q *dbgen.Queries, linkID uuid.UUID) ([]domain.Tag, error) {
+	rows, err := q.GetLinkTags(ctx, linkID)
+	if err != nil {
+		return nil, fmt.Errorf("load tags: %w", err)
+	}
+	out := make([]domain.Tag, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, domain.Tag{ID: r.ID, Name: r.Name, Color: r.Color})
+	}
+	return out, nil
+}
+
+func (s *Service) toDomain(l dbgen.Link, tags []domain.Tag) *domain.Link {
+	if tags == nil {
+		tags = []domain.Tag{}
+	}
+	return &domain.Link{
+		ID:          l.ID,
+		WorkspaceID: l.WorkspaceID,
+		Alias:       l.Alias,
+		ShortURL:    s.baseURL + "/" + l.Alias,
+		URL:         l.PrimaryUrl,
+		Title:       l.Title,
+		Description: l.Description,
+		Status:      domain.LinkStatus(l.Status),
+		Tags:        tags,
+		ExpiresAt:   l.ExpiresAt,
+		ClickCount:  l.ClickCount,
+		LastClickAt: l.LastClickAt,
+		CreatedAt:   l.CreatedAt,
+		UpdatedAt:   l.UpdatedAt,
+		ArchivedAt:  l.ArchivedAt,
+	}
+}
+
+// Cursors encode the (created_at, id) pair the keyset query compares against.
+// Opaque base64 rather than exposing the columns, so the pagination scheme can
+// change without breaking clients that stored a cursor.
+func encodeCursor(at time.Time, id uuid.UUID) string {
+	return base64.RawURLEncoding.EncodeToString(
+		[]byte(at.UTC().Format(time.RFC3339Nano) + "|" + id.String()))
+}
+
+func decodeCursor(s string) (time.Time, uuid.UUID, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return time.Time{}, uuid.Nil, err
+	}
+	before, after, ok := strings.Cut(string(raw), "|")
+	if !ok {
+		return time.Time{}, uuid.Nil, errors.New("malformed cursor")
+	}
+	at, err := time.Parse(time.RFC3339Nano, before)
+	if err != nil {
+		return time.Time{}, uuid.Nil, err
+	}
+	id, err := uuid.Parse(after)
+	if err != nil {
+		return time.Time{}, uuid.Nil, err
+	}
+	return at, id, nil
+}
+
+func isUniqueViolation(err error) bool {
+	var pgErr interface{ SQLState() string }
+	return errors.As(err, &pgErr) && pgErr.SQLState() == "23505"
+}

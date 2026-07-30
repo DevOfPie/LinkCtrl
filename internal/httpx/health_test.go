@@ -138,7 +138,7 @@ func TestRouterRegistersHealthEndpoints(t *testing.T) {
 // M7 extends this to walk the live route tree once the alias catch-all exists.
 func TestReservedListCoversRegisteredRoutes(t *testing.T) {
 	// Paths registered in NewRouter today.
-	registered := []string{"healthz", "readyz"}
+	registered := RegisteredTopLevelPaths()
 
 	for _, path := range registered {
 		t.Run(path, func(t *testing.T) {

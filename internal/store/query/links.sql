@@ -1,0 +1,193 @@
+-- Links, destinations and tags.
+
+-- name: CreateLink :one
+INSERT INTO links (
+    id, workspace_id, domain_id, alias, primary_url,
+    title, description, status, expires_at, created_by
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING *;
+
+-- name: CreateDestination :one
+INSERT INTO destinations (id, link_id, workspace_id, url, url_host, position)
+VALUES ($1, $2, $3, $4, $5, 0)
+RETURNING *;
+
+-- name: SetPrimaryDestination :exec
+UPDATE links SET primary_destination_id = $2, updated_at = now() WHERE id = $1;
+
+-- name: GetLink :one
+-- Workspace-scoped by design. Passing the workspace here rather than checking
+-- it after the fetch makes cross-tenant reads impossible to write by accident:
+-- the wrong workspace returns no rows rather than a row the caller must
+-- remember to reject.
+SELECT * FROM links
+WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL;
+
+-- name: GetLinkByAlias :one
+SELECT * FROM links
+WHERE domain_id = $1 AND alias = $2 AND deleted_at IS NULL;
+
+-- name: UpdateLink :one
+-- COALESCE with sqlc.narg gives partial update: a NULL argument leaves the
+-- column alone, so PATCH semantics need no dynamic SQL.
+UPDATE links
+   SET title       = COALESCE(sqlc.narg(title), title),
+       description = COALESCE(sqlc.narg(description), description),
+       expires_at  = CASE WHEN sqlc.arg(clear_expiry)::boolean THEN NULL
+                          ELSE COALESCE(sqlc.narg(expires_at), expires_at) END,
+       alias       = COALESCE(sqlc.narg(alias), alias),
+       updated_at  = now()
+ WHERE id = sqlc.arg(id) AND workspace_id = sqlc.arg(workspace_id) AND deleted_at IS NULL
+RETURNING *;
+
+-- name: UpdateDestinationURL :exec
+-- The trigger on destinations mirrors this into links.primary_url, so the hot
+-- path never joins.
+UPDATE destinations
+   SET url = $3, url_host = $4, updated_at = now()
+ WHERE link_id = $1 AND workspace_id = $2 AND deleted_at IS NULL;
+
+-- name: ArchiveLink :one
+UPDATE links
+   SET status = 'archived', archived_at = now(), updated_at = now()
+ WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
+RETURNING *;
+
+-- name: RestoreLink :one
+UPDATE links
+   SET status = 'active', archived_at = NULL, updated_at = now()
+ WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
+RETURNING *;
+
+-- name: SoftDeleteLink :one
+-- Soft delete with a purge deadline rather than an immediate DELETE. Restoring
+-- a link someone deleted by accident is a common request, and the alias stays
+-- reserved while the row exists.
+UPDATE links
+   SET deleted_at = now(),
+       purge_after = now() + make_interval(days => sqlc.arg(retention_days)::int),
+       updated_at = now()
+ WHERE id = sqlc.arg(id) AND workspace_id = sqlc.arg(workspace_id) AND deleted_at IS NULL
+RETURNING id, alias, domain_id, click_count;
+
+-- name: ListLinks :many
+-- Keyset pagination over (created_at, id).
+--
+-- The cursor is a composite so ordering is total: created_at alone is not
+-- unique, and a tie at the page boundary would drop or duplicate rows.
+-- Comparing the pair with row-value syntax lets the composite index serve it
+-- directly.
+--
+-- Sorting is a CASE rather than three separate queries because sqlc has no
+-- dynamic SQL. If plan stability becomes a problem this splits into
+-- ListLinksNewest/Oldest/Clicks; measure before doing that.
+SELECT
+    l.*,
+    COALESCE(
+        (SELECT array_agg(t.name ORDER BY t.name)
+           FROM link_tags lt JOIN tags t ON t.id = lt.tag_id
+          WHERE lt.link_id = l.id),
+        ARRAY[]::text[]
+    )::text[] AS tag_names,
+    COALESCE(
+        (SELECT array_agg(lt.tag_id::text ORDER BY lt.tag_id)
+           FROM link_tags lt WHERE lt.link_id = l.id),
+        ARRAY[]::text[]
+    )::text[] AS tag_ids
+FROM links l
+WHERE l.workspace_id = sqlc.arg(workspace_id)
+  AND l.deleted_at IS NULL
+  AND (sqlc.narg(status)::text IS NULL OR l.status = sqlc.narg(status)::text)
+  -- Full-text first, then trigram substring. websearch_to_tsquery returns an
+  -- empty query for input like "and" or "!!", which matches nothing, so the
+  -- caller treats a blank search as no filter rather than as zero results.
+  AND (sqlc.narg(search)::text IS NULL
+       -- A degenerate query means "no filter", not "match nothing".
+       -- websearch_to_tsquery returns an empty tsquery for a stopword ("and")
+       -- or pure punctuation ("!!"), and without this branch a user typing
+       -- either gets an empty list and concludes their links have vanished.
+       OR websearch_to_tsquery('english', sqlc.narg(search)::text) = ''::tsquery
+       OR l.search_vector @@ websearch_to_tsquery('english', sqlc.narg(search)::text)
+       OR l.alias ILIKE '%' || sqlc.narg(search)::text || '%'
+       OR l.primary_url ILIKE '%' || sqlc.narg(search)::text || '%')
+  AND (sqlc.narg(tag_ids)::uuid[] IS NULL
+       OR EXISTS (SELECT 1 FROM link_tags lt
+                   WHERE lt.link_id = l.id
+                     AND lt.tag_id = ANY(sqlc.narg(tag_ids)::uuid[])))
+  AND (
+        sqlc.narg(cursor_created)::timestamptz IS NULL
+        OR (sqlc.arg(sort)::text = 'oldest'
+              AND (l.created_at, l.id) > (sqlc.narg(cursor_created)::timestamptz, sqlc.narg(cursor_id)::uuid))
+        OR (sqlc.arg(sort)::text <> 'oldest'
+              AND (l.created_at, l.id) < (sqlc.narg(cursor_created)::timestamptz, sqlc.narg(cursor_id)::uuid))
+      )
+ORDER BY
+    CASE WHEN sqlc.arg(sort)::text = 'oldest' THEN l.created_at END ASC,
+    CASE WHEN sqlc.arg(sort)::text = 'clicks' THEN l.click_count END DESC,
+    CASE WHEN sqlc.arg(sort)::text NOT IN ('oldest','clicks') THEN l.created_at END DESC,
+    l.id DESC
+LIMIT sqlc.arg(page_limit);
+
+-- name: CountLinks :one
+-- Only issued when the caller explicitly asks for a total, because counting
+-- costs a scan the common page load should not pay for.
+SELECT count(*) FROM links l
+WHERE l.workspace_id = sqlc.arg(workspace_id)
+  AND l.deleted_at IS NULL
+  AND (sqlc.narg(status)::text IS NULL OR l.status = sqlc.narg(status)::text)
+  AND (sqlc.narg(search)::text IS NULL
+       -- A degenerate query means "no filter", not "match nothing".
+       -- websearch_to_tsquery returns an empty tsquery for a stopword ("and")
+       -- or pure punctuation ("!!"), and without this branch a user typing
+       -- either gets an empty list and concludes their links have vanished.
+       OR websearch_to_tsquery('english', sqlc.narg(search)::text) = ''::tsquery
+       OR l.search_vector @@ websearch_to_tsquery('english', sqlc.narg(search)::text)
+       OR l.alias ILIKE '%' || sqlc.narg(search)::text || '%'
+       OR l.primary_url ILIKE '%' || sqlc.narg(search)::text || '%');
+
+-- name: GetLinkTags :many
+SELECT t.id, t.name, t.color
+FROM link_tags lt JOIN tags t ON t.id = lt.tag_id
+WHERE lt.link_id = $1
+ORDER BY t.name;
+
+-- name: ReserveAlias :exec
+-- Called before purging a link that has clicks. The alias is in the wild — on
+-- printed material and in other people's bookmarks — so handing it to a new
+-- destination would be a redirect hijack.
+INSERT INTO reserved_aliases (domain_id, alias, reason)
+VALUES ($1, $2, $3)
+ON CONFLICT DO NOTHING;
+
+-- --- tags -------------------------------------------------------------------
+
+-- name: CreateTag :one
+INSERT INTO tags (id, workspace_id, name, color)
+VALUES ($1, $2, $3, $4)
+RETURNING *;
+
+-- name: GetTagByName :one
+SELECT * FROM tags WHERE workspace_id = $1 AND lower(name) = lower($2);
+
+-- name: ListTags :many
+SELECT t.*, count(lt.link_id) AS link_count
+FROM tags t
+LEFT JOIN link_tags lt ON lt.tag_id = t.id
+LEFT JOIN links l ON l.id = lt.link_id AND l.deleted_at IS NULL
+WHERE t.workspace_id = $1
+GROUP BY t.id
+ORDER BY t.name;
+
+-- name: DeleteTag :execrows
+DELETE FROM tags WHERE id = $1 AND workspace_id = $2;
+
+-- name: AttachTag :exec
+INSERT INTO link_tags (link_id, tag_id, workspace_id)
+VALUES ($1, $2, $3)
+ON CONFLICT DO NOTHING;
+
+-- name: DetachAllTags :exec
+DELETE FROM link_tags WHERE link_id = $1;
+
+-- name: GetWorkspaceDefaultDomain :one
+SELECT id, hostname FROM domains WHERE is_default AND deleted_at IS NULL;
