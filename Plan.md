@@ -71,7 +71,8 @@ Authoritative. Where this table and prose elsewhere disagree, this table wins.
 | Folders — API and tree UI | 2 |
 | Bulk operations, templates, import/export | 2+ |
 | Version history, scheduled changes, approval workflows | 3+ |
-| Malicious link detection | 2 |
+| Malicious destination blocking, tiered by confidence | 2 |
+| Blocked-attempt disputes, with owner review | 2 |
 
 ### Redirect engine
 
@@ -135,8 +136,69 @@ rather than rendering a world uniformly colored "unknown".
 | Audit log — table only | 1 |
 | Audit log — behavior | 2 |
 | Password links, one-time links, max-click links, signed URLs | 2 |
-| Malware scanning | 2 |
+| Malicious destination blocking: tiers, logging, notification, disputes | 2 |
+| Third-party reputation and malware feeds — opt-in, off by default | 2 |
 | MFA, OAuth, OIDC, SSO, SCIM | 3 |
+
+Destination blocking is two threat models wearing one name, and the *Abuse
+prevention* row above is the other half. What Phase 1 already refuses — non-`http(s)`
+schemes, private, loopback, link-local, carrier-NAT and cloud-metadata addresses —
+protects *this instance* from being used as an SSRF proxy. What Phase 2 adds
+protects *visitors* from a destination that is hostile to them. They are not the
+same policy and must not share an override switch: the Phase 1 refusals stay
+unappealable at every tier, because the party they protect is not the party
+appealing. An owner who could approve `169.254.169.254` on request would have
+turned the review queue into the SSRF the validator exists to prevent.
+
+Blocking is tiered by confidence, and the tiers differ in what it costs to
+overrule them:
+
+| Tier | Example | Overruled by |
+| --- | --- | --- |
+| Unappealable | Private and metadata addresses, non-`http(s)` schemes | Nothing. Not a moderation decision. |
+| High confidence | Exact host matches from a curated embedded list | Editing the embedded list and rebuilding |
+| Low confidence | Heuristics: punycode homographs, credentials in the URL, shortener chains, freshly registered domains | The instance owner, from the review queue |
+
+Only part of this is new. `LINKCTRL_DESTINATION_BLOCKLIST` already refuses host
+suffixes an operator names, and it is the shape the low-confidence tier grows out
+of — what it lacks is a reason attached to the refusal, a record that the attempt
+happened, and any way to change it short of a restart.
+
+The middle tier costing a rebuild is the same mechanism `reserved.txt` and
+`profanity.txt` already use, and it is not upstream gatekeeping — an operator owns
+their copy and can patch it. It makes the dangerous override a deliberate,
+reviewable, version-controlled change instead of a click at 2am. The price is that
+a false positive there is expensive, which is why that tier is confined to exact
+matches: heuristics never promote into it, or every false positive becomes a
+rebuild and the feature becomes something operators route around.
+
+Four constraints the implementation inherits rather than chooses:
+
+- **Creation is not the only door.** A destination can be edited after the fact,
+  so the check runs on update too. Re-checking links that were already accepted is
+  a separate job and a separate decision, not something this quietly implies.
+- **The review queue is an attack surface.** It exists to hand an instance owner a
+  URL a stranger wants them to look at. The destination is rendered defanged and
+  never as a live link, and the server never fetches it for a preview or a
+  screenshot — a fetch would be exactly the SSRF the validator exists to refuse,
+  arriving as a convenience feature.
+- **Notification is about the dispute, not the refusal.** The creator already
+  learns of a block synchronously, in the response. What needs delivering later is
+  the review outcome, and to the owner, the fact that something is waiting. Both
+  fit the dormant `notifications` table as it stands.
+- **No destination leaves the box uninvited.** Reputation feeds mean sending
+  someone's URLs to a third party, which is the opposite of what this project
+  promises. Off by default, disclosed plainly when on, and never the mechanism the
+  built-in tiers depend on.
+
+Logging a blocked attempt is what finally gives `audit_logs` a reason to have
+behavior, which is why the two rows sit together. `ip_prefix` rather than an
+address, matching the rest of the privacy stance, and the attempted URL is stored
+as evidence and treated as hostile input everywhere it is displayed.
+
+Sequenced within Phase 2: blocking and logging first, which are useful on their
+own; disputes and review after, since an appeal path is meaningless before
+anything is being refused.
 
 ### Collaboration
 
@@ -371,18 +433,19 @@ taste — one towards custom domains, the other towards a rewrite of the trash.
 | Milestone | Definition of done |
 | --- | --- |
 | **M18 — separate management and link hostnames** | One `BASE_URL` serves both route trees today, told apart by path, which is why every dashboard route must also appear in `internal/alias/reserved.txt`. Done means an app origin and a link origin, both defaulting to `BASE_URL` so a single-host deployment is byte-for-byte unaffected; routing on the `Host` header, with each tree answering the other's paths as `404` rather than redirecting across hosts; `short_url` built from the link origin everywhere one is produced, including `lctl`; the CSRF trusted origin following the management host; and a test asserting a session cookie is never sent to, nor accepted by, the link host. The reserved-alias list stays enforced on both hosts. |
-| **M19 — post-release defect fixes, and a demo seeder** | Three defects found by standing a fresh instance up and using it, plus the tool that found them. Done means: an expired link reports as expired everywhere, not only in the redirect; the `visitors` table and `is_first_visit` either work or stop pretending to; the deletion notice matches what recovery actually is; and `make demo` fills an empty instance with a plausible workspace. Detailed below, because "fix the bugs" is not a definition of done. |
+| **M19 — post-release defect fixes, and a demo seeder** | Four defects found by standing a fresh instance up and using it, plus the tool that found them. Done means: an expired link reports as expired everywhere, not only in the redirect; the `visitors` table and `is_first_visit` either work or stop pretending to; the deletion notice matches what recovery actually is; no doc comment cites a file that does not exist; and `make demo` fills an empty instance with a plausible workspace. Detailed below, because "fix the bugs" is not a definition of done. |
 
 Sequenced M18 then M19 only because the host split touches routing, configuration
 and every short URL the product emits, and is better done against a surface that
 is not also changing underneath it. Neither blocks the other.
 
-**M19 in detail.** The three defects, each with what "fixed" means:
+**M19 in detail.** The four defects, each with what "fixed" means:
 
 | Defect | Fix |
 | --- | --- |
 | `links.status` is never set to `expired` | Only `active` and `archived` are ever written. The redirect path is correct — it reads `expires_at` and answers `410` — but the management surface reports an expired link as `"status":"active"`, and the UI's *Expired* filter is an option that can never match a row. [operations.md](docs/operations.md#troubleshooting) tells an operator diagnosing an unexpected `410` to check the link's status, which will tell them the link is fine. Fixed by deriving effective status in one place that both the list and the resolver agree with, rather than by adding a job to write a column that is stale the moment it is written. `disabled` is in the same enum and the same position; it is out of scope only because nothing offers to set it either. |
 | The `visitors` table is dead | Nothing writes it and nothing reads it, yet it is in `PartitionedTables`, so the hourly job creates a partition a month for it forever, and in `RetainedTables`, so retention runs DDL to drop empty partitions of a table with no rows in it. `click_events.is_first_visit` is the same defect one column down: always `false`, under a comment claiming the rollup computes it, which no rollup does. Fixed by choosing — either they are populated and something displays them, or they leave the maintenance and retention lists and the comment stops describing work that does not happen. Dormant schema is a deliberate Phase 1 decision; dormant schema with a monthly DDL bill is not the same thing. |
+| `ValidateDestination` cites a file that has never existed | Its doc comment ends "Recorded in SECURITY.md rather than pretended away", and there is no `SECURITY.md` in the repository. The limitation itself — DNS rebinding, where a host resolves public at creation and private at click time — genuinely is recorded, in *Known limitations* below. So the substance is fine and the pointer sends a reader looking for a file that is not there, which is the same defect class as the advisory-lock comment the review corrected. Fixed by pointing at where the limitation actually lives, or by writing the `SECURITY.md` the comment assumes — the second being the larger decision, since a security policy file is also where vulnerability reporting goes. |
 | The deletion notice promises a button that does not exist | The UI says "Link deleted. It stays restorable for 30 days." [usage.md](docs/usage.md) is straight about the truth — "recovery inside the 30 days is a database operation, not a button" — and `RestoreLink` is guarded by `deleted_at IS NULL`, so it refuses soft-deleted rows by design. Fixed by making the notice say what recovery is. Adding a trash view instead would be a scope change, and Phase 1 already decided against it. |
 
 **The seeder.** `lctl seed` exists and is for load testing: a hundred thousand

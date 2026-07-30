@@ -1389,3 +1389,100 @@ no CDN at runtime are standing constraints, so this is an inline SVG world map w
 server-computed fills, not a charting library. That is a feature. The fills are
 computed where the numbers already are, the page keeps working without JavaScript,
 and the click-through to the ranked list is a link.
+
+---
+
+## 2026-07-30 — malicious destination blocking, specified rather than named
+
+It was already planned, in the weakest sense of the word: *Scope by phase* carried
+"Malicious link detection | 2" in link management and "Malware scanning | 2" in
+security, two rows naming a feature and defining nothing. Nothing anywhere covered
+tiering, the cost of an override, logging the attempt, notifying anyone, or a
+dispute path. Those are now written down. The phase does not move — Phase 2 was
+right — but a row that names a feature is not a plan, and this one had enough
+sharp edges to be worth having before someone starts.
+
+### The two threat models must not share a switch
+
+This is the decision everything else follows from. Phase 1 already refuses
+non-`http(s)` schemes and private, loopback, link-local, carrier-NAT and
+cloud-metadata addresses. That is not malicious-link protection; it stops *this
+instance* being used as an SSRF proxy, and the party it protects is the operator.
+What Phase 2 adds protects *visitors* from a destination that is hostile to them,
+and the party it protects is a stranger who has not clicked yet.
+
+Merging them is the obvious implementation and it is a vulnerability. Build one
+"blocked destinations" list with one override path, and the review queue that
+exists so an owner can approve a false-positive phishing heuristic becomes the
+mechanism by which someone gets `169.254.169.254` approved. The SSRF refusals are
+therefore not appealable at any tier, and the plan says so in the same breath as
+it introduces appeals — because the natural reading of "the owner can allow
+blocked links" is that the owner can allow *any* blocked link.
+
+### Tiers are about the cost of being wrong, not about severity
+
+The request was for likelihood-of-malice tiers where low ones are owner-reviewable
+and high ones need a repo change. That maps onto something the codebase already
+does: `reserved.txt` and `profanity.txt` are `go:embed`ded, so changing them costs
+a rebuild. The useful reframing is that a tier is not a claim about how bad the
+link is, it is a statement about what it should cost to overrule the machine.
+
+For a self-hosted product, "requires a repo change" needs defending, since the
+operator owns the box and could be forgiven for expecting a checkbox. It is not
+upstream gatekeeping — they own their copy and can patch it. It is that the
+override becomes a deliberate, reviewable, version-controlled change instead of a
+click at 2am on a queue item that looks fine, which is exactly when someone
+approves a phishing page. The cost is deliberate friction, applied where being
+wrong is expensive.
+
+The consequence is a constraint on what may live in that tier: exact host matches
+from a curated list, never heuristics. A heuristic that can reach the
+rebuild-to-override tier turns every false positive into a rebuild, and a feature
+that makes an operator rebuild to publish a legitimate link is a feature they will
+disable wholesale. Confining heuristics to the owner-reviewable tier is what keeps
+the expensive tier credible.
+
+### Three traps worth naming before anyone builds it
+
+**The review queue is a delivery mechanism.** Its entire purpose is to hand the
+instance owner a URL that a stranger wants them to look at, alongside an argument
+for why they should. Rendering it as a live link is the obvious thing and is
+wrong; so is fetching it server-side for a preview or a screenshot, which would
+reintroduce the SSRF the validator refuses, arriving as a usability improvement.
+Defanged text, no fetch.
+
+**Creation is not the only door.** Validation at create is where the thinking
+naturally goes, and a destination can be edited afterwards. Update has to run the
+same check. Re-checking links already accepted — because a domain can be sold, or
+go bad — is a different job with a different cost, and the milestone says so
+rather than letting "we block malicious links" quietly imply it.
+
+**Notification is about the dispute, not the block.** The creator learns of a
+refusal synchronously, in the response; a notification telling them what they were
+just told is noise. What arrives later is the review outcome, plus the owner
+learning that something is waiting. That is the asynchronous part, and it is the
+part the dormant `notifications` table already fits — `kind` and a jsonb `data`,
+no migration needed.
+
+### Reputation feeds stay opt-in, or the product contradicts itself
+
+The obvious way to detect malicious destinations is to ask someone who already
+knows — a reputation API. Doing that by default would send every URL any user
+creates to a third party, on a product whose README says no telemetry leaves the
+box. So: off by default, disclosed plainly when enabled, and never the mechanism
+the built-in tiers rely on, because a self-hosted instance with no outbound access
+must still get the protection the plan promises.
+
+### Found while validating: a comment citing a file that does not exist
+
+`ValidateDestination`'s doc comment ends "Recorded in SECURITY.md rather than
+pretended away", and no `SECURITY.md` has ever been in this repository. The
+limitation it refers to — DNS rebinding — is genuinely recorded, in Plan.md's
+known limitations, so the substance is honest and only the pointer is wrong. Same
+class as the advisory-lock comment the completeness review corrected: a reader who
+trusts the comment goes somewhere and finds nothing. Added to M19.
+
+Whether the fix is to repoint the comment or to write the file is left open on
+purpose. A `SECURITY.md` is also where vulnerability reporting belongs, and this
+project does not have that yet either — which makes it a decision rather than a
+typo, and the wrong thing to settle in a defect row.
