@@ -1,0 +1,106 @@
+# Cross-shell equivalent of the Makefile, for contributors on Windows without
+# make. Keep the two in sync; the Makefile is the reference.
+version: "3"
+
+vars:
+  BIN: bin
+  MODULE: github.com/DevOfPie/LinkCtrl
+  TAILWIND_VERSION: v4.1.14
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  COMMIT:
+    sh: git rev-parse HEAD 2>/dev/null || echo unknown
+  DATE:
+    sh: git log -1 --format=%cI 2>/dev/null || echo unknown
+  LDFLAGS: >-
+    -s -w
+    -X '{{.MODULE}}/internal/build.version={{.VERSION}}'
+    -X '{{.MODULE}}/internal/build.commit={{.COMMIT}}'
+    -X '{{.MODULE}}/internal/build.date={{.DATE}}'
+
+env:
+  DEV_DATABASE_URL: postgres://linkctrl:linkctrl@localhost:55432/linkctrl?sslmode=disable
+  DEV_REDIS_URL: redis://localhost:56379/0
+
+tasks:
+  default:
+    cmds: [task --list]
+
+  build:
+    desc: Build the server and the operator CLI
+    cmds:
+      - go build -trimpath -ldflags "{{.LDFLAGS}}" -o {{.BIN}}/ ./cmd/...
+
+  run:
+    desc: Run the server
+    cmds:
+      - go run -ldflags "{{.LDFLAGS}}" ./cmd/linkctrl
+
+  test:
+    desc: Unit tests with the race detector
+    cmds:
+      - go test -race -covermode=atomic -coverprofile=cover.out ./...
+
+  test-integration:
+    desc: Integration tests (needs Postgres and Redis)
+    cmds:
+      - go test -race -tags=integration ./test/integration/...
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run
+
+  tidy:
+    desc: Tidy and verify modules
+    cmds:
+      - go mod tidy
+      - go mod verify
+
+  check:
+    desc: Everything CI runs, short of integration tests
+    cmds:
+      - task: tidy
+      - task: lint
+      - task: test
+
+  generate:
+    desc: Regenerate all generated code
+    cmds:
+      - task: sqlc
+      - task: openapi
+
+  sqlc:
+    cmds: [sqlc generate]
+
+  openapi:
+    cmds:
+      - oapi-codegen -config api/oapi-server.yaml api/openapi.yaml
+      - oapi-codegen -config api/oapi-client.yaml api/openapi.yaml
+
+  migrate-up:
+    cmds:
+      - go run ./cmd/lctl migrate up
+    env:
+      LINKCTRL_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
+
+  tailwind:
+    desc: Download the pinned Tailwind standalone CLI
+    cmds:
+      - sh scripts/get-tailwind.sh "{{.TAILWIND_VERSION}}" "{{.BIN}}"
+    status:
+      - test -x {{.BIN}}/tailwindcss.exe
+
+  css:
+    desc: Build the stylesheet
+    deps: [tailwind]
+    cmds:
+      - "{{.BIN}}/tailwindcss -i internal/ui/static/css/input.css -o internal/ui/static/css/app.css --minify"
+
+  up:
+    desc: Start the full stack
+    cmds: [docker compose up -d --wait]
+
+  down:
+    desc: Stop the stack and remove volumes
+    cmds: [docker compose down -v]

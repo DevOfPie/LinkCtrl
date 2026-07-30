@@ -1,0 +1,38 @@
+# Keep the build context small and prevent host artifacts from leaking into
+# the image. Anything the image needs must be explicitly un-ignored below.
+
+.git
+.github
+.gitignore
+.gitattributes
+
+bin/
+dist/
+tmp/
+*.exe
+*.test
+*.out
+cover.out
+coverage.html
+
+# Never let a developer's real secrets into a layer.
+.env
+.env.*
+!.env.example
+
+node_modules/
+*.mmdb
+
+test/
+docs/
+*.md
+!README.md
+
+docker-compose*.yml
+Caddyfile
+Taskfile.yml
+
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,87 @@
+version: "2"
+
+run:
+  timeout: 5m
+  build-tags:
+    - integration
+
+linters:
+  enable:
+    # Correctness
+    - errcheck
+    - govet
+    - staticcheck
+    - ineffassign
+    - unused
+    - bodyclose        # a leaked response body is a slow resource leak
+    - sqlclosecheck    # same for rows
+    - rowserrcheck
+    - nilerr           # "return nil" after checking err != nil
+    - noctx            # HTTP requests without a context
+    - contextcheck
+    - containedctx     # a context stored in a struct field
+    - errorlint        # %v on an error instead of %w, bad type assertions
+    - makezero
+    - durationcheck
+    - exhaustive       # unhandled enum cases in a switch
+
+    # Security
+    - gosec
+
+    # Style, kept light
+    - revive
+    - misspell
+    - unconvert
+    - wastedassign
+
+settings:
+  errcheck:
+    check-type-assertions: true
+    exclude-functions:
+      # Writes to an http.ResponseWriter after the header is sent cannot be
+      # meaningfully handled; the request is already on the wire.
+      - (net/http.ResponseWriter).Write
+
+  exhaustive:
+    default-signifies-exhaustive: true
+
+  gosec:
+    excludes:
+      # G104 duplicates errcheck.
+      - G104
+
+  revive:
+    rules:
+      - name: exported
+        disabled: true   # doc.go covers packages; per-symbol comments are noise
+      - name: package-comments
+        disabled: true
+
+  staticcheck:
+    checks:
+      - all
+      - -ST1000   # package comment formatting, covered by doc.go
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/DevOfPie/LinkCtrl
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+exclusions:
+  rules:
+    - path: _test\.go$
+      linters:
+        - gosec         # hardcoded test credentials are fine
+        - containedctx
+        - noctx
+    - path: internal/store/dbgen/
+      linters:
+        - all           # generated

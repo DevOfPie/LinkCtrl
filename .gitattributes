@@ -1,0 +1,48 @@
+# Normalize everything to LF in the repository.
+#
+# This is not cosmetic. The project is developed on Windows and deployed to
+# Linux containers, and CRLF leaking into the image causes failures that are
+# genuinely hard to diagnose:
+#
+#   - a CRLF in .env yields POSTGRES_PASSWORD=secret\r, so Postgres initializes
+#     with an invisible carriage return in the password and every later
+#     connection fails with "password authentication failed"
+#   - a CRLF in a shell script gives "exec format error" or "\r: not found"
+#   - a CRLF in a Dockerfile RUN line breaks line continuations
+#
+* text=auto eol=lf
+
+*.go     text eol=lf
+*.sql    text eol=lf
+*.sh     text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.json   text eol=lf
+*.md     text eol=lf
+*.html   text eol=lf
+*.css    text eol=lf
+*.js     text eol=lf
+*.txt    text eol=lf
+*.mod    text eol=lf
+*.sum    text eol=lf
+
+Dockerfile      text eol=lf
+Dockerfile.*    text eol=lf
+Makefile        text eol=lf
+Caddyfile       text eol=lf
+.dockerignore   text eol=lf
+.gitattributes  text eol=lf
+.gitignore      text eol=lf
+.env.example    text eol=lf
+
+# Generated code — collapse in diffs and exclude from language stats.
+internal/store/dbgen/**   linguist-generated=true
+internal/api/gen/**       linguist-generated=true
+
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
+*.mmdb binary
+*.zip  binary

@@ -1,0 +1,43 @@
+# Build output
+/bin/
+/dist/
+/tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test and coverage output
+*.test
+*.out
+cover.out
+coverage.html
+/test/load/aliases.json
+
+# Secrets and local configuration. Only .env.example is committed.
+.env
+.env.*
+!.env.example
+
+# Generated CSS. CI and the Docker build run `make css` before `go build`;
+# see the css target in the Makefile.
+/internal/ui/static/css/app.css
+
+# Tailwind standalone CLI, downloaded on demand by `make tailwind`.
+/bin/tailwindcss*
+
+# Optional GeoIP database — cannot be redistributed, see DEPLOY.md.
+*.mmdb
+
+# npm is only ever a fallback for the Tailwind build; it is never used in the
+# production image.
+node_modules/
+
+# Editor and OS noise
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+.DS_Store
+Thumbs.db
