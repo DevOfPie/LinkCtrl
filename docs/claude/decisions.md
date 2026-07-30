@@ -1261,3 +1261,131 @@ The tempting argument for the reverse order — "separate the hosts before letti
 strangers in" — does not survive inspection. New accounts get sessions on the
 management host either way; host separation isolates the *link* surface from
 cookies, not users from each other. That work is RBAC's, and it already exists.
+
+---
+
+## 2026-07-30 — signup deferred to Phase 2, and two milestones added
+
+Corrects the entry immediately above, which planned self-serve signup as M18.
+Signup moves to Phase 2 and the numbering closes up behind it: **M18 is now the
+hostname split** (planned above as M19) and **M19 is post-release defect fixes and
+the demo seeder**. Phase 1 is still 18 of 20.
+
+### Signup goes where its supporting features are
+
+Called by the person whose product it is, and the reason holds up on its own
+terms: the previous entry had already worked out that opening signup admits
+tenants rather than colleagues, and that Phase 1 has no mail delivery to verify an
+address with. It then proposed shipping it anyway, with the surprise documented on
+the form.
+
+Documenting a surprise is weaker than not having one. Every one of signup's
+supporting features — invitations, membership in someone else's workspace, a
+mailer — is Phase 2, and with them the toggle finally does what its label implies
+instead of quietly meaning "let strangers homestead on my server". The design work
+above is not wasted: the ceiling rule, the labelling requirement and the
+verification problem all carry forward to wherever it lands.
+
+What stays in Phase 1 is the honesty. `SIGNUP_MODE` keeps working exactly as it
+does, and the configuration reference now states its actual reach — the JSON API,
+not a browser — rather than leaving an operator to infer a signup page from the
+existence of a setting called `open`.
+
+### The three defects were found by using the product, not by reading it
+
+A six-dimension review with adversarial verification found thirty findings and
+none of these. Standing up a fresh instance, seeding it and clicking around found
+all three inside an hour. That is not a criticism of the review, it is a statement
+about what each method reaches: the review read code against its own intent, and
+all three of these are places where the code is internally consistent and
+disagrees with the *product*.
+
+**`links.status` is never set to `expired`.** The value exists in the enum, in the
+OpenAPI document and in the UI's filter dropdown, and `redirect/snapshot.go` reads
+it. Nothing writes it. The redirect path is correct by a different route — it
+compares `expires_at` — so the behaviour users see is right and every management
+surface reporting on it is wrong. The fix is to derive effective status in one
+place rather than to add a job that writes the column, because a stored status is
+stale between the expiry and the next job run, and that window is exactly when
+someone is looking at the link asking why it stopped working. Deriving also keeps
+one definition instead of two that can drift.
+
+**The `visitors` table is dead, and expensively.** All-twenty-entities-up-front is
+a Phase 1 decision and a good one; the cost was supposed to be dead schema. This
+row is not free dormancy. It is in `PartitionedTables`, so the hourly job creates
+a partition a month for it forever, and in `RetainedTables`, so retention issues
+DDL to drop empty partitions of a table that has never held a row. Meanwhile
+`is_first_visit` is written `false` on every click under a comment saying the
+rollup computes it, and no rollup touches it. A dormant table nobody maintains is
+a decision; a dormant table with a monthly DDL bill and a comment describing
+imaginary work is drift. The milestone forces a choice rather than prescribing
+which one, because "populate them" is defensible the moment something displays
+new-versus-returning visitors.
+
+**The deletion notice promises a button.** "It stays restorable for 30 days" is
+true about the row and false about the product: no list shows a deleted link, `GET`
+by id refuses it, and `RestoreLink` is guarded by `deleted_at IS NULL` on purpose.
+`usage.md` says the honest version plainly — recovery is a database operation, not
+a button — so this is the flash message contradicting the manual, and the manual is
+right. Rewording is the fix. Adding a trash view is a scope change Phase 1 already
+declined, and doing it accidentally, as the cheapest way to make a sentence true,
+is how scope arrives.
+
+### The seeder earns its place by being a client
+
+`lctl seed` exists and is not this. It writes a hundred thousand links named
+`ld0`…`ld99999` straight through COPY with no destination rows, because it is
+feeding a load test where the only thing that matters is that the resolver has
+rows to find. Pointing a human at that database teaches them nothing about the
+product.
+
+The demo seeder creates links through the public REST API. That is the requirement
+worth writing down, because writing them straight to the database is faster and
+was the obvious first instinct. Going through the API means the seeder cannot
+invent a state the product cannot reach, and it exercises alias policy, validation
+and tagging on the way past — this is how the prototype discovered that `docs`,
+`pricing`, `status` and five other natural demo aliases are reserved, and that a
+two-character alias is refused. Backfilled click rows are held to the same
+standard: they match what the ingester would have written column for column, so
+nobody debugging the dashboard is looking at rows the application could not
+produce.
+
+One trap the prototype hit, recorded because it is invisible and the data looks
+plausible either way. Generating per-click attributes in a `CROSS JOIN LATERAL`
+subquery that depends only on the link and the day lets the planner evaluate it
+once per link-day and multiply the result: every click in a day came out with the
+same visitor, device, country and referrer, and the only symptom was 18 unique
+visitors against 1,200 clicks — a number you have to already be suspicious of to
+notice. Volatile draws belong in the SELECT list of a statement whose rows already
+exist, which is evaluated per row by definition. `setseed` for reproducibility does
+not save you here; it makes the wrong answer stable.
+
+### Better graphs are Phase 2, and are not blocked on data
+
+Every dimension renders today as the same ranked list of value and count. It is
+exact and it is flat, and a country breakdown is the case where that is most
+obviously the wrong shape: nobody reads `US 1425 / GB 822 / DE 510` and sees a
+map. Phase 2 gives each dimension a visualization suited to it, with the current
+list one click away — the list is what answers "exactly how many", so it is kept
+rather than replaced.
+
+This needs no new column. `link_dimension_daily` already carries clicks and unique
+visitors per value per day, which is why the second layer the request asks for is
+a rendering decision rather than a schema change. It is Phase 2 because it is
+presentation polish on a working feature and gates nothing, not because it is
+hard.
+
+Two constraints it inherits rather than gets to choose. Shading by unique visitors
+has to keep the caveat those figures always travel with — daily-resolution
+estimates, and a multi-day total over-counts anyone who visited on more than one
+day — because a saturated color is a much more confident claim than a number in a
+table, and laundering an estimate into a fact through visual design is still
+laundering it. And the map degrades the way the rest of the geographic UI already
+does: no MaxMind database means saying so, not rendering a world uniformly colored
+"unknown", which reads as "we checked and nobody is there".
+
+An implementation note, since it constrains the choice: no Node in the image and
+no CDN at runtime are standing constraints, so this is an inline SVG world map with
+server-computed fills, not a charting library. That is a feature. The fills are
+computed where the numbers already are, the page keeps working without JavaScript,
+and the click-through to the ranked list is a link.

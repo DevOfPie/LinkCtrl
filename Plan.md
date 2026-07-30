@@ -95,6 +95,7 @@ Authoritative. Where this table and prose elsewhere disagree, this table wins.
 | Dashboards, trends | 1 |
 | Geographic (country) — optional at runtime | 1 |
 | Geographic (region/city) — resolvable, deliberately not stored | 2 |
+| Dimension visualizations: choropleth map, richer charts, click through to the ranked list | 2 |
 | ASN, VPN/proxy detection, response latency | 2+ |
 | Campaign analytics, conversion tracking, live activity | 2+ |
 
@@ -104,12 +105,27 @@ rendering empty charts. The country is resolved at ingest, from the address, in
 the same place the visitor hash is derived — there is no stored address to enrich
 afterwards.
 
+Phase 1 renders every dimension as the same ranked list of value and count, which
+is exact, comparable across dimensions and completely flat: nobody looks at
+`US 1425 / GB 822 / DE 510` and sees a map. Phase 2 gives each dimension the
+visualization it deserves — a choropleth for country, shaded by share of clicks,
+with a second layer for unique visitors — and keeps today's ranked list one click
+away, because the list is the one that answers "exactly how many". The data is
+already there: `link_dimension_daily` carries clicks and unique visitors per
+value per day, so this is presentation work and needs no new column.
+
+Two constraints it inherits. The unique-visitor layer carries the same caveat the
+figures always do — daily-resolution estimates, and a multi-day total over-counts
+anyone who visited on more than one day — so shading by it without repeating the
+caveat would launder an estimate into a fact. And the map has to degrade the way
+the rest of the geographic UI already does: no MaxMind database means it says so,
+rather than rendering a world uniformly colored "unknown".
+
 ### Security
 
 | Capability | Phase |
 | --- | --- |
 | Email/password auth (argon2id), account lockout | 1 |
-| Self-serve signup, switchable at runtime by an owner | 1 |
 | Server-side sessions, `__Host-` cookies | 1 |
 | RBAC: roles, permissions, working evaluator | 1 |
 | API keys with scopes | 1 |
@@ -129,15 +145,23 @@ afterwards.
 | Roles and permissions with evaluator | 1 |
 | One auto-provisioned personal org + workspace per user | 1 |
 | Organizations: sharing, invites, team management | 2 |
+| Self-serve signup, switchable at runtime by an owner | 2 |
 | Activity feed, comments | 2+ |
 
-Signup and collaboration are different features, and the second row is why.
-Registration provisions a new organization and workspace and makes the registrant
-its owner, so opening signup admits *tenants*, not colleagues: a new account can
-see nothing of an existing workspace and cannot be given access to one until
-Phase 2 adds invitations. Both the signup form and the owner-facing toggle have
-to say so, or an owner enabling "allow sign-ups" to add a co-worker gets a
-stranger with their own private instance-within-an-instance instead.
+Signup sits in Phase 2 next to invitations because of the second row, not because
+it is hard. Registration provisions a new organization and workspace and makes
+the registrant its owner, so opening signup on Phase 1's tenancy model admits
+*tenants*, not colleagues: a new account sees nothing of an existing workspace and
+cannot be given access to one. An owner switching on "allow sign-ups" to add a
+co-worker would get a stranger with their own private instance-within-the-instance
+— the feature working exactly as designed and being useless for the thing it was
+turned on to do. It also has no email delivery to verify an address against.
+Shipping it before invitations means shipping the surprise; shipping it after
+means the toggle does what its label says.
+
+`LINKCTRL_SIGNUP_MODE` stays in Phase 1 as it is, honest about its values and
+narrow in its reach: it is read only by `POST /api/v1/auth/register`, so `open`
+admits API clients and not browsers. The configuration reference says so.
 
 ### Other surfaces
 
@@ -300,6 +324,11 @@ and it was the review that said so rather than the milestone counter reaching it
 end. Phase 1 scope has since grown by two milestones, so Phase 1 itself is not
 complete; 0.1.0 does not become retroactively unfinished.
 
+One of those two exists because a fresh instance was then stood up and used, which
+found three defects the review had not — all of them places where the code is
+internally consistent and disagrees with the product. Reading code against its own
+intent and using the thing reach different bugs.
+
 | Area | State |
 | --- | --- |
 | Config, logging, health, graceful shutdown | done, verified |
@@ -319,8 +348,8 @@ complete; 0.1.0 does not become retroactively unfinished.
 | Enforcement: rate limits, 404 probe limits, GeoIP, retention | done, verified |
 | Load validation of the redirect target | done, target met — [docs/slo.md](docs/slo.md) |
 | Release packaging | done, verified — [docs/releasing.md](docs/releasing.md) |
-| Self-serve signup, switchable by an owner | not started |
 | Separate management and link hostnames | not started |
+| Post-release defect fixes, and a demo seeder | not started |
 
 Verification: 92 integration tests against real Postgres and Redis — including
 a contract test that replays every OpenAPI operation against the live server —
@@ -337,17 +366,39 @@ measured. What is left divides into work that is assigned and work that is not.
 
 Two milestones, neither started. Each carries its definition of done here because
 both are the kind of change whose scope drifts pleasantly outwards if left to
-taste — one towards team accounts, the other towards custom domains.
+taste — one towards custom domains, the other towards a rewrite of the trash.
 
 | Milestone | Definition of done |
 | --- | --- |
-| **M18 — self-serve signup** | `SIGNUP_MODE` is parsed and validated today, and read in exactly one place: `POST /api/v1/auth/register`. There is no signup page, so on `open` a person with a browser still cannot create an account — the setting is honest about its values and silent about its reach. Done means a `/signup` page and handler behind the same per-address credential limiter as `/login`; the policy held in the database and switchable by an owner from the UI, taking effect on the next request rather than the next restart; `LINKCTRL_SIGNUP_MODE` retained as a ceiling the UI can lower but never raise; and both surfaces stating what an account gets, which is its own workspace rather than access to this one. Phase 1 has no mail delivery, so accounts created this way are unverified and immediately usable — the reason the default stays `closed`. |
-| **M19 — separate management and link hostnames** | One `BASE_URL` serves both route trees today, told apart by path, which is why every dashboard route must also appear in `internal/alias/reserved.txt`. Done means an app origin and a link origin, both defaulting to `BASE_URL` so a single-host deployment is byte-for-byte unaffected; routing on the `Host` header, with each tree answering the other's paths as `404` rather than redirecting across hosts; `short_url` built from the link origin everywhere one is produced, including `lctl`; the CSRF trusted origin following the management host; and a test asserting a session cookie is never sent to, nor accepted by, the link host. The reserved-alias list stays enforced on both hosts. |
+| **M18 — separate management and link hostnames** | One `BASE_URL` serves both route trees today, told apart by path, which is why every dashboard route must also appear in `internal/alias/reserved.txt`. Done means an app origin and a link origin, both defaulting to `BASE_URL` so a single-host deployment is byte-for-byte unaffected; routing on the `Host` header, with each tree answering the other's paths as `404` rather than redirecting across hosts; `short_url` built from the link origin everywhere one is produced, including `lctl`; the CSRF trusted origin following the management host; and a test asserting a session cookie is never sent to, nor accepted by, the link host. The reserved-alias list stays enforced on both hosts. |
+| **M19 — post-release defect fixes, and a demo seeder** | Three defects found by standing a fresh instance up and using it, plus the tool that found them. Done means: an expired link reports as expired everywhere, not only in the redirect; the `visitors` table and `is_first_visit` either work or stop pretending to; the deletion notice matches what recovery actually is; and `make demo` fills an empty instance with a plausible workspace. Detailed below, because "fix the bugs" is not a definition of done. |
 
-Sequenced M18 then M19. Signup is additive and lands inside one subsystem; the
-host split moves routing, configuration and every short URL the product has ever
-emitted, so it goes second, where it can be tested against a surface that is not
-also changing underneath it.
+Sequenced M18 then M19 only because the host split touches routing, configuration
+and every short URL the product emits, and is better done against a surface that
+is not also changing underneath it. Neither blocks the other.
+
+**M19 in detail.** The three defects, each with what "fixed" means:
+
+| Defect | Fix |
+| --- | --- |
+| `links.status` is never set to `expired` | Only `active` and `archived` are ever written. The redirect path is correct — it reads `expires_at` and answers `410` — but the management surface reports an expired link as `"status":"active"`, and the UI's *Expired* filter is an option that can never match a row. [operations.md](docs/operations.md#troubleshooting) tells an operator diagnosing an unexpected `410` to check the link's status, which will tell them the link is fine. Fixed by deriving effective status in one place that both the list and the resolver agree with, rather than by adding a job to write a column that is stale the moment it is written. `disabled` is in the same enum and the same position; it is out of scope only because nothing offers to set it either. |
+| The `visitors` table is dead | Nothing writes it and nothing reads it, yet it is in `PartitionedTables`, so the hourly job creates a partition a month for it forever, and in `RetainedTables`, so retention runs DDL to drop empty partitions of a table with no rows in it. `click_events.is_first_visit` is the same defect one column down: always `false`, under a comment claiming the rollup computes it, which no rollup does. Fixed by choosing — either they are populated and something displays them, or they leave the maintenance and retention lists and the comment stops describing work that does not happen. Dormant schema is a deliberate Phase 1 decision; dormant schema with a monthly DDL bill is not the same thing. |
+| The deletion notice promises a button that does not exist | The UI says "Link deleted. It stays restorable for 30 days." [usage.md](docs/usage.md) is straight about the truth — "recovery inside the 30 days is a database operation, not a button" — and `RestoreLink` is guarded by `deleted_at IS NULL`, so it refuses soft-deleted rows by design. Fixed by making the notice say what recovery is. Adding a trash view instead would be a scope change, and Phase 1 already decided against it. |
+
+**The seeder.** `lctl seed` exists and is for load testing: a hundred thousand
+links called `ld0`…`ld99999`, no destination rows, random visitor hashes. It is
+the wrong shape for looking at the product. `make demo` fills an empty instance
+with something worth a screenshot — a workspace of plausible links, thirty days
+of history with weekday seasonality and a launch spike, and every status the UI
+can render, including an archived link, an expired campaign and one in the trash.
+Two requirements make it worth committing rather than keeping as a snippet: links
+are created through the public API, so seeding exercises the same validation and
+alias policy a client does and cannot invent states the product cannot reach; and
+backfilled click rows match what the ingester would have written column for
+column — no IP anywhere, referrers already reduced to a host, `is_first_visit`
+false, and the exact device and browser strings `Classify` emits. A seeder that
+writes rows the application could not have produced tests nothing and teaches the
+reader something false.
 
 #### Accepted, unassigned
 
