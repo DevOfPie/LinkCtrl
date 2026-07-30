@@ -6,12 +6,52 @@ package dbgen
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 type Querier interface {
+	// Users, sessions and tenancy provisioning.
+	// Drives the first-run setup flow: /setup exists only while this is zero.
+	CountUsers(ctx context.Context) (int64, error)
+	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
+	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (Organization, error)
+	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
+	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error)
+	// Reaper. Revoked rows are kept briefly so "sign out everywhere" is visible in
+	// the session list before it disappears.
+	DeleteExpiredSessions(ctx context.Context) (int64, error)
+	// The workspace a user lands in with no explicit selection. Ordered so the
+	// result is deterministic rather than whatever the planner returns first.
+	GetDefaultWorkspaceForUser(ctx context.Context, userID uuid.UUID) (Workspace, error)
+	GetRoleBySlug(ctx context.Context, slug string) (Role, error)
+	// Joined with the user so validating a session is one round trip on a path
+	// that runs for every authenticated request. Filters revoked and deleted here
+	// rather than in Go, so a revoked session cannot be resurrected by a caller
+	// that forgets to check.
+	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (GetSessionByTokenHashRow, error)
+	// Comparison is on the generated email_lower column, so callers cannot
+	// accidentally do a case-sensitive lookup and create a duplicate account.
+	GetUserByEmail(ctx context.Context, email string) (User, error)
+	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	// The RBAC evaluator's source of truth. Returns every permission a user holds
+	// in a workspace, via their organization membership and its role.
+	//
+	// A NULL memberships.workspace_id means the membership covers every workspace
+	// in the organization, which is what Phase 1 always creates.
+	GetUserPermissions(ctx context.Context, arg GetUserPermissionsParams) ([]string, error)
+	GetUserRoleInWorkspace(ctx context.Context, arg GetUserRoleInWorkspaceParams) (GetUserRoleInWorkspaceRow, error)
 	// Used by alias generation before insert. The unique index remains the real
 	// guarantee; this only reduces how often the insert has to retry.
 	IsAliasTaken(ctx context.Context, arg IsAliasTakenParams) (bool, error)
+	ListUserSessions(ctx context.Context, userID uuid.UUID) ([]ListUserSessionsRow, error)
+	ListUsers(ctx context.Context) ([]ListUsersRow, error)
+	// Returns the new count so the caller can apply the lockout policy without a
+	// second round trip and without a read-modify-write race between two
+	// concurrent attempts.
+	RecordFailedLogin(ctx context.Context, arg RecordFailedLoginParams) (RecordFailedLoginRow, error)
+	RecordSuccessfulLogin(ctx context.Context, id uuid.UUID) error
 	// The redirect hot path.
 	//
 	// Everything here runs under a 20ms budget on the dedicated redirect pool.
@@ -35,6 +75,18 @@ type Querier interface {
 	// PHASE 2: custom domains. Present now because the cache key is already
 	// host-scoped, so enabling it later needs no key change.
 	ResolveDomainByHostname(ctx context.Context, lower string) (ResolveDomainByHostnameRow, error)
+	// Used on password change. Anyone who had the old password must be logged out,
+	// which is the entire point of changing it.
+	// keep_session is optional: pass NULL to revoke everything, or the current
+	// session's id to leave the browser the user is changing their password in
+	// still signed in.
+	RevokeAllUserSessions(ctx context.Context, arg RevokeAllUserSessionsParams) error
+	RevokeSession(ctx context.Context, id uuid.UUID) error
+	// Idle expiry is measured from last_seen_at. Updated at most once a minute by
+	// the caller, because writing on every request would turn a read-mostly path
+	// into a write on the hottest authenticated query.
+	TouchSession(ctx context.Context, id uuid.UUID) error
+	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 }
 
 var _ Querier = (*Queries)(nil)
