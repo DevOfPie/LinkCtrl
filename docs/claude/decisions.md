@@ -1155,3 +1155,109 @@ with an edit that can be reverted by a counter-edit, never with checkout, unless
 the file is committed. Separately, editing Go sources through PowerShell's
 Get-Content/Set-Content mangled em-dashes into mojibake (UTF-8 read as ANSI);
 byte-safe tools only for in-place source edits.
+
+---
+
+## 2026-07-30 — planning: signup and host separation (M18, M19)
+
+Two milestones added to Phase 1 after 0.1.0 shipped. Adding scope to a phase that
+was just declared complete deserves its own justification, so: neither is a
+Phase 2 feature arriving early. Signup is a setting that already exists and is
+only two-thirds wired; the host split is the thing that makes the dashboard stop
+sharing a namespace with every short link. Both are gaps in what Phase 1 already
+claims, which is the test for whether something belongs in this phase or the next.
+
+### The environment is a ceiling, not a default
+
+The request was a toggle in the UI *or* in `.env`, and the interesting question is
+what happens when they disagree. Two rules were available. Database-wins is the
+obvious one and is wrong: it means a stolen owner session can open a private
+instance to the public, and the operator's `.env` — the first place anyone looks
+when asking "can strangers register here?" — would say `closed` while the answer
+is yes. Environment-wins alone is also wrong, because then the UI toggle is a
+decoration on instances the operator did not pre-authorize.
+
+So the environment sets the maximum and the toggle chooses within it, ordered
+`closed` < `invite` < `open`. An operator who ships `closed` cannot have signup
+opened by anyone holding a session, and the UI says why the control is disabled
+rather than failing silently when pressed. An operator who ships `open` has
+delegated the decision, which is what they said by writing it.
+
+This is the same shape as the rule that API keys can never hold `apikeys.*`: a
+credential that can widen its own reach makes revoking a leaked one meaningless.
+A session that can open registration makes a closed instance's guarantee only as
+strong as the least careful browser tab.
+
+### Open signup admits tenants, not colleagues
+
+`Register` provisions an organization, a workspace and an owner membership in one
+transaction — that is Phase 1's tenancy model working as designed, and it means a
+second account can see nothing of the first. The failure mode is entirely a
+labelling one: an owner who flips a control called "allow sign-ups" to add a
+co-worker gets a stranger with a private instance-within-the-instance, discovers
+the co-worker sees an empty dashboard, and concludes the product is broken.
+
+Invitations are Phase 2 and are not being pulled forward. The mitigation is that
+both the toggle and the signup form must state what an account gets. A feature
+whose correct behavior reliably surprises the person enabling it is a documentation
+defect before it is anything else.
+
+### No mailer, so no verification, so the default stays closed
+
+`EmailVerifiedAt` is set at registration only for the first user, who is trusted by
+construction — they had filesystem or deploy access to reach the setup page.
+Nothing else sets it, because Phase 1 delivers no mail. Open signup therefore
+creates accounts that are unverified and immediately usable, and anyone can claim
+an address they do not control.
+
+That is acceptable for the instances this is for — a team, a homelab, a company
+behind SSO-at-the-proxy — and it is not acceptable as a default for an instance
+facing the open internet. Hence `closed` stays the default, and the limitation is
+written down rather than fixed with a mail dependency that Phase 1 has no other
+reason to acquire.
+
+### One instance with two hosts is not custom domains
+
+The `domains` table already has `hostname`, `verified_at` and `ssl_status`, and
+the resolver deliberately ignores all three in favor of `is_default`. The
+temptation, given a milestone about hostnames, is to start matching on `hostname`
+and arrive most of the way at per-workspace custom domains without having planned
+for verification, certificate issuance, or what happens when a workspace points a
+CNAME at you and then deletes it.
+
+M19 therefore configures two origins for the whole instance and keeps resolution
+matching on `is_default`. It may write the link host into that row for display; it
+must not route on it. Custom domains stay Phase 2 with their machinery intact.
+
+### Cookie isolation is the reason, not tidiness
+
+`manage.example.com` and `lnk.example.com` read as cosmetics. The substance is
+that `__Host-` cookies carry no `Domain` attribute and are locked to the exact
+host that set them, so once the hosts differ the session cookie is *structurally*
+incapable of reaching the link host. Short links are the surface that gets pasted
+into forums, unfurled by strangers' bots and probed by scanners; it is the half of
+the product most exposed and the half that needs no credentials at all.
+
+That is also why the milestone requires a test rather than a paragraph. The
+property holds by construction today, and it would be quietly destroyed by any
+future change that sets an explicit `Domain` to "make cookies work across
+subdomains" — a change that looks like a fix and reads as reasonable in review.
+
+Two related traps, recorded so they are not rediscovered. Wrong-host requests
+answer `404` rather than redirecting to the right host: a cross-host redirector
+attached to the alias namespace is an open-redirect kit for anyone who can create
+a link. And the reserved-alias list stays enforced even once the collision it
+guards against is impossible, because an operator can merge back to a single host,
+and an alias called `login` created during the split-host era would break the
+dashboard on the day they do.
+
+### Sequencing, and one non-reason
+
+M18 first. It is additive, lives in one subsystem, and its blast radius is a page
+and a setting. M19 moves routing, configuration and every short URL the product
+emits, so it goes second, against a surface that is not also moving.
+
+The tempting argument for the reverse order — "separate the hosts before letting
+strangers in" — does not survive inspection. New accounts get sessions on the
+management host either way; host separation isolates the *link* surface from
+cookies, not users from each other. That work is RBAC's, and it already exists.

@@ -6,11 +6,14 @@ measure, script and revoke — not a row you create once and hope about.
 Runs as one Go binary with Postgres and Redis beside it. No Node in the image,
 no SaaS dependency, no telemetry leaving the box.
 
-> **Status: Phase 1 complete.** Everything below is built, tested and exercised
-> end to end; every configuration setting takes effect, and the redirect latency
-> target is measured, not aspirational. What is deferred to Phase 2 is listed
-> plainly in [Not built yet](#not-built-yet). Check that list before deploying
-> anything you care about.
+> **Status: 0.1.0 released.** Everything below is built, tested and exercised end
+> to end; every configuration setting takes effect, and the redirect latency
+> target is measured, not aspirational. Two further Phase 1 milestones have since
+> been planned and are not started — self-serve signup, and separate hostnames for
+> the dashboard and for short links — so Phase 1 is no longer closed; see
+> [Plan.md](Plan.md#assigned). What is deferred to Phase 2 is listed plainly in
+> [Not built yet](#not-built-yet). Check that list before deploying anything you
+> care about.
 
 ---
 

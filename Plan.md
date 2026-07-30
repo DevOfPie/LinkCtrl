@@ -109,6 +109,7 @@ afterwards.
 | Capability | Phase |
 | --- | --- |
 | Email/password auth (argon2id), account lockout | 1 |
+| Self-serve signup, switchable at runtime by an owner | 1 |
 | Server-side sessions, `__Host-` cookies | 1 |
 | RBAC: roles, permissions, working evaluator | 1 |
 | API keys with scopes | 1 |
@@ -130,6 +131,14 @@ afterwards.
 | Organizations: sharing, invites, team management | 2 |
 | Activity feed, comments | 2+ |
 
+Signup and collaboration are different features, and the second row is why.
+Registration provisions a new organization and workspace and makes the registrant
+its owner, so opening signup admits *tenants*, not colleagues: a new account can
+see nothing of an existing workspace and cannot be given access to one until
+Phase 2 adds invitations. Both the signup form and the owner-facing toggle have
+to say so, or an owner enabling "allow sign-ups" to add a co-worker gets a
+stranger with their own private instance-within-an-instance instead.
+
 ### Other surfaces
 
 | Capability | Phase |
@@ -137,12 +146,23 @@ afterwards.
 | REST API, OpenAPI docs, CLI (`lctl`) | 1 |
 | Docker / Compose / Linux deployment | 1 |
 | Project documentation: README, setup, configuration, usage, operations | 1 |
-| Custom domains, QR codes, campaigns, webhooks, automation | 2 |
+| Separate management and link hostnames, instance-wide | 1 |
+| Custom domains, per workspace and per link | 2 |
+| QR codes, campaigns, webhooks, automation | 2 |
 | Advanced analytics, compliance features, high availability | 3 |
 | AI optimization, smart routing, predictive analytics, plugin system | 4 |
 | GraphQL, SDKs, Terraform provider | future |
 | Kubernetes, cloud deployments, multi-region | future |
 | NFC integration | future |
+
+The two domain rows are separate features that sound like one. Phase 1 gives the
+*instance* two hostnames — one for the dashboard and API, one for short links,
+`manage.example.com` and `lnk.example.com` — chosen by the operator in
+configuration and identical for every workspace. Phase 2 lets a *workspace* bring
+its own hostname per link, which needs the verification and certificate machinery
+the `domains` table already has columns for. Doing the first does not imply the
+second, and the first is what makes the dashboard stop sharing a namespace with
+the alias space.
 
 ### Non-goals
 
@@ -271,11 +291,14 @@ caveat with the data.
 
 ## Build status
 
-As of 2026-07-30. 18 of 18 milestones, then re-reviewed: a six-dimension audit
-with adversarial verification confirmed 30 findings — among them a missing purge
-job that inverted the alias-reservation promise, and query forwarding with no
-write surface — all fixed the same day. Phase 1 is complete because the review
-says so, not because the milestone counter reached its end.
+As of 2026-07-30. 18 of 20 milestones. The first eighteen shipped as 0.1.0 and
+were then re-reviewed: a six-dimension audit with adversarial verification
+confirmed 30 findings — among them a missing purge job that inverted the
+alias-reservation promise, and query forwarding with no write surface — all fixed
+the same day. That release is complete against the scope it was released under,
+and it was the review that said so rather than the milestone counter reaching its
+end. Phase 1 scope has since grown by two milestones, so Phase 1 itself is not
+complete; 0.1.0 does not become retroactively unfinished.
 
 | Area | State |
 | --- | --- |
@@ -296,6 +319,8 @@ says so, not because the milestone counter reached its end.
 | Enforcement: rate limits, 404 probe limits, GeoIP, retention | done, verified |
 | Load validation of the redirect target | done, target met — [docs/slo.md](docs/slo.md) |
 | Release packaging | done, verified — [docs/releasing.md](docs/releasing.md) |
+| Self-serve signup, switchable by an owner | not started |
+| Separate management and link hostnames | not started |
 
 Verification: 92 integration tests against real Postgres and Redis — including
 a contract test that replays every OpenAPI operation against the live server —
@@ -306,7 +331,27 @@ runs in CI alongside a two-architecture container build.
 
 Every configuration variable now either takes effect or no longer exists, which
 was the enforcement milestone's definition of done, and the redirect SLO is
-measured. What remains, none of it blocking a release:
+measured. What is left divides into work that is assigned and work that is not.
+
+#### Assigned
+
+Two milestones, neither started. Each carries its definition of done here because
+both are the kind of change whose scope drifts pleasantly outwards if left to
+taste — one towards team accounts, the other towards custom domains.
+
+| Milestone | Definition of done |
+| --- | --- |
+| **M18 — self-serve signup** | `SIGNUP_MODE` is parsed and validated today, and read in exactly one place: `POST /api/v1/auth/register`. There is no signup page, so on `open` a person with a browser still cannot create an account — the setting is honest about its values and silent about its reach. Done means a `/signup` page and handler behind the same per-address credential limiter as `/login`; the policy held in the database and switchable by an owner from the UI, taking effect on the next request rather than the next restart; `LINKCTRL_SIGNUP_MODE` retained as a ceiling the UI can lower but never raise; and both surfaces stating what an account gets, which is its own workspace rather than access to this one. Phase 1 has no mail delivery, so accounts created this way are unverified and immediately usable — the reason the default stays `closed`. |
+| **M19 — separate management and link hostnames** | One `BASE_URL` serves both route trees today, told apart by path, which is why every dashboard route must also appear in `internal/alias/reserved.txt`. Done means an app origin and a link origin, both defaulting to `BASE_URL` so a single-host deployment is byte-for-byte unaffected; routing on the `Host` header, with each tree answering the other's paths as `404` rather than redirecting across hosts; `short_url` built from the link origin everywhere one is produced, including `lctl`; the CSRF trusted origin following the management host; and a test asserting a session cookie is never sent to, nor accepted by, the link host. The reserved-alias list stays enforced on both hosts. |
+
+Sequenced M18 then M19. Signup is additive and lands inside one subsystem; the
+host split moves routing, configuration and every short URL the product has ever
+emitted, so it goes second, where it can be tested against a surface that is not
+also changing underneath it.
+
+#### Accepted, unassigned
+
+None of it blocking a release:
 
 | Capability | State |
 | --- | --- |
