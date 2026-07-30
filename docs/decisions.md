@@ -518,3 +518,72 @@ blocks. /docs alone gets `style-src 'unsafe-inline'`; script-src stays 'self',
 which works because the initializer lives in a real file
 (static/js/docs.js) instead of the inline <script> of the stock index.html. A
 test pins the waiver's shape so it cannot creep to scripts or to other pages.
+
+---
+
+## 2026-07-30 — metrics (M13)
+
+### Its own registry, passed explicitly, nil-safe
+
+Not `prometheus.DefaultRegisterer`. A global registry makes two servers in one
+test process collide on registration, and it lets any dependency that happens
+to import client_golang publish into this project's namespace. The struct is
+passed through Deps like every other collaborator, and every method is nil-safe
+so an instrumentation call site never has to know whether metrics are enabled —
+which is what lets the whole test suite construct routers without them.
+
+### Labels are surfaces, never paths
+
+`{surface, method, status}` where surface is one of redirect, api, web, static,
+ops. The redirect namespace is chosen by whoever sends the request, so a path
+label would let a scanner mint unbounded series and take the process down
+*through the metrics endpoint*. Status is a class (`4xx`) rather than a code,
+because that is what alerts are written against.
+
+The cost is no per-route API latency. Accepted: the access log has that detail
+and does not accumulate. A test asserts the label set stays fixed across
+arbitrary paths.
+
+### The redirect histogram is the SLO's measurement point
+
+`linkctrl_redirect_duration_seconds{outcome, cache}`, observed inside the
+redirect handler rather than in middleware — the outer view includes router
+dispatch, and the target names the time to resolve and answer. `cache` is the
+label that makes the SLO answerable server-side: the target is stated for cache
+hits only, so memory and redis are hits, database a miss, negative a cached
+miss.
+
+Buckets are hand-picked with a boundary at exactly 0.02, so "fraction under
+target" is a ratio of bucket counts rather than an interpolation. The default
+buckets would have put the entire interesting range into one bucket and made
+any p99 estimate meaningless. A histogram, never a summary: per-process
+quantiles cannot be aggregated across replicas.
+
+### Pool and pipeline state is read at scrape time
+
+The connection pools and the ingester already keep authoritative counters.
+Mirroring them into gauges at write time would create two sources of truth that
+can drift; a collector that reads them during a scrape cannot drift and costs
+nothing in between. The two pools are labelled separately because the entire
+point of splitting them is that they saturate independently — the alert worth
+having is "the redirect pool is queueing", which an aggregate hides.
+
+### A second listener, unauthenticated, unpublished
+
+Queue depths, pool saturation and traffic shape are operational detail. They go
+on `METRICS_ADDR`, which compose does not publish, rather than behind a token on
+the public listener — the second port is a stronger boundary than a credential
+someone will eventually put in a URL. A test asserts `/metrics` on the public
+listener is an ordinary 404 from the redirect tree. Losing the metrics listener
+logs and continues; monitoring must not be able to take down what it monitors.
+
+### Latency measured on a Windows host is zero, and that is the clock
+
+Verified rather than assumed: 100,000 out of 100,000 back-to-back `time.Since`
+samples return exactly zero, because Go's monotonic clock on Windows cannot
+resolve intervals this short. So a cache-served redirect lands in the zero
+bucket and `_sum` is useless locally — while bucket counts, and the ratio the
+SLO is stated as, stay correct. The same applies to `click_events.latency_us`.
+Both resolve on Linux, which is where the SLO is measured and where the service
+runs. Recorded in docs/development.md so nobody chases it as a bug or quotes a
+local number as a result.

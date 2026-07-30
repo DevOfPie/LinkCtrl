@@ -98,6 +98,23 @@ readiness cache, and the click-event batcher.
 CI runs `go test -race` on Linux regardless, so a host without a compiler
 blocks local verification, not the merge gate.
 
+## Latency measured on a Windows host is not a latency measurement
+
+Go's monotonic clock on Windows cannot resolve the intervals this project cares
+about. A loop of 100,000 back-to-back `time.Since` calls returns exactly zero
+every single time, so anything faster than a clock tick measures as 0.
+
+Two visible consequences, both harmless once known:
+
+- `linkctrl_redirect_duration_seconds_sum` stays at 0 for cache-served
+  redirects, so averages read as zero. Bucket counts are still right, which is
+  what the SLO is stated against.
+- `click_events.latency_us` is 0 for the same requests.
+
+Both resolve to real figures on Linux, which is where the SLO is measured and
+where the service runs. Do not chase either as a bug, and do not quote a local
+number as a latency result.
+
 ## Git Bash notes
 
 Git Bash rewrites arguments that look like absolute Unix paths, so a container

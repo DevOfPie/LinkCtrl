@@ -22,6 +22,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/build"
@@ -195,6 +197,14 @@ func run(cfg config.Config, _ io.Writer) error {
 		log.Info("cache disabled by configuration")
 	}
 
+	// Metrics come up before the services they observe, so a collector can be
+	// registered at the point the thing it reads on is created.
+	metrics := observability.NewMetrics()
+	metrics.Register(observability.NewPoolCollector(map[string]*pgxpool.Pool{
+		"app":      pools.App,
+		"redirect": pools.Redirect,
+	}))
+
 	authSvc := auth.NewService(pools.App, auth.ServiceConfig{
 		Params: auth.Params{
 			MemoryKiB:   cfg.Auth.Argon2MemoryKiB,
@@ -260,9 +270,10 @@ func run(cfg config.Config, _ io.Writer) error {
 		Logger:        log,
 	})
 	ingester.Start()
+	metrics.Register(observability.NewIngestCollector(ingester))
 
 	roller := analytics.NewRoller(pools.App, log)
-	jobs := newJobRunner(pools.App, salts, roller, log)
+	jobs := newJobRunner(pools.App, salts, roller, log, metrics)
 	jobs.start(ctx)
 	defer jobs.stop()
 
@@ -273,6 +284,7 @@ func run(cfg config.Config, _ io.Writer) error {
 		Logger:    log,
 		LogSample: int64(cfg.Redirect.LogSample),
 		Recorder:  clickRecorder{ingester: ingester},
+		Metrics:   metrics,
 	}
 
 	if needsSetup, err := authSvc.NeedsSetup(ctx); err == nil && needsSetup {
@@ -299,12 +311,39 @@ func run(cfg config.Config, _ io.Writer) error {
 	handler := httpx.NewRouter(httpx.Deps{
 		Config: cfg, Health: health, Auth: authSvc, Keys: keySvc,
 		Links: linkSvc, Redirect: redirectHandler,
-		Stats: stats,
+		Stats:   stats,
+		Metrics: metrics,
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
 			Links: linkSvc, Stats: stats,
 		},
 	})
+
+	// The scrape endpoint lives on its own listener, on a port compose does not
+	// publish. Queue depths, pool saturation and traffic shape are operational
+	// detail, and putting them behind the same listener as the public site is
+	// how they end up on the internet by accident.
+	metricsSrv := httpserver.New(httpserver.Options{
+		Addr:              cfg.HTTP.MetricsAddr,
+		Handler:           metricsMux(metrics),
+		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
+		WriteTimeout:      cfg.HTTP.WriteTimeout,
+		Logger:            log,
+	})
+	// No drain delay: nothing routes user traffic here, so there is nothing to
+	// deregister from. A scrape lost during shutdown is a gap in a graph.
+	metricsSrv.ShutdownTimeout = 2 * time.Second
+	metricsDone := make(chan struct{})
+	go func() {
+		defer close(metricsDone)
+		if err := metricsSrv.Run(ctx); err != nil {
+			// Logged, never fatal. Losing metrics must not take down a healthy
+			// instance — the alternative is an unmonitored outage caused by the
+			// monitoring.
+			log.Error("metrics listener stopped", slog.Any("error", err))
+		}
+	}()
+	defer func() { <-metricsDone }()
 
 	srv := httpserver.New(httpserver.Options{
 		Addr:              cfg.HTTP.Addr,
@@ -330,6 +369,18 @@ func run(cfg config.Config, _ io.Writer) error {
 		return fmt.Errorf("http server: %w", err)
 	}
 	return nil
+}
+
+// metricsMux is the internal listener's routing table: the scrape endpoint and
+// a hint for whoever opens the port in a browser.
+func metricsMux(metrics *observability.Metrics) http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle("GET /metrics", metrics.Handler())
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte("LinkCtrl internal metrics listener: GET /metrics\n"))
+	})
+	return mux
 }
 
 // healthcheck is the container healthcheck. The runtime image is distroless

@@ -8,6 +8,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
+	"github.com/DevOfPie/LinkCtrl/internal/observability"
 )
 
 // Deps are the collaborators the router needs. An explicit struct so adding a
@@ -21,6 +22,10 @@ type Deps struct {
 	Redirect *RedirectHandler
 	Stats    *analytics.Reader
 	Web      *Web
+	// Metrics is optional. Nil disables instrumentation entirely rather than
+	// registering into a global registry, so two servers in one test process
+	// cannot collide.
+	Metrics *observability.Metrics
 
 	// Authenticator overrides how session cookies are resolved. Production
 	// leaves it nil and the auth service is used. The test that proves the
@@ -238,7 +243,11 @@ func NewRouter(d Deps) http.Handler {
 
 	// RealIP wraps both trees: analytics and rate limiting need the client
 	// address, and resolving it costs a header read rather than a query.
-	return RealIP(d.Config.TrustedProxies)(root)
+	//
+	// Metrics wrap RealIP in turn, so the recorded duration is everything the
+	// server does — the outside view. The redirect path measures itself more
+	// precisely inside its own handler, where the SLO is defined.
+	return d.Metrics.HTTPMiddleware(RealIP(d.Config.TrustedProxies)(root))
 }
 
 // RegisteredTopLevelPaths lists the first path segment of every route the

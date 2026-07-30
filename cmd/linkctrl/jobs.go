@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
+	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
 )
 
@@ -18,20 +19,26 @@ import (
 // the holder dies, so a crashed replica does not block the others. Every job
 // re-checks the lock, so leadership can move between runs without coordination.
 type jobRunner struct {
-	pool   *pgxpool.Pool
-	salts  *analytics.SaltCache
-	roller *analytics.Roller
-	log    *slog.Logger
-	cancel context.CancelFunc
-	done   chan struct{}
+	pool    *pgxpool.Pool
+	salts   *analytics.SaltCache
+	roller  *analytics.Roller
+	log     *slog.Logger
+	metrics *observability.Metrics
+	cancel  context.CancelFunc
+	done    chan struct{}
 }
 
 // advisoryLockKey is hashtext('linkctrl_jobs'), computed once so the value is
 // stable across processes and versions.
 const advisoryLockKey int64 = 0x6c63_6a6f_6273_0001
 
-func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analytics.Roller, log *slog.Logger) *jobRunner {
-	return &jobRunner{pool: pool, salts: salts, roller: roller, log: log, done: make(chan struct{})}
+func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analytics.Roller,
+	log *slog.Logger, metrics *observability.Metrics,
+) *jobRunner {
+	return &jobRunner{
+		pool: pool, salts: salts, roller: roller, log: log, metrics: metrics,
+		done: make(chan struct{}),
+	}
 }
 
 func (j *jobRunner) start(parent context.Context) {
@@ -91,13 +98,19 @@ func (j *jobRunner) withLeadership(ctx context.Context, name string, fn func(con
 		return
 	}
 	if !acquired {
+		// Counted, not ignored: on a healthy multi-replica deployment most runs
+		// are skips, and a follower reporting no skips at all is a follower
+		// whose scheduler has stopped.
+		j.metrics.ObserveJobSkipped(name)
 		return
 	}
 	defer func() {
 		_, _ = conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", advisoryLockKey)
 	}()
 
-	if err := fn(ctx); err != nil {
+	err = fn(ctx)
+	j.metrics.ObserveJob(name, err)
+	if err != nil {
 		j.log.Error("job failed", slog.String("job", name), slog.Any("error", err))
 	}
 }

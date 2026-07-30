@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/DevOfPie/LinkCtrl/internal/alias"
+	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
 )
 
@@ -42,7 +43,28 @@ type RedirectHandler struct {
 	// Recorder receives click events. Nil until M8.
 	Recorder ClickRecorder
 
+	// Metrics is optional; a nil value makes every observation a no-op. This
+	// is the SLO's own measurement point, so it lives here rather than in
+	// middleware: the outer view includes the router's dispatch, and the
+	// number the target names is the time to resolve and answer.
+	Metrics *observability.Metrics
+
 	counter atomic.Int64
+}
+
+// outcomeLabel names an outcome for metrics. A switch rather than Stringer on
+// the type, because the label vocabulary is this package's concern.
+func outcomeLabel(o redirect.Outcome) string {
+	switch o {
+	case redirect.OutcomeRedirect:
+		return "redirect"
+	case redirect.OutcomeGone:
+		return "gone"
+	case redirect.OutcomeNotFound:
+		return "not_found"
+	default:
+		return "unknown"
+	}
 }
 
 // ClickRecorder accepts a click for asynchronous recording.
@@ -72,6 +94,8 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// or the database. A scanner spraying long random paths would otherwise
 	// turn each one into a lookup.
 	if len(code) < alias.MinLength || len(code) > alias.MaxLength {
+		// Rejected before any lookup, so there is no cache tier to report.
+		h.Metrics.ObserveRedirect("not_found", "rejected", time.Since(start))
 		h.notFound(w, r)
 		return
 	}
@@ -84,11 +108,18 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// experience than "not found".
 		h.Logger.Error("redirect resolution failed",
 			slog.String("alias", canonical), slog.Any("error", err))
+		h.Metrics.ObserveRedirect("error", "none", time.Since(start))
 		h.notFound(w, r)
 		return
 	}
 
-	switch res.Snapshot.Decide(start) {
+	outcome := res.Snapshot.Decide(start)
+	// Observed here, before the response is written, so the measurement covers
+	// resolution and decision rather than however long a client takes to read
+	// the body. Writing an empty 302 is a syscall on an already-open socket.
+	h.Metrics.ObserveRedirect(outcomeLabel(outcome), string(res.Source), time.Since(start))
+
+	switch outcome {
 	case redirect.OutcomeGone:
 		h.gone(w, r)
 		return

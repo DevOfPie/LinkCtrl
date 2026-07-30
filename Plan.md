@@ -220,6 +220,12 @@ Measured so far — none of these is the SLO:
 | Cached redirect through container, Windows host | ~13ms | Docker Desktop WSL2 bridge; not a useful signal |
 | Cold start to serving, incl. migrations | ~12s | from empty volume |
 
+The server-side histogram the SLO calls for now exists:
+`linkctrl_redirect_duration_seconds{cache,outcome}`, with a bucket boundary at
+the 20ms target so "fraction under SLO" is a ratio of bucket counts. It is
+scraped from a second listener on `METRICS_ADDR`, which compose does not
+publish.
+
 ---
 
 ## Privacy
@@ -251,7 +257,7 @@ caveat with the data.
 
 ## Build status
 
-As of 2026-07-30. 13 of 16 milestones.
+As of 2026-07-30. 14 of 16 milestones.
 
 | Area | State |
 | --- | --- |
@@ -267,11 +273,11 @@ As of 2026-07-30. 13 of 16 milestones.
 | API keys and scopes | done, verified |
 | Dashboard UI | done, verified |
 | OpenAPI document and `/docs` | done, verified |
-| Prometheus metrics | not started |
+| Prometheus metrics | done, verified |
 | Load validation of the redirect target | not started |
 | Release packaging | not started |
 
-Verification: 69 integration tests against real Postgres and Redis — including
+Verification: 72 integration tests against real Postgres and Redis — including
 a contract test that replays every OpenAPI operation against the live server —
 plus unit, property and fuzz tests. All run under the race detector.
 

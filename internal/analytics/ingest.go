@@ -310,4 +310,13 @@ func (i *Ingester) prepare(ctx context.Context, batch []Event) ([][]any, map[uui
 // database is falling behind, minutes before drops start.
 func (i *Ingester) QueueDepth() int { return len(i.ch) }
 
+// Counters returns the lifetime totals, for the metrics collector.
+//
+// One method returning all five rather than five accessors, so a scrape reads
+// them in one call and the set cannot be sampled half a flush apart.
+func (i *Ingester) Counters() (enqueued, dropped, flushed, failed, batches int64) {
+	return i.Stats.Enqueued.Load(), i.Stats.Dropped.Load(), i.Stats.Flushed.Load(),
+		i.Stats.Failed.Load(), i.Stats.Batches.Load()
+}
+
 var ErrIngesterClosed = errors.New("analytics: ingester is closed")
