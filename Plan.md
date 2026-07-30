@@ -436,7 +436,7 @@ Method, so these are designs rather than intentions:
   once it is gone, the hashes cannot be linked back to an IP even with the
   original data in hand.
 - The workspace is part of the hashed message, so the same visitor produces a
-  different hash in each workspace and two workspaces. analytics cannot be
+  different hash in each workspace, and two workspaces' analytics cannot be
   joined to follow one person across both. The salt itself is per-day and
   shared; the non-correlation comes from the message, not the key.
 - Consequence worth stating plainly: the largest table in the system contains no
