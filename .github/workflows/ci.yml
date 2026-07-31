@@ -80,8 +80,13 @@ jobs:
           git diff --exit-code -- go.mod go.sum
 
       - name: Generated code matches its source
+        # Must match the version stamped into internal/store/dbgen, which sqlc
+        # writes into every file it emits. A mismatch fails this step on the
+        # comment alone, with the rest of the diff empty — which is what it did
+        # the first time this workflow ever ran, having been pinned a minor
+        # version behind the committed output since it was written.
         run: |
-          go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
           sqlc generate
           git diff --exit-code -- internal/store/dbgen
 
