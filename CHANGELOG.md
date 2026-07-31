@@ -40,6 +40,18 @@ migrations run at boot.
   refreshed hourly on every replica. Keeping everything forever is only a safe
   default if the growth it permits is visible; the Prometheus alert recipe is in
   [docs/operations.md](docs/operations.md#audit-log-growth).
+- **Cache invalidation now crosses replicas.** Editing a link on one instance
+  clears every instance's cache, over a Redis pub/sub channel, instead of only
+  the one that handled the edit. Running more than one app replica no longer
+  means an edit takes up to `REDIRECT_TTL` to become visible everywhere — the
+  limitation 0.1.0 shipped with, and the reason it told you to run one instance.
+- With Redis down this degrades rather than breaks: redirects still resolve from
+  Postgres, edits still apply and still clear the replica that made them, and
+  the other replicas fall back to the TTL staleness they had before. A
+  subscriber that loses its connection **flushes its in-process caches when it
+  reconnects**, because Redis pub/sub does not replay and a replica cannot know
+  which invalidations it missed. The cost is a cold cache after a Redis blip;
+  the alternative is serving a destination the owner already changed.
 - **Notifications, in the dashboard.** A nav badge, a notifications page and
   `GET /api/v1/notifications` with mark-read and mark-all-read. Your own inbox
   only — there is no permission for reading somebody else's, because there is no

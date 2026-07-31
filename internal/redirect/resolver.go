@@ -289,11 +289,11 @@ func (r *Resolver) InvalidateAlias(ctx context.Context, domainID uuid.UUID, alia
 			slog.Any("error", err))
 	}
 
-	// Known limitation: this clears Redis and THIS process's memory tier.
-	// Another replica keeps its own copy until the entry's TTL expires, so an
-	// edit can take up to REDIRECT_TTL to be visible everywhere. Phase 2 adds
-	// pub/sub invalidation; single-replica deployments, which is what Phase 1
-	// targets, are unaffected.
+	// Every other replica holds its own in-process copy, which neither the
+	// delete above nor this process can reach. Publishing is what closes that
+	// gap; before it existed, an edit took up to REDIRECT_TTL to be visible on
+	// a replica that had already cached the alias.
+	r.publish(ctx, invalidation{Kind: kindAlias, Key: k})
 }
 
 // deleteFromRedis removes a key, retrying a transient failure.

@@ -44,6 +44,7 @@ file. Append a row when you append an entry.
 | [Six decisions taken ahead of the run](#2026-07-31--six-decisions-taken-ahead-of-an-unattended-run) | Delegability as a rule (D18); growth alert on by default (D19); reconnect flush (D20); light theme may move (D21); last-used workspace (D22); mail outbox (D23) |
 | [M21, the audit log gets behavior](#2026-07-31--m21-the-audit-log-gets-behavior) | Why the writer reduces the address itself; `audit.read` under D18; retention as a per-table policy; why the growth metric is job-measured |
 | [M22, the inbox and what it is not](#2026-07-31--m22-the-inbox-and-what-it-is-not) | The fence against a preferences system; why the warning defaults on where retention defaults off; the silence window; the badge query |
+| [M23, invalidation that crosses replicas](#2026-07-31--m23-invalidation-that-crosses-replicas) | Why a reconnect must flush; why the publish does not wait; the black-hole proxy and a test that measured nothing |
 
 ---
 
@@ -2642,3 +2643,86 @@ every page load.
 A failure there is swallowed to zero rather than propagated. Failing a page an
 operator asked for because a decoration could not be computed is the wrong
 trade; the badge is the least important thing on the screen.
+
+---
+
+## 2026-07-31 — M23, invalidation that crosses replicas
+
+The limitation this discharges was the one that made 0.1.0 a single-instance
+product: an edit cleared the cache on the replica that handled it, and every
+other replica served the old destination until the entry expired.
+
+### The reconnect is the whole design
+
+Redis pub/sub does not replay. A subscriber that was disconnected when an
+invalidation was published never hears it, and — this is the part that matters —
+cannot know which key it named. So there is no repair short of distrusting
+everything it holds, which is what D20 settles: flush both in-process tiers on
+every re-establishment.
+
+What makes this a design rather than a detail is how the failure looks. go-redis
+returns the read error to the caller and then reconnects underneath, so a
+dropped subscription is observable *exactly once*, on the failing read, and is
+silent afterwards. A loop that simply retried would resubscribe successfully and
+carry on serving entries whose invalidations went into the gap, with nothing
+anywhere reporting a problem. Stale data mistaken for fresh data, permanently,
+from one dropped TCP connection.
+
+Re-establishment is forced with a ping rather than discovered by waiting for the
+next message. Waiting would hold the stale window open until some unrelated edit
+happened to arrive, which on a quiet instance is indefinitely — and "no
+messages" is precisely what a broken subscriber looks like too.
+
+The first connection flushes as well. A replica whose subscriber comes up after
+Redis was briefly unreachable is in exactly the same position as a reconnecting
+one: holding entries whose invalidations it was not there to hear.
+
+### The publish does not wait, and that is not laziness
+
+It was synchronous first. Testing against a TCP proxy that accepts the
+connection and then never answers — a stalled Redis, as opposed to a refused
+one — showed the publish adding **three seconds** to an edit, because go-redis
+does not honour the short context it is handed when it has to establish a
+connection to a server that never speaks.
+
+The caller has no use for the result either way: a failed publish degrades to
+the TTL staleness that existed before this milestone, which is why it was
+best-effort from the start. So the bound that actually holds is not waiting at
+all. Failures are logged from the goroutine, so a broadcast that never landed is
+still visible.
+
+That measurement also turned up a larger, older problem, deferred as F2: the
+*delete* beside it takes about nine seconds under the same conditions, for the
+same reason, and it predates this milestone. It is not fixed here.
+
+### The test proxy, and a test that was measuring nothing
+
+The drop is produced by cutting a real TCP connection through a proxy rather
+than by faking a client, because the behaviour under test is what go-redis does
+when a read fails mid-subscription — which is exactly what a fake would be
+asserting an assumption about.
+
+The first version of the Redis-down test used a *refused* connection, and a
+sabotage pass showed it caught nothing: a refused connection fails in 264ms, so
+an assertion that an edit "does not hang" could never fail however unbounded the
+call underneath it was. Refusal and stalling are different failures, and only
+the second one can hang a caller. The proxy grew a black-hole mode, and the
+assertion moved onto the publish alone — the half this milestone owns — so it
+stays meaningful when F2 is eventually fixed.
+
+### Message shape
+
+JSON, not a packed string, so M40's hostname cache can add a field without a
+channel version bump: an older replica decoding a newer message ignores what it
+does not know, which is what makes a rolling deploy safe. An unknown *kind* is
+ignored rather than treated as a flush — guessing in the "safe" direction would
+mean clearing every cache on every message some future version sends.
+
+The channel name carries the cache key version, so two builds that disagree
+about key format cannot hear each other at all. A replica that hears nothing
+degrades to TTL staleness, which is the known-good previous behaviour; a replica
+that misinterprets a key does something nobody has reasoned about.
+
+A publisher receives its own message and applies it again, deleting a key it
+just deleted. Filtering that out would need a sender id, a comparison, and a way
+to get it wrong, to save one map delete.

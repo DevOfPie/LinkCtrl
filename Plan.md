@@ -600,7 +600,7 @@ Deliberately accepted in Phase 1.
 | Limitation | Consequence |
 | --- | --- |
 | DNS rebinding not defended against | A host resolving public at creation and private at click time is not caught. Detection needs resolution on the hot path. |
-| Cache invalidation is single-replica | A second replica keeps its copy until TTL. Scheduled: [M23](docs/build-notes/phase-details/m23.md). |
+| Invalidation needs Redis to cross replicas | Invalidations are broadcast on Redis pub/sub. With Redis down each replica falls back to `REDIRECT_TTL` staleness, which is correct but slower to converge; a reconnecting subscriber flushes its in-process tiers because pub/sub cannot replay what it missed. |
 | Rate limits are per instance | In-memory buckets, so N replicas allow N times the configured limit, and a restart resets them. Scheduled for credentials and the API: [M24](docs/build-notes/phase-details/m24.md). The 404-probe limiter stays per-instance permanently — Redis-backed limits would add a network round trip to the redirect path and make an optional dependency load-bearing. |
 | Rate limits fail open | A full key table allows requests rather than refusing them, counted by `linkctrl_rate_limit_overflow_total`. A limiter is abuse mitigation, not an authorization boundary. |
 | Behind a proxy, limits need `TRUSTED_PROXIES` | Otherwise every request carries the proxy's address and all traffic shares one bucket. This is a correctness requirement once a limit is on, not only an analytics one. |

@@ -38,6 +38,35 @@ Three consecutive runs of the same configuration produced generator p99s of 961�
 honest precision of this measurement; a single figure quoted to three digits would
 not be.
 
+### Re-measured for M23 (2026-07-31)
+
+[M23](build-notes/phase-details/m23.md) added a Redis pub/sub subscriber that
+clears the in-process cache when another replica publishes an invalidation, so
+the measurement was repeated on an image built from that code.
+
+| | Target | Measured |
+| --- | --- | --- |
+| Cached redirect, server-side | p99 < 20ms | **99.991% of 239,193 requests under 20ms**; 99.93% under 10ms; 99.81% under 0.5ms |
+| Cached redirect, generator-side | — | median 674µs, p(95) 3.34ms |
+| Sustained rate | 2,000 rps for 2m | 1,993.4 rps, 239,193 requests, zero failures |
+| Cache mix | hits only | 239,193 memory, 0 redis, 0 database |
+| Redirect pool | — | 0 acquire waits |
+
+**The target is met with the same order of margin**: p99 is under 500µs, against
+a 20ms budget.
+
+The honest difference from the runs above is the tail. Twenty-one requests
+(0.009%) landed over 20ms where the earlier runs had none. That is not a claim
+that the subscriber cost anything — it is one run on a developer laptop against
+three, the generator also dropped 808 iterations trying to hold the rate, and
+this document already says the spread between identical runs is the real
+precision of the method. It is recorded rather than smoothed over because a
+later regression should be compared against what was actually observed.
+
+What the run does establish is that the subscriber is off the request path: the
+cache mix is 100% memory, so every measured request was answered without
+touching Redis or Postgres, and the pool waited zero times.
+
 The uncached path, which the plan targets at <100ms:
 
 | | Target | Measured |

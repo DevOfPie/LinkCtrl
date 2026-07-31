@@ -280,7 +280,7 @@ path while it waits.
 | Symptom | Likely cause and fix |
 | --- | --- |
 | Redirects 404 for a link that exists | Cached negative entry, or the link is archived/expired. Check the link's status; negative caching is bounded by `REDIRECT_NEGATIVE_TTL` (60s). |
-| An edit did not take effect | More than one app replica. Cache invalidation is single-replica in Phase 1; others wait out `REDIRECT_TTL`. Run one instance. |
+| An edit did not take effect | Invalidation is broadcast over Redis pub/sub, so check Redis first: with it down, each replica falls back to `REDIRECT_TTL` staleness. The subscriber logs `lost its connection` and `reconnected` — a replica showing the first without the second is not hearing invalidations. |
 | Analytics stopped updating | The `rollup` job. Check `linkctrl_job_last_success_timestamp_seconds{job="rollup"}` and the logs for `job failed`. |
 | Clicks missing entirely | `linkctrl_analytics_events_dropped_total` climbing, or an unclean shutdown lost a batch. `click_count` on a link is approximate for the same reason. |
 | Everything looks like one visitor | `TRUSTED_PROXIES` wrong, so every request appears to come from the proxy. Visitor hashing includes the address. |
@@ -296,11 +296,11 @@ path while it waits.
 
 Deliberate gaps, so they are not discovered during an incident:
 
-- **No audit log behaviour.** The table exists and stays empty. Phase 2.
 - **Region and city are never stored**, even with a GeoIP database configured.
   Country only, deliberately.
-- **Cache invalidation is single-replica.** Run one app instance until Phase 2
-  adds pub/sub.
+- **Invalidation needs Redis to cross replicas.** With Redis down, each replica
+  falls back to `REDIRECT_TTL` staleness — correct, just slower to converge.
+  See [below](#cache-invalidation-across-replicas).
 - **The dimension rollup is expensive and gets worse.** It recomputes whole days
   every 60 seconds; at 5.7M click events that measured 16–21 seconds per run, and
   it will eventually exceed its own interval. Redirects are unaffected — the
@@ -309,5 +309,41 @@ Deliberate gaps, so they are not discovered during an incident:
   the `EXPLAIN` output: [slo.md](slo.md).
 
 The redirect SLO itself is measured and met: [slo.md](slo.md).
+
+## Cache invalidation across replicas
+
+Each replica keeps its own in-process cache in front of Redis. Editing a link
+clears the editing replica's copy and deletes the Redis entry, but the other
+replicas hold copies only they can reach — so invalidations are broadcast on a
+Redis pub/sub channel and every replica clears its own tiers when it hears one.
+
+The subscriber runs in its own goroutine and never touches the request path. It
+only ever deletes from the in-process tiers, which is why invalidation traffic
+does not show up in the redirect latency.
+
+**With Redis down, this degrades rather than breaks.** Redirects still resolve,
+from Postgres. Edits still apply, and still clear the replica that made them.
+What is lost is the broadcast, so other replicas serve their cached copy until
+it expires — the behaviour every deployment had before this existed. Nothing
+errors, and nothing is served incorrectly for longer than `REDIRECT_TTL`.
+
+The interesting case is a subscriber that reconnects. Redis pub/sub does not
+replay, so invalidations published while a replica was disconnected are gone,
+and that replica cannot know which keys they named. **On every reconnect it
+flushes both in-process tiers**, which ends the stale window at the reconnect
+instead of at each entry's TTL. The cost is a cold cache for a moment after a
+Redis blip — latency on an optional dependency, rather than serving a
+destination the owner already changed.
+
+Two log lines matter:
+
+| Line | Means |
+| --- | --- |
+| `cache invalidation subscriber lost its connection` | This replica is not hearing invalidations. Expect `REDIRECT_TTL` staleness until it recovers. |
+| `cache invalidation subscriber reconnected; in-process caches flushed` | Recovered, and it distrusted everything it held. Normal after a Redis restart. |
+
+A replica logging the first without the second is the one to look at: it is
+serving from a cache nothing is invalidating, and a subscriber stuck that way
+looks exactly like one with nothing to report.
 
 Full list: [Plan.md](../Plan.md#phase-1-scope-not-yet-built).

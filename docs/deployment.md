@@ -384,17 +384,22 @@ Worth knowing so you do not spend an afternoon re-adding it:
 
 ## Scaling, honestly
 
-Phase 1 is designed for one app instance, and one limitation decides it:
-**cache invalidation is single-replica.** Editing a link clears the cache on the
-replica that handled the edit; other replicas serve the old destination until
-the entry's TTL expires (`REDIRECT_TTL`, 24h by default). Phase 2 adds pub/sub.
+More than one `app` container works. Each replica keeps its own in-process cache
+in front of Redis, and invalidations are broadcast on a Redis pub/sub channel, so
+an edit on one replica clears every replica's copy rather than only the one that
+handled it. That was the limitation that made 0.1.0 a single-instance product.
 
-Until then:
+What to know before running several:
 
-- Run one `app` container. It is a Go binary serving cached redirects; that goes
-  a long way.
-- If you must run more, lower `REDIRECT_TTL` to bound the staleness window and
-  accept that edits take up to that long to reach every replica.
+- **Redis stops being only a cache.** It is still optional for correctness — with
+  it down, redirects resolve from Postgres and edits still apply — but it is what
+  carries invalidations between replicas. Without it, each replica serves its own
+  cached copy until `REDIRECT_TTL` expires, which is the 0.1.0 behaviour.
+- **A replica that loses the subscription flushes its caches when it reconnects.**
+  Pub/sub does not replay, so it cannot know what it missed. Expect a brief cold
+  cache after a Redis restart, on every replica at once.
+- **Rate limits are still per instance.** N replicas allow roughly N times the
+  configured limit, and the 404-probe limiter stays that way permanently.
 - Vertical growth first: Postgres `shared_buffers` and the two pool sizes
   (`DB_MAX_CONNS`, `DB_REDIRECT_MAX_CONNS`) are the knobs that matter. Keep
   their total under the server's `max_connections`; startup refuses to run when

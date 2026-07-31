@@ -17,7 +17,7 @@ and when it lands.
 | --- | --- | --- | --- |
 | [M21](m21.md) | Audit log: behavior, retention, growth alerting | — | done |
 | [M22](m22.md) | Notifications: in-app behavior | — | done |
-| [M23](m23.md) | Cross-replica cache invalidation (pub/sub) | — | not started |
+| [M23](m23.md) | Cross-replica cache invalidation (pub/sub) | — | done |
 | [M24](m24.md) | Shared rate limits (credentials and API) | — | not started |
 | [M24.5](m24.5.md) | Dark mode: theme tokens, system default, override | — (before M25) | not started |
 | [M25](m25.md) | Workspace and organization switcher | — | not started |

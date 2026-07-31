@@ -320,11 +320,31 @@ func run(cfg config.Config, _ io.Writer) error {
 		// The root-redirect setting is refused unless short links have a
 		// hostname of their own, where "/" is not the dashboard.
 		SplitHosts: cfg.SplitHosts(),
-		RootCache:  rootRedirect,
-		Audit:      auditSvc,
-		Log:        log,
+		// Wrapped so a root-redirect change clears this process's copy and
+		// tells every other replica to clear theirs.
+		RootCache: redirect.BroadcastRootInvalidator{Local: rootRedirect, Publisher: resolver},
+		Audit:     auditSvc,
+		Log:       log,
 	})
 	rootRedirect.Load = linkSvc.LoadRootRedirect
+
+	// The other half of invalidation: this replica hearing what the others
+	// published. Off the request path entirely — it only ever deletes from the
+	// in-process tiers — and a nil Redis client makes Run return immediately,
+	// which is the cache-disabled deployment falling back to TTL staleness.
+	//
+	// Started before the listener so a redirect served in the first moments of
+	// this process's life is not served from a tier nothing is watching.
+	// Root is the plain cache, deliberately not the broadcasting wrapper above.
+	// Handing the wrapper to the subscriber would make every received root
+	// invalidation publish another one, and every replica would answer every
+	// other replica's message forever.
+	subscriber := &redirect.Subscriber{
+		Redis: rdb, Resolver: resolver, Root: rootRedirect, Log: log,
+	}
+	subCtx, stopSubscriber := context.WithCancel(context.WithoutCancel(ctx))
+	defer stopSubscriber()
+	go subscriber.Run(subCtx)
 
 	// Resolved once at boot. A per-request lookup would add a query to the
 	// path the whole cache design exists to keep short.

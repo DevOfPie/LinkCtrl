@@ -133,9 +133,10 @@ every API response that includes them says so.
 
 Known limitations and deferred work, so nobody discovers them in production:
 
-- **Single-instance cache invalidation.** Editing a link clears the cache on the
-  replica that served the edit; others wait out the TTL. Run one app instance
-  until Phase 2 adds pub/sub.
+- **Cross-replica cache invalidation needs Redis.** Edits are broadcast on a
+  Redis pub/sub channel, so every replica clears its cache. With Redis down each
+  replica falls back to waiting out `REDIRECT_TTL`, which is correct but slower
+  to converge.
 - **The analytics dimension rollup gets expensive with traffic.** It recomputes
   whole days every 60 seconds, which measured 16–21 seconds at 5.7M click events
   and will eventually exceed its own interval. Redirects are unaffected — that is
