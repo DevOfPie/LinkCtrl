@@ -49,6 +49,7 @@ file. Append a row when you append an entry.
 | [The loop kept stopping](#2026-07-31--the-loop-kept-stopping-for-reasons-it-had-invented) | Why two runs ended early; the safety net that read as permission; naming the specific excuses |
 | [M24.5, a dark theme that cannot flash](#2026-07-31--m245-a-dark-theme-that-cannot-flash) | Why the server renders the attribute; the token scan as enforcement; the two light values that moved under D21 |
 | [The loop splits in two](#2026-07-31--the-loop-splits-into-an-orchestrator-and-workers) | Premature stopping as a context symptom; why the builder does not commit its own work; the seam at 3.3/3.4; what the split costs |
+| [M24.6, and a test that could not see the defect](#2026-07-31--m246-and-a-test-that-could-not-see-the-defect) | The unlayered-`:root` cascade bug; why the token scan missed it; verifying mechanisms instead of outcomes; why a new milestone rather than reopening M24.5 |
 
 ---
 
@@ -3016,3 +3017,76 @@ a boundary now crossed every milestone instead of only on interruption.
 
 The `X.9` reviews and M45 are not delegated. The product of each is a
 conversation with the owner about what to schedule, and a worker cannot have it.
+
+---
+
+## 2026-07-31 — M24.6, and a test that could not see the defect
+
+The owner reported, hours after M24.5 landed, that switching to dark mode does
+nothing. It does not. The light tokens are declared in an unlayered `:root`; the
+dark tokens live inside `@layer base`. CSS cascade layers give unlayered normal
+declarations priority over layered ones *regardless of specificity*, so
+`:root { --t-surface: #f8fafc }` beats `:root[data-theme="dark"]` every time.
+Both dark paths are dead — the explicit override and the `prefers-color-scheme`
+one — which is why even `color-scheme: dark` never takes.
+
+The server half is correct and is not implicated. The attribute renders, the
+cookie works, the no-flash design does what it claimed. The page simply does not
+change colour.
+
+### The enforcement tested naming, not effect
+
+M24.5's own entry says the scan "is the point of the milestone", and it was
+right about the risk it aimed at: a raw palette utility is wrong only in dark,
+silently, and only for the people using dark. But
+`TestTemplatesUseThemeTokensOnly` asserts that templates *name* tokens. Nothing
+asserted that naming one changes anything, and the contrast figures — every pair
+measured, in both themes — were arithmetic in a comment about values no browser
+ever reached. The milestone was enforced at the layer above the one that broke.
+
+That is the general shape worth keeping: **the check verified the mechanism, not
+the outcome.** The attribute was confirmed present at all three cookie states,
+which is one honest step short of confirming the page looks different. Every
+piece of evidence gathered was true, and the conclusion drawn from it was false.
+
+So M24.6's test asserts the cascade relationship directly — that every construct
+declaring a `--t-*` token shares one layer context — and it has to be shown
+failing against the stylesheet as M24.5 shipped it before it counts. The live
+check moves from "the attribute is there" to "the rendered token values differ".
+
+### A new milestone, not a reopened one
+
+The owner chose M24.6 over reopening M24.5, and the tradeoff is worth recording
+because it cuts against the house rule that status must be true. M24.5 stays
+`done` while one of its central claims is false, which is a real cost paid for a
+real thing: the shipped commit and its decision entry stay untouched, and the
+correction arrives as its own numbered milestone with its own definition of done
+rather than as an edit to history. F3 carries the false-claim note so the
+discrepancy is written down rather than implied, and the CHANGELOG's unreleased
+section now says plainly that the four bullets above it are not yet true of a
+running build.
+
+### The control moves, which is a separate thing
+
+F4 is not a defect: M24.5 said the override is "settable from the dashboard" and
+never named a place, so the footer satisfied it. The footer is nevertheless the
+one region a person scanning for a setting does not read.
+
+It moves to account settings, and the sign-in page keeps its own control. That
+second render site is not redundancy — M24.5's whole per-browser design rests on
+the preference being settable before there is an account, and account settings
+need a session. Putting the only control behind sign-in would quietly retract the
+design while appearing to tidy it.
+
+### What this says about the split committed an hour earlier
+
+The orchestrator-and-worker split would not have caught this on its own.
+Acceptance re-reads the milestone file and the tree, and every bullet in
+m24.5.md would have read as satisfied — the tokens exist, the scan passes, the
+attribute renders. A second reader with fresh context is protection against a
+builder's rationalisations, not against a definition of done that measures the
+wrong thing.
+
+The lesson belongs to the milestone files rather than the loop: a bullet that
+names a mechanism should say what observable outcome proves the mechanism works.
+"Asserted by test" is not enough when the test can pass over a dead stylesheet.

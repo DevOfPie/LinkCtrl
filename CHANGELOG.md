@@ -55,6 +55,15 @@ migrations run at boot.
   An accessibility claim that exempted the theme already shipped would not have
   been one; the contrast figures for every token pair, in both themes, are
   recorded beside the definitions in `internal/ui/static/css/input.css`.
+- **Known limitation, unreleased:** the dark theme does not currently apply. Its
+  light tokens are declared unlayered and its dark tokens inside `@layer base`,
+  and unlayered declarations win regardless of specificity, so both the explicit
+  override and the `prefers-color-scheme` path lose to the light values. The
+  server side is correct — the attribute renders — but the page does not change.
+  M24.6 fixes the cascade and moves the control out of the footer; the four
+  bullets above describe the intended behaviour and are not yet true of a running
+  build. Tracked as F3 and F4 in
+  [docs/build-notes/deferred-findings.md](docs/build-notes/deferred-findings.md).
 - Not themed, deliberately: `/docs`, whose Swagger UI is vendored and
   checksum-pinned.
 - **Credential and API rate limits are shared across replicas.** They are
