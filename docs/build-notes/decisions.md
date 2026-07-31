@@ -41,6 +41,7 @@ file. Append a row when you append an entry.
 | [Feature intake, and reviews at X.9](#2026-07-31--feature-intake-written-down-and-the-review-slot-moves-to-x9) | planning.md exists; why reviews cap the fractional band at .9 |
 | [docs/ reorganized](#2026-07-31--docs-reorganized-around-its-reader) | Root is for running and using; SECURITY.md surfaced; the two recorded keep-decisions |
 | [The phase loop](#2026-07-31--the-phase-loop-written-down) | Unattended milestone iteration; why validation precedes each one; why the resume note is untracked |
+| [Six decisions taken ahead of the run](#2026-07-31--six-decisions-taken-ahead-of-an-unattended-run) | Delegability as a rule (D18); growth alert on by default (D19); reconnect flush (D20); light theme may move (D21); last-used workspace (D22); mail outbox (D23) |
 
 ---
 
@@ -2336,3 +2337,138 @@ answers its own questions: an unanswered decision prompt stops the loop rather
 than resolving into a default, because the failure mode of an unattended builder
 is not a wrong keystroke, it is a plausible assumption compounded over twenty
 milestones.
+
+---
+
+## 2026-07-31 — Six decisions taken ahead of an unattended run
+
+The loop stops at any question it has not been given an answer to, which is the
+property that makes it safe to leave running. It is also the property that makes
+an unattended overnight run mostly idle time: M21 is mid-build, and reading the
+five milestone files after it turned up six choices the loop would have had to
+stop for. They were put to the owner in one sitting and answered before the run
+started. Recorded as D18–D23 in Plan.md, in a second table — the first is headed
+*taken before the plan was finalised* and planning.md's restraint list forbids
+editing it, so post-finalisation decisions continue the numbering in a table of
+their own rather than rewriting history.
+
+This is the same move as writing down the phase loop: a decision made once, in
+advance, costs a conversation; the same decision made twenty times in the middle
+of twenty builds costs a stall each time and drifts.
+
+### Delegability stops being a per-permission conversation (D18)
+
+The `audit.read` call earlier today — non-delegable, because reading the audit
+trail is the one place a `/24` is tied to a named actor — was answered on its
+merits, for one permission. Seven more permissions arrive this phase (M27, M28,
+M31, M38, M39, M44 and M22 if it needs one), each carrying the same question.
+
+The rule generalises what that answer already assumed. A permission is
+non-delegable when reading it exposes an actor's identity tied to network data,
+or when holding it lets a key widen its own reach. The second limb is the older
+one — it is why `apikeys.*` is not a key scope (D9). The first is new vocabulary,
+and naming it is the point: before today the non-delegable set was about
+escalation only, and `audit.read` joined it for confidentiality. Leaving that
+unstated would have meant re-deriving it at every future permission and quietly
+getting a different answer at one of them.
+
+The mechanism does not change. `NonDelegableScopes` remains the only thing
+enforcing it: endpoints authorize on the permission like every other endpoint,
+and no code anywhere asks whether the caller holds a session. Flipping a
+permission in either direction stays a one-line map edit, which is what keeps the
+rule cheap to revise if it turns out to be wrong.
+
+What each milestone owes is one line: which limb it matched, or that it matched
+neither. That is a record, not a decision, so it does not stop the loop.
+
+### The growth alert cannot itself require configuration (D19)
+
+D5 keeps audit history forever until an operator configures otherwise, on the
+argument that an upgrade must never silently delete history someone assumed
+permanent. That argument only holds while unbounded growth is *visible*. An
+instance that keeps everything forever and warns nobody has not been given a safe
+default; it has been given a deferred problem.
+
+So the threshold defaults to 5 GB of audit partitions rather than to off. The
+symmetry with the retention default (0 = forever) is tempting and wrong: the two
+defaults protect against opposite failures. Retention defaults to inaction
+because acting without being asked destroys data. The alert defaults to acting
+because *inaction* is what leaves the operator uninformed. A number that fires on
+a large instance and never on a small one is a nuisance at worst, and the metric
+and the documented Prometheus recipe exist either way.
+
+### A reconnecting subscriber has no way to catch up (D20)
+
+Redis pub/sub does not replay. When M23's subscriber drops and reconnects, the
+invalidations published during the gap are simply gone, and the replica cannot
+know how many it missed or which keys they named. Both available responses accept
+staleness; they differ in when it ends.
+
+Flushing both in-process tiers on reconnect ends it at reconnect. Relying on TTL
+ends it whenever each entry happens to expire — bounded, but bounded by a number
+chosen for a different purpose, and invisible while it lasts. M23's own risk
+statement is that a subscriber which stops delivering looks exactly like nothing
+having changed; a flush is the one action that makes the difference between those
+two states observable in the cache rather than only in a log.
+
+The cost is a cold cache after every Redis blip, which is a latency spike on a
+dependency the project has already decided is optional. Correctness never depends
+on the cache being warm, so this trades the failure mode that hides itself for
+the one that shows up in a graph.
+
+### The light theme is allowed to move (D21)
+
+M24.5 puts every template color behind semantic tokens and requires each pair to
+meet WCAG AA in both themes. Today's light palette was never audited against that
+bar, so some pairs will not clear it — the status colors especially, since amber
+on white is the usual offender.
+
+Freezing light and building dark around it would have kept the diff smaller and
+the milestone's claim false: an AA requirement that exempts half the themes it
+covers is not an AA requirement. It would also have produced deferred rows whose
+fix is a second pass over the same templates the milestone had just swept, which
+is the retrofit that ordering M24.5 before the UI run exists to avoid.
+
+So the light value moves where AA needs it to, and each change is recorded beside
+the token definition — next to the contrast figures the milestone already
+requires, where a reader comparing today's dashboard to yesterday's can find out
+why. The dashboard will look slightly different afterwards. That is the intended
+outcome, not a regression to report.
+
+### Last-used, with a way to pin it (D22)
+
+M25's deterministic default only bites after M27 creates a second membership, but
+the resolution rule has to be written before the four `GetDefaultWorkspaceForUser`
+call sites are converted. Oldest-membership-wins is purely derived and needs no
+state, which is its whole appeal and also its problem: a user who works in one
+org and is a member of another lands in the wrong one on every login, forever,
+with no way to say otherwise.
+
+Last-used costs one piece of persisted state and matches what the switcher is
+for. The owner added the escape hatch that makes it predictable rather than
+merely convenient — a setting that pins an explicit workspace, whose control
+defaults to *Last-Used*, so the derived behaviour stays the default and the
+override is available to anyone it annoys.
+
+Neither part changes anything for today's users: with exactly one membership,
+last-used and only-used are the same workspace, and M25's claim that the
+milestone is byte-identical for existing instances is unaffected.
+
+### Mail goes through an outbox (D23)
+
+M26 named the delivery mechanism as a decision and left it open: a scheduler job
+over a small outbox, or direct-with-retry. Both keep sends off the request path,
+which was the constraint that mattered for the redirect SLO.
+
+The consumers decide it. Invitations and address verification are not
+notifications a user can shrug off and re-trigger — an invite that vanishes
+because the process restarted mid-retry leaves someone locked out of an org with
+no record that anything was attempted, and the failure is invisible on both ends.
+In-memory retry has no answer to that beyond hoping deploys do not coincide with
+sends.
+
+An outbox costs an additive migration and a job on the scheduler that already
+runs partition maintenance, and buys durability plus an inspectable record of
+what was attempted. It also gives the mail-free degradation path something
+concrete to assert against, since "the outbox stays empty when no mailer is
+configured" is a testable claim in a way that "nothing was sent" is not.

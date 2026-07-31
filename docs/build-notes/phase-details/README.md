@@ -15,7 +15,7 @@ and when it lands.
 
 | # | Milestone | Depends on | Status |
 | --- | --- | --- | --- |
-| [M21](m21.md) | Audit log: behavior, retention, growth alerting | — | not started |
+| [M21](m21.md) | Audit log: behavior, retention, growth alerting | — | in progress |
 | [M22](m22.md) | Notifications: in-app behavior | — | not started |
 | [M23](m23.md) | Cross-replica cache invalidation (pub/sub) | — | not started |
 | [M24](m24.md) | Shared rate limits (credentials and API) | — | not started |
@@ -61,7 +61,7 @@ Not repeated in the files below. These hold for all of Phase 2.
 | Dormant structure is jsonb | Until the feature that uses it arrives. |
 | Partitioning | `PARTITION OF` never appears in sqlc-visible SQL; partitions are created by application code. |
 | DDL is additive | Within a minor version. |
-| Permissions | A new permission needs a seed migration that inserts *and* grants it (the 00800 pattern), plus a recorded delegability decision. |
+| Permissions | A new permission needs a seed migration that inserts *and* grants it (the 00800 pattern). Delegability follows decision D18 — non-delegable when reading it exposes an actor's identity tied to network data, or when holding it lets a key widen its own reach; delegable otherwise. The milestone records which limb it matched, or that it matched neither. `NonDelegableScopes` is the only mechanism; nothing branches on whether the caller holds a session. |
 | `ui` stays stdlib-only | No Node, no CDN, CSP unchanged, no `unsafe-` waivers. |
 | Both themes, from [M24.5](m24.5.md) on | New UI colors use the theme tokens; M24.5's template scan fails raw palette utilities. |
 | Touching the redirect path | Re-run the [docs/slo.md](../../slo.md) k6 measurement on the built image; cached p99 stays under 20ms. |

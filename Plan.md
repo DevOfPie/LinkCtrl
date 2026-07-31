@@ -552,6 +552,21 @@ decisions.md; this table is what was decided.
 D11, D13 and D14 were recorded from recommendation rather than chosen explicitly;
 they are the cheapest to revisit.
 
+### Phase 2 decisions taken after the plan was finalised
+
+The table above is a record of what was decided before the plan closed and is not
+edited. Decisions taken afterwards are appended here, keeping the same numbering.
+The *why* for each is in decisions.md.
+
+| # | Decision | Taken | Outcome |
+| --- | --- | --- | --- |
+| D18 | Permission delegability, as a rule | 2026-07-31 | A permission is **non-delegable** to an API key when reading it exposes an actor's identity tied to network data, **or** when holding it lets a key widen its own reach. Everything else is delegable. `NonDelegableScopes` is the only mechanism; no endpoint branches on "is this a session". Each milestone that adds a permission records which limb of the rule it matched, or that it matched neither. Generalises the `audit.read` call and covers M27, M28, M31, M38, M39, M44. |
+| D19 | Audit-growth notification default | 2026-07-31 | On by default. A configurable size threshold over the audit partitions, defaulting to 5 GB, raises the [M22](docs/build-notes/phase-details/m22.md) owner notification. Extends D5: keep-forever is only safe if an untouched instance is warned, so the alert cannot itself require configuration. |
+| D20 | Pub/sub subscriber reconnect | 2026-07-31 | A reconnecting subscriber **flushes both in-process tiers** — the alias memCache and the root-redirect cache. Invalidations published during the gap are unrecoverable, so the missed-invalidation window closes at reconnect rather than at TTL expiry. The cost is a cold cache after a Redis blip: a latency effect on an optional dependency, never a correctness one. |
+| D21 | Light theme under M24.5's tokens | 2026-07-31 | One token set, correct in both themes. Where a pair cannot meet AA at today's light values, **the light value moves**, and each such change is recorded beside the token definition. M24.5 lands genuinely AA-clean rather than deferring its own contrast failures. |
+| D22 | Default workspace resolution | 2026-07-31 | Last-used, remembered: the switcher persists the last selection and that becomes the default. A user setting can pin an explicit workspace instead, and its control defaults to *Last-Used*. Owner-added scope on [M25](docs/build-notes/phase-details/m25.md), 2026-07-31 — the milestone's no-op claim for today's single-membership users is unchanged. |
+| D23 | Mailer delivery mechanism | 2026-07-31 | An outbox table plus a scheduler job, closing the mechanism [M26](docs/build-notes/phase-details/m26.md) deliberately left open. Queued mail survives a restart; invitations and address verification are the consumers, and losing one silently on a deploy is the failure worth an additive migration to avoid. |
+
 ### Not in Phase 2
 
 - MFA, OAuth, OIDC, SSO, SCIM — Phase 3 by the scope table.
