@@ -66,6 +66,8 @@ tags:
     description: Short links and their lifecycle
   - name: tags
     description: Workspace tags
+  - name: domain
+    description: Settings for the hostname short links are served on
   - name: analytics
     description: Rollup-backed statistics and recent activity
   - name: api-keys
@@ -515,6 +517,63 @@ paths:
         "422":
           $ref: "#/components/responses/Validation"
 
+  /domain:
+    get:
+      tags: [domain]
+      operationId: getDomain
+      summary: Read the link domain's settings
+      description: >
+        The hostname short links are served on, and where its root redirects.
+        `split_hosts` reports whether the dashboard and short links are on
+        separate hosts; the root redirect only applies when they are.
+      responses:
+        "200":
+          description: Domain settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DomainSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    patch:
+      tags: [domain]
+      operationId: updateDomain
+      summary: Set or clear the link domain's root redirect
+      description: >
+        Requires the `domains.write` permission. The destination is validated
+        exactly as a link's is: `http` or `https` only, with private, loopback,
+        link-local, carrier-NAT and cloud-metadata addresses refused. An empty
+        string clears the redirect, restoring the `404` the root answers by
+        default. Refused with `422` on a single-host deployment, where the root
+        belongs to the dashboard.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [root_redirect_url]
+              properties:
+                root_redirect_url:
+                  type: string
+                  description: Absolute http(s) URL, or an empty string to clear.
+      responses:
+        "200":
+          description: The updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DomainSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Validation"
+
   /tags:
     get:
       tags: [tags]
@@ -881,6 +940,26 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         archived_at: { type: string, format: date-time }
+
+    DomainSettings:
+      type: object
+      additionalProperties: false
+      required: [hostname, split_hosts]
+      properties:
+        hostname:
+          type: string
+          description: The default domain's stored hostname.
+        root_redirect_url:
+          type: string
+          description: >
+            Where the link domain's root sends a visitor. Absent when unset, in
+            which case the root answers 404.
+        split_hosts:
+          type: boolean
+          description: >
+            True when the dashboard and short links are served on separate
+            hostnames. The root redirect applies only then; setting it otherwise
+            is refused.
 
     LinkPage:
       type: object

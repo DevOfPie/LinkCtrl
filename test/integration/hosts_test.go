@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
@@ -41,6 +43,28 @@ type splitFixture struct {
 	tripwire *tripwireAuthenticator
 	links    *link.Service
 	owner    *auth.Identity
+	pool     *pgxpool.Pool
+	auth     *auth.Service
+}
+
+// identityWithout demotes the owner to a role that does not hold the permission
+// and re-resolves them, which is how the product actually produces such a user —
+// hand-building an Identity would test a shape the RBAC evaluator never emits.
+func (f *splitFixture) identityWithout(perm string) *auth.Identity {
+	f.t.Helper()
+	if _, err := f.pool.Exec(f.t.Context(),
+		`UPDATE memberships SET role_id = (SELECT id FROM roles WHERE slug = 'editor')
+		  WHERE user_id = $1`, f.owner.UserID); err != nil {
+		f.t.Fatal(err)
+	}
+	id, err := f.auth.IdentityForEmail(f.t.Context(), splitOwnerEmail)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	if id.Can(perm) {
+		f.t.Fatalf("the demoted identity still holds %s; this test would prove nothing", perm)
+	}
+	return id
 }
 
 // splitConfig builds a real Config through Parse, because the split is decided
@@ -83,9 +107,15 @@ func newSplit(t *testing.T) *splitFixture {
 	resolver := redirect.NewResolver(pool, nil, redirect.Options{
 		TTL: time.Hour, NegativeTTL: time.Minute,
 	})
+	// Wired the way main.go does: the handler reads through the service and the
+	// service invalidates the handler, so the cache is exercised rather than
+	// bypassed.
+	rootRedirect := &httpx.RootRedirect{Status: http.StatusFound}
 	linkSvc := link.NewService(pool, link.Config{
 		Policy: link.DefaultDestinationPolicy(), BaseURL: cfg.LinkOrigin(), Cache: resolver,
+		SplitHosts: true, RootCache: rootRedirect,
 	})
+	rootRedirect.Load = linkSvc.LoadRootRedirect
 	stats := analytics.NewReader(pool)
 
 	renderer, err := ui.New()
@@ -107,6 +137,7 @@ func newSplit(t *testing.T) *splitFixture {
 		Links:         linkSvc,
 		Stats:         stats,
 		Authenticator: tripwire,
+		RootRedirect:  rootRedirect,
 		Redirect: &httpx.RedirectHandler{
 			Resolver: resolver, DomainID: dom.ID, Status: http.StatusFound,
 		},
@@ -128,6 +159,7 @@ func newSplit(t *testing.T) *splitFixture {
 
 	return &splitFixture{
 		t: t, server: srv, tripwire: tripwire, links: linkSvc, owner: owner,
+		pool: pool, auth: authSvc,
 		client: &http.Client{
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},

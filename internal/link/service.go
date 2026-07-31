@@ -27,6 +27,10 @@ const (
 	PermDelete    = "links.delete"
 	PermTagsRead  = "tags.read"
 	PermTagsWrite = "tags.write"
+	// PermDomainsWrite guards settings that apply to the hostname rather than to
+	// a workspace. One host serves every workspace on the instance, so this is a
+	// wider grant than links.update despite touching fewer rows.
+	PermDomainsWrite = "domains.write"
 )
 
 // TrashRetentionDays is how long a soft-deleted link stays restorable.
@@ -45,6 +49,16 @@ type Service struct {
 	aliases alias.Policy
 	baseURL string
 	cache   Invalidator
+	// splitHosts records whether short links have a hostname of their own. The
+	// root-redirect setting is meaningless without one.
+	splitHosts bool
+	rootCache  RootInvalidator
+}
+
+// RootInvalidator drops the cached root redirect when it changes. Nil is valid
+// and means the redirect tree is not running in this process.
+type RootInvalidator interface {
+	InvalidateRoot()
 }
 
 type Config struct {
@@ -54,6 +68,10 @@ type Config struct {
 	Aliases alias.Policy
 	BaseURL string
 	Cache   Invalidator
+	// SplitHosts mirrors config.SplitHosts. The root-redirect setting is refused
+	// when false, because there the root is the dashboard.
+	SplitHosts bool
+	RootCache  RootInvalidator
 }
 
 func NewService(pool *pgxpool.Pool, cfg Config) *Service {
@@ -64,6 +82,9 @@ func NewService(pool *pgxpool.Pool, cfg Config) *Service {
 		aliases: cfg.Aliases,
 		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
 		cache:   cfg.Cache,
+
+		splitHosts: cfg.SplitHosts,
+		rootCache:  cfg.RootCache,
 	}
 }
 

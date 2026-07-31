@@ -278,6 +278,26 @@ func (q *Queries) DetachAllTags(ctx context.Context, linkID uuid.UUID) error {
 	return err
 }
 
+const getDefaultDomainSettings = `-- name: GetDefaultDomainSettings :one
+SELECT id, hostname, root_redirect_url FROM domains
+WHERE is_default AND deleted_at IS NULL
+`
+
+type GetDefaultDomainSettingsRow struct {
+	ID              uuid.UUID
+	Hostname        string
+	RootRedirectUrl *string
+}
+
+// The instance's link domain and where its root points. Phase 1 has exactly one
+// default domain; Phase 2 gives a workspace its own and this gains a filter.
+func (q *Queries) GetDefaultDomainSettings(ctx context.Context) (GetDefaultDomainSettingsRow, error) {
+	row := q.db.QueryRow(ctx, getDefaultDomainSettings)
+	var i GetDefaultDomainSettingsRow
+	err := row.Scan(&i.ID, &i.Hostname, &i.RootRedirectUrl)
+	return i, err
+}
+
 const getLink = `-- name: GetLink :one
 SELECT id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id FROM links
 WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
@@ -772,6 +792,28 @@ func (q *Queries) RestoreLink(ctx context.Context, arg RestoreLinkParams) (Link,
 		&i.SearchVector,
 		&i.CampaignID,
 	)
+	return i, err
+}
+
+const setDefaultDomainRootRedirect = `-- name: SetDefaultDomainRootRedirect :one
+UPDATE domains
+   SET root_redirect_url = $1, updated_at = now()
+ WHERE is_default AND deleted_at IS NULL
+RETURNING id, hostname, root_redirect_url
+`
+
+type SetDefaultDomainRootRedirectRow struct {
+	ID              uuid.UUID
+	Hostname        string
+	RootRedirectUrl *string
+}
+
+// NULL clears it, which restores the 404 the root answered before anyone set
+// anything.
+func (q *Queries) SetDefaultDomainRootRedirect(ctx context.Context, rootRedirectUrl *string) (SetDefaultDomainRootRedirectRow, error) {
+	row := q.db.QueryRow(ctx, setDefaultDomainRootRedirect, rootRedirectUrl)
+	var i SetDefaultDomainRootRedirectRow
+	err := row.Scan(&i.ID, &i.Hostname, &i.RootRedirectUrl)
 	return i, err
 }
 

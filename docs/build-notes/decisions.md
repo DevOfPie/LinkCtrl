@@ -1811,3 +1811,69 @@ this is the one most likely to be repointed later.
 Attributing them would mean inventing a synthetic link to hang the rows off,
 which is a row the product could not otherwise produce — the same rule the demo
 seeder is built around.
+
+---
+
+## 2026-07-30 — M20 built, and 0.1.0 absorbs everything
+
+### The cycle between the handler and the service, resolved without a setter
+
+The root handler reads through the link service, and the service invalidates the
+handler's cache when the setting changes. Each needs the other. A setter on the
+service would work and would also mean a service that is only correct if someone
+remembers to call it.
+
+Instead the handler is constructed empty, passed to the service as its
+invalidator, and has its loader assigned afterwards — two statements, no partially
+constructed service, and the wiring is visible in one place in main.go. The test
+fixture does the same three lines, deliberately: a fixture that wires it
+differently from production would be testing a shape that does not ship.
+
+### Caching it is not premature
+
+The bare domain is the URL crawlers, scanners and link-preview bots ask for most,
+and it sits on the redirect tree under the same 20ms budget as an alias. Reading
+a row per request would put a database round trip on the most-probed path in the
+product, for a value that changes approximately never.
+
+TTL alone would have been enough for correctness and wrong in practice: the
+person most likely to reload that page immediately is the operator who just
+configured it, and showing them the previous answer is how a working feature gets
+reported as broken. Hence invalidation on write, with the TTL as the backstop for
+an invalidation that never arrives — the same shape as a link snapshot.
+
+The test asserts the second write is visible immediately, and sabotaging the
+invalidation call fails it. Without that, the TTL would have hidden the defect
+behind a one-minute wait that no test is slow enough to notice.
+
+### Reading is not gated the way writing is
+
+`domains.write` guards the change; reading needs only `links.read`. The value is
+published to anyone who visits the bare domain, so hiding it from a viewer inside
+the product would protect nothing while making the account page lie to them about
+what the instance does.
+
+### The permission had to be granted explicitly
+
+The seed migration grants the owner role "everything" with a `SELECT ... FROM
+permissions`, which ran once, at its own version, against the permissions that
+existed then. A permission added in a later migration is therefore granted to
+nobody unless that migration says so. Easy to miss, and the symptom would have
+been the owner of a fresh instance being unable to use a feature that works for
+everyone who upgraded — or the reverse, depending on which way the omission fell.
+
+### 0.1.0 absorbs everything, because 0.1.0 never happened
+
+There is no `v0.1.0` tag and nothing has reached `main`. Keeping an `[Unreleased]`
+section describing changes to a release that was never published would mean
+publishing a changelog whose first version is immediately wrong: it would list an
+expired-status defect as *fixed* in a version that never shipped it, and describe
+hostname splitting as an addition to something nobody ever ran.
+
+So the entries were folded into 0.1.0 in the sections they belong to rather than
+appended as an Added/Fixed block. The three defects are not "fixed" in a first
+release — they simply never existed in anything anyone could install, and the
+correct behaviour is now described as the behaviour. The two capabilities became
+a new "Hostnames" section. What survives as a limitation is what is still true
+after all twenty-one milestones: no signup page, and dormant tables named as
+dormant.

@@ -277,6 +277,12 @@ func run(cfg config.Config, _ io.Writer) error {
 		Logger:       log,
 	})
 
+	// Created before the service and completed after it: the handler reads
+	// through the service, and the service invalidates the handler's cache when
+	// the setting changes. A pointer assigned in two steps rather than a setter
+	// on the service, so neither side has to know the other exists first.
+	rootRedirect := &httpx.RootRedirect{Status: cfg.Redirect.DefaultStatus}
+
 	linkSvc := link.NewService(pools.App, link.Config{
 		Policy: link.DestinationPolicy{
 			Schemes:             cfg.Alias.DestSchemes,
@@ -297,7 +303,12 @@ func run(cfg config.Config, _ io.Writer) error {
 		// Editing a link must drop its cached snapshot, and creating one must
 		// drop any negative entry left by an earlier probe of the same alias.
 		Cache: resolver,
+		// The root-redirect setting is refused unless short links have a
+		// hostname of their own, where "/" is not the dashboard.
+		SplitHosts: cfg.SplitHosts(),
+		RootCache:  rootRedirect,
 	})
+	rootRedirect.Load = linkSvc.LoadRootRedirect
 
 	// Resolved once at boot. A per-request lookup would add a query to the
 	// path the whole cache design exists to keep short.
@@ -387,9 +398,10 @@ func run(cfg config.Config, _ io.Writer) error {
 	handler := httpx.NewRouter(httpx.Deps{
 		Config: cfg, Health: health, Auth: authSvc, Keys: keySvc,
 		Links: linkSvc, Redirect: redirectHandler,
-		Stats:   stats,
-		Metrics: metrics,
-		Limits:  limits,
+		RootRedirect: rootRedirect,
+		Stats:        stats,
+		Metrics:      metrics,
+		Limits:       limits,
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
 			Links: linkSvc, Stats: stats,

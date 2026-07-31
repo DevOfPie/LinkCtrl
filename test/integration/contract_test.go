@@ -228,6 +228,15 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.do("DELETE", p+"/tags/"+tagList.Items[0].ID, nil, http.StatusNoContent)
 	c.do("DELETE", p+"/tags/"+tagList.Items[0].ID, nil, http.StatusNotFound)
 
+	// --- domain -------------------------------------------------------------
+	c.do("GET", p+"/domain", nil, http.StatusOK)
+	// This fixture is single-host, where the root belongs to the dashboard, so
+	// setting a root redirect is refused. The 422 is the documented answer and
+	// exercises the operation against its schemas either way.
+	c.do("PATCH", p+"/domain", map[string]any{
+		"root_redirect_url": "https://example.com/home",
+	}, http.StatusUnprocessableEntity)
+
 	// --- api keys -----------------------------------------------------------
 	key := c.do("POST", p+"/api-keys", map[string]any{
 		"name": "contract", "scopes": []string{"links.read"},

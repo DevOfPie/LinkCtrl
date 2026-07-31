@@ -108,15 +108,16 @@ type Destination struct {
 }
 
 type Domain struct {
-	ID             uuid.UUID
-	OrganizationID *uuid.UUID
-	Hostname       string
-	IsDefault      bool
-	VerifiedAt     *time.Time
-	SslStatus      string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	DeletedAt      *time.Time
+	ID              uuid.UUID
+	OrganizationID  *uuid.UUID
+	Hostname        string
+	IsDefault       bool
+	VerifiedAt      *time.Time
+	SslStatus       string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	DeletedAt       *time.Time
+	RootRedirectUrl *string
 }
 
 type Folder struct {

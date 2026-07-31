@@ -285,6 +285,13 @@ func (h *RedirectHandler) notFound(w http.ResponseWriter, r *http.Request) {
 // thing to publish is "ask again shortly". The body is deliberately tiny —
 // whatever is overloading the server should not also be asked to serve HTML.
 func (h *RedirectHandler) unavailable(w http.ResponseWriter, r *http.Request) {
+	writeUnavailable(w, r)
+}
+
+// writeUnavailable is the same answer for anything on the redirect tree that
+// could not be resolved, shared so the root redirect cannot drift into a
+// different set of headers than an alias.
+func writeUnavailable(w http.ResponseWriter, r *http.Request) {
 	head := w.Header()
 	head.Set("Content-Type", "text/plain; charset=utf-8")
 	head.Set("X-Content-Type-Options", "nosniff")

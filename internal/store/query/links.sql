@@ -240,3 +240,17 @@ DELETE FROM link_tags WHERE link_id = $1;
 
 -- name: GetWorkspaceDefaultDomain :one
 SELECT id, hostname FROM domains WHERE is_default AND deleted_at IS NULL;
+
+-- name: GetDefaultDomainSettings :one
+-- The instance's link domain and where its root points. Phase 1 has exactly one
+-- default domain; Phase 2 gives a workspace its own and this gains a filter.
+SELECT id, hostname, root_redirect_url FROM domains
+WHERE is_default AND deleted_at IS NULL;
+
+-- name: SetDefaultDomainRootRedirect :one
+-- NULL clears it, which restores the 404 the root answered before anyone set
+-- anything.
+UPDATE domains
+   SET root_redirect_url = sqlc.narg(root_redirect_url), updated_at = now()
+ WHERE is_default AND deleted_at IS NULL
+RETURNING id, hostname, root_redirect_url;

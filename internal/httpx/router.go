@@ -20,8 +20,12 @@ type Deps struct {
 	Keys     *auth.APIKeyService
 	Links    *link.Service
 	Redirect *RedirectHandler
-	Stats    *analytics.Reader
-	Web      *Web
+	// RootRedirect serves the link host's root. Only consulted on a split-host
+	// deployment; nil leaves that root a 404, which is what it was before the
+	// setting existed.
+	RootRedirect *RootRedirect
+	Stats        *analytics.Reader
+	Web          *Web
 	// Metrics is optional. Nil disables instrumentation entirely rather than
 	// registering into a global registry, so two servers in one test process
 	// cannot collide.
@@ -102,6 +106,8 @@ func NewRouter(d Deps) http.Handler {
 			"POST " + APIPrefix + "/links/{id}/restore": api.Restore,
 			"GET " + APIPrefix + "/tags":                api.ListTags,
 			"DELETE " + APIPrefix + "/tags/{id}":        api.DeleteTag,
+			"GET " + APIPrefix + "/domain":              api.GetDomain,
+			"PATCH " + APIPrefix + "/domain":            api.UpdateDomain,
 		}
 		for pattern, h := range protected {
 			app.Handle(pattern, RequireAuth(h))
@@ -160,6 +166,8 @@ func NewRouter(d Deps) http.Handler {
 		app.Handle("POST /setup", guard(http.HandlerFunc(web.SetupSubmit)))
 		app.Handle("POST /account/password",
 			guard(web.RequireWebAuth(http.HandlerFunc(web.PasswordChange))))
+		app.Handle("POST /account/domain",
+			web.RequireWebAuth(http.HandlerFunc(web.DomainUpdate)))
 
 		// Everything else redirects anonymous visitors to the login form,
 		// where the API would return a problem document.
@@ -295,6 +303,17 @@ func NewRouter(d Deps) http.Handler {
 		}
 	}
 
+	// The root of the link host. Registered only on the split-host path,
+	// because "/{alias}" does not match "/" and on a single host that root
+	// already belongs to the dashboard — registering both would be a duplicate
+	// pattern and a panic at startup, which is the right way to find out.
+	registerRoot := func(root *http.ServeMux) {
+		if d.RootRedirect != nil {
+			root.Handle("GET /{$}", d.RootRedirect)
+			root.Handle("HEAD /{$}", d.RootRedirect)
+		}
+	}
+
 	var root http.Handler
 	if d.Config.SplitHosts() {
 		appMux := http.NewServeMux()
@@ -303,6 +322,7 @@ func NewRouter(d Deps) http.Handler {
 
 		linkMux := http.NewServeMux()
 		registerOps(linkMux)
+		registerRoot(linkMux)
 		registerRedirect(linkMux)
 
 		opsMux := http.NewServeMux()

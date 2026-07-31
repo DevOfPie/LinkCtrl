@@ -50,6 +50,9 @@ type Querier interface {
 	// rather than filtered out: the caller distinguishes them so the response can
 	// say which it was, and a deleted user's key resolves to no row at all.
 	GetAPIKeyByPrefix(ctx context.Context, prefix string) (GetAPIKeyByPrefixRow, error)
+	// The instance's link domain and where its root points. Phase 1 has exactly one
+	// default domain; Phase 2 gives a workspace its own and this gains a filter.
+	GetDefaultDomainSettings(ctx context.Context) (GetDefaultDomainSettingsRow, error)
 	// The workspace a user lands in with no explicit selection. Ordered so the
 	// result is deterministic rather than whatever the planner returns first.
 	GetDefaultWorkspaceForUser(ctx context.Context, userID uuid.UUID) (Workspace, error)
@@ -211,6 +214,9 @@ type Querier interface {
 	// any retry.
 	RollupLinkDaily(ctx context.Context, arg RollupLinkDailyParams) error
 	RollupWorkspaceDaily(ctx context.Context, arg RollupWorkspaceDailyParams) error
+	// NULL clears it, which restores the 404 the root answered before anyone set
+	// anything.
+	SetDefaultDomainRootRedirect(ctx context.Context, rootRedirectUrl *string) (SetDefaultDomainRootRedirectRow, error)
 	SetPrimaryDestination(ctx context.Context, arg SetPrimaryDestinationParams) error
 	// Soft delete with a purge deadline rather than an immediate DELETE. Restoring
 	// a link someone deleted by accident is a common request, and the alias stays

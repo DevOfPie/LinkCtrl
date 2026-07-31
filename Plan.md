@@ -382,17 +382,18 @@ caveat with the data.
 
 ## Build status
 
-As of 2026-07-30. 20 of 21 milestones. The first eighteen shipped as 0.1.0 and
-were then re-reviewed: a six-dimension audit with adversarial verification
-confirmed 30 findings — among them a missing purge job that inverted the
-alias-reservation promise, and query forwarding with no write surface — all fixed
-the same day. That release is complete against the scope it was released under,
-and it was the review that said so rather than the milestone counter reaching its
-end. Phase 1 scope then grew by two milestones — separate hostnames, and a round
-of defect fixes — and both are built. A third, M20, followed directly from the
-first: giving the instance a second public hostname left that hostname's root
-answering `404`, and only the operator knows where it should point instead.
-Everything after 0.1.0 is unreleased.
+As of 2026-07-30. 21 of 21 milestones, none of them released: 0.1.0 is the
+version they all carry, and it has never been tagged or pushed.
+
+The first eighteen were then re-reviewed: a six-dimension audit with adversarial
+verification confirmed 30 findings — among them a missing purge job that
+inverted the alias-reservation promise, and query forwarding with no write
+surface — all fixed the same day, and it was the review that called them complete
+rather than the milestone counter reaching its end. Scope then grew three times.
+Separate hostnames and a round of defect fixes were asked for; M20 followed
+directly from the first of those, because giving the instance a second public
+hostname left that hostname's root answering `404`, and only the operator knows
+where it should point instead.
 
 The second of those exists because a fresh instance was stood up and used, which
 found three defects the review had not — all of them places where the code is
@@ -421,7 +422,7 @@ done.
 | Release packaging | done, verified — [docs/releasing.md](docs/releasing.md) |
 | Separate management and link hostnames | done, verified |
 | Post-release defect fixes, and a demo seeder | done, verified |
-| Root redirect on the link domain | not started |
+| Root redirect on the link domain | done, verified |
 
 Verification: 92 integration tests against real Postgres and Redis — including
 a contract test that replays every OpenAPI operation against the live server —
@@ -442,7 +443,7 @@ M18 and M19 are done. M20 is not started.
 | --- | --- |
 | **M18 — separate management and link hostnames** | **Done.** `APP_BASE_URL` and `LINK_BASE_URL` both default to `BASE_URL`, so an existing single-host deployment is unaffected; set to different hosts, the router dispatches on `Host` and each tree answers only its own paths. A wrong-host request is `404`, never a cross-host redirect. `short_url` is built from the link origin, the CSRF trusted origin follows the dashboard host, and `/healthz` and `/readyz` answer on every hostname including ones never configured, because probes do not know the operator's names. Reserved aliases stay enforced on both hosts. |
 | **M19 — post-release defect fixes, and a demo seeder** | **Done.** Effective status is derived rather than stored, so an expired link reports as expired everywhere and `?status=expired` matches it. `visitors` and `is_first_visit` are documented as dormant instead of described as working, and stay under partition maintenance and retention so the day something writes to them the guarantees already apply. The deletion notice says what recovery is. `lctl demo` / `make demo` fills an instance with a workspace worth looking at. |
-| **M20 — root redirect on the link domain** | Not started. Detailed below. |
+| **M20 — root redirect on the link domain** | **Done.** Every requirement below holds, verified live and under test. |
 
 **M20 in detail.** M18 gave the instance a second public hostname and left its
 root a bare `404`: `/{alias}` does not match `/`, and the dashboard routes that

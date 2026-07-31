@@ -20,74 +20,29 @@ migrations run at boot.
 
 ## [Unreleased]
 
-### Added
-
-- **The dashboard and short links can be served on separate hostnames**, via
-  `LINKCTRL_APP_BASE_URL` and `LINKCTRL_LINK_BASE_URL`. Both default to
-  `LINKCTRL_BASE_URL`, so an existing single-host instance is unaffected and no
-  configuration change is required to upgrade.
-
-  Set to different hosts, each answers only its own paths: the dashboard host
-  stops resolving aliases, the link host stops serving the dashboard, the API
-  and the static assets. A request to the wrong host is `404`, never a redirect
-  to the right one — a cross-host redirect reachable through the alias namespace
-  would be an open redirector for anyone able to create a link.
-
-  The point is the session cookie. It carries the `__Host-` prefix, which
-  forbids a `Domain` attribute, so once the hosts differ a browser will not send
-  it to the host serving short links — the half of the product that gets pasted
-  into forums and probed by strangers, and the half that needs no credentials.
-
-  `/healthz` and `/readyz` answer on every hostname, including ones never
-  configured: probes come from load balancers and container runtimes that do not
-  know the operator's names.
-
-  Still one listener and one process. See
-  [docs/configuration.md](docs/configuration.md#two-hostnames).
-
-- **`lctl demo`** fills an instance with a workspace worth looking at: around
-  twenty links with titles, tags and destinations, a month of click history with
-  weekday seasonality and a launch spike, and every status the dashboard can
-  render. Links are created through the same service call the REST API uses, so
-  the dataset cannot describe a state the product could not reach. `make demo`
-  runs it against the development database. Distinct from `lctl seed`, which
-  exists to make the redirect SLO measurable.
-
-### Fixed
-
-- **An expired link reported its status as `active`** everywhere except the
-  redirect. The redirect was always right — it reads `expires_at` and answers
-  `410` — but nothing ever writes `expired` to the status column, so the
-  dashboard, the API and the *Expired* filter all disagreed with it, and the
-  filter could never match a row. Status is now derived from the expiry wherever
-  it is reported or filtered, matching the rule the resolver already used.
-- **The deletion notice promised a button that does not exist.** It said a
-  deleted link "stays restorable for 30 days"; there is no trash view in Phase 1
-  and restore refuses soft-deleted rows by design. It now says what the window
-  actually is — the alias stays reserved, then the link is purged.
-- **`visitors` and `click_events.is_first_visit` are documented as dormant**
-  rather than described as working. Nothing writes or reads either; the
-  `is_first_visit` comment claimed a rollup computed it, which none does. Both
-  stay under partition maintenance and retention, so the guarantees apply the
-  day something does write to them.
+Nothing yet.
 
 ## [0.1.0] - 2026-07-30
 
-First release. Phase 1 of [Plan.md](Plan.md): a self-hostable link manager where a
-short link is an editable, measurable, scriptable resource.
+First release, and all of Phase 1's twenty-one milestones: a self-hostable link
+manager where a short link is an editable, measurable, scriptable resource.
 
 ### Links
 
-- Create, edit, archive and soft-delete links, with a 30-day recovery window.
-  A trashed link holds its alias for the whole window; the hourly purge then
-  deletes it, permanently reserving any alias that ever received traffic.
-  Editing a destination never changes the short URL — the reason redirects are
-  always 302.
+- Create, edit, archive and soft-delete links. A trashed link holds its alias for
+  30 days; the hourly purge then deletes it, permanently reserving any alias that
+  ever received traffic. There is no trash view in this release, so recovery
+  inside that window is a database operation and the interface says so rather
+  than implying a button. Editing a destination never changes the short URL —
+  the reason redirects are always 302.
 - Custom or generated aliases, lowercase-canonical and case-insensitive. Dots are
   refused outright, which removes the "is `logo.png` an alias or an asset?" class
   of problem rather than pattern-matching for it.
 - Tags, titles, descriptions and expiry. An expired link answers `410 Gone`, not
-  `404`, so crawlers and link checkers stop retrying.
+  `404`, so crawlers and link checkers stop retrying, and it reports as expired
+  in the dashboard and the API too — the status is derived from the expiry
+  wherever it is shown or filtered, never written to a column that would be stale
+  between the deadline passing and something noticing.
 - Per-link query forwarding, off by default: the visitor's query string is merged
   into the destination, whose own parameters win on conflict.
 - Full-text and substring search, filtering by status, sorting, and cursor
@@ -105,6 +60,37 @@ short link is an editable, measurable, scriptable resource.
 - **Measured**: 100% of 240,001 cached redirects answered under 20ms at a sustained
   2,000 rps, with 100k links and 5.7M click events in the database and the
   analytics rollup running throughout. See [docs/slo.md](docs/slo.md).
+
+### Hostnames
+
+- **The dashboard and short links can be served on separate hostnames**, via
+  `LINKCTRL_APP_BASE_URL` and `LINKCTRL_LINK_BASE_URL`. Both default to
+  `LINKCTRL_BASE_URL`, so a single-host deployment needs no configuration at all.
+
+  Set to different hosts, each answers only its own paths: the dashboard host
+  stops resolving aliases, the link host stops serving the dashboard, the API and
+  the static assets. A request to the wrong host is `404`, never a redirect to
+  the right one — a cross-host redirect reachable through the alias namespace
+  would be an open redirector for anyone able to create a link.
+
+  The point is the session cookie. It carries the `__Host-` prefix, which forbids
+  a `Domain` attribute, so once the hosts differ a browser will not send it to
+  the host serving short links — the half of the product that gets pasted into
+  forums and probed by strangers, and the half that needs no credentials at all.
+
+  `/healthz` and `/readyz` answer on every hostname, including ones never
+  configured: probes come from load balancers and container runtimes that do not
+  know the operator's names. Still one listener and one process.
+
+- **The link domain's root can be pointed somewhere**, for the visitor who trims
+  a short link back to the bare domain. Unset it answers `404`, and there is no
+  default page — an instance that says nothing about itself is a legitimate
+  choice. Setting it needs the `domains.write` permission, held by owner and
+  admin, because this is not one link but where every stray visitor to the whole
+  domain ends up. The destination is validated exactly as a link's is, which
+  matters most here: reaching it needs no link and no alias. Cached and
+  invalidated on change, so it costs no query per request and takes effect
+  immediately.
 
 ### Analytics
 
@@ -154,6 +140,11 @@ short link is an editable, measurable, scriptable resource.
   against a live server, so the document cannot drift from the implementation.
 - `lctl` for configuration checks, migrations, partitions, API keys and load-test
   seeding — including minting the first key on a headless host.
+- `lctl demo` fills an instance with a workspace worth looking at: around twenty
+  links with titles, tags and destinations, a month of click history with weekday
+  seasonality and a launch spike, and every status the dashboard can render. Its
+  links are created through the same service call the REST API uses, so the
+  dataset cannot describe a state the product could not reach.
 
 ### Operations
 
@@ -183,8 +174,14 @@ all in [Plan.md](Plan.md#known-limitations) with their consequences:
   bucket.
 - **`LINKCTRL_API_KEY_PEPPER` cannot be rotated in place.** Changing it invalidates
   every existing key.
-- No audit log behaviour, folders API, custom domains, QR codes, or
-  password/one-time links. The tables exist; the features are Phase 2.
+- No audit log behaviour, folders API, per-workspace custom domains, QR codes, or
+  password/one-time links. The tables exist; the features are Phase 2. The
+  `visitors` table and `click_events.is_first_visit` are dormant in the same way:
+  nothing writes or reads them, and both stay under partition maintenance and
+  retention so the guarantees apply the day something does.
+- No signup page. `LINKCTRL_SIGNUP_MODE=open` is honoured by the JSON API only,
+  and a registration creates a new isolated workspace rather than adding a member
+  to yours. Invitations, and a signup form worth having, are Phase 2.
 
 [Unreleased]: https://github.com/DevOfPie/LinkCtrl/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/DevOfPie/LinkCtrl/releases/tag/v0.1.0

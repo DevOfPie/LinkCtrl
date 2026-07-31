@@ -311,3 +311,46 @@ func stripTagPrefix(s string) string {
 	}
 	return strings.Join(kept, " ")
 }
+
+// GetDomain reports the link domain's settings.
+func (a *LinkAPI) GetDomain(w http.ResponseWriter, r *http.Request) {
+	settings, err := a.Links.DomainSettings(r.Context(), IdentityFrom(r.Context()))
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, settings)
+}
+
+// UpdateDomain sets or clears the root redirect.
+//
+// PATCH with a required field rather than PUT of the whole object: there is one
+// setting here today, and a body that omits it should mean "change nothing"
+// rather than "clear it".
+func (a *LinkAPI) UpdateDomain(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		// A pointer so an absent field is distinguishable from "" — the empty
+		// string is the documented way to clear the redirect, and treating a
+		// missing key the same way would let a client wipe the setting by
+		// sending {}.
+		RootRedirectURL *string `json:"root_redirect_url"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	if req.RootRedirectURL == nil {
+		WriteError(w, r, domain.ValidationErrors{{
+			Field: "root_redirect_url", Code: "required",
+			Message: "send a URL to set, or an empty string to clear",
+		}})
+		return
+	}
+
+	settings, err := a.Links.SetRootRedirect(r.Context(), IdentityFrom(r.Context()), *req.RootRedirectURL)
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, settings)
+}

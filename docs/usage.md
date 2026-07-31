@@ -270,3 +270,30 @@ the account that claims the instance is its owner. Invitations and shared
 workspaces are Phase 2, so in practice everyone is an owner of their own
 workspace today — but the evaluator is real, and changing a role changes
 behaviour immediately, including for existing API keys.
+
+## The link domain
+
+When short links have a hostname of their own — see
+[configuration.md](configuration.md#two-hostnames) — that hostname's root is a
+page in its own right. It answers `404` until you point it somewhere, which is
+what a visitor gets if they trim a short link back to the bare domain.
+
+The *Account* page has the setting when the hosts are separate; it is hidden
+otherwise, because on a single host `/` is the dashboard and there is nothing to
+repoint. The same setting is at `/api/v1/domain`:
+
+```sh
+curl -sS -X PATCH .../api/v1/domain \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"root_redirect_url":"https://example.com/"}'
+```
+
+Send `""` to clear it and go back to answering `404`.
+
+Three things worth knowing. It needs the **`domains.write`** permission, which
+owner and admin hold and editor does not: this is not one link, it is where
+every stray visitor to the whole domain ends up. The destination is validated
+exactly as a link's is, so `http` and `https` only and no private, loopback or
+cloud-metadata addresses — a root redirect is the easiest thing on the instance
+to reach, needing no link and no alias. And the redirect is a `302` that
+intermediaries are told not to cache, so changing it takes effect immediately.
