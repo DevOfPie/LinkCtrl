@@ -1748,3 +1748,66 @@ three more inside an hour, and all three are places where the code is internally
 consistent and disagrees with the product: a status nothing writes, a table
 nothing fills, a message describing a button nobody built. Reading cannot find
 those, because there is nothing inconsistent to notice.
+
+---
+
+## 2026-07-30 — planning: M20, a redirect for the root of the link domain
+
+### Phase 1, because M18 is what created the gap
+
+The request arrived after Phase 1 had been closed at 20 of 20, which is the
+moment to be careful: new scope is easiest to justify when the phase is already
+open. The test applied was the one in workflow.md — is this a gap in something
+Phase 1 already claims, or a Phase 2 feature arriving early?
+
+It is the first. M18 gave the instance a second public hostname, and left that
+hostname's root answering `404`: `/{alias}` does not match `/` (verified rather
+than assumed), and the dashboard routes that used to answer there moved to the
+other host. So a deployment that takes up the feature Phase 1 just shipped gets a
+public domain whose front page is a bare error, and trimming a short link back to
+its domain — which people do — finds nothing. M18 is unreleased, so this is
+cheaper to fix before it ships than to ship and document.
+
+### "The domain owner" does not exist yet, and saying so is the honest version
+
+The request specified the domain owner, or someone with a specific permission. In
+Phase 1 there is no domain owner to check: the default domain is a single
+instance-wide row with a null organization, deliberately, because Phase 1 has one
+hostname and one workspace per user. Implementing an ownership check against that
+would be a check that always resolves to the same person while looking like real
+authorization.
+
+So Phase 1 gets the second half of the request — a new `domains.write` permission,
+granted to owner and admin — and Phase 2 gets the first, as a scope row of its
+own, when a workspace can bring its own hostname and there is an owner to be. The
+permission is the durable part either way: when per-domain ownership arrives, it
+becomes the check that a workspace administers *its* domain rather than any.
+
+### The refusals this inherits, written down before anyone builds it
+
+**It validates like any other destination.** Same `ValidateDestination`, same
+scheme allowlist, same private, loopback and metadata refusals. A root redirect
+that skipped them would be a cleaner SSRF than the one the validator exists to
+prevent, because reaching it needs no link and no alias — just the bare hostname.
+
+**It is refused on a single-host deployment rather than ignored.** There, `/` is
+the dashboard. A root redirect would take the dashboard away from the person
+setting it, and the failure would look like the product breaking rather than like
+a setting doing what it says.
+
+**It is cached.** It lives on the redirect tree under the same 20ms budget as an
+alias, and the root of a link domain is a page crawlers and scanners ask for
+constantly. Reading a row per request would put a database round trip on the hot
+path for the one URL most likely to be probed.
+
+**Unset stays 404.** No default page, no "powered by". An instance that says
+nothing about itself is a legitimate choice and the current behaviour.
+
+**302, not 301.** The same reason the whole product uses 302: a 301 cached in
+browsers and intermediaries cannot be recalled, and of every destination here
+this is the one most likely to be repointed later.
+
+**Root visits are not clicks.** There is no link, so there is no `link_id`.
+Attributing them would mean inventing a synthetic link to hang the rows off,
+which is a row the product could not otherwise produce — the same rule the demo
+seeder is built around.

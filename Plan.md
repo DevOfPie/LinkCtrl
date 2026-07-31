@@ -84,6 +84,7 @@ Authoritative. Where this table and prose elsewhere disagree, this table wins.
 | Expiry enforcement (410 Gone) | 1 |
 | Two-tier cache with negative caching | 1 |
 | Query forwarding (default off) | 1 |
+| Root redirect on the link domain, when it is a separate host | 1 |
 | Deep-link path forwarding | 2 |
 | Rules: country, region, city, language, browser, OS, device, date/time, referrer, query params, UTM, cookies, returning visitors | 2 |
 | A/B testing, weighted routing, percentage splits, sequential routing, feature flags, fallback destinations | 2 |
@@ -135,6 +136,8 @@ rather than rendering a world uniformly colored "unknown".
 | Rate limiting: per address, in-process, on credentials and the API | 1 |
 | Rate limiting: shared across replicas | 2 |
 | Abuse prevention: scheme allowlist, private-IP block, reserved/profanity alias filters, 404 probe limiting | 1 |
+| `domains.write` permission, for settings that affect every link at once | 1 |
+| Per-domain ownership, so a workspace administers its own hostname | 2 |
 | Audit log — table only | 1 |
 | Audit log — behavior | 2 |
 | Password links, one-time links, max-click links, signed URLs | 2 |
@@ -379,15 +382,17 @@ caveat with the data.
 
 ## Build status
 
-As of 2026-07-30. 20 of 20 milestones. The first eighteen shipped as 0.1.0 and
+As of 2026-07-30. 20 of 21 milestones. The first eighteen shipped as 0.1.0 and
 were then re-reviewed: a six-dimension audit with adversarial verification
 confirmed 30 findings — among them a missing purge job that inverted the
 alias-reservation promise, and query forwarding with no write surface — all fixed
 the same day. That release is complete against the scope it was released under,
 and it was the review that said so rather than the milestone counter reaching its
 end. Phase 1 scope then grew by two milestones — separate hostnames, and a round
-of defect fixes — and both are now built, so the phase is complete again on the
-larger scope. Everything after 0.1.0 is unreleased.
+of defect fixes — and both are built. A third, M20, followed directly from the
+first: giving the instance a second public hostname left that hostname's root
+answering `404`, and only the operator knows where it should point instead.
+Everything after 0.1.0 is unreleased.
 
 The second of those exists because a fresh instance was stood up and used, which
 found three defects the review had not — all of them places where the code is
@@ -416,6 +421,7 @@ done.
 | Release packaging | done, verified — [docs/releasing.md](docs/releasing.md) |
 | Separate management and link hostnames | done, verified |
 | Post-release defect fixes, and a demo seeder | done, verified |
+| Root redirect on the link domain | not started |
 
 Verification: 92 integration tests against real Postgres and Redis — including
 a contract test that replays every OpenAPI operation against the live server —
@@ -430,12 +436,34 @@ measured. What is left divides into work that is assigned and work that is not.
 
 #### Assigned
 
-Both done.
+M18 and M19 are done. M20 is not started.
 
 | Milestone | State |
 | --- | --- |
 | **M18 — separate management and link hostnames** | **Done.** `APP_BASE_URL` and `LINK_BASE_URL` both default to `BASE_URL`, so an existing single-host deployment is unaffected; set to different hosts, the router dispatches on `Host` and each tree answers only its own paths. A wrong-host request is `404`, never a cross-host redirect. `short_url` is built from the link origin, the CSRF trusted origin follows the dashboard host, and `/healthz` and `/readyz` answer on every hostname including ones never configured, because probes do not know the operator's names. Reserved aliases stay enforced on both hosts. |
 | **M19 — post-release defect fixes, and a demo seeder** | **Done.** Effective status is derived rather than stored, so an expired link reports as expired everywhere and `?status=expired` matches it. `visitors` and `is_first_visit` are documented as dormant instead of described as working, and stay under partition maintenance and retention so the day something writes to them the guarantees already apply. The deletion notice says what recovery is. `lctl demo` / `make demo` fills an instance with a workspace worth looking at. |
+| **M20 — root redirect on the link domain** | Not started. Detailed below. |
+
+**M20 in detail.** M18 gave the instance a second public hostname and left its
+root a bare `404`: `/{alias}` does not match `/`, and the dashboard routes that
+used to answer there now live on the other host. Anyone who trims a short link
+back to the domain, or types it out of curiosity, gets nothing. Every commercial
+shortener points that page somewhere, and the operator is the only party who
+knows where.
+
+Done means an operator can set a destination for `https://lnk.example.com/`, and:
+
+| Requirement | Why it is stated |
+| --- | --- |
+| Stored on the domain row, as an additive column | It is a property of the hostname, not of a workspace or a link. The `domains` table already exists and already has the row this describes. |
+| Guarded by a new `domains.write` permission, granted to owner and admin | Phase 1 has no per-domain owner to check: the default domain is instance-wide with a null organization, so "the domain owner" resolves to whoever administers the instance. The permission is the honest form of that, and it becomes a real ownership check in Phase 2 when a workspace can bring its own hostname. |
+| Only in effect when the hosts are actually separate | On a single-host deployment `/` is the dashboard, and a root redirect there would take the dashboard away from the person who set it. Refused rather than silently ignored. |
+| Destination validated by `ValidateDestination`, unchanged | Same scheme allowlist and same private, loopback and metadata refusals as any other destination. A root redirect that skipped them would be a cleaner SSRF than the one the validator exists to stop, because it needs no link and no alias. |
+| `302`, like every other redirect here | Same reason: a `301` cached in browsers and intermediaries cannot be recalled, and this is the destination most likely to be changed later. |
+| Unset stays `404` | The current behaviour, and the one that reveals nothing. No default marketing page, no "powered by" — an instance that says nothing is a valid choice. |
+| Resolved from cache, never a query per request | It sits on the redirect tree under the same 20ms budget as an alias, and the root of a link domain is a page crawlers and scanners hit often. Cached with invalidation on change, the way a link snapshot already is. |
+| Not counted as a click | There is no link, so there is no `link_id` to attribute it to. Root visits stay out of `click_events` rather than acquiring a synthetic link to hang off. |
+| Changing it is an audit-log event once the audit log has behavior | It is a setting that redirects every stray visitor to the whole domain, which is exactly the class of change worth being able to ask about afterwards. Phase 2, noted here so it is not rediscovered. |
 
 **M19 in detail.** The three defects, each with what "fixed" means:
 

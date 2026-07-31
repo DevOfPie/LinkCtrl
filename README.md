@@ -11,7 +11,8 @@ no SaaS dependency, no telemetry leaving the box.
 > target is measured, not aspirational. Two further Phase 1 milestones have since
 > been built and are unreleased: separate hostnames for the dashboard and for
 > short links, and a round of defect fixes found by standing a fresh instance up
-> and using it. See [Plan.md](Plan.md#assigned) and
+> and using it. One more is planned — a configurable redirect for the root of the
+> link domain, which currently answers `404`. See [Plan.md](Plan.md#assigned) and
 > [CHANGELOG.md](CHANGELOG.md). What is deferred to Phase 2 is listed plainly in
 > [Not built yet](#not-built-yet). Check that list before deploying anything you
 > care about.
