@@ -48,6 +48,7 @@ file. Append a row when you append an entry.
 | [M24, limits that hold across replicas](#2026-07-31--m24-limits-that-hold-across-replicas) | A backend rather than a replacement; the server-side clock; enforcing a deadline outside the client; why the request context is not used |
 | [The loop kept stopping](#2026-07-31--the-loop-kept-stopping-for-reasons-it-had-invented) | Why two runs ended early; the safety net that read as permission; naming the specific excuses |
 | [M24.5, a dark theme that cannot flash](#2026-07-31--m245-a-dark-theme-that-cannot-flash) | Why the server renders the attribute; the token scan as enforcement; the two light values that moved under D21 |
+| [The loop splits in two](#2026-07-31--the-loop-splits-into-an-orchestrator-and-workers) | Premature stopping as a context symptom; why the builder does not commit its own work; the seam at 3.3/3.4; what the split costs |
 
 ---
 
@@ -2925,3 +2926,93 @@ The cookie is unprefixed, unlike the session's `__Host-`. That prefix requires
 Secure and so cannot be set over plain HTTP, which is right for a credential and
 wrong for an appearance preference that has to work on a local instance. The
 worst a forged one can do is show somebody the other theme.
+
+---
+
+## 2026-07-31 — The loop splits into an orchestrator and workers
+
+The entry above this one but two — *The loop kept stopping for reasons it had
+invented* — fixed premature stopping with rules: mark the table exhaustive, name
+the specific excuses, say that reporting is not stopping. Rules were the right
+first answer, and they addressed the symptom.
+
+The cause is structural. A single context builds a milestone, lands it, and then
+holds every artifact of having done so: the diff, the reasoning, the false
+starts, a summary it has just written. That context contains a great many
+endpoint-shaped things, and each additional milestone adds more. Telling it not
+to stop is asking judgement to hold a line that the shape of its own context
+keeps pushing against.
+
+So the loop now has two actors. A **worker** builds exactly one milestone and is
+*supposed* to end when it is done — the instinct to wrap up at a summary is
+correct behaviour for it. An **orchestrator** never builds, so it never
+accumulates build detritus; across a whole phase it holds a status table, a
+handful of verdicts, and the current milestone's definition of done. The
+premature stop is not forbidden any harder than before. It is simply no longer
+something either actor is under pressure to want.
+
+### The seam was already in the file
+
+Step 3's order is load-bearing and the split does not reorder a line of it. The
+worker holds 3.1 to 3.3 — the gates, and making the docs true — and stops. The
+orchestrator holds 3.4 onward: status row, links, commit, demo-update, push.
+
+That the handoff falls exactly on an existing boundary is not luck. Everything
+before it is work on the tree; everything from the commit onward publishes that
+work. The two were already different kinds of act, written in one list because
+one actor did both.
+
+### The builder does not accept its own work
+
+A worker reports that it satisfied the milestone. That report is the least
+reliable evidence available about the milestone, because it was written by the
+thing being judged, from the context that produced the work and every
+rationalisation in it.
+
+So acceptance re-reads `phase-details/mN.md` and then reads the tree —
+`git status`, `git diff`, the tests the milestone named — and re-runs the gates
+rather than believing they were run. *A report is not evidence. The tree is.*
+This is also why the status row flips to `done` at 3.4 rather than in step 2: a
+milestone that is rejected must not have left a claim behind saying otherwise.
+
+Rejection spawns a **new** worker rather than continuing the old one. Continuing
+it would hand the second attempt the first attempt's reasoning, which is exactly
+the thing that produced the gap; the whole value of the split is that the second
+reading is independent. It is bounded the same way gates are — the same gap
+surviving two workers is a stop condition, because a third attempt at an
+unchanged problem is not progress.
+
+### Prompts belong to one actor
+
+*Ask, never assume* only works if there is a route to the owner. A worker has
+none: nothing it says reaches anybody except through the orchestrator. So a
+worker that meets a decision writes the prompt verbatim into the note, returns it
+unanswered, and stops — and validation moved to the orchestrator for the same
+reason, since step 1's characteristic output is a prompt and it would be spent
+on a worker that must immediately hand it back.
+
+### Stopping honestly
+
+*Stop work* stops the spawning and stops the worker in flight. What it cannot do
+is make a process killed mid-tool-call write a good note first. Rather than
+pretend at a cooperative shutdown, the orchestrator reconciles
+`.current-task.md` against `git status` and `git log -1` — the tree, not the
+report — so the record reflects what is actually there. Nothing is committed,
+pushed or reverted on the way out; uncommitted work is left for the owner to
+judge.
+
+### What it costs, honestly
+
+No speed. Milestones are strictly ordered by their `Depends on` rows, so nothing
+runs in parallel and wall-clock is unchanged or slightly worse. The gain is
+context hygiene, and paying for it in tokens — every worker re-reads the loop,
+the gates, the milestone, and re-orients in the tree.
+
+Part of that was pre-paid: phase-loop.md is already written terse *because* it is
+re-read at every resume. The genuinely new cost is that a worker starts with no
+memory of the previous milestone, which promotes the note's *cost too much to
+re-derive* section from a courtesy to the mechanism that carries knowledge across
+a boundary now crossed every milestone instead of only on interruption.
+
+The `X.9` reviews and M45 are not delegated. The product of each is a
+conversation with the owner about what to schedule, and a worker cannot have it.

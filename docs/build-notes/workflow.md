@@ -9,8 +9,8 @@ Rationale belongs in [decisions.md](decisions.md).
 
 **Precedence.** [Plan.md](../../Plan.md) is the scope contract and wins on *what*.
 This file wins on *gates* — what must pass. [phase-loop.md](phase-loop.md) wins
-on *sequence* — what order, and when to stop. If any two conflict, the conflict
-is a bug — report it, do not pick.
+on *sequence* — what order, who does it, and when to stop. If any two conflict,
+the conflict is a bug — report it, do not pick.
 
 ---
 
@@ -58,7 +58,9 @@ Trigger phrase **"Work on Phase"**, or `/work-on-phase`.
 [phase-loop.md](phase-loop.md) holds the cycle: validate the next milestone,
 build it, land it, repeat until the phase ends. It sequences the gates below and
 never replaces them, and it stops at the phase's last milestone rather than
-starting the next one.
+starting the next one. It runs as two actors — an orchestrator that validates,
+accepts and commits, and a worker per milestone that builds and stops before the
+commit.
 
 ### Before completing a commit
 
