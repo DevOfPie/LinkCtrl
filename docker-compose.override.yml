@@ -20,6 +20,16 @@ services:
       LINKCTRL_LOG_FORMAT: ${LINKCTRL_LOG_FORMAT:-text}
       LINKCTRL_LOG_LEVEL: ${LINKCTRL_LOG_LEVEL:-debug}
       LINKCTRL_SECURE_COOKIES: ${LINKCTRL_SECURE_COOKIES:-false}
+    # The metrics listener, on loopback, for development only — the same bargain
+    # as the database ports below. The base file deliberately publishes nothing
+    # here and that has not changed: this file is not applied by the production
+    # procedure in docs/deployment.md, which runs `-f docker-compose.yml`.
+    #
+    # It is what makes "is anything actually using this instance?" answerable
+    # from the host without starting a container to ask. scripts/idle-stop.sh
+    # reads the per-surface request counters through it.
+    ports:
+      - "127.0.0.1:${LINKCTRL_METRICS_PORT:-9090}:9090"
 
   postgres:
     # Published on a non-default port so it cannot collide with a Postgres the

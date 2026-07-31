@@ -36,6 +36,7 @@ file. Append a row when you append an entry.
 | [M20 built, and 0.1.0 absorbs everything](#2026-07-30--m20-built-and-010-absorbs-everything) | Why no `[Unreleased]` section survived into the first release |
 | [0.1.0 tagged](#2026-07-31--010-tagged) | Why the tag sits on `main`; docs made true before tagging |
 | [Phase 2 planned](#2026-07-31--phase-2-planned) | The doc split, two review milestones, and the seventeen Phase 2 decisions |
+| [Two development instances](#2026-07-31--two-development-instances-and-the-link-gates-third-failure) | Why demo and test are separate stacks, what guards them, and the link gate's SIGPIPE flake |
 
 ---
 
@@ -2062,3 +2063,126 @@ which was also wrong: GitHub replaces each space in a heading with its own hyphe
 and does not collapse runs, so an em-dash — stripped as punctuation, its
 surrounding spaces kept — yields two hyphens, not one. Both failures are recorded
 because both are the kind a checker that "passes" quietly hides.
+
+## 2026-07-31 — two development instances, and the link gate's third failure
+
+Development now runs two stacks: `demo`, long-lived and refreshed only when a
+milestone is validated, and `test`, disposable. Both are compose projects with
+their own volumes and ports; `docs/dev-notes/instances.md` is the reference.
+
+### One stack could not be both
+
+The demo is worth opening only if it holds plausible recent history and the last
+thing you did to it is still there. Testing means dropping the database, seeding
+five million click events, rolling migrations back, and pointing a load generator
+at the result. Sharing one stack means the demo dies about weekly, and wanting a
+clean database starts with deciding whether anything in the current one mattered.
+
+The demo's volume is never recreated, which buys a check nothing else here
+performs: each `make demo-update` applies that milestone's migrations to a
+database that has been through every previous one. CI and the test instance both
+start empty, where a migration that cannot survive existing data passes.
+
+### The refresh replaces the data rather than accumulating it
+
+`lctl demo --reset` truncates `click_events` and rebuilds the catalogue, so
+anything created while using the demo is gone at the next milestone. Preserving
+it was considered and rejected: the dataset's value is that it is generated
+relative to the day it runs, so the charts end today. Data that accumulates
+across milestones ages instead, and a demo whose history trails off three weeks
+back is worse than one that is a month old and says so. Between milestones,
+everything persists.
+
+Keeping it would also have meant changing what `--reset` means — deleting clicks
+by `link_id` instead of truncating — and that is product behaviour changed to
+suit a development convenience.
+
+### `test` is the default, and the demo needs a word typed to break
+
+Every target acts on `test` unless told otherwise, and the destructive ones
+refuse `INSTANCE=demo` without `CONFIRM=demo`. A default that followed whichever
+stack was running would put `make db-reset` one typo from the instance being
+used. An unknown instance name is refused rather than defaulted, so `INSTANCE=dmeo`
+cannot quietly build a third stack that presents as the demo having lost its data.
+
+`make demo-update` additionally refuses a dirty tree. The demo exists to show the
+last validated milestone, and a build carrying uncommitted work is not one.
+
+### Two defects the wiring exposed
+
+**`--env-file` does not change what the container gets.** It redirects the file
+compose interpolates *from*; `env_file:` in the service is a separate path, and a
+literal `.env` there hands both instances the same configuration while each
+appears to have its own. It is now `${LINKCTRL_ENV_PATH:-.env}`.
+
+**Overriding only the DSN put `lctl` in two instances at once.** The migrate,
+seed and demo targets run `lctl` on the host, where `config.Load` reads `.env`
+from the working directory regardless of which instance was meant. With just
+`LINKCTRL_DATABASE_URL` overridden, `lctl demo` wrote to the test database and
+reported the demo instance's URL — and `lctl apikey` would have minted keys under
+a pepper the target instance's server does not hold, so they would never
+validate. The instance's file is now exported before the command runs; godotenv
+does not overwrite variables already set, so it wins.
+
+### The test instance stops itself; the demo does not
+
+Two mechanisms, because they answer different questions. `LINKCTRL_RESTART=no`
+answers "should a reboot bring this back" — for a disposable stack, no. A systemd
+timer answers "is anyone using it", every five minutes, stopping it after thirty
+idle minutes. The demo is excluded from both: the script refuses that instance
+outright, and it keeps `unless-stopped`, because an instance that exists to be
+looked at has to be there when the browser is pointed at it.
+
+Idle is the hard part, and two signals that look obvious are wrong. The container
+log is not one: at debug level an idle app logs one rollup line a minute and
+requests are not logged at all, so the log says nothing either way. Postgres
+transaction counters are not one either: the rollup job and the health probe
+commit on a timer forever, so the counter always moves and nothing is ever idle.
+
+What works is the request histogram's count, summed over every surface *except*
+`ops` — the surface the container's own healthcheck hits every ten seconds. That
+excludes the machine's own noise and counts only what somebody did. It needs the
+metrics listener reachable from the host, so the development override now
+publishes it on loopback; the base file still publishes nothing, and the
+production procedure does not apply the override.
+
+The metrics counter alone would have been wrong too. `go test`, `lctl` and a
+server from `make run` talk to Postgres directly and never touch the app, so a
+process check on this host is a second signal, and a keep-file is the escape
+hatch for something long and unattended. A failed scrape counts as activity: a
+measurement that did not happen is not evidence of idleness, and guessing wrong
+stops a stack somebody is using.
+
+Then a state nothing had considered: `make migrate-status` on a stopped instance
+starts Postgres and Redis and leaves the app down, and the first version called
+that "not running, nothing to do". The half-stack it creates was the one state
+the timer could never clean up. Any running service now counts, and with the app
+down the only signal that can hold it up is a process on this host.
+
+### The link gate failed a third way, and this one was not the anchors
+
+`scripts/check-links.sh` reported one to three broken links per run, a different
+set each time, all of them false. `slugs | grep -qxF` lets `grep` exit at the
+first match, the writers upstream take SIGPIPE, and `pipefail` reports 141 for a
+pipeline that succeeded — measured at 60 failures in 300 runs. It is a here-string
+now.
+
+Worth recording because of where it hid: the gate had been listed since Phase 1,
+was finally implemented while planning Phase 2, and still did not work. Its first
+run passed for the wrong reason, its second rejected correct anchors, and its
+third was a coin flip. A gate is not enforcing anything until its failures have
+been explained rather than fixed.
+
+### shellcheck stops being a habit and becomes a gate
+
+Eight shell scripts now carry real behaviour — the instance guards, the idle
+detector, the release gate — and shellcheck ran only when someone remembered.
+That is the exact shape the link gate failed in: listed, believed, unenforced.
+`make shellcheck` now runs inside `make check` and as a CI lint step, and the
+two findings it was sitting on (an unguarded `cd` in check-links.sh, unquoted
+expansion in release-check.sh) are fixed.
+
+Unlike golangci-lint it is not pinned: its output is stable across minor
+versions, and its scripts-only surface means a surprise finding is a two-line
+fix rather than a red build across the repository. The gate was sabotaged before
+being trusted — a planted unquoted `rm -rf` fails it, its removal restores it.

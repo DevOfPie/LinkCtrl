@@ -101,6 +101,12 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
+      # The runner ships shellcheck, so this costs an apt-get nothing. Unpinned,
+      # unlike golangci-lint: shellcheck's output is stable across minor
+      # versions, and its scripts-only surface means a surprise finding is a
+      # two-line fix rather than a red build across the repository.
+      - name: Lint the shell scripts
+        run: make shellcheck
       # The stylesheet is embedded, so the package does not compile without it and
       # the linter cannot type-check anything that imports internal/ui.
       - name: Build the stylesheet

@@ -54,16 +54,27 @@ times by more than half: the repository, `%LOCALAPPDATA%\go-build`, and
 ## Everyday commands
 
 ```sh
-cp .env.example .env      # fill in the three required secrets
-docker compose up -d --wait
 make assets               # build app.css + verify vendored htmx (before first go build)
+make up                   # start the stack; writes .env.test with fresh secrets if needed
 make test                 # unit tests, race detector on
 make lint
 make migrate-up
 make migrate-status
 make db-reset             # drop, recreate, re-migrate
 make test-integration     # needs the stack up
+make rebuild              # the stack from nothing: volumes gone, image rebuilt, migrated
 ```
+
+These act on the **test** instance. Development runs two stacks — a long-lived
+`demo` and a disposable `test` — and everything above takes `INSTANCE=demo` to
+act on the other one, with the destructive targets refusing it unless
+`CONFIRM=demo` is also passed. See
+[dev-notes/instances.md](../dev-notes/instances.md); it is the reference for
+ports, guards and the milestone refresh.
+
+`cp .env.example .env` is still how the *single* stack in
+[README.md](../../README.md)'s quickstart is configured. The instances write
+their own `.env.demo` and `.env.test` and do not read it.
 
 `make assets` matters before the first build: the stylesheet is generated from
 the templates and embedded into the binary, so a build without it runs fine but

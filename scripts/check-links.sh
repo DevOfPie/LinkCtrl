@@ -19,7 +19,7 @@
 # Usage: scripts/check-links.sh
 set -uo pipefail
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 fails=0
 checked=0
@@ -75,7 +75,11 @@ while IFS= read -r file; do
     [ -d "$target" ] && continue
     [ -n "$anchor" ] || continue
 
-    if ! slugs "$target" | grep -qxF "$anchor"; then
+    # Not `slugs "$target" | grep -qxF`: `grep -q` exits at the first match, the
+    # writers upstream of it take SIGPIPE, and `pipefail` then reports 141 for a
+    # pipeline that succeeded. That failed roughly one anchor in five, a
+    # different one each run.
+    if ! grep -qxF "$anchor" <<<"$(slugs "$target")"; then
       printf '  FAIL  %s -> %s (no such heading)\n' "$file" "$link"
       fails=$((fails + 1))
     fi

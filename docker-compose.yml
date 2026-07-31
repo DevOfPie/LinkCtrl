@@ -6,14 +6,26 @@
 
 name: linkctrl
 
+# LINKCTRL_RESTART is the restart policy for all three services, and it defaults
+# to the value that was hard-coded here. A deployment wants `unless-stopped`; the
+# disposable development instance sets `no`, so that a reboot leaves it down
+# rather than resurrecting a stack nothing is using — see
+# docs/dev-notes/instances.md.
+
 services:
   app:
-    image: ghcr.io/devofpie/linkctrl:${LINKCTRL_TAG:-latest}
+    # Repository and tag are separate so a locally built image can be run without
+    # borrowing the registry's name. An operator sets LINKCTRL_TAG alone and gets
+    # ghcr.io/devofpie/linkctrl:<tag>, exactly as docs/deployment.md describes.
+    # The development instances (docs/dev-notes/instances.md) set LINKCTRL_IMAGE
+    # to a local name instead, so `docker compose pull` on one of them cannot
+    # replace a build with whatever the registry is publishing under that tag.
+    image: ${LINKCTRL_IMAGE:-ghcr.io/devofpie/linkctrl}:${LINKCTRL_TAG:-latest}
     build:
       context: .
       args:
         VERSION: ${LINKCTRL_TAG:-dev}
-    restart: unless-stopped
+    restart: ${LINKCTRL_RESTART:-unless-stopped}
     depends_on:
       # service_healthy, not service_started. Without it a cold `up` races
       # Postgres's initdb and the operator's first impression of the product is
@@ -33,8 +45,14 @@ services:
     # read from .env for interpolation and then never passed in. Setting one and
     # restarting changed nothing, and --check-config validated the same
     # truncated environment and agreed.
+    #
+    # The path is a variable because `--env-file` only redirects the file compose
+    # interpolates from; a literal `.env` here would still be read into the
+    # container. Two instances would then share one configuration while appearing
+    # to have their own, and the second would answer on the first one's BASE_URL.
+    # The instance env files set LINKCTRL_ENV_PATH to their own path.
     env_file:
-      - path: .env
+      - path: ${LINKCTRL_ENV_PATH:-.env}
         required: false
     environment:
       TZ: UTC
@@ -83,7 +101,7 @@ services:
 
   postgres:
     image: postgres:17-alpine
-    restart: unless-stopped
+    restart: ${LINKCTRL_RESTART:-unless-stopped}
     environment:
       TZ: UTC
       POSTGRES_USER: ${POSTGRES_USER:-linkctrl}
@@ -121,7 +139,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    restart: unless-stopped
+    restart: ${LINKCTRL_RESTART:-unless-stopped}
     # Cache only: no RDB snapshots, no AOF, LRU eviction. Any key may vanish at
     # any moment, which is why nothing correctness-critical is kept here.
     command:

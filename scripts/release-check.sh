@@ -43,7 +43,7 @@ if [ -z "$non_exec" ]; then
   ok "every script is executable in the index"
 else
   bad "not executable in git (fix: git update-index --chmod=+x <path>)"
-  printf '        %s\n' $non_exec
+  printf '%s\n' "$non_exec" | sed 's/^/        /'
 fi
 
 step "version"

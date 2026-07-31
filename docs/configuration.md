@@ -256,6 +256,10 @@ Read by the Postgres image, not by LinkCtrl.
 | `REDIS_MAXMEMORY` | `256mb` | |
 | `LINKCTRL_HTTP_PORT` | `8080` | Host port compose publishes. |
 | `POSTGRES_PORT` / `REDIS_PORT` | `55432` / `56379` | Published by the *development* override only, on non-default ports so they cannot collide with a local install. |
+| `LINKCTRL_IMAGE` | `ghcr.io/devofpie/linkctrl` | Image repository, paired with `LINKCTRL_TAG`. Point it at a local name to run an image you built rather than one from the registry. |
+| `LINKCTRL_ENV_PATH` | `.env` | Which file compose loads into the container. `--env-file` alone does not change this: it redirects the file compose *interpolates* from, while the container still receives whatever this names. Running two instances side by side needs both. |
+| `LINKCTRL_RESTART` | `unless-stopped` | Restart policy for all three services. `no` for a stack that should stay down once stopped. |
+| `LINKCTRL_METRICS_PORT` | `9090` | Host port for the metrics listener, bound to `127.0.0.1` and published by the *development* override only. The base file publishes nothing here; the endpoint is unauthenticated. |
 
 ## Removed variables
 

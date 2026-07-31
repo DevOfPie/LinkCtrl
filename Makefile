@@ -17,35 +17,90 @@ LDFLAGS := -s -w \
 	-X '$(MODULE)/internal/build.commit=$(COMMIT)' \
 	-X '$(MODULE)/internal/build.date=$(DATE)'
 
-# Postgres/Redis for local development come from the compose override, which
-# publishes on non-default ports so they do not collide with anything the
-# developer already has installed.
+# Which development instance the targets below act on: `test` (disposable, the
+# default) or `demo` (long-lived, refreshed only by `make demo-update`). They are
+# separate compose projects with separate volumes and ports, so nothing done to
+# one reaches the other. See docs/dev-notes/instances.md.
 #
-# The password is read from .env rather than written here, because .env is where
+# The default is deliberately the disposable one. Every destructive target here
+# is one typo away from another, and the version of this that defaulted to
+# whatever stack happened to be running is how a demo worth showing somebody gets
+# dropped by a `make db-reset` meant for a test.
+INSTANCE ?= test
+ENV_FILE  = .env.$(INSTANCE)
+PROJECT   = linkctrl-$(INSTANCE)
+
+# Both the flags and the exported variables. The flags are for the calls in this
+# file; the variables are for the scripts it invokes, whose own `docker compose`
+# calls would otherwise land on the default project.
+COMPOSE = docker compose -p $(PROJECT) --env-file $(ENV_FILE)
+export COMPOSE_PROJECT_NAME = $(PROJECT)
+export COMPOSE_ENV_FILES    = $(ENV_FILE)
+
+# One value out of the instance's env file. Inline comments are stripped the way
+# compose strips them — whitespace, then `#` — so a `#` inside a password is kept
+# rather than truncating the secret at a character that is legal in one.
+envval = $(shell sed -n 's/^$(1)=//p' $(ENV_FILE) 2>/dev/null \
+	| head -1 | tr -d '\r' | sed -e 's/[[:space:]][[:space:]]*#.*$$//' -e 's/[[:space:]]*$$//')
+
+# Read from the env file rather than written here, because that file is where
 # compose reads it too and therefore what the database was initialised with. A
-# literal here is wrong for every developer who generated their own, and the
-# failure it produces — "password authentication failed" — reads as a broken
-# database rather than a stale variable. An exported POSTGRES_PASSWORD wins, so
-# CI can supply it without a file.
+# literal is wrong for every instance that generated its own, and the failure it
+# produces — "password authentication failed" — reads as a broken database rather
+# than a stale variable. An exported POSTGRES_PASSWORD still wins, for CI.
 #
 # A password containing characters that are not URL-safe must be
-# percent-encoded, since this is assembled into a DSN.
+# percent-encoded, since this is assembled into a DSN. scripts/instance.sh
+# generates alphanumeric ones for exactly that reason.
 POSTGRES_USER     ?= linkctrl
 POSTGRES_DB       ?= linkctrl
-POSTGRES_PASSWORD ?= $(shell sed -n 's/^POSTGRES_PASSWORD=//p' .env 2>/dev/null | tr -d '\r')
+POSTGRES_PASSWORD ?= $(call envval,POSTGRES_PASSWORD)
+POSTGRES_PORT     ?= $(call envval,POSTGRES_PORT)
+REDIS_PORT        ?= $(call envval,REDIS_PORT)
 
-DEV_DATABASE_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:55432/$(POSTGRES_DB)?sslmode=disable
-DEV_REDIS_URL    ?= redis://localhost:56379/0
+DEV_DATABASE_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=disable
+DEV_REDIS_URL    ?= redis://localhost:$(REDIS_PORT)/0
 
 # Guard for the targets that connect. Without it an empty password produces the
 # same authentication error as a wrong one, several steps away from the cause.
 .PHONY: require-db-password
 require-db-password:
-	@test -n "$(POSTGRES_PASSWORD)" || { \
-		echo "POSTGRES_PASSWORD is empty."; \
-		echo "Set it in .env (cp .env.example .env) or export it in the environment."; \
+	@test -f "$(ENV_FILE)" || { \
+		echo "$(ENV_FILE) does not exist."; \
+		echo "Create the $(INSTANCE) instance with: make env INSTANCE=$(INSTANCE)"; \
 		exit 1; \
 	}
+	@test -n "$(POSTGRES_PASSWORD)" || { \
+		echo "POSTGRES_PASSWORD is empty in $(ENV_FILE)."; \
+		echo "Set it there, or export it in the environment."; \
+		exit 1; \
+	}
+
+# Every target that writes to a database routes through this. On the test
+# instance it returns immediately; on demo it refuses without CONFIRM=demo.
+.PHONY: guard-%
+guard-%:
+	@scripts/instance.sh guard "$(INSTANCE)" "$*"
+
+# Postgres and Redis, for the commands that run on this host and talk to them
+# directly. Not the app: `make run` needs the port the app container holds, and
+# the integration suite builds its own server with httptest rather than calling
+# a container.
+#
+# The test instance is stopped whenever nothing has used it for half an hour
+# (scripts/idle-stop.sh), so anything needing a database has to be able to start
+# one. Only when it is not already up: `up --wait` against a healthy stack costs
+# a second and six lines of output on every target that depends on it.
+.PHONY: require-stack
+require-stack:
+	@$(COMPOSE) ps --status running --services 2>/dev/null | grep -qx postgres \
+		|| $(COMPOSE) up -d --wait postgres redis
+
+# The whole stack, for the targets that drive the app over HTTP.
+.PHONY: require-app
+require-app:
+	@$(COMPOSE) ps --status running --services 2>/dev/null | grep -qx app \
+		|| $(COMPOSE) up -d --wait
 
 .PHONY: help
 help: ## Show this help
@@ -58,9 +113,15 @@ help: ## Show this help
 build: ## Build the server and the operator CLI
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/ ./cmd/...
 
+# Against the instance's database and Redis, on the instance's port, with the
+# instance's configuration — not `.env`, whose DSN and Redis URL name compose
+# network hosts that do not resolve here. Stop that instance's app container
+# first; both cannot hold the same port.
 .PHONY: run
-run: ## Run the server against the dev database
-	go run -ldflags "$(LDFLAGS)" ./cmd/linkctrl
+run: require-db-password require-stack ## Run the server from source against the instance's data
+	@$(DEV_ENV) LINKCTRL_REDIS_URL="$(DEV_REDIS_URL)" \
+		LINKCTRL_HTTP_ADDR=":$(call envval,LINKCTRL_HTTP_PORT)" \
+		go run -ldflags "$(LDFLAGS)" ./cmd/linkctrl
 
 .PHONY: clean
 clean: ## Remove build output
@@ -72,9 +133,13 @@ clean: ## Remove build output
 test: ## Unit tests with the race detector
 	go test -race -covermode=atomic -coverprofile=cover.out ./...
 
+# LINKCTRL_REDIS_URL matters as much as the DSN: without it the Redis tier tests
+# fall back to localhost:6379, find nothing there and *skip*. The suite stays
+# green while three tests that never ran claim to cover the cache.
 .PHONY: test-integration
-test-integration: require-db-password ## Integration tests (needs Postgres and Redis)
-	@TEST_DATABASE_URL="$(DEV_DATABASE_URL)" go test -race -tags=integration ./test/integration/...
+test-integration: require-db-password guard-test-integration require-stack ## Integration tests (needs Postgres and Redis)
+	@TEST_DATABASE_URL="$(DEV_DATABASE_URL)" LINKCTRL_REDIS_URL="$(DEV_REDIS_URL)" \
+		go test -race -tags=integration ./test/integration/...
 
 .PHONY: cover
 cover: test ## Open the coverage report
@@ -88,6 +153,13 @@ lint: ## Run golangci-lint
 check-links: ## Verify every relative link and anchor in tracked markdown
 	@scripts/check-links.sh
 
+# A gate, after a phase of being a tool someone remembered to run by hand. This
+# repository's own decision log records how that ends: the link gate was listed
+# for a whole phase, unenforced, and did not work when finally built.
+.PHONY: shellcheck
+shellcheck: ## Lint every shell script
+	shellcheck scripts/*.sh
+
 .PHONY: vuln
 vuln: ## Check for known vulnerabilities
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
@@ -98,7 +170,7 @@ tidy: ## Tidy and verify modules
 	go mod verify
 
 .PHONY: check
-check: tidy lint test ## Everything CI runs, short of integration tests
+check: tidy lint shellcheck test ## Everything CI runs, short of integration tests
 
 ## ---- codegen --------------------------------------------------------------
 
@@ -110,7 +182,7 @@ sqlc: ## Generate the database layer from SQL
 	sqlc generate
 
 .PHONY: sqlc-vet
-sqlc-vet: require-db-password ## Prepare every query against a live database
+sqlc-vet: require-db-password require-stack ## Prepare every query against a live database
 	@LINKCTRL_DATABASE_URL="$(DEV_DATABASE_URL)" sqlc vet -f sqlc-vet.yaml
 
 # No code is generated from the spec in either direction. The API was built
@@ -124,41 +196,51 @@ openapi: ## Validate the OpenAPI document against the implementation
 
 ## ---- database -------------------------------------------------------------
 
-# APP_ENV must be in the environment, not only in .env: config.Load consults it
-# before reading the file, so without it .env is ignored and every target below
+# APP_ENV must be in the environment, not only in a file: config.Load consults it
+# before reading one, so without it the file is ignored and every target below
 # fails on the three required secrets rather than on anything to do with the
-# database. DATABASE_URL is then overridden because the value in .env names the
-# compose network host, which does not resolve from the developer's machine.
+# database. DATABASE_URL is then overridden because the value compose passes the
+# container names the compose network host, which does not resolve from here.
+#
+# The instance file is sourced first, and this is not decoration. lctl runs on
+# the host, where config.Load reads `.env` — the operator quickstart file, not
+# the instance's. Overriding only the DSN was enough to write to the right
+# database while every other value came from the wrong instance: `lctl demo`
+# printed the demo instance's URL for data it had just written to the test one,
+# and `lctl apikey` would have minted keys under a pepper that instance's server
+# does not have, so they would never validate. godotenv does not overwrite a
+# variable that is already set, so exporting these first makes them win.
 #
 # Recipes carrying this are prefixed with @, so the assembled DSN — password
 # included — does not end up in terminal scrollback or a CI log.
-DEV_ENV := LINKCTRL_APP_ENV=development LINKCTRL_DATABASE_URL="$(DEV_DATABASE_URL)"
+DEV_ENV = set -a; . "./$(ENV_FILE)"; set +a; \
+	LINKCTRL_APP_ENV=development LINKCTRL_DATABASE_URL="$(DEV_DATABASE_URL)"
 
 .PHONY: migrate-up
-migrate-up: require-db-password ## Apply all migrations
+migrate-up: require-db-password require-stack ## Apply all migrations
 	@$(DEV_ENV) go run ./cmd/lctl migrate up
 
 .PHONY: migrate-down
-migrate-down: require-db-password ## Roll back one migration
+migrate-down: require-db-password guard-migrate-down require-stack ## Roll back one migration
 	@$(DEV_ENV) go run ./cmd/lctl migrate down
 
 .PHONY: migrate-status
-migrate-status: require-db-password ## Show applied and pending migrations
+migrate-status: require-db-password require-stack ## Show applied and pending migrations
 	@$(DEV_ENV) go run ./cmd/lctl migrate status
 
 .PHONY: db-reset
-db-reset: require-db-password ## Drop and recreate the dev database, then migrate
-	docker compose exec -T postgres psql -U "$(POSTGRES_USER)" -d postgres \
+db-reset: require-db-password guard-db-reset require-stack ## Drop and recreate the dev database, then migrate
+	$(COMPOSE) exec -T postgres psql -U "$(POSTGRES_USER)" -d postgres \
 		-c "DROP DATABASE IF EXISTS $(POSTGRES_DB) WITH (FORCE);" \
 		-c "CREATE DATABASE $(POSTGRES_DB);"
 	$(MAKE) migrate-up
 
 .PHONY: seed
-seed: require-db-password ## Seed development data
+seed: require-db-password guard-seed require-stack ## Seed development data
 	@$(DEV_ENV) go run ./cmd/lctl seed --links 1000 --clicks 20000
 
 .PHONY: demo
-demo: require-db-password ## Fill the dev instance with demo data worth looking at
+demo: require-db-password guard-demo require-stack ## Fill the dev instance with demo data worth looking at
 	@$(DEV_ENV) go run ./cmd/lctl demo --reset
 
 ## ---- frontend -------------------------------------------------------------
@@ -210,17 +292,77 @@ assets: htmx swagger-ui css ## Everything `go build` embeds
 
 ## ---- containers -----------------------------------------------------------
 
+.PHONY: env
+env: ## Create the instance's env file if it does not exist
+	@scripts/instance.sh init "$(INSTANCE)"
+
+.PHONY: instances
+instances: ## Both development instances and whether they are running
+	@scripts/instance.sh list
+
 .PHONY: up
 up: ## Start the full stack
-	docker compose up -d --wait
+	@test -f "$(ENV_FILE)" || scripts/instance.sh init "$(INSTANCE)"
+	$(COMPOSE) up -d --wait
 
 .PHONY: down
-down: ## Stop the stack and remove volumes
-	docker compose down -v
+down: guard-down ## Stop the stack and remove volumes
+	$(COMPOSE) down -v
+
+.PHONY: stop
+stop: ## Stop the stack, keeping its volumes
+	$(COMPOSE) stop
+
+# What the systemd timer runs every five minutes. Here so the decision can be
+# inspected without reading the journal — it reports what it sees and why.
+.PHONY: idle-stop
+idle-stop: ## Stop the test instance if nothing has used it (IDLE_MINUTES=30)
+	@scripts/idle-stop.sh test $(or $(IDLE_MINUTES),30)
 
 .PHONY: logs
 logs: ## Follow application logs
-	docker compose logs -f app
+	$(COMPOSE) logs -f app
+
+# The test instance, from nothing: volumes gone, image rebuilt from the working
+# tree, schema migrated. Guarded like any other destructive target, so
+# `make rebuild INSTANCE=demo` stops rather than doing what it says.
+.PHONY: rebuild
+rebuild: guard-rebuild ## Recreate the instance from scratch and migrate
+	$(COMPOSE) down -v
+	@test -f "$(ENV_FILE)" || scripts/instance.sh init "$(INSTANCE)"
+	$(COMPOSE) up -d --build --force-recreate --wait
+	$(MAKE) migrate-up INSTANCE=$(INSTANCE)
+
+# The milestone refresh, and the only thing that should write to the demo.
+#
+# Recursive assignment, not simple: .env.demo may not exist when this file is
+# read, and does by the time the recipe below prints the URL.
+DEMO_URL = http://localhost$(addprefix :,$(shell sed -n 's/^LINKCTRL_HTTP_PORT=//p' .env.demo 2>/dev/null | head -1 | tr -d '\r'))
+
+# The clean-tree check is the enforcement: the demo is meant to show the last
+# validated milestone, and building it from a tree with uncommitted work puts
+# something nobody has validated in front of the person judging the milestone.
+# Pass FORCE=1 when the point is to look at work in progress.
+.PHONY: demo-update
+demo-update: ## Rebuild the demo from the current commit and refresh its data
+	@test -f .env.demo || scripts/instance.sh init demo
+	@if [ -z "$(FORCE)" ] && [ -n "$$(git status --porcelain)" ]; then \
+		echo "The working tree is dirty, so this build is not the validated milestone."; \
+		echo "Commit first, or pass FORCE=1 to demo the work in progress."; \
+		git status --short; \
+		exit 1; \
+	fi
+	docker compose -p linkctrl-demo --env-file .env.demo up -d --build --force-recreate --wait
+	@echo
+	@$(MAKE) --no-print-directory demo INSTANCE=demo CONFIRM=demo || { \
+		echo; \
+		echo "The stack is up and migrated, but no demo data was written."; \
+		echo "A fresh instance has no user to own it. Claim it at $(DEMO_URL),"; \
+		echo "then run make demo-update again."; \
+		exit 1; \
+	}
+	@echo
+	@echo "demo updated to $(VERSION) at $(DEMO_URL)"
 
 .PHONY: docker-build
 docker-build: ## Build the production image
@@ -269,13 +411,16 @@ release-check: ## Everything that must hold before tagging a release
 ## ---- load -----------------------------------------------------------------
 
 .PHONY: seed-slo
-seed-slo: require-db-password ## Seed the dataset the SLO is defined against (100k links, 5M clicks)
+seed-slo: require-db-password guard-seed-slo require-stack ## Seed the dataset the SLO is defined against (100k links, 5M clicks)
 	@$(DEV_ENV) go run ./cmd/lctl seed --reset --links 100000 --clicks 5000000
 
+# Guarded even though a load test only reads: it writes several hundred thousand
+# click events on the way, and the demo's analytics are meant to look like a
+# workspace rather than like a benchmark.
 .PHONY: load
-load: ## Measure the cached redirect SLO against a running stack
+load: guard-load require-app ## Measure the cached redirect SLO against a running stack
 	./scripts/load-test.sh cached 2000 2m
 
 .PHONY: load-uncached
-load-uncached: ## Same, spread across the whole dataset so the cache cannot answer
+load-uncached: guard-load-uncached require-app ## Same, spread across the whole dataset so the cache cannot answer
 	./scripts/load-test.sh uncached 500 1m

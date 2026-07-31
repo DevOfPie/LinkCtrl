@@ -24,54 +24,119 @@ vars:
     -X '{{.MODULE}}/internal/build.commit={{.COMMIT}}'
     -X '{{.MODULE}}/internal/build.date={{.DATE}}'
 
-  # The dev database password is read from .env, which is where compose reads it
-  # too and therefore what the database was initialised with. A literal here is
-  # wrong for every developer who generated their own, and the resulting
-  # "password authentication failed" reads as a broken database rather than a
-  # stale variable. An exported POSTGRES_PASSWORD wins, for CI.
+  # Which development instance these act on: test (disposable, the default) or
+  # demo (long-lived). Separate compose projects, separate volumes, separate
+  # ports — docs/dev-notes/instances.md. Override per invocation:
+  #
+  #   task up INSTANCE=demo
+  #
+  # The default is the disposable one on purpose; see the Makefile.
+  INSTANCE: '{{.INSTANCE | default "test"}}'
+  ENV_FILE: .env.{{.INSTANCE}}
+  PROJECT: linkctrl-{{.INSTANCE}}
+
+  # The dev database password is read from the instance's env file, which is
+  # where compose reads it too and therefore what the database was initialised
+  # with. A literal here is wrong for every instance that generated its own, and
+  # the resulting "password authentication failed" reads as a broken database
+  # rather than a stale variable. An exported POSTGRES_PASSWORD wins, for CI.
   #
   # A password with characters that are not URL-safe must be percent-encoded,
   # since this is assembled into a DSN.
   POSTGRES_USER: linkctrl
   POSTGRES_DB: linkctrl
   DB_PASSWORD:
-    sh: 'if [ -n "$POSTGRES_PASSWORD" ]; then printf %s "$POSTGRES_PASSWORD"; else sed -n "s/^POSTGRES_PASSWORD=//p" .env 2>/dev/null | tr -d "\r"; fi'
+    sh: 'if [ -n "$POSTGRES_PASSWORD" ]; then printf %s "$POSTGRES_PASSWORD"; else sed -n "s/^POSTGRES_PASSWORD=//p" .env.{{.INSTANCE | default "test"}} 2>/dev/null | head -1 | tr -d "\r"; fi'
+  DB_PORT:
+    sh: 'sed -n "s/^POSTGRES_PORT=//p" .env.{{.INSTANCE | default "test"}} 2>/dev/null | head -1 | tr -d "\r"'
+  REDIS_PORT:
+    sh: 'sed -n "s/^REDIS_PORT=//p" .env.{{.INSTANCE | default "test"}} 2>/dev/null | head -1 | tr -d "\r"'
+  HTTP_PORT:
+    sh: 'sed -n "s/^LINKCTRL_HTTP_PORT=//p" .env.{{.INSTANCE | default "test"}} 2>/dev/null | head -1 | tr -d "\r"'
 
   # Vars, not the global env block. Values there are not templated against these
   # vars, so the DSN silently came out as postgres://:@localhost:55432/ — which
   # is a valid URL, so it failed at connect time as the wrong Postgres user
   # rather than at parse time.
-  DEV_DATABASE_URL: postgres://{{.POSTGRES_USER}}:{{.DB_PASSWORD}}@localhost:55432/{{.POSTGRES_DB}}?sslmode=disable
-  DEV_REDIS_URL: redis://localhost:56379/0
+  DEV_DATABASE_URL: postgres://{{.POSTGRES_USER}}:{{.DB_PASSWORD}}@localhost:{{.DB_PORT}}/{{.POSTGRES_DB}}?sslmode=disable
+  DEV_REDIS_URL: redis://localhost:{{.REDIS_PORT}}/0
+
+  # Both the flags and the variables: the flags are for the calls in this file,
+  # the variables for the scripts it invokes, whose own `docker compose` calls
+  # would otherwise land on the default project.
+  COMPOSE: docker compose -p {{.PROJECT}} --env-file {{.ENV_FILE}}
+
+env:
+  COMPOSE_PROJECT_NAME: linkctrl-{{.INSTANCE | default "test"}}
+  COMPOSE_ENV_FILES: .env.{{.INSTANCE | default "test"}}
 
 tasks:
   default:
     cmds: [task --list]
+
+  # Postgres and Redis, for the commands that run on this host and talk to them
+  # directly. Not the app: `task run` needs the port the app container holds, and
+  # the integration suite builds its own server with httptest rather than calling
+  # a container. The test instance is stopped when idle, so anything needing a
+  # database has to be able to start one.
+  require-stack:
+    internal: true
+    cmds:
+      - "{{.COMPOSE}} ps --status running --services 2>/dev/null | grep -qx postgres
+         || {{.COMPOSE}} up -d --wait postgres redis"
+
+  # The whole stack, for the tasks that drive the app over HTTP.
+  require-app:
+    internal: true
+    cmds:
+      - "{{.COMPOSE}} ps --status running --services 2>/dev/null | grep -qx app
+         || {{.COMPOSE}} up -d --wait"
 
   build:
     desc: Build the server and the operator CLI
     cmds:
       - go build -trimpath -ldflags "{{.LDFLAGS}}" -o {{.BIN}}/ ./cmd/...
 
+  # Against the instance's database and Redis, on the instance's port, with the
+  # instance's configuration — not `.env`, whose DSN and Redis URL name compose
+  # network hosts that do not resolve here. Stop that instance's app container
+  # first; both cannot hold the same port.
   run:
-    desc: Run the server
+    desc: Run the server from source against the instance's data
+    deps:
+      - task: require-stack
+        vars: {INSTANCE: '{{.INSTANCE}}'}
+    dotenv: ['{{.ENV_FILE}}']
     cmds:
       - go run -ldflags "{{.LDFLAGS}}" ./cmd/linkctrl
+    env:
+      LINKCTRL_APP_ENV: development
+      LINKCTRL_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
+      LINKCTRL_REDIS_URL: "{{.DEV_REDIS_URL}}"
+      LINKCTRL_HTTP_ADDR: ":{{.HTTP_PORT}}"
 
   test:
     desc: Unit tests with the race detector
     cmds:
       - go test -race -covermode=atomic -coverprofile=cover.out ./...
 
+  # LINKCTRL_REDIS_URL matters as much as the DSN: without it the Redis tier tests
+  # fall back to localhost:6379, find nothing there and *skip*. The suite stays
+  # green while tests that never ran claim to cover the cache.
   test-integration:
     desc: Integration tests (needs Postgres and Redis)
+    deps:
+      - task: require-stack
+        vars: {INSTANCE: '{{.INSTANCE}}'}
     preconditions:
       - sh: 'test -n "{{.DB_PASSWORD}}"'
-        msg: "POSTGRES_PASSWORD is empty. Set it in .env (cp .env.example .env) or export it."
+        msg: "POSTGRES_PASSWORD is empty. Run: task env INSTANCE={{.INSTANCE}}"
     cmds:
+      - CONFIRM={{.CONFIRM}} bash scripts/instance.sh guard {{.INSTANCE}} test-integration
       - go test -race -tags=integration ./test/integration/...
     env:
       TEST_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
+      LINKCTRL_REDIS_URL: "{{.DEV_REDIS_URL}}"
 
   lint:
     desc: Run golangci-lint
@@ -82,6 +147,11 @@ tasks:
     desc: Verify every relative link and anchor in tracked markdown
     cmds:
       - bash scripts/check-links.sh
+
+  shellcheck:
+    desc: Lint every shell script
+    cmds:
+      - shellcheck scripts/*.sh
 
   tidy:
     desc: Tidy and verify modules
@@ -94,6 +164,7 @@ tasks:
     cmds:
       - task: tidy
       - task: lint
+      - task: shellcheck
       - task: test
 
   generate:
@@ -107,24 +178,38 @@ tasks:
 
   sqlc-vet:
     desc: Prepare every query against a live database
+    deps:
+      - task: require-stack
+        vars: {INSTANCE: '{{.INSTANCE}}'}
     preconditions:
       - sh: 'test -n "{{.DB_PASSWORD}}"'
-        msg: "POSTGRES_PASSWORD is empty. Set it in .env (cp .env.example .env) or export it."
+        msg: "POSTGRES_PASSWORD is empty. Run: task env INSTANCE={{.INSTANCE}}"
     cmds:
       - sqlc vet -f sqlc-vet.yaml
     env:
       LINKCTRL_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
 
-  # LINKCTRL_APP_ENV must be in the environment, not only in .env: config.Load
-  # consults it before reading the file, so without it .env is ignored and these
+  # LINKCTRL_APP_ENV must be in the environment, not only in a file: config.Load
+  # consults it before reading one, so without it the file is ignored and these
   # tasks fail on the three required secrets rather than on anything to do with
-  # the database. LINKCTRL_DATABASE_URL is then overridden because the value in
-  # .env names the compose network host, which does not resolve from here.
+  # the database. LINKCTRL_DATABASE_URL is then overridden because the value
+  # compose passes the container names the compose network host, which does not
+  # resolve from here.
+  #
+  # `dotenv` loads the instance's own file, and that is not decoration: lctl runs
+  # on the host, where config.Load reads `.env` — the operator quickstart file,
+  # not the instance's. Overriding the DSN alone was enough to write to the right
+  # database while every other value came from the wrong instance. Task's `env`
+  # wins over `dotenv`, and godotenv inside lctl overwrites neither.
   migrate-up:
     desc: Apply all migrations
+    deps:
+      - task: require-stack
+        vars: {INSTANCE: '{{.INSTANCE}}'}
+    dotenv: ['{{.ENV_FILE}}']
     preconditions:
       - sh: 'test -n "{{.DB_PASSWORD}}"'
-        msg: "POSTGRES_PASSWORD is empty. Set it in .env (cp .env.example .env) or export it."
+        msg: "POSTGRES_PASSWORD is empty. Run: task env INSTANCE={{.INSTANCE}}"
     cmds:
       - go run ./cmd/lctl migrate up
     env:
@@ -133,10 +218,15 @@ tasks:
 
   migrate-down:
     desc: Roll back one migration
+    deps:
+      - task: require-stack
+        vars: {INSTANCE: '{{.INSTANCE}}'}
+    dotenv: ['{{.ENV_FILE}}']
     preconditions:
       - sh: 'test -n "{{.DB_PASSWORD}}"'
-        msg: "POSTGRES_PASSWORD is empty. Set it in .env (cp .env.example .env) or export it."
+        msg: "POSTGRES_PASSWORD is empty. Run: task env INSTANCE={{.INSTANCE}}"
     cmds:
+      - CONFIRM={{.CONFIRM}} bash scripts/instance.sh guard {{.INSTANCE}} migrate-down
       - go run ./cmd/lctl migrate down
     env:
       LINKCTRL_APP_ENV: development
@@ -144,9 +234,13 @@ tasks:
 
   migrate-status:
     desc: Show applied and pending migrations
+    deps:
+      - task: require-stack
+        vars: {INSTANCE: '{{.INSTANCE}}'}
+    dotenv: ['{{.ENV_FILE}}']
     preconditions:
       - sh: 'test -n "{{.DB_PASSWORD}}"'
-        msg: "POSTGRES_PASSWORD is empty. Set it in .env (cp .env.example .env) or export it."
+        msg: "POSTGRES_PASSWORD is empty. Run: task env INSTANCE={{.INSTANCE}}"
     cmds:
       - go run ./cmd/lctl migrate status
     env:
@@ -155,45 +249,87 @@ tasks:
 
   db-reset:
     desc: Drop and recreate the dev database, then migrate
+    deps:
+      - task: require-stack
+        vars: {INSTANCE: '{{.INSTANCE}}'}
     preconditions:
       - sh: 'test -n "{{.DB_PASSWORD}}"'
-        msg: "POSTGRES_PASSWORD is empty. Set it in .env (cp .env.example .env) or export it."
+        msg: "POSTGRES_PASSWORD is empty. Run: task env INSTANCE={{.INSTANCE}}"
     cmds:
-      - docker compose exec -T postgres psql -U {{.POSTGRES_USER}} -d postgres
-        -c "DROP DATABASE IF EXISTS {{.POSTGRES_DB}} WITH (FORCE);"
-        -c "CREATE DATABASE {{.POSTGRES_DB}};"
+      - CONFIRM={{.CONFIRM}} bash scripts/instance.sh guard {{.INSTANCE}} db-reset
+      - "{{.COMPOSE}} exec -T postgres psql -U {{.POSTGRES_USER}} -d postgres
+        -c \"DROP DATABASE IF EXISTS {{.POSTGRES_DB}} WITH (FORCE);\"
+        -c \"CREATE DATABASE {{.POSTGRES_DB}};\""
       - task: migrate-up
+        vars: {INSTANCE: '{{.INSTANCE}}'}
 
   seed:
     desc: Seed development data
+    deps:
+      - task: require-stack
+        vars: {INSTANCE: '{{.INSTANCE}}'}
+    dotenv: ['{{.ENV_FILE}}']
     preconditions:
       - sh: 'test -n "{{.DB_PASSWORD}}"'
-        msg: "POSTGRES_PASSWORD is empty. Set it in .env (cp .env.example .env) or export it."
+        msg: "POSTGRES_PASSWORD is empty. Run: task env INSTANCE={{.INSTANCE}}"
     cmds:
+      - CONFIRM={{.CONFIRM}} bash scripts/instance.sh guard {{.INSTANCE}} seed
       - go run ./cmd/lctl seed --links 1000 --clicks 20000
+    env:
+      LINKCTRL_APP_ENV: development
+      LINKCTRL_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
+
+  demo:
+    desc: Fill the instance with demo data worth looking at
+    deps:
+      - task: require-stack
+        vars: {INSTANCE: '{{.INSTANCE}}'}
+    dotenv: ['{{.ENV_FILE}}']
+    preconditions:
+      - sh: 'test -n "{{.DB_PASSWORD}}"'
+        msg: "POSTGRES_PASSWORD is empty. Run: task env INSTANCE={{.INSTANCE}}"
+    cmds:
+      - CONFIRM={{.CONFIRM}} bash scripts/instance.sh guard {{.INSTANCE}} demo
+      - go run ./cmd/lctl demo --reset
     env:
       LINKCTRL_APP_ENV: development
       LINKCTRL_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
 
   seed-slo:
     desc: Seed the dataset the SLO is defined against (100k links, 5M clicks)
+    deps:
+      - task: require-stack
+        vars: {INSTANCE: '{{.INSTANCE}}'}
+    dotenv: ['{{.ENV_FILE}}']
     preconditions:
       - sh: 'test -n "{{.DB_PASSWORD}}"'
-        msg: "POSTGRES_PASSWORD is empty. Set it in .env (cp .env.example .env) or export it."
+        msg: "POSTGRES_PASSWORD is empty. Run: task env INSTANCE={{.INSTANCE}}"
     cmds:
+      - CONFIRM={{.CONFIRM}} bash scripts/instance.sh guard {{.INSTANCE}} seed-slo
       - go run ./cmd/lctl seed --reset --links 100000 --clicks 5000000
     env:
       LINKCTRL_APP_ENV: development
       LINKCTRL_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
 
+  # Guarded even though a load test only reads: it writes several hundred thousand
+  # click events on the way, and the demo's analytics are meant to look like a
+  # workspace rather than like a benchmark.
   load:
     desc: Measure the cached redirect SLO against a running stack
+    deps:
+      - task: require-app
+        vars: {INSTANCE: '{{.INSTANCE}}'}
     cmds:
+      - CONFIRM={{.CONFIRM}} bash scripts/instance.sh guard {{.INSTANCE}} load
       - bash scripts/load-test.sh cached 2000 2m
 
   load-uncached:
     desc: Same, spread across the whole dataset so the cache cannot answer
+    deps:
+      - task: require-app
+        vars: {INSTANCE: '{{.INSTANCE}}'}
     cmds:
+      - CONFIRM={{.CONFIRM}} bash scripts/instance.sh guard {{.INSTANCE}} load-uncached
       - bash scripts/load-test.sh uncached 500 1m
 
   tailwind:
@@ -231,10 +367,66 @@ tasks:
       - task: swagger-ui
       - task: css
 
+  env:
+    desc: Create the instance's env file if it does not exist
+    cmds:
+      - bash scripts/instance.sh init {{.INSTANCE}}
+
+  instances:
+    desc: Both development instances and whether they are running
+    cmds:
+      - bash scripts/instance.sh list
+
   up:
     desc: Start the full stack
-    cmds: [docker compose up -d --wait]
+    cmds:
+      - test -f {{.ENV_FILE}} || bash scripts/instance.sh init {{.INSTANCE}}
+      - "{{.COMPOSE}} up -d --wait"
 
   down:
     desc: Stop the stack and remove volumes
-    cmds: [docker compose down -v]
+    cmds:
+      - CONFIRM={{.CONFIRM}} bash scripts/instance.sh guard {{.INSTANCE}} down
+      - "{{.COMPOSE}} down -v"
+
+  stop:
+    desc: Stop the stack, keeping its volumes
+    cmds:
+      - "{{.COMPOSE}} stop"
+
+  # What the systemd timer runs every five minutes. Here so the decision can be
+  # inspected without reading the journal — it reports what it sees and why.
+  idle-stop:
+    desc: Stop the test instance if nothing has used it (IDLE_MINUTES=30)
+    cmds:
+      - bash scripts/idle-stop.sh test {{.IDLE_MINUTES | default 30}}
+
+  logs:
+    desc: Follow application logs
+    cmds:
+      - "{{.COMPOSE}} logs -f app"
+
+  rebuild:
+    desc: Recreate the instance from scratch and migrate
+    cmds:
+      - CONFIRM={{.CONFIRM}} bash scripts/instance.sh guard {{.INSTANCE}} rebuild
+      - "{{.COMPOSE}} down -v"
+      - test -f {{.ENV_FILE}} || bash scripts/instance.sh init {{.INSTANCE}}
+      - "{{.COMPOSE}} up -d --build --force-recreate --wait"
+      - task: migrate-up
+        vars: {INSTANCE: '{{.INSTANCE}}'}
+
+  # The milestone refresh, and the only thing that should write to the demo. The
+  # clean-tree check is the enforcement: the demo shows the last validated
+  # milestone, and a build carrying uncommitted work is not one. FORCE=1
+  # overrides it, for deliberately demoing work in progress.
+  demo-update:
+    desc: Rebuild the demo from the current commit and refresh its data
+    preconditions:
+      - sh: '[ -n "{{.FORCE}}" ] || [ -z "$(git status --porcelain)" ]'
+        msg: "The working tree is dirty, so this build is not the validated milestone. Commit first, or pass FORCE=1."
+    cmds:
+      - test -f .env.demo || bash scripts/instance.sh init demo
+      - docker compose -p linkctrl-demo --env-file .env.demo up -d --build --force-recreate --wait
+      - task: demo
+        vars: {INSTANCE: demo, CONFIRM: demo}

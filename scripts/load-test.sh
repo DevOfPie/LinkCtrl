@@ -16,7 +16,12 @@ MODE="${1:-cached}"
 RATE="${2:-2000}"
 DURATION="${3:-2m}"
 
-NETWORK="${LINKCTRL_NETWORK:-linkctrl_default}"
+# The compose network is named after the project, and the development instances
+# are separate projects (docs/dev-notes/instances.md). Every `docker compose`
+# call below reads COMPOSE_PROJECT_NAME and COMPOSE_ENV_FILES from the
+# environment on its own; the network has to be derived from the same place, or
+# the load generator joins one instance's network and measures the other's app.
+NETWORK="${LINKCTRL_NETWORK:-${COMPOSE_PROJECT_NAME:-linkctrl}_default}"
 APP="${LINKCTRL_APP_HOST:-app}"
 PREFIX="${LINKCTRL_SEED_PREFIX:-ld}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

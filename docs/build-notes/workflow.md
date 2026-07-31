@@ -67,6 +67,18 @@ Then:
 
 Commit messages are long prose explaining *why*, not what. The diff shows what.
 
+### A milestone is finished — validated, committed
+
+```
+make demo-update
+```
+
+Rebuilds the demo instance from the commit just made and regenerates its data.
+Refuses on a dirty tree; that refusal means the milestone is not finished.
+
+Work happens on the **test** instance. The demo changes here and nowhere else.
+Both are in [dev-notes/instances.md](../dev-notes/instances.md).
+
 ### A test passes on the first try
 
 Sabotage it. Break the thing it claims to protect, confirm the test fails, then
@@ -149,10 +161,20 @@ follows from the current milestone.
 ## Quick reference
 
 ```sh
-make up                 # start Postgres, Redis, app
+make up                 # start Postgres, Redis, app — the test instance
 make check              # tidy + lint + unit tests (race)
 make test-integration   # integration tests (needs the stack)
 make generate           # sqlc + openapi
 make release-check      # full pre-release validation
+make rebuild            # test instance from nothing, migrated
 make down               # stop and remove volumes
+make instances          # both instances, and whether they are up
+make demo-update        # refresh the demo — after a milestone, not during one
 ```
+
+Targets act on the **test** instance unless given `INSTANCE=demo`. Destructive
+ones refuse `demo` without `CONFIRM=demo`.
+
+The test instance is stopped after thirty idle minutes and does not restart
+itself. Anything needing a database starts one, so this is rarely visible; when
+it matters — a long unattended job — `touch /tmp/linkctrl-test-keep`.
