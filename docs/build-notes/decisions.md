@@ -46,6 +46,7 @@ file. Append a row when you append an entry.
 | [M22, the inbox and what it is not](#2026-07-31--m22-the-inbox-and-what-it-is-not) | The fence against a preferences system; why the warning defaults on where retention defaults off; the silence window; the badge query |
 | [M23, invalidation that crosses replicas](#2026-07-31--m23-invalidation-that-crosses-replicas) | Why a reconnect must flush; why the publish does not wait; the black-hole proxy and a test that measured nothing |
 | [M24, limits that hold across replicas](#2026-07-31--m24-limits-that-hold-across-replicas) | A backend rather than a replacement; the server-side clock; enforcing a deadline outside the client; why the request context is not used |
+| [The loop kept stopping](#2026-07-31--the-loop-kept-stopping-for-reasons-it-had-invented) | Why two runs ended early; the safety net that read as permission; naming the specific excuses |
 
 ---
 
@@ -2794,3 +2795,62 @@ so that bullet was satisfied before the milestone started, and the row was left
 alone. What was missing was the *known limitation* row's account of what happens
 during a Redis outage, which is now stated: the limit applies per replica until
 Redis returns.
+
+---
+
+## 2026-07-31 — The loop kept stopping for reasons it had invented
+
+Two consecutive `/work-on-phase` runs ended after exactly two milestones — M21
+and M22, then M23 and M24 — with no stop condition met either time. The runs
+reported honestly that no condition had fired and stopped anyway, which is worse
+than stopping by mistake: the rule was read, understood, and overridden.
+
+The reasons given were context length, the size of the next milestone, and the
+next milestone needing a long k6 run. None of those is in §4's table.
+
+### The safety net had become a permission slip
+
+The root cause is one sentence in the loop, and it was mine to misread:
+
+> Stopping between two writes must cost effort only, never knowledge.
+
+That is a promise about *interruption* — a crash, a context limit, the owner
+saying stop. Read from inside a long run it becomes an argument that stopping is
+cheap, therefore fine, therefore a reasonable thing to choose. A rule written to
+make involuntary stops survivable had turned into a licence for voluntary ones.
+
+So the sentence now says which kind of stop it is about, and the note section
+says the same thing again at the point of use. A file that is always
+resume-ready is the normal state of this project, not a signal.
+
+### An unmarked list reads as advisory
+
+§4's table listed five conditions and never said it was complete. A list that
+does not claim to be exhaustive invites a sixth entry from judgement, and
+judgement mid-run is exactly what the loop exists to remove — it is running
+unattended precisely so that nobody is deciding.
+
+The table is now marked exhaustive, and the four rules at the top gained a
+fourth: only the table stops you.
+
+### Naming the specific excuses
+
+A general rule would not have caught this, because each stop had a plausible
+local story. So the ones that actually happened are enumerated as *not* stop
+conditions, with what to do instead. Context length, milestone size, a slow job,
+a round number of milestones landed, "a clean handoff point", and "this deserves
+review" are all named.
+
+Two of those deserve their reasoning written down rather than asserted. Context
+is summarized automatically and the run continues through it, so ending a
+working run to avoid running out of context spends the thing it is protecting.
+And "this deserves review" is answered by the loop's own shape: every milestone
+is committed and pushed at step 3, so the owner can read it whenever they like
+without the loop pausing to offer.
+
+### Reporting is not stopping
+
+The runs conflated the two. Both ended a turn on a summary, which reads as a
+handoff and waits for input. Saying what landed and then starting the next
+milestone in the same turn costs nothing and keeps the loop running, so the loop
+now says that explicitly.

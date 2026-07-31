@@ -3,6 +3,12 @@
 Trigger: **"Work on Phase"**, or `/work-on-phase`. Builds the current phase one
 milestone at a time, unattended, until the phase ends.
 
+*Until the phase ends* is literal. One invocation is expected to land many
+milestones in sequence, and the run stops only on a condition in
+[§4](#4-repeat-or-stop). Stopping early has been this loop's most common
+failure — see the *Not stop conditions* table there before deciding you have a
+reason.
+
 Style matches [workflow.md](workflow.md) — terse, trigger-first, no rationale —
 because this file is re-read at every resume. The *why* is in
 [decisions.md](decisions.md).
@@ -23,13 +29,14 @@ stop. A conflict between them is a bug: report it, do not pick.
 4 repeat    from 1, unless a stop condition fired
 ```
 
-Three rules outrank every step:
+Four rules outrank every step:
 
 | Rule | Meaning |
 | --- | --- |
 | **Ask, never assume** | Any choice the owner would want → decision prompt, then *wait*. Picking one and proceeding is a process failure even when the pick is right. |
 | **Never cross a phase boundary** | The loop ends at the phase's last milestone. Starting the next phase is a new instruction, not the next iteration. |
-| **Keep `.current-task.md` true** | Rewrite it at every step boundary. Stopping between two writes must cost effort only, never knowledge. |
+| **Only the table stops you** | [§4](#4-repeat-or-stop) lists every stop condition and is exhaustive. A reason that is not in it is not a reason — continue. Stopping early is the most common way this loop has failed. |
+| **Keep `.current-task.md` true** | Rewrite it at every step boundary, so that a stop you did not choose costs effort only, never knowledge. It is a safety net for being interrupted, never a licence to interrupt yourself. |
 
 ---
 
@@ -121,6 +128,28 @@ continue:
 | The same cause failed a gate twice | Retrying is not progress |
 | The owner said stop | — |
 
+**That table is exhaustive.** Landing a milestone is not an event; it is one
+iteration. The default after step 3 is step 1 again, and it takes a row above to
+override that.
+
+### Not stop conditions
+
+Every one of these has ended a run in practice, which is why each is named
+rather than left to judgement. None of them is a reason.
+
+| Not a reason | Do this instead |
+| --- | --- |
+| Context is long, or running out | Keep the note true and carry on. Context is summarized automatically and the run continues; wrapping up early throws away a working run to avoid a problem that handles itself. |
+| The next milestone is large, or touches many files | Start it. Step 2 is interruptible at any point, which is what the note is for. |
+| The next milestone needs a long job — k6, a reseed, a rebuild | Start it. A job being slow is not a job being risky. |
+| Two, or three, or five milestones have landed | The phase ends at its last row, not at a round number. |
+| It looks like a clean place to hand off | Handing off is the note's job, and the note is already written. A "clean boundary" is indistinguishable from the next iteration. |
+| The work so far deserves review | Land it and keep going. It is committed and pushed; the owner can read it whenever they like without the loop pausing. |
+
+Reporting mid-run is fine and costs nothing — say what landed, then start the
+next milestone in the same turn. What is not fine is ending the turn on a
+summary when [§4](#4-repeat-or-stop)'s table has not fired.
+
 ### Two milestones that do not end like the others
 
 **Reviews** (`X.9` — [M32.9](phase-details/m32.9.md),
@@ -172,3 +201,8 @@ Cost too much to re-derive:
 ```
 
 Rewritten at every step boundary; reset by step 3's last line.
+
+It exists so that an interruption — a crash, a context limit, the owner saying
+stop — costs effort and not knowledge. It is not a reason to interrupt yourself:
+a note good enough to resume from is the normal state of this file, not a signal
+that stopping is now free.
