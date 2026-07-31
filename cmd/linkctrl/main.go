@@ -229,7 +229,7 @@ func run(cfg config.Config, _ io.Writer) error {
 	// Request limits. Built once here and shared: the router enforces two of
 	// them, the redirect handler the third, and the collector reports on all
 	// three, so none of them re-derives a limit from configuration.
-	limits := httpx.NewLimiters(cfg)
+	limits := httpx.NewLimiters(cfg, rdb, log)
 	metrics.Register(observability.NewLimiterCollector(limits.Stats()))
 	for name, on := range map[string]bool{
 		"login":        limits.Login != nil,

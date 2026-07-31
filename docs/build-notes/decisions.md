@@ -45,6 +45,7 @@ file. Append a row when you append an entry.
 | [M21, the audit log gets behavior](#2026-07-31--m21-the-audit-log-gets-behavior) | Why the writer reduces the address itself; `audit.read` under D18; retention as a per-table policy; why the growth metric is job-measured |
 | [M22, the inbox and what it is not](#2026-07-31--m22-the-inbox-and-what-it-is-not) | The fence against a preferences system; why the warning defaults on where retention defaults off; the silence window; the badge query |
 | [M23, invalidation that crosses replicas](#2026-07-31--m23-invalidation-that-crosses-replicas) | Why a reconnect must flush; why the publish does not wait; the black-hole proxy and a test that measured nothing |
+| [M24, limits that hold across replicas](#2026-07-31--m24-limits-that-hold-across-replicas) | A backend rather than a replacement; the server-side clock; enforcing a deadline outside the client; why the request context is not used |
 
 ---
 
@@ -2726,3 +2727,70 @@ that misinterprets a key does something nobody has reasoned about.
 A publisher receives its own message and applies it again, deleting a key it
 just deleted. Filtering that out would need a sender id, a comparison, and a way
 to get it wrong, to save one map delete.
+
+---
+
+## 2026-07-31 — M24, limits that hold across replicas
+
+In-memory buckets mean N replicas allow N times the configured rate. That is
+tolerable for the 404-probe limiter, whose job is to make alias scanning
+tedious, and wrong for the credential limiter, whose job is to make credential
+stuffing across a leaked list expensive — an attacker who can reach any replica
+simply gets the budget multiplied.
+
+### A backend, not a replacement
+
+The Redis limiter is a field on the existing `Limiter` rather than a separate
+type, because the fallback is the design rather than an error path. Any Redis
+failure means the local bucket answers, so the limit degrades from *shared* to
+*per instance* — never from *enforced* to *absent*. Nothing else in the codebase
+changed shape: `nil` still means the limit is off, `Stats()` still works, and an
+instance with the cache disabled keeps exactly the limiter it had.
+
+### The bucket is evaluated on the server, against the server's clock
+
+Atomic because the read-modify-write is the whole point: two replicas doing
+get-compute-set would each see the same starting tokens and each allow a request
+the other had already spent. So it is a Lua script.
+
+The clock inside it is Redis's own `TIME`, not the caller's. Replicas do not
+agree on the time to better than a few hundred milliseconds in practice, and a
+bucket refilled against a fast client's clock refills faster than it should — a
+limit that quietly does not hold, discovered by whoever has the most skewed
+clock. Redis 7 replicates effects rather than commands, so a non-deterministic
+script is safe.
+
+### The deadline is enforced from outside the client call
+
+F2 measured what a stalled Redis does to a call that trusts a context deadline:
+go-redis does not honour it when it has to establish a connection to a server
+that never answers, and the call took seconds. On the invalidation path that was
+slow. Here it would be the *login endpoint* hanging on an optional dependency,
+which is the failure this milestone's risk section names.
+
+So the Redis call runs in its own goroutine and is abandoned on a timer rather
+than merely cancelled. An abandoned call may still land and spend a token the
+local fallback also spent; over-counting by one token during a stall is the
+harmless direction.
+
+A breaker sits in front of it because otherwise every request during an outage
+pays the full timeout before falling back — turning a cache problem into latency
+on every sign-in. Three consecutive failures open it for five seconds. The test
+that pins this down would take four seconds without it and takes almost none
+with it, which is the arithmetic stated in the test itself.
+
+### The context is deliberately not the request's
+
+The three call sites carry a `contextcheck` suppression, and the reason is not
+convenience. Deriving the Redis call's context from the request would let a
+client escape being charged by hanging up mid-request. Abandoning a connection
+is free, and a limiter that can be dodged that way is not a limiter.
+
+### The scope row was already honest
+
+M24's done-means asks for Plan.md's scope row to be annotated with which
+limiters are shared and which are not. It already was, from the planning pass —
+so that bullet was satisfied before the milestone started, and the row was left
+alone. What was missing was the *known limitation* row's account of what happens
+during a Redis outage, which is now stated: the limit applies per replica until
+Redis returns.

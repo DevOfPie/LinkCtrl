@@ -40,6 +40,18 @@ migrations run at boot.
   refreshed hourly on every replica. Keeping everything forever is only a safe
   default if the growth it permits is visible; the Prometheus alert recipe is in
   [docs/operations.md](docs/operations.md#audit-log-growth).
+- **Credential and API rate limits are shared across replicas.** They are
+  enforced in Redis, so the configured rate is the instance's rate rather than
+  each replica's — an attacker spreading a credential-stuffing run across
+  replicas no longer gets the limit multiplied by however many are behind the
+  load balancer.
+- On any Redis error the limiter falls back to the per-replica bucket it always
+  had. It still limits, just once per replica, and it never starts refusing
+  requests because Redis is unwell: a limiter is abuse mitigation, not an
+  authorization boundary. The fallback is logged once when it begins.
+- **The 404-probe limiter is deliberately not shared**, and will not be. A Redis
+  round trip on the redirect path would put an optional dependency inside the
+  20ms budget.
 - **Cache invalidation now crosses replicas.** Editing a link on one instance
   clears every instance's cache, over a Redis pub/sub channel, instead of only
   the one that handled the edit. Running more than one app replica no longer

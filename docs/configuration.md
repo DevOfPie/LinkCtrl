@@ -219,6 +219,19 @@ a page on the dashboard. `linkctrl_rate_limited_total{limit}` counts them, and
 `linkctrl_rate_limit_overflow_total` is the one to alert on: it means a limiter's
 key table filled and it has stopped limiting.
 
+**The credential and API limits are shared across replicas** through Redis, so
+the configured rate is the whole instance's rate rather than each replica's. The
+404-probe limiter is not, and never will be: a Redis round trip on the redirect
+path would put an optional dependency inside the 20ms budget.
+
+Sharing degrades rather than fails. On any Redis error — unreachable, stalled,
+or slower than `REDIS_READ_TIMEOUT` — the limiter falls back to the per-replica
+bucket it always had, so the limit is still enforced, just once per replica. It
+never starts refusing requests because Redis is unwell; a limiter is abuse
+mitigation, not an authorization boundary, and converting a cache outage into a
+sign-in outage would be the wrong trade. The fallback is logged once when it
+starts, not per request.
+
 ## Analytics
 
 | Variable | Default | Notes |

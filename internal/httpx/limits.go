@@ -1,9 +1,12 @@
 package httpx
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
+
+	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
@@ -30,10 +33,31 @@ type Limiters struct {
 // One construction site for all three, so the composition root can hand the same
 // values to the router, the redirect handler and the metrics collector without
 // any of them re-deriving a limit from config.
-func NewLimiters(cfg config.Config) Limiters {
+// The Redis client may be nil — cache disabled, or Redis unreachable at boot —
+// and then every limit is per instance exactly as it was before M24.
+func NewLimiters(cfg config.Config, rdb *goredis.Client, log *slog.Logger) Limiters {
+	shared := func(name string) *ratelimit.Shared {
+		return ratelimit.NewShared(ratelimit.SharedConfig{
+			Client: rdb, Name: name,
+			// The cache read timeout, reused deliberately: it is the number an
+			// operator already tuned to mean "how long this instance is willing
+			// to wait on Redis", and a second knob meaning the same thing is a
+			// second knob to get wrong.
+			Timeout: cfg.Redis.ReadTimeout,
+			Logger:  log,
+		})
+	}
 	return Limiters{
-		Login:    ratelimit.New(cfg.Auth.LoginRatePerMin, ratelimit.Options{}),
-		API:      ratelimit.New(cfg.Auth.APIRatePerMin, ratelimit.Options{}),
+		Login: ratelimit.New(cfg.Auth.LoginRatePerMin, ratelimit.Options{
+			Shared: shared("login"),
+		}),
+		API: ratelimit.New(cfg.Auth.APIRatePerMin, ratelimit.Options{
+			Shared: shared("api"),
+		}),
+		// Deliberately not shared. Sharing it would put a Redis round trip on
+		// the 20ms redirect budget and make an optional dependency load-bearing
+		// on the hot path — and its job, making alias scanning tedious, is
+		// served well enough per instance.
 		NotFound: ratelimit.New(cfg.Redirect.NotFoundLimit, ratelimit.Options{}),
 	}
 }
@@ -82,7 +106,10 @@ func RateLimit(l *ratelimit.Limiter, name string, metrics *observability.Metrics
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ok, retry := l.Allow(ClientIPFrom(r.Context()))
+			// The limiter deliberately does not take the request context; see
+			// ratelimit.Shared.take. Charging must not be cancellable by the
+			// client being charged.
+			ok, retry := l.Allow(ClientIPFrom(r.Context())) //nolint:contextcheck // deliberate: see ratelimit.Shared.take
 			if ok {
 				next.ServeHTTP(w, r)
 				return

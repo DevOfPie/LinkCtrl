@@ -106,6 +106,7 @@ rate(linkctrl_db_pool_acquire_waits_total{pool="redirect"}[5m]) > 0
 | Job stalled | `time() - linkctrl_job_last_success_timestamp_seconds{job="rollup"} > 600` | Dashboards are going stale. |
 | Job erroring | `rate(linkctrl_job_runs_total{result="error"}[15m]) > 0` | |
 | Limiter stopped limiting | `rate(linkctrl_rate_limit_overflow_total[15m]) > 0` | The key table filled, so requests are being allowed uncounted. The design fails open deliberately — a limiter must not become an outage — which is exactly why this needs an alert rather than a log line. |
+| Credential limit stopped being shared | `rate(linkctrl_rate_limited_total{limit="login"}[5m])` unchanged while Redis is unhealthy, plus the log line below | The limit fell back to per-replica buckets, so N replicas now allow N times it. Correct by design — it never refuses because Redis is unwell — but the effective limit is looser until Redis returns. |
 | Redirects being throttled | `rate(linkctrl_rate_limited_total{limit="redirect_404"}[5m]) > 1` | Either someone is scanning for aliases, or `TRUSTED_PROXIES` is wrong and every visitor shares one bucket. Check which before tuning the limit. |
 | 5xx on any surface | `rate(linkctrl_http_requests_total{status="5xx"}[5m]) > 0` | |
 | Rows in a default partition | see [below](#partitions) | Silent data misrouting; next month's partition will fail to attach. |
@@ -285,7 +286,7 @@ path while it waits.
 | Clicks missing entirely | `linkctrl_analytics_events_dropped_total` climbing, or an unclean shutdown lost a batch. `click_count` on a link is approximate for the same reason. |
 | Everything looks like one visitor | `TRUSTED_PROXIES` wrong, so every request appears to come from the proxy. Visitor hashing includes the address. |
 | Visitors getting 429 on links that exist | Same cause, now with teeth: with one shared address, everyone's 404s come out of one bucket. A throttled address can still follow links already in the in-process cache, so the symptom is partial and looks random. Fix `TRUSTED_PROXIES`; raising the limit only moves the threshold. |
-| `429` right after a deploy | Rate limits are per instance and in memory, so a restart resets every bucket. Buckets refill continuously rather than on a window boundary, so a client is never waiting for a reset. |
+| `429` right after a deploy | The credential and API limits live in Redis and survive a restart. The 404-probe limiter is per instance and in memory, so that one resets. Buckets refill continuously rather than on a window boundary, so a client is never waiting for a reset. |
 | Dashboard unstyled | Image built without `make css`. The server warns at boot. Rebuild. |
 | `/docs` renders as plain text | Its CSP relaxes `style-src` only; a proxy overriding `Content-Security-Policy` breaks it. Stop overriding it — LinkCtrl sets its own security headers. |
 | API keys all rejected after a config change | `API_KEY_PEPPER` changed. Every hash is keyed with it. Restore the old value or reissue every key. |
@@ -341,6 +342,7 @@ Two log lines matter:
 | --- | --- |
 | `cache invalidation subscriber lost its connection` | This replica is not hearing invalidations. Expect `REDIRECT_TTL` staleness until it recovers. |
 | `cache invalidation subscriber reconnected; in-process caches flushed` | Recovered, and it distrusted everything it held. Normal after a Redis restart. |
+| `rate limiting fell back to per-instance buckets` | The credential or API limit is no longer shared across replicas. Logged once when it starts, not per request. |
 
 A replica logging the first without the second is the one to look at: it is
 serving from a cache nothing is invalidating, and a subscriber stuck that way

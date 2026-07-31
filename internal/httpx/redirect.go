@@ -240,7 +240,7 @@ func (h *RedirectHandler) probeStatus(r *http.Request) (bool, time.Duration) {
 	if h.NotFoundLimiter == nil {
 		return false, 0
 	}
-	ok, retry := h.NotFoundLimiter.Check(ClientIPFrom(r.Context()))
+	ok, retry := h.NotFoundLimiter.Check(ClientIPFrom(r.Context())) //nolint:contextcheck // deliberate: see ratelimit.Shared.take
 	return !ok, retry
 }
 
@@ -254,7 +254,7 @@ func (h *RedirectHandler) chargeProbe(r *http.Request) {
 	if h.NotFoundLimiter == nil {
 		return
 	}
-	h.NotFoundLimiter.Charge(ClientIPFrom(r.Context()))
+	h.NotFoundLimiter.Charge(ClientIPFrom(r.Context())) //nolint:contextcheck // deliberate: see ratelimit.Shared.take
 }
 
 // tooManyRequests refuses a request from an address that has been probing.

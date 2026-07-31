@@ -86,7 +86,7 @@ func newLimited(t *testing.T, mutate func(*config.Config)) *limitedFixture {
 		t.Fatal(err)
 	}
 
-	limits := httpx.NewLimiters(cfg)
+	limits := httpx.NewLimiters(cfg, nil, nil)
 	metrics := observability.NewMetrics()
 	metrics.Register(observability.NewLimiterCollector(limits.Stats()))
 

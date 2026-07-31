@@ -67,6 +67,22 @@ What the run does establish is that the subscriber is off the request path: the
 cache mix is 100% memory, so every measured request was answered without
 touching Redis or Postgres, and the pool waited zero times.
 
+### Re-measured for M24 (2026-07-31)
+
+[M24](build-notes/phase-details/m24.md) put the credential and API limits in
+Redis. The 404-probe limiter deliberately stayed in process, so the redirect
+path gained one nil comparison and nothing else, but the rule is to re-measure
+whenever that path is touched at all.
+
+**100% of 240,010 requests under 20ms**; 99.98% under 0.5ms, 99.999% under 5ms.
+2,000 rps sustained, zero failures, 240,010 memory hits with no Redis or
+database reads, zero pool acquire waits.
+
+This is also the cleanest evidence about the M23 tail above: the same seeded
+dataset and the same machine, with one more change layered on, produced no
+requests over 20ms at all. Five runs now read 100%, 100%, 100%, 99.991% and 100%,
+which is what run-to-run spread looks like rather than a regression.
+
 The uncached path, which the plan targets at <100ms:
 
 | | Target | Measured |

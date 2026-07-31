@@ -133,6 +133,10 @@ every API response that includes them says so.
 
 Known limitations and deferred work, so nobody discovers them in production:
 
+- **Rate limits are shared only while Redis is reachable.** The credential and
+  API limits are enforced in Redis and hold across replicas; on any Redis error
+  each replica falls back to its own bucket, so the limit then applies per
+  replica until Redis returns. The 404-probe limiter is per instance by design.
 - **Cross-replica cache invalidation needs Redis.** Edits are broadcast on a
   Redis pub/sub channel, so every replica clears its cache. With Redis down each
   replica falls back to waiting out `REDIRECT_TTL`, which is correct but slower

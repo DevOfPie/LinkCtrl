@@ -73,6 +73,12 @@ type Options struct {
 
 	// Now overrides the clock, for tests.
 	Now func() time.Time
+
+	// Shared makes this limit apply across replicas. Nil keeps it per process,
+	// which is what every limit was before M24 and what the 404-probe limiter
+	// stays: sharing that one would put a network round trip on the redirect
+	// path and make an optional dependency load-bearing.
+	Shared *Shared
 }
 
 // bucket is one key's allowance. Refill is computed from `last` when the bucket
@@ -97,6 +103,8 @@ type Limiter struct {
 	burst     float64
 	maxShard  int
 	now       func() time.Time
+
+	shared *Shared
 
 	seed   maphash.Seed
 	shards [shardCount]shard
@@ -126,6 +134,7 @@ func New(perMinute int, opts Options) *Limiter {
 	}
 
 	l := &Limiter{
+		shared:    opts.Shared,
 		perSecond: float64(perMinute) / 60,
 		burst:     float64(opts.Burst),
 		// Rounded up so a small MaxKeys still leaves every shard room for one.
@@ -165,6 +174,27 @@ func (l *Limiter) take(addr netip.Addr, consume bool) (bool, time.Duration) {
 	}
 
 	k := Key(addr)
+
+	// The shared decision first, when there is one. It is authoritative because
+	// it is the only one that sees the other replicas; the local bucket below
+	// is what answers when Redis does not.
+	//
+	// Only a consumed take goes to Redis. Check-then-Charge exists for the
+	// redirect path, which is deliberately not shared, so a non-consuming
+	// shared read would be a round trip nothing asks for.
+	//
+	// A shared answer returns without touching the local bucket, so the local
+	// one is full at the moment Redis fails and a client gets one fresh burst
+	// on failover. That is the fail-open direction, and the alternative —
+	// spending both on every request — would make the local bucket useless as a
+	// fallback by keeping it permanently empty.
+	if consume && l.shared != nil {
+		ttl := time.Duration(l.burst/l.perSecond*float64(time.Second)) + time.Minute
+		if ok, retry, answered := l.shared.take(l.perSecond, l.burst, 1, ttl, k); answered {
+			return ok, retry
+		}
+	}
+
 	now := l.now()
 	sh := &l.shards[l.shardFor(k)]
 
