@@ -73,9 +73,31 @@ else
 fi
 
 step "assets the binary embeds"
-# Through make, so the pinned versions and checksums have one home rather than
-# being restated here where they would drift.
-require "vendored htmx and Swagger UI match their checksums" make htmx swagger-ui
+# The pinned versions and checksums have one home, the Makefile, and are read
+# from it rather than restated here where they would drift. Read rather than
+# invoked, because this script has to run where make does not: development on
+# Windows is a supported path — it is why a Taskfile exists — and a release gate
+# that only runs on Linux is a gate that gets skipped by the people most likely
+# to need it.
+mkvar() { sed -n "s/^$1 *:*= *//p" Makefile | head -1 | tr -d '\r'; }
+
+htmx_version=$(mkvar HTMX_VERSION)
+htmx_sha=$(mkvar HTMX_SHA256)
+swagger_version=$(mkvar SWAGGER_UI_VERSION)
+swagger_css=$(mkvar SWAGGER_CSS_SHA256)
+swagger_js=$(mkvar SWAGGER_JS_SHA256)
+
+if [ -z "$htmx_version" ] || [ -z "$htmx_sha" ] || [ -z "$swagger_version" ] ||
+   [ -z "$swagger_css" ] || [ -z "$swagger_js" ]; then
+  # An empty value would make the checks below pass against nothing.
+  bad "could not read the pinned asset versions from the Makefile"
+else
+  require "vendored htmx matches its pinned checksum" \
+    scripts/get-htmx.sh "$htmx_version" "$htmx_sha" internal/ui/static/js/htmx.min.js
+  require "vendored Swagger UI matches its pinned checksums" \
+    scripts/get-swagger.sh "$swagger_version" "$swagger_css" "$swagger_js" \
+      internal/ui/static/vendor
+fi
 if [ -s internal/ui/static/css/app.css ] && \
    [ "$(wc -c < internal/ui/static/css/app.css)" -gt 8192 ]; then
   ok "stylesheet is built and plausible"
@@ -102,7 +124,32 @@ else
 fi
 
 step "release artifacts build"
-require "cross-compilation for every release platform" make dist
+# Compiles every release target rather than assembling the archives. What breaks
+# here is a build tag or a syscall that does not exist on some GOOS, and that
+# shows up at compile time; tarring and checksumming is `make dist`, which the
+# release workflow runs. Same platform list, read from the same place.
+platforms=$(mkvar RELEASE_PLATFORMS)
+if [ -z "$platforms" ]; then
+  bad "could not read RELEASE_PLATFORMS from the Makefile"
+else
+  xbuild_out=$(mktemp -d)
+  xbuild_failed=""
+  for platform in $platforms; do
+    goos=${platform%/*}; goarch=${platform#*/}
+    for cmd in linkctrl lctl; do
+      if ! CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+           go build -trimpath -o "$xbuild_out/$cmd" "./cmd/$cmd" >/dev/null 2>&1; then
+        xbuild_failed="$xbuild_failed $platform:$cmd"
+      fi
+    done
+  done
+  rm -rf "$xbuild_out"
+  if [ -z "$xbuild_failed" ]; then
+    ok "cross-compilation for every release platform"
+  else
+    bad "cross-compilation failed for:$xbuild_failed"
+  fi
+fi
 
 printf '\n'
 if [ "$fails" -eq 0 ]; then
