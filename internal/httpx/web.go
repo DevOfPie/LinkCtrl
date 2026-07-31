@@ -41,10 +41,24 @@ type shell struct {
 	// Unread is the notification badge. Zero renders no badge, which is also
 	// what a failed count renders — see below.
 	Unread int64
+	// Theme is the explicit override, or "" to follow prefers-color-scheme.
+	// Rendered as an attribute on <html> by the layout, so the first response
+	// is already in the right theme and there is no correcting script — the
+	// flash of the wrong theme is unrepresentable rather than suppressed.
+	Theme string
+	// Path is where a form in the layout should return to. The theme switcher
+	// is on every page, including the login page.
+	Path string
 }
 
 func (h *Web) shell(r *http.Request, title, nav string) shell {
-	s := shell{Title: title, Nav: nav, Identity: IdentityFrom(r.Context())}
+	s := shell{
+		Title:    title,
+		Nav:      nav,
+		Identity: IdentityFrom(r.Context()),
+		Theme:    themeFrom(r),
+		Path:     r.URL.Path,
+	}
 	// One count per page render, served by the partial index the notifications
 	// table ships with. An error is swallowed to zero rather than propagated:
 	// this is a badge, and failing a page an operator asked for because a

@@ -11,3 +11,207 @@
 
 @source "../../templates/**/*.html";
 @source "../../funcs.go";
+
+/* ---------------------------------------------------------------------------
+ * Theme tokens.
+ *
+ * Templates name meaning — surface, muted, danger — never a palette shade. One
+ * token set drives both themes, so a page is written once and is correct in
+ * both; TestTemplatesUseThemeTokensOnly fails the build on any raw palette
+ * utility, which is what holds later UI work to this rather than review.
+ *
+ * `@theme inline` means the generated utilities emit var(--…) directly instead
+ * of a copy of the value, which is what lets the same class change appearance
+ * when the variables below are redefined. It also gives every family at once:
+ * defining --color-surface yields bg-surface, text-surface, border-surface,
+ * fill-surface, stroke-surface and ring-surface, so the SVG charts are covered
+ * by the same definition as the cards.
+ * ------------------------------------------------------------------------- */
+@theme inline {
+  --color-surface: var(--t-surface);
+  --color-raised: var(--t-raised);
+  --color-sunken: var(--t-sunken);
+
+  --color-ink: var(--t-ink);
+  --color-muted: var(--t-muted);
+  --color-subtle: var(--t-subtle);
+  --color-on-accent: var(--t-on-accent);
+
+  --color-line: var(--t-line);
+  --color-line-strong: var(--t-line-strong);
+
+  --color-accent: var(--t-accent);
+  --color-accent-hover: var(--t-accent-hover);
+  --color-accent-ink: var(--t-accent-ink);
+  --color-accent-soft: var(--t-accent-soft);
+  --color-accent-line: var(--t-accent-line);
+
+  --color-ok-soft: var(--t-ok-soft);
+  --color-ok-ink: var(--t-ok-ink);
+  --color-ok-line: var(--t-ok-line);
+
+  --color-warn-soft: var(--t-warn-soft);
+  --color-warn-ink: var(--t-warn-ink);
+  --color-warn-line: var(--t-warn-line);
+
+  --color-danger: var(--t-danger);
+  --color-danger-hover: var(--t-danger-hover);
+  --color-danger-soft: var(--t-danger-soft);
+  --color-danger-ink: var(--t-danger-ink);
+  --color-danger-line: var(--t-danger-line);
+}
+
+/* Light.
+ *
+ * Contrast against the surface a token is actually used on, measured rather
+ * than assumed (WCAG 2.1 relative luminance, AA body text is 4.5:1):
+ *
+ *   ink     on raised  17.85:1   ink     on surface  17.06:1
+ *   muted   on raised   7.58:1   muted   on surface   7.24:1
+ *   subtle  on raised   4.76:1   subtle  on surface   4.55:1
+ *   accent-ink on raised 6.29:1  on-accent on accent   6.29:1
+ *   danger-ink on danger-soft 5.72:1
+ *   ok-ink     on ok-soft     5.21:1
+ *   warn-ink   on warn-soft   4.84:1
+ *   on-accent  on danger      4.70:1
+ *
+ * TWO LIGHT VALUES MOVED to get here, under decision D21 — the alternative was
+ * an AA claim that exempted the theme already shipped:
+ *
+ *   subtle  was slate-400 #94a3b8, 2.56:1 on white — FAIL. Now slate-500.
+ *   the ⓘ affordance was slate-300 #cbd5e1, 1.48:1 — FAIL. Now subtle as well.
+ *
+ * Both carried real text — timestamps, "(optional)" hints, empty states, help
+ * copy — so neither qualified as decorative. The visible effect is that the
+ * quietest text in the light theme is now darker than it shipped.
+ */
+:root {
+  color-scheme: light;
+
+  --t-surface: #f8fafc;
+  --t-raised: #ffffff;
+  --t-sunken: #f1f5f9;
+
+  --t-ink: #0f172a;
+  --t-muted: #475569;
+  --t-subtle: #64748b;
+  --t-on-accent: #ffffff;
+
+  --t-line: #e2e8f0;
+  --t-line-strong: #cbd5e1;
+
+  --t-accent: #4f46e5;
+  --t-accent-hover: #4338ca;
+  --t-accent-ink: #4f46e5;
+  --t-accent-soft: #eef2ff;
+  --t-accent-line: #c7d2fe;
+
+  --t-ok-soft: #ecfdf5;
+  --t-ok-ink: #047857;
+  --t-ok-line: #a7f3d0;
+
+  --t-warn-soft: #fffbeb;
+  --t-warn-ink: #b45309;
+  --t-warn-line: #fde68a;
+
+  --t-danger: #e11d48;
+  --t-danger-hover: #be123c;
+  --t-danger-soft: #fff1f2;
+  --t-danger-ink: #be123c;
+  --t-danger-line: #fecdd3;
+}
+
+/* Dark values, shared by the system-preference path and the explicit override.
+ *
+ *   ink     on raised  13.35:1   ink     on surface  16.30:1
+ *   muted   on raised   9.85:1   muted   on surface  12.02:1
+ *   subtle  on raised   5.71:1   subtle  on surface   6.96:1
+ *   accent-ink on raised 7.34:1  on surface  8.96:1
+ *   danger-ink on danger-soft 8.27:1
+ *   ok-ink     on ok-soft     9.94:1
+ *   warn-ink   on warn-soft  10.39:1
+ *
+ * The status colours are the ones that go wrong here: amber, rose and emerald
+ * at their light-theme values sit on dark surfaces at around 2:1. Each keeps a
+ * dark tint for its surface and a light shade for its text, rather than
+ * reusing the -50 backgrounds.
+ */
+@layer base {
+  @media (prefers-color-scheme: dark) {
+    /* :not() so an explicit light override still wins here. The override rules
+     * below repeat at equal specificity and rely on source order. */
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+
+      --t-surface: #0f172a;
+      --t-raised: #1e293b;
+      --t-sunken: #0b1220;
+
+      --t-ink: #f1f5f9;
+      --t-muted: #cbd5e1;
+      --t-subtle: #94a3b8;
+      --t-on-accent: #ffffff;
+
+      --t-line: #334155;
+      --t-line-strong: #475569;
+
+      --t-accent: #4f46e5;
+      --t-accent-hover: #6366f1;
+      --t-accent-ink: #a5b4fc;
+      --t-accent-soft: #1e1b4b;
+      --t-accent-line: #3730a3;
+
+      --t-ok-soft: #022c22;
+      --t-ok-ink: #6ee7b7;
+      --t-ok-line: #065f46;
+
+      --t-warn-soft: #451a03;
+      --t-warn-ink: #fcd34d;
+      --t-warn-line: #92400e;
+
+      --t-danger: #e11d48;
+      --t-danger-hover: #f43f5e;
+      --t-danger-soft: #4c0519;
+      --t-danger-ink: #fda4af;
+      --t-danger-line: #9f1239;
+    }
+  }
+
+  /* The explicit override. Last so it wins over the media query at equal
+   * specificity, which is what makes "dark on a light system" work. */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --t-surface: #0f172a;
+    --t-raised: #1e293b;
+    --t-sunken: #0b1220;
+
+    --t-ink: #f1f5f9;
+    --t-muted: #cbd5e1;
+    --t-subtle: #94a3b8;
+    --t-on-accent: #ffffff;
+
+    --t-line: #334155;
+    --t-line-strong: #475569;
+
+    --t-accent: #4f46e5;
+    --t-accent-hover: #6366f1;
+    --t-accent-ink: #a5b4fc;
+    --t-accent-soft: #1e1b4b;
+    --t-accent-line: #3730a3;
+
+    --t-ok-soft: #022c22;
+    --t-ok-ink: #6ee7b7;
+    --t-ok-line: #065f46;
+
+    --t-warn-soft: #451a03;
+    --t-warn-ink: #fcd34d;
+    --t-warn-line: #92400e;
+
+    --t-danger: #e11d48;
+    --t-danger-hover: #f43f5e;
+    --t-danger-soft: #4c0519;
+    --t-danger-ink: #fda4af;
+    --t-danger-line: #9f1239;
+  }
+}

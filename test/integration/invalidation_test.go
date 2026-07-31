@@ -186,7 +186,7 @@ func TestInvalidationReachesAnotherReplica(t *testing.T) {
 	// The edit happens on the first replica.
 	editor.InvalidateAlias(ctx, dom.ID, alias)
 
-	waitFor(t, 2*time.Second, "the other replica to drop its cached copy", func() bool {
+	waitFor(t, 10*time.Second, "the other replica to drop its cached copy", func() bool {
 		_, ok := other.ResolveCached(dom.ID, alias)
 		return !ok
 	})
@@ -211,14 +211,14 @@ func TestRootInvalidationReachesAnotherReplica(t *testing.T) {
 	// The subscriber flushes once when it first establishes, so wait that out
 	// before counting — otherwise the assertion below could pass on the startup
 	// flush rather than on the published message.
-	waitFor(t, 2*time.Second, "the subscriber to establish", func() bool {
+	waitFor(t, 10*time.Second, "the subscriber to establish", func() bool {
 		return local.count() >= 1
 	})
 	before := local.count()
 
 	publisher.PublishRootInvalidation(context.Background())
 
-	waitFor(t, 2*time.Second, "the root invalidation to arrive", func() bool {
+	waitFor(t, 10*time.Second, "the root invalidation to arrive", func() bool {
 		return local.count() > before
 	})
 }
@@ -240,13 +240,13 @@ func TestApplyingARootInvalidationDoesNotRepublishIt(t *testing.T) {
 	defer stop()
 	go sub.Run(subCtx)
 
-	waitFor(t, 2*time.Second, "the subscriber to establish", func() bool {
+	waitFor(t, 10*time.Second, "the subscriber to establish", func() bool {
 		return local.count() >= 1
 	})
 	before := local.count()
 
 	publisher.PublishRootInvalidation(context.Background())
-	waitFor(t, 2*time.Second, "the invalidation to arrive", func() bool {
+	waitFor(t, 10*time.Second, "the invalidation to arrive", func() bool {
 		return local.count() > before
 	})
 

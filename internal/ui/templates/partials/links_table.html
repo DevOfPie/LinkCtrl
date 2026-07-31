@@ -5,7 +5,7 @@
   {{if .Links}}
   <table class="w-full table-fixed border-collapse text-sm">
     <thead>
-      <tr class="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-400">
+      <tr class="border-b border-line text-left text-xs uppercase tracking-wide text-subtle">
         <th class="w-1/3 py-2 pr-4 font-medium">Link</th>
         <th class="w-24 py-2 pr-4 font-medium">Status</th>
         <th class="w-24 py-2 pr-4 text-right font-medium">Clicks</th>
@@ -15,32 +15,32 @@
     </thead>
     <tbody>
       {{range .Links}}
-      <tr class="border-b border-slate-100 hover:bg-slate-50">
+      <tr class="border-b border-line hover:bg-surface">
         <td class="py-3 pr-4">
-          <a href="/links/{{.ID}}" class="font-medium text-indigo-600 hover:underline">/{{.Alias}}</a>
-          <p class="mt-0.5 truncate text-xs text-slate-500" title="{{.URL}}">{{if .Title}}{{truncate .Title 60}} · {{end}}{{truncate .URL 80}}</p>
+          <a href="/links/{{.ID}}" class="font-medium text-accent-ink hover:underline">/{{.Alias}}</a>
+          <p class="mt-0.5 truncate text-xs text-muted" title="{{.URL}}">{{if .Title}}{{truncate .Title 60}} · {{end}}{{truncate .URL 80}}</p>
           {{if .Tags}}
           <p class="mt-1 flex flex-wrap gap-1">
-            {{range .Tags}}<span class="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">{{.Name}}</span>{{end}}
+            {{range .Tags}}<span class="rounded bg-sunken px-1.5 py-0.5 text-xs text-muted">{{.Name}}</span>{{end}}
           </p>
           {{end}}
         </td>
         <td class="py-3 pr-4"><span class="{{statusBadge .Status}}">{{.Status}}</span></td>
         <td class="py-3 pr-4 text-right tabular-nums">{{fmtInt .ClickCount}}</td>
-        <td class="py-3 pr-4 text-slate-500">{{reltime .LastClickAt}}</td>
-        <td class="py-3 text-slate-500">{{date .CreatedAt}}</td>
+        <td class="py-3 pr-4 text-muted">{{reltime .LastClickAt}}</td>
+        <td class="py-3 text-muted">{{date .CreatedAt}}</td>
       </tr>
       {{end}}
     </tbody>
   </table>
-  <div class="mt-4 flex items-center justify-between text-sm text-slate-500">
+  <div class="mt-4 flex items-center justify-between text-sm text-muted">
     <span>{{if .Total}}{{fmtInt .Total}} links{{end}}</span>
     {{if .HasMore}}
-    <a href="{{.NextURL}}" class="rounded-md border border-slate-300 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50">Next page →</a>
+    <a href="{{.NextURL}}" class="rounded-md border border-line-strong px-3 py-1.5 font-medium text-ink hover:bg-surface">Next page →</a>
     {{end}}
   </div>
   {{else}}
-  <div class="rounded-md border border-dashed border-slate-200 py-12 text-center text-sm text-slate-400">
+  <div class="rounded-md border border-dashed border-line py-12 text-center text-sm text-subtle">
     {{if .Filtered}}No links match this filter.{{else}}No links yet — create the first one above.{{end}}
   </div>
   {{end}}

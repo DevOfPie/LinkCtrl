@@ -2,25 +2,25 @@
 {{- /* Takes (dict "Title" string "Items" []analytics.DimensionValue
        "Total" int64 "Empty" string). The share bars are SVG rects because the
        CSP forbids inline styles, and a width attribute is not a style. */ -}}
-<div class="rounded-lg border border-slate-200 bg-white p-4">
-  <h3 class="text-sm font-medium text-slate-900">{{.Title}}</h3>
+<div class="rounded-lg border border-line bg-raised p-4">
+  <h3 class="text-sm font-medium text-ink">{{.Title}}</h3>
   {{if .Items}}
   <ul class="mt-3 space-y-2">
     {{range .Items}}
     <li>
       <div class="flex items-baseline justify-between gap-2 text-sm">
-        <span class="truncate text-slate-700">{{if .Value}}{{.Value}}{{else}}unknown{{end}}</span>
-        <span class="shrink-0 tabular-nums text-slate-500">{{fmtInt .Clicks}}</span>
+        <span class="truncate text-ink">{{if .Value}}{{.Value}}{{else}}unknown{{end}}</span>
+        <span class="shrink-0 tabular-nums text-muted">{{fmtInt .Clicks}}</span>
       </div>
       <svg viewBox="0 0 100 4" preserveAspectRatio="none" class="mt-1 h-1 w-full" aria-hidden="true">
-        <rect x="0" y="0" width="100" height="4" rx="2" class="fill-slate-100"/>
-        <rect x="0" y="0" width="{{pct .Clicks $.Total}}" height="4" rx="2" class="fill-indigo-500"/>
+        <rect x="0" y="0" width="100" height="4" rx="2" class="fill-sunken"/>
+        <rect x="0" y="0" width="{{pct .Clicks $.Total}}" height="4" rx="2" class="fill-accent-hover"/>
       </svg>
     </li>
     {{end}}
   </ul>
   {{else}}
-  <p class="mt-3 text-sm text-slate-400">{{if .Empty}}{{.Empty}}{{else}}No data yet{{end}}</p>
+  <p class="mt-3 text-sm text-subtle">{{if .Empty}}{{.Empty}}{{else}}No data yet{{end}}</p>
   {{end}}
 </div>
 {{end}}

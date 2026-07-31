@@ -1,7 +1,42 @@
-{{define "navlink"}}<a href="{{.Href}}" class="{{if .Active}}text-sm font-medium text-indigo-600{{else}}text-sm font-medium text-slate-600 hover:text-slate-900{{end}}">{{.Label}}</a>{{end}}
+{{define "navlink"}}<a href="{{.Href}}" class="{{if .Active}}text-sm font-medium text-accent-ink{{else}}text-sm font-medium text-muted hover:text-ink{{end}}">{{.Label}}</a>{{end}}
 
-{{define "field_error"}}{{if .}}<p class="mt-1 text-sm text-rose-600">{{.}}</p>{{end}}{{end}}
+{{define "field_error"}}{{if .}}<p class="mt-1 text-sm text-danger-ink">{{.}}</p>{{end}}{{end}}
 
-{{define "flash_error"}}{{if .}}<div class="mb-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{{.}}</div>{{end}}{{end}}
+{{define "flash_error"}}{{if .}}<div class="mb-4 rounded-md border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger-ink">{{.}}</div>{{end}}{{end}}
 
-{{define "flash_ok"}}{{if .}}<div class="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{{.}}</div>{{end}}{{end}}
+{{define "flash_ok"}}{{if .}}<div class="mb-4 rounded-md border border-ok-line bg-ok-soft px-4 py-3 text-sm text-ok-ink">{{.}}</div>{{end}}{{end}}
+
+{{/* The appearance switcher.
+
+     A plain form POST, on every page including the login page, because the
+     preference is per-browser rather than per account — there is no session to
+     hang it on and none is wanted. Three radios rather than a toggle: "system"
+     is a real choice and the one a fresh visitor is on, so it has to be
+     reachable again after picking one of the others.
+
+     No JavaScript. The server reads the cookie and renders the attribute on
+     <html>, so the response is already correct and there is nothing to correct
+     on load. */}}
+{{define "theme_switch"}}
+<footer class="mx-auto max-w-6xl px-4 pb-8">
+  <form method="post" action="/theme" class="flex items-center gap-2 text-xs text-subtle">
+    <input type="hidden" name="next" value="{{.Path}}">
+    <span id="theme-label">Appearance</span>
+    <div role="group" aria-labelledby="theme-label" class="flex items-center gap-1">
+      {{template "theme_option" (dict "Value" "system" "Label" "System" "Current" .Theme)}}
+      {{template "theme_option" (dict "Value" "light" "Label" "Light" "Current" .Theme)}}
+      {{template "theme_option" (dict "Value" "dark" "Label" "Dark" "Current" .Theme)}}
+    </div>
+  </form>
+</footer>
+{{end}}
+
+{{/* One option. Current is "" for system, so the comparison below treats an
+     absent cookie and an explicit "system" as the same state — which they are. */}}
+{{define "theme_option"}}
+{{$on := eq .Current .Value}}
+{{if and (eq .Value "system") (eq .Current "")}}{{$on = true}}{{end}}
+<button type="submit" name="theme" value="{{.Value}}"
+        {{if $on}}aria-current="true"{{end}}
+        class="rounded-md px-2 py-1 {{if $on}}bg-sunken font-medium text-ink{{else}}text-subtle hover:bg-sunken hover:text-ink{{end}}">{{.Label}}</button>
+{{end}}

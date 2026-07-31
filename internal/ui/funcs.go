@@ -258,15 +258,15 @@ func statusBadge(status any) string {
 	base := "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset "
 	switch fmt.Sprint(status) {
 	case "active":
-		return base + "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
+		return base + "bg-ok-soft text-ok-ink ring-ok-line"
 	case "archived":
-		return base + "bg-slate-100 text-slate-600 ring-slate-500/20"
+		return base + "bg-sunken text-muted ring-line-strong"
 	case "expired":
-		return base + "bg-amber-50 text-amber-700 ring-amber-600/20"
+		return base + "bg-warn-soft text-warn-ink ring-warn-line"
 	case "disabled":
-		return base + "bg-rose-50 text-rose-700 ring-rose-600/20"
+		return base + "bg-danger-soft text-danger-ink ring-danger-line"
 	default:
-		return base + "bg-slate-100 text-slate-600 ring-slate-500/20"
+		return base + "bg-sunken text-muted ring-line-strong"
 	}
 }
 

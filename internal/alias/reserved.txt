@@ -96,6 +96,7 @@ automation
 notification
 notifications
 audit
+theme
 key
 keys
 apikey

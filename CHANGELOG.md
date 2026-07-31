@@ -40,6 +40,23 @@ migrations run at boot.
   refreshed hourly on every replica. Keeping everything forever is only a safe
   default if the growth it permits is visible; the Prometheus alert recipe is in
   [docs/operations.md](docs/operations.md#audit-log-growth).
+- **The dashboard has a dark theme.** With nothing chosen it follows
+  `prefers-color-scheme`, with no cookie, no account and no JavaScript involved.
+  An **Appearance** control at the foot of every page — the sign-in page
+  included — overrides that with System, Light or Dark.
+- The choice is stored per browser rather than on the account, so it works
+  before you sign in and two browsers on one account may disagree. Deliberate.
+- **There is no flash of the wrong theme.** The server reads the cookie and
+  renders the theme onto `<html>`, so the first response is already correct.
+  Nothing corrects it afterwards because there is nothing to correct.
+- **Two light-theme colours changed.** The quietest text — timestamps,
+  "(optional)" hints, empty states — was `slate-400` and `slate-300`, which
+  measure 2.56:1 and 1.48:1 against white and fail WCAG AA. Both are now darker.
+  An accessibility claim that exempted the theme already shipped would not have
+  been one; the contrast figures for every token pair, in both themes, are
+  recorded beside the definitions in `internal/ui/static/css/input.css`.
+- Not themed, deliberately: `/docs`, whose Swagger UI is vendored and
+  checksum-pinned.
 - **Credential and API rate limits are shared across replicas.** They are
   enforced in Redis, so the configured rate is the instance's rate rather than
   each replica's — an attacker spreading a credential-stuffing run across

@@ -47,6 +47,7 @@ file. Append a row when you append an entry.
 | [M23, invalidation that crosses replicas](#2026-07-31--m23-invalidation-that-crosses-replicas) | Why a reconnect must flush; why the publish does not wait; the black-hole proxy and a test that measured nothing |
 | [M24, limits that hold across replicas](#2026-07-31--m24-limits-that-hold-across-replicas) | A backend rather than a replacement; the server-side clock; enforcing a deadline outside the client; why the request context is not used |
 | [The loop kept stopping](#2026-07-31--the-loop-kept-stopping-for-reasons-it-had-invented) | Why two runs ended early; the safety net that read as permission; naming the specific excuses |
+| [M24.5, a dark theme that cannot flash](#2026-07-31--m245-a-dark-theme-that-cannot-flash) | Why the server renders the attribute; the token scan as enforcement; the two light values that moved under D21 |
 
 ---
 
@@ -2854,3 +2855,73 @@ The runs conflated the two. Both ended a turn on a summary, which reads as a
 handoff and waits for input. Saying what landed and then starting the next
 milestone in the same turn costs nothing and keeps the loop running, so the loop
 now says that explicitly.
+
+---
+
+## 2026-07-31 — M24.5, a dark theme that cannot flash
+
+Owner-added scope, and the only milestone this phase that discharges nothing on
+the scope tables. It lands before the phase's UI-building run — M25, M31, M37,
+M38, M41, M43, M44 — because its token test becomes the enforcement for all of
+them, and restyling seven milestones afterwards is a different job from building
+them right the first time.
+
+### The flash is unrepresentable, not suppressed
+
+The usual dark-mode bug is a page painting light and correcting itself once a
+script has read a preference. The usual fix is to move that script earlier —
+into `<head>`, blocking — which makes the flash small rather than absent.
+
+Here the server reads the cookie and renders `data-theme` onto `<html>` in the
+response it sends. The first paint is already correct because there is no second
+state to arrive at. No script runs, so there is none to block on, and the
+dashboard's no-JavaScript claim survives a feature that is usually the reason it
+stops being true.
+
+"System" is the absence of a choice rather than a third value, and is stored by
+*clearing* the cookie. An absent cookie and "follow the system" are then the same
+state and cannot disagree — which they would eventually, if one were a value.
+
+### One token set, and a test rather than vigilance
+
+Templates name meaning — surface, muted, danger — never a shade. `@theme inline`
+makes the generated utilities emit `var(--…)` directly, so one definition yields
+`bg-`, `text-`, `border-`, `fill-`, `stroke-` and `ring-` at once; the SVG charts
+are covered by the same definition as the cards, which is why the scan includes
+`fill-` and `stroke-`.
+
+The scan is the point of the milestone. A raw palette utility is not wrong in
+light — it is wrong in dark, silently, and only for the people using dark.
+Nobody building a feature in the light theme has any reason to notice, so review
+is the wrong instrument and a failing build is the right one.
+
+### Two light values moved, which is the honest half
+
+D21 decided in advance that where a pair cannot meet AA at today's light value,
+the light value moves. It came due immediately. The quietest text in the shipped
+theme measured 2.56:1 (`slate-400`) and 1.48:1 (`slate-300`) against white,
+against a 4.5:1 requirement, and all of it was real text — timestamps,
+"(optional)" hints, empty states, help copy. None of it qualified as decorative.
+
+So the light theme is now visibly darker in its quietest text. That is a change
+to something already shipped, made deliberately, because an AA claim that
+exempted the theme people are already using would not be a claim.
+
+Every pair is measured rather than asserted, in both themes, and the figures sit
+beside the definitions. The tightest is 4.55:1. The status colours were the
+predicted risk and behaved as predicted: amber, rose and emerald at their
+light-theme values sit near 2:1 on dark surfaces, so each keeps a dark tint for
+its surface and a light shade for its text rather than reusing the `-50`
+backgrounds.
+
+### Per browser, not per account
+
+A `users` column would not work on the sign-in page, which is the first page
+anybody sees and the one most likely to be looked at in a dark room. A cookie
+does, needs no session, and lets two browsers on one account disagree — which is
+correct, because the person sitting at each of them chose.
+
+The cookie is unprefixed, unlike the session's `__Host-`. That prefix requires
+Secure and so cannot be set over plain HTTP, which is right for a credential and
+wrong for an appearance preference that has to work on a local instance. The
+worst a forged one can do is show somebody the other theme.

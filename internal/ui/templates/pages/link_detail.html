@@ -1,39 +1,39 @@
 {{define "content"}}
 <div class="mb-6">
-  <a href="/links" class="text-sm text-slate-500 hover:text-slate-900">← Links</a>
+  <a href="/links" class="text-sm text-muted hover:text-ink">← Links</a>
   <div class="mt-2 flex flex-wrap items-center gap-3">
     <h1 class="text-xl font-semibold tracking-tight">/{{.Link.Alias}}</h1>
     <span class="{{statusBadge .Link.Status}}">{{.Link.Status}}</span>
-    <a href="{{.Link.ShortURL}}" target="_blank" rel="noopener" class="text-sm text-indigo-600 hover:underline">{{.Link.ShortURL}}</a>
+    <a href="{{.Link.ShortURL}}" target="_blank" rel="noopener" class="text-sm text-accent-ink hover:underline">{{.Link.ShortURL}}</a>
   </div>
-  <p class="mt-1 break-all text-sm text-slate-500">→ {{.Link.URL}}</p>
+  <p class="mt-1 break-all text-sm text-muted">→ {{.Link.URL}}</p>
 </div>
 
 {{template "flash_ok" .Notice}}
 {{template "flash_error" .Error}}
 
 <div class="grid gap-4 sm:grid-cols-3">
-  <div class="rounded-lg border border-slate-200 bg-white p-4">
-    <p class="text-sm text-slate-500">Clicks ({{.Days}}d)</p>
+  <div class="rounded-lg border border-line bg-raised p-4">
+    <p class="text-sm text-muted">Clicks ({{.Days}}d)</p>
     <p class="mt-1 text-2xl font-semibold tabular-nums">{{fmtInt .Stats.Totals.Clicks}}</p>
   </div>
-  <div class="rounded-lg border border-slate-200 bg-white p-4">
-    <p class="text-sm text-slate-500">Unique visitors <span class="cursor-help text-slate-300" title="{{.Stats.Caveat}}">ⓘ</span></p>
+  <div class="rounded-lg border border-line bg-raised p-4">
+    <p class="text-sm text-muted">Unique visitors <span class="cursor-help text-subtle" title="{{.Stats.Caveat}}">ⓘ</span></p>
     <p class="mt-1 text-2xl font-semibold tabular-nums">{{fmtInt .Stats.Totals.UniqueVisitors}}</p>
   </div>
-  <div class="rounded-lg border border-slate-200 bg-white p-4">
-    <p class="text-sm text-slate-500">Bot clicks</p>
+  <div class="rounded-lg border border-line bg-raised p-4">
+    <p class="text-sm text-muted">Bot clicks</p>
     <p class="mt-1 text-2xl font-semibold tabular-nums">{{fmtInt .Stats.Totals.BotClicks}}</p>
   </div>
 </div>
 
-<div class="mt-6 rounded-lg border border-slate-200 bg-white p-6">
+<div class="mt-6 rounded-lg border border-line bg-raised p-6">
   <div class="mb-4 flex items-center justify-between">
-    <h2 class="text-sm font-medium text-slate-900">Clicks per day</h2>
+    <h2 class="text-sm font-medium text-ink">Clicks per day</h2>
     <div class="flex gap-1 text-sm">
       {{range .Windows}}
       <a href="/links/{{$.Link.ID}}?days={{.}}"
-         class="{{if eq . $.Days}}rounded-md bg-indigo-50 px-2 py-1 font-medium text-indigo-700{{else}}rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100{{end}}">{{.}}d</a>
+         class="{{if eq . $.Days}}rounded-md bg-accent-soft px-2 py-1 font-medium text-accent-ink{{else}}rounded-md px-2 py-1 text-muted hover:bg-sunken{{end}}">{{.}}d</a>
       {{end}}
     </div>
   </div>
@@ -50,76 +50,76 @@
 </div>
 
 {{if and .Identity (.Identity.Can "links.update")}}
-<div class="mt-6 rounded-lg border border-slate-200 bg-white p-6">
-  <h2 class="mb-4 text-sm font-medium text-slate-900">Edit link</h2>
+<div class="mt-6 rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-4 text-sm font-medium text-ink">Edit link</h2>
   <form method="post" action="/links/{{.Link.ID}}" class="grid gap-4 sm:grid-cols-2">
     <div class="sm:col-span-2">
-      <label for="url" class="block text-sm font-medium text-slate-700">Destination URL</label>
+      <label for="url" class="block text-sm font-medium text-ink">Destination URL</label>
       <input id="url" name="url" type="url" required value="{{.Form.URL}}"
-             class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
       {{template "field_error" (index .FieldErrors "url")}}
     </div>
     <div>
-      <label for="alias" class="block text-sm font-medium text-slate-700">Alias</label>
+      <label for="alias" class="block text-sm font-medium text-ink">Alias</label>
       <input id="alias" name="alias" type="text" required value="{{.Form.Alias}}"
-             class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
       {{template "field_error" (index .FieldErrors "alias")}}
-      <p class="mt-1 text-xs text-slate-400">Changing the alias breaks anything already pointing at the old one.</p>
+      <p class="mt-1 text-xs text-subtle">Changing the alias breaks anything already pointing at the old one.</p>
     </div>
     <div>
-      <label for="title" class="block text-sm font-medium text-slate-700">Title</label>
+      <label for="title" class="block text-sm font-medium text-ink">Title</label>
       <input id="title" name="title" type="text" value="{{.Form.Title}}"
-             class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
     </div>
     <div class="sm:col-span-2">
-      <label for="description" class="block text-sm font-medium text-slate-700">Description</label>
+      <label for="description" class="block text-sm font-medium text-ink">Description</label>
       <textarea id="description" name="description" rows="2"
-                class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">{{.Form.Description}}</textarea>
+                class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">{{.Form.Description}}</textarea>
     </div>
     <div>
-      <label for="expires_at" class="block text-sm font-medium text-slate-700">Expires <span class="text-slate-400">(UTC, empty = never)</span></label>
+      <label for="expires_at" class="block text-sm font-medium text-ink">Expires <span class="text-subtle">(UTC, empty = never)</span></label>
       <input id="expires_at" name="expires_at" type="datetime-local" value="{{.Form.ExpiresAt}}"
-             class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
       {{template "field_error" (index .FieldErrors "expires_at")}}
     </div>
     <div>
-      <label for="tags" class="block text-sm font-medium text-slate-700">Tags <span class="text-slate-400">(comma-separated)</span></label>
+      <label for="tags" class="block text-sm font-medium text-ink">Tags <span class="text-subtle">(comma-separated)</span></label>
       <input id="tags" name="tags" type="text" value="{{.Form.Tags}}" placeholder="marketing, launch"
-             class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
     </div>
     <div class="sm:col-span-2">
-      <label class="flex items-start gap-2 text-sm text-slate-700">
-        <input type="checkbox" name="forward_query" value="1" class="mt-0.5 rounded border-slate-300"
+      <label class="flex items-start gap-2 text-sm text-ink">
+        <input type="checkbox" name="forward_query" value="1" class="mt-0.5 rounded border-line-strong"
                {{if .Form.ForwardQuery}}checked{{end}}>
         <span>Forward query parameters
-          <span class="block text-xs text-slate-400">Visitors' <code>?utm_source=…</code> and friends are merged into the destination. The destination's own parameters win on conflict.</span>
+          <span class="block text-xs text-subtle">Visitors' <code>?utm_source=…</code> and friends are merged into the destination. The destination's own parameters win on conflict.</span>
         </span>
       </label>
     </div>
     <div class="sm:col-span-2">
-      <button type="submit" class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Save changes</button>
+      <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Save changes</button>
     </div>
   </form>
 </div>
 {{end}}
 
 {{if and .Identity (.Identity.Can "links.delete")}}
-<div class="mt-6 rounded-lg border border-rose-200 bg-white p-6">
-  <h2 class="mb-1 text-sm font-medium text-rose-700">Danger zone</h2>
+<div class="mt-6 rounded-lg border border-danger-line bg-raised p-6">
+  <h2 class="mb-1 text-sm font-medium text-danger-ink">Danger zone</h2>
   {{/* Says what deletion actually does. "Restorable for 30 days" described a
        trash view that does not exist in Phase 1: GetLink filters soft-deleted
        rows, so the link's own page 404s the moment it is deleted, and
        RestoreLink only un-archives. The alias reservation is real and is the
        part worth stating. */}}
-  <p class="mb-4 text-sm text-slate-500">Archiving keeps the alias but stops redirecting, and can be undone here. Deleting stops the redirect immediately and holds the alias for 30 days before purging it &mdash; recovery inside that window is a database operation, not a button.</p>
+  <p class="mb-4 text-sm text-muted">Archiving keeps the alias but stops redirecting, and can be undone here. Deleting stops the redirect immediately and holds the alias for 30 days before purging it &mdash; recovery inside that window is a database operation, not a button.</p>
   <div class="flex gap-3">
     {{if eq (printf "%s" .Link.Status) "archived"}}
     <form method="post" action="/links/{{.Link.ID}}/restore">
-      <button type="submit" class="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Restore</button>
+      <button type="submit" class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-surface">Restore</button>
     </form>
     {{else}}
     <form method="post" action="/links/{{.Link.ID}}/archive">
-      <button type="submit" class="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Archive</button>
+      <button type="submit" class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-surface">Archive</button>
     </form>
     {{end}}
     {{/* hx-post as well as the native action: htmx only honours hx-confirm on
@@ -130,18 +130,18 @@
     <form method="post" action="/links/{{.Link.ID}}/delete"
           hx-post="/links/{{.Link.ID}}/delete"
           hx-confirm="Delete /{{.Link.Alias}}? It stops redirecting immediately, and its alias stays reserved for 30 days before it is purged.">
-      <button type="submit" class="rounded-md bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-500">Delete</button>
+      <button type="submit" class="rounded-md bg-danger px-4 py-2 text-sm font-medium text-on-accent hover:bg-danger-hover">Delete</button>
     </form>
   </div>
 </div>
 {{end}}
 
 {{if .RecentClicks}}
-<div class="mt-6 rounded-lg border border-slate-200 bg-white p-6">
-  <h2 class="mb-4 text-sm font-medium text-slate-900">Recent activity</h2>
+<div class="mt-6 rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-4 text-sm font-medium text-ink">Recent activity</h2>
   <table class="w-full text-sm">
     <thead>
-      <tr class="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-400">
+      <tr class="border-b border-line text-left text-xs uppercase tracking-wide text-subtle">
         <th class="py-2 pr-4 font-medium">When</th>
         <th class="py-2 pr-4 font-medium">Device</th>
         <th class="py-2 pr-4 font-medium">Browser</th>
@@ -151,12 +151,12 @@
     </thead>
     <tbody>
       {{range .RecentClicks}}
-      <tr class="border-b border-slate-100">
-        <td class="py-2 pr-4 text-slate-500">{{reltime .OccurredAt}}</td>
-        <td class="py-2 pr-4">{{.Device}}{{if .IsBot}} <span class="rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-700">bot</span>{{end}}</td>
+      <tr class="border-b border-line">
+        <td class="py-2 pr-4 text-muted">{{reltime .OccurredAt}}</td>
+        <td class="py-2 pr-4">{{.Device}}{{if .IsBot}} <span class="rounded bg-warn-soft px-1.5 py-0.5 text-xs text-warn-ink">bot</span>{{end}}</td>
         <td class="py-2 pr-4">{{.Browser}}</td>
         <td class="py-2 pr-4">{{.OS}}</td>
-        <td class="py-2 text-slate-500">{{if .Referrer}}{{.Referrer}}{{else}}direct{{end}}</td>
+        <td class="py-2 text-muted">{{if .Referrer}}{{.Referrer}}{{else}}direct{{end}}</td>
       </tr>
       {{end}}
     </tbody>

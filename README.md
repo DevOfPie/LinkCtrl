@@ -84,7 +84,7 @@ answers, not the same ones with a domain name.
 | **Auth** | Email/password with argon2id, server-side sessions in `__Host-` cookies, per-account lockout and per-address rate limiting, real RBAC with four built-in roles and a working permission evaluator. |
 | **Abuse limits** | Per-address limits on credential endpoints, the API, and 404 probing. The last charges misses only, so a working link is never throttled by anyone's scanning. |
 | **API keys** | `lk_live_…` bearer tokens, scoped to permissions you hold, intersected with your current role on every request. Revocable, with usage timestamps. |
-| **Dashboard** | Server-rendered HTML with htmx. Works without JavaScript; no build step at runtime. |
+| **Dashboard** | Server-rendered HTML with htmx. Works without JavaScript; no build step at runtime. Light and dark, following the operating system unless overridden per browser — the server renders the theme into the page, so there is no flash of the wrong one. |
 | **API** | REST with RFC 9457 problem responses, an OpenAPI 3 document, and Swagger UI at `/docs`. |
 | **Operations** | `/healthz`, `/readyz`, Prometheus metrics on a separate unpublished port, structured JSON logs, graceful shutdown that flushes buffered clicks. |
 | **CLI** | `lctl` for config validation, migrations, partitions and API keys — including the first key on a headless box. |

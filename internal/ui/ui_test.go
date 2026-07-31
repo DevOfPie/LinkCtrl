@@ -164,6 +164,16 @@ func TestEveryPageRenders(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 	data := pageData(t)
+	// Every page goes through the layout, which now carries the appearance
+	// switcher, so every page renders it. Supplied here rather than in each
+	// entry so a page added later cannot forget it and quietly stop covering
+	// the footer.
+	for _, d := range data {
+		if m, ok := d.(map[string]any); ok {
+			m["Theme"] = ""
+			m["Path"] = "/dashboard"
+		}
+	}
 
 	for _, page := range r.Pages() {
 		t.Run(page, func(t *testing.T) {

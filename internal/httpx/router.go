@@ -187,6 +187,9 @@ func NewRouter(d Deps) http.Handler {
 		app.Handle("POST /login", guard(http.HandlerFunc(web.LoginSubmit)))
 		app.HandleFunc("POST /logout", web.Logout)
 		app.HandleFunc("GET /setup", web.SetupPage)
+		// Unauthenticated on purpose: the preference is per-browser, not per
+		// account, so it has to be settable from the login page too.
+		app.HandleFunc("POST /theme", web.ThemeSet)
 		app.Handle("POST /setup", guard(http.HandlerFunc(web.SetupSubmit)))
 		app.Handle("POST /account/password",
 			guard(web.RequireWebAuth(http.HandlerFunc(web.PasswordChange))))
@@ -414,7 +417,7 @@ func (h hostRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 var dashboardPatterns = []string{
 	"/{$}", "/login", "/logout", "/setup", "/dashboard", "/docs",
 	"/links", "/links/", "/keys", "/keys/", "/account", "/account/",
-	"/notifications", "/notifications/",
+	"/notifications", "/notifications/", "/theme",
 }
 
 // infrastructurePatterns are the routes registered outside dashboardPatterns:

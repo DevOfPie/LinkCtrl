@@ -15,10 +15,25 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 | `/links` | Create a link; search, filter by status, sort; page through with a cursor. The search box filters as you type and updates the address bar, so a reload or a shared URL shows the same view. |
 | `/links/{id}` | Everything about one link: edit destination, alias, title, description, expiry and tags; per-window analytics (7/30/90 days) with device, browser, OS, referrer, language and country breakdowns; recent activity; archive, restore and delete. |
 | `/keys` | Mint, list and revoke API keys. |
+| `/notifications` | Things the instance wanted you to know about, and mark-read. |
 | `/account` | Your profile and password. |
 
 It works without JavaScript. htmx makes search and filtering swap a fragment
 instead of reloading, and that is the only thing it is used for.
+
+### Light and dark
+
+Every page follows your operating system's setting unless you say otherwise.
+The **Appearance** control at the foot of every page — including the sign-in
+page — overrides it with System, Light or Dark.
+
+The choice is stored per browser, in a cookie, not on your account. Two browsers
+signed into the same account may disagree, which is deliberate: the person
+sitting at each of them chose. It is also why it works before you sign in.
+
+There is no flash of the wrong theme while a page loads. The server reads the
+cookie and renders the theme into the page it sends, so the first paint is
+already correct — there is no script to run and nothing to correct.
 
 ### Creating a link
 
