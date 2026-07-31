@@ -9,6 +9,8 @@ Scope contract and specification. States **what** is true, not why.
 | Dev environment | `docs/build-notes/development.md` |
 | How the work is done | `docs/build-notes/workflow.md` |
 | Security model and reporting | `docs/build-notes/SECURITY.md` |
+| Phase 2 definitions of done | `docs/build-notes/phase-details/` — one file per milestone |
+| Out-of-spec findings | `docs/build-notes/deferred-findings.md` |
 | Current progress | [Build Status](#build-status) |
 | Last updated | 2026-07-31 |
 
@@ -86,7 +88,7 @@ Authoritative. Where this table and prose elsewhere disagree, this table wins.
 | Query forwarding (default off) | 1 |
 | Root redirect on the link domain, when it is a separate host | 1 |
 | Deep-link path forwarding | 2 |
-| Rules: country, region, city, language, browser, OS, device, date/time, referrer, query params, UTM, cookies, returning visitors | 2 |
+| Rules: country, region, city, language, browser, OS, device, date/time, referrer, query params, UTM, returning visitors (within-day). Cookies refused — see M34 | 2 |
 | A/B testing, weighted routing, percentage splits, sequential routing, feature flags, fallback destinations | 2 |
 
 ### Analytics
@@ -134,7 +136,7 @@ rather than rendering a world uniformly colored "unknown".
 | RBAC: roles, permissions, working evaluator | 1 |
 | API keys with scopes | 1 |
 | Rate limiting: per address, in-process, on credentials and the API | 1 |
-| Rate limiting: shared across replicas | 2 |
+| Rate limiting: shared across replicas — credentials and API only; the 404-probe limiter stays per-instance | 2 |
 | Abuse prevention: scheme allowlist, private-IP block, reserved/profanity alias filters, 404 probe limiting | 1 |
 | `domains.write` permission, for settings that affect every link at once | 1 |
 | Per-domain ownership, so a workspace administers its own hostname | 2 |
@@ -212,7 +214,9 @@ anything is being refused.
 | Roles and permissions with evaluator | 1 |
 | One auto-provisioned personal org + workspace per user | 1 |
 | Organizations: sharing, invites, team management | 2 |
+| Workspace creation, and organization creation from an existing account | 2 |
 | Self-serve signup, switchable at runtime by an owner | 2 |
+| Optional SMTP mailer, for invitations and address verification | 2 |
 | Activity feed, comments | 2+ |
 
 Signup sits in Phase 2 next to invitations because of the second row, not because
@@ -241,6 +245,7 @@ admits API clients and not browsers. The configuration reference says so.
 | Custom domains, per workspace and per link | 2 |
 | QR codes, campaigns, webhooks, automation | 2 |
 | Advanced analytics, compliance features, high availability | 3 |
+| Entitlements or billing for organization creation | 3+ |
 | AI optimization, smart routing, predictive analytics, plugin system | 4 |
 | GraphQL, SDKs, Terraform provider | future |
 | Kubernetes, cloud deployments, multi-region | future |
@@ -271,7 +276,7 @@ CRM · email marketing · website builder · advertising system · full CMS.
 `AuditLog` · `Notification`
 
 31 tables. ERD and per-entity implementation status: `docs/data-model.md`
-*(not yet written)*.
+*(not yet written — scheduled in [M45](docs/build-notes/phase-details/m45.md))*.
 
 Rules:
 
@@ -383,7 +388,8 @@ caveat with the data.
 ## Build status
 
 As of 2026-07-31. 21 of 21 milestones, all of them in 0.1.0, tagged `v0.1.0` on
-`main`.
+`main` and released. Phase 2 is planned and unstarted:
+[Phase 2 build plan](#phase-2-build-plan).
 
 The first eighteen were then re-reviewed: a six-dimension audit with adversarial
 verification confirmed 30 findings — among them a missing purge job that
@@ -440,97 +446,127 @@ which is deliberately not scheduled.
 #### Added after the review, and built
 
 The scope Phase 1 grew after 0.1.0's first eighteen milestones were reviewed. All
-three are done; their definitions of done are kept because they are what the
-implementations are held to.
-
-| Milestone | State |
-| --- | --- |
-| **M18 — separate management and link hostnames** | **Done.** `APP_BASE_URL` and `LINK_BASE_URL` both default to `BASE_URL`, so an existing single-host deployment is unaffected; set to different hosts, the router dispatches on `Host` and each tree answers only its own paths. A wrong-host request is `404`, never a cross-host redirect. `short_url` is built from the link origin, the CSRF trusted origin follows the dashboard host, and `/healthz` and `/readyz` answer on every hostname including ones never configured, because probes do not know the operator's names. Reserved aliases stay enforced on both hosts. |
-| **M19 — post-release defect fixes, and a demo seeder** | **Done.** Effective status is derived rather than stored, so an expired link reports as expired everywhere and `?status=expired` matches it. `visitors` and `is_first_visit` are documented as dormant instead of described as working, and stay under partition maintenance and retention so the day something writes to them the guarantees already apply. The deletion notice says what recovery is. `lctl demo` / `make demo` fills an instance with a workspace worth looking at. |
-| **M20 — root redirect on the link domain** | **Done.** Every requirement below holds, verified live and under test. |
-
-**M20 in detail.** M18 gave the instance a second public hostname and left its
-root a bare `404`: `/{alias}` does not match `/`, and the dashboard routes that
-used to answer there moved to the other host. Anyone who trimmed a short link
-back to the domain, or typed it out of curiosity, got nothing. Every commercial
-shortener points that page somewhere, and the operator is the only party who
-knows where.
-
-An operator can now set a destination for `https://lnk.example.com/`, and every
-row below holds:
-
-| Requirement | Why it is stated |
-| --- | --- |
-| Stored on the domain row, as an additive column | It is a property of the hostname, not of a workspace or a link. The `domains` table already exists and already has the row this describes. |
-| Guarded by a new `domains.write` permission, granted to owner and admin | Phase 1 has no per-domain owner to check: the default domain is instance-wide with a null organization, so "the domain owner" resolves to whoever administers the instance. The permission is the honest form of that, and it becomes a real ownership check in Phase 2 when a workspace can bring its own hostname. |
-| Only in effect when the hosts are actually separate | On a single-host deployment `/` is the dashboard, and a root redirect there would take the dashboard away from the person who set it. Refused rather than silently ignored. |
-| Destination validated by `ValidateDestination`, unchanged | Same scheme allowlist and same private, loopback and metadata refusals as any other destination. A root redirect that skipped them would be a cleaner SSRF than the one the validator exists to stop, because it needs no link and no alias. |
-| `302`, like every other redirect here | Same reason: a `301` cached in browsers and intermediaries cannot be recalled, and this is the destination most likely to be changed later. |
-| Unset stays `404` | The current behaviour, and the one that reveals nothing. No default marketing page, no "powered by" — an instance that says nothing is a valid choice. |
-| Resolved from cache, never a query per request | It sits on the redirect tree under the same 20ms budget as an alias, and the root of a link domain is a page crawlers and scanners hit often. Cached with invalidation on change, the way a link snapshot already is. |
-| Not counted as a click | There is no link, so there is no `link_id` to attribute it to. Root visits stay out of `click_events` rather than acquiring a synthetic link to hang off. |
-| Changing it is an audit-log event once the audit log has behavior | It is a setting that redirects every stray visitor to the whole domain, which is exactly the class of change worth being able to ask about afterwards. Phase 2, noted here so it is not rediscovered. |
-
-**M19 in detail.** The three defects, each with what "fixed" means:
-
-| Defect | Fix |
-| --- | --- |
-| `links.status` is never set to `expired` | Only `active` and `archived` are ever written. The redirect path is correct — it reads `expires_at` and answers `410` — but the management surface reports an expired link as `"status":"active"`, and the UI's *Expired* filter is an option that can never match a row. [operations.md](docs/operations.md#troubleshooting) tells an operator diagnosing an unexpected `410` to check the link's status, which will tell them the link is fine. Fixed by deriving effective status in one place that both the list and the resolver agree with, rather than by adding a job to write a column that is stale the moment it is written. `disabled` is in the same enum and the same position; it is out of scope only because nothing offers to set it either. |
-| The `visitors` table is dead | Nothing writes it and nothing reads it, and `click_events.is_first_visit` is the same one column down: always `false`, under a comment claiming the rollup computes it, which no rollup does. The milestone forced a choice; the choice taken was neither of the two it offered. Both stay dormant and both stay under partition maintenance and retention, because the alternative fails in the direction that matters — a table dropped from those lists that later acquires a writer puts its rows in the default partition, which retention never drops, making the dormant table the one place raw visitor data is kept forever. What was actually wrong was the description, so the comments now say dormant instead of describing work that does not happen. |
-| The deletion notice promises a button that does not exist | The UI says "Link deleted. It stays restorable for 30 days." [usage.md](docs/usage.md) is straight about the truth — "recovery inside the 30 days is a database operation, not a button" — and `RestoreLink` is guarded by `deleted_at IS NULL`, so it refuses soft-deleted rows by design. Fixed by making the notice say what recovery is. Adding a trash view instead would be a scope change, and Phase 1 already decided against it. |
-
-**The seeder.** `lctl seed` exists and is for load testing: a hundred thousand
-links called `ld0`…`ld99999`, no destination rows, random visitor hashes. It is
-the wrong shape for looking at the product. `make demo` fills an empty instance
-with something worth a screenshot — a workspace of plausible links, thirty days
-of history with weekday seasonality and a launch spike, and every status the UI
-can render, including an archived link, an expired campaign and one in the trash.
-Two requirements make it worth committing rather than keeping as a snippet: links
-are created through the same service call the REST API makes, so seeding runs the
-same validation and alias policy a client does and cannot invent states the
-product cannot reach; and
-backfilled click rows match what the ingester would have written column for
-column — no IP anywhere, referrers already reduced to a host, `is_first_visit`
-false, and the exact device and browser strings `Classify` emits. A seeder that
-writes rows the application could not have produced tests nothing and teaches the
-reader something false.
+three are done. Their definitions of done — M18's hostname split, M20's root
+redirect requirement table, M19's three defects, and the demo seeder — are in
+[phase-details/phase-1.md](docs/build-notes/phase-details/phase-1.md), kept
+because they are what the implementations are still held to.
 
 #### Deferred findings
 
-Where out-of-spec issues go the moment they are found, instead of being fixed on
-the spot or forgotten. Anything discovered while a milestone is in flight that is
-not required by that milestone lands here as one row: what, where, the evidence
-it is real, and a suspected severity.
+Moved to [deferred-findings.md](docs/build-notes/deferred-findings.md), which
+carries the queue, the rules for what lands in it, and the review state of each
+row. One open finding, cosmetic, unreviewed.
 
-**Nothing here is scheduled work.** The owner reviews each row and approves it
-individually; approved rows become the phase's final milestone. An unreviewed row
-is a report, not a commitment — which is what keeps "I noticed something" from
-turning into unplanned scope.
+#### Previously unassigned, now scheduled
 
-Issues that make the *current* milestone's own claim false are in spec by
-definition and get fixed immediately, whatever subsystem they turn up in. The test
-is the claim, not the file.
+All three items Phase 1 accepted without an owner are scheduled in Phase 2:
 
-| Finding | Where | Evidence | Severity | Reviewed |
-| --- | --- | --- | --- | --- |
-| *(empty)* | | | | |
-
-The process around this — when to defer, what counts as work, what has to pass
-before a phase PR — is in [workflow.md](docs/build-notes/workflow.md).
-
-#### Accepted, unassigned
-
-None of it blocking a release:
-
-| Capability | State |
+| Capability | Now |
 | --- | --- |
-| Dimension rollup cost | The job recomputes whole days every 60s and takes 16-21s at 5.7M events, because 553k `(link, day, dimension, value)` tuples are re-upserted per run. Measured, not fixed: see [docs/slo.md](docs/slo.md#the-dimension-rollup-is-the-real-bottleneck-and-it-is-not-the-scan). The options are a narrower window, a longer cadence for dimensions than for totals, or accepting it with an alert. |
-| Audit log behavior | Table only, by design — Phase 1 scope says table, Phase 2 says behavior. |
-| Geographic region and city | Resolvable from the same database as the country and deliberately not stored. Nothing displays them, and city plus a timestamp approaches a location history. Storing them needs a UI and a reason, which makes it a Phase 2 decision. |
+| Dimension rollup cost | [M37](docs/build-notes/phase-details/m37.md) — split cadence, staleness metric, re-measured at the 5.7M-event seed before the choropleth reads it. |
+| Audit log behavior | [M21](docs/build-notes/phase-details/m21.md) — writer, read API, and its own retention window. |
+| Geographic region and city | [M34](docs/build-notes/phase-details/m34.md) — resolved transiently for routing, never stored. `click_events.region` and `city` stay null, asserted by test. |
 
-The last row narrows *Scope by phase*, which lists geographic analytics as
+That last row narrows *Scope by phase*, which lists geographic analytics as
 country/region/city in Phase 1. Country is delivered; the other two are
 reclassified rather than quietly skipped.
+
+---
+
+## Phase 2 build plan
+
+27 milestones, M21–M45, continuing Phase 1's numbering — including two adversarial
+reviews numbered `.5`, following Phase 1's M0.5 precedent so they insert without
+renumbering the work either side. One milestone per commit.
+
+**Definitions of done live in
+[`docs/build-notes/phase-details/`](docs/build-notes/phase-details/), one file per
+milestone.** Read `m27.md` to build M27, and nothing else — the files do not
+restate each other, and the rules every milestone inherits are stated once in that
+directory's [README](docs/build-notes/phase-details/README.md).
+
+Ordering is strict enablement: substrates land before their consumers, so event
+emission, invalidation and delivery are never retrofitted into shipped features.
+The cache key bumps exactly once (M34) and the durable counter is built exactly
+once (M35).
+
+| # | Milestone | Depends on | Discharges |
+| --- | --- | --- | --- |
+| [M21](docs/build-notes/phase-details/m21.md) | Audit log: behavior, retention, growth alerting | — | Audit log behavior · M20's root-redirect audit promise |
+| [M22](docs/build-notes/phase-details/m22.md) | Notifications: in-app behavior | — | Blocking row's *notification* leg |
+| [M23](docs/build-notes/phase-details/m23.md) | Cross-replica cache invalidation (pub/sub) | — | Known limitation: single-replica invalidation |
+| [M24](docs/build-notes/phase-details/m24.md) | Shared rate limits (credentials and API) | — | Rate limiting shared across replicas |
+| [M25](docs/build-notes/phase-details/m25.md) | Workspace and organization switcher | — | Groundwork for M27/M28 |
+| [M26](docs/build-notes/phase-details/m26.md) | Mailer: optional SMTP delivery | — | Optional SMTP mailer |
+| [M27](docs/build-notes/phase-details/m27.md) | Organizations: invitations and joining | M21 M22 M25 M26 | Organizations row (invites) |
+| [M28](docs/build-notes/phase-details/m28.md) | Team management, workspaces, org creation | M27 | Organizations row (complete) · workspace and org creation |
+| [M29](docs/build-notes/phase-details/m29.md) | Self-serve signup, switchable at runtime | M26 M27 | Self-serve signup |
+| [M30](docs/build-notes/phase-details/m30.md) | Destination blocking: tiers and logging | M21 | Malicious destination blocking (tiers, logging) |
+| [M31](docs/build-notes/phase-details/m31.md) | Blocked-attempt disputes and owner review | M30 M22 | Disputes with owner review |
+| [M32](docs/build-notes/phase-details/m32.md) | Opt-in reputation and malware feeds | M30 M31 | Third-party feeds |
+| [M32.5](docs/build-notes/phase-details/m32.5.md) | **Mid-phase adversarial review** | M21–M32 | — |
+| [M33](docs/build-notes/phase-details/m33.md) | Deep-link path forwarding | — *(before M34)* | Deep-link path forwarding |
+| [M34](docs/build-notes/phase-details/m34.md) | Routing rules: conditions, first-match evaluation | M23 M30 M33 | Rules row · region/city decision |
+| [M35](docs/build-notes/phase-details/m35.md) | Gated links: password, signed, one-time, max-click | M34 *(ordering)* | Password/one-time/max-click/signed |
+| [M36](docs/build-notes/phase-details/m36.md) | Split testing: weighted, sequential, fallback, flags | M34 M35 | A/B testing row |
+| [M37](docs/build-notes/phase-details/m37.md) | Dimension visualizations, rollup cadence first | — | Dimension visualizations · rollup cost |
+| [M38](docs/build-notes/phase-details/m38.md) | Folders: API and tree UI | — | Folders row |
+| [M39](docs/build-notes/phase-details/m39.md) | Per-domain ownership | M21 | Per-domain ownership |
+| [M40](docs/build-notes/phase-details/m40.md) | Custom domains: verification and serving | M39 M23 | Custom domains row |
+| [M41](docs/build-notes/phase-details/m41.md) | QR codes and campaigns | — | Other surfaces (QR, campaigns) |
+| [M42](docs/build-notes/phase-details/m42.md) | Webhooks | M30 | Other surfaces (webhooks) |
+| [M43](docs/build-notes/phase-details/m43.md) | Automation rules | M22 M35 M42 | Other surfaces (complete) |
+| [M44](docs/build-notes/phase-details/m44.md) | API keys: rotation and scope choice | M21 | Known limitation: key rotation |
+| [M44.5](docs/build-notes/phase-details/m44.5.md) | **Pre-release adversarial review** | M21–M44 | — |
+| [M45](docs/build-notes/phase-details/m45.md) | Deferred findings, documentation pass, 0.2.0 | all | Phase close · `docs/data-model.md` |
+
+### Phase 2 decisions
+
+Taken 2026-07-31, before the plan was finalised. The *why* for each is in
+decisions.md; this table is what was decided.
+
+| # | Decision | Outcome |
+| --- | --- | --- |
+| D1 | Mailer | Ships. Optional SMTP (M26), off by default; emailed invites, address verification gating `open` signup, emailed dispute outcomes. Every consumer degrades mail-free. |
+| D2 | Cookie / returning-visitor conditions | Returning-visitor ships with **within-day** semantics via the daily-salted visitor hash, cookie-free. The cookies condition is refused; the scope row is annotated. |
+| D3 | Custom-domain TLS | Operator-managed Caddy on-demand TLS. The app tracks `ssl_status` only and never speaks ACME. |
+| D4 | Version at phase end | 0.2.0. 1.0.0 stays a later phase's promise. |
+| D5 | Audit retention default | Keep forever until configured, so an upgrade never silently deletes history. Growth is made observable instead: metric and alert (M21), owner notification (M22), emailed when a mailer exists (M26). |
+| D6 | Invite-path provisioning | Membership only — no auto-provisioned personal org. The account stays capable of owning an org later, so nobody needs a second account (D16). |
+| D7 | Signup ceiling vs invites | `closed` admits **no new account by any path**, invites included. The environment ceiling stays absolute, matching the recorded rule that no session can open a closed instance. Onboarding under `closed` costs one `.env` edit. |
+| D8 | Sequential routing | Strict global order, via M35's durable counter. The write cost lands only on links using `sequential`. |
+| D9 | API key rotation | Self-rotation into an identical-or-narrower successor with a bounded grace window. `apikeys.*` never becomes a key scope. Accepted trade: a leaked key can persist across rotations. |
+| D10 | `disabled` automation action | **Not built.** `archived` and `disabled` are the same outcome on the redirect path, and `disabled` has no restore affordance — automation would strand links in a state the UI cannot leave. Action set is notify / webhook / archive. |
+| D11 | QR output | SVG only. No image encoder in the dependency set. |
+| D12 | New-vs-returning analytics split | `visitors` and `is_first_visit` stay dormant. No scope row asks for it; M45 trues up the comments that imply otherwise. |
+| D13 | Freshly-registered-domains heuristic | Excluded from M30 — it needs a domain-age source, meaning egress. Noted as what M32's opt-in feed path can supply. |
+| D14 | Alias-rename 409 | Stays absolute. No self-service release path in Phase 2. |
+| D15 | Workspace creation | Included in M28. Workspace-scoped roles otherwise have no second object to scope to. |
+| D16 | `orgs.create` | A permission, granted by default to self-registered users only. On a default instance that means the owner. It is also the call site a future entitlement check would hang on. |
+| D17 | Billing groundwork | None in Phase 2. Recorded as a Phase 3+ scope row so the intent is written down rather than living in a conversation. |
+
+D11, D13 and D14 were recorded from recommendation rather than chosen explicitly;
+they are the cheapest to revisit.
+
+### Not in Phase 2
+
+- MFA, OAuth, OIDC, SSO, SCIM — Phase 3 by the scope table.
+- Version history, scheduled changes, approval workflows — 3+.
+- Re-checking already-accepted links against new blocklist tiers — a separate job
+  and a separate decision.
+- Redis Streams as a work queue, for webhooks **or** the analytics recorder.
+  Webhook delivery rides Postgres (M42); the recorder comment is trued up in M45.
+- Sharing the 404-probe limiter across replicas — a network round trip on the 20ms
+  path, and an optional dependency made load-bearing.
+- Storing region or city.
+- The cookies routing condition (D2), and the new-vs-returning analytics split (D12).
+- `links.status = 'disabled'` gaining a writer (D10).
+- Trash/restore UI — Phase 1 decided against it.
+- Root-level `SECURITY.md` pointer — not done without being asked, and it has not
+  been asked for.
+- Bulk operations, ASN/VPN detection, campaign analytics, activity feed and
+  comments — all "2+" rows, all deferred. Their substrates (folders, campaigns,
+  the fixed rollup) ship this phase, so a Phase 3 version is better informed.
 
 ---
 
@@ -541,15 +577,15 @@ Deliberately accepted in Phase 1.
 | Limitation | Consequence |
 | --- | --- |
 | DNS rebinding not defended against | A host resolving public at creation and private at click time is not caught. Detection needs resolution on the hot path. |
-| Cache invalidation is single-replica | A second replica keeps its copy until TTL. Phase 2 adds pub/sub. |
-| Rate limits are per instance | In-memory buckets, so N replicas allow N times the configured limit, and a restart resets them. Redis-backed limits would add a network round trip to the redirect path and make an optional dependency load-bearing. |
+| Cache invalidation is single-replica | A second replica keeps its copy until TTL. Scheduled: [M23](docs/build-notes/phase-details/m23.md). |
+| Rate limits are per instance | In-memory buckets, so N replicas allow N times the configured limit, and a restart resets them. Scheduled for credentials and the API: [M24](docs/build-notes/phase-details/m24.md). The 404-probe limiter stays per-instance permanently — Redis-backed limits would add a network round trip to the redirect path and make an optional dependency load-bearing. |
 | Rate limits fail open | A full key table allows requests rather than refusing them, counted by `linkctrl_rate_limit_overflow_total`. A limiter is abuse mitigation, not an authorization boundary. |
 | Behind a proxy, limits need `TRUSTED_PROXIES` | Otherwise every request carries the proxy's address and all traffic shares one bucket. This is a correctness requirement once a limit is on, not only an analytics one. |
 | `links.click_count` is approximate | Written with the click rows, but an unclean shutdown loses at most one batch of both. |
 | `api_keys.last_used_at` is approximate | Buffered and flushed on a 30s cadence, so an unclean shutdown loses the most recent timestamps. Authentication must not cost a write. |
-| API keys cannot manage API keys | `apikeys.*` is not delegable, so minting and revoking need a session. Automating key rotation is Phase 2 work. |
+| API keys cannot manage API keys | `apikeys.*` is not delegable, so minting and revoking need a session. Rotation is scheduled as self-rotation-only: [M44](docs/build-notes/phase-details/m44.md). |
 | Analytics drops under overload | Bounded queue; drops counted and alertable. Backpressure would slow redirects. |
-| The dimension rollup grows with traffic | 16-21s per 60s run at 5.7M events, and the cost is the 553k upserts a whole-day recompute implies rather than the scan. It will exceed its own interval as data grows. Measured in [docs/slo.md](docs/slo.md); the cached redirect path is unaffected, which is what the split pool is for. |
+| The dimension rollup grows with traffic | 16-21s per 60s run at 5.7M events, and the cost is the 553k upserts a whole-day recompute implies rather than the scan. It will exceed its own interval as data grows. Measured in [docs/slo.md](docs/slo.md); the cached redirect path is unaffected, which is what the split pool is for. Scheduled: [M37](docs/build-notes/phase-details/m37.md). |
 | Unique visitors are estimates | Carrier NAT merges people; network switches split one. Daily resolution. |
 | Multi-day unique totals over-count | Sum of daily figures; exact values unrecoverable once salts are purged. |
 

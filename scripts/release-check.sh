@@ -69,6 +69,11 @@ else
   fi
 fi
 
+step "documentation links"
+# workflow.md makes this a commit gate. It went unenforced for all of Phase 1,
+# which is what happens to a gate that needs someone to remember it.
+require "every relative link and anchor resolves" scripts/check-links.sh
+
 step "generated code matches its source"
 # sqlc and the OpenAPI document are both hand-triggered. A release built from a
 # tree where they were not regenerated ships a binary whose behaviour does not

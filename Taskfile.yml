@@ -78,6 +78,11 @@ tasks:
     cmds:
       - golangci-lint run
 
+  check-links:
+    desc: Verify every relative link and anchor in tracked markdown
+    cmds:
+      - bash scripts/check-links.sh
+
   tidy:
     desc: Tidy and verify modules
     cmds:

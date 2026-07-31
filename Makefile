@@ -84,6 +84,10 @@ cover: test ## Open the coverage report
 lint: ## Run golangci-lint
 	golangci-lint run
 
+.PHONY: check-links
+check-links: ## Verify every relative link and anchor in tracked markdown
+	@scripts/check-links.sh
+
 .PHONY: vuln
 vuln: ## Check for known vulnerabilities
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...

@@ -8,6 +8,35 @@ the earlier text is left in place with a pointer rather than edited away.
 
 Longer investigations live in `../adr/`.
 
+## Index
+
+Navigation only — adding to it is not editing an entry. Newest last, matching the
+file. Append a row when you append an entry.
+
+| Entry | Covers |
+| --- | --- |
+| [Phase 1 planning](#2026-07-29--phase-1-planning) | Stack choices, tenancy model, 302-only, Redis as pure cache |
+| [Decisions made while building](#2026-07-30--decisions-made-while-building) | Schema, partitioning, auth, RBAC, redirect hot path, analytics ingest |
+| [Dashboard (M11)](#2026-07-30--dashboard-m11) | HTMX, template structure, CSP, no-Node stylesheet |
+| [OpenAPI contract (M12)](#2026-07-30--openapi-contract-m12) | Hand-maintained spec, contract test, `/api/v2` for breaking changes |
+| [Metrics (M13)](#2026-07-30--metrics-m13) | Prometheus conventions, cardinality rules, second listener |
+| [Documentation (M14)](#2026-07-30--documentation-m14) | What each document is for, and what it may claim |
+| [Planning: the enforcement milestone (M15)](#2026-07-30--planning-the-enforcement-milestone-m15) | Why every config variable must take effect or be removed |
+| [Enforcement (M15)](#2026-07-30--enforcement-m15) | Rate limits, 404 probes, GeoIP, retention, `config.Removed` |
+| [Load validation (M16)](#2026-07-30--load-validation-m16) | How the redirect SLO is defined and measured |
+| [Release packaging (M17)](#2026-07-30--release-packaging-m17) | Tag-driven releases, version stamping, image and binary artifacts |
+| [The Phase 1 completeness review](#2026-07-30--the-phase-1-completeness-review-and-what-it-found) | The 30 confirmed findings and the shape they shared |
+| [Planning: signup and host separation (M18, M19)](#2026-07-30--planning-signup-and-host-separation-m18-m19) | The signup ceiling rule; why open signup admits tenants |
+| [Signup deferred to Phase 2](#2026-07-30--signup-deferred-to-phase-2-and-two-milestones-added) | Why invitations and a mailer must precede the toggle |
+| [Malicious destination blocking, specified](#2026-07-30--malicious-destination-blocking-specified-rather-than-named) | The three tiers, the unappealable rule, the review queue as attack surface |
+| [Build-notes, a security policy, and the process](#2026-07-30--build-notes-a-security-policy-and-the-process-written-down) | Why workflow.md exists and what SECURITY.md promises |
+| [M18: two hostnames, one listener](#2026-07-30--m18-two-hostnames-one-listener) | Host dispatch, no cross-host redirect, unknown hosts get ops only |
+| [M19: three defects, and the seeder](#2026-07-30--m19-three-defects-and-the-seeder-that-found-them) | Derived status, dormant `visitors`, honest deletion notice |
+| [Planning: M20, root redirect](#2026-07-30--planning-m20-a-redirect-for-the-root-of-the-link-domain) | Why the link domain's root needs an operator-set destination |
+| [M20 built, and 0.1.0 absorbs everything](#2026-07-30--m20-built-and-010-absorbs-everything) | Why no `[Unreleased]` section survived into the first release |
+| [0.1.0 tagged](#2026-07-31--010-tagged) | Why the tag sits on `main`; docs made true before tagging |
+| [Phase 2 planned](#2026-07-31--phase-2-planned) | The doc split, two review milestones, and the seventeen Phase 2 decisions |
+
 ---
 
 ## 2026-07-29 — Phase 1 planning
@@ -1906,3 +1935,130 @@ This entry corrects "0.1.0 absorbs everything, because 0.1.0 never happened"
 above, which recorded that there was no tag and that nothing had reached `main`.
 Both halves were true when written and both are now false; the entry stays as it
 is, because this file is append-only.
+
+## 2026-07-31 — Phase 2 planned
+
+Seventeen decisions, two review milestones, and a change to how planning
+documents are shaped. `Plan.md` records what was decided; this records why.
+
+### The plan is split: contract here, definitions of done per milestone
+
+Phase 1 kept milestone detail in `Plan.md`, which worked at three detailed
+milestones and would not have at twenty-seven. Every session reads `Plan.md`, and
+almost none of them need M34's condition vocabulary. So `Plan.md` keeps the
+contract — scope tables, the ordering table, decisions, exclusions — and each
+milestone's definition of done moved to `phase-details/m<N>.md`.
+
+Named for the number rather than the subject so a milestone id resolves to a path
+without consulting an index. Building M27 means reading a 44-line table and a
+43-line file, not 1,000 lines of specification for twenty-six milestones that are
+not being built today. Phase 1's own M18–M20 detail moved to `phase-1.md` for the
+same reason, which also makes the rule uniform rather than a Phase 2 convention.
+
+Rules every milestone inherits — the SLO re-measurement, the privacy stance, the
+permission-seeding pattern, sabotage discipline — are stated once in that
+directory's README. Repeating them twenty-seven times would guarantee they drift.
+
+### Two reviews, because Phase 1's found what milestones did not
+
+Phase 1 ran two adversarial reviews. The first confirmed 30 findings and, as the
+build status put it, was what called the phase complete "rather than the milestone
+counter reaching its end". The second confirmed 71, seven of which blocked a tag,
+on a branch that felt finished. Both found the same shape of defect: an invariant
+enforced on one path and not on its sibling — something no single milestone's
+definition of done can catch, because each milestone was internally consistent.
+
+Phase 2 is larger, so it gets two: M32.5 after the substrate and collaboration
+work, while the redirect engine is still unwritten and a finding can still change
+its design; and M44.5 before the close, because M32.5 cannot review code that does
+not exist yet, and the phase's most dangerous work — rules on the hot path, a
+durable counter, outbound HTTP, verified-domain serving — all lands after it.
+
+Numbered `.5` following M0.5, so inserting them renumbered nothing.
+
+### `closed` keeps meaning closed
+
+The first answer was that an invite should be able to create an account on a
+`closed` instance, with that account restricted to the inviting organization. The
+instinct was right and the mechanism was wrong, in two ways.
+
+The ceiling rule above exists because a session that can cause account creation
+makes a closed instance's guarantee "only as strong as the least careful browser
+tab" — and it is explicitly the same shape as the rule that an API key can never
+hold `apikeys.*`, which the same round of decisions chose to preserve. Letting
+invites through would have broken one invariant an hour after upholding its twin.
+It would also have collapsed the enum: if `closed` admits invited accounts, it
+differs from `invite` only by a flag.
+
+So `closed` admits no new account by any path, and onboarding someone new costs
+one `.env` edit — a deliberate, reviewable act, which is the property the ceiling
+exists to force.
+
+The restriction instinct survived, on a better axis. Rather than an account class
+derived from the signup mode at creation time, org creation became an ordinary
+permission, `orgs.create`, granted by default to self-registered users only. One
+mechanism instead of two, no rule needed for what happens to accounts created
+under a mode that later changed, and it satisfies the requirement attached to
+membership-only invitations: an invited colleague's account is *capable* of owning
+an organization, so nobody ever needs a second account. It is also the call site a
+future entitlement check would hang on, which is why the possibility of charging
+for organizations became a Phase 3+ scope row rather than either silence or
+speculative machinery.
+
+### Automation cannot disable a link, because disabling is archiving
+
+The draft gave automation a `disabled` action. Challenged on what it would be
+for, the code answered: `snapshot.go` maps `archived` and `disabled` to the same
+outcome — `OutcomeNotFound`, deliberately, so a scanner cannot tell them apart.
+
+A fourth status with no behavioural difference would buy nothing, and it would
+cost something real: restore targets archived, so automation would have been the
+first thing able to put a link into a state the interface offers no way out of.
+Phase 1's record that nothing sets `disabled` stands, and the action set is
+notify, webhook, archive.
+
+### Returning visitors, without a cookie
+
+The rules row lists cookies and returning visitors as conditions. Analytics here
+is cookie-free and visitor hashes die with the daily salt, so the honest options
+were a first-party routing cookie — a positioning change — or narrower semantics.
+
+Returning-visitor ships as "seen earlier today", read from the same daily-salted
+hash the ingester already produces, expiring with the day. A visitor from
+yesterday is new again, and the UI says so; an estimate described precisely is
+worth more than a better number that requires abandoning the cookie-free claim.
+The cookies condition is refused outright with a reason code, and the scope row is
+annotated, so a thirteen-condition row is never quietly shipped as twelve.
+
+### Audit retention defaults to forever, and says so out loud
+
+Both defaults are a data-loss policy. A finite window means an upgrade silently
+starts deleting history an operator assumed permanent; keep-forever means
+unbounded growth. The first failure is invisible and irreversible, the second is
+visible and recoverable, so keep-forever won — but only paired with an obligation
+to make the growth observable: a metric and alert recipe in M21, an owner
+notification in M22, emailed when a mailer exists.
+
+### A mailer, after all
+
+The record already said one was Phase 2 — "invitations, membership in someone
+else's workspace, a mailer". The draft plan had proposed shipping mail-free and
+citing a Phase 1 entry as authority, which misread it: that entry recorded the
+*absence* of a mailer as the reason signup stayed closed, not a decision never to
+have one. With SMTP optional and off by default, `open` signup can verify an
+address before an account is usable, which is the difference between a toggle and
+an abuse surface.
+
+### The link gate is now a script, not a hope
+
+`workflow.md` has listed "every relative link and anchor resolves" as a commit
+gate since Phase 1, and nothing enforced it — writing this plan required building
+the checker from scratch to satisfy a rule already on the books. It is now
+`scripts/check-links.sh`, wired into the release gate.
+
+Its first run passed, which was wrong: `git ls-files` sees only tracked files, and
+the new documents were untracked. Its second run rejected twenty correct anchors,
+which was also wrong: GitHub replaces each space in a heading with its own hyphen
+and does not collapse runs, so an em-dash — stripped as punctuation, its
+surrounding spaces kept — yields two hyphens, not one. Both failures are recorded
+because both are the kind a checker that "passes" quietly hides.
