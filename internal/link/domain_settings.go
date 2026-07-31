@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
+	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 )
@@ -88,9 +90,46 @@ func (s *Service) SetRootRedirect(ctx context.Context, actor *auth.Identity, raw
 		stored = &normalized
 	}
 
+	// Read before the write, because the audit record is worth little without
+	// what it replaced: "the root now points at example.com" does not tell an
+	// operator whether that was a change or a no-op, and the previous value is
+	// unrecoverable a moment later.
+	previous := ""
+	if before, err := s.q.GetDefaultDomainSettings(ctx); err == nil && before.RootRedirectUrl != nil {
+		previous = *before.RootRedirectUrl
+	}
+
 	row, err := s.q.SetDefaultDomainRootRedirect(ctx, stored)
 	if err != nil {
 		return nil, fmt.Errorf("set root redirect: %w", err)
+	}
+
+	// The audit event M20 promised. This is one setting that redirects every
+	// stray visitor to the whole domain, which is the class of change worth
+	// being able to ask about months later.
+	//
+	// After the write and outside it: the change is what the operator asked
+	// for, and failing it because the record could not be written would trade a
+	// missing audit line for a setting that did not take effect. Logged at warn
+	// rather than swallowed, so the gap is visible to whoever goes looking.
+	if s.audit != nil {
+		to := ""
+		if row.RootRedirectUrl != nil {
+			to = *row.RootRedirectUrl
+		}
+		if err := s.audit.Record(ctx, actor, audit.Event{
+			Action:     audit.ActionDomainRootRedirectChanged,
+			TargetType: "domain",
+			TargetID:   &row.ID,
+			Metadata: map[string]any{
+				"hostname": row.Hostname,
+				"from":     previous,
+				"to":       to,
+			},
+		}); err != nil {
+			s.log.Warn("root redirect changed but the audit record was not written",
+				slog.String("hostname", row.Hostname), slog.Any("error", err))
+		}
 	}
 
 	// The redirect tree caches this; without invalidation the change waits out

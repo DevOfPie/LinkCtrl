@@ -20,7 +20,35 @@ migrations run at boot.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **The audit log has behavior.** The table shipped in 0.1.0 with nothing writing
+  to it; there is now a writer, a read API, and a retention policy of its own.
+  Changing the link domain's root redirect is the first recorded action — the
+  setting that sends every stray visitor somewhere, and the one 0.1.0 said would
+  become an audit event once there was an audit log to put it in.
+- `GET /api/v1/audit` lists an organization's records newest-first with keyset
+  pagination, gated by a new `audit.read` permission granted to owners and
+  admins. **It cannot be granted to an API key.** Reading the log is the one
+  place a network prefix is tied to a named person, so it requires a signed-in
+  session; a key requesting the scope is refused when it is minted.
+- `LINKCTRL_AUDIT_RETENTION_DAYS`, **defaulting to `0` — keep forever.**
+  Deliberately not the analytics default: an upgrade must never silently start
+  deleting history an operator assumed permanent. `audit_logs` partitions are
+  now dropped under this window and never under the analytics one.
+- `linkctrl_audit_log_bytes`, the on-disk size of every `audit_logs` partition,
+  refreshed hourly on every replica. Keeping everything forever is only a safe
+  default if the growth it permits is visible; the Prometheus alert recipe is in
+  [docs/operations.md](docs/operations.md#audit-log-growth). The in-app owner
+  notification that reads the same metric is not in this release.
+
+### Notes for operators
+
+- Every record stores a network prefix — /24 for IPv4, /48 for IPv6 — and never
+  an address, matching what sessions already did. The actor's label is
+  snapshotted when the event is written, so a record stays readable after the
+  account it names is deleted.
+- Nothing is recorded retroactively. The log starts at the upgrade.
 
 ## [0.1.0] - 2026-07-31
 

@@ -248,6 +248,10 @@ func TestValidateIndividualRules(t *testing.T) {
 		{"negative 404 limit", map[string]string{"LINKCTRL_REDIRECT_404_RATE_LIMIT": "-1"}, "REDIRECT_404_RATE_LIMIT"},
 
 		{"negative retention", map[string]string{"LINKCTRL_ANALYTICS_RETENTION_DAYS": "-1"}, "ANALYTICS_RETENTION_DAYS"},
+		// A negative audit window reads as "unlimited" and would silently be
+		// treated as "keep forever", which is the same behaviour as 0 by luck
+		// rather than by contract. The operator who typed it meant something.
+		{"negative audit retention", map[string]string{"LINKCTRL_AUDIT_RETENTION_DAYS": "-1"}, "AUDIT_RETENTION_DAYS"},
 		{"missing geoip file", map[string]string{"LINKCTRL_GEOIP_MMDB_PATH": "/nope/missing.mmdb"}, "GEOIP_MMDB_PATH"},
 
 		{"alias too short", map[string]string{"LINKCTRL_ALIAS_LENGTH": "2"}, "ALIAS_LENGTH"},
@@ -443,5 +447,32 @@ func TestSecretHelpers(t *testing.T) {
 	}
 	if got := Secret("abcde").Len(); got != 5 {
 		t.Errorf("Len() = %d, want 5", got)
+	}
+}
+
+// The audit window must default to 0, and 0 must mean keep forever.
+//
+// This is decision D5 expressed as a test rather than as prose. The failure it
+// guards against is an upgrade that starts deleting audit history an operator
+// assumed permanent — silent, irreversible, and discovered only when somebody
+// goes looking for a record that is no longer there. A default borrowed from
+// ANALYTICS_RETENTION_DAYS, or a "sensible" non-zero value added later, is
+// exactly that failure.
+func TestAuditRetentionDefaultsToKeepingEverything(t *testing.T) {
+	setEnv(t, validEnv())
+
+	c, err := Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Audit.RetentionDays != 0 {
+		t.Errorf("AUDIT_RETENTION_DAYS defaults to %d, want 0: an instance nobody "+
+			"configured must never delete audit history (D5)", c.Audit.RetentionDays)
+	}
+	// And it is its own setting. Sharing the analytics window would delete the
+	// audit trail on a number chosen for click events.
+	if c.Analytics.RetentionDays == c.Audit.RetentionDays {
+		t.Error("the audit and analytics windows have the same default; they are " +
+			"separate policies and the whole point is that their defaults differ")
 	}
 }

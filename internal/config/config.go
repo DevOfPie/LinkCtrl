@@ -62,6 +62,7 @@ type Config struct {
 	Auth      AuthConfig
 	Ingest    IngestConfig
 	Analytics AnalyticsConfig
+	Audit     AuditConfig
 	Shutdown  ShutdownConfig
 
 	APIKeyPepper Secret `env:"API_KEY_PEPPER,required,unset"`
@@ -186,6 +187,20 @@ type IngestConfig struct {
 type AnalyticsConfig struct {
 	RetentionDays int    `env:"ANALYTICS_RETENTION_DAYS" envDefault:"395"`
 	GeoIPPath     string `env:"GEOIP_MMDB_PATH"`
+}
+
+// AuditConfig is the audit log's retention policy, which is deliberately its
+// own setting rather than a share of the analytics window.
+//
+// The default is 0 — keep forever — and it is different from the analytics
+// default on purpose. Both choices are a data-loss policy, and they fail in
+// opposite directions: a finite window means an upgrade silently starts
+// deleting history an operator assumed permanent, while keep-forever means
+// unbounded growth. The first failure is invisible and irreversible; the second
+// is visible and recoverable, and linkctrl_audit_log_bytes plus the alert recipe
+// in docs/operations.md are what make it visible. See decisions.md, D5.
+type AuditConfig struct {
+	RetentionDays int `env:"AUDIT_RETENTION_DAYS" envDefault:"0"`
 }
 
 type ShutdownConfig struct {
@@ -564,6 +579,11 @@ func (c Config) Validate() error {
 		add("ANALYTICS_RETENTION_DAYS: must be 0 (keep forever) or positive, got %d",
 			c.Analytics.RetentionDays)
 	}
+	if c.Audit.RetentionDays < 0 {
+		add("AUDIT_RETENTION_DAYS: must be 0 (keep forever) or positive, got %d",
+			c.Audit.RetentionDays)
+	}
+
 	if c.Analytics.GeoIPPath != "" {
 		if _, err := os.Stat(c.Analytics.GeoIPPath); err != nil {
 			add("GEOIP_MMDB_PATH: %q is not readable: %v; leave it empty to disable "+

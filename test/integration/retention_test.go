@@ -54,6 +54,12 @@ func tableExists(t *testing.T, pool *pgxpool.Pool, name string) bool {
 	return exists
 }
 
+// analyticsOnly is the policy with an analytics window and audit set to keep
+// forever — the shipped default, and the one most of these tests want.
+func analyticsOnly(days int) store.RetentionPolicy {
+	return store.NewRetentionPolicy(days, 0)
+}
+
 // Retention is enforced by dropping whole months, and only months whose newest
 // possible row is already outside the window.
 func TestRetentionDropsWholeExpiredMonths(t *testing.T) {
@@ -78,7 +84,7 @@ func TestRetentionDropsWholeExpiredMonths(t *testing.T) {
 		t.Fatalf("seed old click: %v", err)
 	}
 
-	dropped, err := store.DropExpiredPartitions(t.Context(), pool, 30, now)
+	dropped, err := store.DropExpiredPartitions(t.Context(), pool, analyticsOnly(30), now)
 	if err != nil {
 		t.Fatalf("DropExpiredPartitions: %v", err)
 	}
@@ -111,11 +117,116 @@ func TestRetentionDropsWholeExpiredMonths(t *testing.T) {
 	}
 }
 
+// audit_logs joins partition retention under its own window. This is the
+// partition-drop test M21 requires, and it asserts both halves of the claim in
+// one run: the audit partition goes under the audit window, and the analytics
+// partitions beside it do not, because their own window is longer.
+func TestAuditRetentionUsesItsOwnWindow(t *testing.T) {
+	pool := newDB(t)
+	now := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
+
+	oldAudit := makePartition(t, pool, "audit_logs", 2024, time.January)
+	oldClicks := makePartition(t, pool, "click_events", 2024, time.January)
+
+	// A record in the doomed partition, so the test shows history actually
+	// leaving rather than an empty table being renamed.
+	if _, err := pool.Exec(t.Context(), `
+		INSERT INTO audit_logs (id, occurred_at, actor_label, action)
+		VALUES ($1, '2024-01-15 10:00:00+00', 'gone@example.com', 'domain.root_redirect_changed')`,
+		uuid.Must(uuid.NewV7())); err != nil {
+		t.Fatalf("seed old audit record: %v", err)
+	}
+
+	// Audit keeps 30 days; analytics keeps ten years. Deliberately the reverse
+	// of the shipped defaults, so a policy that quietly used one number for both
+	// tables cannot pass by coincidence.
+	dropped, err := store.DropExpiredPartitions(t.Context(), pool,
+		store.NewRetentionPolicy(3650, 30), now)
+	if err != nil {
+		t.Fatalf("DropExpiredPartitions: %v", err)
+	}
+
+	if len(dropped) != 1 || dropped[0] != oldAudit {
+		t.Fatalf("dropped %v, want exactly %s", dropped, oldAudit)
+	}
+	if tableExists(t, pool, oldAudit) {
+		t.Error("audit_logs_2024_01 survived a 30-day audit window")
+	}
+	if !tableExists(t, pool, oldClicks) {
+		t.Error("click_events_2024_01 was dropped by the audit window; the two " +
+			"policies are separate and analytics kept ten years here")
+	}
+}
+
+// The default: nothing configured, nothing deleted. This is decision D5 as a
+// partition-level assertion — an upgrade must never silently start expiring
+// audit history, and 0 is what an untouched instance runs with.
+func TestAuditRetentionOfZeroKeepsEverything(t *testing.T) {
+	pool := newDB(t)
+	old := makePartition(t, pool, "audit_logs", 2018, time.January)
+
+	// Analytics retention is aggressive and audit is left at its default, which
+	// is the shipped configuration. The audit partition must be untouched even
+	// though it is a decade outside the analytics window.
+	dropped, err := store.DropExpiredPartitions(t.Context(), pool,
+		store.NewRetentionPolicy(30, 0), time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("DropExpiredPartitions: %v", err)
+	}
+	for _, name := range dropped {
+		if name == old {
+			t.Fatal("an audit partition was dropped with AUDIT_RETENTION_DAYS=0; " +
+				"0 means keep forever, and this is history an operator assumed permanent")
+		}
+	}
+	if !tableExists(t, pool, old) {
+		t.Error("audit_logs_2018_01 was dropped with audit retention disabled")
+	}
+}
+
+// The size metric is what makes keep-forever defensible, so it has to report
+// something real. A gauge stuck at zero would leave an operator believing an
+// unbounded table was empty.
+func TestAuditLogBytesReportsRealSize(t *testing.T) {
+	pool := newDB(t)
+
+	before, err := store.PartitionedTableBytes(t.Context(), pool, store.AuditTable)
+	if err != nil {
+		t.Fatalf("PartitionedTableBytes: %v", err)
+	}
+
+	for i := range 500 {
+		if _, err := pool.Exec(t.Context(), `
+			INSERT INTO audit_logs (id, occurred_at, actor_label, action, metadata)
+			VALUES ($1, now(), 'someone@example.com', 'domain.root_redirect_changed', $2::jsonb)`,
+			uuid.Must(uuid.NewV7()),
+			fmt.Sprintf(`{"from":"https://example.com/%d","to":"https://example.com/%d"}`, i, i+1),
+		); err != nil {
+			t.Fatalf("seed audit record %d: %v", i, err)
+		}
+	}
+	// Sizes come from the catalogue, which lags until the relation's stats are
+	// flushed; the write itself extends the file, so this is exact rather than
+	// estimated, but the table must be analyzed for the space to be attributed.
+	if _, err := pool.Exec(t.Context(), "VACUUM ANALYZE audit_logs"); err != nil {
+		t.Fatalf("vacuum: %v", err)
+	}
+
+	after, err := store.PartitionedTableBytes(t.Context(), pool, store.AuditTable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after <= before {
+		t.Errorf("audit log size went from %d to %d bytes after 500 inserts; the "+
+			"growth metric is not measuring the partitions", before, after)
+	}
+}
+
 func TestRetentionOfZeroKeepsEverything(t *testing.T) {
 	pool := newDB(t)
 	old := makePartition(t, pool, "click_events", 2020, time.January)
 
-	dropped, err := store.DropExpiredPartitions(t.Context(), pool, 0, time.Now())
+	dropped, err := store.DropExpiredPartitions(t.Context(), pool, store.NewRetentionPolicy(0, 0), time.Now())
 	if err != nil {
 		t.Fatalf("DropExpiredPartitions: %v", err)
 	}
@@ -149,7 +260,7 @@ func TestRetentionIgnoresPartitionsItDoesNotRecognise(t *testing.T) {
 		}
 	}
 
-	if _, err := store.DropExpiredPartitions(t.Context(), pool, 30,
+	if _, err := store.DropExpiredPartitions(t.Context(), pool, analyticsOnly(30),
 		time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC)); err != nil {
 		t.Fatalf("DropExpiredPartitions: %v", err)
 	}
@@ -218,11 +329,11 @@ func TestRetentionIsIdempotent(t *testing.T) {
 	makePartition(t, pool, "click_events", 2024, time.January)
 	now := time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC)
 
-	first, err := store.DropExpiredPartitions(t.Context(), pool, 30, now)
+	first, err := store.DropExpiredPartitions(t.Context(), pool, analyticsOnly(30), now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := store.DropExpiredPartitions(t.Context(), pool, 30, now)
+	second, err := store.DropExpiredPartitions(t.Context(), pool, analyticsOnly(30), now)
 	if err != nil {
 		t.Fatalf("second run: %v", err)
 	}

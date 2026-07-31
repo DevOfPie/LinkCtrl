@@ -145,7 +145,7 @@ a follower whose scheduler has stopped.
 | --- | --- | --- |
 | `rollup` | 60s | Recomputes recent days from raw events and upserts. Whole days, never incremental — an "add what arrived since the watermark" design double-counts on retry and, once it drifts, stays wrong invisibly. |
 | `partitions` | 1h | Creates monthly partitions two months ahead. |
-| `retention` | 1h | Drops monthly partitions of `click_events` and `visitors` that are entirely outside `ANALYTICS_RETENTION_DAYS`. Runs after `partitions`, so a run can never drop what it just created. |
+| `retention` | 1h | Drops monthly partitions that are entirely outside their table's window — `ANALYTICS_RETENTION_DAYS` for `click_events` and `visitors`, `AUDIT_RETENTION_DAYS` for `audit_logs`. Runs after `partitions`, so a run can never drop what it just created. With the audit default of `0` it drops no audit partition at all. |
 | `salt-purge` | 1h | Deletes analytics salts older than two days. **This is the de-identification step, not housekeeping**: once a salt is gone, that day's visitor hashes cannot be linked to an address by anyone. |
 | `partition-check` | 1h | Warns if rows landed in a default partition. |
 | `housekeeping` | 1h | The reapers. Hard-deletes links whose 30-day trash window has passed — reserving any alias that ever received traffic in the same statement, so it is never reissued — and deletes sessions and revoked API keys past their retention. Each purged link is logged by alias; that log line is the only record of the deletion. |
@@ -174,11 +174,23 @@ impossible, and worth investigating rather than patching around.
 
 ### Retention
 
-`ANALYTICS_RETENTION_DAYS` (default 395) is enforced hourly by the `retention`
-job, which drops whole monthly partitions of `click_events` and `visitors`.
-Dropping a partition is instant and reclaims the space, which is the whole reason
-these tables are partitioned this way — a `DELETE` across the largest table in the
+The `retention` job runs hourly and drops whole monthly partitions. Dropping a
+partition is instant and reclaims the space, which is the whole reason these
+tables are partitioned this way — a `DELETE` across the largest table in the
 system followed by a `VACUUM` is the alternative, on a schedule, forever.
+
+Each table answers to its own window:
+
+| Table | Window | Default |
+| --- | --- | --- |
+| `click_events`, `visitors` | `ANALYTICS_RETENTION_DAYS` | 395 days |
+| `audit_logs` | `AUDIT_RETENTION_DAYS` | `0` — **keep forever** |
+
+Two windows rather than one because the right default differs. Analytics is
+high-volume and its value decays; an audit trail is read precisely because
+somebody is asking about something that happened a long time ago. Deleting the
+second on the first's setting would be a surprise of the wrong kind, so
+`audit_logs` had no policy at all until it had one of its own.
 
 Four properties follow from doing it by the month:
 
@@ -188,11 +200,63 @@ Four properties follow from doing it by the month:
   is not.
 - **Rollups survive.** They live in their own unpartitioned tables, so charts keep
   working after the raw events are gone.
-- **`audit_logs` is exempt** even though it is partitioned identically. Audit
-  retention is a different policy from analytics retention, and deleting an audit
-  trail on the analytics setting would be a surprise of the wrong kind.
+- **A window of `0` drops nothing**, and so does a table with no configured
+  window at all. Retention deletes only where it was told a number.
 - **Only partitions this software created** are considered — the `_YYYY_MM` naming
   is the test. A table you attached by hand is left alone.
+
+### Audit log growth
+
+`AUDIT_RETENTION_DAYS` defaults to `0`, so an instance nobody configures keeps
+every audit record forever. That is the safe default only for as long as the
+growth it permits is visible, which is what this series is for:
+
+```
+linkctrl_audit_log_bytes
+```
+
+On-disk bytes across every `audit_logs` partition, indexes included. Refreshed
+by the hourly maintenance pass on **every** replica, not only the job leader, so
+it does not matter which one a scrape reaches.
+
+Two alerts, because size and growth fail differently. The first matches the
+5 GB threshold the in-app notification uses, so Prometheus and the dashboard do
+not disagree about when this is a problem:
+
+```yaml
+- alert: AuditLogLarge
+  # The same 5 GB the in-app owner notification fires at.
+  expr: linkctrl_audit_log_bytes > 5e9
+  for: 1h
+  labels: { severity: warning }
+  annotations:
+    summary: "audit_logs has passed 5 GB"
+    description: >-
+      Currently {{ $value | humanize1024 }}B. Set
+      LINKCTRL_AUDIT_RETENTION_DAYS, or confirm the disk is sized for it.
+
+- alert: AuditLogGrowthUnbounded
+  # Projects a fortnight ahead from the last week, so an instance heading for
+  # trouble is flagged before it arrives rather than after.
+  expr: predict_linear(linkctrl_audit_log_bytes[7d], 14 * 86400) > 5e9
+  for: 6h
+  labels: { severity: warning }
+  annotations:
+    summary: "audit_logs is on track to pass 5 GB within a fortnight"
+    description: >-
+      Projected {{ $value | humanize1024 }}B. Growth this steady usually
+      means retention was never configured.
+```
+
+Tune `5e9` to the volume you actually have — the number that matters is your
+own. An instance with a year of history and no growth is fine at any size; one
+doubling monthly is not fine at any size.
+
+The owner-facing notification for the same threshold is
+[M22](build-notes/phase-details/m22.md)'s, is **on by default** rather than
+opt-in, and is emailed once [M26](build-notes/phase-details/m26.md)'s mailer is
+configured. Until M22 lands, these alerts are the whole mechanism — which is why
+the metric ships here and not with the notification that reads it.
 
 Each drop is logged at info with the partition name. That log line is the only
 record that irreversible deletion happened, so keep it.

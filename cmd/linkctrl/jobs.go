@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,10 +28,15 @@ type jobRunner struct {
 	roller  *analytics.Roller
 	log     *slog.Logger
 	metrics *observability.Metrics
-	// retentionDays is the analytics window. Zero keeps raw events forever.
-	retentionDays int
-	cancel        context.CancelFunc
-	done          chan struct{}
+	// retention is the per-table window. Analytics and audit have separate
+	// policies and different defaults; zero for a table keeps it forever.
+	retention store.RetentionPolicy
+	// auditRetentionDays is kept alongside the policy for the log line that
+	// reports a drop, which is the only record that history was deleted.
+	auditRetentionDays     int
+	analyticsRetentionDays int
+	cancel                 context.CancelFunc
+	done                   chan struct{}
 }
 
 // advisoryLockKey is a hand-picked constant — the ASCII bytes "lcjobs" plus a
@@ -41,12 +47,14 @@ type jobRunner struct {
 const advisoryLockKey int64 = 0x6c63_6a6f_6273_0001
 
 func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analytics.Roller,
-	log *slog.Logger, metrics *observability.Metrics, retentionDays int,
+	log *slog.Logger, metrics *observability.Metrics, analyticsRetentionDays, auditRetentionDays int,
 ) *jobRunner {
 	return &jobRunner{
 		pool: pool, salts: salts, roller: roller, log: log, metrics: metrics,
-		retentionDays: retentionDays,
-		done:          make(chan struct{}),
+		retention:              store.NewRetentionPolicy(analyticsRetentionDays, auditRetentionDays),
+		analyticsRetentionDays: analyticsRetentionDays,
+		auditRetentionDays:     auditRetentionDays,
+		done:                   make(chan struct{}),
 	}
 }
 
@@ -159,17 +167,43 @@ func (j *jobRunner) runMaintenance(ctx context.Context) {
 	// is the reason these tables are partitioned by month in the first place —
 	// and it runs after partition creation so a run can never drop the partition
 	// the same run just made.
+	//
+	// Analytics and audit are dropped by the same pass under different windows.
+	// The audit window defaults to zero, so on a default instance this drops no
+	// audit partition at all and linkctrl_audit_log_bytes is what tells the
+	// operator what that is costing.
 	j.withLeadership(runCtx, "retention", func(ctx context.Context) error {
-		dropped, err := store.DropExpiredPartitions(ctx, j.pool, j.retentionDays, time.Now())
+		dropped, err := store.DropExpiredPartitions(ctx, j.pool, j.retention, time.Now())
 		for _, name := range dropped {
-			// Info, not Debug: this is irreversible deletion of click data, and
-			// the log is the only record that it happened.
-			j.log.Info("dropped expired analytics partition",
+			// Info, not Debug: this is irreversible deletion, and the log is the
+			// only record that it happened. Named per table, because "an audit
+			// partition was dropped" is a different sentence to answer for than
+			// "a click partition was dropped".
+			days := j.analyticsRetentionDays
+			kind := "analytics"
+			if strings.HasPrefix(name, store.AuditTable+"_") {
+				days, kind = j.auditRetentionDays, "audit"
+			}
+			j.log.Info("dropped expired partition",
 				slog.String("partition", name),
-				slog.Int("retention_days", j.retentionDays))
+				slog.String("kind", kind),
+				slog.Int("retention_days", days))
 		}
 		return err
 	})
+
+	// The audit log's size, measured on every replica rather than only the
+	// leader: a gauge the followers never set reads as zero, and an operator's
+	// alert would then depend on which replica answered the scrape. It is a
+	// catalogue read, not a scan, so paying for it N times is cheap.
+	//
+	// Outside withLeadership for the same reason. This is a measurement, not
+	// work that must happen once.
+	if bytes, err := store.PartitionedTableBytes(runCtx, j.pool, store.AuditTable); err != nil {
+		j.log.Debug("could not measure the audit log", slog.Any("error", err))
+	} else {
+		j.metrics.SetAuditLogBytes(bytes)
+	}
 
 	j.withLeadership(runCtx, "partition-check", func(ctx context.Context) error {
 		counts, err := store.DefaultPartitionCounts(ctx, j.pool)

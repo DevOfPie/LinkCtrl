@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
+	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
@@ -69,6 +70,7 @@ func newAPI(t *testing.T) *apiFixture {
 		Keys:   keySvc,
 		Links:  linkSvc,
 		Stats:  analytics.NewReader(pool),
+		Audit:  audit.NewService(pool),
 	}))
 	t.Cleanup(srv.Close)
 

@@ -42,6 +42,7 @@ file. Append a row when you append an entry.
 | [docs/ reorganized](#2026-07-31--docs-reorganized-around-its-reader) | Root is for running and using; SECURITY.md surfaced; the two recorded keep-decisions |
 | [The phase loop](#2026-07-31--the-phase-loop-written-down) | Unattended milestone iteration; why validation precedes each one; why the resume note is untracked |
 | [Six decisions taken ahead of the run](#2026-07-31--six-decisions-taken-ahead-of-an-unattended-run) | Delegability as a rule (D18); growth alert on by default (D19); reconnect flush (D20); light theme may move (D21); last-used workspace (D22); mail outbox (D23) |
+| [M21, the audit log gets behavior](#2026-07-31--m21-the-audit-log-gets-behavior) | Why the writer reduces the address itself; `audit.read` under D18; retention as a per-table policy; why the growth metric is job-measured |
 
 ---
 
@@ -2472,3 +2473,97 @@ runs partition maintenance, and buys durability plus an inspectable record of
 what was attempted. It also gives the mail-free degradation path something
 concrete to assert against, since "the outbox stays empty when no mailer is
 configured" is a testable claim in a way that "nothing was sent" is not.
+
+---
+
+## 2026-07-31 — M21, the audit log gets behavior
+
+The table shipped in Phase 1 with nothing writing to it. Five later milestones
+emit events and one reads them, so the writer is built first — retrofitting
+emission into shipped features would mean touching each of them again, and the
+first version of the trail would be whatever those features happened to record.
+
+### The address never reaches the caller
+
+`Record` takes the client address off the context and reduces it to a prefix
+itself, rather than accepting a prefix from its caller. That is one line either
+way and the difference is that no caller ever holds a full address destined for
+this table, so no caller can forget to reduce one. The privacy stance is a
+property of the writer, not a convention its callers are trusted to follow.
+
+Getting the address there needed a carrier. Services take an `*auth.Identity`
+and no request, so without one, every service method that will ever write an
+audit event grows an address parameter and so does every caller of those
+methods — the retrofit this milestone exists to avoid, arriving through the
+back door. It lives in `internal/auth`, beside `AnonymizeIP` and `Identity`,
+because the HTTP layer cannot be imported from below it. `httpx.ClientIPFrom`
+stayed as the name the handlers already used and now delegates.
+
+Not a field on `Identity`, which was the tempting alternative: the address is a
+property of the request, not of who is making it. The same identity acts from
+different networks, and `Identity` is also constructed outside a request
+entirely, by the CLI.
+
+### `audit.read` matches D18's first limb
+
+Reading the trail exposes an actor's identity tied to a `/24`, which is the
+disclosure limb of the rule, so it is non-delegable. It was answered on its
+merits before D18 generalised it; the answer did not change.
+
+The mechanism is worth stating because it is the whole of it.
+`NonDelegableScopes` is the only thing making this session-only. The endpoint
+authorizes on the permission exactly like every other endpoint, no handler or
+service asks whether the caller holds a session, and there is no second response
+shape that redacts `ip_prefix` for keys. Reversing the call is deleting one map
+entry — which is the property that makes the rule cheap to revise if the
+operational case for machine export ever outweighs the disclosure.
+
+That deliberately leaves no automated export path in this phase. It is the known
+cost, and the honest one: an operator who wants the log in a SIEM today has to
+read it with a session or wait for M42's webhooks.
+
+### Retention became a policy per table, not a window and a list
+
+`DropExpiredPartitions` took one window and a list of tables it applied to, and
+`audit_logs` was exempt by being absent from that list. That worked for exactly
+as long as there was one window. Adding a second by adding a second list and a
+second call would have left the two policies expressed differently from each
+other, and the exemption still expressed as an omission.
+
+It now takes a `RetentionPolicy` — table to days — and a table absent from the
+map is never touched. Exemption by omission still works, but now it says so:
+retention deletes only where it was told a number. The two defaults differ on
+purpose (395 days and forever, D5), and the test that proves they are separate
+inverts them, so a policy quietly using one number for both cannot pass by
+coincidence.
+
+### The growth metric is measured by the job, not at scrape time
+
+`linkctrl_audit_log_bytes` is set by the hourly maintenance pass rather than by
+a collector that queries Postgres when Prometheus scrapes. `/metrics` has to
+keep answering while the database is unwell — it is the endpoint an operator
+scrapes to find out that it is — and a collector that opens a connection makes
+the scrape fail exactly when it is most wanted. The cost is up to an hour of
+staleness, which does not matter for a series whose entire purpose is a trend
+measured in days.
+
+It is measured on every replica and outside the leader lock, unlike the work in
+that pass. A gauge only the leader wrote reads as zero on every follower, and
+whether the alert fired would then depend on which replica answered the scrape.
+It is a catalogue read rather than a scan, so paying for it N times is cheap.
+
+Summed over the partitions, too: a partitioned table has no storage of its own,
+so `pg_total_relation_size` on the parent answers 0 however much is underneath.
+
+### A failed audit write does not fail the change
+
+The record is written after the setting is saved and outside its transaction,
+and a failure is logged at warn rather than returned. The operator asked for the
+change; refusing it because the record of it could not be written trades a
+missing log line for a setting that did not take effect, which is the worse of
+the two. The warning is what keeps the gap visible rather than silent.
+
+The previous value is read *before* the write, because "the root now points at
+example.com" does not tell a reader whether that was a change or a no-op, and a
+moment later the old value is unrecoverable. That ordering has its own test —
+reading it afterwards returns the new value for both fields and looks correct.

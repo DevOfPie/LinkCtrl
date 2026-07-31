@@ -15,7 +15,7 @@ and when it lands.
 
 | # | Milestone | Depends on | Status |
 | --- | --- | --- | --- |
-| [M21](m21.md) | Audit log: behavior, retention, growth alerting | — | in progress |
+| [M21](m21.md) | Audit log: behavior, retention, growth alerting | — | done |
 | [M22](m22.md) | Notifications: in-app behavior | — | not started |
 | [M23](m23.md) | Cross-replica cache invalidation (pub/sub) | — | not started |
 | [M24](m24.md) | Shared rate limits (credentials and API) | — | not started |

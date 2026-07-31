@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
+	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
@@ -25,7 +26,10 @@ type Deps struct {
 	// setting existed.
 	RootRedirect *RootRedirect
 	Stats        *analytics.Reader
-	Web          *Web
+	// Audit serves the audit log. Nil leaves the endpoint unregistered, which
+	// is what the parity test against openapi.yaml compares itself to.
+	Audit *audit.Service
+	Web   *Web
 	// Metrics is optional. Nil disables instrumentation entirely rather than
 	// registering into a global registry, so two servers in one test process
 	// cannot collide.
@@ -134,6 +138,11 @@ func NewRouter(d Deps) http.Handler {
 		} {
 			app.Handle(pattern, RequireAuth(h))
 		}
+	}
+
+	if d.Audit != nil {
+		a := &AuditAPI{Audit: d.Audit}
+		app.Handle("GET "+APIPrefix+"/audit", RequireAuth(http.HandlerFunc(a.List)))
 	}
 
 	// The API reference. The spec endpoints need nothing but the embedded

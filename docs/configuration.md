@@ -226,12 +226,32 @@ key table filled and it has stopped limiting.
 | `LINKCTRL_INGEST_QUEUE_SIZE` | `16384` | Bounded buffer. When full, clicks are **dropped** rather than delaying a redirect. Drops are counted and alertable. |
 | `LINKCTRL_INGEST_BATCH_SIZE` | `500` | Must not exceed the queue size. |
 | `LINKCTRL_INGEST_FLUSH_INTERVAL` | `250ms` | |
-| `LINKCTRL_ANALYTICS_RETENTION_DAYS` | `395` | 13 months. Enforced hourly by dropping monthly partitions of `click_events` and `visitors`, and only once a partition's newest possible row is outside the window — so raw data survives up to a month longer than the number says. Rollups are separate tables and are never dropped, so charts outlive the events. `audit_logs` is partitioned too and deliberately exempt: audit retention is a different policy. `0` keeps everything. |
+| `LINKCTRL_ANALYTICS_RETENTION_DAYS` | `395` | 13 months. Enforced hourly by dropping monthly partitions of `click_events` and `visitors`, and only once a partition's newest possible row is outside the window — so raw data survives up to a month longer than the number says. Rollups are separate tables and are never dropped, so charts outlive the events. `audit_logs` has its own window and is not covered by this one. `0` keeps everything. |
 | `LINKCTRL_GEOIP_MMDB_PATH` | *(empty)* | A MaxMind DB file. Resolves a country at ingest, from the address, before it is discarded — nothing is stored to resolve later. Empty disables geographic reporting and the dashboard says so. See [deployment.md](deployment.md#optional-geographic-analytics). |
 
 Country is the only geographic field stored. Region and city are in the same
 database and in the schema, and are deliberately left null: nothing in the product
 shows them, and city plus timestamp is close to a location history.
+
+## Audit log
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `LINKCTRL_AUDIT_RETENTION_DAYS` | `0` | **Keep forever.** Enforced by the same hourly pass and the same whole-month rule as analytics retention, under a separate window: `audit_logs` partitions are dropped only once their newest possible row is outside *this* number. `0` deletes nothing, ever. |
+
+The default is the opposite of the analytics one, and that is deliberate. Both
+settings are a data-loss policy, and they fail in opposite directions: a finite
+default means an upgrade silently begins deleting history an operator assumed
+permanent, while keeping everything means growth nobody bounded. The first
+failure is invisible and irreversible; the second is visible and recoverable.
+
+Visible is a claim that has to be paid for, so it is:
+`linkctrl_audit_log_bytes` reports the on-disk size of every `audit_logs`
+partition, refreshed hourly on every replica. The alert recipe is in
+[operations.md](operations.md#audit-log-growth).
+
+Reading the log needs the `audit.read` permission, held by owners and admins.
+It cannot be granted to an API key — see [SECURITY.md](SECURITY.md).
 
 ## Shutdown
 

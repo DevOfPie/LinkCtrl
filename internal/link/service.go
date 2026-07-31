@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/alias"
+	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
@@ -54,6 +56,10 @@ type Service struct {
 	// root-redirect setting is meaningless without one.
 	splitHosts bool
 	rootCache  RootInvalidator
+	// audit records administrative changes. Nil is valid and means nothing is
+	// recorded — the CLI and most tests run that way.
+	audit audit.Recorder
+	log   *slog.Logger
 }
 
 // RootInvalidator drops the cached root redirect when it changes. Nil is valid
@@ -73,9 +79,18 @@ type Config struct {
 	// when false, because there the root is the dashboard.
 	SplitHosts bool
 	RootCache  RootInvalidator
+	// Audit records administrative changes. Nil records nothing.
+	Audit audit.Recorder
+	// Log receives the warning when an audit write fails. Nil uses the default
+	// logger, so a dropped record is never silent.
+	Log *slog.Logger
 }
 
 func NewService(pool *pgxpool.Pool, cfg Config) *Service {
+	log := cfg.Log
+	if log == nil {
+		log = slog.Default()
+	}
 	return &Service{
 		pool:    pool,
 		q:       dbgen.New(pool),
@@ -86,6 +101,8 @@ func NewService(pool *pgxpool.Pool, cfg Config) *Service {
 
 		splitHosts: cfg.SplitHosts,
 		rootCache:  cfg.RootCache,
+		audit:      cfg.Audit,
+		log:        log,
 	}
 }
 

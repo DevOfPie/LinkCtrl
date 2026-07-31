@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -12,6 +13,35 @@ import (
 
 	"github.com/google/uuid"
 )
+
+type ctxKey int
+
+const ctxClientIP ctxKey = iota
+
+// WithClientIP carries the resolved client address down to the service layer.
+//
+// It lives here, beside AnonymizeIP and Identity, rather than in the HTTP layer
+// where it is set. Services take an *Identity and no request, and an audit
+// event has to record the network a change came from — so without a carrier,
+// every service method that will ever write an audit event grows an address
+// parameter, and every caller of those methods grows one too. Five later
+// milestones write audit events; that is the retrofit M21 exists to avoid.
+//
+// A context value rather than a field on Identity because it is a property of
+// the request, not of who is making it: the same identity acts from different
+// networks, and Identity is also built outside a request entirely, by the CLI.
+func WithClientIP(ctx context.Context, addr netip.Addr) context.Context {
+	return context.WithValue(ctx, ctxClientIP, addr)
+}
+
+// ClientIPFrom returns the resolved client address, or the zero Addr when there
+// is none — a CLI invocation, a background job, or a test that did not set one.
+// AnonymizeIP maps that to an empty string, so an event written off a request
+// records no network rather than a misleading one.
+func ClientIPFrom(ctx context.Context) netip.Addr {
+	addr, _ := ctx.Value(ctxClientIP).(netip.Addr)
+	return addr
+}
 
 // SessionCookieName uses the __Host- prefix, which browsers only accept when
 // the cookie is Secure, has Path=/, and carries no Domain attribute. That

@@ -196,6 +196,22 @@ func TestNonDelegableScopesCoverKeyManagement(t *testing.T) {
 	}
 }
 
+// audit.read is non-delegable for a different reason from the rest of the set,
+// and the difference is the point of asserting it separately. It escalates
+// nothing and reverses nothing; it is refused because the audit log is where a
+// network prefix is tied to a named person.
+//
+// This map is also the only thing enforcing that — the endpoint authorizes on
+// the permission like any other — so if this entry goes, audit.read becomes
+// delegable with no other code change and no other test noticing.
+func TestAuditReadIsNotDelegable(t *testing.T) {
+	if !isNonDelegable("audit.read") {
+		t.Error("audit.read must not be delegable to an API key: it is the one " +
+			"permission that discloses which named person acted from which network, " +
+			"and NonDelegableScopes is the only place that is enforced")
+	}
+}
+
 func TestIsAPIKey(t *testing.T) {
 	var nilIdentity *Identity
 	if nilIdentity.IsAPIKey() {

@@ -16,10 +16,7 @@ import (
 
 type ctxKey int
 
-const (
-	ctxIdentity ctxKey = iota
-	ctxClientIP
-)
+const ctxIdentity ctxKey = iota
 
 // IdentityFrom returns the authenticated identity, or nil.
 func IdentityFrom(ctx context.Context) *auth.Identity {
@@ -28,9 +25,13 @@ func IdentityFrom(ctx context.Context) *auth.Identity {
 }
 
 // ClientIPFrom returns the resolved client address.
+//
+// The value itself is carried by internal/auth, so the service layer can read
+// it without importing the HTTP layer — an audit event records the network a
+// change came from, and the services that write those events are below this
+// package. This stays as the name the handlers here already use.
 func ClientIPFrom(ctx context.Context) netip.Addr {
-	addr, _ := ctx.Value(ctxClientIP).(netip.Addr)
-	return addr
+	return auth.ClientIPFrom(ctx)
 }
 
 // RealIP resolves the client address, honouring X-Forwarded-For only from
@@ -84,8 +85,7 @@ func RealIP(trusted []netip.Prefix) func(http.Handler) http.Handler {
 				}
 			}
 
-			ctx := context.WithValue(r.Context(), ctxClientIP, addr)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			next.ServeHTTP(w, r.WithContext(auth.WithClientIP(r.Context(), addr)))
 		})
 	}
 }

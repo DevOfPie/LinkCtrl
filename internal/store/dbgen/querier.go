@@ -104,6 +104,9 @@ type Querier interface {
 	// presented as a distinct-person count, because the exact figure cannot be
 	// recovered once the salts are purged. That is the intended trade.
 	GetWorkspaceTotals(ctx context.Context, arg GetWorkspaceTotalsParams) (GetWorkspaceTotalsRow, error)
+	// Audit log. Append-only: there is no update and no delete here, and that is the
+	// point of the table. Rows leave only when retention drops a whole partition.
+	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) error
 	// Consulted by BOTH create paths — generated aliases before insert, and
 	// user-supplied aliases as validation — and by alias changes.
 	//
@@ -117,6 +120,20 @@ type Querier interface {
 	// is the question asked after an incident, so they are listed until the reaper
 	// removes them.
 	ListAPIKeysForUser(ctx context.Context, arg ListAPIKeysForUserParams) ([]ListAPIKeysForUserRow, error)
+	//
+	// Newest first, keyed on (occurred_at, id) so the cursor is a position rather
+	// than an offset: an event written while a reader is paginating shifts every
+	// offset by one, and a keyset cursor is unaffected by it.
+	//
+	// The row-comparison predicate is what makes that hold. Comparing the columns
+	// separately -- occurred_at < c OR (occurred_at = c AND id < i) -- is the same
+	// logic, and the planner does not always recognise it as a range scan on the
+	// (organization_id, occurred_at DESC) index.
+	//
+	// Scoped by organization, never by workspace: an audit log that can be narrowed
+	// to the workspace the reader happens to be in would hide exactly the actions
+	// worth reviewing.
+	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error)
 	// Keyset pagination over (created_at, id).
 	//
 	// The cursor is a composite so ordering is total: created_at alone is not

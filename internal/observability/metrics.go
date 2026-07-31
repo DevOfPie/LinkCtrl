@@ -35,6 +35,8 @@ type Metrics struct {
 
 	jobRuns    *prometheus.CounterVec
 	jobLastRun *prometheus.GaugeVec
+
+	auditBytes prometheus.Gauge
 }
 
 // redirectBuckets straddle the 20ms cached-redirect target, densely below it
@@ -102,6 +104,12 @@ func NewMetrics() *Metrics {
 			Name: "linkctrl_job_last_success_timestamp_seconds",
 			Help: "Unix time of each job's last success. Absent means it has never succeeded.",
 		}, []string{"job"}),
+
+		auditBytes: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "linkctrl_audit_log_bytes",
+			Help: "On-disk size of audit_logs across every partition, including indexes. " +
+				"Audit retention defaults to keeping everything, so this only ever grows until AUDIT_RETENTION_DAYS is set.",
+		}),
 	}
 
 	buildInfo := prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -116,6 +124,7 @@ func NewMetrics() *Metrics {
 		m.redirectDuration, m.redirects,
 		m.throttled,
 		m.jobRuns, m.jobLastRun,
+		m.auditBytes,
 		buildInfo,
 		// Go runtime and process collectors: memory, goroutines, GC, file
 		// descriptors, CPU. Free, standard, and the first thing anyone asks
@@ -343,4 +352,22 @@ func (m *Metrics) ObserveJobSkipped(job string) {
 		return
 	}
 	m.jobRuns.WithLabelValues(job, "skipped").Inc()
+}
+
+// SetAuditLogBytes records the audit log's on-disk size.
+//
+// A plain gauge rather than a collector that queries at scrape time, because
+// /metrics has to keep answering while the database is unwell — it is the
+// endpoint an operator scrapes to find out that it is. The cost is that the
+// value is up to an hour stale, which does not matter for a series whose whole
+// purpose is a growth trend measured in days.
+//
+// Set by every replica, not only the job leader. A gauge only the leader wrote
+// would read as zero on every follower, so whether an alert fired would depend
+// on which replica answered the scrape.
+func (m *Metrics) SetAuditLogBytes(n int64) {
+	if m == nil {
+		return
+	}
+	m.auditBytes.Set(float64(n))
 }

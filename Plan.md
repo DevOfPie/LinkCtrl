@@ -198,10 +198,12 @@ Four constraints the implementation inherits rather than chooses:
   promises. Off by default, disclosed plainly when on, and never the mechanism the
   built-in tiers depend on.
 
-Logging a blocked attempt is what finally gives `audit_logs` a reason to have
-behavior, which is why the two rows sit together. `ip_prefix` rather than an
-address, matching the rest of the privacy stance, and the attempted URL is stored
-as evidence and treated as hostile input everywhere it is displayed.
+Blocked attempts are recorded through the audit writer [M21](docs/build-notes/phase-details/m21.md)
+builds, which is why the two rows sit together — the writer exists before the
+features that emit into it, rather than being retrofitted afterwards.
+`ip_prefix` rather than an address, matching the rest of the privacy stance, and
+the attempted URL is stored as evidence and treated as hostile input everywhere
+it is displayed.
 
 Sequenced within Phase 2: blocking and logging first, which are useful on their
 own; disputes and review after, since an appeal path is meaningless before
@@ -373,7 +375,8 @@ Implementation:
 | Referrers | Host only; query strings discarded at ingest |
 | Language | Primary subtag only (`en`, not `en-GB`) |
 | Session/audit IPs | Prefix only: /24 IPv4, /48 IPv6 |
-| Analytics retention | 395 days default, enforced hourly by dropping monthly partitions of `click_events` and `visitors`; a partition goes only once its newest possible row is outside the window, so data survives up to a month longer. `audit_logs` is exempt. |
+| Analytics retention | 395 days default, enforced hourly by dropping monthly partitions of `click_events` and `visitors`; a partition goes only once its newest possible row is outside the window, so data survives up to a month longer. |
+| Audit retention | Its own window, `AUDIT_RETENTION_DAYS`, defaulting to 0 — keep forever. Never governed by the analytics number: an upgrade must not silently delete history assumed permanent. Growth is made visible instead, by `linkctrl_audit_log_bytes`. |
 | Geographic detail | Country only. Region and city are resolvable and deliberately not stored. |
 | Regional storage | One instance per region via `organizations.data_region`; no row-level routing |
 

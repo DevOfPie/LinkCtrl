@@ -248,6 +248,16 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.do("GET", p+"/api-keys", nil, http.StatusOK)
 	c.do("DELETE", p+"/api-keys/"+keyID, nil, http.StatusNoContent)
 
+	// --- audit --------------------------------------------------------------
+	// Still signed in with a session, which is the only credential that can
+	// reach this: audit.read is non-delegable, so the key minted above could
+	// not have been given it (D18).
+	c.do("GET", p+"/audit", nil, http.StatusOK)
+	c.do("GET", p+"/audit?limit=10", nil, http.StatusOK)
+	// A cursor from a different scheme is refused rather than reinterpreted as
+	// a position it does not describe.
+	c.do("GET", p+"/audit?cursor=not-a-cursor", nil, http.StatusUnprocessableEntity)
+
 	// --- link deletion, password, logout ------------------------------------
 	c.do("DELETE", p+"/links/"+linkID, nil, http.StatusNoContent)
 	c.do("POST", p+"/auth/password", map[string]string{

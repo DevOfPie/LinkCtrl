@@ -26,6 +26,7 @@ import (
 
 	"github.com/DevOfPie/LinkCtrl/internal/alias"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
+	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/build"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
@@ -283,6 +284,12 @@ func run(cfg config.Config, _ io.Writer) error {
 	// on the service, so neither side has to know the other exists first.
 	rootRedirect := &httpx.RootRedirect{Status: cfg.Redirect.DefaultStatus}
 
+	// The audit log. Constructed before the services that emit into it, which
+	// is the ordering the whole milestone is about: emission is a dependency
+	// the emitting features are built against, not something added to them
+	// afterwards.
+	auditSvc := audit.NewService(pools.App)
+
 	linkSvc := link.NewService(pools.App, link.Config{
 		Policy: link.DestinationPolicy{
 			Schemes:             cfg.Alias.DestSchemes,
@@ -309,6 +316,8 @@ func run(cfg config.Config, _ io.Writer) error {
 		// hostname of their own, where "/" is not the dashboard.
 		SplitHosts: cfg.SplitHosts(),
 		RootCache:  rootRedirect,
+		Audit:      auditSvc,
+		Log:        log,
 	})
 	rootRedirect.Load = linkSvc.LoadRootRedirect
 
@@ -361,7 +370,8 @@ func run(cfg config.Config, _ io.Writer) error {
 	metrics.Register(observability.NewIngestCollector(ingester))
 
 	roller := analytics.NewRoller(pools.App, log)
-	jobs := newJobRunner(pools.App, salts, roller, log, metrics, cfg.Analytics.RetentionDays)
+	jobs := newJobRunner(pools.App, salts, roller, log, metrics,
+		cfg.Analytics.RetentionDays, cfg.Audit.RetentionDays)
 	jobs.start(ctx)
 	defer jobs.stop()
 
@@ -402,6 +412,7 @@ func run(cfg config.Config, _ io.Writer) error {
 		Links: linkSvc, Redirect: redirectHandler,
 		RootRedirect: rootRedirect,
 		Stats:        stats,
+		Audit:        auditSvc,
 		Metrics:      metrics,
 		Limits:       limits,
 		Web: &httpx.Web{

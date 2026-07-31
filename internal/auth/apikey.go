@@ -136,10 +136,22 @@ func APIKeyHash(pepper []byte, prefix, secret string) []byte {
 // another before the original is cut off. So minting stays behind an
 // interactive session, and org.delete follows the same rule — an irreversible
 // action should require a human sign-in rather than a token in a CI variable.
+//
+// audit.read is here for a different reason, and the difference matters to
+// whoever adds the next entry. It escalates nothing and reverses nothing; it is
+// listed because of what it discloses. The audit log is the one place a network
+// prefix is tied to a named person, so the rule this map encodes is now
+// "escalating, irreversible, or disclosing" rather than only the first two.
+//
+// This map is the only thing that makes audit.read session-only. There is no
+// second check in the handler or the service — the endpoint authorizes on the
+// permission like every other endpoint — so if machine export ever outweighs
+// the disclosure, deleting this one line is the whole change. See decisions.md.
 var NonDelegableScopes = map[string]struct{}{
 	PermAPIKeysRead:  {},
 	PermAPIKeysWrite: {},
 	"org.delete":     {},
+	"audit.read":     {},
 }
 
 // APIKeyInfo is a key as its owner sees it. The secret is absent by
