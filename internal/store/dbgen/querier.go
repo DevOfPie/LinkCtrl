@@ -18,6 +18,17 @@ type Querier interface {
 	// Only issued when the caller explicitly asks for a total, because counting
 	// costs a scan the common page load should not pay for.
 	CountLinks(ctx context.Context, arg CountLinksParams) (int64, error)
+	//
+	// The re-notify guard. A threshold that is still crossed is still crossed on
+	// the next run an hour later, and a notification per hour forever is how an
+	// inbox becomes something people stop reading — which would cost exactly the
+	// warning D5 depends on.
+	CountRecentNotificationsOfKind(ctx context.Context, arg CountRecentNotificationsOfKindParams) (int64, error)
+	//
+	// Served by notifications_user_unread_idx, the partial index the table already
+	// ships with: the WHERE clause here has to match the index's predicate exactly
+	// or this becomes a sequential scan on every page render in the dashboard.
+	CountUnreadNotifications(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Users, sessions and tenancy provisioning.
 	// Drives the first-run setup flow: /setup exists only while this is zero.
 	CountUsers(ctx context.Context) (int64, error)
@@ -107,6 +118,10 @@ type Querier interface {
 	// Audit log. Append-only: there is no update and no delete here, and that is the
 	// point of the table. Rows leave only when retention drops a whole partition.
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) error
+	// Notifications. The table shipped dormant in 00600; nothing here adds a
+	// column, per the rule that a dormant table's structure goes in its jsonb until
+	// the feature that needs a column arrives. `data` carries whatever a kind needs.
+	InsertNotification(ctx context.Context, arg InsertNotificationParams) error
 	// Consulted by BOTH create paths — generated aliases before insert, and
 	// user-supplied aliases as validation — and by alias changes.
 	//
@@ -151,6 +166,16 @@ type Querier interface {
 	// than by id, and every tag came back carrying another tag's name. One
 	// subquery, one ORDER BY, both columns.
 	ListLinks(ctx context.Context, arg ListLinksParams) ([]ListLinksRow, error)
+	//
+	// Newest first, keyset on (created_at, id). Same shape as the audit log and the
+	// link list: an offset shifts under a notification arriving mid-page, and a new
+	// notification arriving is the normal case here rather than the rare one.
+	ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]Notification, error)
+	//
+	// Every organization on the instance. Phase 1 has exactly one; this is written
+	// as a list because M28 makes that untrue and a job that notified only the
+	// first organization would then be silently wrong for every other.
+	ListOrganizationIDs(ctx context.Context) ([]uuid.UUID, error)
 	// The scope vocabulary. Scopes are validated against the permissions table
 	// rather than a list in Go, so RBAC and API keys cannot drift apart.
 	ListPermissionSlugs(ctx context.Context) ([]string, error)
@@ -162,6 +187,10 @@ type Querier interface {
 	ListTags(ctx context.Context, workspaceID uuid.UUID) ([]ListTagsRow, error)
 	ListUserSessions(ctx context.Context, userID uuid.UUID) ([]ListUserSessionsRow, error)
 	ListUsers(ctx context.Context) ([]ListUsersRow, error)
+	//
+	// Who to tell about something that concerns the organization rather than a
+	// person. Active users only: a deactivated account cannot sign in to read it.
+	ListUsersWithRoleInOrg(ctx context.Context, arg ListUsersWithRoleInOrgParams) ([]uuid.UUID, error)
 	// Serializes the setup flow's count-then-create.
 	//
 	// Both setup surfaces read CountUsers and then, in a separate transaction,
@@ -179,6 +208,15 @@ type Querier interface {
 	//
 	//     SELECT pg_advisory_xact_lock(7810213058373316608);
 	LockFirstUserSetup(ctx context.Context) error
+	MarkAllNotificationsRead(ctx context.Context, userID uuid.UUID) (int64, error)
+	//
+	// Scoped by user_id as well as id, so someone else's notification is a
+	// zero-row update rather than a 403 that confirms the id exists.
+	//
+	// read_at is only set once. Marking an already-read notification is a no-op
+	// rather than a fresh timestamp, so "when did you first see this" survives a
+	// double click.
+	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (int64, error)
 	// The end of the trash window: hard-delete links whose purge_after has passed.
 	//
 	// One statement, so the reservation and the deletion cannot be separated by a

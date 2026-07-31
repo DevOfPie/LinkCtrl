@@ -9,6 +9,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
+	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 )
 
@@ -29,7 +30,9 @@ type Deps struct {
 	// Audit serves the audit log. Nil leaves the endpoint unregistered, which
 	// is what the parity test against openapi.yaml compares itself to.
 	Audit *audit.Service
-	Web   *Web
+	// Notify serves the per-user inbox, and backs the nav's unread count.
+	Notify *notify.Service
+	Web    *Web
 	// Metrics is optional. Nil disables instrumentation entirely rather than
 	// registering into a global registry, so two servers in one test process
 	// cannot collide.
@@ -145,6 +148,18 @@ func NewRouter(d Deps) http.Handler {
 		app.Handle("GET "+APIPrefix+"/audit", RequireAuth(http.HandlerFunc(a.List)))
 	}
 
+	if d.Notify != nil {
+		n := &NotificationAPI{Notify: d.Notify}
+		for pattern, h := range map[string]http.HandlerFunc{
+			"GET " + APIPrefix + "/notifications":            n.List,
+			"GET " + APIPrefix + "/notifications/unread":     n.Unread,
+			"POST " + APIPrefix + "/notifications/read":      n.ReadAll,
+			"POST " + APIPrefix + "/notifications/{id}/read": n.Read,
+		} {
+			app.Handle(pattern, RequireAuth(h))
+		}
+	}
+
 	// The API reference. The spec endpoints need nothing but the embedded
 	// document, so they are served whenever docs are enabled; the Swagger UI
 	// page also needs the asset pipeline, so it additionally requires Web.
@@ -181,18 +196,21 @@ func NewRouter(d Deps) http.Handler {
 		// Everything else redirects anonymous visitors to the login form,
 		// where the API would return a problem document.
 		for pattern, fn := range map[string]http.HandlerFunc{
-			"GET /dashboard":           web.Dashboard,
-			"GET /links":               web.LinksPage,
-			"POST /links":              web.LinkCreate,
-			"GET /links/{id}":          web.LinkDetail,
-			"POST /links/{id}":         web.LinkUpdate,
-			"POST /links/{id}/archive": web.LinkArchive,
-			"POST /links/{id}/restore": web.LinkRestore,
-			"POST /links/{id}/delete":  web.LinkDelete,
-			"GET /keys":                web.KeysPage,
-			"POST /keys":               web.KeyCreate,
-			"POST /keys/{id}/revoke":   web.KeyRevoke,
-			"GET /account":             web.AccountPage,
+			"GET /dashboard":                web.Dashboard,
+			"GET /links":                    web.LinksPage,
+			"POST /links":                   web.LinkCreate,
+			"GET /links/{id}":               web.LinkDetail,
+			"POST /links/{id}":              web.LinkUpdate,
+			"POST /links/{id}/archive":      web.LinkArchive,
+			"POST /links/{id}/restore":      web.LinkRestore,
+			"POST /links/{id}/delete":       web.LinkDelete,
+			"GET /keys":                     web.KeysPage,
+			"GET /notifications":            web.NotificationsPage,
+			"POST /notifications/read":      web.NotificationReadAll,
+			"POST /notifications/{id}/read": web.NotificationRead,
+			"POST /keys":                    web.KeyCreate,
+			"POST /keys/{id}/revoke":        web.KeyRevoke,
+			"GET /account":                  web.AccountPage,
 		} {
 			app.Handle(pattern, web.RequireWebAuth(fn))
 		}
@@ -396,6 +414,7 @@ func (h hostRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 var dashboardPatterns = []string{
 	"/{$}", "/login", "/logout", "/setup", "/dashboard", "/docs",
 	"/links", "/links/", "/keys", "/keys/", "/account", "/account/",
+	"/notifications", "/notifications/",
 }
 
 // infrastructurePatterns are the routes registered outside dashboardPatterns:

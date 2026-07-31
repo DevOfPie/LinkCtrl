@@ -142,6 +142,7 @@ rather than rendering a world uniformly colored "unknown".
 | Per-domain ownership, so a workspace administers its own hostname | 2 |
 | Audit log — table only | 1 |
 | Audit log — behavior | 2 |
+| In-app notifications | 2 |
 | Password links, one-time links, max-click links, signed URLs | 2 |
 | Malicious destination blocking: tiers, logging, notification, disputes | 2 |
 | Third-party reputation and malware feeds — opt-in, off by default | 2 |

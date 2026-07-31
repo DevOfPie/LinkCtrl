@@ -74,6 +74,8 @@ tags:
     description: Programmatic credentials
   - name: audit
     description: What changed, who changed it, and when
+  - name: notifications
+    description: Your own in-app inbox
   - name: meta
     description: The API describing itself
 
@@ -744,6 +746,107 @@ paths:
         "422":
           $ref: "#/components/responses/Validation"
 
+  /notifications:
+    get:
+      tags: [notifications]
+      operationId: listNotifications
+      summary: Your own notifications, newest first
+      description: |
+        Always your own inbox. There is no permission for reading somebody
+        else's, because there is no reason to have one — the query is scoped by
+        user, not filtered afterwards.
+
+        There is deliberately no endpoint that *creates* a notification. A
+        notification records something the system observed; an API that could
+        post one would make the inbox a thing callers assert into.
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string }
+          description: Opaque, from `next_cursor` of the previous page.
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - name: unread
+          in: query
+          schema: { type: boolean }
+          description: "`true` returns only unread notifications."
+      responses:
+        "200":
+          description: One page of notifications
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /notifications/unread:
+    get:
+      tags: [notifications]
+      operationId: countUnreadNotifications
+      summary: How many are unread
+      description: |
+        Separate from the list so a client polling the badge does not pay for a
+        page of rows it will not render.
+      responses:
+        "200":
+          description: The unread count
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [unread]
+                properties:
+                  unread: { type: integer, format: int64 }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /notifications/read:
+    post:
+      tags: [notifications]
+      operationId: markAllNotificationsRead
+      summary: Mark every notification read
+      responses:
+        "200":
+          description: How many were marked
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [marked_read]
+                properties:
+                  marked_read: { type: integer, format: int64 }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /notifications/{id}/read:
+    post:
+      tags: [notifications]
+      operationId: markNotificationRead
+      summary: Mark one notification read
+      description: |
+        Idempotent, and `read_at` is only ever set once, so "when did you first
+        see this" survives a double click. Someone else's id is indistinguishable
+        from one that does not exist — both answer `204` — so ids cannot be
+        probed.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Marked read (idempotent)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Validation"
+
   /openapi.json:
     get:
       tags: [meta]
@@ -1289,6 +1392,44 @@ components:
           description: |
             Detail that varies by action, such as the old and new values of a
             setting. Shape is per-action and not part of this contract.
+
+    Notification:
+      type: object
+      additionalProperties: false
+      required: [id, kind, title, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        kind:
+          type: string
+          description: Dotted `noun.event`, e.g. `audit.growth`.
+        title: { type: string }
+        body: { type: string }
+        data:
+          type: object
+          additionalProperties: true
+          description: |
+            Per-kind detail, returned verbatim. `audit.growth` carries `bytes`
+            and `threshold`, so a client can render the numbers without parsing
+            them back out of the sentence.
+        read_at:
+          type: string
+          format: date-time
+          description: Absent while unread. Set once, on the first mark-read.
+        created_at: { type: string, format: date-time }
+
+    NotificationPage:
+      type: object
+      additionalProperties: false
+      required: [items, has_more]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Notification"
+        next_cursor:
+          type: string
+          description: Opaque keyset cursor; present when `has_more`.
+        has_more: { type: boolean }
 
     AuditPage:
       type: object

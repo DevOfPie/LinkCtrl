@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
+	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
@@ -35,8 +36,12 @@ type jobRunner struct {
 	// reports a drop, which is the only record that history was deleted.
 	auditRetentionDays     int
 	analyticsRetentionDays int
-	cancel                 context.CancelFunc
-	done                   chan struct{}
+	// notifier raises the audit-growth warning. Nil disables it entirely.
+	notifier *notify.Service
+	// auditSizeWarnBytes is the threshold. Zero means never warn.
+	auditSizeWarnBytes int64
+	cancel             context.CancelFunc
+	done               chan struct{}
 }
 
 // advisoryLockKey is a hand-picked constant — the ASCII bytes "lcjobs" plus a
@@ -47,13 +52,16 @@ type jobRunner struct {
 const advisoryLockKey int64 = 0x6c63_6a6f_6273_0001
 
 func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analytics.Roller,
-	log *slog.Logger, metrics *observability.Metrics, analyticsRetentionDays, auditRetentionDays int,
+	log *slog.Logger, metrics *observability.Metrics, notifier *notify.Service,
+	analyticsRetentionDays, auditRetentionDays int, auditSizeWarnBytes int64,
 ) *jobRunner {
 	return &jobRunner{
 		pool: pool, salts: salts, roller: roller, log: log, metrics: metrics,
 		retention:              store.NewRetentionPolicy(analyticsRetentionDays, auditRetentionDays),
 		analyticsRetentionDays: analyticsRetentionDays,
 		auditRetentionDays:     auditRetentionDays,
+		notifier:               notifier,
+		auditSizeWarnBytes:     auditSizeWarnBytes,
 		done:                   make(chan struct{}),
 	}
 }
@@ -199,10 +207,20 @@ func (j *jobRunner) runMaintenance(ctx context.Context) {
 	//
 	// Outside withLeadership for the same reason. This is a measurement, not
 	// work that must happen once.
-	if bytes, err := store.PartitionedTableBytes(runCtx, j.pool, store.AuditTable); err != nil {
+	auditBytes, err := store.PartitionedTableBytes(runCtx, j.pool, store.AuditTable)
+	if err != nil {
 		j.log.Debug("could not measure the audit log", slog.Any("error", err))
 	} else {
-		j.metrics.SetAuditLogBytes(bytes)
+		j.metrics.SetAuditLogBytes(auditBytes)
+	}
+
+	// Warning the owner about that size is work, not measurement, so it does
+	// run under leadership: three replicas each writing the same notification
+	// would put three copies in one inbox.
+	if err == nil && j.notifier != nil {
+		j.withLeadership(runCtx, "audit-growth-warning", func(ctx context.Context) error {
+			return j.notifier.WarnAuditGrowth(ctx, auditBytes, j.auditSizeWarnBytes)
+		})
 	}
 
 	j.withLeadership(runCtx, "partition-check", func(ctx context.Context) error {

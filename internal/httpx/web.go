@@ -11,6 +11,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
+	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
 )
@@ -29,6 +30,7 @@ type Web struct {
 	Keys   *auth.APIKeyService
 	Links  *link.Service
 	Stats  *analytics.Reader
+	Notify *notify.Service
 }
 
 // shell is what the layout template needs on every page.
@@ -36,10 +38,23 @@ type shell struct {
 	Title    string
 	Nav      string
 	Identity *auth.Identity
+	// Unread is the notification badge. Zero renders no badge, which is also
+	// what a failed count renders — see below.
+	Unread int64
 }
 
 func (h *Web) shell(r *http.Request, title, nav string) shell {
-	return shell{Title: title, Nav: nav, Identity: IdentityFrom(r.Context())}
+	s := shell{Title: title, Nav: nav, Identity: IdentityFrom(r.Context())}
+	// One count per page render, served by the partial index the notifications
+	// table ships with. An error is swallowed to zero rather than propagated:
+	// this is a badge, and failing a page an operator asked for because a
+	// decoration could not be computed is the wrong trade.
+	if h.Notify != nil && s.Identity != nil {
+		if n, err := h.Notify.Unread(r.Context(), s.Identity); err == nil {
+			s.Unread = n
+		}
+	}
+	return s
 }
 
 // maxFormBytes caps HTML form bodies. Far above any real form, far below

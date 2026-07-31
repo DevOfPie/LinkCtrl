@@ -258,6 +258,18 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	// a position it does not describe.
 	c.do("GET", p+"/audit?cursor=not-a-cursor", nil, http.StatusUnprocessableEntity)
 
+	// --- notifications ------------------------------------------------------
+	// Nothing has raised one on this fixture, which is the point of listing an
+	// empty inbox: `items: []` has to satisfy the schema too, and a null there
+	// would only show up on a fresh instance.
+	c.do("GET", p+"/notifications", nil, http.StatusOK)
+	c.do("GET", p+"/notifications?unread=true&limit=10", nil, http.StatusOK)
+	c.do("GET", p+"/notifications/unread", nil, http.StatusOK)
+	c.do("POST", p+"/notifications/read", nil, http.StatusOK)
+	// Marking an id that does not exist is a 204, not a 404 — someone else's
+	// notification must be indistinguishable from one that was never there.
+	c.do("POST", p+"/notifications/"+uuid.NewString()+"/read", nil, http.StatusNoContent)
+
 	// --- link deletion, password, logout ------------------------------------
 	c.do("DELETE", p+"/links/"+linkID, nil, http.StatusNoContent)
 	c.do("POST", p+"/auth/password", map[string]string{

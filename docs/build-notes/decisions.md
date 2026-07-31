@@ -43,6 +43,7 @@ file. Append a row when you append an entry.
 | [The phase loop](#2026-07-31--the-phase-loop-written-down) | Unattended milestone iteration; why validation precedes each one; why the resume note is untracked |
 | [Six decisions taken ahead of the run](#2026-07-31--six-decisions-taken-ahead-of-an-unattended-run) | Delegability as a rule (D18); growth alert on by default (D19); reconnect flush (D20); light theme may move (D21); last-used workspace (D22); mail outbox (D23) |
 | [M21, the audit log gets behavior](#2026-07-31--m21-the-audit-log-gets-behavior) | Why the writer reduces the address itself; `audit.read` under D18; retention as a per-table policy; why the growth metric is job-measured |
+| [M22, the inbox and what it is not](#2026-07-31--m22-the-inbox-and-what-it-is-not) | The fence against a preferences system; why the warning defaults on where retention defaults off; the silence window; the badge query |
 
 ---
 
@@ -2567,3 +2568,77 @@ The previous value is read *before* the write, because "the root now points at
 example.com" does not tell a reader whether that was a change or a no-op, and a
 moment later the old value is unrecoverable. That ordering has its own test —
 reading it afterwards returns the new value for both fields and looks correct.
+
+---
+
+## 2026-07-31 — M22, the inbox and what it is not
+
+The `notifications` table shipped dormant in Phase 1. Giving it behavior is a
+small milestone whose main risk was never the code: the judges flagged
+over-building, and a notification system is the archetypal feature that grows a
+preferences matrix, a digest scheduler and three transports before anyone asks.
+
+So the fence is explicit and it held. There is no push, no per-event preference
+machinery, no general notification centre, and no endpoint that *creates* a
+notification. That last one is worth stating as a rule rather than an omission:
+a notification records something the system observed, and an API a caller can
+post into is an inbox of assertions rather than a record. Email stays M26's
+concern, reading from its own outbox.
+
+Zero DDL, which is the dormant-table rule, and it now has a test rather than a
+convention behind it — the column set of `notifications` is asserted to be
+exactly what 00600 created. The next milestone that wants somewhere to put a
+field will meet that test before it meets a migration, and the answer is the
+`data` jsonb.
+
+### The warning defaults to on, and the retention window defaults to off
+
+Both are audit-log settings and their defaults point in opposite directions,
+which reads as an inconsistency until you name what each protects against.
+
+Retention defaults to inaction because acting unasked destroys data (D5). The
+warning defaults to acting because *inaction* is what leaves the operator
+uninformed (D19). Keep-forever is a safe default only on the condition that the
+instance nobody configured is the instance that gets warned — a threshold you
+had to switch on would be no threshold at all for exactly the operators who
+never look.
+
+`AUDIT_SIZE_WARN_BYTES=0` turns it off, for someone who has decided and does not
+want reminding. That is the only way off, and it is deliberately not the default.
+
+### The re-notify guard is a silence window, not a mute
+
+A crossed threshold stays crossed until an operator acts, so the hourly job would
+file the same notification every hour forever. An inbox that fills with one
+repeated line is one people stop opening, which would cost precisely the warning
+D5 leans on.
+
+A week of silence per recipient, and then it warns again — because the opposite
+failure is an operator who dismissed it once and never hears about it again.
+Both edges have tests, including the elapsed-interval case, which is the half
+that a "notify once" implementation would silently get wrong.
+
+Only owners are told. An editor cannot change the retention setting, so telling
+them is noise in the inbox of somebody who cannot act on it.
+
+### The policy lives in the notify package, not the job runner
+
+`WarnAuditGrowth` started in `cmd/linkctrl`, beside the scheduler that calls it.
+It moved because what counts as too big, who hears about it and how often are
+decisions worth testing, and nothing in `package main` can be reached by the
+integration suite. The job runner now decides *when* to ask and the notify
+package decides *what to do* — which is also why the threshold comparison lives
+behind the same function rather than in the caller's `if`.
+
+### The badge costs one query per page render
+
+`shell` computes the unread count on every dashboard page, because the nav is on
+every dashboard page. That is affordable specifically because the count matches
+the partial index `notifications` already shipped with — the predicate in the
+query is written to match `notifications_user_unread_idx` rather than merely to
+be correct, and a count that did not match it would be a sequential scan on
+every page load.
+
+A failure there is swallowed to zero rather than propagated. Failing a page an
+operator asked for because a decoration could not be computed is the wrong
+trade; the badge is the least important thing on the screen.

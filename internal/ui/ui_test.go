@@ -130,6 +130,31 @@ func pageData(t *testing.T) map[string]any {
 			"FieldErrors": map[string]string{},
 			"Notice":      "", "Error": "",
 		},
+		// Both states in one render: a read notification and an unread one, so
+		// the branch that draws the dot and the "mark read" button is exercised
+		// alongside the branch that does not. Unread is non-zero so the nav
+		// badge renders too — it is drawn from the shell on every page, and a
+		// template error there would break every page rather than this one.
+		"notifications": map[string]any{
+			"Title": "Notifications", "Nav": "notifications", "Identity": owner(),
+			"Unread": int64(1),
+			"Items": []map[string]any{
+				{
+					"ID": "0198c9c5-0000-7000-8000-000000000003", "Kind": "audit.growth",
+					"Title":  "The audit log has passed its size threshold",
+					"Body":   "audit_logs now uses 5.2 GiB on disk.",
+					"Data":   map[string]any{"bytes": int64(5583457484)},
+					"ReadAt": (*time.Time)(nil), "CreatedAt": now,
+				},
+				{
+					"ID": "0198c9c5-0000-7000-8000-000000000004", "Kind": "audit.growth",
+					"Title": "An older notice", "Body": "",
+					"ReadAt": &now, "CreatedAt": now,
+				},
+			},
+			"NextCursor": "abc",
+			"Notice":     "", "Error": "",
+		},
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
+	"github.com/DevOfPie/LinkCtrl/internal/notify"
 )
 
 // apiFixture is a running server plus a cookie-jar client, so tests drive the
@@ -71,6 +72,7 @@ func newAPI(t *testing.T) *apiFixture {
 		Links:  linkSvc,
 		Stats:  analytics.NewReader(pool),
 		Audit:  audit.NewService(pool),
+		Notify: notify.NewService(pool),
 	}))
 	t.Cleanup(srv.Close)
 

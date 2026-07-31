@@ -33,6 +33,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/geoip"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
+	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/httpserver"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/postgres"
@@ -290,6 +291,10 @@ func run(cfg config.Config, _ io.Writer) error {
 	// afterwards.
 	auditSvc := audit.NewService(pools.App)
 
+	// The inbox. Its first consumer is the audit-growth warning in the job
+	// runner below, which is why it is built here rather than beside the API.
+	notifySvc := notify.NewService(pools.App)
+
 	linkSvc := link.NewService(pools.App, link.Config{
 		Policy: link.DestinationPolicy{
 			Schemes:             cfg.Alias.DestSchemes,
@@ -370,8 +375,8 @@ func run(cfg config.Config, _ io.Writer) error {
 	metrics.Register(observability.NewIngestCollector(ingester))
 
 	roller := analytics.NewRoller(pools.App, log)
-	jobs := newJobRunner(pools.App, salts, roller, log, metrics,
-		cfg.Analytics.RetentionDays, cfg.Audit.RetentionDays)
+	jobs := newJobRunner(pools.App, salts, roller, log, metrics, notifySvc,
+		cfg.Analytics.RetentionDays, cfg.Audit.RetentionDays, cfg.Audit.SizeWarnBytes)
 	jobs.start(ctx)
 	defer jobs.stop()
 
@@ -413,11 +418,12 @@ func run(cfg config.Config, _ io.Writer) error {
 		RootRedirect: rootRedirect,
 		Stats:        stats,
 		Audit:        auditSvc,
+		Notify:       notifySvc,
 		Metrics:      metrics,
 		Limits:       limits,
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
-			Links: linkSvc, Stats: stats,
+			Links: linkSvc, Stats: stats, Notify: notifySvc,
 		},
 	})
 

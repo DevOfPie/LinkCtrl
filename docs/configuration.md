@@ -250,6 +250,15 @@ Visible is a claim that has to be paid for, so it is:
 partition, refreshed hourly on every replica. The alert recipe is in
 [operations.md](operations.md#audit-log-growth).
 
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `LINKCTRL_AUDIT_SIZE_WARN_BYTES` | `5368709120` | 5 GiB. Once the audit partitions pass this, every organization owner gets an in-app notification, at most one a week each. **On by default**, unlike the retention window. `0` disables it. |
+
+The asymmetry is deliberate. Retention defaults to inaction because acting
+unasked destroys data; the warning defaults to acting because inaction is what
+leaves an operator uninformed. Keep-forever is a safe default only if the
+instance nobody configured is the one that gets warned.
+
 Reading the log needs the `audit.read` permission, held by owners and admins.
 It cannot be granted to an API key — see [SECURITY.md](SECURITY.md).
 

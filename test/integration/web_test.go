@@ -20,6 +20,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
+	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
 )
 
@@ -59,6 +60,7 @@ func newWeb(t *testing.T) *webFixture {
 		BaseURL: cfg.BaseURL,
 	})
 	stats := analytics.NewReader(pool)
+	notifySvc := notify.NewService(pool)
 
 	renderer, err := ui.New()
 	if err != nil {
@@ -72,9 +74,10 @@ func newWeb(t *testing.T) *webFixture {
 		Keys:   keySvc,
 		Links:  linkSvc,
 		Stats:  stats,
+		Notify: notifySvc,
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
-			Links: linkSvc, Stats: stats,
+			Links: linkSvc, Stats: stats, Notify: notifySvc,
 		},
 	}))
 	t.Cleanup(srv.Close)

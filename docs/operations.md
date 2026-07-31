@@ -147,6 +147,7 @@ a follower whose scheduler has stopped.
 | `partitions` | 1h | Creates monthly partitions two months ahead. |
 | `retention` | 1h | Drops monthly partitions that are entirely outside their table's window — `ANALYTICS_RETENTION_DAYS` for `click_events` and `visitors`, `AUDIT_RETENTION_DAYS` for `audit_logs`. Runs after `partitions`, so a run can never drop what it just created. With the audit default of `0` it drops no audit partition at all. |
 | `salt-purge` | 1h | Deletes analytics salts older than two days. **This is the de-identification step, not housekeeping**: once a salt is gone, that day's visitor hashes cannot be linked to an address by anyone. |
+| `audit-growth-warning` | 1h | Notifies every organization owner once `audit_logs` passes `AUDIT_SIZE_WARN_BYTES`, at most weekly each. Skipped entirely when the threshold is `0`. |
 | `partition-check` | 1h | Warns if rows landed in a default partition. |
 | `housekeeping` | 1h | The reapers. Hard-deletes links whose 30-day trash window has passed — reserving any alias that ever received traffic in the same statement, so it is never reissued — and deletes sessions and revoked API keys past their retention. Each purged link is logged by alias; that log line is the only record of the deletion. |
 

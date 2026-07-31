@@ -39,8 +39,18 @@ migrations run at boot.
 - `linkctrl_audit_log_bytes`, the on-disk size of every `audit_logs` partition,
   refreshed hourly on every replica. Keeping everything forever is only a safe
   default if the growth it permits is visible; the Prometheus alert recipe is in
-  [docs/operations.md](docs/operations.md#audit-log-growth). The in-app owner
-  notification that reads the same metric is not in this release.
+  [docs/operations.md](docs/operations.md#audit-log-growth).
+- **Notifications, in the dashboard.** A nav badge, a notifications page and
+  `GET /api/v1/notifications` with mark-read and mark-all-read. Your own inbox
+  only — there is no permission for reading somebody else's, because there is no
+  reason for one — and no endpoint that creates a notification: they record what
+  the system observed, not what a caller asserts.
+- The first thing that raises one is the audit-log size threshold above.
+  `LINKCTRL_AUDIT_SIZE_WARN_BYTES` defaults to 5 GiB and is **on by default**,
+  which is deliberately the opposite of the retention default: keeping
+  everything forever is only safe if the instance nobody configured is the one
+  that gets warned. Owners are told, at most once a week each, and only owners —
+  nobody else can change the setting.
 
 ### Notes for operators
 
@@ -49,6 +59,10 @@ migrations run at boot.
   snapshotted when the event is written, so a record stays readable after the
   account it names is deleted.
 - Nothing is recorded retroactively. The log starts at the upgrade.
+- Notifications added no database columns. The table shipped in 0.1.0 and
+  per-kind detail goes in its `data` jsonb, so this upgrade is additive in the
+  ordinary way and needs no backfill.
+- There is no email yet, and no push. In-app only until a mailer exists.
 
 ## [0.1.0] - 2026-07-31
 

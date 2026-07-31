@@ -201,6 +201,21 @@ type AnalyticsConfig struct {
 // in docs/operations.md are what make it visible. See decisions.md, D5.
 type AuditConfig struct {
 	RetentionDays int `env:"AUDIT_RETENTION_DAYS" envDefault:"0"`
+
+	// SizeWarnBytes raises an owner notification once the audit partitions pass
+	// it. 5 GB, and **on by default** — which is the asymmetry with
+	// RetentionDays above, not an inconsistency (D19).
+	//
+	// The two defaults protect against opposite failures. Retention defaults to
+	// inaction because acting unasked destroys data. The warning defaults to
+	// acting because inaction is what leaves the operator uninformed, and
+	// keep-forever is only a safe default on an instance nobody configured if
+	// that instance is the one being warned. A threshold that had to be
+	// switched on would be no threshold at all for exactly the operators who
+	// need it.
+	//
+	// 0 disables it, for an operator who has decided and does not want reminding.
+	SizeWarnBytes int64 `env:"AUDIT_SIZE_WARN_BYTES" envDefault:"5368709120"`
 }
 
 type ShutdownConfig struct {
@@ -582,6 +597,10 @@ func (c Config) Validate() error {
 	if c.Audit.RetentionDays < 0 {
 		add("AUDIT_RETENTION_DAYS: must be 0 (keep forever) or positive, got %d",
 			c.Audit.RetentionDays)
+	}
+	if c.Audit.SizeWarnBytes < 0 {
+		add("AUDIT_SIZE_WARN_BYTES: must be 0 (no warning) or positive, got %d",
+			c.Audit.SizeWarnBytes)
 	}
 
 	if c.Analytics.GeoIPPath != "" {
