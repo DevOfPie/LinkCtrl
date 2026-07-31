@@ -424,20 +424,24 @@ done.
 | Post-release defect fixes, and a demo seeder | done, verified |
 | Root redirect on the link domain | done, verified |
 
-Verification: 92 integration tests against real Postgres and Redis — including
+Verification: 103 integration tests against real Postgres and Redis — including
 a contract test that replays every OpenAPI operation against the live server —
 plus unit, property and fuzz tests. All run under the race detector, and all of it
 runs in CI alongside a two-architecture container build.
 
 ### Phase 1 scope not yet built
 
-Every configuration variable now either takes effect or no longer exists, which
-was the enforcement milestone's definition of done, and the redirect SLO is
-measured. What is left divides into work that is assigned and work that is not.
+Every configuration variable either takes effect or no longer exists, which was
+the enforcement milestone's definition of done, and the redirect SLO is measured.
+Nothing in Phase 1 is outstanding: what follows is the record of the three
+milestones added after the completeness review, then the two lists that hold work
+which is deliberately not scheduled.
 
-#### Assigned
+#### Added after the review, and built
 
-M18 and M19 are done. M20 is not started.
+The scope Phase 1 grew after 0.1.0's first eighteen milestones were reviewed. All
+three are done; their definitions of done are kept because they are what the
+implementations are held to.
 
 | Milestone | State |
 | --- | --- |
@@ -447,12 +451,13 @@ M18 and M19 are done. M20 is not started.
 
 **M20 in detail.** M18 gave the instance a second public hostname and left its
 root a bare `404`: `/{alias}` does not match `/`, and the dashboard routes that
-used to answer there now live on the other host. Anyone who trims a short link
-back to the domain, or types it out of curiosity, gets nothing. Every commercial
+used to answer there moved to the other host. Anyone who trimmed a short link
+back to the domain, or typed it out of curiosity, got nothing. Every commercial
 shortener points that page somewhere, and the operator is the only party who
 knows where.
 
-Done means an operator can set a destination for `https://lnk.example.com/`, and:
+An operator can now set a destination for `https://lnk.example.com/`, and every
+row below holds:
 
 | Requirement | Why it is stated |
 | --- | --- |
@@ -481,8 +486,9 @@ with something worth a screenshot — a workspace of plausible links, thirty day
 of history with weekday seasonality and a launch spike, and every status the UI
 can render, including an archived link, an expired campaign and one in the trash.
 Two requirements make it worth committing rather than keeping as a snippet: links
-are created through the public API, so seeding exercises the same validation and
-alias policy a client does and cannot invent states the product cannot reach; and
+are created through the same service call the REST API makes, so seeding runs the
+same validation and alias policy a client does and cannot invent states the
+product cannot reach; and
 backfilled click rows match what the ingester would have written column for
 column — no IP anywhere, referrers already reduced to a host, `is_first_visit`
 false, and the exact device and browser strings `Classify` emits. A seeder that
