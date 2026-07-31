@@ -1,0 +1,13 @@
+/* Tailwind entry point.
+ *
+ * @source tells Tailwind v4 where to scan for class names. funcs.go is listed
+ * because some class strings live in Go — the status badge map, for instance —
+ * and a utility that appears only there would otherwise be missing from the
+ * generated stylesheet. The vendored htmx build is deliberately NOT scanned:
+ * minified JavaScript is full of short strings that look like class names, and
+ * every false match becomes dead CSS.
+ */
+@import "tailwindcss";
+
+@source "../../templates/**/*.html";
+@source "../../funcs.go";

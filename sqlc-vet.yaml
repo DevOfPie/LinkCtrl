@@ -1,0 +1,19 @@
+# Query verification against a live database, run in CI.
+#
+# sqlc/db-prepare PREPAREs every query server-side, so a typo'd column, a wrong
+# cast, or a reference to a dropped table fails the build with no test written.
+# Kept separate from sqlc.yaml so `sqlc generate` works with no database.
+version: "2"
+sql:
+  - engine: postgresql
+    schema: internal/store/migrations
+    queries: internal/store/query
+    database:
+      uri: "${LINKCTRL_DATABASE_URL}"
+    rules:
+      - sqlc/db-prepare
+    gen:
+      go:
+        package: dbgen
+        out: internal/store/dbgen
+        sql_package: pgx/v5

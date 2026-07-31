@@ -1,0 +1,26 @@
+{{define "series_chart"}}
+{{- /* Takes a ui.Chart. Pure SVG: geometry is attributes, colors are fill-*
+       utilities, so nothing here needs an inline style and the CSP stays
+       strict. */ -}}
+{{if .Bars}}
+<svg viewBox="0 0 {{.W}} {{.H}}" preserveAspectRatio="none" class="h-40 w-full" role="img" aria-label="Clicks per day">
+  {{range .Ticks}}
+  <line x1="0" y1="{{.Y}}" x2="{{$.W}}" y2="{{.Y}}" class="stroke-slate-200" stroke-width="1" stroke-dasharray="2 3"/>
+  {{end}}
+  {{range .Bars}}
+  <rect x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" rx="1" class="fill-indigo-500 hover:fill-indigo-600">
+    <title>{{dayShort .Day}}: {{fmtInt .Clicks}} clicks, {{fmtInt .Visitors}} visitors{{if .Bots}}, {{fmtInt .Bots}} bots{{end}}</title>
+  </rect>
+  {{end}}
+</svg>
+<div class="mt-1 flex justify-between text-xs text-slate-400">
+  <span>{{.First}}</span>
+  <span>peak {{fmtInt .MaxY}}/day</span>
+  <span>{{.Last}}</span>
+</div>
+{{else}}
+<div class="flex h-40 items-center justify-center rounded-md border border-dashed border-slate-200 text-sm text-slate-400">
+  No clicks in this period yet
+</div>
+{{end}}
+{{end}}

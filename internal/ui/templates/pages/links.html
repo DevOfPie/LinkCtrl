@@ -1,0 +1,56 @@
+{{define "content"}}
+<div class="mb-6 flex items-baseline justify-between">
+  <h1 class="text-xl font-semibold tracking-tight">Links</h1>
+</div>
+
+{{template "flash_ok" .Notice}}
+{{template "flash_error" .Error}}
+
+{{if and .Identity (.Identity.Can "links.create")}}
+<div class="mb-6 rounded-lg border border-slate-200 bg-white p-6">
+  <h2 class="mb-4 text-sm font-medium text-slate-900">Create a link</h2>
+  <form method="post" action="/links" class="grid gap-4 sm:grid-cols-[1fr_12rem_auto]">
+    <div>
+      <label for="url" class="block text-sm font-medium text-slate-700">Destination URL</label>
+      <input id="url" name="url" type="url" required placeholder="https://example.com/page" value="{{.Form.URL}}"
+             class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+      {{template "field_error" (index .FieldErrors "url")}}
+    </div>
+    <div>
+      <label for="alias" class="block text-sm font-medium text-slate-700">Alias <span class="text-slate-400">(optional)</span></label>
+      <input id="alias" name="alias" type="text" placeholder="generated" value="{{.Form.Alias}}"
+             class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+      {{template "field_error" (index .FieldErrors "alias")}}
+    </div>
+    <div class="flex items-end">
+      <button type="submit" class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Create</button>
+    </div>
+  </form>
+</div>
+{{end}}
+
+<div class="rounded-lg border border-slate-200 bg-white p-6">
+  <form method="get" action="/links" class="mb-4 flex flex-wrap items-center gap-3"
+        hx-get="/links" hx-target="#links-table" hx-select="#links-table" hx-swap="outerHTML" hx-push-url="true">
+    <input type="search" name="search" value="{{.Search}}" placeholder="Search links…"
+           hx-get="/links" hx-trigger="input changed delay:300ms" hx-include="closest form"
+           class="w-64 rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none">
+    <select name="status" hx-get="/links" hx-trigger="change" hx-include="closest form"
+            class="rounded-md border border-slate-300 px-2 py-1.5 text-sm">
+      <option value="" {{if eq .Status ""}}selected{{end}}>All statuses</option>
+      <option value="active" {{if eq .Status "active"}}selected{{end}}>Active</option>
+      <option value="archived" {{if eq .Status "archived"}}selected{{end}}>Archived</option>
+      <option value="expired" {{if eq .Status "expired"}}selected{{end}}>Expired</option>
+    </select>
+    <select name="sort" hx-get="/links" hx-trigger="change" hx-include="closest form"
+            class="rounded-md border border-slate-300 px-2 py-1.5 text-sm">
+      <option value="newest" {{if eq .Sort "newest"}}selected{{end}}>Newest first</option>
+      <option value="oldest" {{if eq .Sort "oldest"}}selected{{end}}>Oldest first</option>
+      <option value="clicks" {{if eq .Sort "clicks"}}selected{{end}}>Most clicks</option>
+    </select>
+    <noscript><button type="submit" class="rounded-md border border-slate-300 px-3 py-1.5 text-sm">Filter</button></noscript>
+  </form>
+
+  {{template "links_table" .}}
+</div>
+{{end}}

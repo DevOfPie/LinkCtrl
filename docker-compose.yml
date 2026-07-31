@@ -1,0 +1,149 @@
+# The "try it on localhost" stack, and the base for a real deployment. See
+# docs/deployment.md for the TLS-terminated topology (a reverse proxy in front of
+# this file, no second compose file needed) and docker-compose.override.yml
+# (applied automatically) for developer conveniences such as published database
+# ports.
+
+name: linkctrl
+
+services:
+  app:
+    image: ghcr.io/devofpie/linkctrl:${LINKCTRL_TAG:-latest}
+    build:
+      context: .
+      args:
+        VERSION: ${LINKCTRL_TAG:-dev}
+    restart: unless-stopped
+    depends_on:
+      # service_healthy, not service_started. Without it a cold `up` races
+      # Postgres's initdb and the operator's first impression of the product is
+      # a crash loop.
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Everything in .env reaches the process. The explicit block below still
+    # wins for the values compose has to own (the service hostnames, the ports
+    # the container listens on) and for the required-secret checks, because
+    # `environment:` takes precedence over `env_file:`.
+    #
+    # Without this the file forwarded a fixed fifteen variables, so most of what
+    # docs/configuration.md documents — every REDIRECT_*, SESSION_* and ARGON2_*
+    # knob, the retention windows, the pool sizes, the second hostname — was
+    # read from .env for interpolation and then never passed in. Setting one and
+    # restarting changed nothing, and --check-config validated the same
+    # truncated environment and agreed.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TZ: UTC
+      LINKCTRL_APP_ENV: ${LINKCTRL_APP_ENV:-production}
+      LINKCTRL_BASE_URL: ${LINKCTRL_BASE_URL:?LINKCTRL_BASE_URL is required, e.g. https://links.example.com}
+      LINKCTRL_HTTP_ADDR: ":8080"
+      LINKCTRL_METRICS_ADDR: ":9090"
+      LINKCTRL_API_KEY_PEPPER: ${LINKCTRL_API_KEY_PEPPER:?LINKCTRL_API_KEY_PEPPER is required (openssl rand -base64 48)}
+      LINKCTRL_DATABASE_URL: postgres://${POSTGRES_USER:-linkctrl}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-linkctrl}?sslmode=disable
+      LINKCTRL_REDIS_URL: redis://redis:6379/0
+      LINKCTRL_LOG_LEVEL: ${LINKCTRL_LOG_LEVEL:-info}
+      LINKCTRL_LOG_FORMAT: ${LINKCTRL_LOG_FORMAT:-json}
+      LINKCTRL_SECURE_COOKIES: ${LINKCTRL_SECURE_COOKIES:-true}
+      LINKCTRL_SIGNUP_MODE: ${LINKCTRL_SIGNUP_MODE:-closed}
+      LINKCTRL_TRUSTED_PROXIES: ${LINKCTRL_TRUSTED_PROXIES:-}
+      LINKCTRL_MIGRATE_ON_START: ${LINKCTRL_MIGRATE_ON_START:-true}
+      LINKCTRL_GEOIP_MMDB_PATH: ${LINKCTRL_GEOIP_MMDB_PATH:-}
+    ports:
+      - "${LINKCTRL_HTTP_PORT:-8080}:8080"
+      # :9090 is deliberately NOT published. A Prometheus on this compose
+      # network scrapes http://app:9090/metrics; see docs/operations.md.
+    healthcheck:
+      # The binary healthchecks itself: the runtime image is distroless and has
+      # no curl or shell.
+      test: ["CMD", "/linkctrl", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    # Must exceed SHUTDOWN_DRAIN_DELAY + SHUTDOWN_TIMEOUT + the final ingest
+    # flush, or Docker SIGKILLs mid-flush and loses the click events that
+    # graceful shutdown exists to save.
+    stop_grace_period: 30s
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      TZ: UTC
+      POSTGRES_USER: ${POSTGRES_USER:-linkctrl}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-linkctrl}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    command:
+      - postgres
+      # UTC is enforced here as well as in the pgx pool and the container
+      # environment. Partition bounds on timestamptz are resolved using the
+      # session timezone at DDL time, so a non-UTC session silently creates
+      # partitions offset by the UTC offset, leaving gaps that swallow rows.
+      # See docs/adr/0001-partitioning-and-sqlc.md.
+      - "-c"
+      - "timezone=UTC"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "max_connections=100"
+      - "-c"
+      - "log_min_duration_statement=500ms"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-linkctrl} -d ${POSTGRES_DB:-linkctrl}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Cache only: no RDB snapshots, no AOF, LRU eviction. Any key may vanish at
+    # any moment, which is why nothing correctness-critical is kept here.
+    command:
+      - redis-server
+      - "--save"
+      - ""
+      - "--appendonly"
+      - "no"
+      - "--maxmemory"
+      - "${REDIS_MAXMEMORY:-256mb}"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  pgdata:

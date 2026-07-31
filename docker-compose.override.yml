@@ -1,0 +1,35 @@
+# Developer conveniences. Compose applies this file AUTOMATICALLY on top of
+# docker-compose.yml whenever `docker compose` runs in this directory — there is
+# no flag in the happy path that skips it. That is why every value below is a
+# *default*, not a literal: an operator who sets LINKCTRL_APP_ENV=production in
+# .env must get production, and a hard-coded `development` here would silently
+# override it. An earlier version of this file did exactly that, which meant the
+# documented production procedure deployed a dev-mode instance — insecure
+# cookies, debug logs — without a word of warning.
+#
+# For production, docs/deployment.md additionally says to run with
+# `-f docker-compose.yml`, which skips this file (and its published database
+# ports) entirely. The parameterization is the belt for operators who forget.
+
+services:
+  app:
+    build:
+      context: .
+    environment:
+      LINKCTRL_APP_ENV: ${LINKCTRL_APP_ENV:-development}
+      LINKCTRL_LOG_FORMAT: ${LINKCTRL_LOG_FORMAT:-text}
+      LINKCTRL_LOG_LEVEL: ${LINKCTRL_LOG_LEVEL:-debug}
+      LINKCTRL_SECURE_COOKIES: ${LINKCTRL_SECURE_COOKIES:-false}
+
+  postgres:
+    # Published on a non-default port so it cannot collide with a Postgres the
+    # developer already has installed on 5432, and bound to loopback so it is
+    # reachable from this machine and not from the network it is on. A short
+    # port mapping binds 0.0.0.0, which on a laptop joined to a coffee-shop or
+    # office network publishes the development database to that network.
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-55432}:5432"
+
+  redis:
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-56379}:6379"

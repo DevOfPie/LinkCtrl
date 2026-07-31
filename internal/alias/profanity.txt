@@ -1,0 +1,86 @@
+# Terms that may not appear in an alias.
+#
+# Format: one entry per line, lowercase. Blank lines and # comments ignored.
+#
+#   word:<term>       matches only as a whole alias or as a whole
+#                     separator-delimited token ("damn", "my-damn-link")
+#   sub:<term>        matches anywhere in the alias with separators removed
+#
+# The distinction exists because naive substring matching is worse than
+# useless: "ass" as a substring rejects "class", "assets", "passage" and
+# "assessment". Short or commonly-embedded terms therefore go in the word list,
+# and only terms whose appearance is essentially never innocent go in the
+# substring list, where the false-positive cost is worth paying.
+#
+# Matching runs after leetspeak normalization (0->o, 1->i, 3->e, 4->a, 5->s,
+# 7->t, 8->b), so "sh1t" and "cr4p" are caught. A consequence worth knowing:
+# generated random codes can contain 0 and 1 and so can normalize into a listed
+# word by chance, which is exactly why Random re-validates its own output.
+#
+# This list is intentionally short and covers the obvious cases. Operators who
+# need stricter filtering extend it via LINKCTRL_ALIAS_RESERVED_EXTRA rather
+# than by patching this file.
+
+# --- whole-word matches -----------------------------------------------------
+word:arse
+word:ass
+word:asshole
+word:bastard
+word:bitch
+word:bollocks
+word:bugger
+word:crap
+word:cunt
+word:damn
+word:dick
+word:dickhead
+word:dumbass
+word:fuck
+word:fucker
+word:fucking
+word:goddamn
+word:jackass
+word:jerkoff
+word:nigga
+word:piss
+word:prick
+word:pussy
+# The following four are slurs, but each is a substring of an ordinary English
+# word, so substring matching would reject innocent aliases. Demoted to
+# whole-token matching, with the collisions locked in by
+# TestValidateDoesNotFlagInnocentWords:
+#   rapist  -> therapist, therapists
+#   coon    -> raccoon, cocoon, tycoon
+#   retard  -> retardant, fire-retardant
+#   spastic -> spasticity (and legitimate clinical use)
+word:coon
+word:rapist
+word:retard
+word:shit
+word:shite
+word:slut
+word:spastic
+word:twat
+word:wank
+word:wanker
+word:whore
+
+# --- substring matches ------------------------------------------------------
+# Slurs and sexual-abuse terms, where an embedded occurrence is not plausibly
+# innocent.
+sub:childporn
+sub:chink
+sub:cocksuck
+sub:cp0rn
+sub:faggot
+sub:fellatio
+sub:kike
+sub:lolicon
+sub:motherfuck
+sub:nigger
+sub:paedo
+sub:pedophile
+sub:shemale
+sub:towelhead
+sub:tranny
+sub:wetback
