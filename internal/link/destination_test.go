@@ -95,6 +95,82 @@ func TestValidateDestinationBlocksPrivateAddresses(t *testing.T) {
 	}
 }
 
+// The same addresses written the way netip.ParseAddr refuses and browsers
+// accept. Every one of these resolves to loopback or the metadata endpoint in a
+// real client, so a check that skips them on a parse failure blocks nothing an
+// attacker would actually type.
+func TestValidateDestinationBlocksObfuscatedIPv4(t *testing.T) {
+	p := DefaultDestinationPolicy()
+	obfuscated := []string{
+		"http://2130706433/admin", // decimal 127.0.0.1
+		"http://0177.0.0.1/",      // octal
+		"http://0x7f000001/",      // hex
+		"http://127.1/",           // short dotted form
+		"http://127.0.1/",         // three-part form
+		"http://0xa9fea9fe/latest/meta-data/iam/security-credentials/", // 169.254.169.254
+		"http://2852039166/", // decimal 169.254.169.254
+		"http://010.0.0.1/",  // leading zero, rejected by ParseAddr
+	}
+
+	for _, raw := range obfuscated {
+		t.Run(raw, func(t *testing.T) {
+			_, err := ValidateDestination(raw, p)
+			if err == nil {
+				t.Errorf("accepted %q; a browser resolves it to a restricted address", raw)
+			}
+		})
+	}
+}
+
+// The counterpart: rejecting numeric hosts must not reject ordinary names,
+// including the ones whose labels are mostly digits.
+func TestValidateDestinationAcceptsNumericLookingHostnames(t *testing.T) {
+	p := DefaultDestinationPolicy()
+	ok := []string{
+		"https://123.example.com/",
+		"https://4chan.org/",
+		"https://1337.co.uk/",
+		"https://example.com./", // trailing dot, fully qualified
+		"https://8.8.8.8/",      // a real public address, still allowed
+	}
+
+	for _, raw := range ok {
+		t.Run(raw, func(t *testing.T) {
+			if _, err := ValidateDestination(raw, p); err != nil {
+				t.Errorf("rejected %q: %v", raw, err)
+			}
+		})
+	}
+}
+
+// Hostname() drops the brackets and Port() reports none, so the normalized form
+// has to put them back or the stored URL is one no client can follow.
+func TestValidateDestinationKeepsIPv6Brackets(t *testing.T) {
+	p := DefaultDestinationPolicy()
+	tests := []struct{ in, want string }{
+		{"https://[2606:4700:4700::1111]/status", "https://[2606:4700:4700::1111]/status"},
+		{"https://[2606:4700:4700::1111]:8443/x", "https://[2606:4700:4700::1111]:8443/x"},
+		{"https://[2606:4700:4700::1111]", "https://[2606:4700:4700::1111]"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			got, err := ValidateDestination(tt.in, p)
+			if err != nil {
+				t.Fatalf("rejected a public IPv6 destination: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("normalized to %q, want %q", got, tt.want)
+			}
+			// The round trip is the point: the stored form must re-parse to the
+			// same host, which an unbracketed literal does not.
+			if HostOf(got) != HostOf(tt.want) {
+				t.Errorf("host round-tripped to %q, want %q", HostOf(got), HostOf(tt.want))
+			}
+		})
+	}
+}
+
 func TestPrivateAddressBlockingCanBeDisabled(t *testing.T) {
 	// A self-hoster pointing links at an intranet is a legitimate
 	// configuration, so this must be a policy rather than a hard rule.

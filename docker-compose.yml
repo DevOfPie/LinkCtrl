@@ -22,13 +22,26 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # Everything in .env reaches the process. The explicit block below still
+    # wins for the values compose has to own (the service hostnames, the ports
+    # the container listens on) and for the required-secret checks, because
+    # `environment:` takes precedence over `env_file:`.
+    #
+    # Without this the file forwarded a fixed fifteen variables, so most of what
+    # docs/configuration.md documents — every REDIRECT_*, SESSION_* and ARGON2_*
+    # knob, the retention windows, the pool sizes, the second hostname — was
+    # read from .env for interpolation and then never passed in. Setting one and
+    # restarting changed nothing, and --check-config validated the same
+    # truncated environment and agreed.
+    env_file:
+      - path: .env
+        required: false
     environment:
       TZ: UTC
       LINKCTRL_APP_ENV: ${LINKCTRL_APP_ENV:-production}
       LINKCTRL_BASE_URL: ${LINKCTRL_BASE_URL:?LINKCTRL_BASE_URL is required, e.g. https://links.example.com}
       LINKCTRL_HTTP_ADDR: ":8080"
       LINKCTRL_METRICS_ADDR: ":9090"
-      LINKCTRL_SECRET_KEY: ${LINKCTRL_SECRET_KEY:?LINKCTRL_SECRET_KEY is required (openssl rand -base64 48)}
       LINKCTRL_API_KEY_PEPPER: ${LINKCTRL_API_KEY_PEPPER:?LINKCTRL_API_KEY_PEPPER is required (openssl rand -base64 48)}
       LINKCTRL_DATABASE_URL: postgres://${POSTGRES_USER:-linkctrl}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-linkctrl}?sslmode=disable
       LINKCTRL_REDIS_URL: redis://redis:6379/0

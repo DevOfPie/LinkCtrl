@@ -31,7 +31,11 @@ if [ "$os" = "windows" ]; then
 	out="${out}.exe"
 fi
 
-if [ -x "$out" ] && "$out" --help >/dev/null 2>&1; then
+# An existing binary is reused only if it is the pinned version. Checking that
+# it merely runs defeats the pin: bumping TAILWIND_VERSION would keep building
+# the stylesheet with whatever ./bin already held, and a binary put there by
+# something other than this script would never be questioned.
+if [ -x "$out" ] && "$out" --version 2>/dev/null | grep -qF "${VERSION#v}"; then
 	exit 0
 fi
 

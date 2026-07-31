@@ -43,7 +43,7 @@ config check       Validate configuration, reporting every problem at once
 migrate up         Apply pending migrations, then ensure partitions exist
 migrate down       Roll back the most recent migration
 migrate status     Show applied and pending migrations
-partitions ensure  Create partitions for the current and next months
+partitions ensure  Create partitions for the current and next two months
 apikey create      Issue an API key   --user --name --scopes [--expires-in]
 apikey list        List a user's API keys                          --user
 apikey revoke      Revoke an API key                         --user --id
@@ -90,8 +90,11 @@ partitions ensured (0 created)
 ```
 
 Creates monthly partitions for `click_events`, `visitors` and `audit_logs` for
-the current and next month. The background scheduler runs this hourly, so it is
-normally only needed after a restore or when investigating.
+the current month and the next two. The background scheduler runs this hourly,
+so it is normally only needed after a restore or when investigating. The
+headroom is deliberate: creating next month's partition on the last day of this
+one is a single point of failure with a hard deadline, and two months turns a
+missed run into a warning rather than an outage.
 
 Nothing here *drops* partitions. Retention is enforced by the hourly `retention`
 job instead, which drops whole months once they are entirely outside the window —

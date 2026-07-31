@@ -27,6 +27,25 @@ UPDATE users
        updated_at = now()
  WHERE id = $1;
 
+-- name: LockFirstUserSetup :exec
+-- Serializes the setup flow's count-then-create.
+--
+-- Both setup surfaces read CountUsers and then, in a separate transaction,
+-- register the first user. Nothing held the gap, and the gap is wide: the
+-- argon2 hash runs for ~100ms before the transaction even begins. On a fresh
+-- closed instance, setup is unauthenticated and only login-rate-limited, so an
+-- attacker polling it could have their CountUsers land in the window while the
+-- real operator was hashing, and both would be created as "the first user" —
+-- each with their own organization, on an instance the operator believes only
+-- they can reach.
+--
+-- Transaction-scoped, so it releases on commit or rollback with nothing to
+-- clean up. The key is the ASCII bytes "lcsetup\0" as a literal, NOT a hash of
+-- anything; to inspect it from psql use the value directly:
+--
+--     SELECT pg_advisory_xact_lock(7810213058373316608);
+SELECT pg_advisory_xact_lock(7810213058373316608);
+
 -- name: RecordSuccessfulLogin :exec
 UPDATE users
    SET last_login_at = now(),
@@ -39,12 +58,30 @@ UPDATE users
 -- Returns the new count so the caller can apply the lockout policy without a
 -- second round trip and without a read-modify-write race between two
 -- concurrent attempts.
+--
+-- An elapsed lockout starts the count over. Incrementing unconditionally meant
+-- the counter only ever went down on a successful sign-in or a password change,
+-- so once an account had been locked it sat at the threshold forever: the user
+-- waited out the window, got one attempt, and a single wrong guess re-locked
+-- them for the full duration. The lockout became permanent for anyone who could
+-- not remember their password on the first try — which is the population it
+-- applies to.
 UPDATE users
-   SET failed_login_count = failed_login_count + 1,
+   SET failed_login_count = CASE
+           WHEN locked_until IS NOT NULL AND locked_until <= now() THEN 1
+           ELSE failed_login_count + 1
+       END,
        -- Seconds rather than an interval literal: an interval parameter maps
        -- to pgtype.Interval, which would leak a driver type into the service
        -- layer for no benefit.
        locked_until = CASE
+           WHEN sqlc.arg(threshold)::int <= 0 THEN locked_until
+           WHEN locked_until IS NOT NULL AND locked_until <= now()
+           THEN CASE
+               WHEN 1 >= sqlc.arg(threshold)::int
+               THEN now() + make_interval(secs => sqlc.arg(lockout_seconds)::int)
+               ELSE NULL
+           END
            WHEN failed_login_count + 1 >= sqlc.arg(threshold)::int
            THEN now() + make_interval(secs => sqlc.arg(lockout_seconds)::int)
            ELSE locked_until

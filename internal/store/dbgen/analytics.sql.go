@@ -46,6 +46,25 @@ func (q *Queries) CreateSalt(ctx context.Context, arg CreateSaltParams) ([]byte,
 	return salt, err
 }
 
+const getJobWatermark = `-- name: GetJobWatermark :one
+
+SELECT watermark FROM job_state WHERE job = $1
+`
+
+// --- job bookkeeping ---------------------------------------------------------
+// The point a job is known to have completed through. Rollups recompute rather
+// than accumulate, so this is not a correctness dependency for a run that
+// happens on schedule — it exists for the run that does not. Without it,
+// RunRecent covered a fixed yesterday-and-today window, and any downtime that
+// spanned a UTC day left that day with no rollup and nothing to notice it: the
+// raw events were still there, but nothing ever aggregated them again.
+func (q *Queries) GetJobWatermark(ctx context.Context, job string) (*time.Time, error) {
+	row := q.db.QueryRow(ctx, getJobWatermark, job)
+	var watermark *time.Time
+	err := row.Scan(&watermark)
+	return watermark, err
+}
+
 const getLinkDimensions = `-- name: GetLinkDimensions :many
 SELECT value, sum(clicks)::bigint AS clicks, sum(unique_visitors)::bigint AS unique_visitors
 FROM link_dimension_daily
@@ -309,6 +328,27 @@ func (q *Queries) PurgeExpiredSalts(ctx context.Context) (int64, error) {
 	return result.RowsAffected(), nil
 }
 
+const recordJobFailure = `-- name: RecordJobFailure :exec
+INSERT INTO job_state (job, last_run_at, last_error, updated_at)
+VALUES ($1, now(), $2, now())
+ON CONFLICT (job) DO UPDATE
+   SET last_run_at = now(),
+       last_error  = EXCLUDED.last_error,
+       updated_at  = now()
+`
+
+type RecordJobFailureParams struct {
+	Job       string
+	LastError *string
+}
+
+// Keeps the watermark where it was: a failed run has not covered its window,
+// and advancing past it would turn one bad run into permanent gaps.
+func (q *Queries) RecordJobFailure(ctx context.Context, arg RecordJobFailureParams) error {
+	_, err := q.db.Exec(ctx, recordJobFailure, arg.Job, arg.LastError)
+	return err
+}
+
 const rollupDimensionDaily = `-- name: RollupDimensionDaily :exec
 INSERT INTO link_dimension_daily (link_id, workspace_id, day, dimension, value, clicks, unique_visitors)
 SELECT ce.link_id,
@@ -426,5 +466,25 @@ type RollupWorkspaceDailyParams struct {
 
 func (q *Queries) RollupWorkspaceDaily(ctx context.Context, arg RollupWorkspaceDailyParams) error {
 	_, err := q.db.Exec(ctx, rollupWorkspaceDaily, arg.WindowStart, arg.WindowEnd)
+	return err
+}
+
+const setJobWatermark = `-- name: SetJobWatermark :exec
+INSERT INTO job_state (job, last_run_at, watermark, last_error, updated_at)
+VALUES ($1, now(), $2, NULL, now())
+ON CONFLICT (job) DO UPDATE
+   SET last_run_at = now(),
+       watermark   = EXCLUDED.watermark,
+       last_error  = NULL,
+       updated_at  = now()
+`
+
+type SetJobWatermarkParams struct {
+	Job       string
+	Watermark *time.Time
+}
+
+func (q *Queries) SetJobWatermark(ctx context.Context, arg SetJobWatermarkParams) error {
+	_, err := q.db.Exec(ctx, setJobWatermark, arg.Job, arg.Watermark)
 	return err
 }

@@ -106,7 +106,12 @@
 {{if and .Identity (.Identity.Can "links.delete")}}
 <div class="mt-6 rounded-lg border border-rose-200 bg-white p-6">
   <h2 class="mb-1 text-sm font-medium text-rose-700">Danger zone</h2>
-  <p class="mb-4 text-sm text-slate-500">Archiving keeps the alias but stops redirecting. Deleting keeps the link restorable for 30 days, then purges it.</p>
+  {{/* Says what deletion actually does. "Restorable for 30 days" described a
+       trash view that does not exist in Phase 1: GetLink filters soft-deleted
+       rows, so the link's own page 404s the moment it is deleted, and
+       RestoreLink only un-archives. The alias reservation is real and is the
+       part worth stating. */}}
+  <p class="mb-4 text-sm text-slate-500">Archiving keeps the alias but stops redirecting, and can be undone here. Deleting stops the redirect immediately and holds the alias for 30 days before purging it &mdash; recovery inside that window is a database operation, not a button.</p>
   <div class="flex gap-3">
     {{if eq (printf "%s" .Link.Status) "archived"}}
     <form method="post" action="/links/{{.Link.ID}}/restore">
@@ -117,8 +122,14 @@
       <button type="submit" class="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Archive</button>
     </form>
     {{end}}
+    {{/* hx-post as well as the native action: htmx only honours hx-confirm on
+         requests it issues itself, so on a plain form the prompt never
+         appeared and the button deleted on the first click. The action stays
+         so the form still works with htmx unavailable, and the handler's
+         seeOther already answers both dialects. */}}
     <form method="post" action="/links/{{.Link.ID}}/delete"
-          hx-confirm="Delete /{{.Link.Alias}}? It stops redirecting immediately and is purged after 30 days.">
+          hx-post="/links/{{.Link.ID}}/delete"
+          hx-confirm="Delete /{{.Link.Alias}}? It stops redirecting immediately, and its alias stays reserved for 30 days before it is purged.">
       <button type="submit" class="rounded-md bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-500">Delete</button>
     </form>
   </div>

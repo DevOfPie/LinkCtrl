@@ -60,6 +60,49 @@ type Policy struct {
 	// and an instance used internally for engineering links has different needs
 	// from a public shortener. It does not affect the reserved list.
 	ProfanityDisabled bool
+
+	// MinUserLength raises the floor on a user-supplied alias. Zero means the
+	// package default, so the zero Policy keeps the documented behaviour.
+	//
+	// Raising it and lowering it are both legitimate: the two-character space is
+	// held back for routing, and an operator who wants /go to be claimable can
+	// say so, while a public instance may want short aliases kept scarce.
+	// Clamped to the package bounds — a policy cannot permit an alias the column
+	// or the redirect's WellFormed pre-filter would refuse.
+	MinUserLength int
+
+	// GeneratedLength is the starting length for generated codes. Zero means
+	// DefaultLength. Larger values buy collision headroom on a big instance at
+	// the cost of a longer URL; Generate still escalates from here.
+	GeneratedLength int
+}
+
+// minUserLength and generatedLength resolve the configured values against the
+// package bounds. Clamping rather than validating, because these arrive from
+// configuration that has already been range-checked, and a policy that silently
+// refuses to apply would be the same class of defect as one nothing reads.
+func (p Policy) minUserLength() int {
+	switch {
+	case p.MinUserLength <= 0:
+		return MinLength
+	case p.MinUserLength > MaxLength:
+		return MaxLength
+	default:
+		return p.MinUserLength
+	}
+}
+
+func (p Policy) generatedLength() int {
+	switch {
+	case p.GeneratedLength <= 0:
+		return DefaultLength
+	case p.GeneratedLength < MinLength:
+		return MinLength
+	case p.GeneratedLength > MaxGeneratedLength:
+		return MaxGeneratedLength
+	default:
+		return p.GeneratedLength
+	}
 }
 
 // Validate canonicalizes a user-supplied alias under the default policy.
@@ -81,12 +124,13 @@ func (p Policy) Validate(input string) (string, error) {
 	}
 	// Count runes, not bytes: a multi-byte input should report "invalid
 	// characters" rather than a confusing length error.
-	if n := len([]rune(s)); n < MinLength {
+	minLen := p.minUserLength()
+	if n := len([]rune(s)); n < minLen {
 		if !isAllowedASCII(s) {
 			return "", newError(ReasonInvalidChars,
 				"alias may only contain lowercase letters, digits, hyphen and underscore")
 		}
-		return "", newError(ReasonTooShort, "alias must be at least %d characters", MinLength)
+		return "", newError(ReasonTooShort, "alias must be at least %d characters", minLen)
 	} else if n > MaxLength {
 		return "", newError(ReasonTooLong, "alias must be at most %d characters", MaxLength)
 	}

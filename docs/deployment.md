@@ -28,10 +28,9 @@ cd LinkCtrl
 cp .env.example .env
 ```
 
-Generate three independent secrets:
+Generate two independent secrets:
 
 ```sh
-openssl rand -base64 48   # LINKCTRL_SECRET_KEY
 openssl rand -base64 48   # LINKCTRL_API_KEY_PEPPER
 openssl rand -base64 32   # POSTGRES_PASSWORD
 ```
@@ -40,7 +39,6 @@ Edit `.env`:
 
 ```ini
 LINKCTRL_BASE_URL=https://links.example.com
-LINKCTRL_SECRET_KEY=<48 random bytes>
 LINKCTRL_API_KEY_PEPPER=<48 random bytes>
 POSTGRES_PASSWORD=<32 random bytes>
 
@@ -88,9 +86,9 @@ secrets:
 LINKCTRL_API_KEY_PEPPER_FILE=/run/secrets/api_key_pepper
 ```
 
-Supported for `SECRET_KEY`, `API_KEY_PEPPER`, `DATABASE_URL` and
-`SMTP_PASSWORD`. Setting both the inline and `_FILE` form for the same secret is
-an error rather than a silent precedence rule.
+Supported for `API_KEY_PEPPER` and `DATABASE_URL`. Setting both the inline and
+`_FILE` form for the same secret is an error rather than a silent precedence
+rule.
 
 Save `.env` with **LF line endings**. A CRLF makes `POSTGRES_PASSWORD` end in an
 invisible carriage return, Postgres initialises with a password nobody can type,
@@ -159,6 +157,16 @@ manage.example.com, lnk.example.com {
 LINKCTRL_BASE_URL=https://manage.example.com
 LINKCTRL_APP_BASE_URL=https://manage.example.com
 LINKCTRL_LINK_BASE_URL=https://lnk.example.com
+```
+
+Compose loads `.env` into the app service wholesale, so these take effect on the
+next `docker compose up -d`. Confirm it before trusting the split: the link host
+must answer `/login` with a 404. If it serves the sign-in page, the two-hostname
+configuration did not reach the process and sessions are still being minted on
+the host that serves other people's destinations.
+
+```sh
+curl -so /dev/null -w '%{http_code}\n' https://lnk.example.com/login    # want 404
 ```
 
 One listener and one process either way — the routing is by `Host`. Caddy will
@@ -389,8 +397,8 @@ Until then:
   accept that edits take up to that long to reach every replica.
 - Vertical growth first: Postgres `shared_buffers` and the two pool sizes
   (`DB_MAX_CONNS`, `DB_REDIRECT_MAX_CONNS`) are the knobs that matter. Keep
-  their total under the server's `max_connections`; startup warns when the sum
-  approaches 100.
+  their total under the server's `max_connections`; startup refuses to run when
+  the sum exceeds 90, so raise `max_connections` on Postgres first.
 
 ## When it will not start
 

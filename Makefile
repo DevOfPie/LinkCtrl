@@ -184,6 +184,15 @@ htmx: ## Verify (or restore) the vendored htmx against its pinned checksum
 swagger-ui: ## Verify (or restore) the vendored Swagger UI against its pinned checksums
 	@scripts/get-swagger.sh "$(SWAGGER_UI_VERSION)" "$(SWAGGER_CSS_SHA256)" "$(SWAGGER_JS_SHA256)" internal/ui/static/vendor
 
+# What CI runs instead of `make htmx swagger-ui`. Those targets repair a stale
+# copy, which is right for a developer and wrong for a gate: a gate that fixes
+# what it finds reports success on a tampered blob. VERIFY_ONLY makes the
+# mismatch fatal instead.
+.PHONY: verify-assets
+verify-assets: ## Fail if a vendored asset does not match its pinned checksum
+	@VERIFY_ONLY=1 scripts/get-htmx.sh "$(HTMX_VERSION)" "$(HTMX_SHA256)" internal/ui/static/js/htmx.min.js
+	@VERIFY_ONLY=1 scripts/get-swagger.sh "$(SWAGGER_UI_VERSION)" "$(SWAGGER_CSS_SHA256)" "$(SWAGGER_JS_SHA256)" internal/ui/static/vendor
+
 .PHONY: css
 css: tailwind ## Build the stylesheet
 	$(BIN)/tailwindcss -i internal/ui/static/css/input.css -o internal/ui/static/css/app.css --minify

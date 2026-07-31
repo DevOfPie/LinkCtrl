@@ -43,7 +43,9 @@ jobs:
           check-latest: true
 
       - name: Verify the vendored assets against their pinned checksums
-        run: make htmx swagger-ui
+        # verify-assets, not `make htmx swagger-ui`: those repair a mismatch and
+        # exit 0, so this step passed on any tampered blob it could re-download.
+        run: make verify-assets
 
       - name: Build the stylesheet
         run: make css

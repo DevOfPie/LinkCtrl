@@ -94,18 +94,31 @@ WHERE l.workspace_id = $1
        OR l.search_vector @@ websearch_to_tsquery('english', $3::text)
        OR l.alias ILIKE '%' || $3::text || '%'
        OR l.primary_url ILIKE '%' || $3::text || '%')
+  -- Must mirror ListLinks exactly. Without this branch a tag-filtered page
+  -- reported the workspace's whole link count as its total, so "8 of 100" was
+  -- shown for a filter matching 8 of 8.
+  AND ($4::uuid[] IS NULL
+       OR EXISTS (SELECT 1 FROM link_tags lt
+                   WHERE lt.link_id = l.id
+                     AND lt.tag_id = ANY($4::uuid[])))
 `
 
 type CountLinksParams struct {
 	WorkspaceID uuid.UUID
 	Status      *string
 	Search      *string
+	TagIds      []uuid.UUID
 }
 
 // Only issued when the caller explicitly asks for a total, because counting
 // costs a scan the common page load should not pay for.
 func (q *Queries) CountLinks(ctx context.Context, arg CountLinksParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countLinks, arg.WorkspaceID, arg.Status, arg.Search)
+	row := q.db.QueryRow(ctx, countLinks,
+		arg.WorkspaceID,
+		arg.Status,
+		arg.Search,
+		arg.TagIds,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -462,18 +475,15 @@ func (q *Queries) GetWorkspaceDefaultDomain(ctx context.Context) (GetWorkspaceDe
 const listLinks = `-- name: ListLinks :many
 SELECT
     l.id, l.workspace_id, l.domain_id, l.folder_id, l.alias, l.primary_url, l.primary_destination_id, l.title, l.description, l.status, l.expires_at, l.password_hash, l.max_clicks, l.one_time, l.forward_query, l.click_count, l.last_click_at, l.created_by, l.created_at, l.updated_at, l.archived_at, l.deleted_at, l.purge_after, l.search_vector, l.campaign_id,
-    COALESCE(
-        (SELECT array_agg(t.name ORDER BY t.name)
-           FROM link_tags lt JOIN tags t ON t.id = lt.tag_id
-          WHERE lt.link_id = l.id),
-        ARRAY[]::text[]
-    )::text[] AS tag_names,
-    COALESCE(
-        (SELECT array_agg(lt.tag_id::text ORDER BY lt.tag_id)
-           FROM link_tags lt WHERE lt.link_id = l.id),
-        ARRAY[]::text[]
-    )::text[] AS tag_ids
+    COALESCE(tg.names, ARRAY[]::text[])::text[] AS tag_names,
+    COALESCE(tg.ids, ARRAY[]::text[])::text[]   AS tag_ids
 FROM links l
+LEFT JOIN LATERAL (
+    SELECT array_agg(t.name ORDER BY t.name, t.id)     AS names,
+           array_agg(t.id::text ORDER BY t.name, t.id) AS ids
+      FROM link_tags lt JOIN tags t ON t.id = lt.tag_id
+     WHERE lt.link_id = l.id
+) tg ON true
 WHERE l.workspace_id = $1
   AND l.deleted_at IS NULL
   -- Filtered on effective status, not the stored column: nothing ever writes
@@ -499,19 +509,30 @@ WHERE l.workspace_id = $1
        OR EXISTS (SELECT 1 FROM link_tags lt
                    WHERE lt.link_id = l.id
                      AND lt.tag_id = ANY($4::uuid[])))
+  -- Keyset pagination only works if the predicate compares the same tuple the
+  -- ORDER BY sorts on. It did not: every sort filtered on (created_at, id)
+  -- while 'clicks' ordered by click_count, so page 2 dropped rows that belonged
+  -- on it and repeated rows already shown. Each branch below pairs with the
+  -- correspondingly-named ORDER BY key, and the id tiebreaker matches its
+  -- direction — 'oldest' ascends, so its tiebreaker ascends too.
   AND (
-        $5::timestamptz IS NULL
+        $5::uuid IS NULL
         OR ($6::text = 'oldest'
-              AND (l.created_at, l.id) > ($5::timestamptz, $7::uuid))
-        OR ($6::text <> 'oldest'
-              AND (l.created_at, l.id) < ($5::timestamptz, $7::uuid))
+              AND (l.created_at, l.id) > ($7::timestamptz, $5::uuid))
+        OR ($6::text = 'clicks'
+              AND (l.click_count, l.id) < ($8::bigint, $5::uuid))
+        OR ($6::text NOT IN ('oldest','clicks')
+              AND (l.created_at, l.id) < ($7::timestamptz, $5::uuid))
       )
 ORDER BY
     CASE WHEN $6::text = 'oldest' THEN l.created_at END ASC,
     CASE WHEN $6::text = 'clicks' THEN l.click_count END DESC,
     CASE WHEN $6::text NOT IN ('oldest','clicks') THEN l.created_at END DESC,
+    -- Ascending tiebreaker for the ascending sort. For the others this key is
+    -- NULL on every row, so it ties and the DESC key below decides.
+    CASE WHEN $6::text = 'oldest' THEN l.id END ASC,
     l.id DESC
-LIMIT $8
+LIMIT $9
 `
 
 type ListLinksParams struct {
@@ -519,9 +540,10 @@ type ListLinksParams struct {
 	Status        *string
 	Search        *string
 	TagIds        []uuid.UUID
-	CursorCreated *time.Time
-	Sort          string
 	CursorID      *uuid.UUID
+	Sort          string
+	CursorCreated *time.Time
+	CursorClicks  *int64
 	PageLimit     int32
 }
 
@@ -565,15 +587,22 @@ type ListLinksRow struct {
 // Sorting is a CASE rather than three separate queries because sqlc has no
 // dynamic SQL. If plan stability becomes a problem this splits into
 // ListLinksNewest/Oldest/Clicks; measure before doing that.
+// The two tag aggregates are paired positionally by the caller, so they must
+// agree on their order — and on the table they read. Aggregating names from a
+// join and ids from link_tags alone, each sorted by its own column, produced
+// arrays in different orders whenever a link's tags sorted differently by name
+// than by id, and every tag came back carrying another tag's name. One
+// subquery, one ORDER BY, both columns.
 func (q *Queries) ListLinks(ctx context.Context, arg ListLinksParams) ([]ListLinksRow, error) {
 	rows, err := q.db.Query(ctx, listLinks,
 		arg.WorkspaceID,
 		arg.Status,
 		arg.Search,
 		arg.TagIds,
-		arg.CursorCreated,
-		arg.Sort,
 		arg.CursorID,
+		arg.Sort,
+		arg.CursorCreated,
+		arg.CursorClicks,
 		arg.PageLimit,
 	)
 	if err != nil {
@@ -623,7 +652,7 @@ func (q *Queries) ListLinks(ctx context.Context, arg ListLinksParams) ([]ListLin
 }
 
 const listTags = `-- name: ListTags :many
-SELECT t.id, t.workspace_id, t.name, t.color, t.created_at, count(lt.link_id) AS link_count
+SELECT t.id, t.workspace_id, t.name, t.color, t.created_at, count(l.id) AS link_count
 FROM tags t
 LEFT JOIN link_tags lt ON lt.tag_id = t.id
 LEFT JOIN links l ON l.id = lt.link_id AND l.deleted_at IS NULL
@@ -641,6 +670,11 @@ type ListTagsRow struct {
 	LinkCount   int64
 }
 
+// Counts l.id, not lt.link_id. The join onto links is what excludes trashed
+// links, but counting the link_tags column ignored it: a LEFT JOIN keeps the
+// link_tags row when its link is soft-deleted, so the count included trashed
+// links for the whole 30-day window and the tag list disagreed with the link
+// list it filters.
 func (q *Queries) ListTags(ctx context.Context, workspaceID uuid.UUID) ([]ListTagsRow, error) {
 	rows, err := q.db.Query(ctx, listTags, workspaceID)
 	if err != nil {

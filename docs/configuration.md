@@ -9,6 +9,15 @@ reference: every variable listed here takes effect. Three that used to be
 documented as accepted-but-inert no longer exist — see
 [Removed](#removed-variables).
 
+Under the shipped `docker-compose.yml` that holds without qualification: the app
+service loads `.env` wholesale via `env_file`, so anything set there reaches the
+process. Only the values compose itself owns — the service hostnames in
+`DATABASE_URL` and `REDIS_URL`, the ports inside the container — are pinned in
+the compose file and cannot be overridden from `.env`. (This used to be a fixed
+fifteen-variable list, which meant most of this document was read from `.env`
+for interpolation and then quietly dropped. A test in `internal/config` now
+fails if the compose file goes back to hand-picking.)
+
 Validate before deploying:
 
 ```sh
@@ -26,13 +35,12 @@ No defaults. The process refuses to start without them.
 | Variable | Notes |
 | --- | --- |
 | `LINKCTRL_BASE_URL` | Public origin, e.g. `https://links.example.com`. Builds every short URL, scopes cookies, and is trusted as a CSRF origin. No path, query or fragment. Must be `https` when `APP_ENV=production`. Also the default for the two variables below. |
-| `LINKCTRL_SECRET_KEY` | ≥32 bytes. `openssl rand -base64 48`. |
-| `LINKCTRL_API_KEY_PEPPER` | ≥32 bytes. Keys the HMAC that protects every API key hash, so **changing it invalidates every existing API key**. Not rotatable in place. |
+| `LINKCTRL_API_KEY_PEPPER` | ≥32 bytes. `openssl rand -base64 48`. Keys the HMAC that protects every API key hash, so **changing it invalidates every existing API key**. Not rotatable in place. |
 | `LINKCTRL_DATABASE_URL` | pgx-compatible DSN. Compose builds it from the `POSTGRES_*` variables. |
 
-`SECRET_KEY`, `API_KEY_PEPPER`, `DATABASE_URL` and `SMTP_PASSWORD` also accept a
-`_FILE` suffix pointing at a file, for mounted secrets. Setting both forms of the
-same secret is an error, not a precedence rule.
+`API_KEY_PEPPER` and `DATABASE_URL` also accept a `_FILE` suffix pointing at a
+file, for mounted secrets. Setting both forms of the same secret is an error, not
+a precedence rule.
 
 ## Core
 
@@ -111,8 +119,11 @@ application pool cannot leave a redirect waiting to acquire a connection.
 | `LINKCTRL_DB_MAX_CONN_IDLE_TIME` | `15m` | |
 | `LINKCTRL_DB_CONNECT_TIMEOUT` | `10s` | |
 
-Startup warns when `DB_MAX_CONNS + DB_REDIRECT_MAX_CONNS` approaches Postgres's
-default `max_connections` of 100.
+Startup **refuses** when `DB_MAX_CONNS + DB_REDIRECT_MAX_CONNS` exceeds 90,
+which approaches Postgres's default `max_connections` of 100. It is a validation
+error, not a warning: a pool that cannot get a connection fails requests, and
+finding that out at startup is cheaper than finding it out under load. Raise
+`max_connections` on the server before raising the pools past it.
 
 ## Cache
 

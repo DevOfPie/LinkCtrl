@@ -348,16 +348,31 @@ func latencyUS(d time.Duration) int32 {
 //
 // The destination's own parameters win on conflict: they were configured
 // deliberately, whereas the incoming ones are whatever a visitor arrived with.
+//
+// The destination's query is only ever re-encoded when it round-trips exactly.
+// url.Query() discards ParseQuery's error and drops every pair it could not
+// read, so a destination holding a bare semicolon or a stray percent — both of
+// which browsers accept and neither of which ValidateDestination rejects —
+// silently lost those parameters the moment forwarding was switched on. The
+// link worked with forward_query off and broke with it on, which points
+// suspicion at exactly the wrong place. When the destination cannot be parsed
+// losslessly, its raw query is preserved verbatim and the incoming pairs are
+// appended textually instead.
 func appendQuery(target, incoming string) string {
 	u, err := url.Parse(target)
 	if err != nil {
 		return target
 	}
-	existing := u.Query()
 	extra, err := url.ParseQuery(incoming)
 	if err != nil {
 		return target
 	}
+
+	existing, parseErr := url.ParseQuery(u.RawQuery)
+	if parseErr != nil || countPairs(u.RawQuery) != countValues(existing) {
+		return appendRaw(u, extra)
+	}
+
 	for k, vs := range extra {
 		if existing.Has(k) {
 			continue
@@ -368,6 +383,56 @@ func appendQuery(target, incoming string) string {
 	}
 	u.RawQuery = existing.Encode()
 	return u.String()
+}
+
+// appendRaw adds parameters to a query that cannot be safely re-encoded,
+// leaving the original bytes untouched.
+func appendRaw(u *url.URL, extra url.Values) string {
+	// Skip anything whose name already appears in the raw query. A textual
+	// check is coarser than url.Values.Has, and coarse in the safe direction:
+	// the destination's own parameters are the ones that must win.
+	add := url.Values{}
+	for k, vs := range extra {
+		if strings.Contains("&"+u.RawQuery+"&", "&"+url.QueryEscape(k)+"=") ||
+			strings.HasPrefix(u.RawQuery, url.QueryEscape(k)+"=") {
+			continue
+		}
+		add[k] = vs
+	}
+	if len(add) == 0 {
+		return u.String()
+	}
+	encoded := add.Encode()
+	if u.RawQuery == "" {
+		u.RawQuery = encoded
+	} else {
+		u.RawQuery += "&" + encoded
+	}
+	return u.String()
+}
+
+// countPairs and countValues detect a lossy parse.
+//
+// Comparing the parsed pair count to the raw one catches anything ParseQuery
+// dropped without saying so. A straight string comparison would not work:
+// Encode sorts and re-escapes, so "b=2&a=1" differs from its own round trip
+// while losing nothing.
+func countPairs(raw string) int {
+	n := 0
+	for _, part := range strings.Split(raw, "&") {
+		if part != "" {
+			n++
+		}
+	}
+	return n
+}
+
+func countValues(v url.Values) int {
+	n := 0
+	for _, vs := range v {
+		n += len(vs)
+	}
+	return n
 }
 
 func clientIPString(r *http.Request) string {

@@ -47,11 +47,10 @@ cd LinkCtrl
 cp .env.example .env
 ```
 
-Fill in the three secrets in `.env` (`openssl rand -base64 48` for each):
+Fill in the two secrets in `.env` (`openssl rand -base64 48` for each):
 
 ```sh
 LINKCTRL_BASE_URL=http://localhost:8080
-LINKCTRL_SECRET_KEY=…
 LINKCTRL_API_KEY_PEPPER=…
 POSTGRES_PASSWORD=…
 ```

@@ -88,6 +88,15 @@ func (s *Snapshot) Decide(now time.Time) Outcome {
 // kind of bug that only shows up in production, on the one link that mattered.
 func (s *Snapshot) CacheTTL(now time.Time, base, negative time.Duration) time.Duration {
 	if s == nil || s.NotFound {
+		// The same one-second floor as a positive entry, and for a sharper
+		// reason: go-redis treats a zero expiration as "no TTL", so a
+		// REDIRECT_NEGATIVE_TTL of 0 — the natural way to write "do not cache
+		// misses" — wrote a permanent key for every well-formed alias anyone
+		// ever probed. A scanner spraying /abc123 paths would fill Redis with
+		// keys that never expire.
+		if negative < time.Second {
+			return time.Second
+		}
 		return negative
 	}
 	ttl := base

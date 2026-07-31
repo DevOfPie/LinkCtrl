@@ -100,11 +100,35 @@ jobs:
       - name: Assets, build and tests
         run: |
           set -eux
-          make htmx swagger-ui css
+          make verify-assets
+          make css
           go build ./...
           go vet ./...
           go test -race -count=1 ./...
           go test -count=1 -run TestOpenAPI ./internal/httpx/
+
+      # ci.yml triggers on `push: branches`, which does not match a tag push, so
+      # nothing else on the release path checks these. A tag could otherwise
+      # publish a binary built from SQL whose generated code was never
+      # regenerated — the one class of drift this project cannot see by reading.
+      - name: Generated code matches its source
+        run: |
+          set -eux
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+          sqlc generate
+          git diff --exit-code -- internal/store/dbgen
+
+      - name: Modules are tidy
+        run: |
+          set -eux
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      # Same pin as ci.yml's lint job; the two must not drift.
+      - name: Lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.12.2
 
       - name: Integration tests
         run: go test -tags=integration -race -count=1 ./test/integration/

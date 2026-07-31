@@ -23,10 +23,13 @@ services:
 
   postgres:
     # Published on a non-default port so it cannot collide with a Postgres the
-    # developer already has installed on 5432.
+    # developer already has installed on 5432, and bound to loopback so it is
+    # reachable from this machine and not from the network it is on. A short
+    # port mapping binds 0.0.0.0, which on a laptop joined to a coffee-shop or
+    # office network publishes the development database to that network.
     ports:
-      - "${POSTGRES_PORT:-55432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-55432}:5432"
 
   redis:
     ports:
-      - "${REDIS_PORT:-56379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-56379}:6379"

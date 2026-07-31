@@ -157,3 +157,33 @@ LIMIT sqlc.arg(row_limit);
 
 -- name: CountClickEvents :one
 SELECT count(*) FROM click_events WHERE workspace_id = $1;
+
+-- --- job bookkeeping ---------------------------------------------------------
+
+-- name: GetJobWatermark :one
+-- The point a job is known to have completed through. Rollups recompute rather
+-- than accumulate, so this is not a correctness dependency for a run that
+-- happens on schedule — it exists for the run that does not. Without it,
+-- RunRecent covered a fixed yesterday-and-today window, and any downtime that
+-- spanned a UTC day left that day with no rollup and nothing to notice it: the
+-- raw events were still there, but nothing ever aggregated them again.
+SELECT watermark FROM job_state WHERE job = $1;
+
+-- name: SetJobWatermark :exec
+INSERT INTO job_state (job, last_run_at, watermark, last_error, updated_at)
+VALUES (sqlc.arg(job), now(), sqlc.arg(watermark), NULL, now())
+ON CONFLICT (job) DO UPDATE
+   SET last_run_at = now(),
+       watermark   = EXCLUDED.watermark,
+       last_error  = NULL,
+       updated_at  = now();
+
+-- name: RecordJobFailure :exec
+-- Keeps the watermark where it was: a failed run has not covered its window,
+-- and advancing past it would turn one bad run into permanent gaps.
+INSERT INTO job_state (job, last_run_at, last_error, updated_at)
+VALUES (sqlc.arg(job), now(), sqlc.arg(last_error), now())
+ON CONFLICT (job) DO UPDATE
+   SET last_run_at = now(),
+       last_error  = EXCLUDED.last_error,
+       updated_at  = now();

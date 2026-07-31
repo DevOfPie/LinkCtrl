@@ -10,6 +10,9 @@
 # Only two files are vendored. swagger-ui-bundle.js and swagger-ui.css are all
 # that SwaggerUIBundle needs; the standalone preset just adds the top bar with
 # a URL box, which an embedded viewer pointing at its own spec has no use for.
+#
+# VERIFY_ONLY=1 turns the repair off and makes a mismatch fatal; see the same
+# note in get-htmx.sh for why a gate must never repair.
 set -eu
 
 VERSION="${1:?usage: get-swagger.sh <version> <css-sha256> <js-sha256> <destdir>}"
@@ -33,6 +36,19 @@ fetch() { # file expected-sha
 	if [ -f "$dest" ] && [ "$(sha256_of "$dest")" = "$expected" ]; then
 		echo "get-swagger: ${dest} matches swagger-ui ${VERSION}"
 		return 0
+	fi
+
+	if [ -n "${VERIFY_ONLY:-}" ]; then
+		echo "get-swagger: ${dest} does not match swagger-ui ${VERSION}" >&2
+		echo "  expected ${expected}" >&2
+		if [ -f "$dest" ]; then
+			echo "  actual   $(sha256_of "$dest")" >&2
+		else
+			echo "  actual   (file missing)" >&2
+		fi
+		echo "The committed blob differs from the pinned upstream release. Run" >&2
+		echo "\`make swagger-ui\` to restore it, and review why it changed." >&2
+		exit 1
 	fi
 
 	mkdir -p "$DESTDIR"

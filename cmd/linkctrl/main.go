@@ -296,6 +296,8 @@ func run(cfg config.Config, _ io.Writer) error {
 			// the policy field names the state it disables. Inverting here rather
 			// than in the policy keeps the zero Policy the safe one.
 			ProfanityDisabled: !cfg.Alias.ProfanityFilter,
+			MinUserLength:     cfg.Alias.MinUserLength,
+			GeneratedLength:   cfg.Alias.Length,
 		},
 		// Short URLs are built from the link origin, which is the same as
 		// BaseURL unless the deployment splits the two hosts.

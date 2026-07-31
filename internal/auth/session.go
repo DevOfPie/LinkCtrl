@@ -37,6 +37,21 @@ var (
 	ErrSessionRevoked  = errors.New("auth: session revoked")
 )
 
+// IsSessionInvalid reports whether an Authenticate failure means the credential
+// itself is finished, as opposed to the lookup having failed.
+//
+// The distinction decides whether a caller may destroy the cookie. Authenticate
+// returns wrapped pgx errors for a dead pool, a cancelled context or a missing
+// workspace row, and treating those as "this session is over" turns a ten-second
+// database blip into a forced sign-out for every signed-in user at once —
+// sessions that were, and remain, perfectly valid.
+func IsSessionInvalid(err error) bool {
+	return errors.Is(err, ErrSessionNotFound) ||
+		errors.Is(err, ErrSessionExpired) ||
+		errors.Is(err, ErrSessionRevoked) ||
+		errors.Is(err, ErrAccountInactive)
+}
+
 // Session is a live login.
 type Session struct {
 	ID         uuid.UUID

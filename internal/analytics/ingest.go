@@ -1,11 +1,13 @@
 package analytics
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -75,7 +77,10 @@ type Ingester struct {
 	cfg   IngestConfig
 	log   *slog.Logger
 
-	ch     chan Event
+	ch chan Event
+	// stop is closed instead of ch, so that a Record already past its closed
+	// check cannot send on a closed channel. See Close.
+	stop   chan struct{}
 	Stats  Stats
 	wg     sync.WaitGroup
 	closed atomic.Bool
@@ -100,6 +105,7 @@ func NewIngester(pool *pgxpool.Pool, salts *SaltCache, cfg IngestConfig) *Ingest
 		cfg:   cfg,
 		log:   cfg.Logger,
 		ch:    make(chan Event, cfg.QueueSize),
+		stop:  make(chan struct{}),
 	}
 }
 
@@ -130,11 +136,19 @@ func (i *Ingester) Record(ev Event) {
 //
 // Called during shutdown after the listener has closed, so no new events can
 // arrive. Without this, every restart loses up to a full batch.
+//
+// Signals through stop rather than closing ch. Record's closed check and its
+// send cannot be one atomic step, so a redirect that passed the check just
+// before Close ran would send on a closed channel and panic — killing the
+// process during the one window where it is trying to save data. That is not
+// hypothetical during a shutdown that times out with requests still in flight,
+// which is exactly when Close is called. An event that races the drain is lost
+// instead, which is what a full queue already does to it.
 func (i *Ingester) Close(ctx context.Context) error {
 	if !i.closed.CompareAndSwap(false, true) {
 		return nil
 	}
-	close(i.ch)
+	close(i.stop)
 
 	done := make(chan struct{})
 	go func() { i.wg.Wait(); close(done) }()
@@ -168,25 +182,29 @@ func (i *Ingester) loop() {
 
 	for {
 		select {
-		case ev, ok := <-i.ch:
-			if !ok {
-				// Channel closed by Close. Drain whatever is left, then flush
-				// a final time so buffered clicks are not lost.
-				for ev := range i.ch {
-					batch = append(batch, ev)
-					if len(batch) >= i.cfg.BatchSize {
-						flush()
-					}
-				}
-				flush()
-				return
-			}
+		case ev := <-i.ch:
 			batch = append(batch, ev)
 			if len(batch) >= i.cfg.BatchSize {
 				flush()
 			}
 		case <-ticker.C:
 			flush()
+		case <-i.stop:
+			// Drain what is buffered, then flush a final time so a restart
+			// does not lose up to a full batch. A non-blocking drain rather
+			// than `range i.ch`, because ch is never closed — see Close.
+			for {
+				select {
+				case ev := <-i.ch:
+					batch = append(batch, ev)
+					if len(batch) >= i.cfg.BatchSize {
+						flush()
+					}
+				default:
+					flush()
+					return
+				}
+			}
 		}
 	}
 }
@@ -235,14 +253,40 @@ func (i *Ingester) write(batch []Event) {
 	// The denormalized counter is updated in the same transaction, so a click
 	// row and its count never disagree. The counter remains approximate
 	// overall, because a batch lost to SIGKILL takes both with it.
-	for linkID, n := range counts {
+	//
+	// One statement, ordered by link id, for two reasons. Ordering: two
+	// instances flushing batches that touch the same popular links would take
+	// row locks in whatever order Go's map iteration produced, which is a
+	// deadlock the database resolves by killing one of them. Single statement:
+	// the previous loop logged a warning and continued on error, which cannot
+	// work inside a transaction — the first failed UPDATE aborts it, every
+	// later Exec fails with 25P02, and the Commit rolls back the click rows
+	// that were already copied. A whole batch disappeared while the log said
+	// "warning".
+	if len(counts) > 0 {
+		ids := make([]uuid.UUID, 0, len(counts))
+		for linkID := range counts {
+			ids = append(ids, linkID)
+		}
+		slices.SortFunc(ids, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
+
+		bumps := make([]int64, len(ids))
+		lasts := make([]time.Time, len(ids))
+		for n, linkID := range ids {
+			bumps[n] = counts[linkID].count
+			lasts[n] = counts[linkID].last
+		}
+
 		if _, err := tx.Exec(ctx, `
-			UPDATE links
-			   SET click_count = click_count + $2,
-			       last_click_at = GREATEST(COALESCE(last_click_at, to_timestamp(0)), $3)
-			 WHERE id = $1`, linkID, n.count, n.last); err != nil {
-			i.log.Warn("failed to bump click count",
-				slog.String("link_id", linkID.String()), slog.Any("error", err))
+			UPDATE links l
+			   SET click_count = l.click_count + b.bump,
+			       last_click_at = GREATEST(COALESCE(l.last_click_at, to_timestamp(0)), b.last)
+			  FROM unnest($1::uuid[], $2::bigint[], $3::timestamptz[]) AS b(id, bump, last)
+			 WHERE l.id = b.id`, ids, bumps, lasts); err != nil {
+			i.Stats.Failed.Add(int64(len(batch)))
+			i.log.Error("failed to bump click counts; the batch is being rolled back",
+				slog.Any("error", err), slog.Int("links", len(ids)))
+			return
 		}
 	}
 

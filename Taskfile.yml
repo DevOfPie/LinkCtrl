@@ -110,11 +110,6 @@ tasks:
     env:
       LINKCTRL_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
 
-  openapi:
-    cmds:
-      - oapi-codegen -config api/oapi-server.yaml api/openapi.yaml
-      - oapi-codegen -config api/oapi-client.yaml api/openapi.yaml
-
   # LINKCTRL_APP_ENV must be in the environment, not only in .env: config.Load
   # consults it before reading the file, so without it .env is ignored and these
   # tasks fail on the three required secrets rather than on anything to do with

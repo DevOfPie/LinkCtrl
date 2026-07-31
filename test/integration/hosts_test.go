@@ -77,7 +77,6 @@ func splitConfig(t *testing.T) config.Config {
 		"LINKCTRL_BASE_URL":       "http://" + appHost,
 		"LINKCTRL_APP_BASE_URL":   "http://" + appHost,
 		"LINKCTRL_LINK_BASE_URL":  "http://" + linkHost,
-		"LINKCTRL_SECRET_KEY":     strings.Repeat("k", 48),
 		"LINKCTRL_API_KEY_PEPPER": strings.Repeat("p", 48),
 		"LINKCTRL_DATABASE_URL":   "postgres://u:p@127.0.0.1:5432/linkctrl?sslmode=disable",
 		"LINKCTRL_SECURE_COOKIES": "false",

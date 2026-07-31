@@ -104,8 +104,16 @@ type ServiceConfig struct {
 }
 
 func NewService(pool *pgxpool.Pool, cfg ServiceConfig) *Service {
-	if cfg.Lockout.Threshold == 0 {
-		cfg.Lockout = DefaultLockout
+	// Threshold 0 means "no lockout", because that is what the configuration
+	// layer promises: LOGIN_LOCKOUT_THRESHOLD validates as "must be 0 (no
+	// limit) or positive" and .env.example says 0 disables. Substituting the
+	// default here made that promise false — an operator who set 0 got the
+	// standard five-strike lockout and no indication otherwise. The variable
+	// carries envDefault:"5", so an unset one never reaches this as 0.
+	//
+	// Only the window is defaulted, and only when a caller left it unset.
+	if cfg.Lockout.Window <= 0 {
+		cfg.Lockout.Window = DefaultLockout.Window
 	}
 	return &Service{
 		pool:    pool,
@@ -194,6 +202,26 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*Identity, er
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.q.WithTx(tx)
+
+	// The setup flow's "is this instance empty?" has to be answered inside the
+	// transaction that acts on the answer, under a lock that makes the pair
+	// atomic. The caller's earlier NeedsSetup check is a UI affordance; this is
+	// the enforcement. Without it two concurrent setup posts could both create
+	// a first user, and on a closed instance the second one is an intruder.
+	if in.IsFirstUser {
+		if err := q.LockFirstUserSetup(ctx); err != nil {
+			return nil, fmt.Errorf("lock setup: %w", err)
+		}
+		n, err := q.CountUsers(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("count users: %w", err)
+		}
+		if n > 0 {
+			// Not ErrEmailTaken: the address may be fine, the instance is
+			// simply already set up. Signup rules apply from here on.
+			return nil, ErrSignupClosed
+		}
+	}
 
 	userID := uuid.Must(uuid.NewV7())
 	user, err := q.CreateUser(ctx, dbgen.CreateUserParams{

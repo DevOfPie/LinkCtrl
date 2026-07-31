@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -10,6 +11,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/observability"
 )
 
 type ctxKey int
@@ -58,7 +60,16 @@ func RealIP(trusted []netip.Prefix) func(http.Handler) http.Handler {
 					for i := len(parts) - 1; i >= 0; i-- {
 						candidate, err := netip.ParseAddr(strings.TrimSpace(parts[i]))
 						if err != nil {
-							continue
+							// Stop, do not skip. Everything left of an entry is
+							// client-controlled, so continuing past one the
+							// proxy wrote in a form we cannot parse hands the
+							// walk straight to forged values: IIS and ARR append
+							// the client as ip:port and Squid writes the literal
+							// "unknown", and either made the next entry leftward
+							// — the attacker's — look like the trusted hop.
+							// Falling back to the peer address is the safe
+							// answer: it is always real, only less specific.
+							break
 						}
 						// Unmap before the trust check: a proxy that writes its
 						// upstream hop as ::ffff:10.0.0.5 must match a 10.0.0.0/8
@@ -127,12 +138,25 @@ func Session(a Authenticator, secure bool) func(http.Handler) http.Handler {
 
 			cookie, err := r.Cookie(name)
 			if err == nil && cookie.Value != "" {
-				if id, err := a.Authenticate(r.Context(), cookie.Value); err == nil {
+				id, err := a.Authenticate(r.Context(), cookie.Value)
+				switch {
+				case err == nil:
 					r = r.WithContext(context.WithValue(r.Context(), ctxIdentity, id))
-				} else {
-					// A cookie that no longer resolves is cleared, so the
+				case auth.IsSessionInvalid(err):
+					// A cookie that will never resolve again is cleared, so the
 					// browser stops sending it on every subsequent request.
 					http.SetCookie(w, ClearSessionCookie(secure))
+				default:
+					// The lookup failed, which says nothing about the session.
+					// Clearing here meant a Postgres restart signed out every
+					// user who made a request during it — the cookie destroyed
+					// on the way past, so the session was unrecoverable even
+					// though the row was still there. Leave it alone and
+					// continue anonymous; RequireAuth turns that into a
+					// redirect to sign-in, and the next request succeeds.
+					observability.LoggerFrom(r.Context()).Warn(
+						"session lookup failed; continuing without an identity",
+						slog.Any("error", err))
 				}
 			}
 			next.ServeHTTP(w, r)

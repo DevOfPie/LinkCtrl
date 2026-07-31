@@ -82,20 +82,23 @@ RETURNING id, alias, domain_id, click_count;
 -- Sorting is a CASE rather than three separate queries because sqlc has no
 -- dynamic SQL. If plan stability becomes a problem this splits into
 -- ListLinksNewest/Oldest/Clicks; measure before doing that.
+-- The two tag aggregates are paired positionally by the caller, so they must
+-- agree on their order — and on the table they read. Aggregating names from a
+-- join and ids from link_tags alone, each sorted by its own column, produced
+-- arrays in different orders whenever a link's tags sorted differently by name
+-- than by id, and every tag came back carrying another tag's name. One
+-- subquery, one ORDER BY, both columns.
 SELECT
     l.*,
-    COALESCE(
-        (SELECT array_agg(t.name ORDER BY t.name)
-           FROM link_tags lt JOIN tags t ON t.id = lt.tag_id
-          WHERE lt.link_id = l.id),
-        ARRAY[]::text[]
-    )::text[] AS tag_names,
-    COALESCE(
-        (SELECT array_agg(lt.tag_id::text ORDER BY lt.tag_id)
-           FROM link_tags lt WHERE lt.link_id = l.id),
-        ARRAY[]::text[]
-    )::text[] AS tag_ids
+    COALESCE(tg.names, ARRAY[]::text[])::text[] AS tag_names,
+    COALESCE(tg.ids, ARRAY[]::text[])::text[]   AS tag_ids
 FROM links l
+LEFT JOIN LATERAL (
+    SELECT array_agg(t.name ORDER BY t.name, t.id)     AS names,
+           array_agg(t.id::text ORDER BY t.name, t.id) AS ids
+      FROM link_tags lt JOIN tags t ON t.id = lt.tag_id
+     WHERE lt.link_id = l.id
+) tg ON true
 WHERE l.workspace_id = sqlc.arg(workspace_id)
   AND l.deleted_at IS NULL
   -- Filtered on effective status, not the stored column: nothing ever writes
@@ -121,17 +124,28 @@ WHERE l.workspace_id = sqlc.arg(workspace_id)
        OR EXISTS (SELECT 1 FROM link_tags lt
                    WHERE lt.link_id = l.id
                      AND lt.tag_id = ANY(sqlc.narg(tag_ids)::uuid[])))
+  -- Keyset pagination only works if the predicate compares the same tuple the
+  -- ORDER BY sorts on. It did not: every sort filtered on (created_at, id)
+  -- while 'clicks' ordered by click_count, so page 2 dropped rows that belonged
+  -- on it and repeated rows already shown. Each branch below pairs with the
+  -- correspondingly-named ORDER BY key, and the id tiebreaker matches its
+  -- direction — 'oldest' ascends, so its tiebreaker ascends too.
   AND (
-        sqlc.narg(cursor_created)::timestamptz IS NULL
+        sqlc.narg(cursor_id)::uuid IS NULL
         OR (sqlc.arg(sort)::text = 'oldest'
               AND (l.created_at, l.id) > (sqlc.narg(cursor_created)::timestamptz, sqlc.narg(cursor_id)::uuid))
-        OR (sqlc.arg(sort)::text <> 'oldest'
+        OR (sqlc.arg(sort)::text = 'clicks'
+              AND (l.click_count, l.id) < (sqlc.narg(cursor_clicks)::bigint, sqlc.narg(cursor_id)::uuid))
+        OR (sqlc.arg(sort)::text NOT IN ('oldest','clicks')
               AND (l.created_at, l.id) < (sqlc.narg(cursor_created)::timestamptz, sqlc.narg(cursor_id)::uuid))
       )
 ORDER BY
     CASE WHEN sqlc.arg(sort)::text = 'oldest' THEN l.created_at END ASC,
     CASE WHEN sqlc.arg(sort)::text = 'clicks' THEN l.click_count END DESC,
     CASE WHEN sqlc.arg(sort)::text NOT IN ('oldest','clicks') THEN l.created_at END DESC,
+    -- Ascending tiebreaker for the ascending sort. For the others this key is
+    -- NULL on every row, so it ties and the DESC key below decides.
+    CASE WHEN sqlc.arg(sort)::text = 'oldest' THEN l.id END ASC,
     l.id DESC
 LIMIT sqlc.arg(page_limit);
 
@@ -156,7 +170,14 @@ WHERE l.workspace_id = sqlc.arg(workspace_id)
        OR websearch_to_tsquery('english', sqlc.narg(search)::text) = ''::tsquery
        OR l.search_vector @@ websearch_to_tsquery('english', sqlc.narg(search)::text)
        OR l.alias ILIKE '%' || sqlc.narg(search)::text || '%'
-       OR l.primary_url ILIKE '%' || sqlc.narg(search)::text || '%');
+       OR l.primary_url ILIKE '%' || sqlc.narg(search)::text || '%')
+  -- Must mirror ListLinks exactly. Without this branch a tag-filtered page
+  -- reported the workspace's whole link count as its total, so "8 of 100" was
+  -- shown for a filter matching 8 of 8.
+  AND (sqlc.narg(tag_ids)::uuid[] IS NULL
+       OR EXISTS (SELECT 1 FROM link_tags lt
+                   WHERE lt.link_id = l.id
+                     AND lt.tag_id = ANY(sqlc.narg(tag_ids)::uuid[])));
 
 -- name: GetLinkTags :many
 SELECT t.id, t.name, t.color
@@ -219,7 +240,12 @@ RETURNING *;
 SELECT * FROM tags WHERE workspace_id = $1 AND lower(name) = lower($2);
 
 -- name: ListTags :many
-SELECT t.*, count(lt.link_id) AS link_count
+-- Counts l.id, not lt.link_id. The join onto links is what excludes trashed
+-- links, but counting the link_tags column ignored it: a LEFT JOIN keeps the
+-- link_tags row when its link is soft-deleted, so the count included trashed
+-- links for the whole 30-day window and the tag list disagreed with the link
+-- list it filters.
+SELECT t.*, count(l.id) AS link_count
 FROM tags t
 LEFT JOIN link_tags lt ON lt.tag_id = t.id
 LEFT JOIN links l ON l.id = lt.link_id AND l.deleted_at IS NULL

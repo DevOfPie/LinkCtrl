@@ -217,10 +217,19 @@ func (j *jobRunner) housekeeping(ctx context.Context) error {
 		if p.Reserved {
 			reserved++
 		}
+		// One line per link, by alias. The comment here used to say "the log is
+		// the only record of which aliases went" while logging nothing but a
+		// count, so the record it described did not exist — an operator
+		// answering "which link disappeared?" had a number and no names. The
+		// batch is bounded at purgeBatch and the job runs hourly, so the volume
+		// is bounded too.
+		j.log.Info("purged link past its recovery window",
+			slog.String("alias", p.Alias),
+			slog.Bool("alias_reserved", p.Reserved))
 	}
 	if len(purged) > 0 {
-		// Info, not Debug: this is irreversible deletion of user data, and the
-		// log is the only record of which aliases went.
+		// Info, not Debug: this is irreversible deletion of user data, and
+		// these lines plus the ones above are its only record.
 		j.log.Info("purged links past their recovery window",
 			slog.Int("links", len(purged)),
 			slog.Int("aliases_reserved", reserved))

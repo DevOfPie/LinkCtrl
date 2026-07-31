@@ -56,6 +56,14 @@ type Querier interface {
 	// The workspace a user lands in with no explicit selection. Ordered so the
 	// result is deterministic rather than whatever the planner returns first.
 	GetDefaultWorkspaceForUser(ctx context.Context, userID uuid.UUID) (Workspace, error)
+	// --- job bookkeeping ---------------------------------------------------------
+	// The point a job is known to have completed through. Rollups recompute rather
+	// than accumulate, so this is not a correctness dependency for a run that
+	// happens on schedule — it exists for the run that does not. Without it,
+	// RunRecent covered a fixed yesterday-and-today window, and any downtime that
+	// spanned a UTC day left that day with no rollup and nothing to notice it: the
+	// raw events were still there, but nothing ever aggregated them again.
+	GetJobWatermark(ctx context.Context, job string) (*time.Time, error)
 	// Workspace-scoped by design. Passing the workspace here rather than checking
 	// it after the fetch makes cross-tenant reads impossible to write by accident:
 	// the wrong workspace returns no rows rather than a row the caller must
@@ -119,13 +127,41 @@ type Querier interface {
 	// Sorting is a CASE rather than three separate queries because sqlc has no
 	// dynamic SQL. If plan stability becomes a problem this splits into
 	// ListLinksNewest/Oldest/Clicks; measure before doing that.
+	// The two tag aggregates are paired positionally by the caller, so they must
+	// agree on their order — and on the table they read. Aggregating names from a
+	// join and ids from link_tags alone, each sorted by its own column, produced
+	// arrays in different orders whenever a link's tags sorted differently by name
+	// than by id, and every tag came back carrying another tag's name. One
+	// subquery, one ORDER BY, both columns.
 	ListLinks(ctx context.Context, arg ListLinksParams) ([]ListLinksRow, error)
 	// The scope vocabulary. Scopes are validated against the permissions table
 	// rather than a list in Go, so RBAC and API keys cannot drift apart.
 	ListPermissionSlugs(ctx context.Context) ([]string, error)
+	// Counts l.id, not lt.link_id. The join onto links is what excludes trashed
+	// links, but counting the link_tags column ignored it: a LEFT JOIN keeps the
+	// link_tags row when its link is soft-deleted, so the count included trashed
+	// links for the whole 30-day window and the tag list disagreed with the link
+	// list it filters.
 	ListTags(ctx context.Context, workspaceID uuid.UUID) ([]ListTagsRow, error)
 	ListUserSessions(ctx context.Context, userID uuid.UUID) ([]ListUserSessionsRow, error)
 	ListUsers(ctx context.Context) ([]ListUsersRow, error)
+	// Serializes the setup flow's count-then-create.
+	//
+	// Both setup surfaces read CountUsers and then, in a separate transaction,
+	// register the first user. Nothing held the gap, and the gap is wide: the
+	// argon2 hash runs for ~100ms before the transaction even begins. On a fresh
+	// closed instance, setup is unauthenticated and only login-rate-limited, so an
+	// attacker polling it could have their CountUsers land in the window while the
+	// real operator was hashing, and both would be created as "the first user" —
+	// each with their own organization, on an instance the operator believes only
+	// they can reach.
+	//
+	// Transaction-scoped, so it releases on commit or rollback with nothing to
+	// clean up. The key is the ASCII bytes "lcsetup\0" as a literal, NOT a hash of
+	// anything; to inspect it from psql use the value directly:
+	//
+	//     SELECT pg_advisory_xact_lock(7810213058373316608);
+	LockFirstUserSetup(ctx context.Context) error
 	// The end of the trash window: hard-delete links whose purge_after has passed.
 	//
 	// One statement, so the reservation and the deletion cannot be separated by a
@@ -146,7 +182,18 @@ type Querier interface {
 	// Returns the new count so the caller can apply the lockout policy without a
 	// second round trip and without a read-modify-write race between two
 	// concurrent attempts.
+	//
+	// An elapsed lockout starts the count over. Incrementing unconditionally meant
+	// the counter only ever went down on a successful sign-in or a password change,
+	// so once an account had been locked it sat at the threshold forever: the user
+	// waited out the window, got one attempt, and a single wrong guess re-locked
+	// them for the full duration. The lockout became permanent for anyone who could
+	// not remember their password on the first try — which is the population it
+	// applies to.
 	RecordFailedLogin(ctx context.Context, arg RecordFailedLoginParams) (RecordFailedLoginRow, error)
+	// Keeps the watermark where it was: a failed run has not covered its window,
+	// and advancing past it would turn one bad run into permanent gaps.
+	RecordJobFailure(ctx context.Context, arg RecordJobFailureParams) error
 	RecordSuccessfulLogin(ctx context.Context, id uuid.UUID) error
 	// Called before purging a link that has clicks. The alias is in the wild — on
 	// printed material and in other people's bookmarks — so handing it to a new
@@ -217,6 +264,7 @@ type Querier interface {
 	// NULL clears it, which restores the 404 the root answered before anyone set
 	// anything.
 	SetDefaultDomainRootRedirect(ctx context.Context, rootRedirectUrl *string) (SetDefaultDomainRootRedirectRow, error)
+	SetJobWatermark(ctx context.Context, arg SetJobWatermarkParams) error
 	SetPrimaryDestination(ctx context.Context, arg SetPrimaryDestinationParams) error
 	// Soft delete with a purge deadline rather than an immediate DELETE. Restoring
 	// a link someone deleted by accident is a common request, and the alias stays

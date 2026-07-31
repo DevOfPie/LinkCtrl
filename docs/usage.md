@@ -116,8 +116,8 @@ against your current role. Demote the owner and their keys weaken immediately.
 
 ```
 links.read   links.create   links.update   links.delete
-tags.read    tags.write     analytics.read
-members.read members.write   workspace.read workspace.write
+tags.read    tags.write     analytics.read domains.write
+members.read members.write  workspace.read workspace.write
 ```
 
 `apikeys.read`, `apikeys.write` and `org.delete` are never grantable to a key —

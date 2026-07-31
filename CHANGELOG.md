@@ -22,7 +22,7 @@ migrations run at boot.
 
 Nothing yet.
 
-## [0.1.0] - 2026-07-30
+## [0.1.0] - 2026-07-31
 
 First release, and all of Phase 1's twenty-one milestones: a self-hostable link
 manager where a short link is an editable, measurable, scriptable resource.
@@ -35,6 +35,11 @@ manager where a short link is an editable, measurable, scriptable resource.
   inside that window is a database operation and the interface says so rather
   than implying a button. Editing a destination never changes the short URL —
   the reason redirects are always 302.
+- **Renaming a link reserves its old alias** on the same rule the purge uses: if
+  it ever received a click it can never be reissued, to anyone. Abandoning an
+  alias is not the same as freeing it — the old one is still on printed material
+  and in other people's bookmarks, and handing it to a different destination is
+  a redirect hijack.
 - Custom or generated aliases, lowercase-canonical and case-insensitive. Dots are
   refused outright, which removes the "is `logo.png` an alias or an asset?" class
   of problem rather than pattern-matching for it.

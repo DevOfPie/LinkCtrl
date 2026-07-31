@@ -91,12 +91,33 @@ func TestRealIPUnmapsMappedHopsBeforeTheTrustCheck(t *testing.T) {
 	}
 }
 
-func TestRealIPSkipsGarbageEntries(t *testing.T) {
+// An unparseable entry stops the walk instead of being skipped past.
+//
+// This test asserted the opposite until it was found to be describing a spoof.
+// Everything to the left of an entry is client-controlled; only the rightmost
+// entries were written by the trusted proxy. Real proxies do emit hops this
+// parser rejects — IIS and ARR append the client as ip:port, Squid writes the
+// literal "unknown" — and skipping past one promotes the next entry leftward,
+// which the client wrote, to "the address the proxy vouched for". Falling back
+// to the socket address is less specific and always true.
+func TestRealIPStopsAtAnUnparseableEntry(t *testing.T) {
 	trusted := prefixes(t, "10.0.0.0/8")
-	got := resolvedIP(t, trusted, "10.0.0.5:4444",
-		"198.51.100.7, not-an-ip, unknown")
-	if got != netip.MustParseAddr("198.51.100.7") {
-		t.Errorf("resolved %v, want 198.51.100.7 past the unparseable entries", got)
+
+	// The IIS/ARR shape: the real client, with a port, appended by the proxy.
+	// 6.6.6.6 is what an attacker sent in the header they control.
+	got := resolvedIP(t, trusted, "10.0.0.5:4444", "6.6.6.6, 203.0.113.9:51544")
+	if got == netip.MustParseAddr("6.6.6.6") {
+		t.Error("resolved the client-supplied entry after failing to parse the " +
+			"proxy-appended one; every rate limit would key on an attacker's choice")
+	}
+	if got != netip.MustParseAddr("10.0.0.5") {
+		t.Errorf("resolved %v, want the socket address 10.0.0.5 as the fallback", got)
+	}
+
+	// Squid's "unknown", with the same consequence.
+	got = resolvedIP(t, trusted, "10.0.0.5:4444", "6.6.6.6, unknown")
+	if got != netip.MustParseAddr("10.0.0.5") {
+		t.Errorf("resolved %v after an `unknown` hop, want the socket address", got)
 	}
 }
 

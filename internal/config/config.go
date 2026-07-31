@@ -64,7 +64,6 @@ type Config struct {
 	Analytics AnalyticsConfig
 	Shutdown  ShutdownConfig
 
-	SecretKey    Secret `env:"SECRET_KEY,required,unset"`
 	APIKeyPepper Secret `env:"API_KEY_PEPPER,required,unset"`
 
 	DocsEnabled    bool `env:"DOCS_ENABLED" envDefault:"true"`
@@ -213,10 +212,8 @@ func Load() (Config, error) {
 // FileSecretVars are the variables that additionally support a _FILE suffix,
 // for Docker and Swarm secrets mounted under /run/secrets.
 var FileSecretVars = []string{
-	"SECRET_KEY",
 	"API_KEY_PEPPER",
 	"DATABASE_URL",
-	"SMTP_PASSWORD",
 }
 
 // resolveFileSecrets implements the LINKCTRL_X_FILE convention: when set, the
@@ -269,6 +266,12 @@ func resolveFileSecrets() error {
 // warnings rather than errors — an upgrade must not refuse to boot over a stale
 // line in a file.
 var Removed = map[string]string{
+	"SECRET_KEY": "nothing was keyed by it. Sessions use random 32-byte tokens " +
+		"stored as SHA-256, CSRF is origin-based, and API keys use API_KEY_PEPPER; " +
+		"rotating this changed nothing, which is the opposite of what a variable " +
+		"with this name promises",
+	"SMTP_PASSWORD": "there is no mail feature to authenticate to; it was accepted, " +
+		"validated and never read",
 	"INGEST_WORKERS": "the ingester runs a single consumer, which is what makes " +
 		"batch coalescing work; a worker count would break it",
 	"VISITOR_SALT_ROTATION": "visitor salts rotate once per UTC day, which is the " +
@@ -447,10 +450,6 @@ func (c Config) Validate() error {
 		linkU = checkOrigin("LINK_BASE_URL", c.LinkBaseURL)
 	}
 
-	if c.SecretKey.Len() < 32 {
-		add("SECRET_KEY: must be at least 32 bytes, got %d (generate: openssl rand -base64 48)",
-			c.SecretKey.Len())
-	}
 	if c.APIKeyPepper.Len() < 32 {
 		add("API_KEY_PEPPER: must be at least 32 bytes, got %d (generate: openssl rand -base64 48). "+
 			"Changing this invalidates every existing API key.", c.APIKeyPepper.Len())

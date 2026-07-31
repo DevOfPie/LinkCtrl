@@ -60,6 +60,81 @@ func TestTrashedAliasCannotBeReRegistered(t *testing.T) {
 	f.decode(resp, nil)
 }
 
+// Renaming is the other way a link lets go of an alias, and it has the same
+// consequence as purging: the old alias stops being covered by the partial
+// unique index, so without a reservation anyone can take over the audience the
+// rename left behind. The threshold matches the purge — traffic is what puts an
+// alias in the wild — so a rename with clicks reserves and one without releases.
+func TestRenamingReservesATraffickedAlias(t *testing.T) {
+	f := newAPI(t)
+	f.setupOwner()
+	ctx := t.Context()
+
+	mk := func(alias string) string {
+		resp := f.do(http.MethodPost, "/api/v1/links", map[string]any{
+			"url": "https://example.com/" + alias, "alias": alias,
+		})
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("create %s returned %d", alias, resp.StatusCode)
+		}
+		var c struct{ ID string }
+		f.decode(resp, &c)
+		return c.ID
+	}
+	clicked := mk("promo")
+	unclicked := mk("draft")
+
+	if _, err := f.pool.Exec(ctx,
+		`UPDATE links SET click_count = 50000 WHERE id = $1`, clicked); err != nil {
+		t.Fatal(err)
+	}
+
+	for id, to := range map[string]string{clicked: "promo2024", unclicked: "draft2"} {
+		resp := f.do(http.MethodPatch, "/api/v1/links/"+id, map[string]any{"alias": to})
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("rename to %s returned %d", to, resp.StatusCode)
+		}
+		f.decode(resp, nil)
+	}
+
+	var reservations int
+	if err := f.pool.QueryRow(ctx,
+		`SELECT count(*) FROM reserved_aliases WHERE alias = 'promo'`).Scan(&reservations); err != nil {
+		t.Fatal(err)
+	}
+	if reservations != 1 {
+		t.Errorf("reserved_aliases holds %d rows for the renamed trafficked alias, want 1", reservations)
+	}
+
+	// The consequence that matters: the abandoned alias cannot be claimed. It
+	// is still on flyers and in bookmarks pointing at the original destination.
+	resp := f.do(http.MethodPost, "/api/v1/links", map[string]any{
+		"url": "https://phishing.example/login", "alias": "promo",
+	})
+	if resp.StatusCode != http.StatusConflict {
+		t.Errorf("claiming a renamed trafficked alias returned %d, want 409: "+
+			"renaming abandons an alias, it does not free it", resp.StatusCode)
+	}
+	f.decode(resp, nil)
+
+	// An alias nobody ever followed is released, for the same reason purge
+	// releases it: reserving it would only bleed the namespace.
+	resp = f.do(http.MethodPost, "/api/v1/links", map[string]any{
+		"url": "https://example.com/reuse", "alias": "draft2",
+	})
+	if resp.StatusCode != http.StatusConflict {
+		t.Errorf("the new alias of a renamed link returned %d, want 409", resp.StatusCode)
+	}
+	f.decode(resp, nil)
+	resp = f.do(http.MethodPost, "/api/v1/links", map[string]any{
+		"url": "https://example.com/reuse", "alias": "draft",
+	})
+	if resp.StatusCode != http.StatusCreated {
+		t.Errorf("claiming a renamed untrafficked alias returned %d, want 201", resp.StatusCode)
+	}
+	f.decode(resp, nil)
+}
+
 // The end of the window. Purge deletes the row; a trafficked alias enters
 // reserved_aliases in the same statement and stays unregisterable forever,
 // while an untrafficked one is released — nothing in the wild points at it.

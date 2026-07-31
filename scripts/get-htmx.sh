@@ -12,6 +12,11 @@
 # it checks the committed copy against the checksum of the pinned upstream
 # release, so the blob is verifiable rather than trusted. It runs offline when
 # the copy already matches, and only reaches the network when it does not.
+#
+# VERIFY_ONLY=1 turns the repair off and makes a mismatch fatal. CI must set it:
+# repairing is the right behaviour for a developer whose copy went stale, and
+# exactly the wrong behaviour for a gate, which would otherwise overwrite a
+# tampered blob and report success — a check that cannot fail is not a check.
 set -eu
 
 VERSION="${1:?usage: get-htmx.sh <version> <sha256> <destination>}"
@@ -32,9 +37,22 @@ if [ -f "$DEST" ]; then
 		echo "get-htmx: ${DEST} matches htmx ${VERSION}"
 		exit 0
 	fi
+	if [ -n "${VERIFY_ONLY:-}" ]; then
+		echo "get-htmx: ${DEST} does not match htmx ${VERSION}" >&2
+		echo "  expected ${EXPECTED}" >&2
+		echo "  actual   ${actual}" >&2
+		echo "The committed blob differs from the pinned upstream release. Run" >&2
+		echo "\`make htmx\` to restore it, and review why it changed." >&2
+		exit 1
+	fi
 	echo "get-htmx: ${DEST} does not match htmx ${VERSION}; re-fetching" >&2
 	echo "  expected ${EXPECTED}" >&2
 	echo "  actual   ${actual}" >&2
+fi
+
+if [ -n "${VERIFY_ONLY:-}" ]; then
+	echo "get-htmx: ${DEST} is missing; it is committed and must be present" >&2
+	exit 1
 fi
 
 mkdir -p "$(dirname "$DEST")"

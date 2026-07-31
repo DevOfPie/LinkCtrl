@@ -104,21 +104,46 @@ func ValidateDestination(raw string, p DestinationPolicy) (string, error) {
 
 	// Lowercase the host so the blocklist and reporting are consistent; leave
 	// the path alone, since paths are case-sensitive.
+	//
+	// Hostname() strips the brackets from an IPv6 authority and Port() returns
+	// "" when there is no ":port" suffix, so the no-port branch has to put the
+	// brackets back itself. Without that, https://[2606:4700:4700::1111]/ is
+	// stored and served as https://2606:4700:4700::1111/, which no client can
+	// follow and which re-parses as a different host entirely.
 	lowerHost := strings.ToLower(host)
-	if u.Port() != "" {
+	switch {
+	case u.Port() != "":
 		u.Host = net.JoinHostPort(lowerHost, u.Port())
-	} else {
+	case strings.Contains(lowerHost, ":"):
+		u.Host = "[" + lowerHost + "]"
+	default:
 		u.Host = lowerHost
 	}
 
 	if p.BlockPrivateIPs {
-		if addr, err := netip.ParseAddr(strings.Trim(lowerHost, "[]")); err == nil {
-			if isRestricted(addr) {
-				return "", append(errs, domain.FieldError{
-					Field: "url", Code: "private_address",
-					Message: "destination must not be a private, loopback or link-local address",
-				})
-			}
+		addr, addrErr := netip.ParseAddr(lowerHost)
+		switch {
+		case addrErr == nil && isRestricted(addr):
+			return "", append(errs, domain.FieldError{
+				Field: "url", Code: "private_address",
+				Message: "destination must not be a private, loopback or link-local address",
+			})
+		case addrErr != nil && looksNumeric(lowerHost):
+			// A host that is not a parseable address but is not a hostname
+			// either. netip.ParseAddr accepts only dotted-quad IPv4 and rejects
+			// leading zeros, so 2130706433, 0177.0.0.1, 0x7f000001, 127.1 and
+			// 0xa9fea9fe all fail to parse — and skipping the check on a parse
+			// failure would wave every one of them through. Browsers use the
+			// WHATWG parser and resolve all of them, 0xa9fea9fe to the cloud
+			// metadata endpoint this check exists to keep visitors away from.
+			//
+			// Refused rather than canonicalized: no legitimate destination is
+			// written this way, so rejecting is both safer and clearer than
+			// reimplementing an alternate address grammar to block it.
+			return "", append(errs, domain.FieldError{
+				Field: "url", Code: "private_address",
+				Message: "destination host must be a hostname or a standard IP address",
+			})
 		}
 		// "localhost" is not an IP literal but resolves to loopback everywhere.
 		if lowerHost == "localhost" || strings.HasSuffix(lowerHost, ".localhost") {
@@ -145,6 +170,39 @@ func ValidateDestination(raw string, p DestinationPolicy) (string, error) {
 	}
 
 	return u.String(), nil
+}
+
+// looksNumeric reports whether a host is written as a number rather than as a
+// name — the shapes the WHATWG URL spec resolves as IPv4 and netip.ParseAddr
+// refuses: decimal (2130706433), octal (0177.0.0.1), hex (0x7f000001) and short
+// dotted forms (127.1). Also true for a bare IPv6 literal that failed to parse,
+// which is malformed rather than a hostname.
+//
+// A real hostname always has a non-numeric TLD, so this cannot reject one: the
+// last label is what decides, and "com", "co.uk" and "example" are all names.
+func looksNumeric(host string) bool {
+	if host == "" {
+		return false
+	}
+	if strings.ContainsAny(host, ":[]") {
+		return true // an IPv6 shape that ParseAddr already rejected
+	}
+	last := host
+	if i := strings.LastIndexByte(host, '.'); i >= 0 {
+		last = host[i+1:]
+	}
+	if last == "" {
+		return false // trailing dot: a fully-qualified name, not a number
+	}
+	if strings.HasPrefix(last, "0x") {
+		return true
+	}
+	for _, r := range last {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // isRestricted reports whether an address is in a range a public short link

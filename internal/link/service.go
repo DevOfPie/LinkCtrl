@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -187,7 +188,7 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 			return nil, fmt.Errorf("%w: alias %q is already in use", domain.ErrConflict, code)
 		}
 	} else {
-		code, err = alias.Generate(ctx, func(ctx context.Context, candidate string) (bool, error) {
+		code, err = s.aliases.Generate(ctx, func(ctx context.Context, candidate string) (bool, error) {
 			return s.q.IsAliasTaken(ctx, dbgen.IsAliasTakenParams{
 				DomainID: dom.ID, Alias: candidate,
 			})
@@ -369,6 +370,28 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 		return nil, fmt.Errorf("update link: %w", err)
 	}
 
+	// A rename abandons the old alias, and abandoning it is not the same as
+	// freeing it. The partial unique index stops covering it the moment the row
+	// changes, so without this the alias is immediately claimable by anyone —
+	// including another workspace — while every bookmark and printed QR code
+	// still points at it. That is the redirect hijack reserved_aliases exists
+	// to prevent, and the purge job already prevents it on its own path; the
+	// threshold here is deliberately the same one PurgeExpiredLinks uses, so
+	// the two paths cannot disagree about what "in the wild" means.
+	//
+	// In the transaction with UpdateLink, because a rename that committed
+	// without its reservation would leave the alias free with no second chance
+	// to notice.
+	if newAlias != nil && existing.ClickCount > 0 {
+		if err := q.ReserveAlias(ctx, dbgen.ReserveAliasParams{
+			DomainID: existing.DomainID,
+			Alias:    existing.Alias,
+			Reason:   "renamed with traffic",
+		}); err != nil {
+			return nil, fmt.Errorf("reserve previous alias: %w", err)
+		}
+	}
+
 	if in.URL != nil {
 		// Updates the destination; the trigger mirrors it into
 		// links.primary_url. Editing the destination without changing the
@@ -441,9 +464,18 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 		limit = 25
 	}
 
+	// Normalized once, because the cursor records the sort it was minted under
+	// and compares it on the way back in. Without this, an omitted sort and an
+	// explicit "newest" are different strings for the same ordering, and adding
+	// the parameter mid-pagination would be refused for no reason.
+	sort := f.Sort
+	if sort != domain.SortOldest && sort != domain.SortMostClicks {
+		sort = domain.SortNewest
+	}
+
 	params := dbgen.ListLinksParams{
 		WorkspaceID: actor.WorkspaceID,
-		Sort:        string(f.Sort),
+		Sort:        string(sort),
 		// One extra row tells us whether another page exists without a second
 		// query and without a count.
 		PageLimit: limit + 1,
@@ -462,14 +494,25 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 		params.TagIds = f.TagIDs
 	}
 	if f.Cursor != "" {
-		at, id, err := decodeCursor(f.Cursor)
+		cur, err := decodeCursor(f.Cursor)
 		if err != nil {
 			return nil, domain.ValidationErrors{{
 				Field: "cursor", Code: "invalid", Message: "pagination cursor is not valid",
 			}}
 		}
-		params.CursorCreated = &at
-		params.CursorID = &id
+		// A cursor is only meaningful under the sort that produced it: it names
+		// a position in one ordering, and the query filters on whichever tuple
+		// that sort uses. Carrying it into a different sort is how a page silently
+		// skips and repeats rows, so it is refused rather than reinterpreted.
+		if cur.Sort != string(sort) {
+			return nil, domain.ValidationErrors{{
+				Field: "cursor", Code: "sort_changed",
+				Message: "pagination cursor belongs to a different sort order; start from the first page",
+			}}
+		}
+		params.CursorCreated = &cur.CreatedAt
+		params.CursorID = &cur.ID
+		params.CursorClicks = &cur.Clicks
 	}
 
 	rows, err := s.q.ListLinks(ctx, params)
@@ -517,7 +560,7 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 	}
 	if page.HasMore && len(page.Items) > 0 {
 		last := page.Items[len(page.Items)-1]
-		page.NextCursor = encodeCursor(last.CreatedAt, last.ID)
+		page.NextCursor = encodeCursor(string(sort), last.CreatedAt, last.ClickCount, last.ID)
 	}
 
 	if f.IncludeTotal {
@@ -525,6 +568,9 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 			WorkspaceID: actor.WorkspaceID,
 			Status:      params.Status,
 			Search:      params.Search,
+			// The same filter the page itself used, or the total describes a
+			// different set of links than the items beside it.
+			TagIds: params.TagIds,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("count links: %w", err)
@@ -713,29 +759,49 @@ func (s *Service) toDomain(l dbgen.Link, tags []domain.Tag) *domain.Link {
 // Cursors encode the (created_at, id) pair the keyset query compares against.
 // Opaque base64 rather than exposing the columns, so the pagination scheme can
 // change without breaking clients that stored a cursor.
-func encodeCursor(at time.Time, id uuid.UUID) string {
-	return base64.RawURLEncoding.EncodeToString(
-		[]byte(at.UTC().Format(time.RFC3339Nano) + "|" + id.String()))
+// cursor is a position in one specific ordering. It carries the sort it was
+// minted under so the query cannot be asked to resume a 'clicks' page under
+// 'newest', and it carries every column any sort keys on, because which one the
+// predicate compares depends on that sort.
+type cursor struct {
+	Sort      string
+	CreatedAt time.Time
+	Clicks    int64
+	ID        uuid.UUID
 }
 
-func decodeCursor(s string) (time.Time, uuid.UUID, error) {
+func encodeCursor(sort string, at time.Time, clicks int64, id uuid.UUID) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(strings.Join([]string{
+		"1", sort, at.UTC().Format(time.RFC3339Nano),
+		strconv.FormatInt(clicks, 10), id.String(),
+	}, "|")))
+}
+
+func decodeCursor(s string) (cursor, error) {
 	raw, err := base64.RawURLEncoding.DecodeString(s)
 	if err != nil {
-		return time.Time{}, uuid.Nil, err
+		return cursor{}, err
 	}
-	before, after, ok := strings.Cut(string(raw), "|")
-	if !ok {
-		return time.Time{}, uuid.Nil, errors.New("malformed cursor")
+	// Version-prefixed and fixed-arity: a cursor from an older build decodes to
+	// the wrong number of fields and is refused, rather than being read as a
+	// position it does not describe.
+	parts := strings.Split(string(raw), "|")
+	if len(parts) != 5 || parts[0] != "1" {
+		return cursor{}, errors.New("malformed cursor")
 	}
-	at, err := time.Parse(time.RFC3339Nano, before)
+	at, err := time.Parse(time.RFC3339Nano, parts[2])
 	if err != nil {
-		return time.Time{}, uuid.Nil, err
+		return cursor{}, err
 	}
-	id, err := uuid.Parse(after)
+	clicks, err := strconv.ParseInt(parts[3], 10, 64)
 	if err != nil {
-		return time.Time{}, uuid.Nil, err
+		return cursor{}, err
 	}
-	return at, id, nil
+	id, err := uuid.Parse(parts[4])
+	if err != nil {
+		return cursor{}, err
+	}
+	return cursor{Sort: parts[1], CreatedAt: at, Clicks: clicks, ID: id}, nil
 }
 
 func isUniqueViolation(err error) bool {

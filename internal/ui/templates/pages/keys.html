@@ -84,7 +84,9 @@
         </td>
         <td class="py-3 text-right">
           {{if not .RevokedAt}}
+          {{/* hx-post so hx-confirm is honoured; see the note in link_detail.html. */}}
           <form method="post" action="/keys/{{.ID}}/revoke"
+                hx-post="/keys/{{.ID}}/revoke"
                 hx-confirm="Revoke {{.Name}}? Anything using it stops working on its next request.">
             <button type="submit" class="text-sm font-medium text-rose-600 hover:underline">Revoke</button>
           </form>

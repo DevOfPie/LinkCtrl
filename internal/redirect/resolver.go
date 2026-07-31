@@ -79,6 +79,13 @@ func NewResolver(pool *pgxpool.Pool, rdb *goredis.Client, opts Options) *Resolve
 	if opts.RedisTimeout <= 0 {
 		opts.RedisTimeout = 50 * time.Millisecond
 	}
+	// The collapsed database flight runs detached from any one request, so it
+	// needs a bound of its own even when the caller left DBTimeout at zero —
+	// otherwise the one context that used to stop it is gone and nothing
+	// replaces it.
+	if opts.DBTimeout <= 0 {
+		opts.DBTimeout = time.Second
+	}
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
 	}
@@ -114,8 +121,19 @@ func (r *Resolver) Resolve(ctx context.Context, domainID uuid.UUID, alias string
 
 	// Collapse concurrent misses. The shared result is used by every waiter,
 	// so a stampede costs one query rather than N.
+	//
+	// The flight runs on a context detached from whichever request happened to
+	// start it, with its own budget. singleflight hands the leader's error to
+	// every waiter, so a leader whose client hit Stop mid-query cancelled the
+	// query and turned every other waiter's redirect into a 503 — the more
+	// popular the cold alias, the more people one abandoned tab took with it.
+	// The detached context still bounds the work; it just cannot be cancelled
+	// by a single visitor on behalf of the rest.
+	fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.opts.DBTimeout)
+	defer cancel()
+
 	v, err, _ := r.group.Do(k, func() (any, error) {
-		return r.fromDatabase(ctx, domainID, alias, k, now)
+		return r.fromDatabase(fctx, domainID, alias, k, now)
 	})
 	if err != nil {
 		return Result{}, err
@@ -192,13 +210,10 @@ func (r *Resolver) fromRedis(ctx context.Context, k string, now time.Time) *Snap
 	return snap
 }
 
+// fromDatabase is only ever called inside the singleflight, whose context
+// already carries DBTimeout. Bounding it a second time here would just be a
+// second copy of the same budget started a moment later.
 func (r *Resolver) fromDatabase(ctx context.Context, domainID uuid.UUID, alias, k string, now time.Time) (*Snapshot, error) {
-	if r.opts.DBTimeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, r.opts.DBTimeout)
-		defer cancel()
-	}
-
 	row, err := r.q.ResolveAliasForRedirect(ctx, dbgen.ResolveAliasForRedirectParams{
 		DomainID: domainID, Alias: alias,
 	})
@@ -260,11 +275,18 @@ func (r *Resolver) InvalidateAlias(ctx context.Context, domainID uuid.UUID, alia
 	if r.redis == nil {
 		return
 	}
-	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.opts.RedisTimeout)
-	defer cancel()
-	if err := r.redis.Del(dctx, k).Err(); err != nil {
-		r.log.Warn("failed to invalidate cache entry",
-			slog.String("alias", alias), slog.Any("error", err))
+	// Retried, unlike the populate path. A failed Set costs one extra query on
+	// the next request; a failed Del leaves the *old* snapshot authoritative for
+	// up to REDIRECT_TTL, and the memory tier this function just cleared refills
+	// from it on the very next miss. The edit looks applied in the dashboard
+	// while every visitor keeps reaching the previous destination — including a
+	// destination the owner deleted on purpose.
+	if err := r.deleteFromRedis(ctx, k); err != nil {
+		r.log.Error("failed to invalidate cache entry; the previous destination "+
+			"may keep being served until it expires",
+			slog.String("alias", alias),
+			slog.Duration("stale_for_up_to", r.opts.TTL),
+			slog.Any("error", err))
 	}
 
 	// Known limitation: this clears Redis and THIS process's memory tier.
@@ -272,6 +294,40 @@ func (r *Resolver) InvalidateAlias(ctx context.Context, domainID uuid.UUID, alia
 	// edit can take up to REDIRECT_TTL to be visible everywhere. Phase 2 adds
 	// pub/sub invalidation; single-replica deployments, which is what Phase 1
 	// targets, are unaffected.
+}
+
+// deleteFromRedis removes a key, retrying a transient failure.
+//
+// Three attempts, each with its own RedisTimeout budget, because the common
+// failure here is a brief stall rather than a durable outage — and the cost of
+// giving up is serving a destination the owner has already changed. Detached
+// from the caller's context: the invalidation must complete even if the request
+// that triggered the edit has gone away.
+func (r *Resolver) deleteFromRedis(ctx context.Context, k string) error {
+	base := context.WithoutCancel(ctx)
+	var err error
+	for attempt := range 3 {
+		if attempt > 0 {
+			// Short and fixed. This runs after a successful commit, on the
+			// write path rather than the redirect path, so a few milliseconds
+			// of patience is affordable — but an operator waiting on a form
+			// submission is not going to wait out an exponential backoff.
+			timer := time.NewTimer(time.Duration(attempt) * 20 * time.Millisecond)
+			select {
+			case <-timer.C:
+			case <-base.Done():
+				timer.Stop()
+				return base.Err()
+			}
+		}
+		dctx, cancel := context.WithTimeout(base, r.opts.RedisTimeout)
+		err = r.redis.Del(dctx, k).Err()
+		cancel()
+		if err == nil {
+			return nil
+		}
+	}
+	return err
 }
 
 // CacheSize reports in-process entries, for metrics.

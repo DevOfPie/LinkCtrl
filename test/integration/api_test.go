@@ -504,6 +504,251 @@ func TestListPaginationSearchAndTagFilter(t *testing.T) {
 	}
 }
 
+// Pagination has to hold under every sort, not just the default. The cursor
+// used to compare (created_at, id) whatever the sort was, so a ?sort=clicks
+// page filtered on a column it was not ordered by: page 2 dropped links that
+// belonged on it and repeated links already shown. Only the default sort was
+// ever paged in a test, which is why that survived.
+func TestPaginationIsStableUnderEverySort(t *testing.T) {
+	f := newAPI(t)
+	f.setupOwner()
+	ctx := t.Context()
+
+	const total = 30
+	ids := make([]string, 0, total)
+	for i := range total {
+		resp := f.do(http.MethodPost, "/api/v1/links", map[string]any{
+			"url": "https://example.com/sorted" + itoa(i), "title": "Sorted " + itoa(i),
+		})
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("seed %d returned %d", i, resp.StatusCode)
+		}
+		var c struct{ ID string }
+		f.decode(resp, &c)
+		ids = append(ids, c.ID)
+	}
+
+	// Click counts that deliberately disagree with creation order, including a
+	// block of ties — ties are what the id tiebreaker exists for, and a cursor
+	// that cannot break them loops or skips.
+	for i, id := range ids {
+		clicks := (i * 7) % 11
+		if _, err := f.pool.Exec(ctx,
+			`UPDATE links SET click_count = $2 WHERE id = $1`, id, clicks); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, sort := range []string{"newest", "oldest", "clicks"} {
+		t.Run(sort, func(t *testing.T) {
+			seen := map[string]bool{}
+			order := make([]string, 0, total)
+			cursor := ""
+			for pages := 0; pages <= 10; pages++ {
+				path := "/api/v1/links?limit=7&sort=" + sort
+				if cursor != "" {
+					path += "&cursor=" + url.QueryEscape(cursor)
+				}
+				resp := f.do(http.MethodGet, path, nil)
+				if resp.StatusCode != http.StatusOK {
+					t.Fatalf("page %d returned %d", pages, resp.StatusCode)
+				}
+				var page struct {
+					Items []struct {
+						ID         string `json:"id"`
+						ClickCount int64  `json:"click_count"`
+					} `json:"items"`
+					NextCursor string `json:"next_cursor"`
+					HasMore    bool   `json:"has_more"`
+				}
+				f.decode(resp, &page)
+
+				for _, it := range page.Items {
+					if seen[it.ID] {
+						t.Fatalf("sort=%s returned link %s on two pages", sort, it.ID)
+					}
+					seen[it.ID] = true
+					order = append(order, it.ID)
+				}
+				if !page.HasMore {
+					break
+				}
+				cursor = page.NextCursor
+			}
+			if len(seen) != total {
+				t.Errorf("sort=%s paged over %d links, want %d: pagination dropped rows",
+					sort, len(seen), total)
+			}
+
+			// The paged sequence must equal the unpaged one. Covering every row
+			// is not enough — a cursor can be complete and still out of order.
+			resp := f.do(http.MethodGet, "/api/v1/links?limit=100&sort="+sort, nil)
+			var all struct {
+				Items []struct {
+					ID string `json:"id"`
+				} `json:"items"`
+			}
+			f.decode(resp, &all)
+			if len(all.Items) != len(order) {
+				t.Fatalf("sort=%s single page returned %d links, paged returned %d",
+					sort, len(all.Items), len(order))
+			}
+			for i := range order {
+				if order[i] != all.Items[i].ID {
+					t.Fatalf("sort=%s paged order diverges at position %d: %s paged, %s unpaged",
+						sort, i, order[i], all.Items[i].ID)
+				}
+			}
+		})
+	}
+
+	// A cursor names a position in one ordering. Reusing it under another sort
+	// is refused rather than silently reinterpreted against the wrong column.
+	resp := f.do(http.MethodGet, "/api/v1/links?limit=7&sort=newest", nil)
+	var first struct {
+		NextCursor string `json:"next_cursor"`
+	}
+	f.decode(resp, &first)
+	resp = f.do(http.MethodGet,
+		"/api/v1/links?limit=7&sort=clicks&cursor="+url.QueryEscape(first.NextCursor), nil)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("a newest cursor replayed under sort=clicks returned %d, want 422",
+			resp.StatusCode)
+	}
+	f.decode(resp, nil)
+}
+
+// include_total must describe the same set as the items beside it. CountLinks
+// had no tag branch at all, so a tag-filtered page reported the workspace's
+// whole link count and a client rendering "8 of 100" was off by the filter.
+func TestIncludeTotalRespectsTheTagFilter(t *testing.T) {
+	f := newAPI(t)
+	f.setupOwner()
+
+	for i := range 9 {
+		tag := "campaign"
+		if i >= 3 {
+			tag = "other"
+		}
+		resp := f.do(http.MethodPost, "/api/v1/links", map[string]any{
+			"url": "https://example.com/tagged" + itoa(i), "tags": []string{tag},
+		})
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("seed %d returned %d", i, resp.StatusCode)
+		}
+		f.decode(resp, nil)
+	}
+
+	resp := f.do(http.MethodGet, "/api/v1/links?include_total=true", nil)
+	var tags struct {
+		Items []struct {
+			Tags []struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			} `json:"tags"`
+		} `json:"items"`
+	}
+	f.decode(resp, &tags)
+	var campaignID string
+	for _, it := range tags.Items {
+		for _, tg := range it.Tags {
+			if tg.Name == "campaign" {
+				campaignID = tg.ID
+			}
+		}
+	}
+	if campaignID == "" {
+		t.Fatal("no link came back carrying the campaign tag")
+	}
+
+	resp = f.do(http.MethodGet, "/api/v1/links?include_total=true&tag="+campaignID, nil)
+	var filtered struct {
+		Items []struct{ ID string } `json:"items"`
+		Total *int64                `json:"total"`
+	}
+	f.decode(resp, &filtered)
+	if len(filtered.Items) != 3 {
+		t.Fatalf("tag filter returned %d links, want 3", len(filtered.Items))
+	}
+	if filtered.Total == nil || *filtered.Total != 3 {
+		t.Errorf("total = %v under a tag filter returning 3 items, want 3", filtered.Total)
+	}
+}
+
+// The two tag aggregates are paired positionally, so they have to be ordered
+// identically. Names sorted by name and ids sorted by id, which are different
+// orders whenever a link's tags were not created in alphabetical order — every
+// tag then came back carrying another tag's name.
+func TestTagIDsAndNamesPairCorrectly(t *testing.T) {
+	f := newAPI(t)
+	f.setupOwner()
+
+	// Created zebra-first so creation order (uuidv7, hence id order) is the
+	// reverse of alphabetical order.
+	resp := f.do(http.MethodPost, "/api/v1/links", map[string]any{
+		"url": "https://example.com/z", "tags": []string{"zebra"},
+	})
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("seeding zebra returned %d", resp.StatusCode)
+	}
+	f.decode(resp, nil)
+
+	resp = f.do(http.MethodPost, "/api/v1/links", map[string]any{
+		"url": "https://example.com/both", "tags": []string{"alpha", "zebra"},
+	})
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("seeding both returned %d", resp.StatusCode)
+	}
+	var created struct {
+		ID   string `json:"id"`
+		Tags []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"tags"`
+	}
+	f.decode(resp, &created)
+
+	// GetLinkTags joins properly, so the single-link read is the reference the
+	// list has to match.
+	want := map[string]string{}
+	for _, tg := range created.Tags {
+		want[tg.ID] = tg.Name
+	}
+	if len(want) != 2 {
+		t.Fatalf("link was created with %d tags, want 2", len(want))
+	}
+
+	resp = f.do(http.MethodGet, "/api/v1/links", nil)
+	var page struct {
+		Items []struct {
+			ID   string `json:"id"`
+			Tags []struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			} `json:"tags"`
+		} `json:"items"`
+	}
+	f.decode(resp, &page)
+
+	for _, it := range page.Items {
+		if it.ID != created.ID {
+			continue
+		}
+		if len(it.Tags) != 2 {
+			t.Fatalf("listed link carries %d tags, want 2", len(it.Tags))
+		}
+		for _, tg := range it.Tags {
+			if name, ok := want[tg.ID]; !ok {
+				t.Errorf("listed an unknown tag id %s", tg.ID)
+			} else if name != tg.Name {
+				t.Errorf("tag %s listed as %q, but it is %q: the id and name "+
+					"arrays are paired positionally and disagree on order",
+					tg.ID, tg.Name, name)
+			}
+		}
+	}
+}
+
 func TestEmptyTagListSerializesAsArray(t *testing.T) {
 	f := newAPI(t)
 	f.setupOwner()

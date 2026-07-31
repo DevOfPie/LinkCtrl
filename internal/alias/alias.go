@@ -97,7 +97,12 @@ type TakenFunc func(ctx context.Context, candidate string) (bool, error)
 // check and the write, another request can take the same alias; this reduces
 // the frequency of that race, it does not eliminate it.
 func Generate(ctx context.Context, taken TakenFunc) (string, error) {
-	for length := DefaultLength; length <= MaxGeneratedLength; length++ {
+	return Policy{}.Generate(ctx, taken)
+}
+
+// Generate is the policy-aware form, starting from the configured length.
+func (p Policy) Generate(ctx context.Context, taken TakenFunc) (string, error) {
+	for length := p.generatedLength(); length <= MaxGeneratedLength; length++ {
 		for attempt := 0; attempt < attemptsPerLength; attempt++ {
 			if err := ctx.Err(); err != nil {
 				return "", err

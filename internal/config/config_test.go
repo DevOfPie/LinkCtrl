@@ -18,7 +18,6 @@ func validEnv() map[string]string {
 	return map[string]string{
 		"LINKCTRL_APP_ENV":        "production",
 		"LINKCTRL_BASE_URL":       "https://links.example.com",
-		"LINKCTRL_SECRET_KEY":     strings.Repeat("k", 48),
 		"LINKCTRL_API_KEY_PEPPER": strings.Repeat("p", 48),
 		"LINKCTRL_DATABASE_URL":   "postgres://u:p@localhost:5432/linkctrl?sslmode=disable",
 	}
@@ -159,7 +158,6 @@ func TestValidateReportsEveryProblemAtOnce(t *testing.T) {
 	setEnv(t, map[string]string{
 		"LINKCTRL_APP_ENV":                 "production",
 		"LINKCTRL_BASE_URL":                "http://links.example.com/some/path",
-		"LINKCTRL_SECRET_KEY":              "tooshort",
 		"LINKCTRL_API_KEY_PEPPER":          "alsotooshort",
 		"LINKCTRL_DATABASE_URL":            "postgres://localhost/db",
 		"LINKCTRL_LOG_LEVEL":               "verbose",
@@ -179,7 +177,6 @@ func TestValidateReportsEveryProblemAtOnce(t *testing.T) {
 	// Each of these is an independent problem; all must be reported together.
 	wantMentions := []string{
 		"BASE_URL",
-		"SECRET_KEY",
 		"API_KEY_PEPPER",
 		"LOG_LEVEL",
 		"SIGNUP_MODE",
@@ -212,8 +209,7 @@ func TestValidateIndividualRules(t *testing.T) {
 		{"base url no host", map[string]string{"LINKCTRL_BASE_URL": "https://"}, "must include a host"},
 		{"base url with query", map[string]string{"LINKCTRL_BASE_URL": "https://x.example.com?a=1"}, "query or fragment"},
 
-		{"short secret", map[string]string{"LINKCTRL_SECRET_KEY": "abc"}, "at least 32 bytes"},
-		{"short pepper", map[string]string{"LINKCTRL_API_KEY_PEPPER": "abc"}, "API_KEY_PEPPER"},
+		{"short pepper", map[string]string{"LINKCTRL_API_KEY_PEPPER": "abc"}, "at least 32 bytes"},
 
 		{"http in production", map[string]string{"LINKCTRL_BASE_URL": "http://x.example.com"}, "__Host-"},
 		{"insecure cookies in production", map[string]string{"LINKCTRL_SECURE_COOKIES": "false"}, "SECURE_COOKIES"},
@@ -351,15 +347,15 @@ func TestFileSecretRejectsBothFormsSet(t *testing.T) {
 
 func TestFileSecretReportsUnreadableFile(t *testing.T) {
 	env := validEnv()
-	delete(env, "LINKCTRL_SECRET_KEY")
-	env["LINKCTRL_SECRET_KEY_FILE"] = filepath.Join(t.TempDir(), "does-not-exist")
+	delete(env, "LINKCTRL_API_KEY_PEPPER")
+	env["LINKCTRL_API_KEY_PEPPER_FILE"] = filepath.Join(t.TempDir(), "does-not-exist")
 	setEnv(t, env)
 
 	_, err := Parse()
 	if err == nil {
 		t.Fatal("Parse succeeded with an unreadable secret file")
 	}
-	if !strings.Contains(err.Error(), "SECRET_KEY_FILE") {
+	if !strings.Contains(err.Error(), "API_KEY_PEPPER_FILE") {
 		t.Errorf("error = %v, want it to name the variable", err)
 	}
 }

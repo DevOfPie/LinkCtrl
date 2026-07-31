@@ -262,14 +262,11 @@ func NewRouter(d Deps) http.Handler {
 		root.Handle(APIPrefix+"/", RateLimit(d.Limits.API, "api", d.Metrics, nil)(appHandler))
 
 		if d.Web != nil {
-			// Dashboard prefixes, mounted one by one rather than at "/", because
-			// "/" belongs to the redirect catch-all. Every entry here must appear
-			// in internal/alias/reserved.txt; the reserved-list test enforces it
-			// via RegisteredTopLevelPaths.
-			for _, p := range []string{
-				"/{$}", "/login", "/logout", "/setup", "/dashboard", "/docs",
-				"/links", "/links/", "/keys", "/keys/", "/account", "/account/",
-			} {
+			// Mounted from the same slice the reserved-list guard reads, so a
+			// new dashboard route cannot be registered without the guard seeing
+			// it. Two lists that had to agree by hand is what the guard existed
+			// to prevent in the first place.
+			for _, p := range dashboardPatterns {
 				root.Handle(p, appHandler)
 			}
 
@@ -380,14 +377,48 @@ func (h hostRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// dashboardPatterns are the dashboard routes mounted on the root mux, one by
+// one rather than at "/", because "/" belongs to the redirect catch-all.
+//
+// A package-level slice rather than a literal inside NewRouter so that the
+// reserved-list guard reads the same values the router registers. Every entry
+// must also appear in internal/alias/reserved.txt, or a user could create an
+// alias that shadows it; TestReservedListCoversRegisteredRoutes enforces that.
+var dashboardPatterns = []string{
+	"/{$}", "/login", "/logout", "/setup", "/dashboard", "/docs",
+	"/links", "/links/", "/keys", "/keys/", "/account", "/account/",
+}
+
+// infrastructurePatterns are the routes registered outside dashboardPatterns:
+// health endpoints, the API prefix and the static tree. These are fixed and
+// registered individually, so unlike the dashboard set they are listed rather
+// than iterated.
+var infrastructurePatterns = []string{"/healthz", "/readyz", APIPrefix + "/", "/static/"}
+
 // RegisteredTopLevelPaths lists the first path segment of every route the
-// router registers, for the test that guards against an alias shadowing a
-// real route.
+// router registers, for the test that guards against an alias shadowing a real
+// route.
+//
+// Derived from the slices the router actually mounts rather than hand-written
+// beside them. It is still not a walk of the live mux — net/http exposes no way
+// to enumerate a ServeMux's patterns — but adding a dashboard route now updates
+// this automatically, which is where routes are actually added.
 func RegisteredTopLevelPaths() []string {
-	return []string{
-		"healthz", "readyz", "api", "docs",
-		"login", "logout", "setup", "dashboard", "links", "keys", "account", "static",
+	seen := map[string]bool{}
+	var out []string
+	for _, p := range append(append([]string{}, dashboardPatterns...), infrastructurePatterns...) {
+		seg := strings.Trim(p, "/")
+		if i := strings.IndexByte(seg, '/'); i >= 0 {
+			seg = seg[:i]
+		}
+		// "/{$}" is the root exact-match pattern; it has no segment to reserve.
+		if seg == "" || seg == "{$}" || seen[seg] {
+			continue
+		}
+		seen[seg] = true
+		out = append(out, seg)
 	}
+	return out
 }
 
 // methodFilter restricts a handler to the given methods, answering anything

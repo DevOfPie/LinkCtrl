@@ -110,7 +110,7 @@ above.
 - **Set `TRUSTED_PROXIES`** to the proxy's address as LinkCtrl sees it, and only
   that. An over-broad value lets a client forge `X-Forwarded-For` and evade
   per-address limits.
-- **Generate the secrets.** `LINKCTRL_SECRET_KEY` and `LINKCTRL_API_KEY_PEPPER`
+- **Generate the secret.** `LINKCTRL_API_KEY_PEPPER`
   with `openssl rand -base64 48`, stored outside the repository. The values in
   `.env.example` are examples, and an instance running with them is compromised by
   anyone who has read the file.

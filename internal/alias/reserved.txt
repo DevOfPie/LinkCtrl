@@ -5,10 +5,12 @@
 # instance) are unreachable and therefore pointless — Validate rejects those
 # inputs before the list is consulted.
 #
-# The first group is load-bearing: TestReservedCoversRegisteredRoutes walks the
-# live router and fails the build if any registered top-level path is missing
-# here. That converts "remember to reserve the path" from a review comment into
-# a compiler-adjacent guarantee.
+# The first group is load-bearing: TestReservedListCoversRegisteredRoutes (in
+# internal/httpx) fails if any path the router mounts is missing here. It reads
+# the same slices NewRouter registers from, so adding a route updates it, but it
+# is a test rather than a walk of the live mux — net/http exposes no way to
+# enumerate a ServeMux's patterns. Adding a route outside those slices still
+# needs the entry added here by hand.
 
 # --- application routes -----------------------------------------------------
 api

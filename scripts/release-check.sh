@@ -121,10 +121,13 @@ if [ -z "$htmx_version" ] || [ -z "$htmx_sha" ] || [ -z "$swagger_version" ] ||
   # An empty value would make the checks below pass against nothing.
   bad "could not read the pinned asset versions from the Makefile"
 else
+  # VERIFY_ONLY, or these scripts would silently re-download a mismatching blob
+  # and pass — a release gate must fail on a vendored asset that changed.
   require "vendored htmx matches its pinned checksum" \
-    scripts/get-htmx.sh "$htmx_version" "$htmx_sha" internal/ui/static/js/htmx.min.js
+    env VERIFY_ONLY=1 scripts/get-htmx.sh "$htmx_version" "$htmx_sha" \
+      internal/ui/static/js/htmx.min.js
   require "vendored Swagger UI matches its pinned checksums" \
-    scripts/get-swagger.sh "$swagger_version" "$swagger_css" "$swagger_js" \
+    env VERIFY_ONLY=1 scripts/get-swagger.sh "$swagger_version" "$swagger_css" "$swagger_js" \
       internal/ui/static/vendor
 fi
 if [ -s internal/ui/static/css/app.css ] && \

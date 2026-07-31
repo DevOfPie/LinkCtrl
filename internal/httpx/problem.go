@@ -113,6 +113,19 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 			Detail: "The email or password is incorrect.",
 		})
 
+	case errors.Is(err, auth.ErrAccountInactive):
+		// Deliberately identical to the invalid-credentials response, and not
+		// its own type. Login already refuses to say whether an address is
+		// registered; telling an unauthenticated caller "this account exists
+		// but is suspended" gives back exactly what that refusal withholds.
+		// Unmapped, this returned a 500 and an error-level log line per
+		// attempt, which is both a worse answer and a louder oracle.
+		WriteProblem(w, r, Problem{
+			Type: problemBase + "invalid-credentials", Title: "Invalid credentials",
+			Status: http.StatusUnauthorized,
+			Detail: "The email or password is incorrect.",
+		})
+
 	case errors.Is(err, auth.ErrAccountLocked):
 		WriteProblem(w, r, Problem{
 			Type: problemBase + "account-locked", Title: "Account temporarily locked",
