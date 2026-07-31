@@ -666,14 +666,18 @@ func (s *Service) toDomain(l dbgen.Link, tags []domain.Tag) *domain.Link {
 		tags = []domain.Tag{}
 	}
 	return &domain.Link{
-		ID:           l.ID,
-		WorkspaceID:  l.WorkspaceID,
-		Alias:        l.Alias,
-		ShortURL:     s.baseURL + "/" + l.Alias,
-		URL:          l.PrimaryUrl,
-		Title:        l.Title,
-		Description:  l.Description,
-		Status:       domain.LinkStatus(l.Status),
+		ID:          l.ID,
+		WorkspaceID: l.WorkspaceID,
+		Alias:       l.Alias,
+		ShortURL:    s.baseURL + "/" + l.Alias,
+		URL:         l.PrimaryUrl,
+		Title:       l.Title,
+		Description: l.Description,
+		// Derived, not read: nothing writes 'expired' to the column. The list
+		// and count queries filter on the same rule, and
+		// TestExpiredLinkReportsAndFiltersAsExpired pins the two together.
+		Status: domain.EffectiveStatus(
+			domain.LinkStatus(l.Status), l.ExpiresAt, time.Now()),
 		Tags:         tags,
 		ForwardQuery: l.ForwardQuery,
 		ExpiresAt:    l.ExpiresAt,

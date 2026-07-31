@@ -290,8 +290,15 @@ func TestWebLinkLifecycle(t *testing.T) {
 	if strings.Contains(list, "/webflow") {
 		t.Error("deleted link still listed")
 	}
-	if !strings.Contains(list, "restorable for 30 days") {
+	// The notice must describe the window without implying a restore button:
+	// there is no trash view in Phase 1 and RestoreLink refuses soft-deleted
+	// rows, so "restorable for 30 days" sent people looking for one.
+	if !strings.Contains(list, "alias stays reserved for 30 days") {
 		t.Error("delete notice missing")
+	}
+	if strings.Contains(list, "restorable") {
+		t.Error("delete notice still promises the link is restorable, which no " +
+			"product surface offers")
 	}
 }
 

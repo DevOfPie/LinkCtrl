@@ -15,6 +15,16 @@ import (
 
 // PartitionedTables are the RANGE-partitioned tables. All are keyed on a
 // timestamptz and partitioned by month.
+//
+// Two of the three are dormant in Phase 1: nothing writes visitors at all, and
+// audit_logs has a table but no behavior. They are maintained anyway, and that
+// is deliberate rather than an oversight. The cost is one to_regclass check per
+// table per month — the partition already exists on all but one run an hour.
+// The benefit is that the day something does write to them, partitions exist
+// and retention already applies. The alternative fails in the direction that
+// matters: rows landing in the default partition, which retention never drops,
+// so dormant tables would quietly become the one place raw visitor data is kept
+// forever.
 var PartitionedTables = []string{"click_events", "visitors", "audit_logs"}
 
 // EnsurePartitions creates monthly partitions for the current month and the

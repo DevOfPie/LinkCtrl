@@ -300,7 +300,11 @@ func (i *Ingester) prepare(ctx context.Context, batch []Event) ([][]any, map[uui
 			ev.WorkspaceID,
 			ev.OccurredAt,
 			hash,
-			false,   // is_first_visit, computed by the rollup job
+			// is_first_visit is dormant: nothing computes it and nothing reads
+			// it. It is the storage for Phase 2's new-versus-returning split,
+			// and deriving it here would cost a per-click lookup for a number
+			// no surface displays. Always false until something needs it.
+			false,
 			country, // nil unless a GeoIP database is configured
 			nil,     // region — resolvable, deliberately not stored; see internal/geoip
 			nil,     // city

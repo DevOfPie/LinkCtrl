@@ -45,6 +45,32 @@ migrations run at boot.
   Still one listener and one process. See
   [docs/configuration.md](docs/configuration.md#two-hostnames).
 
+- **`lctl demo`** fills an instance with a workspace worth looking at: around
+  twenty links with titles, tags and destinations, a month of click history with
+  weekday seasonality and a launch spike, and every status the dashboard can
+  render. Links are created through the same service call the REST API uses, so
+  the dataset cannot describe a state the product could not reach. `make demo`
+  runs it against the development database. Distinct from `lctl seed`, which
+  exists to make the redirect SLO measurable.
+
+### Fixed
+
+- **An expired link reported its status as `active`** everywhere except the
+  redirect. The redirect was always right — it reads `expires_at` and answers
+  `410` — but nothing ever writes `expired` to the status column, so the
+  dashboard, the API and the *Expired* filter all disagreed with it, and the
+  filter could never match a row. Status is now derived from the expiry wherever
+  it is reported or filtered, matching the rule the resolver already used.
+- **The deletion notice promised a button that does not exist.** It said a
+  deleted link "stays restorable for 30 days"; there is no trash view in Phase 1
+  and restore refuses soft-deleted rows by design. It now says what the window
+  actually is — the alias stays reserved, then the link is purged.
+- **`visitors` and `click_events.is_first_visit` are documented as dormant**
+  rather than described as working. Nothing writes or reads either; the
+  `is_first_visit` comment claimed a rollup computed it, which none does. Both
+  stay under partition maintenance and retention, so the guarantees apply the
+  day something does write to them.
+
 ## [0.1.0] - 2026-07-30
 
 First release. Phase 1 of [Plan.md](Plan.md): a self-hostable link manager where a

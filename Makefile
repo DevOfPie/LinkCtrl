@@ -153,6 +153,10 @@ db-reset: require-db-password ## Drop and recreate the dev database, then migrat
 seed: require-db-password ## Seed development data
 	@$(DEV_ENV) go run ./cmd/lctl seed --links 1000 --clicks 20000
 
+.PHONY: demo
+demo: require-db-password ## Fill the dev instance with demo data worth looking at
+	@$(DEV_ENV) go run ./cmd/lctl demo --reset
+
 ## ---- frontend -------------------------------------------------------------
 
 TAILWIND_VERSION := v4.1.14

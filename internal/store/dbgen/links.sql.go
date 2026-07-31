@@ -78,7 +78,13 @@ const countLinks = `-- name: CountLinks :one
 SELECT count(*) FROM links l
 WHERE l.workspace_id = $1
   AND l.deleted_at IS NULL
-  AND ($2::text IS NULL OR l.status = $2::text)
+  -- Filtered on effective status, not the stored column: nothing ever writes
+  -- 'expired', so ` + "`" + `?status=expired` + "`" + ` matched no row while expired links listed
+  -- themselves as active. Must stay identical to domain.EffectiveStatus and to
+  -- Snapshot.Decide, expiry outranking an archived status in all three.
+  AND ($2::text IS NULL
+       OR CASE WHEN l.expires_at IS NOT NULL AND l.expires_at <= now()
+               THEN 'expired' ELSE l.status END = $2::text)
   AND ($3::text IS NULL
        -- A degenerate query means "no filter", not "match nothing".
        -- websearch_to_tsquery returns an empty tsquery for a stopword ("and")
@@ -450,7 +456,13 @@ SELECT
 FROM links l
 WHERE l.workspace_id = $1
   AND l.deleted_at IS NULL
-  AND ($2::text IS NULL OR l.status = $2::text)
+  -- Filtered on effective status, not the stored column: nothing ever writes
+  -- 'expired', so ` + "`" + `?status=expired` + "`" + ` matched no row while expired links listed
+  -- themselves as active. Must stay identical to domain.EffectiveStatus and to
+  -- Snapshot.Decide, expiry outranking an archived status in all three.
+  AND ($2::text IS NULL
+       OR CASE WHEN l.expires_at IS NOT NULL AND l.expires_at <= now()
+               THEN 'expired' ELSE l.status END = $2::text)
   -- Full-text first, then trigram substring. websearch_to_tsquery returns an
   -- empty query for input like "and" or "!!", which matches nothing, so the
   -- caller treats a blank search as no filter rather than as zero results.

@@ -38,7 +38,10 @@ CREATE TABLE click_events (
     -- HMAC(salt_of_the_day, ip || user_agent || workspace_id). Per-workspace
     -- salting means the same person is not correlatable across workspaces.
     visitor_hash  bytea,
-    -- True the first time a visitor_hash is seen for this link today.
+    -- Dormant. Intended as "first time this visitor_hash was seen for this link
+    -- today", for Phase 2's new-versus-returning split. Nothing computes it and
+    -- nothing reads it, so it is always false; deriving it at ingest would cost
+    -- a lookup per click for a number no surface shows.
     is_first_visit boolean    NOT NULL DEFAULT false,
 
     country       text,

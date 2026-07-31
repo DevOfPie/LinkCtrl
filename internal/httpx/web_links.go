@@ -120,7 +120,11 @@ func (h *Web) loadLinksPage(w http.ResponseWriter, r *http.Request) (linksPageDa
 		data.Sort = "newest"
 	}
 	if q.Get("deleted") == "1" {
-		data.Notice = "Link deleted. It stays restorable for 30 days."
+		// Says what recovery actually is. There is no trash view in Phase 1 and
+		// RestoreLink refuses soft-deleted rows by design, so "restorable for 30
+		// days" sent people looking for a button that does not exist.
+		data.Notice = "Link deleted. Its alias stays reserved for 30 days, then the link " +
+			"is purged permanently. Recovery inside that window is a database operation."
 	}
 
 	f := domain.LinkFilter{

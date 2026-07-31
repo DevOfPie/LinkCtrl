@@ -84,6 +84,24 @@ const (
 	StatusDisabled LinkStatus = "disabled"
 )
 
+// EffectiveStatus is the status a link presents to the outside world.
+//
+// Expiry is a timestamp, never a stored status. Nothing writes 'expired' to the
+// column, because a written status is stale from the moment the expiry passes
+// until whatever job notices — and that window is exactly when somebody is
+// looking at the link asking why it stopped working.
+//
+// The redirect path has always derived it this way, which is how an expired link
+// came to answer 410 while every management surface still called it active. The
+// rule matches Snapshot.Decide, including that expiry outranks an archived
+// status: if the two disagreed, this would be the same bug in a smaller form.
+func EffectiveStatus(stored LinkStatus, expiresAt *time.Time, now time.Time) LinkStatus {
+	if expiresAt != nil && !now.Before(*expiresAt) {
+		return StatusExpired
+	}
+	return stored
+}
+
 // Link is a short link as the product understands it.
 type Link struct {
 	ID          uuid.UUID  `json:"id"`

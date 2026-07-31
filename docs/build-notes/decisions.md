@@ -1654,3 +1654,97 @@ and arrive most of the way at per-workspace custom domains without having planne
 verification, certificates, or what happens when a workspace points a CNAME at
 you and then deletes it. One instance, two hosts, chosen by the operator. Custom
 domains remain Phase 2 with their machinery untouched.
+
+---
+
+## 2026-07-30 — M19: three defects, and the seeder that found them
+
+### Effective status is derived, never stored
+
+Nothing ever wrote `expired` to `links.status`. The value existed in the enum, in
+the OpenAPI document, in the UI's filter dropdown and in the resolver's snapshot
+reader — and no code path produced it. The redirect path was right by a different
+route, comparing `expires_at`, so users got the correct 410 while every
+management surface reported the link as active and the *Expired* filter matched
+nothing.
+
+Writing the column from a job was the obvious fix and is the wrong one: a stored
+status is stale between the expiry passing and the job noticing, and that window
+is exactly when someone is looking at the link asking why it stopped working.
+
+It is derived in two places, which is a compromise worth naming. `toDomain` is a
+true single funnel for output, so Go computes it once there. Filtering has to
+happen in SQL or the database returns rows the caller then hides, breaking
+pagination counts. So the rule exists as Go and as SQL, and what stops them
+drifting is not shared code but a test that asserts they agree — an expired link
+must report as expired *and* be found by `?status=expired` *and* be absent from
+`?status=active`. Each half was sabotaged separately to prove the test sees both.
+
+Expiry outranks an archived status, matching `Snapshot.Decide`. If the two
+disagreed on the both-true case this would be the original defect in a smaller
+form.
+
+### The dormant tables stay maintained, which is neither option the plan offered
+
+The plan said `visitors` and `is_first_visit` should either work or leave the
+maintenance and retention lists, and framed the status quo as dormancy with a
+"monthly DDL bill". Writing the fix showed the framing was wrong twice over.
+
+The bill is a `to_regclass` check per table per month, which is a rounding error.
+And removing the table from `PartitionedTables` and `RetainedTables` fails in the
+direction that matters: the day something does write to it, rows land in the
+default partition, which retention never drops — so the dormant table would
+quietly become the one place raw visitor data is kept forever, on a product whose
+central privacy claim is that it does not do that.
+
+So both stay dormant and both stay maintained. What was actually defective was
+the description: a comment claiming the rollup computes `is_first_visit` when no
+rollup touches it. Comments now say dormant and say why. This is the milestone's
+"force a choice" working as intended — it did not prescribe which, and the
+inspection that came with implementing it produced a third answer better than the
+two written down in advance.
+
+### The seeder is a client, and that is the whole design
+
+`lctl seed` already existed and is for load tests: a hundred thousand links named
+`ld0`…`ld99999`, written with COPY, no destinations rows. Correct for measuring
+the redirect SLO and useless for looking at the product.
+
+`lctl demo` creates its links through `link.Service.Create` — the same call the
+REST API makes. Writing rows directly is faster and was the obvious instinct;
+going through the service means alias policy, destination validation, tag
+creation and the destinations row all happen exactly as they do for a client, so
+the dataset cannot describe a state the product could not reach. A seeder that
+can invent unreachable states produces a dashboard being debugged against data it
+could never have produced.
+
+One field is written directly and the comment says which: the expired campaign's
+past `expires_at`. That state is reached by the clock, never by a request, so
+there is no client path to imitate.
+
+Click history is written directly too, because the redirect path can only produce
+traffic for right now. The constraint there is fidelity rather than provenance:
+every column matches what the ingester writes, including `is_first_visit` false,
+null region and city, referrers already reduced to a host, a 16-byte visitor hash
+keyed on (day, visitor) so the same person is a different hash tomorrow exactly
+as a rotating salt makes them, and device/browser/OS strings from the vocabulary
+`Classify` emits.
+
+The prototype that found the three defects was a shell script and a pile of SQL
+in a scratch directory. It hit a trap worth keeping in the record: generating
+per-click attributes in a `CROSS JOIN LATERAL` that depends only on the link and
+the day lets the planner evaluate it once per link-day and multiply the result,
+so every click in a day shared one visitor, device and country. The only symptom
+was 18 unique visitors against 1,200 clicks — a number you have to already be
+suspicious of to question. The committed version generates in Go, one row at a
+time, where the question cannot arise.
+
+### Standing an instance up found what the review did not
+
+Worth recording as a method note rather than as a fix. A six-dimension review
+with adversarial verification read this codebase against its own intent and found
+thirty things. Standing up a fresh instance, seeding it and clicking around found
+three more inside an hour, and all three are places where the code is internally
+consistent and disagrees with the product: a status nothing writes, a table
+nothing fills, a message describing a button nobody built. Reading cannot find
+those, because there is nothing inconsistent to notice.

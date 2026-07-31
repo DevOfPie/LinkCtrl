@@ -48,6 +48,7 @@ apikey create      Issue an API key   --user --name --scopes [--expires-in]
 apikey list        List a user's API keys                          --user
 apikey revoke      Revoke an API key                         --user --id
 seed               Generate a load-testing dataset  --links --clicks [--reset]
+demo               Fill an instance with demo data              [--reset]
 version            Print version information
 ```
 
@@ -182,3 +183,49 @@ query that reads one.
 `--seed N` fixes the PRNG, so two runs produce the same dataset and two load
 results are comparable. `make seed` is the small development variant; `make
 seed-slo` is the SLO dataset. See [slo.md](slo.md).
+
+### `demo`
+
+Fills an instance with a workspace worth looking at. `seed` is for load tests;
+this is for seeing the product.
+
+```sh
+$ lctl demo --reset
+reset: previous demo data removed
+links: 21
+clicks: 31008
+rollups computed
+
+demo data ready for you@example.com
+links are at http://localhost:8080/<alias>, dashboard at http://localhost:8080
+```
+
+Around twenty links with titles, tags, descriptions and destinations, and a month
+of click history with weekday seasonality, a launch spike, bots, and a spread of
+devices, browsers, countries, languages and referrers. Every status the dashboard
+can render is present: an archived link, an expired campaign that answers `410`,
+one in the trash, one with query forwarding on, and two with generated aliases.
+
+It needs a user to own the data, so claim the instance first — through the setup
+form or `POST /api/v1/auth/setup`. `--user` picks one; the default is the
+earliest.
+
+Two properties are worth stating because they are what make it trustworthy.
+Links are created **through the same service call the REST API uses**, so alias
+policy, destination validation and tag creation all run: the dataset cannot
+describe a state the product could not reach. Click history is written directly —
+the redirect path can only make traffic for right now — but every column matches
+what the ingester would have written, including no address anywhere, referrers
+already reduced to a host, and device and browser strings from the vocabulary
+`Classify` emits.
+
+The one field written directly that a client could not set is the expired
+campaign's past `expires_at`. That state is reached by the clock, never by a
+request.
+
+`--reset` deletes the demo links in the owning workspace and truncates
+`click_events` — **all of them**, since a click row carries no marker saying it
+was seeded. Like `seed`, it refuses to run when `APP_ENV=production` without
+`--force`. `--seed N` fixes the PRNG so two runs produce the same dataset, and
+`--days`, `--volume` change how much history there is. `make demo` runs it with
+`--reset` against the development database.

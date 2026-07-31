@@ -37,6 +37,7 @@ Commands:
   apikey list        List a user's API keys                          --user
   apikey revoke      Revoke an API key                         --user --id
   seed               Generate a load-testing dataset  --links --clicks [--reset]
+  demo               Fill an instance with demo data              [--reset]
   version            Print version information
 `)
 }
@@ -77,6 +78,9 @@ func run(args []string) error {
 
 	case "seed":
 		return seedCmd(args[1:])
+
+	case "demo":
+		return demoCmd(args[1:])
 
 	case "partitions":
 		if len(args) < 2 || args[1] != "ensure" {

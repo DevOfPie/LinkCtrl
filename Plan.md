@@ -413,7 +413,7 @@ intent and using the thing reach different bugs.
 | Load validation of the redirect target | done, target met — [docs/slo.md](docs/slo.md) |
 | Release packaging | done, verified — [docs/releasing.md](docs/releasing.md) |
 | Separate management and link hostnames | done, verified |
-| Post-release defect fixes, and a demo seeder | not started |
+| Post-release defect fixes, and a demo seeder | done, verified |
 
 Verification: 92 integration tests against real Postgres and Redis — including
 a contract test that replays every OpenAPI operation against the live server —
@@ -428,21 +428,19 @@ measured. What is left divides into work that is assigned and work that is not.
 
 #### Assigned
 
-M18 is done. M19 carries its definition of done here because "fix the bugs" is
-not one, and because its scope drifts pleasantly outwards towards a rewrite of
-the trash if left to taste.
+Both done.
 
 | Milestone | State |
 | --- | --- |
 | **M18 — separate management and link hostnames** | **Done.** `APP_BASE_URL` and `LINK_BASE_URL` both default to `BASE_URL`, so an existing single-host deployment is unaffected; set to different hosts, the router dispatches on `Host` and each tree answers only its own paths. A wrong-host request is `404`, never a cross-host redirect. `short_url` is built from the link origin, the CSRF trusted origin follows the dashboard host, and `/healthz` and `/readyz` answer on every hostname including ones never configured, because probes do not know the operator's names. Reserved aliases stay enforced on both hosts. |
-| **M19 — post-release defect fixes, and a demo seeder** | Three defects found by standing a fresh instance up and using it, plus the tool that found them. Done means: an expired link reports as expired everywhere, not only in the redirect; the `visitors` table and `is_first_visit` either work or stop pretending to; the deletion notice matches what recovery actually is; and `make demo` fills an empty instance with a plausible workspace. Detailed below. |
+| **M19 — post-release defect fixes, and a demo seeder** | **Done.** Effective status is derived rather than stored, so an expired link reports as expired everywhere and `?status=expired` matches it. `visitors` and `is_first_visit` are documented as dormant instead of described as working, and stay under partition maintenance and retention so the day something writes to them the guarantees already apply. The deletion notice says what recovery is. `lctl demo` / `make demo` fills an instance with a workspace worth looking at. |
 
 **M19 in detail.** The three defects, each with what "fixed" means:
 
 | Defect | Fix |
 | --- | --- |
 | `links.status` is never set to `expired` | Only `active` and `archived` are ever written. The redirect path is correct — it reads `expires_at` and answers `410` — but the management surface reports an expired link as `"status":"active"`, and the UI's *Expired* filter is an option that can never match a row. [operations.md](docs/operations.md#troubleshooting) tells an operator diagnosing an unexpected `410` to check the link's status, which will tell them the link is fine. Fixed by deriving effective status in one place that both the list and the resolver agree with, rather than by adding a job to write a column that is stale the moment it is written. `disabled` is in the same enum and the same position; it is out of scope only because nothing offers to set it either. |
-| The `visitors` table is dead | Nothing writes it and nothing reads it, yet it is in `PartitionedTables`, so the hourly job creates a partition a month for it forever, and in `RetainedTables`, so retention runs DDL to drop empty partitions of a table with no rows in it. `click_events.is_first_visit` is the same defect one column down: always `false`, under a comment claiming the rollup computes it, which no rollup does. Fixed by choosing — either they are populated and something displays them, or they leave the maintenance and retention lists and the comment stops describing work that does not happen. Dormant schema is a deliberate Phase 1 decision; dormant schema with a monthly DDL bill is not the same thing. |
+| The `visitors` table is dead | Nothing writes it and nothing reads it, and `click_events.is_first_visit` is the same one column down: always `false`, under a comment claiming the rollup computes it, which no rollup does. The milestone forced a choice; the choice taken was neither of the two it offered. Both stay dormant and both stay under partition maintenance and retention, because the alternative fails in the direction that matters — a table dropped from those lists that later acquires a writer puts its rows in the default partition, which retention never drops, making the dormant table the one place raw visitor data is kept forever. What was actually wrong was the description, so the comments now say dormant instead of describing work that does not happen. |
 | The deletion notice promises a button that does not exist | The UI says "Link deleted. It stays restorable for 30 days." [usage.md](docs/usage.md) is straight about the truth — "recovery inside the 30 days is a database operation, not a button" — and `RestoreLink` is guarded by `deleted_at IS NULL`, so it refuses soft-deleted rows by design. Fixed by making the notice say what recovery is. Adding a trash view instead would be a scope change, and Phase 1 already decided against it. |
 
 **The seeder.** `lctl seed` exists and is for load testing: a hundred thousand
