@@ -9,10 +9,10 @@ no SaaS dependency, no telemetry leaving the box.
 > **Status: 0.1.0 released.** Everything below is built, tested and exercised end
 > to end; every configuration setting takes effect, and the redirect latency
 > target is measured, not aspirational. Two further Phase 1 milestones have since
-> been planned and are not started — separate hostnames for the dashboard and for
-> short links, and a round of post-release defect fixes with a demo seeder — so
-> Phase 1 is no longer closed; see
-> [Plan.md](Plan.md#assigned). What is deferred to Phase 2 is listed plainly in
+> been built and are unreleased: separate hostnames for the dashboard and for
+> short links, and a round of defect fixes found by standing a fresh instance up
+> and using it. See [Plan.md](Plan.md#assigned) and
+> [CHANGELOG.md](CHANGELOG.md). What is deferred to Phase 2 is listed plainly in
 > [Not built yet](#not-built-yet). Check that list before deploying anything you
 > care about.
 
@@ -147,10 +147,6 @@ Known limitations and deferred work, so nobody discovers them in production:
   country is resolved at ingest; region and city are available from the same file
   and deliberately left null. Nothing shows them, and city plus a timestamp is
   close to a location history.
-- **An expired link still reports its status as `active`.** The redirect is
-  right — it reads the expiry and answers `410 Gone` — but the dashboard, the API
-  and the *Expired* filter all disagree with it, because nothing ever writes that
-  status. Being fixed; see [Plan.md](Plan.md#assigned).
 - **No audit log behaviour, no folders, no custom domains, no QR codes, no
   password/one-time links, and no signup page.** The tables exist and
   `SIGNUP_MODE` is honoured by the JSON API; the features are Phase 2.

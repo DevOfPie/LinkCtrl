@@ -379,19 +379,21 @@ caveat with the data.
 
 ## Build status
 
-As of 2026-07-30. 19 of 20 milestones. The first eighteen shipped as 0.1.0 and
+As of 2026-07-30. 20 of 20 milestones. The first eighteen shipped as 0.1.0 and
 were then re-reviewed: a six-dimension audit with adversarial verification
 confirmed 30 findings — among them a missing purge job that inverted the
 alias-reservation promise, and query forwarding with no write surface — all fixed
 the same day. That release is complete against the scope it was released under,
 and it was the review that said so rather than the milestone counter reaching its
-end. Phase 1 scope has since grown by two milestones, one of them now built, so
-Phase 1 itself is not complete; 0.1.0 does not become retroactively unfinished.
+end. Phase 1 scope then grew by two milestones — separate hostnames, and a round
+of defect fixes — and both are now built, so the phase is complete again on the
+larger scope. Everything after 0.1.0 is unreleased.
 
-One of those two exists because a fresh instance was then stood up and used, which
+The second of those exists because a fresh instance was stood up and used, which
 found three defects the review had not — all of them places where the code is
 internally consistent and disagrees with the product. Reading code against its own
-intent and using the thing reach different bugs.
+intent and using the thing reach different bugs, and only one of those had been
+done.
 
 | Area | State |
 | --- | --- |
