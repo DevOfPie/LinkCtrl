@@ -8,8 +8,9 @@ optimized for scanning and low token cost instead. Do not rewrite it into prose.
 Rationale belongs in [decisions.md](decisions.md).
 
 **Precedence.** [Plan.md](../../Plan.md) is the scope contract and wins on *what*.
-This file wins on *process*. If they conflict, the conflict is a bug — report it,
-do not pick.
+This file wins on *gates* — what must pass. [phase-loop.md](phase-loop.md) wins
+on *sequence* — what order, and when to stop. If any two conflict, the conflict
+is a bug — report it, do not pick.
 
 ---
 
@@ -50,6 +51,14 @@ Not a defect — defects follow the trigger above. Features follow
 [planning.md](planning.md): establish absence, decide the phase, place by
 number (`X.9` is reserved for scheduled reviews), write the five artifacts,
 verify. The owner decides scope; planning.md decides everything else.
+
+### The phase is being worked
+
+Trigger phrase **"Work on Phase"**, or `/work-on-phase`.
+[phase-loop.md](phase-loop.md) holds the cycle: validate the next milestone,
+build it, land it, repeat until the phase ends. It sequences the gates below and
+never replaces them, and it stops at the phase's last milestone rather than
+starting the next one.
 
 ### Before completing a commit
 
@@ -130,6 +139,7 @@ phase touched.
 | `docs/build-notes/decisions.md` | Append-only. Never edit an entry; a later entry corrects an earlier one |
 | `docs/SECURITY.md` | New defences, new gaps, new operator responsibilities |
 | `docs/build-notes/workflow.md` | This file. Rules learned this phase |
+| `docs/build-notes/phase-loop.md` | The loop that ran this phase, and where it needed a human anyway |
 | `docs/adr/` | Investigations that outgrew a decision-log entry |
 
 Minimize means: delete what is no longer true, merge what is duplicated, and cut

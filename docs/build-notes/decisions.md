@@ -40,6 +40,7 @@ file. Append a row when you append an entry.
 | [Dark mode added as M24.5](#2026-07-31--dark-mode-added-to-the-plan-as-m245) | Post-finalisation scope; why it lands before the UI run; the CSP case for a server-rendered cookie |
 | [Feature intake, and reviews at X.9](#2026-07-31--feature-intake-written-down-and-the-review-slot-moves-to-x9) | planning.md exists; why reviews cap the fractional band at .9 |
 | [docs/ reorganized](#2026-07-31--docs-reorganized-around-its-reader) | Root is for running and using; SECURITY.md surfaced; the two recorded keep-decisions |
+| [The phase loop](#2026-07-31--the-phase-loop-written-down) | Unattended milestone iteration; why validation precedes each one; why the resume note is untracked |
 
 ---
 
@@ -2270,3 +2271,68 @@ kept deliberately rather than by default, and the reasons are recorded in the
 map: releasing.md (versions, upgrade and rollback are the operator's contract,
 even though cutting a release is the maintainer's) and slo.md (the performance
 promise is only a promise if its evidence is where a host can read it).
+
+## 2026-07-31 — the phase loop written down
+
+Phase 2 is twenty-eight milestones whose definitions of done are already
+written. What was not written is the cycle around them, so every session
+re-derived it: which milestone is next, what to check before starting, what
+order the gates run in, and when to stop. That cycle is now
+[phase-loop.md](phase-loop.md), triggered by "Work on Phase", and the owner asked
+for it precisely so the derivation happens once.
+
+### Validation is its own step, and it never edits
+
+The obvious loop is build–commit–repeat. It is wrong here because the
+definitions of done were all written on the same day, before any of the code
+they describe existed. By M35 the tree will have moved twenty-five milestones
+away from what M35's file assumed: a bullet may name a test that was renamed, a
+discharge may point at a Plan.md row a later milestone rewrote, or an earlier
+milestone may have already built part of it. Discovering that mid-build turns
+into unplanned scope, because the natural response to "the plan is slightly
+wrong" while already deep in the code is to fix it quietly. So validation runs
+first, produces a verdict and notes, and is forbidden from touching code — which
+means a failed validation surfaces as a question to the owner rather than as a
+silent amendment.
+
+One consequence is recorded in the file because it is an exception, not a
+derivation anyone should re-make: an open deferred finding that would make the
+*current* milestone's claim false is in spec by workflow.md's standing rule, and
+gets fixed inside the milestone without individual owner approval. It is the
+only route out of that queue that skips approval, so it is named in the commit
+message when taken.
+
+### Why demo-update lands between commit and push
+
+workflow.md already required `make demo-update` after a milestone; the loop
+fixes *where*. It refuses on a dirty tree, so it cannot precede the commit, and
+its refusal is a real completion signal rather than a formality. Putting it
+after the push would mean the failure arrives once the work is already
+published. Between the two, it is the last gate that can still fail privately.
+
+### The resume note is untracked, and holds nothing durable
+
+Recovery after a stop needs working state — which milestone, which step inside
+it, what was already verified, what cost real effort to learn. None of that
+survives the milestone, and all of it has somewhere better to live the moment it
+does: status in the phase-details README, rationale here, out-of-spec findings
+in the queue, scope in Plan.md. A tracked file would therefore duplicate the
+status table this repository deliberately keeps in exactly one place, and would
+have to be committed with every milestone to keep the tree clean for
+`make demo-update` and `make release-check`.
+
+`.current-task.md` is gitignored instead. `git status --porcelain` skips ignored
+files, so both of those gates stay green while it exists, and it can be rewritten
+as often as the work changes without a single commit. The cost is that it does
+not survive a fresh clone, which is the right trade: a note describing work in
+flight has nothing to say to a machine that has not started.
+
+### Where it stops
+
+Two boundaries, both deliberate. The loop never starts the next phase — a phase
+boundary is where scope, versioning and the owner's judgment all change at once,
+and M45 ends with a tag and a PR that are the owner's to approve. And it never
+answers its own questions: an unanswered decision prompt stops the loop rather
+than resolving into a default, because the failure mode of an unattended builder
+is not a wrong keystroke, it is a plausible assumption compounded over twenty
+milestones.
