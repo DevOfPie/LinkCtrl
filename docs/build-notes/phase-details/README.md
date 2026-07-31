@@ -13,14 +13,19 @@ which suited Phase 1's twenty-one milestones summarized by subsystem and does no
 scale to twenty-five tracked individually. Update the row when a milestone starts
 and when it lands.
 
+A milestone that shipped and came back reads `in progress (reopened)`. The
+parenthesis earns its place: without it, a milestone below the one being built
+looks like an ordering mistake. Reopening is what happens when a shipped
+milestone's claim turns out false — the rule, and why it beats a successor
+milestone, is in [workflow.md](../workflow.md).
+
 | # | Milestone | Depends on | Status |
 | --- | --- | --- | --- |
 | [M21](m21.md) | Audit log: behavior, retention, growth alerting | — | done |
 | [M22](m22.md) | Notifications: in-app behavior | — | done |
 | [M23](m23.md) | Cross-replica cache invalidation (pub/sub) | — | done |
 | [M24](m24.md) | Shared rate limits (credentials and API) | — | done |
-| [M24.5](m24.5.md) | Dark mode: theme tokens, system default, override | — (before M25) | done |
-| [M24.6](m24.6.md) | Dark mode, actually applied: cascade fix, control moved | M24.5 (before M25) | not started |
+| [M24.5](m24.5.md) | Dark mode: theme tokens, system default, override | — (before M25) | in progress (reopened) |
 | [M25](m25.md) | Workspace and organization switcher | — | not started |
 | [M26](m26.md) | Mailer: optional SMTP delivery | — | not started |
 | [M27](m27.md) | Organizations: invitations and joining | M21 M22 M25 M26 | not started |

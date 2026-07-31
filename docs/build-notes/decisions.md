@@ -50,6 +50,7 @@ file. Append a row when you append an entry.
 | [M24.5, a dark theme that cannot flash](#2026-07-31--m245-a-dark-theme-that-cannot-flash) | Why the server renders the attribute; the token scan as enforcement; the two light values that moved under D21 |
 | [The loop splits in two](#2026-07-31--the-loop-splits-into-an-orchestrator-and-workers) | Premature stopping as a context symptom; why the builder does not commit its own work; the seam at 3.3/3.4; what the split costs |
 | [M24.6, and a test that could not see the defect](#2026-07-31--m246-and-a-test-that-could-not-see-the-defect) | The unlayered-`:root` cascade bug; why the token scan missed it; verifying mechanisms instead of outcomes; why a new milestone rather than reopening M24.5 |
+| [M24.6 withdrawn; M24.5 reopened](#2026-07-31--m246-withdrawn-m245-reopened-and-appends-get-a-number) | Corrects the entry above: a `done` row may not assert something false; reopening as the rule; why every append now carries its milestone number |
 
 ---
 
@@ -3090,3 +3091,63 @@ wrong thing.
 The lesson belongs to the milestone files rather than the loop: a bullet that
 names a mechanism should say what observable outcome proves the mechanism works.
 "Asserted by test" is not enough when the test can pass over a dead stylesheet.
+
+---
+
+## 2026-07-31 — M24.6 withdrawn, M24.5 reopened, and appends get a number
+
+This corrects the entry immediately above, within the hour, on the owner's
+instruction. Everything it records about the cascade defect and about testing
+mechanisms instead of outcomes stands. Its scheduling decision does not.
+
+### A `done` row may not assert something false
+
+The previous entry took the cost of M24.6 knowingly and wrote it down: M24.5
+stays `done` while one of its central claims is false, paid for by an untouched
+commit and an untouched decision entry. Written out plainly like that, it does
+not survive contact with the rest of this project. *Plan.md states what is true*
+is not a preference about tidiness — it is the reason any of these documents are
+worth reading, and a status table with one knowingly false row is a status table
+a reader has to verify independently, which is the same as not having one.
+
+The two things it bought were both cheap to give up. History is not edited by
+reopening: the M24.5 commit stands untouched, this entry corrects the previous
+one rather than replacing it, and the append-only rule is doing exactly the job
+it exists for. What is actually gained is that the fix, the defect, the original
+work and the trail all sit under one number instead of being split across two.
+
+So the rule is now written down in workflow.md rather than decided case by case:
+a defect that makes a **shipped** milestone's claim false reopens that milestone.
+The deferred-findings row still comes first, because reopening is scheduling and
+scheduling is the owner's.
+
+### The status vocabulary gained a word
+
+M24.5's row reads `in progress (reopened)`, not `in progress`. The distinction is
+worth the parenthesis: a reader scanning the table should not have to wonder why
+a milestone below M25 is being worked, and "reopened" says the milestone shipped
+and came back rather than never having landed.
+
+### Appends get a number
+
+Separately, and prompted by the same episode: F3 and F4 were traceable to M24.5
+only because the defect was hours old and the whole story was in one
+conversation. F2 is traceable to M23 only because whoever wrote it happened to
+say "measured while building M23" in prose. Nothing required either.
+
+Appends outlive the context that made them, and under the worker split that
+context is *deliberately* discarded at the end of every milestone. So the loop
+now requires the milestone number on anything appended while a milestone is
+under way: leading the title in decisions.md, and a **Found in** column in
+deferred-findings.md, backfilled where the existing rows made it recoverable and
+marked honestly where they did not.
+
+Two files are exempt for reasons rather than by omission. Plan.md and
+phase-details/ need no marker because every row already sits under its own
+number. CHANGELOG.md needs none because it is written for operators, and `MN`
+means nothing outside this repository.
+
+The useful consequence is that an unmarked decision entry becomes a positive
+claim — that no milestone produced it, that it is a process change or a phase
+close — rather than an absence nobody can interpret. This entry carries no
+number for exactly that reason.

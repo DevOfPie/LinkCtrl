@@ -74,6 +74,30 @@ Short, and the only thing the orchestrator reads from it:
 
 A report is not evidence. The tree is.
 
+### Marking what gets appended
+
+Appends outlive the context that made them. A worker returns and everything it
+knew about *why* a decision entry or a finding exists goes with it, so the
+milestone number is written at the time or it is not recoverable at all.
+
+**Anything appended while a milestone is under way carries that milestone's
+number, whoever appends it.**
+
+| File | Marker |
+| --- | --- |
+| decisions.md | `## <date> — MN, <title>` — the number leads the title, before any prose |
+| [deferred-findings.md](deferred-findings.md) | the **Found in** column |
+| Plan.md, phase-details/ | none — every row already sits under its own number |
+| CHANGELOG.md | none — it is written for operators, and `MN` means nothing outside this repo |
+
+Entries no milestone produced — a process change, a phase close — carry no
+number, and name what prompted them in their first line instead. An unmarked
+entry is therefore a claim that nothing was being built, not an oversight.
+
+A reopened milestone keeps its number: work added to it marks the number it was
+added under rather than acquiring a new one. That is the whole reason reopening
+is preferred to a successor milestone — the trail stays in one place.
+
 ---
 
 ## 0. Resume
@@ -129,8 +153,9 @@ read for step 3.4.
 Worker.
 
 - Status row → `in progress` in phase-details/README.md.
-- **In spec only.** Anything else → one row in deferred-findings.md, then carry
-  on. Never fix out of spec, never bundle a second milestone.
+- **In spec only.** Anything else → one row in deferred-findings.md, marked per
+  [Marking what gets appended](#marking-what-gets-appended), then carry on.
+  Never fix out of spec, never bundle a second milestone.
 - A test that passes first try → sabotage it, confirm red, restore by
   counter-edit. Never `git checkout`.
 - Work on the **test** instance. The demo is touched at step 3 and nowhere else.
@@ -145,7 +170,8 @@ Order is load-bearing. Do not reorder. The actor changes in the middle.
 1. `make check`, then `make test-integration` with the stack up (`make up`)
 2. Every gate in workflow.md's *Before completing a commit* table
 3. Docs true: Plan.md, CHANGELOG.md, `docs/*.md`; decisions.md **appended**
-   (never edited) with its index row
+   (never edited) with its index row, and every append
+   [marked](#marking-what-gets-appended)
 
 Then stop and report. **The worker does not commit.** One that commits, pushes,
 or runs `make demo-update` has broken the split; the milestone is unaccepted and

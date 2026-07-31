@@ -479,12 +479,12 @@ reclassified rather than quietly skipped.
 
 ## Phase 2 build plan
 
-29 milestones, M21–M45, continuing Phase 1's numbering. Fractional numbers
+28 milestones, M21–M45, continuing Phase 1's numbering. Fractional numbers
 insert without renumbering the work either side (Phase 1's M0.5 precedent):
 `X.9` is reserved for scheduled reviews, `X.1`–`X.8` for scope added after the
-plan was finalised — so far two, both dark mode: M24.5 (2026-07-31) and M24.6
-(2026-07-31), which corrects it. The numbering rules are in
-[planning.md](docs/build-notes/planning.md). One milestone per commit.
+plan was finalised — so far one, dark mode at M24.5 (2026-07-31). The numbering
+rules are in [planning.md](docs/build-notes/planning.md). One milestone per
+commit.
 
 **Definitions of done live in
 [`docs/build-notes/phase-details/`](docs/build-notes/phase-details/), one file per
@@ -504,7 +504,6 @@ once (M35).
 | [M23](docs/build-notes/phase-details/m23.md) | Cross-replica cache invalidation (pub/sub) | — | Known limitation: single-replica invalidation |
 | [M24](docs/build-notes/phase-details/m24.md) | Shared rate limits (credentials and API) | — | Rate limiting shared across replicas |
 | [M24.5](docs/build-notes/phase-details/m24.5.md) | Dark mode: theme tokens, system default, override | — *(before M25)* | — *(owner-added scope, 2026-07-31)* |
-| [M24.6](docs/build-notes/phase-details/m24.6.md) | Dark mode, actually applied: cascade fix, control moved | M24.5 *(before M25)* | Deferred findings F3, F4 *(owner-scheduled, 2026-07-31)* |
 | [M25](docs/build-notes/phase-details/m25.md) | Workspace and organization switcher | — | Groundwork for M27/M28 |
 | [M26](docs/build-notes/phase-details/m26.md) | Mailer: optional SMTP delivery | — | Optional SMTP mailer |
 | [M27](docs/build-notes/phase-details/m27.md) | Organizations: invitations and joining | M21 M22 M25 M26 | Organizations row (invites) |

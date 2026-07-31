@@ -45,6 +45,14 @@ batch — an unreviewed row is not scheduled work.
 A defect that makes the *current* milestone's claim false is in spec, whatever it
 looks like. Judge by the claim, not by the subsystem.
 
+A defect that makes a **shipped** milestone's claim false **reopens that
+milestone** — status row back to `in progress`, the correction written into its
+own file — rather than arriving as a successor. A successor leaves a `done` row
+asserting something untrue, which is the one outcome worth spending a reopening
+to avoid, and it scatters one piece of work across two numbers. The defect still
+gets a deferred-findings row first: reopening is scheduling, and scheduling is
+the owner's.
+
 ### A feature is requested
 
 Not a defect — defects follow the trigger above. Features follow

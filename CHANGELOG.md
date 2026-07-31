@@ -60,7 +60,8 @@ migrations run at boot.
   and unlayered declarations win regardless of specificity, so both the explicit
   override and the `prefers-color-scheme` path lose to the light values. The
   server side is correct — the attribute renders — but the page does not change.
-  M24.6 fixes the cascade and moves the control out of the footer; the four
+  The milestone has been reopened to fix the cascade and to move the control from
+  the footer to account settings, with the sign-in page keeping its own; the four
   bullets above describe the intended behaviour and are not yet true of a running
   build. Tracked as F3 and F4 in
   [docs/build-notes/deferred-findings.md](docs/build-notes/deferred-findings.md).
