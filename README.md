@@ -6,7 +6,7 @@ measure, script and revoke — not a row you create once and hope about.
 Runs as one Go binary with Postgres and Redis beside it. No Node in the image,
 no SaaS dependency, no telemetry leaving the box.
 
-> **Status: Phase 1 complete, 0.1.0 not yet tagged.** All twenty-one milestones
+> **Status: Phase 1 complete, released as 0.1.0.** All twenty-one milestones
 > are built, tested and exercised end to end; every configuration setting takes
 > effect, and the redirect latency target is measured, not aspirational. See
 > [CHANGELOG.md](CHANGELOG.md) for what is in it. What is deferred to Phase 2 is

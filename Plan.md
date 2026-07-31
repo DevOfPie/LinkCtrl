@@ -10,7 +10,7 @@ Scope contract and specification. States **what** is true, not why.
 | How the work is done | `docs/build-notes/workflow.md` |
 | Security model and reporting | `docs/build-notes/SECURITY.md` |
 | Current progress | [Build Status](#build-status) |
-| Last updated | 2026-07-30 |
+| Last updated | 2026-07-31 |
 
 **Core rule:** links are programmable, observable, secure resources.
 
@@ -382,8 +382,8 @@ caveat with the data.
 
 ## Build status
 
-As of 2026-07-30. 21 of 21 milestones, none of them released: 0.1.0 is the
-version they all carry, and it has never been tagged or pushed.
+As of 2026-07-31. 21 of 21 milestones, all of them in 0.1.0, tagged `v0.1.0` on
+`main`.
 
 The first eighteen were then re-reviewed: a six-dimension audit with adversarial
 verification confirmed 30 findings — among them a missing purge job that

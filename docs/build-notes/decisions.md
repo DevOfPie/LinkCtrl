@@ -1877,3 +1877,32 @@ correct behaviour is now described as the behaviour. The two capabilities became
 a new "Hostnames" section. What survives as a limitation is what is still true
 after all twenty-one milestones: no signup page, and dormant tables named as
 dormant.
+
+## 2026-07-31 — 0.1.0 tagged
+
+### The tag goes on `main`, not on the phase branch
+
+`main` is `phase-1-mvp` plus the merge commit from PR #1, and the two trees are
+identical — `git diff origin/main origin/phase-1-mvp` prints nothing. Either
+commit would build the same artifacts, so the choice is about what the tag means
+rather than what it produces. `main` is the branch the project publishes from; a
+release tag hanging off a phase branch would make the published history depend on
+a branch that exists in order to be merged and eventually deleted.
+
+### The status lines had to change before the tag, not after
+
+`README.md` said "0.1.0 not yet tagged" and `Plan.md` said the version "has never
+been tagged or pushed". Both were true right up to the moment the tag existed —
+and a release is built *from the tag*, so tagging the tree that still carried them
+would have published a 0.1.0 whose own README says 0.1.0 does not exist. The
+documentation pass workflow.md puts before a PR applies to a tag for the same
+reason: the artifact is the claim, and it carries its own documentation with it.
+
+Nothing else needed a version written into it. `VERSION` in the Makefile is
+`git describe --tags`, so the version the binaries report is derived from the tag
+rather than restated anywhere a copy could drift.
+
+This entry corrects "0.1.0 absorbs everything, because 0.1.0 never happened"
+above, which recorded that there was no tag and that nothing had reached `main`.
+Both halves were true when written and both are now false; the entry stays as it
+is, because this file is append-only.
