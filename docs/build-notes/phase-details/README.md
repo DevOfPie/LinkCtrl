@@ -1,7 +1,8 @@
 # Phase details
 
-One file per milestone, named for its number: `m21.md` … `m45.md`, plus the two
-`.5` review milestones. Read exactly the one you are building — that is what this
+One file per milestone, named for its number: `m21.md` … `m45.md`, plus the
+fractional insertions — `X.9` is reserved for scheduled reviews, `X.1`–`X.8` for
+added scope; the rules are in [planning.md](../planning.md). Read exactly the one you are building — that is what this
 split is for. Nothing here restates another file.
 
 [Plan.md](../../../Plan.md) holds the scope contract and the ordering table.
@@ -18,6 +19,7 @@ and when it lands.
 | [M22](m22.md) | Notifications: in-app behavior | — | not started |
 | [M23](m23.md) | Cross-replica cache invalidation (pub/sub) | — | not started |
 | [M24](m24.md) | Shared rate limits (credentials and API) | — | not started |
+| [M24.5](m24.5.md) | Dark mode: theme tokens, system default, override | — (before M25) | not started |
 | [M25](m25.md) | Workspace and organization switcher | — | not started |
 | [M26](m26.md) | Mailer: optional SMTP delivery | — | not started |
 | [M27](m27.md) | Organizations: invitations and joining | M21 M22 M25 M26 | not started |
@@ -26,7 +28,7 @@ and when it lands.
 | [M30](m30.md) | Destination blocking: tiers and logging | M21 | not started |
 | [M31](m31.md) | Blocked-attempt disputes and owner review | M30 M22 | not started |
 | [M32](m32.md) | Opt-in reputation and malware feeds | M30 M31 | not started |
-| [M32.5](m32.5.md) | **Mid-phase adversarial review** | M21–M32 | not started |
+| [M32.9](m32.9.md) | **Mid-phase adversarial review** | M21–M32 | not started |
 | [M33](m33.md) | Deep-link path forwarding | — (before M34) | not started |
 | [M34](m34.md) | Routing rules: conditions, first-match evaluation | M23 M30 M33 | not started |
 | [M35](m35.md) | Gated links: password, signed, one-time, max-click | M34 (ordering) | not started |
@@ -39,7 +41,7 @@ and when it lands.
 | [M42](m42.md) | Webhooks | M30 | not started |
 | [M43](m43.md) | Automation rules | M22 M35 M42 | not started |
 | [M44](m44.md) | API keys: rotation and scope choice | M21 | not started |
-| [M44.5](m44.5.md) | **Pre-release adversarial review** | M21–M44 | not started |
+| [M44.9](m44.9.md) | **Pre-release adversarial review** | M21–M44 | not started |
 | [M45](m45.md) | Deferred findings, documentation pass, 0.2.0 | all | not started |
 
 New milestone files start from [_template.md](_template.md).
@@ -61,6 +63,7 @@ Not repeated in the files below. These hold for all of Phase 2.
 | DDL is additive | Within a minor version. |
 | Permissions | A new permission needs a seed migration that inserts *and* grants it (the 00800 pattern), plus a recorded delegability decision. |
 | `ui` stays stdlib-only | No Node, no CDN, CSP unchanged, no `unsafe-` waivers. |
+| Both themes, from [M24.5](m24.5.md) on | New UI colors use the theme tokens; M24.5's template scan fails raw palette utilities. |
 | Touching the redirect path | Re-run the [docs/slo.md](../../slo.md) k6 measurement on the built image; cached p99 stays under 20ms. |
 | A test that passes first try | Sabotage it, confirm it fails, restore by counter-edit. |
 

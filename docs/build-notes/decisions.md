@@ -37,6 +37,9 @@ file. Append a row when you append an entry.
 | [0.1.0 tagged](#2026-07-31--010-tagged) | Why the tag sits on `main`; docs made true before tagging |
 | [Phase 2 planned](#2026-07-31--phase-2-planned) | The doc split, two review milestones, and the seventeen Phase 2 decisions |
 | [Two development instances](#2026-07-31--two-development-instances-and-the-link-gates-third-failure) | Why demo and test are separate stacks, what guards them, and the link gate's SIGPIPE flake |
+| [Dark mode added as M24.5](#2026-07-31--dark-mode-added-to-the-plan-as-m245) | Post-finalisation scope; why it lands before the UI run; the CSP case for a server-rendered cookie |
+| [Feature intake, and reviews at X.9](#2026-07-31--feature-intake-written-down-and-the-review-slot-moves-to-x9) | planning.md exists; why reviews cap the fractional band at .9 |
+| [docs/ reorganized](#2026-07-31--docs-reorganized-around-its-reader) | Root is for running and using; SECURITY.md surfaced; the two recorded keep-decisions |
 
 ---
 
@@ -2186,3 +2189,84 @@ Unlike golangci-lint it is not pinned: its output is stable across minor
 versions, and its scripts-only surface means a surprise finding is a two-line
 fix rather than a red build across the repository. The gate was sabotaged before
 being trusted — a planted unquoted `rm -rf` fails it, its removal restores it.
+
+## 2026-07-31 — dark mode added to the plan as M24.5
+
+Owner request, made after the plan was finalised. It enters the same way Phase 1
+absorbed M18–M20 after its review: scope changes arrive as numbered milestones
+with their own definitions of done, not as riders on existing ones. `.5` because
+the ordering table's dependency edges reference milestone numbers, so inserting
+is cheap and renumbering is not — M0.5 set the precedent, M32.5 and M44.5
+continued it, and this is the first non-review use of it.
+
+### Why before M25 rather than at the end of the phase
+
+The plan's own ordering rule: substrates before consumers, nothing retrofitted
+into shipped features. Seven later milestones build significant UI — M25, M31,
+M37, M38, M41, M43, M44. Landed first, dark mode is a token set plus a template
+scan those milestones build inside; landed last, it is a restyle of everything
+the phase produced. The scan is what makes the early placement stick: a test
+that fails on raw palette utilities turns "renders in both themes" into a
+property later work cannot merge without, instead of a review item someone has
+to remember.
+
+### Why a cookie rendered by the server, not a client-side toggle
+
+The CSP decides this. Every client-side theme toggle needs a render-blocking
+script in the head that reads storage before first paint, or the page flashes
+the wrong theme; this UI ships no inline scripts and has no waiver to add one.
+A cookie the server reads at render time produces the right document from the
+first byte — the flash is not suppressed, it is unrepresentable. It also works
+logged out, on the login page, and costs no schema: the preference is
+per-browser ergonomics, not account data, so it is deliberately not a `users`
+column. A visitor who has chosen nothing gets `prefers-color-scheme` with no
+cookie at all.
+
+### What deliberately stays light
+
+`/docs`: Swagger UI is a checksum-pinned vendored asset, and carrying a themed
+fork of its stylesheet is a standing maintenance cost with no product in it.
+Email, when M26 exists: client support for dark-mode CSS in mail is chaos, and a
+readable light email is better than a broken dark one. QR codes, when M41
+exists: scanners have opinions about contrast, so codes stay dark-on-light in
+both themes — the theme is chrome, never output.
+
+## 2026-07-31 — feature intake written down, and the review slot moves to X.9
+
+The dark-mode addition earlier today was the first post-finalisation scope
+request, and placing it meant re-deriving conventions scattered across the
+template, the phase-details README, two precedents and the ordering rule. That
+derivation is now [planning.md](planning.md): establish absence, decide the
+phase, place by number, write the five artifacts, verify. workflow.md gained the
+trigger pointing at it. The guide exists because the second request should cost
+reading, not archaeology.
+
+One rule in it is new rather than recorded: **`X.9` is reserved for scheduled
+reviews**, and the two Phase 2 reviews moved — M32.5 → M32.9, M44.5 → M44.9. A
+review's range covers everything numerically below it, and reviews at `.5` left
+that property to luck: scope inserted at M32.6 would have landed *after* the
+mid-phase review it needed to be inside. With reviews capping the band, any
+insertion between `X` and `X+1` — `.1` through `.8` — is inside the nearest
+following review's coverage by construction. M24.5 keeps its number; it now
+reads as what it is, an insertion below the M32.9 cap. Phase 1's M0.5 predates
+the reservation and stays where history put it; earlier entries here that say
+M32.5 and M44.5 were true when written, per this file's rules.
+
+## 2026-07-31 — docs/ reorganized around its reader
+
+One criterion, now stated in [docs/README.md](../README.md): a file sits at
+`docs/` root only if someone *running or using* the product reads it; people
+*changing* the product read the subfolders. Applying it moved exactly one file:
+`build-notes/SECURITY.md` → `docs/SECURITY.md`. A vulnerability-reporting
+policy is for reporters, who should not need to know the repository keeps its
+build notes to find it — and GitHub's security tab discovers `docs/SECURITY.md`
+but not a file two levels down. The *Not in Phase 2* row about a root-level
+`SECURITY.md` pointer stays true: the repository root still carries none, and
+this move was asked for as part of the docs reorganisation, which is what that
+row said to wait for.
+
+Everything else already sat where the criterion puts it. Two root files were
+kept deliberately rather than by default, and the reasons are recorded in the
+map: releasing.md (versions, upgrade and rollback are the operator's contract,
+even though cutting a release is the maintainer's) and slo.md (the performance
+promise is only a promise if its evidence is where a host can read it).

@@ -51,7 +51,7 @@ Stated as claims, because each one is testable and several have tests naming the
 ## What is not defended
 
 The list that matters. Each of these is a decision with a consequence, not an
-oversight, and each is also in [Plan.md](../../Plan.md#known-limitations) with the
+oversight, and each is also in [Plan.md](../Plan.md#known-limitations) with the
 trade-off that produced it.
 
 **DNS rebinding.** Destination validation refuses private address *literals*, but
@@ -105,7 +105,7 @@ above.
 
 - **Terminate TLS in front of it.** LinkCtrl does not. Session cookies carry
   `Secure` in production and are useless over plaintext. See
-  [deployment.md](../deployment.md).
+  [deployment.md](deployment.md).
 - **Keep `:9090` unreachable.**
 - **Set `TRUSTED_PROXIES`** to the proxy's address as LinkCtrl sees it, and only
   that. An over-broad value lets a client forge `X-Forwarded-For` and evade

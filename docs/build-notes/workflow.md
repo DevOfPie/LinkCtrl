@@ -44,6 +44,13 @@ batch — an unreviewed row is not scheduled work.
 A defect that makes the *current* milestone's claim false is in spec, whatever it
 looks like. Judge by the claim, not by the subsystem.
 
+### A feature is requested
+
+Not a defect — defects follow the trigger above. Features follow
+[planning.md](planning.md): establish absence, decide the phase, place by
+number (`X.9` is reserved for scheduled reviews), write the five artifacts,
+verify. The owner decides scope; planning.md decides everything else.
+
 ### Before completing a commit
 
 All must pass. Failure means the commit does not happen.
@@ -121,7 +128,7 @@ phase touched.
 | `CHANGELOG.md` | Entry for what shipped, with its limitations |
 | `docs/*.md` | Configuration, usage, operations, deployment, CLI, releasing — every documented behaviour still behaves that way |
 | `docs/build-notes/decisions.md` | Append-only. Never edit an entry; a later entry corrects an earlier one |
-| `docs/build-notes/SECURITY.md` | New defences, new gaps, new operator responsibilities |
+| `docs/SECURITY.md` | New defences, new gaps, new operator responsibilities |
 | `docs/build-notes/workflow.md` | This file. Rules learned this phase |
 | `docs/adr/` | Investigations that outgrew a decision-log entry |
 

@@ -8,7 +8,7 @@ Scope contract and specification. States **what** is true, not why.
 | Investigations | `docs/adr/` |
 | Dev environment | `docs/build-notes/development.md` |
 | How the work is done | `docs/build-notes/workflow.md` |
-| Security model and reporting | `docs/build-notes/SECURITY.md` |
+| Security model and reporting | `docs/SECURITY.md` |
 | Phase 2 definitions of done | `docs/build-notes/phase-details/` — one file per milestone |
 | Out-of-spec findings | `docs/build-notes/deferred-findings.md` |
 | Current progress | [Build Status](#build-status) |
@@ -475,9 +475,12 @@ reclassified rather than quietly skipped.
 
 ## Phase 2 build plan
 
-27 milestones, M21–M45, continuing Phase 1's numbering — including two adversarial
-reviews numbered `.5`, following Phase 1's M0.5 precedent so they insert without
-renumbering the work either side. One milestone per commit.
+28 milestones, M21–M45, continuing Phase 1's numbering. Fractional numbers
+insert without renumbering the work either side (Phase 1's M0.5 precedent):
+`X.9` is reserved for scheduled reviews, `X.1`–`X.8` for scope added after the
+plan was finalised — so far one, dark mode at M24.5 (2026-07-31). The numbering
+rules are in [planning.md](docs/build-notes/planning.md). One milestone per
+commit.
 
 **Definitions of done live in
 [`docs/build-notes/phase-details/`](docs/build-notes/phase-details/), one file per
@@ -496,6 +499,7 @@ once (M35).
 | [M22](docs/build-notes/phase-details/m22.md) | Notifications: in-app behavior | — | Blocking row's *notification* leg |
 | [M23](docs/build-notes/phase-details/m23.md) | Cross-replica cache invalidation (pub/sub) | — | Known limitation: single-replica invalidation |
 | [M24](docs/build-notes/phase-details/m24.md) | Shared rate limits (credentials and API) | — | Rate limiting shared across replicas |
+| [M24.5](docs/build-notes/phase-details/m24.5.md) | Dark mode: theme tokens, system default, override | — *(before M25)* | — *(owner-added scope, 2026-07-31)* |
 | [M25](docs/build-notes/phase-details/m25.md) | Workspace and organization switcher | — | Groundwork for M27/M28 |
 | [M26](docs/build-notes/phase-details/m26.md) | Mailer: optional SMTP delivery | — | Optional SMTP mailer |
 | [M27](docs/build-notes/phase-details/m27.md) | Organizations: invitations and joining | M21 M22 M25 M26 | Organizations row (invites) |
@@ -504,7 +508,7 @@ once (M35).
 | [M30](docs/build-notes/phase-details/m30.md) | Destination blocking: tiers and logging | M21 | Malicious destination blocking (tiers, logging) |
 | [M31](docs/build-notes/phase-details/m31.md) | Blocked-attempt disputes and owner review | M30 M22 | Disputes with owner review |
 | [M32](docs/build-notes/phase-details/m32.md) | Opt-in reputation and malware feeds | M30 M31 | Third-party feeds |
-| [M32.5](docs/build-notes/phase-details/m32.5.md) | **Mid-phase adversarial review** | M21–M32 | — |
+| [M32.9](docs/build-notes/phase-details/m32.9.md) | **Mid-phase adversarial review** | M21–M32 | — |
 | [M33](docs/build-notes/phase-details/m33.md) | Deep-link path forwarding | — *(before M34)* | Deep-link path forwarding |
 | [M34](docs/build-notes/phase-details/m34.md) | Routing rules: conditions, first-match evaluation | M23 M30 M33 | Rules row · region/city decision |
 | [M35](docs/build-notes/phase-details/m35.md) | Gated links: password, signed, one-time, max-click | M34 *(ordering)* | Password/one-time/max-click/signed |
@@ -517,7 +521,7 @@ once (M35).
 | [M42](docs/build-notes/phase-details/m42.md) | Webhooks | M30 | Other surfaces (webhooks) |
 | [M43](docs/build-notes/phase-details/m43.md) | Automation rules | M22 M35 M42 | Other surfaces (complete) |
 | [M44](docs/build-notes/phase-details/m44.md) | API keys: rotation and scope choice | M21 | Known limitation: key rotation |
-| [M44.5](docs/build-notes/phase-details/m44.5.md) | **Pre-release adversarial review** | M21–M44 | — |
+| [M44.9](docs/build-notes/phase-details/m44.9.md) | **Pre-release adversarial review** | M21–M44 | — |
 | [M45](docs/build-notes/phase-details/m45.md) | Deferred findings, documentation pass, 0.2.0 | all | Phase close · `docs/data-model.md` |
 
 ### Phase 2 decisions

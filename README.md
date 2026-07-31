@@ -101,7 +101,7 @@ answers, not the same ones with a domain name.
 | [docs/slo.md](docs/slo.md) | The redirect latency target, how it was measured, and what the measurement found |
 | [docs/releasing.md](docs/releasing.md) | What a version number means, how a release is cut, how to upgrade and roll back |
 | [CHANGELOG.md](CHANGELOG.md) | What changed, and what each version's limitations are |
-| [docs/build-notes/SECURITY.md](docs/build-notes/SECURITY.md) | The security model, what it does not defend, and how to report a vulnerability |
+| [docs/SECURITY.md](docs/SECURITY.md) | The security model, what it does not defend, and how to report a vulnerability |
 | [docs/build-notes/development.md](docs/build-notes/development.md) | Working on LinkCtrl itself |
 | [docs/build-notes/workflow.md](docs/build-notes/workflow.md) | How work is done here: gates, commit rules, what happens when a defect turns up |
 | [Plan.md](Plan.md) | Scope contract: what is in Phase 1, what is deferred, what is measured |
@@ -173,7 +173,7 @@ along the way, are in
 [docs/build-notes/workflow.md](docs/build-notes/workflow.md).
 
 Security issues do not go in an issue or a pull request — see
-[SECURITY.md](docs/build-notes/SECURITY.md).
+[SECURITY.md](docs/SECURITY.md).
 
 ## License
 
