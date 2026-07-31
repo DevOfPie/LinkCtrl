@@ -32,6 +32,20 @@ else
   git status --short | sed 's/^/        /'
 fi
 
+# Checked here because it is invisible on the machine where it gets broken.
+# Windows has no executable bit, so a script committed from there lands in the
+# index as 100644, every local run still works — bash reads the file regardless —
+# and the first thing to notice is Linux CI refusing to execute it, one step into
+# a job, with "Permission denied". Which is exactly how it happened.
+step "script permissions"
+non_exec=$(git ls-files -s -- 'scripts/*.sh' | awk '$1 != "100755" { print $4 }')
+if [ -z "$non_exec" ]; then
+  ok "every script is executable in the index"
+else
+  bad "not executable in git (fix: git update-index --chmod=+x <path>)"
+  printf '        %s\n' $non_exec
+fi
+
 step "version"
 if [ -z "$VERSION" ]; then
   printf '  skip  no version given; pass one to check the tag and changelog\n'
