@@ -135,7 +135,7 @@ before the code existed; validation is where that gap surfaces.
 | Dependencies landed | a `Depends on` milestone is not `done` | ordering bug → **prompt** |
 | Not already built | code already satisfies a bullet | record in the note, do not rebuild |
 | Discharges real | the Plan.md row or limitation it claims to close is gone or reworded | plan drift → **prompt** |
-| Bullets falsifiable now | a bullet names a file, test or behaviour that no longer exists | **prompt**, carrying the proposed amendment |
+| Bullets falsifiable now | a bullet names a file, test or behaviour that no longer exists | [amend](#amending-a-bullet) — correct a fact, **prompt** on an assertion |
 | Decisions cover it | it needs a choice no `D`-numbered decision made | **prompt** |
 | Deferred overlap | an open row in [deferred-findings.md](deferred-findings.md) would make *this* milestone's claim false | in spec → fix here, close the row pointing at MN |
 
@@ -147,6 +147,42 @@ the exception in the commit message and keep it visible.
 Output is one line: `MN validates`, plus notes; or `MN does not validate:
 <reason>`, plus the prompt. **Validation never edits code**, and mN.md stays
 read for step 3.4.
+
+### Amending a bullet
+
+A milestone file written before the code existed will sometimes name a tree that
+is no longer there. Two kinds of wrongness hide under that, and they do not cost
+the same:
+
+| The bullet is wrong about | Example | Then |
+| --- | --- | --- |
+| **A fact** — a count, a filename, a test name | "across the eight pages" when there are nine | correct it, log the amendment, carry on |
+| **What is being asserted** | which pages must render a control at all | **prompt**, carrying the proposed amendment |
+
+Only the orchestrator amends, at step 1 or at [step 3.4](#3-land) — both, because
+a stale fact surfaces as often while reading the tree against the bullets as
+while validating. A worker never amends: it meets the bullet as written, or it
+reports and stops.
+
+The test is whether anyone could have decided differently. Nine pages is not a
+choice, so prompting about it spends the owner's attention on arithmetic. Which
+pages *should* carry a control is a choice, and correcting it silently would be
+the loop editing its own definition of done.
+
+**Every amendment gets a decisions.md entry**, marked with the milestone under
+way, carrying three things:
+
+- the bullet **as it stood**, quoted
+- the bullet **as amended**, quoted
+- the **tree fact** that forced it — what was looked at, and what it said
+
+All three, because an entry recording only the new reading is indistinguishable
+from a bullet that always read that way. The amendment is the thing being
+recorded, not the conclusion; without the before, a reader cannot see that the
+definition of done moved, and the drift is invisible in exactly the file that
+exists to make it visible.
+
+Plan drift is allowed here. Silent plan drift is not.
 
 ## 2. Build
 
@@ -192,6 +228,12 @@ worker say it was done*. It is *does the tree satisfy every bullet*.
 
 Rejection spawns a new worker from step 2. Re-running `make check` yourself is a
 gate, not a courtesy.
+
+A bullet the tree contradicts on a *fact* is not a rejection — it is an
+[amendment](#amending-a-bullet), and it happens here as readily as at step 1,
+because reading the tree against the bullets is what surfaces one. Amend, log
+it, and judge the work against the bullet as amended. A bullet the tree
+contradicts on what it *asserts* is still a prompt, and the milestone waits.
 
 **Orchestrator — 3.4 to 3.9, on acceptance:**
 

@@ -55,6 +55,7 @@ file. Append a row when you append an entry.
 | [M24.5 reopened: applied, not declared](#2026-07-31--m245-applying-the-theme-rather-than-declaring-it) | Why the tokens are unlayered rather than all in `@layer base`; a test that had to be shown red against the shipped stylesheet; resolving the cascade live instead of counting attributes; where the control went and why two sites is not two controls |
 | [M25, which workspace a request is in](#2026-07-31--m25-where-a-request-decides-which-workspace-it-is-in) | Three columns for three questions; precedence as one `ORDER BY`; why the switch needs a session; why the switcher draws nothing with one membership |
 | [M26, a mailer that is genuinely optional](#2026-07-31--m26-a-mailer-that-is-genuinely-optional) | Off-by-default as a nil interface rather than a flag; why a relay being down is not a boot failure; inert by construction in the renderer; attempts counted at claim time; plain text as the whole hostile-input answer |
+| [Plan drift is allowed; silent plan drift is not](#2026-07-31--plan-drift-is-allowed-silent-plan-drift-is-not) | Facts a bullet gets wrong versus what a bullet asserts; why one is corrected and the other prompts; the three things an amendment entry carries; why step 3.4 needed the rule as much as step 1 |
 
 ---
 
@@ -3625,3 +3626,55 @@ Wiring it here is what gives the degradation claim something real to be tested
 against. It also completes D5's promise on its own terms — keep-forever is only
 safe if the growth it permits is visible, and an owner who does not open the
 dashboard for a month was not, until now, being told anything.
+
+---
+
+## 2026-07-31 — Plan drift is allowed; silent plan drift is not
+
+Prompted by the owner, after M24.5 landed with its definition of done quietly
+edited. No milestone number: this changes how the loop runs, not the product.
+
+### What happened
+
+`m24.5.md` said a template test asserted the appearance control "across the
+eight pages". There are nine. At step 3.4 the orchestrator corrected the numeral
+in the milestone file, mentioned it in the commit message, and moved on. The
+decision entry written for that milestone states the reading the test encodes
+and never says the file was amended at all.
+
+Read back a month from now, nothing distinguishes that from a bullet that always
+said nine. The one file that exists to make the reasoning visible recorded the
+conclusion and dropped the change — which is the failure mode, not the numeral.
+
+### Two kinds of wrong, and they do not cost the same
+
+A milestone file is written before the code exists, so some of it will be wrong
+by the time it is built. The distinction that matters is whether anyone could
+have decided otherwise:
+
+- **A fact** — a count, a filename, a renamed test. Nine pages is not an
+  opinion. Prompting about it spends the owner's attention on arithmetic and
+  stalls a run that has nothing to decide.
+- **What is asserted** — which pages must render a control, whether a path is in
+  scope. That is a choice, and a loop that edits it silently is editing its own
+  definition of done.
+
+So: correct the first and log it, prompt on the second. Step 1 previously said
+prompt for both, which is why the loop did neither — a rule that is wrong in the
+cheap direction gets quietly skipped rather than followed, and the skipping is
+invisible.
+
+Step 3.4 said nothing at all, which is where this actually happened. A stale
+fact surfaces while reading the tree against the bullets at least as often as
+while validating, because that is the first time anyone counts the pages. The
+rule now lives at both steps; only the orchestrator may amend, and a worker
+still meets the bullet as written or reports and stops.
+
+### An amendment entry carries three things
+
+The bullet as it stood, the bullet as amended, and the tree fact that forced it.
+
+All three, because the first is what makes it an amendment. An entry with only
+the new reading is a description of the current file, and a reader cannot tell
+whether the definition of done moved or was always that. The before is the
+evidence; the after is just the file.
