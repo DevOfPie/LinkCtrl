@@ -38,7 +38,8 @@ append-only and records which.
 | [phase-details/](phase-details/) | One definition of done per milestone, plus the status table | Building one milestone |
 | [decisions.md](decisions.md) | Why. Append-only; a later entry corrects an earlier one, nothing is edited | Wondering why something is the way it is |
 | [deferred-findings.md](deferred-findings.md) | Defects found at the wrong moment, parked rather than fixed | A defect turns up out of scope |
-| [upcoming-decisions.md](upcoming-decisions.md) | Questions the build has not reached yet, unanswered | Answering ahead of the loop |
+| [upcoming-decisions.md](upcoming-decisions.md) | Questions with no answer yet — one section the loop will stall on, one it will not | Answering ahead of the loop, or at leisure |
+| [workflow-changes.md](workflow-changes.md) | Changes to the process itself: proposed, and made | Asking what the contract used to be, or what is queued to change |
 | [development.md](development.md) | Toolchain and local setup | Running it yourself |
 | [doc-cost.md](doc-cost.md) | What the always-read documents cost to read, measured | Adding to them |
 
@@ -94,6 +95,10 @@ participants, so the artifacts are the point:
 - **Status lives in exactly one place** — the table in
   [phase-details/](phase-details/README.md). Rationale never appears in the plan
   and status never appears in the decision log.
+- **Nothing leaves a tracker silently.** A row is re-homed into another tracker,
+  which names where it went, or its removal is logged with a reason. Deciding
+  something no longer matters is itself a decision, and an unrecorded one comes
+  back later as a fresh idea with its reasoning lost.
 - **The gates are runnable.** `make check`, `make test-integration`,
   `make check-links`, `make release-check`. Nothing lands without them, and they
   do not depend on anybody's judgement.

@@ -53,7 +53,7 @@ Unanswered dispute → that row stays in the queue. The others still route.
 | --- | --- | --- |
 | `issue` | [deferred-findings.md](../../docs/build-notes/deferred-findings.md) | One row: what, where as `file:line`, evidence it is real, suspected severity, **Found in** = the milestone the queue row carries. Evidence means verified against the tree — an unverified note becoming a findings row is exactly the laundering this queue exists to prevent. Unverifiable → prompt, do not weaken the column. |
 | `feature` | [planning.md](../../docs/build-notes/planning.md) | Its whole path — establish absence, decide the phase, number, five artifacts, verify. The owner decides *whether* and prompts happen before anything is written. Several feature rows → prompt with all of them before writing any, so scope is judged together. |
-| `task` | Its own commit | Not a milestone, so per the scope gate it commits alone, when complete. Anything non-obvious gets a decisions.md entry with **no** milestone number, naming what prompted it. |
+| `task` | Its own commit, or [workflow-changes.md](../../docs/build-notes/workflow-changes.md) | Not a milestone, so per the scope gate it commits alone, when complete. **Made now** → commit, plus a *Made* row so it is findable without grepping git log. **Not made now** → a *Proposed* row, because a process change waiting must be as visible as a defect waiting. Anything non-obvious gets a decisions.md entry with **no** milestone number, naming what prompted it. |
 
 A `blocking?` flag is *yours* to judge, here and at no earlier point. Blocking
 means the milestone in flight would build something the note makes wrong. If it
@@ -64,9 +64,20 @@ command. If it is not: drop the flag and route normally, and say that you did.
 
 - Remove every routed row from `.queue.md`. Rows left behind are only the ones
   carrying an unanswered prompt, and the report names each and why.
+- **A row leaves the queue only into a tracked file.** Every removal names its
+  destination — a findings row, a Plan.md row and milestone file, a
+  workflow-changes row, or a decisions.md entry recording that it was dropped and
+  why. "Handled in conversation" is not a destination, and neither is a commit
+  nobody can find without knowing the search term. This is workflow.md's
+  no-silent-removal rule at the one place rows are removed in bulk.
+- Anything decided while routing goes to decisions.md, or the question goes to
+  upcoming-decisions.md. Routing forces judgement calls — which type a row is,
+  which phase it belongs to, whether it duplicates something — and those are
+  decisions whether or not they felt like it at the time.
 - `make check-links` if anything with links was written.
 - Report: what routed where, what was closed as already built or scheduled, what
   is waiting on a prompt.
 
 The queue is untracked, so a row that is neither routed nor reported is simply
-lost. Draining fully is the point of the command.
+lost. Draining fully is the point of the command; draining *into somewhere* is
+what makes the draining worth anything.

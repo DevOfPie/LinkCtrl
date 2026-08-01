@@ -77,7 +77,7 @@ found:
 | --- | --- | --- |
 | **issue** | a change to existing function or design | [deferred-findings.md](deferred-findings.md), one row |
 | **feature** | an addition of new function or design | [planning.md](planning.md)'s five artifacts |
-| **task** | a change to workflow or process, not to the product | its own commit, per the scope gate |
+| **task** | a change to workflow or process, not to the product | its own commit, per the scope gate — or a **Proposed** row in [workflow-changes.md](workflow-changes.md) when it is not being made now, so a process change waiting is as visible as a defect waiting |
 
 `.queue.md` is untracked and transient, for the reason `.current-task.md` is:
 appending to it mid-milestone must not dirty the tree that `make demo-update`
@@ -222,6 +222,37 @@ bytes.
 
 **Plan.md states what is true. decisions.md states why.** Rationale in the plan
 and status in the decision log are both wrong.
+
+**Nothing leaves a tracker silently.** A row removed from any tracked list —
+Plan.md's scope and *Not in Phase N* tables, [phase-details/](phase-details/)'s
+status table, [deferred-findings.md](deferred-findings.md),
+[upcoming-decisions.md](upcoming-decisions.md),
+[workflow-changes.md](workflow-changes.md) — leaves only one of two ways:
+
+1. **Re-homed.** It appears in another tracker, and the row it left says which.
+   Moving is the normal case: a finding becomes a milestone, a question becomes a
+   decision, a queue row becomes a Plan.md row.
+2. **Logged.** Its removal is an entry in decisions.md naming what was dropped
+   and why.
+
+Deciding an item no longer matters *is a decision*, and it is the one kind this
+project keeps losing: nobody writes down what they stopped caring about, so it
+returns later as a fresh idea with its reasoning gone. A tracker that can be
+quietly emptied tracks nothing.
+
+`.queue.md` is the deliberate exception, and only because draining it is exactly
+this rule applied — every row leaves it by being routed somewhere durable, and
+[`/process-queue`](../../.claude/commands/process-queue.md) will not let a row
+go anywhere else.
+
+**A decision made in conversation is written down before it is acted on.**
+Answers given in prose evaporate: the reasoning is gone by the next session and
+the conclusion gets re-derived, differently. If a milestone forces it, the
+answer goes to decisions.md with its `D` number. If nothing forces it yet, the
+*question* goes to [upcoming-decisions.md](upcoming-decisions.md) — including
+when it has already been acted on, in which case the entry names the behaviour
+the tree currently has. This applies to whoever is deciding, and most of all to
+an actor deciding on the owner's behalf because the loop would otherwise stall.
 
 **Stop and ask** for: destructive operations, scope changes, anything the owner
 would reasonably want to decide. Proceed without asking for reversible work that

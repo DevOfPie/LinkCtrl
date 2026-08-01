@@ -61,6 +61,7 @@ file. Append a row when you append an entry.
 | [Documents nobody was asked about](#2026-07-31--the-gate-that-never-asked-about-readme) | Why four milestones drifted; why the gate was widened instead of M21 reopened; truing a baseline before installing a gate; two audit overclaims found on the way |
 | [M26.5, settling the header before four milestones fill it](#2026-07-31--m265-the-header-before-four-milestones-compete-for-it) | F6 and F7 as one milestone; why identity-scoped and organization-scoped controls separate; details/summary and what it costs; what is deliberately left out |
 | [M26.6, two retry loops that multiply](#2026-07-31--m266-a-stalled-redis-and-two-retry-loops-that-multiply) | Correcting F2's attribution; why a total budget beats a per-attempt one; why it lands before the next SLO measurement; the false-negative trade a lower timeout buys |
+| [Nothing leaves a tracker silently](#2026-07-31--nothing-leaves-a-tracker-silently) | Decisions dying in prose; a tracker for process changes; the two ways a row may leave a list; why upcoming-decisions gained a section nothing forces |
 
 ---
 
@@ -4013,3 +4014,70 @@ answer. The shipped default is a judgement, and the milestone is required to
 state which stall shapes it actually tested: a proxy that accepts and then never
 speaks is one shape, and a server that completes the handshake and hangs
 mid-command is another that a fix tuned to the first may not bound.
+
+---
+
+## 2026-07-31 — Nothing leaves a tracker silently
+
+Prompted by the owner, after being asked twice in a row where something had gone
+and twice finding the honest answer was "in prose, and nowhere else". No
+milestone number: this changes how the project is run.
+
+### The failure
+
+Three separate versions of one problem turned up in a single session.
+
+Process changes had no tracker. A product defect gets a findings row and a
+product feature gets a Plan.md row, but a change to the operating contract got a
+commit and nothing else — so once `.queue.md` was drained, the only record that
+a change had been *requested* was a commit message in a log nobody greps without
+already knowing the answer.
+
+Deferred scope was recorded where it was decided rather than where it would be
+looked for. Six items pushed out of this session's milestones were written into
+"deliberately not in this milestone" bullets across six files, when the rule in
+planning.md is that future-phase work is parked in *Not in Phase N* — a list one
+place, not six.
+
+And decisions taken to keep the loop moving were never written down at all. The
+sharpest example: whether README describes the released product or the branch it
+sits on. That was settled by the orchestrator on its own, acted on, wired into a
+commit gate — and stated nowhere. It is now an entry in upcoming-decisions with
+the current behaviour named, which is what it should have been before the gate
+was written.
+
+### The rule
+
+A row leaves a tracker two ways: re-homed into another tracker that names where
+it came from, or removed with the removal logged in decisions.md.
+
+The point is the second clause. Moving things was never really the problem —
+findings become milestones and questions become decisions, and both leave a
+trail because the destination is a file. The problem is deletion, which leaves
+nothing at all and is indistinguishable from tidying. Deciding an item no longer
+matters is a decision, and the unrecorded ones come back later as fresh ideas
+with their reasoning gone.
+
+`.queue.md` is the exception, and only in the sense that draining it is this rule
+being applied: every row leaves by being routed somewhere durable, and
+`/process-queue` now refuses any other destination — "handled in conversation" is
+not one, and neither is a commit nobody can find without knowing the term to
+search for.
+
+### Two sections in upcoming-decisions, split by what forces an answer
+
+The file was built for `/preview-decisions`, which reads ahead of the loop, so
+every entry assumed a milestone waiting on it. That left nowhere for the
+questions this session actually produced: a convention adopted by judgement that
+nobody ratified, and a piece of unasked-for work that shipped and could still be
+struck. Neither blocks anything, so neither belonged in a file whose entries stall
+a build — and having nowhere to put them is exactly why they stayed in prose.
+
+So there is now a section nothing forces, meant to be read at leisure. The
+looseness is the feature: a question nobody is waiting on still beats a question
+nobody wrote down.
+
+One consequence is worth stating because it is uncomfortable. Both seed entries
+record that the default, if nobody answers, is the behaviour already built —
+unasked-for work ships unless somebody objects. Writing that down does not fix
+it. It does mean the next person can see it happened.

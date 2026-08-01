@@ -14,6 +14,13 @@ Issues that make the *current* milestone's own claim false are in spec by
 definition and get fixed immediately, whatever subsystem they turn up in. The
 test is the claim, not the file.
 
+**A row never just disappears.** It moves to *Closed* naming what closed it, or
+it acquires a milestone number in [Plan.md](../../Plan.md), or its removal is an
+entry in [decisions.md](decisions.md) saying it was dropped and why. Deciding a
+finding does not matter is a decision, and one made silently is indistinguishable
+from a row somebody deleted by accident. This is workflow.md's standing rule; it
+is repeated here because this is the file most tempting to tidy.
+
 The process around this — when to defer, what counts as work, what has to pass
 before a phase PR — is in [workflow.md](workflow.md).
 
