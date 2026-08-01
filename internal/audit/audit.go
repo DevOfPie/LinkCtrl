@@ -65,6 +65,31 @@ const (
 	ActionInvitationCreated  = "invitation.created"
 	ActionInvitationRevoked  = "invitation.revoked"
 	ActionInvitationRedeemed = "invitation.redeemed"
+
+	// Team management (M28). The membership actions are the counterpart of the
+	// invitation ones: an invitation records how somebody was offered a place,
+	// these record what happened to it afterwards, and reading the two together
+	// is how "who gave this person admin" is answered months later.
+	//
+	// member.added is the workspace-scoped grant specifically. Joining by
+	// redeeming an invitation is already invitation.redeemed, and recording it
+	// twice would make one join look like two.
+	ActionMemberAdded       = "member.added"
+	ActionMemberRemoved     = "member.removed"
+	ActionMemberRoleChanged = "member.role_changed"
+
+	// Tenancy (M28). Deleting a workspace cascades every link in it, so its
+	// record is the only trace left of what was there — the metadata carries the
+	// name, because the row it names is gone.
+	ActionWorkspaceCreated = "workspace.created"
+	ActionWorkspaceRenamed = "workspace.renamed"
+	ActionWorkspaceDeleted = "workspace.deleted"
+
+	// Organization creation. There is no organization.deleted here because
+	// nothing deletes one: `org.delete` is seeded and held by owners, but no
+	// milestone has built the operation it guards, and an action constant with
+	// no writer is a vocabulary entry an operator would search for in vain.
+	ActionOrganizationCreated = "organization.created"
 )
 
 // Event is one thing that happened.

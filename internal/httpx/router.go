@@ -12,6 +12,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
+	"github.com/DevOfPie/LinkCtrl/internal/team"
 )
 
 // Deps are the collaborators the router needs. An explicit struct so adding a
@@ -37,7 +38,11 @@ type Deps struct {
 	// and the dashboard page unregistered, which is what the parity test
 	// against openapi.yaml compares itself to.
 	Invites *invite.Service
-	Web     *Web
+	// Team serves member management, workspace lifecycle and organization
+	// creation. Nil leaves its endpoints and both dashboard pages unregistered,
+	// which is what the parity test against openapi.yaml compares itself to.
+	Team *team.Service
+	Web  *Web
 	// Metrics is optional. Nil disables instrumentation entirely rather than
 	// registering into a global registry, so two servers in one test process
 	// cannot collide.
@@ -182,6 +187,26 @@ func NewRouter(d Deps) http.Handler {
 			RateLimit(d.Limits.Login, "login", d.Metrics, nil)(http.HandlerFunc(inv.Redeem)))
 	}
 
+	if d.Team != nil {
+		tm := &TeamAPI{Team: d.Team}
+		for pattern, h := range map[string]http.HandlerFunc{
+			"GET " + APIPrefix + "/members":         tm.ListMembers,
+			"POST " + APIPrefix + "/members":        tm.GrantMember,
+			"PATCH " + APIPrefix + "/members/{id}":  tm.ChangeMemberRole,
+			"DELETE " + APIPrefix + "/members/{id}": tm.RemoveMember,
+			// Creating and reshaping workspaces sits under the same prefix the
+			// switcher already owns, because it is the same object. The
+			// switcher's own routes are unchanged; nothing here is a method or
+			// path either of them already claims.
+			"POST " + APIPrefix + "/workspaces":        tm.CreateWorkspace,
+			"PATCH " + APIPrefix + "/workspaces/{id}":  tm.RenameWorkspace,
+			"DELETE " + APIPrefix + "/workspaces/{id}": tm.DeleteWorkspace,
+			"POST " + APIPrefix + "/organizations":     tm.CreateOrganization,
+		} {
+			app.Handle(pattern, RequireAuth(h))
+		}
+	}
+
 	if d.Notify != nil {
 		n := &NotificationAPI{Notify: d.Notify}
 		for pattern, h := range map[string]http.HandlerFunc{
@@ -268,6 +293,22 @@ func NewRouter(d Deps) http.Handler {
 				"GET /invites":              web.InvitesPage,
 				"POST /invites":             web.InviteCreate,
 				"POST /invites/{id}/revoke": web.InviteRevoke,
+			} {
+				app.Handle(pattern, web.RequireWebAuth(fn))
+			}
+		}
+
+		if web.Team != nil {
+			for pattern, fn := range map[string]http.HandlerFunc{
+				"GET /members":                 web.MembersPage,
+				"POST /members":                web.MemberGrant,
+				"POST /members/{id}/role":      web.MemberRole,
+				"POST /members/{id}/remove":    web.MemberRemove,
+				"GET /workspaces":              web.WorkspacesPage,
+				"POST /workspaces":             web.WorkspaceCreate,
+				"POST /workspaces/{id}/rename": web.WorkspaceRename,
+				"POST /workspaces/{id}/delete": web.WorkspaceDelete,
+				"POST /organizations":          web.OrganizationCreate,
 			} {
 				app.Handle(pattern, web.RequireWebAuth(fn))
 			}
@@ -474,6 +515,7 @@ var dashboardPatterns = []string{
 	"/links", "/links/", "/keys", "/keys/", "/account", "/account/",
 	"/notifications", "/notifications/", "/theme", "/workspace/",
 	"/invites", "/invites/", "/invite/",
+	"/members", "/members/", "/workspaces", "/workspaces/", "/organizations",
 }
 
 // infrastructurePatterns are the routes registered outside dashboardPatterns:

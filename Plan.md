@@ -484,12 +484,12 @@ reclassified rather than quietly skipped.
 
 ## Phase 2 build plan
 
-31 milestones, M21–M45, continuing Phase 1's numbering. Fractional numbers
+32 milestones, M21–M45, continuing Phase 1's numbering. Fractional numbers
 insert without renumbering the work either side (Phase 1's M0.5 precedent):
 `X.9` is reserved for scheduled reviews, `X.1`–`X.8` for scope added after the
-plan was finalised — so far four, all 2026-07-31: dark mode at M24.5,
-the dashboard header at M26.5, the Redis stall bound at M26.6 and bot blocking
-at M32.5. The numbering
+plan was finalised — so far five: dark mode at M24.5, the dashboard header at
+M26.5, the Redis stall bound at M26.6 and bot blocking at M32.5, all
+2026-07-31; then organization deletion at M28.5 on 2026-08-01. The numbering
 rules are in [planning.md](docs/build-notes/planning.md). One milestone per
 commit.
 
@@ -517,6 +517,7 @@ once (M35).
 | [M26.6](docs/build-notes/phase-details/m26.6.md) | Bounded Redis failure, when the server never answers | — *(before M32.5, M34, M40)* | — *(owner-approved finding F2, 2026-07-31)* |
 | [M27](docs/build-notes/phase-details/m27.md) | Organizations: invitations and joining | M21 M22 M25 M26 | Organizations row (invites) |
 | [M28](docs/build-notes/phase-details/m28.md) | Team management, workspaces, org creation | M27 | Organizations row (complete) · workspace and org creation |
+| [M28.5](docs/build-notes/phase-details/m28.5.md) | Organization deletion and tenancy teardown | M28 | — *(owner-added scope, 2026-08-01)* |
 | [M29](docs/build-notes/phase-details/m29.md) | Self-serve signup, switchable at runtime | M26 M27 | Self-serve signup |
 | [M30](docs/build-notes/phase-details/m30.md) | Destination blocking: tiers and logging | M21 | Malicious destination blocking (tiers, logging) |
 | [M31](docs/build-notes/phase-details/m31.md) | Blocked-attempt disputes and owner review | M30 M22 | Disputes with owner review |
@@ -589,6 +590,9 @@ The *why* for each is in decisions.md.
 | D30 | Rank management bound | 2026-07-31 | **Strictly below your own rank, with owners the single exception.** An admin manages editors and viewers and never another admin; only an owner manages admins; an owner may re-role or remove another owner, bounded by the existing last-owner refusal. The exemption is where the escalation argument stops applying — an owner already holds everything — and the uniform reading would make a departed co-owner removable only by SQL. Accepted costs: any owner can remove any other owner, and a single-owner instance whose owner is away cannot manage its admins at all. The spine of [M28](docs/build-notes/phase-details/m28.md)'s rank table. |
 | D31 | Workspace-scoped membership | 2026-07-31 | **Union: it adds access, never narrows it.** Permissions are the union of every matching membership and the effective role is the lowest rank among them — which is what `GetUserPermissions` and `GetUserRoleInWorkspace` already compute, so the RBAC evaluator is not touched in the milestone that also lands members, workspaces and org creation. Cost: *org admin but viewer in one workspace* is unexpressible, so M28's control must say it adds access and never imply it restricts. |
 | D32 | Workspace deletion | 2026-07-31 | **Refused while the workspace holds any link**, archived ones included; the links are deleted first. Everything under a workspace cascades on delete (`00300_links.sql`) and Phase 1 has no trash/restore, so the guard goes in front. Archiving is not an escape hatch: an archived link keeps its alias and click history. Named cost, flagged by the owner for later: with no bulk delete and no cross-workspace move, links go one at a time. |
+| D33 | `orgs.create` delegability | 2026-08-01 | **Delegable**, matching neither limb of D18. It discloses no identity tied to network data, and it cannot widen a key's reach: a key's permissions are its scopes intersected with its owner's role on every request, so an organization made through a key leaves that key holding exactly what it was minted with. `NonDelegableScopes` therefore does not list it, and a test asserts both the absence and a live bearer request. |
+| D34 | An organization's last workspace | 2026-08-01 | **Cannot be deleted.** Every member resolves into one of an organization's workspaces to act at all, and `ResolveWorkspaceForUser` reports finding none as a broken instance — so deleting the last one would leave every member unable to authenticate, unrecoverably without SQL. The same class of guard as the last-owner refusal, and a consequence of a tree fact rather than a preference. |
+| D35 | Team surfaces take no top-level nav slot | 2026-08-01 | Members, Invitations and Workspaces all hang off the identity menu. [M26.5](docs/build-notes/phase-details/m26.5.md) cut the nav to three destinations and asked the next milestone wanting a slot to argue for one; M28's argument is that all three are visited when something *changes* rather than while work is done, and that promoting one would mean choosing between three faces of one subject. `TestTopLevelNavHoldsThreeDestinations` still asserts the count exactly. |
 
 ### Not in Phase 2
 
@@ -652,7 +656,10 @@ Deliberately accepted in Phase 1.
 | Behind a proxy, limits need `TRUSTED_PROXIES` | Otherwise every request carries the proxy's address and all traffic shares one bucket. This is a correctness requirement once a limit is on, not only an analytics one. |
 | `links.click_count` is approximate | Written with the click rows, but an unclean shutdown loses at most one batch of both. |
 | `api_keys.last_used_at` is approximate | Buffered and flushed on a 30s cadence, so an unclean shutdown loses the most recent timestamps. Authentication must not cost a write. |
-| Nothing manages a member once they have joined | [M27](docs/build-notes/phase-details/m27.md) issues, lists and revokes invitations; an invitation can be revoked only until it is accepted. Changing somebody's role or removing them from an organization is [M28](docs/build-notes/phase-details/m28.md). Until then the only correction available is at the database. |
+| A member cannot manage their own rank, or a peer's | [M28](docs/build-notes/phase-details/m28.md) bounds management to ranks strictly below your own (D30), so an admin cannot demote themselves and cannot touch another admin — both need an owner. On a single-owner instance whose owner is unavailable, the admins cannot be changed at all, and there is no self-service way to leave an organization. |
+| A workspace-scoped role cannot narrow anybody | Permissions are the union of every matching membership (D31), so *org admin, viewer in one workspace* is unexpressible. Granting a role in a workspace only ever adds to what somebody already holds. |
+| Emptying a workspace is one link at a time | D32 refuses to delete a workspace holding any link, archived ones included, and Phase 2 has neither bulk delete nor a cross-workspace move. Flagged by the owner as worth revisiting; bulk delete, a link move and archive-then-cascade are three separate features with three separate arguments. |
+| Nothing deletes an organization | `org.delete` is seeded and held by owners, but no milestone has built the operation behind it, so there is no `organization.deleted` audit action either. |
 | An invitation cannot be re-sent, only re-issued | Only the token's hash is stored, so the link exists once, in the response that created it. Losing it means revoking the invitation and issuing another — the same trade an API key makes, for the same reason. |
 | API keys cannot manage API keys | `apikeys.*` is not delegable, so minting and revoking need a session. Rotation is scheduled as self-rotation-only: [M44](docs/build-notes/phase-details/m44.md). |
 | Analytics drops under overload | Bounded queue; drops counted and alertable. Backpressure would slow redirects. |

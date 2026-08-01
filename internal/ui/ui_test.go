@@ -26,9 +26,13 @@ func owner() *identityStub {
 		Email: "o@example.com", Name: "Owner", Role: "owner",
 		perms: map[string]bool{
 			"links.create": true, "links.update": true, "links.delete": true,
-			// The nav's invitation entry is drawn from the shell on every page,
-			// so an owner holds it here and every page exercises that branch.
-			"members.write": true,
+			// The identity menu's three administrative entries are drawn from
+			// the shell on every page, so an owner holds all three permissions
+			// here and every page exercises those branches.
+			"members.read": true, "members.write": true, "workspace.write": true,
+			// Held by the owner role and by nothing else (D16), which is what
+			// draws the organization form on the workspaces page.
+			"orgs.create": true,
 		},
 	}
 }
@@ -222,6 +226,71 @@ func pageData(t *testing.T) map[string]any {
 			"Form":        map[string]string{"Email": "", "Role": "editor"},
 			"FieldErrors": map[string]string{},
 			"Notice":      "", "Error": "", "MailConfigured": false,
+		},
+		// Every branch the member list has, in one render: a row the viewer may
+		// manage, their own row (never manageable, which is what "an admin
+		// cannot demote themselves" looks like on the page), a row above them,
+		// and a workspace-scoped membership — the one whose "reaches" column
+		// says something other than "every workspace".
+		"members": map[string]any{
+			"Title": "Members", "Nav": "members", "Identity": owner(),
+			"CanWrite": true,
+			"Members": []map[string]any{
+				{
+					"ID": "0198c9c5-0000-7000-8000-00000000000b", "UserID": "0198c9c5-0000-7000-8000-00000000001b",
+					"Email": "o@example.com", "Name": "Owner", "Role": "owner", "RoleRank": 10,
+					"WorkspaceID": nil, "WorkspaceName": "",
+					"Manageable": true, "IsSelf": true, "CreatedAt": now,
+				},
+				{
+					"ID": "0198c9c5-0000-7000-8000-00000000000c", "UserID": "0198c9c5-0000-7000-8000-00000000001c",
+					"Email": "admin@example.com", "Name": "", "Role": "admin", "RoleRank": 20,
+					"WorkspaceID": nil, "WorkspaceName": "",
+					"Manageable": true, "IsSelf": false, "CreatedAt": now,
+				},
+				{
+					"ID": "0198c9c5-0000-7000-8000-00000000000d", "UserID": "0198c9c5-0000-7000-8000-00000000001c",
+					"Email": "admin@example.com", "Name": "", "Role": "editor", "RoleRank": 30,
+					"WorkspaceID": "0198c9c5-0000-7000-8000-000000000011", "WorkspaceName": "Marketing",
+					"Manageable": true, "IsSelf": false, "CreatedAt": now,
+				},
+				{
+					"ID": "0198c9c5-0000-7000-8000-00000000000e", "UserID": "0198c9c5-0000-7000-8000-00000000001e",
+					"Email": "untouchable@example.com", "Name": "", "Role": "owner", "RoleRank": 10,
+					"WorkspaceID": nil, "WorkspaceName": "",
+					"Manageable": false, "IsSelf": false, "CreatedAt": now,
+				},
+			},
+			"RoleOptions": []map[string]any{
+				{"Slug": "admin", "Name": "Admin", "Description": "Manage links and members.", "Rank": 20},
+				{"Slug": "editor", "Name": "Editor", "Description": "Create and edit links.", "Rank": 30},
+			},
+			"Workspaces": []map[string]any{
+				{"ID": "0198c9c5-0000-7000-8000-000000000010", "Name": "Default", "Slug": "default",
+					"Current": true, "Manageable": true},
+			},
+			"GrantTargets": []map[string]any{
+				{"UserID": "0198c9c5-0000-7000-8000-00000000001c", "Email": "admin@example.com", "Role": "admin"},
+			},
+			"FieldErrors": map[string]string{},
+			"Notice":      "", "Error": "",
+		},
+		// A workspace the reader may manage and one they may not, plus the
+		// organization form — which only an account holding orgs.create ever
+		// sees, and which this fixture therefore turns on.
+		"workspaces": map[string]any{
+			"Title": "Workspaces", "Nav": "workspaces", "Identity": owner(),
+			"CanWrite": true, "CanCreateOrganization": true,
+			"Workspaces": []map[string]any{
+				{"ID": "0198c9c5-0000-7000-8000-000000000010", "Name": "Default", "Slug": "default",
+					"Current": true, "Manageable": true},
+				{"ID": "0198c9c5-0000-7000-8000-000000000011", "Name": "Marketing", "Slug": "marketing",
+					"Current": false, "Manageable": false},
+			},
+			"Form":           map[string]string{"Name": "", "OrganizationName": ""},
+			"FieldErrors":    map[string]string{"name": "a workspace in this organization already uses that name"},
+			"OrgFieldErrors": map[string]string{},
+			"Notice":         "", "Error": "",
 		},
 		// The public half. No identity at all, which is the state it is designed
 		// for: whoever opens it may have no account yet.

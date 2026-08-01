@@ -11,6 +11,64 @@ import (
 	"github.com/google/uuid"
 )
 
+const deleteWorkspace = `-- name: DeleteWorkspace :execrows
+DELETE FROM workspaces
+ WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL
+`
+
+type DeleteWorkspaceParams struct {
+	ID             uuid.UUID
+	OrganizationID uuid.UUID
+}
+
+// A real delete, not a soft one, and that is the decision D32 guards.
+//
+// `links`, `tags` and `folders` cascade from here (00300_links.sql). Soft
+// deleting instead would leave those rows behind and their aliases still
+// serving redirects out of a workspace the dashboard says is gone, which is a
+// worse outcome than the cascade — so the guard goes in front of the delete and
+// the delete is honest about what it does.
+func (q *Queries) DeleteWorkspace(ctx context.Context, arg DeleteWorkspaceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteWorkspace, arg.ID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getWorkspaceInOrganization = `-- name: GetWorkspaceInOrganization :one
+SELECT id, organization_id, name, slug, analytics_retention_days, created_at, updated_at, deleted_at FROM workspaces
+WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL
+FOR UPDATE
+`
+
+type GetWorkspaceInOrganizationParams struct {
+	ID             uuid.UUID
+	OrganizationID uuid.UUID
+}
+
+// One workspace, scoped by organization so an id belonging to another tenant is
+// indistinguishable from one that does not exist.
+//
+// FOR UPDATE: both callers — rename and delete — are about to write this row or
+// the rows that cascade from it, and delete reads a link count that must not
+// change underneath the decision.
+func (q *Queries) GetWorkspaceInOrganization(ctx context.Context, arg GetWorkspaceInOrganizationParams) (Workspace, error) {
+	row := q.db.QueryRow(ctx, getWorkspaceInOrganization, arg.ID, arg.OrganizationID)
+	var i Workspace
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Slug,
+		&i.AnalyticsRetentionDays,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const listWorkspacesForUser = `-- name: ListWorkspacesForUser :many
 
 SELECT DISTINCT
@@ -81,6 +139,47 @@ func (q *Queries) ListWorkspacesForUser(ctx context.Context, userID uuid.UUID) (
 		return nil, err
 	}
 	return items, nil
+}
+
+const renameWorkspace = `-- name: RenameWorkspace :one
+UPDATE workspaces
+   SET name = $3,
+       slug = $4,
+       updated_at = now()
+ WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL
+RETURNING id, organization_id, name, slug, analytics_retention_days, created_at, updated_at, deleted_at
+`
+
+type RenameWorkspaceParams struct {
+	ID             uuid.UUID
+	OrganizationID uuid.UUID
+	Name           string
+	Slug           string
+}
+
+// Name and slug move together. The slug is derived from the name by the caller
+// rather than kept as a separate field somebody can edit into disagreement with
+// it, and the partial unique index on (organization_id, lower(slug)) is what
+// refuses a collision.
+func (q *Queries) RenameWorkspace(ctx context.Context, arg RenameWorkspaceParams) (Workspace, error) {
+	row := q.db.QueryRow(ctx, renameWorkspace,
+		arg.ID,
+		arg.OrganizationID,
+		arg.Name,
+		arg.Slug,
+	)
+	var i Workspace
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Slug,
+		&i.AnalyticsRetentionDays,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }
 
 const setDefaultWorkspaceForUser = `-- name: SetDefaultWorkspaceForUser :execrows

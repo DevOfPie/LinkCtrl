@@ -339,6 +339,76 @@ func TestAPIMatchesItsContract(t *testing.T) {
 		"token": token, "email": "invited@example.com", "password": password,
 	}, http.StatusNotFound)
 
+	// --- members, workspaces, organizations ---------------------------------
+	// The redemption above put a second person in this organization, which is
+	// what makes the member operations exercisable at all: a fixture with one
+	// member can list but not manage, since nobody is below an owner except the
+	// person who just joined.
+	var memberList struct {
+		Items []struct {
+			ID         string `json:"id"`
+			UserID     string `json:"user_id"`
+			Email      string `json:"email"`
+			Manageable bool   `json:"manageable"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(c.do("GET", p+"/members", nil, http.StatusOK), &memberList); err != nil {
+		t.Fatalf("members response is not the documented shape: %v", err)
+	}
+	var invitedMembership, invitedUser string
+	for _, m := range memberList.Items {
+		if m.Email == "invited@example.com" {
+			invitedMembership, invitedUser = m.ID, m.UserID
+		}
+	}
+	if invitedMembership == "" {
+		t.Fatalf("the redeemed invitation is not in the member list: %+v", memberList.Items)
+	}
+
+	newWorkspace := c.do("POST", p+"/workspaces", map[string]any{
+		"name": "Marketing",
+	}, http.StatusCreated)
+	marketingID := field(t, newWorkspace, "id")
+	// A duplicate name is the documented 422; the slug is what enforces it.
+	c.do("POST", p+"/workspaces", map[string]any{"name": "Marketing"},
+		http.StatusUnprocessableEntity)
+
+	// A workspace-scoped membership: it adds a role there and narrows nothing.
+	c.do("POST", p+"/members", map[string]any{
+		"user_id": invitedUser, "workspace_id": marketingID, "role": "admin",
+	}, http.StatusCreated)
+
+	c.do("PATCH", p+"/members/"+invitedMembership, map[string]any{
+		"role": "viewer",
+	}, http.StatusNoContent)
+	// The owner is the last one, so demoting themselves is the documented 409.
+	var ownMembership string
+	for _, m := range memberList.Items {
+		if m.Email == "owner@example.com" {
+			ownMembership = m.ID
+		}
+	}
+	c.do("PATCH", p+"/members/"+ownMembership, map[string]any{
+		"role": "admin",
+	}, http.StatusConflict)
+	c.do("DELETE", p+"/members/"+invitedMembership, nil, http.StatusNoContent)
+	// A membership id from nowhere is not-found, so ids cannot be probed.
+	c.do("DELETE", p+"/members/"+uuid.NewString(), nil, http.StatusNotFound)
+
+	c.do("PATCH", p+"/workspaces/"+marketingID, map[string]any{
+		"name": "Growth",
+	}, http.StatusOK)
+	c.do("DELETE", p+"/workspaces/"+marketingID, nil, http.StatusNoContent)
+	// The remaining one is the organization's last, which is the other 409 the
+	// delete documents.
+	c.do("DELETE", p+"/workspaces/"+workspaceID, nil, http.StatusConflict)
+
+	c.do("POST", p+"/organizations", map[string]any{"name": "Acme"}, http.StatusCreated)
+	// Deliberately below the schema's own floor: the point is the server's 422,
+	// which a spec-side request check would pre-empt and prove nothing about.
+	c.doBadRequest("POST", p+"/organizations", map[string]any{"name": ""},
+		http.StatusUnprocessableEntity)
+
 	// --- link deletion, password, logout ------------------------------------
 	c.do("DELETE", p+"/links/"+linkID, nil, http.StatusNoContent)
 	c.do("POST", p+"/auth/password", map[string]string{

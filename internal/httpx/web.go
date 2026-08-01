@@ -14,6 +14,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
+	"github.com/DevOfPie/LinkCtrl/internal/team"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
 )
 
@@ -35,6 +36,9 @@ type Web struct {
 	// Invites serves both halves of the invitation surface: the administrator's
 	// page and the public redemption form.
 	Invites *invite.Service
+	// Team serves member management, workspace lifecycle and organization
+	// creation. Nil leaves both pages unregistered.
+	Team *team.Service
 }
 
 // shell is what the layout template needs on every page.
@@ -196,6 +200,12 @@ func (h *Web) webError(w http.ResponseWriter, r *http.Request, err error) {
 			"This page or link does not exist, or it belongs to a different workspace.")
 	case errors.Is(err, domain.ErrForbidden):
 		h.errorPage(w, r, http.StatusForbidden, "Not allowed", err.Error())
+	case errors.Is(err, domain.ErrConflict):
+		// A refusal with a reason the reader can act on — "delete the links
+		// first", "make somebody else an owner first". Pages that can put it
+		// beside the list it is about do so; this is the answer for the ones
+		// that cannot.
+		h.errorPage(w, r, http.StatusConflict, "Not allowed yet", conflictMessage(err))
 	case errors.Is(err, domain.ErrUnauthorized),
 		errors.Is(err, auth.ErrSessionNotFound),
 		errors.Is(err, auth.ErrSessionExpired),
@@ -230,6 +240,24 @@ func fieldErrors(err error) (map[string]string, string) {
 		}
 	}
 	return fields, strings.Join(general, " ")
+}
+
+// conflictMessage is the readable half of a domain.ErrConflict, or "" for any
+// other error.
+//
+// Conflicts from the team service are written as `%w: <instruction>`, and the
+// instruction is the whole value of them — "delete the links first" tells
+// somebody what to do, where "conflict: delete the links first" reads like a
+// fault. Anything that is not a conflict returns empty so callers fall through
+// to their ordinary error path rather than showing a bare sentinel.
+func conflictMessage(err error) string {
+	if !errors.Is(err, domain.ErrConflict) {
+		return ""
+	}
+	if _, rest, ok := strings.Cut(err.Error(), ": "); ok && rest != "" {
+		return rest
+	}
+	return err.Error()
 }
 
 // RequireWebAuth is RequireAuth for pages: anonymous requests are sent to the

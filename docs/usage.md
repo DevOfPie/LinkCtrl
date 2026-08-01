@@ -32,7 +32,11 @@ notifications with a **View all** link to `/notifications`, which is still the
 full surface: everything, paged, with mark-read. The preview is deliberately
 short, and nothing is only reachable through it.
 
-Your **email address** opens a menu holding **Account** and **Sign out**.
+Your **email address** opens a menu holding the administrative surfaces —
+**Members**, **Invitations** and **Workspaces**, each shown only if you hold the
+permission its page needs — plus **Account** and **Sign out**. They live here
+rather than at the top level because each is visited when something *changes*,
+where the three top-level destinations are where work happens.
 
 Both are popovers, which the browser opens and closes on its own: they work with
 a keyboard, close on **Escape** or a click anywhere outside, and open only one at
@@ -161,16 +165,22 @@ against your current role. Demote the owner and their keys weaken immediately.
 links.read   links.create   links.update   links.delete
 tags.read    tags.write     analytics.read domains.write
 members.read members.write  workspace.read workspace.write
+orgs.create
 ```
 
-`apikeys.read`, `apikeys.write` and `org.delete` are never grantable to a key —
-a key that can mint keys makes revoking a leaked one meaningless, and an
-irreversible action should need an interactive sign-in.
+`apikeys.read`, `apikeys.write`, `org.delete` and `audit.read` are never
+grantable to a key — a key that can mint keys makes revoking a leaked one
+meaningless, an irreversible action should need an interactive sign-in, and the
+audit log ties a network prefix to a named person.
 
-`members.write` gates the invitation endpoints, and it **is** grantable: an
-invitation can only carry a role at or below its issuer's own, and a key's issuer
-is whoever created it, so a key holding it cannot reach past its owner.
-`members.read` and `workspace.write` are grantable but gate no endpoint yet.
+Everything else is grantable, and each one has a reason it is safe to be.
+`members.write` gates invitations and member management, and a key holding it
+cannot reach past its owner: every role it can hand out is capped at its
+creator's own rank, and it can only manage members below that rank.
+`orgs.create` gates organization creation, and a key holding it gains nothing —
+scopes are intersected with the owner's role on every request, so an
+organization made through a key leaves that key holding exactly what it was
+minted with.
 
 ### Worked examples
 
@@ -303,17 +313,25 @@ a click.
 
 ## Roles
 
-| Role | Can |
-| --- | --- |
-| Owner | Everything, including deleting the organization. |
-| Admin | Everything except deleting the organization. |
-| Editor | Create, edit and delete links and tags; read analytics. **Cannot mint API keys** — an editor who could would be able to grant themselves scopes beyond their own role. |
-| Viewer | Read links, tags and analytics. |
+| Role | Rank | Can |
+| --- | --- | --- |
+| Owner | 10 | Everything, including creating an organization and deleting this one. |
+| Admin | 20 | Everything except creating or deleting an organization. |
+| Editor | 30 | Create, edit and delete links and tags; read analytics. **Cannot mint API keys** — an editor who could would be able to grant themselves scopes beyond their own role. Cannot see the member list. |
+| Viewer | 40 | Read links, tags and analytics. |
+
+Rank counts *downward* in authority, and it is what every ceiling in the product
+is expressed against: the role an invitation may carry, the role you may hand
+out, and which memberships you may change. Lower binds tighter.
 
 Registration auto-provisions one personal organization and workspace per user,
 and the account that claims the instance is its owner. Accepting an invitation
 is what puts somebody in a role that is not owner. The evaluator is real, and
 changing a role changes behaviour immediately, including for existing API keys.
+
+A membership can also name a single workspace, in which case its role applies
+there **in addition to** whatever the person holds organization-wide. Permissions
+are the union of every membership that matches the workspace being acted in.
 
 ## Inviting somebody
 
@@ -370,6 +388,106 @@ whether a given address has an account here.
 
 Issuing, revoking and accepting are all in the audit log, and an accepted
 invitation shows up in the inviter's notification inbox.
+
+## Managing the people already here
+
+*Members*, in the same menu, lists every membership in your organization with
+the role it carries and how far it reaches. Reading it needs **`members.read`**
+and changing anything needs **`members.write`**; owner and admin hold both.
+
+**You manage only roles below your own.** An admin changes and removes editors
+and viewers, and never another admin — nor themselves, so an admin who wants to
+step down asks an owner. Owners are the exception: an owner manages every role
+including another owner, because an owner already holds everything and there is
+no authority left to escalate to. The page draws the controls you can actually
+use and leaves the rest as plain text, and the service refuses again either way.
+
+**The last owner cannot be removed or demoted**, by anybody, including
+themselves. Make somebody else an owner first. There is no self-service way to
+leave an organization; somebody who outranks you does it.
+
+Separately from who you may act on, you cannot hand out a role above your own —
+the same ceiling an invitation carries. So an admin may promote an editor to
+admin, and will then find they can no longer manage them.
+
+Removing somebody ends the membership and nothing else. Their account, their
+password and the links they made all stay; inviting them again restores access.
+
+### Giving somebody a role in one workspace
+
+The same page grants a role scoped to a single workspace. **It adds and never
+narrows.** Permissions are the union of every membership that matches a
+workspace and the effective role is the strongest among them, so an
+organization-wide editor granted `admin` in one workspace is an admin there and
+an editor everywhere else.
+
+There is no way round this: *organization admin, viewer in the finance
+workspace* is not expressible. If you need somebody to see less, give them less
+everywhere and add workspaces back.
+
+Withdrawing the grant is the same *Remove* control — it removes that membership
+row and leaves the organization-wide one alone.
+
+```sh
+curl -sS .../api/v1/members -H "Authorization: Bearer $KEY"
+
+# Re-role or remove. The id is the *membership* id from the list above.
+curl -sS -X PATCH .../api/v1/members/$ID \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"role":"editor"}'
+curl -sS -X DELETE .../api/v1/members/$ID -H "Authorization: Bearer $KEY"
+
+# Add a role in one workspace.
+curl -sS -X POST .../api/v1/members \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"user_id":"…","workspace_id":"…","role":"admin"}'
+```
+
+Everything here is in the audit log: added, removed, re-roled.
+
+## Adding workspaces, and organizations
+
+*Workspaces*, in the same menu, lists the workspaces of your organization and
+creates, renames and deletes them. It needs **`workspace.write`**, which owner
+and admin hold — and for renaming or deleting, it needs that permission *in the
+workspace being changed*, which can differ from the one you are acting in if you
+hold a workspace-scoped role.
+
+**Deleting a workspace is refused while it holds any link at all**, archived
+ones included. Links, tags and folders all cascade from a workspace and there is
+no trash to restore them from, so this refusal is the only guard there is; an
+archived link keeps its alias and its click history, so archiving is not a way
+round it. Delete the links first. There is no bulk delete and no way to move a
+link to another workspace, so that is a link at a time.
+
+An organization's **last** workspace cannot be deleted either. Everybody in an
+organization resolves into one of its workspaces to act at all, so removing the
+last one would leave every member unable to sign in.
+
+The same page creates an **organization** of your own, if you hold the
+**`orgs.create`** permission. That is granted to the owner role and to nothing
+else, so on a default instance it is the account that claimed the instance and
+nobody else — until an owner deliberately makes somebody else an owner. Creating
+one provisions its first workspace and your owner membership in the same
+transaction, and moves you into it.
+
+```sh
+curl -sS -X POST .../api/v1/workspaces \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"name":"Marketing"}'
+curl -sS -X PATCH .../api/v1/workspaces/$ID \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"name":"Growth"}'
+curl -sS -X DELETE .../api/v1/workspaces/$ID -H "Authorization: Bearer $KEY"
+
+curl -sS -X POST .../api/v1/organizations \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"name":"Acme"}'
+```
+
+Both refusals — links present, last workspace — answer `409` with the reason in
+`detail`. The API does not move your session into a new organization; call
+`POST /api/v1/workspaces/{id}/switch` with the `workspace_id` it returned.
 
 ## Which workspace you are in
 

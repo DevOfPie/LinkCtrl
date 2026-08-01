@@ -43,6 +43,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/team"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
 )
 
@@ -390,6 +391,11 @@ func run(cfg config.Config, _ io.Writer) error {
 		return err
 	}
 
+	// Member management, workspace lifecycle and organization creation. The
+	// other half of invitations: one decides who may join, the other what
+	// happens to them afterwards.
+	teamSvc := team.NewService(pools.App, team.Config{Audit: auditSvc, Log: log})
+
 	linkSvc := link.NewService(pools.App, link.Config{
 		Policy: link.DestinationPolicy{
 			Schemes:             cfg.Alias.DestSchemes,
@@ -521,11 +527,13 @@ func run(cfg config.Config, _ io.Writer) error {
 		Audit:        auditSvc,
 		Notify:       notifySvc,
 		Invites:      inviteSvc,
+		Team:         teamSvc,
 		Metrics:      metrics,
 		Limits:       limits,
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
 			Links: linkSvc, Stats: stats, Notify: notifySvc, Invites: inviteSvc,
+			Team: teamSvc,
 		},
 	})
 

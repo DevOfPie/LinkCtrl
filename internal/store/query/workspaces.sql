@@ -70,6 +70,40 @@ UPDATE users
          AND w.deleted_at IS NULL
          AND (m.workspace_id IS NULL OR m.workspace_id = w.id)));
 
+-- name: GetWorkspaceInOrganization :one
+-- One workspace, scoped by organization so an id belonging to another tenant is
+-- indistinguishable from one that does not exist.
+--
+-- FOR UPDATE: both callers — rename and delete — are about to write this row or
+-- the rows that cascade from it, and delete reads a link count that must not
+-- change underneath the decision.
+SELECT * FROM workspaces
+WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL
+FOR UPDATE;
+
+-- name: RenameWorkspace :one
+-- Name and slug move together. The slug is derived from the name by the caller
+-- rather than kept as a separate field somebody can edit into disagreement with
+-- it, and the partial unique index on (organization_id, lower(slug)) is what
+-- refuses a collision.
+UPDATE workspaces
+   SET name = $3,
+       slug = $4,
+       updated_at = now()
+ WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL
+RETURNING *;
+
+-- name: DeleteWorkspace :execrows
+-- A real delete, not a soft one, and that is the decision D32 guards.
+--
+-- `links`, `tags` and `folders` cascade from here (00300_links.sql). Soft
+-- deleting instead would leave those rows behind and their aliases still
+-- serving redirects out of a workspace the dashboard says is gone, which is a
+-- worse outcome than the cascade — so the guard goes in front of the delete and
+-- the delete is honest about what it does.
+DELETE FROM workspaces
+ WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL;
+
 -- name: SetSessionWorkspace :execrows
 -- Moves one session, and only the session that asked.
 --

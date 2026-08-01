@@ -84,11 +84,13 @@ answers, not the same ones with a domain name.
 | **Auth** | Email/password with argon2id, server-side sessions in `__Host-` cookies, per-account lockout and per-address rate limiting, real RBAC with four built-in roles and a working permission evaluator. |
 | **Abuse limits** | Per-address limits on credential endpoints, the API, and 404 probing. The last charges misses only, so a working link is never throttled by anyone's scanning. |
 | **API keys** | `lk_live_…` bearer tokens, scoped to permissions you hold, intersected with your current role on every request. Revocable, with usage timestamps. |
-| **Audit log** | Events recorded with the actor snapshotted at write time and a network prefix rather than an address, readable at `GET /api/v1/audit` behind a non-delegable permission. Retention is its own setting and defaults to keeping everything, so growth is reported rather than trimmed silently. Root-redirect changes and the invitation lifecycle are recorded so far; the rest arrive with the Phase 2 features that produce them. |
+| **Audit log** | Events recorded with the actor snapshotted at write time and a network prefix rather than an address, readable at `GET /api/v1/audit` behind a non-delegable permission. Retention is its own setting and defaults to keeping everything, so growth is reported rather than trimmed silently. Root-redirect changes, the invitation lifecycle, member and workspace changes and organization creation are recorded so far; the rest arrive with the Phase 2 features that produce them. |
 | **Notifications** | An in-app inbox for things the instance wanted you to know about — the audit log outgrowing its threshold is the first — with mark-read. A bell in the header carries the count and previews the newest few, so answering "what is it" costs nothing; the full page is one click on. Emailed as well when a mailer is configured. |
 | **Mail** | Optional SMTP, off unless `SMTP_HOST` is set. Queued in an outbox and delivered by the scheduler, so a message survives a restart; plain text only, and every consumer works unchanged with no mailer at all. |
 | **Invitations** | Bring somebody into your organization with a single-use, revocable, expiring link. It is tied to the address you send it to, so forwarding it cannot add a stranger, and the role it carries is capped at your own. Emailed when a mailer is configured, copyable either way. Under `SIGNUP_MODE=closed` an invitation may only add an account that already exists. |
-| **Workspaces** | Every request resolves to exactly one, and a switcher moves the browser you are in without moving the others. Which workspace a new session starts in follows the one you used last, or a pin you set. |
+| **Members** | A member list with role changes and removal, behind `members.read` and `members.write`. You manage only roles below your own — an admin manages editors and viewers, an owner manages everyone including other owners — and the last owner of an organization cannot be removed or demoted. Giving somebody a role in one workspace *adds* it there and takes nothing away anywhere. |
+| **Workspaces** | Every request resolves to exactly one, and a switcher moves the browser you are in without moving the others. Which workspace a new session starts in follows the one you used last, or a pin you set. Create, rename and delete them within an organization; deleting one is refused while it still holds any link, archived ones included, because everything in it cascades and there is no trash. |
+| **Organizations** | Create one of your own, provisioned with a workspace and an owner membership in a single transaction, behind a new `orgs.create` permission held by the owner role. On a default instance that means the account from the setup form and nobody else, until an owner grants it. |
 | **Dashboard** | Server-rendered HTML with htmx. Works without JavaScript; no build step at runtime — the header's menus are popovers, so the browser opens them, closes them on Escape and needs no script to do it. Needs a browser from mid-2023 (Chrome 114, Safari 17, Firefox 125) for that. Light and dark, following the operating system unless overridden per browser — the server renders the theme into the page, so there is no flash of the wrong one. |
 | **API** | REST with RFC 9457 problem responses, an OpenAPI 3 document, and Swagger UI at `/docs`. |
 | **Operations** | `/healthz`, `/readyz`, Prometheus metrics on a separate unpublished port, structured JSON logs, graceful shutdown that flushes buffered clicks. |
@@ -161,14 +163,25 @@ Known limitations and deferred work, so nobody discovers them in production:
 - **No folders, no custom domains, no QR codes, no password/one-time links, and
   no signup page.** The tables exist and `SIGNUP_MODE` is honoured by the JSON
   API; the features are Phase 2.
-- **Nothing creates a second organization or workspace yet.** Registration
-  provisions one of each and there is no way to add another, so the only route
-  to a second membership is accepting an invitation into somebody else's
-  organization — which does make the switcher appear. Creating organizations and
-  workspaces, and managing the members already in one, are still to come.
-- **An invitation adds a member; nothing removes one.** Revoking works until the
-  invitation is accepted. After that, changing somebody's role or removing them
-  is not built yet.
+- **You can only manage members below your own role.** An admin manages editors
+  and viewers, never another admin and never themselves — so an admin who wants
+  to step down asks an owner. Owners are the exception and manage every role
+  including each other, bounded by the refusal to remove or demote the last
+  owner. The practical consequence on a small instance: one owner, a few admins,
+  and the owner unavailable means the admins cannot be changed at all.
+- **A workspace-scoped role only ever adds.** Giving somebody a role in one
+  workspace grants it there on top of what they already hold; there is no way to
+  *restrict* somebody to a workspace. "Org admin, viewer in finance" is not
+  expressible.
+- **Emptying a workspace is one link at a time.** A workspace holding any link —
+  archived ones included — refuses to be deleted, because links, tags and folders
+  cascade from it and there is no trash to restore them from. There is no bulk
+  delete and no way to move a link between workspaces, so a workspace with fifty
+  links takes fifty deletions.
+- **Nothing deletes an organization.** The `org.delete` permission is seeded and
+  held by owners, but no operation is behind it yet.
+- **A member cannot leave an organization themselves.** Removal is done by
+  somebody who holds `members.write` and outranks them.
 
 
 The full list, with consequences, is in

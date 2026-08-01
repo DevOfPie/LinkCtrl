@@ -251,43 +251,9 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*Identity, er
 		return nil, fmt.Errorf("create user: %w", err)
 	}
 
-	orgID := uuid.Must(uuid.NewV7())
-	org, err := q.CreateOrganization(ctx, dbgen.CreateOrganizationParams{
-		ID:         orgID,
-		Name:       name,
-		Slug:       slugify(name) + "-" + orgID.String()[:8],
-		IsPersonal: true,
-	})
+	org, ws, err := ProvisionOrganization(ctx, q, user.ID, name, true)
 	if err != nil {
-		return nil, fmt.Errorf("create organization: %w", err)
-	}
-
-	wsID := uuid.Must(uuid.NewV7())
-	ws, err := q.CreateWorkspace(ctx, dbgen.CreateWorkspaceParams{
-		ID:             wsID,
-		OrganizationID: org.ID,
-		Name:           "Default",
-		Slug:           "default",
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create workspace: %w", err)
-	}
-
-	ownerRole, err := q.GetRoleBySlug(ctx, "owner")
-	if err != nil {
-		return nil, fmt.Errorf("look up owner role: %w", err)
-	}
-
-	// workspace_id is NULL: the membership covers every workspace in the
-	// organization, which is what a personal organization always wants.
-	if _, err := q.CreateMembership(ctx, dbgen.CreateMembershipParams{
-		ID:             uuid.Must(uuid.NewV7()),
-		UserID:         user.ID,
-		OrganizationID: org.ID,
-		RoleID:         ownerRole.ID,
-		WorkspaceID:    nil,
-	}); err != nil {
-		return nil, fmt.Errorf("create membership: %w", err)
+		return nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -602,7 +568,86 @@ func truncate(s string, n int) string {
 	return s[:n]
 }
 
+// ProvisionOrganization creates an organization, its first workspace and an
+// owner membership for one user, inside the caller's transaction.
+//
+// Exported and taking a *dbgen.Queries rather than being a method, because two
+// packages provision tenancy and there must not be two implementations of it.
+// Registration calls it for the personal organization every account starts with
+// (is_personal true); internal/team calls it for an organization somebody
+// deliberately creates (is_personal false). The tenancy invariants — an
+// organization always has a workspace, and always has an owner, both written in
+// the same transaction as the row that needs them — are stated once, here.
+//
+// The caller owns the transaction and the commit. That is what lets registration
+// create the user in the same one, and what keeps this function unable to leave
+// a half-provisioned organization behind.
+func ProvisionOrganization(
+	ctx context.Context, q *dbgen.Queries, userID uuid.UUID, name string, isPersonal bool,
+) (dbgen.Organization, dbgen.Workspace, error) {
+	var (
+		org dbgen.Organization
+		ws  dbgen.Workspace
+	)
+
+	orgID := uuid.Must(uuid.NewV7())
+	// A suffix from the id, because organization slugs are unique instance-wide
+	// and names are not: two people called "Acme" must both be able to exist.
+	//
+	// The **last** twelve hex characters, not the first eight. A UUIDv7 begins
+	// with the timestamp, and the leading eight characters are the top 32 bits
+	// of a 48-bit millisecond clock — which means they change once every 65
+	// seconds and are identical for everything created inside that window. Two
+	// organizations of the same name created a few seconds apart therefore
+	// produced the same slug and the second one failed on the unique index, as a
+	// 500 rather than as anything a caller could act on. The trailing group is
+	// the random half of a v7, so it does not have that property.
+	org, err := q.CreateOrganization(ctx, dbgen.CreateOrganizationParams{
+		ID:         orgID,
+		Name:       name,
+		Slug:       Slugify(name) + "-" + orgID.String()[24:],
+		IsPersonal: isPersonal,
+	})
+	if err != nil {
+		return org, ws, fmt.Errorf("create organization: %w", err)
+	}
+
+	ws, err = q.CreateWorkspace(ctx, dbgen.CreateWorkspaceParams{
+		ID:             uuid.Must(uuid.NewV7()),
+		OrganizationID: org.ID,
+		Name:           "Default",
+		Slug:           "default",
+	})
+	if err != nil {
+		return org, ws, fmt.Errorf("create workspace: %w", err)
+	}
+
+	ownerRole, err := q.GetRoleBySlug(ctx, "owner")
+	if err != nil {
+		return org, ws, fmt.Errorf("look up owner role: %w", err)
+	}
+
+	// workspace_id is NULL: the membership covers every workspace in the
+	// organization, which is what the person who just created it always wants.
+	if _, err := q.CreateMembership(ctx, dbgen.CreateMembershipParams{
+		ID:             uuid.Must(uuid.NewV7()),
+		UserID:         userID,
+		OrganizationID: org.ID,
+		RoleID:         ownerRole.ID,
+		WorkspaceID:    nil,
+	}); err != nil {
+		return org, ws, fmt.Errorf("create membership: %w", err)
+	}
+
+	return org, ws, nil
+}
+
 var nonSlug = regexp.MustCompile(`[^a-z0-9]+`)
+
+// Slugify reduces a name to the URL-safe form the tenancy tables store beside
+// it. Exported because workspace renaming derives a slug the same way, and a
+// second implementation would be a second answer to "what is this called".
+func Slugify(s string) string { return slugify(s) }
 
 func slugify(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))

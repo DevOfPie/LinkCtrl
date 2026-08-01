@@ -72,6 +72,8 @@ file. Append a row when you append an entry.
 | [M27, building an invitation so that no refusal answers a question](#2026-07-31--m27-building-an-invitation-so-that-no-refusal-answers-a-question) | The one error every redemption failure returns and the dummy verification behind it; why the page does not print the invited address; why the two validation errors are safe; the one outstanding invitation per address, and why an expired one is revoked rather than indexed around |
 | [M27, where the invitation surface hangs, and what M27 left to M28](#2026-07-31--m27-where-the-invitation-surface-hangs-and-what-m27-left-to-m28) | Why Invitations is in the identity menu and not the top-level nav; the `orgs.create` bullet read against M28's own file, and what M27 asserts instead |
 | [M27, amending the bullet that said a permission exists](#2026-08-01--m27-amending-the-bullet-that-said-a-permission-exists) | The bullet before and after; why `orgs.create` is M28's; what D6 actually attached to membership-only; how milestones absorb each other's work |
+| [M28, managing a member without inventing a second way to be one](#2026-08-01--m28-managing-a-member-without-inventing-a-second-way-to-be-one) | The two bounds and why both hold at once; the last-owner lock; D31 union, D32 and D34 guards; D33 delegability; D35 and the nav slot; the UUIDv7 slug collision |
+| [M28, the audit bullet that quietly required a feature](#2026-08-01--m28-the-audit-bullet-that-quietly-required-a-feature) | The bullet before and after; why this was assertion-level and not an amendment; M28.5's placement under planning.md; why a teardown milestone leads with refusals |
 
 ---
 
@@ -5008,3 +5010,246 @@ have opened with a bullet already done and a delegability decision already taken
 somewhere else. Milestones that quietly absorb each other's work are how a
 twenty-five-milestone plan stops meaning anything, and the only defence is
 reading the *other* file when a bullet points at it.
+
+## 2026-08-01 — M28, managing a member without inventing a second way to be one
+
+M28 turns four Phase 1 tables that only ever had rows written *into* them at
+provisioning time — `memberships`, `workspaces`, `organizations`, and the
+`roles` grants that give them meaning — into tables a person edits. Everything
+below is either a consequence of that, or a bound placed on it.
+
+### Why this is a new package and not more files in `internal/auth`
+
+`internal/audit` imports `internal/auth`, for `auth.Identity` and
+`auth.ClientIPFrom`. So `internal/auth` cannot import `internal/audit`, and
+every operation this milestone adds is an audit event. Member management,
+workspace lifecycle and organization creation therefore live in a new
+`internal/team`, which imports both.
+
+The one thing that could not move is tenancy provisioning: `Register` writes an
+organization, a workspace and an owner membership in the transaction that
+creates the user, and m28.md requires org creation *reuse* that rather than
+reimplement it. So it is now `auth.ProvisionOrganization`, exported and taking a
+`*dbgen.Queries` instead of being a method, and both callers pass their own
+transaction. Registration keeps its user-and-org atomicity; `team` opens its own
+transaction and calls the same function. There is one statement of "an
+organization always has a workspace and always has an owner", and it is that
+function.
+
+### D16 as a grant, which is the part worth writing down
+
+m28.md's Risks section is explicit that `orgs.create` defaulting to
+self-registered accounts must be expressed as a grant at account creation, not
+as a runtime check against how the account was made — the latter would be a
+second authorization axis running beside RBAC, which is what D16 chose to avoid.
+
+The grant is one row: `orgs.create` to the **owner** role, and to nothing else
+(`01300_orgs_create.sql`). The mechanism that makes that mean "self-registered
+only" is not in the migration, it is in what the two admission paths already do.
+Registration provisions an owner membership in the same transaction as the
+account. Invitation redemption provisions a membership and nothing else, at
+whatever role the invitation named, capped at the inviter's rank and defaulting
+to viewer (D6, D28). So on a default instance — `closed`, everybody else
+arriving by invite — the setup-form owner holds it and nobody else does, and an
+owner who deliberately hands somebody the owner role has granted it. That is
+D16's "and nobody else until they grant it", with no second axis anywhere.
+
+Admin is excluded, unlike `audit.read` in 00900, because admins arrive by
+invitation and D16's sentence is about who holds this without anybody deciding
+they should.
+
+The permission is also the call site a Phase 3+ entitlement check would hang on.
+Nothing here is billing-shaped; the point of naming it now is that the check has
+somewhere to go without a schema change.
+
+### Delegability: D33
+
+Neither limb of D18 matches, so `orgs.create` stays delegable and
+`NonDelegableScopes` does not list it. It discloses nothing about anybody's
+identity or network, and it cannot widen a key's own reach — a key's permissions
+are its scopes intersected with its owner's current role on *every* request, so
+an organization created through a key leaves that key holding exactly the scopes
+it was minted with, in an organization it has no other permission in.
+`TestOrgsCreateIsDelegableToAnAPIKey` asserts both halves: the absence from the
+map, which is the whole mechanism, and a live bearer request that then fails to
+reach `members.write`.
+
+### Two bounds that are not the same bound
+
+D30 governs *who may be acted on*: strictly below your own rank, owners
+excepted. m28.md's "nobody grants a role binding tighter than their own" governs
+*what may be handed out*: at or below your own rank, which is D28's invitation
+ceiling asked at a second moment.
+
+They differ by one step, and the difference is visible: an admin may promote an
+editor to admin, and then cannot manage them. That is not a hole. The ceiling
+says an admin may hand out admin — an invitation already let them — and
+strictly-below says an admin may not act on a peer. Both hold at once, and the
+outcome is that minting a peer is a decision an admin cannot take back alone.
+`TestRankTableIsWhatWasWrittenDown` pins it as a case rather than leaving it to
+be discovered.
+
+### The last-owner refusal, and why it locks rows
+
+Demoting or removing an owner reads a count and then writes, which is a
+check-then-act. Two administrators each removing one of the two remaining owners
+would each see two and both succeed. So `LockOrganizationOwners` selects the
+organization's owner memberships `FOR UPDATE` before counting, inside the
+transaction that does the write; the second transaction blocks and then reads
+the state the first left.
+
+Organization-wide owners only. A workspace-scoped owner membership is ownership
+of one workspace, and counting it would let the real last owner go while a
+narrower row stood in for them.
+
+### D34 — an organization's last workspace cannot be deleted either
+
+Not in m28.md, and not a preference. `ResolveWorkspaceForUser` is the only path
+by which any identity — session, API key, CLI — learns which workspace it acts
+in, and it reports finding no row as *a broken instance rather than a state a
+caller can reach*. Deleting an organization's last workspace produces exactly
+that state for every member of it, and nothing in the product can undo it.
+
+It is the same class of guard as the last owner: a state reachable only through
+this milestone's new code, unrecoverable without SQL, and refused with an
+instruction rather than an error. Recorded rather than absorbed, because it is
+scope m28.md did not ask for and the reason it is here is a fact about the tree.
+
+### D35 — none of this takes a top-level nav slot
+
+M26.5 cut the header to three destinations and left a note asking the next
+milestone that wanted a slot to argue for one rather than drift into it, naming
+M28 as where that argument belonged. The argument is that no slot is warranted.
+Members, Invitations and Workspaces are all visited when something *changes* —
+somebody joins, somebody leaves, a workspace is added — where Dashboard, Links
+and API keys are where work happens. Promoting one would also mean choosing
+between three faces of the same subject. All three hang off the identity menu,
+each gated on exactly the permission its page requires, and
+`TestTopLevelNavHoldsThreeDestinations` still asserts the count exactly so that
+disagreeing with this costs a decision entry rather than a template edit.
+
+### An in-spec defect the sabotage pass surfaced
+
+Organization slugs are unique instance-wide; names are not. The suffix that made
+them unique was `orgID.String()[:8]` — and a UUIDv7 *begins* with its timestamp,
+so those eight hex characters are the top 32 bits of a 48-bit millisecond clock
+and are identical for everything created within the same ~65 seconds. Two
+organizations of the same name created a minute apart collided on
+`organizations_slug_key` and answered 500.
+
+Pre-existing, in `Register`, where it needed two accounts with the same display
+name to trigger and so had never been seen. It is fixed here rather than
+deferred because M28's own bullet — creating an organization provisions it in
+one transaction — is what it falsifies, and M28 is the milestone that makes
+same-named organizations an ordinary thing to have. The suffix is now the uuid's
+trailing group, which is the random half of a v7.
+
+Found by a sabotage run, which is the second time that practice has paid for
+itself by failing in a way that was not the sabotage.
+
+### A dead end removed before it shipped
+
+`Grant` first required the person to hold an *organization-wide* membership, on
+the reasoning that somebody scoped to one workspace had been deliberately
+scoped. That reasoning is wrong in one direction: re-inviting them is refused as
+already-a-member, so a person narrowed to one workspace could never be widened
+again by any route the product has. Any membership in the organization now
+qualifies. A grant still cannot admit a stranger — that is what an invitation is
+for, and making a grant a second admission path would sit beside the address
+binding D27 exists to enforce.
+
+Caught by a sabotage that stayed *green*: removing the clause changed no test,
+which is what "this rule is not tested" looks like, and asking why led to asking
+whether it should be there at all.
+
+### What left Plan.md's limitations table
+
+*Nothing manages a member once they have joined* is gone, because M28 is the
+milestone it named as the one that would end it. It is replaced rather than
+deleted: what remains true after M28 is narrower and worth keeping visible, so
+four rows stand where one did — the rank bound and the lack of a self-service
+way to leave (D30), the impossibility of narrowing somebody with a
+workspace-scoped role (D31), the one-link-at-a-time cost of emptying a workspace
+(D32), and the fact that nothing deletes an organization.
+
+That last one is not new, but it was never written down: `org.delete` has been
+seeded and held by owners since Phase 1 with no operation behind it. m28.md's
+audit bullet reads *"workspace and org created or deleted"*, and organization
+deletion is the one item in that list with nothing to emit an event for — so
+`ActionOrganizationDeleted` does not exist. An action constant with no writer is
+a vocabulary entry an operator would search for and never find, which is worse
+than the absence.
+
+---
+
+## 2026-08-01 — M28, the audit bullet that quietly required a feature
+
+The orchestrator's amendment at [step 3.4](phase-loop.md#3-land), and the
+milestone it produced. The worker was right to stop: this one is
+**assertion-level**, so it went to the owner rather than being amended away.
+
+### The bullet as it stood
+
+> Member added / removed / re-roled, workspace and org created or deleted are
+> all audit events ([M21](phase-details/m21.md)).
+
+### The bullet as amended
+
+> Member added / removed / re-roled, workspace created, renamed or deleted, and
+> organization **created**, are all audit events ([M21](phase-details/m21.md)).
+
+### The tree fact that forced it
+
+Nothing in the product deletes an organization. `org.delete` has been a seeded
+permission since Phase 1's `00700_seed.sql`, granted to `owner` alone, and has
+never gated an operation. There is no handler, no service call and no query. So
+the bullet asked for an audit event for something that cannot happen.
+
+### Why this was the owner's call and not an amendment
+
+An amendment corrects a *fact* — a count, a filename, a test name — because
+nobody could have decided it differently. This was not that. The bullet had two
+honest readings, and they differ by a feature:
+
+- the list is a list of *audit events*, and org deletion appearing in it is a
+  drafting slip, or
+- M28 was always meant to include organization deletion, and the audit bullet is
+  the only place that survived saying so.
+
+Choosing between them is choosing whether M28's scope includes tenancy teardown,
+and an actor that picked the cheaper reading on the owner's behalf would have
+been deciding scope while reporting a wording fix.
+
+### What the owner chose: amend, and schedule it
+
+Neither building it here nor dropping it. Organization deletion becomes
+**[M28.5](phase-details/m28.5.md)**, a milestone of its own, and `org.delete`
+finally gets an operation.
+
+The placement follows [planning.md](planning.md) rather than preference. It
+depends on M28, which is what first lets a person create the workspaces,
+memberships and invitations a deletion has to tear down; nothing later builds on
+it, so there is no substrate argument for landing it early; and it sits well
+inside [M44.9](phase-details/m44.9.md)'s range, so the pre-release review still
+covers everything below it. Dependency order plus the mid-band preference puts
+it at `M28.5`.
+
+One consequence is worth naming rather than discovering: **M28.5 is now the next
+milestone the loop will build**, ahead of M29 and everything after it. That
+follows from dependency-order placement and is not a judgement that tenancy
+teardown outranks self-serve signup. Moving it is a renumbering, which is cheap
+while nothing references it.
+
+### Why the milestone file leads with refusals
+
+Almost every bullet in [m28.5.md](phase-details/m28.5.md) is about what deletion
+must decline to do, because the deleting is the easy half — Postgres already
+cascades. The hard half is that this product has spent M27 and M28 establishing
+that a person is resolved through a membership into a workspace, and deletion is
+the first operation that can take that away while they are using it. D34 already
+refuses to delete an organization's last workspace for exactly this reason; M28.5
+inherits the argument one level up and has to answer the version of it nobody has
+answered yet — what happens to a member whose *only* organization is being
+deleted. That question is written into the milestone as something to settle
+before code, the way M28's rank table was, because discovering it in review is
+how it becomes a privilege or availability bug.

@@ -47,6 +47,13 @@ type Querier interface {
 	// failure.
 	CountMembershipsForEmail(ctx context.Context, arg CountMembershipsForEmailParams) (int64, error)
 	CountMembershipsForUser(ctx context.Context, arg CountMembershipsForUserParams) (int64, error)
+	// Whether this is the organization's last workspace.
+	//
+	// Deleting it would leave every member of the organization resolving into no
+	// workspace at all, which `ResolveWorkspaceForUser` reports as a broken instance
+	// rather than as an empty state — so the account could not authenticate. Guarded
+	// for the same reason the last owner is.
+	CountOrganizationWorkspaces(ctx context.Context, organizationID uuid.UUID) (int64, error)
 	CountPendingMail(ctx context.Context) (int64, error)
 	//
 	// The re-notify guard. A threshold that is still crossed is still crossed on
@@ -62,6 +69,16 @@ type Querier interface {
 	// Users, sessions and tenancy provisioning.
 	// Drives the first-run setup flow: /setup exists only while this is zero.
 	CountUsers(ctx context.Context) (int64, error)
+	// What D32 refuses a workspace deletion on.
+	//
+	// Soft-deleted links are excluded on purpose. `links`, `tags` and `folders` all
+	// cascade from `workspaces`, so the guard is in front of a real cascade — but a
+	// link the owner already deleted is one they cannot delete again, and counting
+	// it would leave the workspace undeletable until the purge job ran, with nothing
+	// the person could do about it. Archived links **are** counted: an archived link
+	// keeps its alias and its click history, so cascading it away would be silent
+	// data loss dressed as tidying up.
+	CountWorkspaceLinks(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	// API keys and the permission vocabulary their scopes are drawn from.
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error)
 	CreateDestination(ctx context.Context, arg CreateDestinationParams) (Destination, error)
@@ -88,10 +105,19 @@ type Querier interface {
 	// Reaper. Revoked rows are kept briefly so "sign out everywhere" is visible in
 	// the session list before it disappears.
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
+	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (int64, error)
 	// Reaper. Kept long enough to be visible in the key list after revocation, and
 	// long enough for the audit question above to be answerable.
 	DeleteRevokedAPIKeys(ctx context.Context) (int64, error)
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
+	// A real delete, not a soft one, and that is the decision D32 guards.
+	//
+	// `links`, `tags` and `folders` cascade from here (00300_links.sql). Soft
+	// deleting instead would leave those rows behind and their aliases still
+	// serving redirects out of a workspace the dashboard says is gone, which is a
+	// worse outcome than the cascade — so the guard goes in front of the delete and
+	// the delete is honest about what it does.
+	DeleteWorkspace(ctx context.Context, arg DeleteWorkspaceParams) (int64, error)
 	DetachAllTags(ctx context.Context, linkID uuid.UUID) error
 	// The mail outbox. Queued on the request path, drained by the scheduler.
 	//
@@ -138,6 +164,29 @@ type Querier interface {
 	// the 2s target as click_events grows into the tens of millions.
 	GetLinkStats(ctx context.Context, arg GetLinkStatsParams) ([]GetLinkStatsRow, error)
 	GetLinkTags(ctx context.Context, linkID uuid.UUID) ([]GetLinkTagsRow, error)
+	// One membership, scoped by organization so an id from elsewhere is
+	// indistinguishable from one that never existed.
+	//
+	// FOR UPDATE OF m: every caller is about to re-role or delete this row, and the
+	// rank check that decides whether they may is read from it. Without the lock,
+	// two administrators acting at once could each read a state the other is
+	// changing — the check-then-act that the last-owner refusal exists to prevent.
+	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
+	// Whether a user is in an organization at all, for the grant path:
+	// workspace-scoped access is given to somebody who is already a member, and
+	// this is what establishes that.
+	//
+	// **Any** membership counts, organization-wide or workspace-scoped. Requiring
+	// an organization-wide one would be a dead end: somebody left holding only a
+	// workspace-scoped membership could never be given a second workspace, because
+	// re-inviting them is refused as already-a-member. Under D31 every grant adds,
+	// so widening a scoped member to a second workspace is the same kind of act as
+	// the first grant was.
+	//
+	// The organization-wide row wins the tiebreak so the label and role this
+	// returns are the person's broadest, which is what a control naming them should
+	// show.
+	GetOrganizationMember(ctx context.Context, arg GetOrganizationMemberParams) (GetOrganizationMemberRow, error)
 	// What to call the organization in an invitation. A primary-key lookup on a
 	// path that is already writing a row, rather than carrying a name on every
 	// identity for the one surface that needs it.
@@ -165,6 +214,13 @@ type Querier interface {
 	GetUserPermissions(ctx context.Context, arg GetUserPermissionsParams) ([]string, error)
 	GetUserRoleInWorkspace(ctx context.Context, arg GetUserRoleInWorkspaceParams) (GetUserRoleInWorkspaceRow, error)
 	GetWorkspaceDefaultDomain(ctx context.Context) (GetWorkspaceDefaultDomainRow, error)
+	// One workspace, scoped by organization so an id belonging to another tenant is
+	// indistinguishable from one that does not exist.
+	//
+	// FOR UPDATE: both callers — rename and delete — are about to write this row or
+	// the rows that cascade from it, and delete reads a link count that must not
+	// change underneath the decision.
+	GetWorkspaceInOrganization(ctx context.Context, arg GetWorkspaceInOrganizationParams) (Workspace, error)
 	GetWorkspaceStats(ctx context.Context, arg GetWorkspaceStatsParams) ([]GetWorkspaceStatsRow, error)
 	// Summing daily uniques over-counts anyone visiting on more than one day.
 	// Reported as "unique visitors per day, summed" in the UI rather than
@@ -236,6 +292,26 @@ type Querier interface {
 	// than by id, and every tag came back carrying another tag's name. One
 	// subquery, one ORDER BY, both columns.
 	ListLinks(ctx context.Context, arg ListLinksParams) ([]ListLinksRow, error)
+	// Membership management: who is in an organization, at what rank, and where
+	// that rank reaches (M28).
+	//
+	// The rows these statements read and write are the ones 00200 has carried since
+	// Phase 1. Nothing here is new schema; what is new is that a person can change
+	// them, which is why every write is scoped by organization_id as well as by id.
+	// Every membership in an organization, most powerful first.
+	//
+	// One row per membership, not per user. A user holding an organization-wide
+	// membership and a workspace-scoped one appears twice, and that is the shape the
+	// page has to show: under D31 the two rows *add*, and collapsing them into one
+	// would hide the second grant behind the first.
+	//
+	// The workspace name is joined rather than looked up per row, and is NULL for an
+	// organization-wide membership — which is what the absence of a workspace_id
+	// means, and the distinction the list is read for.
+	//
+	// Not paginated. An organization's membership is a handful of rows by
+	// construction, exactly as its invitations are.
+	ListMembers(ctx context.Context, organizationID uuid.UUID) ([]ListMembersRow, error)
 	//
 	// Newest first, keyset on (created_at, id). Same shape as the audit log and the
 	// link list: an offset shifts under a notification arriving mid-page, and a new
@@ -312,6 +388,16 @@ type Querier interface {
 	//
 	//     SELECT pg_advisory_xact_lock(7810213058373316608);
 	LockFirstUserSetup(ctx context.Context) error
+	// The organization's owner memberships, locked.
+	//
+	// Organization-wide only: a workspace-scoped owner membership grants ownership
+	// of one workspace, not of the organization, so counting it would let the last
+	// real owner be removed while a workspace-scoped row stood in for them.
+	//
+	// Rows rather than a count, because a count cannot be locked. Taken before any
+	// removal or demotion of an owner, so two concurrent administrators cannot each
+	// observe two owners and each remove one.
+	LockOrganizationOwners(ctx context.Context, organizationID uuid.UUID) ([]uuid.UUID, error)
 	MarkAllNotificationsRead(ctx context.Context, userID uuid.UUID) (int64, error)
 	// The single-use write. Conditional on the invite still being redeemable, so
 	// even without the lock above this could not be spent twice.
@@ -388,6 +474,11 @@ type Querier interface {
 	// and advancing past it would turn one bad run into permanent gaps.
 	RecordJobFailure(ctx context.Context, arg RecordJobFailureParams) error
 	RecordSuccessfulLogin(ctx context.Context, id uuid.UUID) error
+	// Name and slug move together. The slug is derived from the name by the caller
+	// rather than kept as a separate field somebody can edit into disagreement with
+	// it, and the partial unique index on (organization_id, lower(slug)) is what
+	// refuses a collision.
+	RenameWorkspace(ctx context.Context, arg RenameWorkspaceParams) (Workspace, error)
 	// Called before purging a link that has clicks. The alias is in the wild — on
 	// printed material and in other people's bookmarks — so handing it to a new
 	// destination would be a redirect hijack.
@@ -537,6 +628,9 @@ type Querier interface {
 	// COALESCE with sqlc.narg gives partial update: a NULL argument leaves the
 	// column alone, so PATCH semantics need no dynamic SQL.
 	UpdateLink(ctx context.Context, arg UpdateLinkParams) (Link, error)
+	// Scoped by organization as well as id, so the authorization decision the
+	// service made cannot be applied to a row in another tenant.
+	UpdateMembershipRole(ctx context.Context, arg UpdateMembershipRoleParams) (int64, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 }
 

@@ -22,6 +22,56 @@ migrations run at boot.
 
 ### Added
 
+- **You can manage the people already in your organization.** *Members*, in the
+  menu behind your address in the header, lists every membership with its role
+  and lets you change or end one. `GET /api/v1/members`, `PATCH` and `DELETE
+  /api/v1/members/{id}` do the same. The list needs `members.read` and changing
+  anything needs `members.write` — both held by owners and admins, and this is
+  the first enforcement of `members.read` anywhere.
+- **You can only manage roles below your own.** An admin manages editors and
+  viewers, and never another admin — nor themselves, so an admin who wants to
+  step down asks an owner. Owners manage every role including each other,
+  because an owner already holds everything and refusing would only mean a
+  departed co-owner could be removed by nothing but SQL. **The last owner of an
+  organization cannot be removed or demoted**, by anybody, including themselves.
+  Separately, nobody can hand out a role above their own — the same ceiling an
+  invitation carries. The cost is worth knowing before you rely on it: one owner
+  and a few admins, with the owner away, means the admins cannot be changed at
+  all.
+- **You can give somebody a role in one workspace.** It **adds** that role there
+  on top of whatever they already hold, and takes nothing away anywhere. There
+  is no way to *restrict* somebody to a workspace — "org admin, viewer in
+  finance" is not expressible — so the feature can only ever grant more than you
+  expected, never less. `POST /api/v1/members` issues one; removing it is the
+  same call that removes any membership.
+- **Workspaces can be created, renamed and deleted.** *Workspaces*, in the same
+  menu, and `POST /api/v1/workspaces`, `PATCH` and `DELETE
+  /api/v1/workspaces/{id}`. Until now registration provisioned one and there was
+  no way to add another.
+- **Deleting a workspace is refused while it still holds any link**, archived
+  ones included. Links, tags and folders all cascade from a workspace and there
+  is no trash to restore them from, so deleting one with links in it would be a
+  redirect outage for every alias it held, and an archived link keeps its alias
+  and its click history. The cost is stated rather than hidden: there is no bulk
+  delete and no way to move a link between workspaces, so emptying a workspace
+  is one link at a time. An organization's **last** workspace is refused too —
+  everybody in an organization has to resolve into one to sign in at all.
+- **You can create an organization of your own**, provisioned with a workspace
+  and an owner membership in one transaction — the same path registration takes,
+  not a second implementation of it. `POST /api/v1/organizations`, and a form on
+  the workspaces page that moves you into the new organization once it exists.
+- **A new `orgs.create` permission**, granted to the `owner` role and to nothing
+  else. On a default instance — signup closed, everybody else arriving by
+  invitation — that means the account from the setup form and nobody else, until
+  an owner deliberately makes somebody else an owner. It is a role grant rather
+  than a check on how an account was created, so there is one authorization axis
+  rather than two. It is delegable to an API key: a key's scopes are intersected
+  with its owner's role on every request, so an organization made through one
+  leaves that key holding exactly what it was minted with.
+- **Seven more audit events**: a member added to a workspace, removed or
+  re-roled; a workspace created, renamed or deleted; an organization created. A
+  workspace deletion records the name, because the row it names is gone and the
+  record is the only trace left.
 - **You can invite somebody into your organization.** *Invitations*, in the menu
   behind your address in the header, issues a single-use link that adds one
   person as one role. Emailed when a mailer is configured, and copyable either
@@ -205,6 +255,16 @@ migrations run at boot.
 - `LINKCTRL_SMTP_PASSWORD` **exists again.** It was accepted and ignored before
   0.1.0, then removed because there was no mail feature to authenticate to.
   There is one now.
+
+### Fixed
+
+- **Two organizations with the same name, created within about a minute of each
+  other, failed with an internal error.** The suffix that makes an organization
+  slug unique was taken from the front of its UUIDv7 — which is the timestamp,
+  and whose leading characters are identical for everything created inside the
+  same 65-second window. It now comes from the random half of the id. This was
+  reachable before only by two accounts registering with the same display name;
+  creating organizations by hand is what makes it ordinary.
 
 ### Notes for operators
 

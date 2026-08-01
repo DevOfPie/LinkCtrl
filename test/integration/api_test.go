@@ -21,6 +21,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
+	"github.com/DevOfPie/LinkCtrl/internal/team"
 )
 
 // apiFixture is a running server plus a cookie-jar client, so tests drive the
@@ -79,6 +80,8 @@ func newAPI(t *testing.T) *apiFixture {
 		t.Fatal(err)
 	}
 
+	teamSvc := team.NewService(pool, team.Config{Audit: audit.NewService(pool)})
+
 	srv := httptest.NewServer(httpx.NewRouter(httpx.Deps{
 		Config:  cfg,
 		Health:  &httpx.Health{DB: pool},
@@ -89,6 +92,7 @@ func newAPI(t *testing.T) *apiFixture {
 		Audit:   audit.NewService(pool),
 		Notify:  notify.NewService(pool),
 		Invites: inviteSvc,
+		Team:    teamSvc,
 	}))
 	t.Cleanup(srv.Close)
 

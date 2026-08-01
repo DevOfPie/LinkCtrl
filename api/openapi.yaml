@@ -76,6 +76,10 @@ tags:
     description: What changed, who changed it, and when
   - name: invitations
     description: Adding people to an organization
+  - name: members
+    description: Who is in an organization, at what role, and where that role reaches
+  - name: organizations
+    description: Creating an organization of your own
   - name: notifications
     description: Your own in-app inbox
   - name: workspaces
@@ -920,6 +924,223 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /members:
+    get:
+      tags: [members]
+      operationId: listMembers
+      summary: Everybody in your organization
+      description: |
+        One entry per **membership**, not per person. Somebody may hold an
+        organization-wide membership and a workspace-scoped one at the same
+        time, and under the union rule those add — so they appear twice, and
+        collapsing them would hide the second grant behind the first.
+
+        `workspace_id` absent means the membership covers every workspace in the
+        organization, which is what registering and accepting an invitation both
+        create. Present means it covers exactly that workspace, on top of
+        whatever else the person holds.
+
+        `manageable` is computed against *you*: it is true when you may re-role
+        or remove that membership. Your own row is never manageable unless you
+        are an owner, because the rule is "strictly below your own rank" and
+        nobody is strictly below themselves.
+
+        Not paginated: an organization's membership is a handful of rows by
+        construction. Requires `members.read`, which owners and admins hold.
+      responses:
+        "200":
+          description: Every membership in the caller's organization
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Member"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+    post:
+      tags: [members]
+      operationId: grantWorkspaceAccess
+      summary: Give a member a role in one workspace
+      description: |
+        **This adds access and never narrows it.** Permissions resolve as the
+        union of every membership matching a workspace, and the effective role
+        is the lowest rank among them — so an organization-wide editor granted
+        `admin` here is an admin in that workspace and an editor everywhere
+        else. There is no operation that restricts somebody to a workspace, and
+        this is not it.
+
+        The person must already hold an organization-wide membership. Somebody
+        whose only place here is one workspace was deliberately scoped to it,
+        and somebody with no membership at all is invited rather than granted.
+
+        The role is capped at your own rank, exactly as an invitation's is.
+        Requires `members.write`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GrantWorkspaceAccessRequest"
+      responses:
+        "201":
+          description: The workspace-scoped membership
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /members/{id}:
+    patch:
+      tags: [members]
+      operationId: changeMemberRole
+      summary: Change a member's role
+      description: |
+        Two different bounds apply, and a `403` may mean either.
+
+        **You may only manage ranks strictly below your own.** An admin re-roles
+        editors and viewers, never another admin and never themselves — self is
+        not strictly below self, so an admin who wants out asks an owner. Owners
+        are the single exception: an owner may re-role any member including
+        another owner, because an owner already holds everything and there is no
+        escalation left to prevent.
+
+        **You may not grant a role above your own.** An admin may promote an
+        editor to admin — the same ceiling an invitation carries — and will then
+        find they can no longer manage them, which follows from the first rule
+        rather than contradicting it.
+
+        Demoting the organization's last owner answers `409`. Requires
+        `members.write`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The **membership** id, from `GET /members`.
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [role]
+              properties:
+                role:
+                  $ref: "#/components/schemas/RoleSlug"
+      responses:
+        "204":
+          description: Role changed, or already that role
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: |
+            Refused because it would leave the organization without an owner.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+    delete:
+      tags: [members]
+      operationId: removeMember
+      summary: End a membership
+      description: |
+        The membership, not the account. Their user row, their password and
+        every other membership they hold survive, which is what makes this
+        reversible by inviting them back rather than by restoring a backup.
+        Links they created stay in the workspace.
+
+        Removing a workspace-scoped membership withdraws the access that row
+        added and leaves the organization-wide one alone.
+
+        The same rank bound as re-roling applies, and removing the last owner
+        answers `409`. Requires `members.write`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The **membership** id, from `GET /members`.
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Removed
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: |
+            Refused because it would leave the organization without an owner.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /organizations:
+    post:
+      tags: [organizations]
+      operationId: createOrganization
+      summary: Create an organization
+      description: |
+        Provisions the organization, its first workspace and an owner membership
+        for you, in one transaction — the same path registration takes for the
+        personal organization every account starts with, so an organization
+        never exists without somewhere to work or somebody to own it.
+
+        You become the owner. It is not settable: an organization created on
+        somebody else's behalf is one nobody asked for.
+
+        Requires `orgs.create`, which is granted to the `owner` role. On a
+        default instance — closed signup, everybody else arriving by invitation —
+        that means the account from the setup form and nobody else until an owner
+        grants somebody the owner role.
+
+        Your session is not moved. Call `POST /workspaces/{id}/switch` with the
+        `workspace_id` in this response to start working in it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NameRequest"
+      responses:
+        "201":
+          description: The organization, and the workspace it was provisioned with
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Validation"
+
   /notifications:
     get:
       tags: [notifications]
@@ -1053,6 +1274,119 @@ paths:
                       $ref: "#/components/schemas/Workspace"
         "401":
           $ref: "#/components/responses/Unauthorized"
+
+    post:
+      tags: [workspaces]
+      operationId: createWorkspace
+      summary: Add a workspace to your organization
+      description: |
+        The slug is derived from the name rather than supplied: two fields that
+        have to agree is two fields somebody can make disagree, and the slug's
+        only job is the per-organization uniqueness that makes a duplicate name
+        a `422`.
+
+        Requires `workspace.write` in the workspace you are currently acting in,
+        which is the authority being exercised — there is no target workspace
+        yet.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NameRequest"
+      responses:
+        "201":
+          description: The new workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationWorkspace"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /workspaces/{id}:
+    patch:
+      tags: [workspaces]
+      operationId: renameWorkspace
+      summary: Rename a workspace
+      description: |
+        Name and slug move together.
+
+        Requires `workspace.write` **in that workspace**, not in the one you are
+        acting in. The two can differ: a workspace-scoped membership grants a
+        role in one workspace and nothing in the next, so the permission is read
+        against the workspace being changed.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NameRequest"
+      responses:
+        "200":
+          description: The renamed workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationWorkspace"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+    delete:
+      tags: [workspaces]
+      operationId: deleteWorkspace
+      summary: Delete a workspace
+      description: |
+        **Refused while the workspace holds any link at all**, archived ones
+        included, and the links must be deleted first. Links, tags and folders
+        cascade from a workspace and there is no trash to restore them from, so
+        deleting one with links in it would be a redirect outage for every alias
+        it held. An archived link keeps its alias and its click history, which is
+        why archiving is not a way around this.
+
+        **Also refused when it is the organization's only workspace.** Everybody
+        in an organization resolves into one of its workspaces to act at all, so
+        deleting the last one would leave every member unable to sign in.
+
+        Both refusals are `409` with the reason in `detail`. Requires
+        `workspace.write` in that workspace.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: |
+            Refused: the workspace still holds links, or it is the
+            organization's only one. `detail` says which.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 
   /workspaces/default:
     put:
@@ -1345,6 +1679,118 @@ components:
           description: |
             The pinned workspace, where new sessions start. No entry carries it
             while the account follows last-used.
+
+    OrganizationWorkspace:
+      type: object
+      additionalProperties: false
+      description: |
+        A workspace of your own organization, as its management surface sees it.
+        Distinct from `Workspace`, which is the switcher's shape and carries the
+        organization because that list spans several; this one never leaves one.
+      required: [id, name, slug, current, manageable]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        current:
+          type: boolean
+          description: The workspace this request is acting in.
+        manageable:
+          type: boolean
+          description: |
+            Whether you may rename or delete it. Answered per row, because a
+            workspace-scoped membership can grant `workspace.write` in one
+            workspace and nothing in the next.
+
+    Organization:
+      type: object
+      additionalProperties: false
+      required: [id, name, slug, is_personal, workspace_id, workspace_name, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug:
+          type: string
+          description: |
+            Derived from the name with the id's first octets appended, because
+            organization slugs are unique instance-wide and names are not.
+        is_personal:
+          type: boolean
+          description: |
+            False for everything created here. The flag marks the organization
+            registration provisions alongside an account.
+        workspace_id:
+          type: string
+          format: uuid
+          description: The workspace provisioned with it, in the same transaction.
+        workspace_name: { type: string }
+        created_at: { type: string, format: date-time }
+
+    RoleSlug:
+      type: string
+      enum: [owner, admin, editor, viewer]
+      description: |
+        The four built-in roles. Rank counts downward in authority — `owner` 10,
+        `admin` 20, `editor` 30, `viewer` 40 — and every ceiling in this API is
+        expressed against it.
+
+    Member:
+      type: object
+      additionalProperties: false
+      required: [id, user_id, email, name, role, role_rank, manageable, is_self, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: |
+            The **membership** id, which is what every operation here acts on.
+            Not the user's id.
+        user_id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        name: { type: string }
+        role:
+          $ref: "#/components/schemas/RoleSlug"
+        role_rank:
+          type: integer
+          description: Lower binds tighter; carried so a client can compare without a lookup.
+        workspace_id:
+          type: string
+          format: uuid
+          description: |
+            Absent when the membership covers every workspace in the
+            organization. Present means it covers exactly that one, in addition
+            to whatever else the person holds.
+        workspace_name: { type: string }
+        manageable:
+          type: boolean
+          description: Whether *you* may re-role or remove this membership.
+        is_self:
+          type: boolean
+          description: Your own membership.
+        created_at: { type: string, format: date-time }
+
+    GrantWorkspaceAccessRequest:
+      type: object
+      additionalProperties: false
+      required: [user_id, workspace_id, role]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: Somebody who already holds an organization-wide membership.
+        workspace_id: { type: string, format: uuid }
+        role:
+          $ref: "#/components/schemas/RoleSlug"
+
+    NameRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
 
     LinkStatus:
       type: string
