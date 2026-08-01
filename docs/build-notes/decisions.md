@@ -89,6 +89,7 @@ file. Append a row when you append an entry.
 | [M32.9, a first pass and an honest account of its depth](#2026-08-01--m329-a-first-pass-and-an-honest-account-of-its-depth) | The five named risks and how each held; F17, F18, F19; the refutation that narrowed F19; why three findings is a signal about the review rather than the code |
 | [Draining the queue, and the four rows that could not be verified](#2026-08-01--draining-the-queue-and-the-four-rows-that-could-not-be-verified) | Seven tasks to workflow-changes; why four defect reports did not become findings rows; the tooling gap blocking their verification; what a closure pointing at 2+ does and does not cover |
 | [Five answers, and the port that made a liar of one of them](#2026-08-01--five-answers-and-the-port-that-made-a-liar-of-one-of-them) | W15's diagnosis corrected — it was a misread port, not a stale credential; D41 and why M33.5 is the first legal slot after a review; the demo's coverage test and its tax; cross-workspace move to Phase 3; W13 approved without amending the no-delegation rule |
+| [M28 reopened, and four verdicts sent to be refuted](#2026-08-01--m28-reopened-and-four-verdicts-sent-to-be-refuted) | Two verdicts overturned and why; testing the mechanism instead of the affordance; the trigger correction a regression test would have missed; why the tests were green |
 
 ---
 
@@ -6846,3 +6847,85 @@ no-delegation rule is left exactly as it was.
 It is approved to be made **after M32.9 completes**, not during. A change to
 what a review does, applied to a review already in flight, would leave that
 review's coverage claim describing two different procedures.
+
+---
+
+## 2026-08-01 — M28 reopened, and four verdicts sent to be refuted
+
+Two of them came back overturned, which is the entry's reason for existing.
+
+### What was checked, and what the refutation changed
+
+Four owner reports about the dashboard were reproduced against a live instance
+and given verdicts; each verdict was then handed to an independent verifier
+whose brief was to overturn it.
+
+| Report | My verdict | After refutation |
+| --- | --- | --- |
+| Creating a workspace returns an internal error | Confirmed, and broader than reported | **Held** — with the trigger corrected |
+| The dashboard should scope to the selected workspace | Refuted; it already does | **Held** — on better evidence than mine |
+| Selection resets between pages | Refuted; it persists | **Overturned** |
+| The links page does not follow the selection | Refuted; it is scoped | **Overturned** |
+
+### The overturns, which were mine to get wrong
+
+Both reduce to one thing I never tested. The header switcher is a bare
+`<select>` and a **separate submit button**, with no change handler — the
+template says why, and it is the CSP. So picking a workspace in the dropdown
+does nothing at all, and the next navigation re-renders `selected` at the
+workspace the session is actually in, discarding the choice. That is, verbatim,
+*changing between the Dashboard page and Links page resets your selected
+workspace*.
+
+My evidence was a raw `POST /workspace/switch` — the request the button sends.
+It proved the store-level switch is sound, which it is, and said nothing about
+the report, which was about the control. **Testing the mechanism instead of the
+affordance is how three real observations became "refuted".** Filed as
+[F21](deferred-findings.md), with two more the verifiers found while looking:
+switching from a link detail page lands on a 404 ([F22](deferred-findings.md)),
+and aliases are global across workspaces so a 409 leaks another workspace's
+([F23](deferred-findings.md)).
+
+The two verdicts that held did not survive unaltered either. The dashboard's
+scoping was confirmed only because a verifier generated real click traffic —
+mine ran against an empty `click_events`, so every tile read zero and proved
+nothing. It also found the same page showing **two different numbers for one
+link's clicks**, the row counting bot hits and the tile not
+([F24](deferred-findings.md)).
+
+### The correction inside the confirmed defect
+
+The 500 is real and the root cause was right: two page structs redeclare
+`Workspaces` with a type the switcher partial cannot render. But my statement of
+*when* was wrong, and wrong in the direction that matters. The trigger is more
+than one workspace **in the organization being acted in**, not more than one
+overall — a verifier held six workspaces across two organizations and got a
+clean 200 while sitting in the single-workspace one.
+
+A regression test written from my sentence would have passed without the fix.
+That is the kind of error adversarial verification exists to catch, and it was
+caught by somebody trying to prove me wrong rather than by another read.
+
+### Reopened rather than succeeded
+
+The owner reopened M28 so the fix lands before [M32.9](phase-details/m32.9.md)
+finishes its full pass. M28 claims member and workspace management exist in the
+UI; both pages 500 in the state M28 exists to create, so the claim is false and
+the correction belongs under M28's own number — a successor would leave a `done`
+row asserting something untrue and split one piece of work across two numbers.
+
+Its file now carries what the reopening owes, including two things the original
+did not: the 422 path is unreachable because the error renderer re-renders the
+same broken page, and `/members` never failed for a member without
+`members.write` because that path returns before the field is assigned.
+
+### Why the tests were green
+
+The reusable part. `TestEveryPageRenders` constructs each page's data from a
+fixture and the fixture fills the *shell's* `Workspaces`; production fills the
+*page's* field of the same name, and Go's template resolution prefers the outer
+one. Test and product render different structs through one template. The
+milestone that shipped the pages is the milestone whose tests passed while they
+were broken, which is why the reopening asks for a structural assertion — no
+page struct may redeclare a field the shell already provides — rather than a
+fix to two lines.
