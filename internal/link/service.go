@@ -18,6 +18,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/feed"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 )
 
@@ -59,7 +60,14 @@ type Service struct {
 	// audit records administrative changes. Nil is valid and means nothing is
 	// recorded — the CLI and most tests run that way.
 	audit audit.Recorder
-	log   *slog.Logger
+	// feed is the opt-in third-party reputation check (M32). Nil on every
+	// instance that has not named a feed, which is the default, and nil is what
+	// "no destination leaves the box" is made of: there is no client to call
+	// and no flag whose false branch could be missed.
+	feed FeedChecker
+	// feedMetrics counts feed checks. Nil counts nothing.
+	feedMetrics FeedObserver
+	log         *slog.Logger
 }
 
 // RootInvalidator drops the cached root redirect when it changes. Nil is valid
@@ -81,6 +89,13 @@ type Config struct {
 	RootCache  RootInvalidator
 	// Audit records administrative changes. Nil records nothing.
 	Audit audit.Recorder
+	// Feed is the opt-in third-party reputation check. Nil is the default and
+	// the only state in which this program sends nothing anywhere; see
+	// Service.askFeed and docs/build-notes/decisions.md, D40.
+	Feed FeedChecker
+	// FeedMetrics counts feed checks, including the failures that fail open.
+	// Nil counts nothing.
+	FeedMetrics FeedObserver
 	// Log receives the warning when an audit write fails. Nil uses the default
 	// logger, so a dropped record is never silent.
 	Log *slog.Logger
@@ -99,11 +114,27 @@ func NewService(pool *pgxpool.Pool, cfg Config) *Service {
 		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
 		cache:   cfg.Cache,
 
-		splitHosts: cfg.SplitHosts,
-		rootCache:  cfg.RootCache,
-		audit:      cfg.Audit,
-		log:        log,
+		splitHosts:  cfg.SplitHosts,
+		rootCache:   cfg.RootCache,
+		audit:       cfg.Audit,
+		feed:        cfg.Feed,
+		feedMetrics: cfg.FeedMetrics,
+		log:         log,
 	}
+}
+
+// FeedDisclosure is what this instance does with destinations, as the
+// disclosure page and the API print it.
+//
+// It reads the service's own checker rather than the configuration the checker
+// was built from, so the page cannot describe a feed the service is not using.
+// The zero Disclosure — Enabled false — is the default instance and is the
+// whole of the answer there: nothing is sent anywhere.
+func (s *Service) FeedDisclosure() feed.Disclosure {
+	if s.feed == nil {
+		return feed.Disclosure{}
+	}
+	return s.feed.Describe()
 }
 
 // CreateInput describes a new link.

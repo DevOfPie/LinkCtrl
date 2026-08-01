@@ -319,6 +319,23 @@ type Querier interface {
 	// presented as a distinct-person count, because the exact figure cannot be
 	// recovered once the salts are purged. That is the intended trade.
 	GetWorkspaceTotals(ctx context.Context, arg GetWorkspaceTotalsParams) (GetWorkspaceTotalsRow, error)
+	// Whether the instance owner has allowed this host (M32).
+	//
+	// Read at exactly one call site — internal/link's feed step — and that
+	// confinement is the whole safety argument. It suppresses the third-party
+	// reputation feed for a host the owner already decided about, which is what
+	// makes a feed verdict owner-overridable without 01500 growing the allow column
+	// it deliberately does not have.
+	//
+	// It cannot widen anything else. The three tiers above the feed have all
+	// returned by the time this runs, and M31 refuses to file a dispute about any
+	// refusal but a low-confidence one, so no row here can carry an unappealable or
+	// embedded-tier reason code to be read as permission.
+	//
+	// Equality rather than the blocklist's candidate walk: allowing 'evil.example'
+	// says nothing about 'login.evil.example', and 01700's partial index matches
+	// this predicate exactly.
+	HostHasAllowedDispute(ctx context.Context, host string) (bool, error)
 	// Audit log. Append-only: there is no update and no delete here, and that is the
 	// point of the table. Rows leave only when retention drops a whole partition.
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) error

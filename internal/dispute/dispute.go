@@ -18,14 +18,25 @@
 // "does it still resolve" check. TestTheQueueFetchesNothing parses this package
 // and the handlers that serve it and fails on any outbound-HTTP symbol, because a
 // preview fetch is exactly that same SSRF arriving as a convenience feature.
+// Since M32 there is one thing that leaves the box on this path and it is not a
+// fetch of the destination: filing re-judges the URL, and on an instance that
+// has named a reputation feed, judging sends the destination to that feed. The
+// difference is the one the SSRF argument turns on — the address contacted is
+// the operator's configured endpoint, never the attacker-chosen destination —
+// and it is disclosed at /feeds and in the docs rather than left implicit.
 //
 // **The destination is stored inert.** Defanged once, on the way in, the rule
 // audit_logs.metadata has followed since M30 — a value that cannot be rendered
 // live is one no consumer written later can render live by forgetting.
 //
-// **A decision reaches the runtime list and nothing else.** Allowing removes one
-// row from blocked_destinations. There is no row anybody can write that makes a
-// destination acceptable, so an allow is a deletion or it is nothing.
+// **A decision writes no permission anywhere.** Allowing removes one row from
+// blocked_destinations; there is no row anybody can write that makes a
+// destination acceptable, and 01500 has no allow column on purpose. M32 added
+// the one decision that deletes nothing: an allowed dispute about a feed verdict
+// is itself the override, read only by internal/link's feed step, which is the
+// last check and the one every built-in tier has already returned before. So an
+// allow still cannot reach the unappealable tier, the embedded list or the
+// runtime blocklist — see liftableRules.
 package dispute
 
 import (
@@ -157,6 +168,12 @@ type Judge interface {
 type Notifier interface {
 	Notify(ctx context.Context, userID uuid.UUID, e notify.Event) error
 	EveryOwner(ctx context.Context) ([]notify.Recipient, error)
+	// RecipientByID and Mail are the outcome email (D1's addendum). Mail is a
+	// no-op on an instance with no mailer, so this package never asks whether
+	// one is configured — in-app delivery is the baseline and the mail is the
+	// addition, in that order, at every call site.
+	RecipientByID(ctx context.Context, userID uuid.UUID) (notify.Recipient, error)
+	Mail(ctx context.Context, to notify.Recipient, template string, data map[string]string) error
 }
 
 // Service files, lists and decides disputes.
@@ -203,12 +220,12 @@ const (
 
 // liftableRules are the low-confidence rules a decision can actually lift.
 //
-// Both of them are rows in blocked_destinations, which is the entire reach an
-// allow has. The other two low-confidence rules — a punycode homograph, and
-// credentials before the host — are computed from the URL every time it is
-// judged, so there is no row to remove and no row anyone may add: 01500 has no
-// allow column, deliberately, because a list that can permit a destination is a
-// list that can overrule the unappealable tier one entry at a time.
+// Two of them are rows in blocked_destinations, and deleting the matched row is
+// the entire reach an allow had until M32. The punycode homograph and the
+// credentials rule are computed from the URL every time it is judged, so there
+// is no row to remove and no row anyone may add: 01500 has no allow column,
+// deliberately, because a list that can permit a destination is a list that can
+// overrule the unappealable tier one entry at a time.
 //
 // A dispute about one of those is still worth filing and worth reading — it is
 // how an operator learns their heuristics are producing false positives, which
@@ -218,6 +235,25 @@ const (
 var liftableRules = map[string]bool{
 	link.TierLowConfidence.Code(link.RuleOperatorBlocklist): true,
 	link.TierLowConfidence.Code(link.RuleShortenerChain):    true,
+	link.TierLowConfidence.Code(link.RuleFeedReputation):    true,
+}
+
+// liftedByDecision are the liftable rules with no row behind them.
+//
+// One entry, and it is the whole of how a third party's verdict is made
+// owner-overridable without giving anybody a way to write permission into the
+// blocklist. A feed verdict is not stored — it is asked for on every destination
+// write — so there is nothing for an allow to delete. The `allowed` status on
+// this dispute *is* the override: internal/link reads it before it sends
+// anything, so overruling the verdict stops both the refusal and the egress.
+//
+// It is confined to the feed step and cannot widen anything else, for a reason
+// that is structural rather than careful: the feed is consulted last, only on a
+// destination the unappealable tier, the embedded list, the runtime blocklist
+// and the heuristics have all already accepted. There is no verdict left above
+// it for a suppression to reach.
+var liftedByDecision = map[string]bool{
+	link.TierLowConfidence.Code(link.RuleFeedReputation): true,
 }
 
 // Codes a refusal to file carries, on the `url` field.
@@ -479,14 +515,22 @@ func (s *Service) decide(
 
 // entryToLift finds the blocklist row an allow would remove, or refuses.
 //
-// Returns the host to delete. An empty string is never returned with a nil
-// error: if there is nothing to lift, that is a refusal, because a decision that
+// Returns the host to delete. An empty string with a nil error means the rule is
+// one of liftedByDecision — the allow changes something real, just not a row.
+// For every other rule an empty string is a refusal, because a decision that
 // changes nothing must not be recorded as one that did.
 func (s *Service) entryToLift(ctx context.Context, d dbgen.DestinationDispute) (string, error) {
 	if !liftableRules[d.ReasonCode] {
 		return "", fmt.Errorf(
 			"%w: %s is computed from the URL rather than held in the blocklist, so there "+
 				"is no entry to remove; uphold it, or change the rule", domain.ErrConflict, d.ReasonCode)
+	}
+	if liftedByDecision[d.ReasonCode] {
+		// Nothing to delete, and nothing to check for either: the verdict is a
+		// third party's, re-asked on every write, so there is no row that could
+		// have gone stale between filing and deciding. Recording the decision is
+		// the whole effect.
+		return "", nil
 	}
 
 	row, err := s.q.MatchBlockedDestination(ctx, link.HostCandidates(d.Host))
@@ -535,6 +579,13 @@ func (s *Service) record(
 	if lifted != "" {
 		meta["blocklist_entry_removed"] = link.Defang(lifted)
 	}
+	// An allow that deleted nothing still did something, and the log has to say
+	// which of the two it was. Without this an operator reading back a
+	// `dispute.allowed` row with no `blocklist_entry_removed` would reasonably
+	// conclude the decision failed silently.
+	if d.Status == StatusAllowed && liftedByDecision[d.ReasonCode] {
+		meta["feed_verdict_overridden"] = true
+	}
 	err := s.audit.Record(ctx, actor, audit.Event{
 		Action: action, TargetType: "destination_dispute", TargetID: &id, Metadata: meta,
 	})
@@ -581,16 +632,26 @@ func (s *Service) tellReviewers(ctx context.Context, d dbgen.DestinationDispute)
 }
 
 // tellFiler reports the outcome to whoever filed the dispute.
+//
+// In the dashboard always, and by email as well when the instance has a mailer
+// (D1). Which is the baseline and which is the addition is decided by the
+// ordering here rather than by a flag: the inbox row is written first, and the
+// mail is only attempted after it succeeded. A person who files a dispute may
+// not open the dashboard again for a week — the outcome is the one thing in this
+// feature they are actually waiting for, and it is the only notification in it
+// addressed to somebody who did not choose to be an administrator.
 func (s *Service) tellFiler(ctx context.Context, d dbgen.DestinationDispute) {
 	if s.notify == nil || d.CreatedBy == nil {
 		return
 	}
 	title := "Your disputed destination was allowed"
 	body := fmt.Sprintf("%s is no longer refused; you can create that link now.", link.Defang(d.Host))
+	outcome := "You can create that link now."
 	if d.Status != StatusAllowed {
 		title = "Your disputed destination stays blocked"
 		body = fmt.Sprintf(
 			"%s was reviewed and the refusal stands (%s).", link.Defang(d.Host), d.ReasonCode)
+		outcome = "The refusal stands, so that destination still cannot be used here."
 	}
 	if err := s.notify.Notify(ctx, *d.CreatedBy, notify.Event{
 		Kind: KindDecided, Title: title, Body: body,
@@ -601,6 +662,36 @@ func (s *Service) tellFiler(ctx context.Context, d dbgen.DestinationDispute) {
 		},
 	}); err != nil {
 		s.log.Warn("dispute decided but the filer was not notified",
+			slog.String("dispute", d.ID.String()), slog.Any("error", err))
+		// No mail either. The inbox row is the delivery; if it could not be
+		// written the person has heard nothing, and emailing them about a
+		// decision the dashboard will not show is worse than the silence.
+		return
+	}
+	s.mailFiler(ctx, d, outcome)
+}
+
+// mailFiler queues the email form of the outcome, if there is a mailer.
+//
+// Every value it interpolates is inert before it goes in — the host defanged,
+// the status and the reason code drawn from this program's own vocabulary — and
+// internal/ui neutralizes them again on the way into the template. Twice, because
+// this is the one message in the product whose subject matter is a string an
+// attacker chose, sent to somebody who did not ask to receive it.
+func (s *Service) mailFiler(ctx context.Context, d dbgen.DestinationDispute, outcome string) {
+	to, err := s.notify.RecipientByID(ctx, *d.CreatedBy)
+	if err != nil {
+		s.log.Warn("dispute decided but the filer could not be resolved for mail",
+			slog.String("dispute", d.ID.String()), slog.Any("error", err))
+		return
+	}
+	if err := s.notify.Mail(ctx, to, notify.MailDisputeDecided, map[string]string{
+		"Status":     d.Status,
+		"Host":       link.Defang(d.Host),
+		"ReasonCode": d.ReasonCode,
+		"Outcome":    outcome,
+	}); err != nil {
+		s.log.Warn("dispute decided but the outcome mail was not queued",
 			slog.String("dispute", d.ID.String()), slog.Any("error", err))
 	}
 }

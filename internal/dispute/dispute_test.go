@@ -135,6 +135,9 @@ func TestOnlyListedRulesCanBeLifted(t *testing.T) {
 		link.RuleShortenerChain:    true,
 		link.RulePunycodeHomograph: false,
 		link.RuleURLCredentials:    false,
+		// M32. A feed verdict is liftable and has no row behind it — see
+		// TestAFeedVerdictIsLiftedByTheDecisionItself below.
+		link.RuleFeedReputation: true,
 	}
 	for rule, want := range listed {
 		if got := liftableRules[link.TierLowConfidence.Code(rule)]; got != want {
@@ -148,6 +151,47 @@ func TestOnlyListedRulesCanBeLifted(t *testing.T) {
 			if strings.HasPrefix(code, string(tier)+".") {
 				t.Errorf("%s is marked liftable; only the low-confidence tier may be lifted", code)
 			}
+		}
+	}
+}
+
+// TestAFeedVerdictIsLiftedByTheDecisionItself pins the one allow that deletes
+// nothing, and the bound on how far that reaches.
+//
+// m32.md requires a feed verdict be owner-overridable. 01500 has no allow column
+// on purpose — a list that can permit a destination is a list that can overrule
+// the unappealable tier one entry at a time — so the override had to be
+// something other than a row in it, and it is the `allowed` status on the
+// dispute, read by internal/link's feed step and nowhere else.
+//
+// Two things have to stay true for that to be safe, and both are asserted here:
+// every rule lifted this way is liftable at all, and no rule outside the
+// low-confidence tier ever joins the map. The third — that the feed step is the
+// only reader — is asserted in internal/link, where the reading happens.
+func TestAFeedVerdictIsLiftedByTheDecisionItself(t *testing.T) {
+	feedCode := link.TierLowConfidence.Code(link.RuleFeedReputation)
+	if !liftedByDecision[feedCode] {
+		t.Errorf("%s is not lifted by the decision; then an allow on a feed verdict "+
+			"looks for a blocklist row that cannot exist and refuses", feedCode)
+	}
+	for code := range liftedByDecision {
+		if !liftableRules[code] {
+			t.Errorf("%s is lifted by a decision but is not liftable at all; the two "+
+				"maps disagree and entryToLift would refuse before it ever got here", code)
+		}
+		if !strings.HasPrefix(code, string(link.TierLowConfidence)+".") {
+			t.Errorf("%s is outside the low-confidence tier. A decision that overrides "+
+				"without deleting anything must never reach a tier whose refusals "+
+				"protect somebody other than the person appealing.", code)
+		}
+	}
+	// The rules with a row behind them must not be in it: for those, deleting
+	// the row *is* the lift, and marking one here would record a decision that
+	// left the blocklist entry in place.
+	for _, rule := range []string{link.RuleOperatorBlocklist, link.RuleShortenerChain} {
+		if liftedByDecision[link.TierLowConfidence.Code(rule)] {
+			t.Errorf("%s is backed by a blocklist row; lifting it by decision would "+
+				"leave the row refusing the destination", rule)
 		}
 	}
 }
@@ -187,6 +231,11 @@ var queueSources = []string{
 	"internal/ui/templates/pages/disputes.html",
 	"internal/store/query/disputes.sql",
 	"internal/store/migrations/01600_destination_disputes.sql",
+	// The outcome mail (M32, D1's addendum). A template is exactly where this
+	// gate has to keep looking: the browser is not the only client that fetches
+	// what it is shown, and a remote image in a message reporting a decision
+	// about a hostile URL is a read receipt for whoever chose that URL.
+	"internal/ui/templates/mail/dispute-decided.txt",
 }
 
 // TestTheQueueFetchesNothing is the milestone's third bullet, as a gate.

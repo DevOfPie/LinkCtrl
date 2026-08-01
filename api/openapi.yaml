@@ -76,6 +76,10 @@ tags:
     description: What changed, who changed it, and when
   - name: disputes
     description: Appealing a blocked destination, and the queue that decides them
+  - name: feeds
+    description: >
+      Whether this instance sends destinations to a third party, and to whom.
+      Read-only by design
   - name: invitations
     description: Adding people to an organization
   - name: members
@@ -769,6 +773,39 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/Validation"
+
+  /feeds:
+    get:
+      tags: [feeds]
+      operationId: getFeedDisclosure
+      summary: What this instance does with the destinations you submit
+      description: |
+        Every blocking decision LinkCtrl makes is local by default: a host list
+        compiled into the binary, a list held in this instance's own database,
+        and rules that read a URL's own text. An operator may additionally
+        switch on a third-party reputation feed, and doing so means the
+        destination you submit is **sent to somebody else's server** — a
+        deliberate exception to this product's promise that no destination
+        leaves the box uninvited.
+
+        This operation answers whether that is happening here, and to whom. It
+        is the same disclosure the dashboard shows at `/feeds`, available to
+        anyone with a credential because what it describes is what happens to
+        their own data.
+
+        **There is no write counterpart and there will not be one.** A feed is
+        switched on by the operator, in this instance's configuration, and
+        restarting it — no request to this API and nothing in the dashboard can
+        change it. See decision D40.
+      responses:
+        "200":
+          description: What this instance sends, and to whom
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedDisclosure"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /disputes:
     post:
@@ -2161,6 +2198,44 @@ components:
             True when the dashboard and short links are served on separate
             hostnames. The root redirect applies only then; setting it otherwise
             is refused.
+
+    FeedDisclosure:
+      type: object
+      additionalProperties: false
+      required: [enabled]
+      description: >
+        What this instance does with a destination you submit. `enabled: false`
+        is the shipped default and the whole answer: nothing is sent anywhere.
+        The remaining fields are present only when a feed is configured.
+      properties:
+        enabled:
+          type: boolean
+          description: >
+            True when destinations are sent to a third party for a reputation
+            check.
+        third_party:
+          type: string
+          description: >
+            Who the destinations go to, in words, as the operator named them.
+            Required alongside the endpoint: an instance cannot be configured to
+            send destinations somewhere it cannot name.
+          example: Google Safe Browsing
+        endpoint:
+          type: string
+          description: >
+            Where they are sent, with any query string removed — a feed URL
+            often carries the operator's API key in one, and this disclosure is
+            readable by every account on the instance.
+        method:
+          type: string
+          enum: [GET, POST]
+        timeout_seconds:
+          type: number
+          description: >
+            How long a check may take before it fails open. A check that fails
+            open accepts the destination: the built-in tiers had already
+            accepted it, and a third party's outage must not decide that this
+            instance may not create links.
 
     LinkPage:
       type: object

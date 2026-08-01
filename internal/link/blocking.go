@@ -14,6 +14,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/feed"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 )
 
@@ -67,6 +68,12 @@ const (
 	// Low confidence, computed.
 	RulePunycodeHomograph = "punycode_homograph"
 	RuleURLCredentials    = "url_credentials"
+
+	// RuleFeedReputation is the opt-in third-party feed (M32). Low confidence
+	// like everything else that guesses, and low confidence for a second reason
+	// the others do not have: the claim is somebody else's, made about a URL
+	// they were sent, and this instance cannot check their working.
+	RuleFeedReputation = "feed_reputation"
 )
 
 // Sources a row of the runtime list can carry, and the vocabulary the `source`
@@ -357,6 +364,118 @@ func blockForSource(source string) *Block {
 	}
 }
 
+// --- the opt-in third-party feed ---------------------------------------------
+
+// FeedChecker is internal/feed's client, as this package needs it.
+//
+// An interface declared by the consumer, so the dependency is two methods wide
+// and a test answers with a table instead of an HTTP server. It is also what
+// makes "with the feature off, zero destination URLs leave the instance" a
+// structural claim: off is a nil interface, not a false flag, so there is no
+// branch to get wrong and nothing to construct.
+type FeedChecker interface {
+	Check(ctx context.Context, destination string) (feed.Result, error)
+	Name() string
+	// Describe is what the instance tells its users it is doing. On this
+	// interface rather than read from configuration so that the disclosure and
+	// the sending come from one object: a page assembled from the environment
+	// could say "on" about a client that was never built.
+	Describe() feed.Disclosure
+}
+
+// FeedObserver counts checks. internal/observability implements it; nil counts
+// nothing, which is what the CLI and most tests run with.
+type FeedObserver interface {
+	ObserveFeedCheck(result string)
+}
+
+// askFeed is the whole of the feed's authority over a destination.
+//
+// Three properties, and each is here rather than in a comment somewhere else
+// because this is the only function that can break them.
+//
+// **It runs last, and only on a destination every built-in tier accepted.** So
+// the built-in tiers behave identically with the feed on, off or erroring —
+// they have already returned by the time this is reached, and nothing here can
+// revisit their verdict. That is the bullet about feeds never being the
+// mechanism the built-in tiers depend on, expressed as control flow.
+//
+// **It fails open, always.** Every error path returns nil, which means "no
+// opinion" and lets the destination through. A third party's outage must not
+// decide that this instance may not create links; the built-in protection an
+// operator was promised is the protection they still have.
+//
+// **The owner's decision is read before anything leaves the box.** A host with
+// an allowed dispute is not sent, so overruling a feed verdict stops both the
+// refusal and the egress. It is scoped to this function — the only place in the
+// program that reads that state — so it cannot reach the unappealable tier, the
+// embedded list or the runtime blocklist, all three of which have already had
+// their say above.
+func (s *Service) askFeed(ctx context.Context, normalized, host string) *Block {
+	if s.feed == nil {
+		return nil
+	}
+
+	// Exact host, not the label-boundary walk the blocklist uses. An owner
+	// allowing evil.example said that host was fine; reading it as permission
+	// for login.evil.example would be widening a decision nobody made.
+	allowed, err := s.q.HostHasAllowedDispute(ctx, host)
+	switch {
+	case err != nil:
+		// Unable to tell whether the owner already allowed this. Counted as an
+		// error and the destination is not sent: the failure direction that
+		// keeps a promise is the one where nothing leaves, and refusing to ask
+		// fails open on blocking exactly as an unanswered feed does.
+		s.observeFeed(string(feed.ResultError))
+		s.log.Warn("reputation feed skipped: could not read the owner's decisions",
+			slog.Any("error", err))
+		return nil
+	case allowed:
+		s.observeFeed("skipped")
+		return nil
+	}
+
+	result, err := s.feed.Check(ctx, normalized)
+	s.observeFeed(string(result))
+	if err != nil {
+		// Warn rather than error: nothing is broken here, a dependency the
+		// operator opted into did not answer, and the request succeeds. The
+		// counter above is what an alert reads; this is what explains it.
+		s.log.Warn("reputation feed did not answer; failing open to the built-in tiers",
+			slog.String("feed", s.feed.Name()),
+			slog.Any("error", err))
+		return nil
+	}
+	if result != feed.ResultMalicious {
+		return nil
+	}
+	return feedBlock(s.feed.Name())
+}
+
+// feedBlock is the refusal a malicious verdict produces.
+//
+// Separate from askFeed so the tier can be asserted without a database, and
+// because it is the one place a third party's answer becomes this program's. The
+// tier is stamped here and there is no path by which a feed could supply one:
+// FeedChecker returns a Result, which is three words, none of them a tier.
+func feedBlock(name string) *Block {
+	return &Block{
+		Tier: TierLowConfidence, Rule: RuleFeedReputation,
+		// Names the feed. The person being refused is entitled to know whose
+		// claim it is, and the instance already discloses that the feed exists —
+		// hiding it here would only make the refusal unappealable in practice.
+		Detail: "that destination is reported as malicious by " + name +
+			", this instance's configured reputation feed; the instance owner can review it",
+	}
+}
+
+func (s *Service) observeFeed(result string) {
+	if s.feedMetrics == nil {
+		return
+	}
+	s.feedMetrics.ObserveFeedCheck(result)
+}
+
 // --- the surfaces ------------------------------------------------------------
 
 // destinationSurface names one place a destination can be written.
@@ -461,6 +580,12 @@ func (s *Service) Judge(ctx context.Context, raw string) (Verdict, error) {
 	}
 	if block == nil {
 		block = lowConfidenceHeuristics(u, host)
+	}
+	// Last, and only on a destination everything above accepted. See askFeed:
+	// the ordering is what makes the built-in tiers independent of the feed
+	// rather than a claim somebody has to keep true by hand.
+	if block == nil {
+		block = s.askFeed(ctx, normalized, host)
 	}
 	if block == nil {
 		return Verdict{Normalized: normalized, Host: host}, nil

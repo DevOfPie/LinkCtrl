@@ -138,6 +138,19 @@ personal data, which puts it outside the scope of subject-access and erasure
 requests. Unique-visitor counts are therefore estimates at daily resolution, and
 every API response that includes them says so.
 
+**One thing can leave the box, and only if you turn it on.** Every check LinkCtrl
+makes on a destination is local — a host list compiled into the binary, a list in
+your own database, and rules that read the URL's own text. Setting
+`LINKCTRL_FEED_URL` adds a third-party reputation feed, and that means the
+destination somebody typed is **sent to a server you named** each time a link is
+created or edited, the root redirect is set, or a refusal is disputed. It is
+unset by default. When it is set, the instance says so at `/feeds` to every
+signed-in user — which feed, what is sent, when, and that only you can change
+it — and the same disclosure is on `GET /api/v1/feeds`. A feed that does not
+answer is ignored rather than trusted, so the built-in checks behave identically
+with one on, off, or failing. See
+[docs/configuration.md](docs/configuration.md#reputation-feeds).
+
 ## Not built yet
 
 Known limitations and deferred work, so nobody discovers them in production:

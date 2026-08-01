@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -31,6 +32,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/build"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/dispute"
+	"github.com/DevOfPie/LinkCtrl/internal/feed"
 	"github.com/DevOfPie/LinkCtrl/internal/geoip"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
@@ -424,6 +426,45 @@ func run(cfg config.Config, _ io.Writer) error {
 	// happens to them afterwards.
 	teamSvc := team.NewService(pools.App, team.Config{Audit: auditSvc, Log: log})
 
+	// The opt-in reputation feed (M32). Off unless LINKCTRL_FEED_URL names one,
+	// which is the default, and off means there is no client — not a client with
+	// a false flag in it.
+	//
+	// The nil is assigned into the interface deliberately and only when a client
+	// exists. A typed nil stored in link.Config.Feed would be a non-nil
+	// interface holding nothing, and the guard that keeps destinations on this
+	// box is `s.feed == nil`.
+	var feedChecker link.FeedChecker
+	feedClient, err := feed.New(feed.Config{
+		Name:         cfg.Feed.Name,
+		URL:          cfg.Feed.URL,
+		Method:       strings.ToUpper(cfg.Feed.Method),
+		Param:        cfg.Feed.Param,
+		AuthHeader:   cfg.Feed.AuthHeader,
+		AuthToken:    cfg.Feed.AuthToken.Reveal(),
+		VerdictField: cfg.Feed.VerdictField,
+		Timeout:      cfg.Feed.Timeout,
+	})
+	if err != nil {
+		return fmt.Errorf("configure reputation feed: %w", err)
+	}
+	if feedClient != nil {
+		feedChecker = feedClient
+		// Said at boot, at info, and worded as what it does rather than as what
+		// was configured. An operator who inherits a box should be able to find
+		// this in the first screen of its log: it is the one setting on this
+		// instance that sends its users' data somewhere else.
+		log.Info("reputation feed enabled; destinations are sent to a third party "+
+			"when a link is created, edited, or a refusal is disputed",
+			slog.String("feed", feedClient.Name()),
+			slog.String("endpoint", feedClient.Endpoint()),
+			slog.Duration("timeout", cfg.Feed.Timeout),
+			slog.String("disclosed_at", cfg.AppOrigin()+"/feeds"))
+	} else {
+		log.Info("no reputation feed configured (LINKCTRL_FEED_URL is empty); " +
+			"no destination leaves this instance")
+	}
+
 	linkSvc := link.NewService(pools.App, link.Config{
 		// The unappealable tier is not configured here and cannot be: private
 		// and metadata addresses are refused unconditionally, and the scheme
@@ -455,7 +496,12 @@ func run(cfg config.Config, _ io.Writer) error {
 		// tells every other replica to clear theirs.
 		RootCache: redirect.BroadcastRootInvalidator{Local: rootRedirect, Publisher: resolver},
 		Audit:     auditSvc,
-		Log:       log,
+		// Consulted last and only on a destination every built-in tier
+		// accepted, so the protection an operator gets with no feed configured
+		// is the protection they keep when one stops answering.
+		Feed:        feedChecker,
+		FeedMetrics: metrics,
+		Log:         log,
 	})
 	rootRedirect.Load = linkSvc.LoadRootRedirect
 

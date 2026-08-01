@@ -83,7 +83,7 @@
         {{if .Liftable}}
         <form method="post" action="/disputes/{{.ID}}/allow"
               hx-post="/disputes/{{.ID}}/allow"
-              hx-confirm="Allow this destination for every workspace on this instance? The blocklist entry is deleted.">
+              hx-confirm="Allow this destination for every workspace on this instance? The refusal is removed for that host.">
           <button type="submit" class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Allow</button>
         </form>
         {{end}}
@@ -117,8 +117,10 @@
   <p class="text-sm text-muted">Nothing to review.</p>
   <p class="mt-1 text-sm text-subtle">
     A dispute appears here when somebody is refused by a low-confidence rule — the
-    operator blocklist, or a known URL shortener — and asks for a second look. The
-    curated list and the private-address refusals never reach this page.
+    operator blocklist, a known URL shortener, a rule computed from the URL itself,
+    or a third-party reputation feed if this instance has one — and asks for a
+    second look. The curated list and the private-address refusals never reach this
+    page.
   </p>
 </div>
 {{end}}

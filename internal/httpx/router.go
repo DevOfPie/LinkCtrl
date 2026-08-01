@@ -149,6 +149,11 @@ func NewRouter(d Deps) http.Handler {
 			"DELETE " + APIPrefix + "/tags/{id}":        api.DeleteTag,
 			"GET " + APIPrefix + "/domain":              api.GetDomain,
 			"PATCH " + APIPrefix + "/domain":            api.UpdateDomain,
+			// The reputation-feed disclosure (M32). Read-only, and there is no
+			// second operation here by design: the page it mirrors accepts no
+			// POST (D40), and an API that could write would be the settings
+			// surface D38 removed wearing a bearer token.
+			"GET " + APIPrefix + "/feeds": (&FeedAPI{Links: d.Links}).Get,
 		}
 		for pattern, h := range protected {
 			app.Handle(pattern, RequireAuth(h))
@@ -341,8 +346,12 @@ func NewRouter(d Deps) http.Handler {
 			"POST /keys":                    web.KeyCreate,
 			"POST /keys/{id}/revoke":        web.KeyRevoke,
 			"GET /account":                  web.AccountPage,
-			"POST /workspace/switch":        web.WorkspaceSwitch,
-			"POST /workspace/default":       web.WorkspaceDefault,
+			// Read-only, and registered GET-only on purpose: a POST to /feeds
+			// must be refused by the mux rather than by a handler somebody
+			// could add one to. D40, and TestTheDisclosurePageAcceptsNoWrite.
+			"GET /feeds":              web.FeedsPage,
+			"POST /workspace/switch":  web.WorkspaceSwitch,
+			"POST /workspace/default": web.WorkspaceDefault,
 		} {
 			app.Handle(pattern, signedIn(fn))
 		}
@@ -591,7 +600,7 @@ func (h hostRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 var dashboardPatterns = []string{
 	"/{$}", "/login", "/logout", "/setup", "/dashboard", "/docs",
 	"/links", "/links/", "/keys", "/keys/", "/account", "/account/",
-	"/notifications", "/notifications/", "/theme", "/workspace/",
+	"/notifications", "/notifications/", "/theme", "/workspace/", "/feeds",
 	"/invites", "/invites/", "/invite/", "/disputes", "/disputes/",
 	"/members", "/members/", "/workspaces", "/workspaces/",
 	"/organizations", "/organizations/",

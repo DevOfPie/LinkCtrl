@@ -207,6 +207,77 @@ intranet, give the host a name that resolves there — hostnames are not checked
 against these ranges, and that limitation is
 [documented](SECURITY.md), not a loophole to rely on.
 
+## Reputation feeds
+
+**This is the only setting in LinkCtrl that sends your users' data to somebody
+else. It is off by default. Read this section before switching it on.**
+
+Every other check this product makes on a destination is local: a host list
+compiled into the binary, the `blocked_destinations` table above, and rules that
+inspect the URL's own text. A reputation feed cannot work that way. Answering
+*is this destination malicious* means **sending the destination to a third
+party's server**, and that is a deliberate exception to this project's promise
+that no destination leaves the box uninvited — which is why turning it on costs
+you a named feed rather than a boolean.
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `LINKCTRL_FEED_URL` | *(empty)* | The endpoint, and the switch. Empty means no feed, no client, and no code path that sends a destination anywhere. **`https` only**: destinations are already going to somebody else's server and must not travel in clear as well. |
+| `LINKCTRL_FEED_NAME` | *(empty)* | Who the destinations go to, in words — "Google Safe Browsing", "urlscan.io". **Required once `FEED_URL` is set.** It is what `/feeds` prints, and an instance may not send destinations somewhere it cannot name. |
+| `LINKCTRL_FEED_METHOD` | `POST` | `POST` or `GET`. `POST` keeps the destination out of the feed's access-log query string. |
+| `LINKCTRL_FEED_PARAM` | `url` | The field carrying the destination: a JSON key on `POST`, a query parameter on `GET`. |
+| `LINKCTRL_FEED_VERDICT_FIELD` | `blocked` | Dotted path into the JSON response holding the verdict — `data.malicious` reads `{"data":{"malicious":true}}`. `true`, a non-zero number, or one of `yes`/`malicious`/`blocked`/`phishing`/`malware` means refuse; `false`, `no`, `clean`, `ok`, `harmless` and empty mean accept. Anything else is counted as an error and fails open. |
+| `LINKCTRL_FEED_AUTH_HEADER` | `Authorization` | Sent only when a token is set. |
+| `LINKCTRL_FEED_AUTH_TOKEN` | *(empty)* | The credential, verbatim — include `Bearer ` yourself if the feed wants it. `LINKCTRL_FEED_AUTH_TOKEN_FILE` works too, for mounted secrets. Never printed: it is redacted in logs and stripped from the endpoint shown on `/feeds`. |
+| `LINKCTRL_FEED_TIMEOUT` | `2s` | Bounds one check end to end. Spent inside a form submission somebody is waiting on, so keep it small; validation refuses anything above `HTTP_REQUEST_TIMEOUT`. |
+
+One generic HTTP adapter, not a list of integrations. Point it at any endpoint
+that takes a URL and answers JSON. Which feeds get first-class support is a
+product decision nobody has made, and shipping a named integration would be
+making it.
+
+### What is sent, and when
+
+The destination URL, and nothing else. No account, no address, no workspace name,
+no name for your instance — the request carries the URL and your own credential
+for that feed.
+
+It is sent when a destination is **checked**, which is four moments: creating a
+link, editing one, setting the link domain's root redirect, and asking for a
+refusal to be reviewed. Nothing is sent when a visitor follows a link, and
+existing links are never re-checked in the background.
+
+### What the answer can and cannot do
+
+- **Asked last.** The feed only ever sees a destination every built-in tier has
+  already accepted. A private address, a host on the compiled list, a listed
+  host, a homograph — none of them is ever sent anywhere, and none of them
+  changes answer with a feed on, off or failing.
+- **Low confidence.** A refusal it produces is `low_confidence.feed_reputation`:
+  disputable like any other, and the instance owner can overrule it from
+  `/disputes`. Overruling also stops that host being sent again, so an override
+  ends both the refusal and the egress. It is scoped to the exact host —
+  allowing `evil.example` says nothing about `login.evil.example`.
+- **Fails open.** A timeout, a `500`, or a response this adapter cannot read
+  accepts the destination and increments
+  `linkctrl_destination_feed_checks_total{result="error"}`. A third party's
+  outage must not decide that your instance may not create links — but it also
+  means a feed that quietly stopped working is invisible in the product's
+  behaviour, so alert on that counter if you are relying on one.
+
+### The disclosure
+
+Once a feed is configured, the instance says so at **`/feeds`** — to every
+signed-in user, gated on no permission, because what it describes is what happens
+to their own destinations. The same disclosure is on `GET /api/v1/feeds`. It
+names the feed, states what is sent and when, and says that only the operator can
+change it. With no feed configured the page still answers, and says nothing
+leaves.
+
+The page is **read-only and accepts no `POST`**, and that is asserted by test
+rather than left as a convention (decision D40). There is no setting there and
+there will not be one: this file is the only switch.
+
 ## Authentication
 
 | Variable | Default | Notes |
@@ -385,14 +456,25 @@ can become a header or a second message.
 
 ### What sends mail today
 
-One thing: the audit-growth warning. Once `audit_logs` passes
-`AUDIT_SIZE_WARN_BYTES`, every organization owner gets the in-app notification —
-and, with a mailer configured, the same warning by email. The in-app
-notification is the baseline and does not depend on the mailer.
+Four things, and every one of them degrades to a mail-free behaviour rather than
+failing:
 
-Invitations, address verification and dispute outcomes are specified for later
-milestones in [Plan.md](../Plan.md#phase-2-build-plan). Each degrades to its
-mail-free behaviour when no mailer is configured.
+- **The audit-growth warning.** Once `audit_logs` passes
+  `AUDIT_SIZE_WARN_BYTES`, every organization owner gets the in-app
+  notification, and the same warning by email.
+- **Invitations.** With no mailer the invitation is still created and the link
+  is shown to whoever made it, to be passed on by hand.
+- **Address verification**, which is what `SIGNUP_MODE=open` needs. Without a
+  mailer the effective mode drops to `invite`.
+- **Dispute outcomes.** Whoever asked for a blocked destination to be reviewed
+  is told what was decided.
+
+In-app delivery is the baseline in every case and does not depend on the mailer;
+the email is the addition. The dispute outcome is the one that most repays
+configuring a relay, because it is the only message addressed to somebody who
+did not choose to be an administrator — a person who filed a dispute may not open
+the dashboard again for a week, and the outcome is the thing they are waiting
+for.
 
 ### Boot behaviour
 

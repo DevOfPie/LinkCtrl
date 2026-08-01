@@ -209,6 +209,26 @@ Four constraints the implementation inherits rather than chooses:
   promises. Off by default, disclosed plainly when on, and never the mechanism the
   built-in tiers depend on.
 
+  [M32](docs/build-notes/phase-details/m32.md) shipped that exception, so the
+  promise is now stated precisely rather than left to be read as absolute. What
+  is true of every instance: **no destination is sent anywhere unless the
+  operator sets `LINKCTRL_FEED_URL`, and the shipped default is unset.** What is
+  true once they do: the destination — and nothing else, no account, no
+  workspace, no instance name — is sent to the named feed on every link create,
+  link update, root-redirect change and dispute filing. Never when a visitor
+  follows a link, and existing links are not re-checked in the background.
+
+  Four bounds hold whatever the operator configures. The feed is asked **last**,
+  only about destinations every built-in tier already accepted, so no built-in
+  refusal is ever sent out and none of them changes answer with a feed on, off or
+  erroring. A feed that does not answer **fails open** to those tiers and
+  increments `linkctrl_destination_feed_checks_total{result="error"}`. Its
+  verdicts are low-confidence: disputable, and the instance owner can overrule one
+  from the review queue, which also stops that host being sent again. And the
+  instance discloses the whole of the above at **`/feeds`**, to every signed-in
+  user, in both states — a read-only page with no controls, because only the
+  operator can change any of it (D40).
+
 Blocked attempts are recorded through the audit writer [M21](docs/build-notes/phase-details/m21.md)
 builds, which is why the two rows sit together — the writer exists before the
 features that emit into it, rather than being retrofitted afterwards.

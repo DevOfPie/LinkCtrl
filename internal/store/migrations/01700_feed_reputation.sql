@@ -1,0 +1,42 @@
+-- +goose Up
+--
+-- The opt-in third-party reputation feed (M32).
+--
+-- No table, and that is the whole of the schema change. A feed verdict is not
+-- stored: it is asked for on every destination write, the answer decides that
+-- one write, and nothing is written down. Persisting it was considered and
+-- refused — a cached verdict is a third party's opinion aging inside this
+-- instance's blocklist, indistinguishable from a row a person put there, and
+-- 01500's source column exists precisely so that no reconciliation can erase a
+-- decision somebody made.
+--
+-- What this migration does add is the index behind the one piece of state the
+-- feature reads: the instance owner's own decisions, which are already rows in
+-- destination_disputes.
+--
+-- WHY AN ALLOWED DISPUTE IS THE OVERRIDE. m32.md requires a feed verdict be
+-- owner-overridable, and 01500 has no allow column on purpose: a list that can
+-- permit a destination is a list that can overrule the unappealable tier one
+-- entry at a time. So the override cannot be a row in blocked_destinations, and
+-- inventing a second allow-list would reintroduce exactly what that comment
+-- refuses. It does not need to be either. The owner deciding `allowed` on a
+-- dispute is already a recorded, audited, permission-gated act, and M31 already
+-- refuses to file a dispute about anything but a low-confidence refusal — so no
+-- row in this table can ever carry an unappealable or embedded-tier reason code,
+-- and reading it cannot widen anything those tiers refuse.
+--
+-- The read is scoped to internal/link's feed step and appears nowhere else in
+-- the program. The suppression is therefore as narrow as the claim: it stops
+-- this instance asking a third party about that host, and it stops the refusal
+-- that answer would have produced. It reaches no other tier, because every other
+-- tier has already returned by the time the feed is consulted.
+--
+-- Exact host, not a label-boundary match. An owner who allowed evil.example
+-- allowed that host; reading it as permission for login.evil.example would widen
+-- a decision nobody made. This index therefore matches on equality, unlike the
+-- blocklist's suffix walk.
+CREATE INDEX destination_disputes_allowed_host_idx
+    ON destination_disputes (host) WHERE status = 'allowed';
+
+-- +goose Down
+DROP INDEX IF EXISTS destination_disputes_allowed_host_idx;

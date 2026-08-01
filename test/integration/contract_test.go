@@ -311,6 +311,14 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	}, http.StatusCreated)
 	c.do("POST", p+"/disputes/"+field(t, second, "id")+"/allow", nil, http.StatusOK)
 
+	// --- reputation feeds ---------------------------------------------------
+	// One operation, and the fixture has no feed configured — which is the
+	// shipped default and the answer this replay validates against the schema:
+	// `enabled: false` with every other field absent. There is deliberately no
+	// write counterpart to exercise, because a feed is switched on in the
+	// instance's configuration and nowhere else (D40).
+	c.do("GET", p+"/feeds", nil, http.StatusOK)
+
 	// --- notifications ------------------------------------------------------
 	// The dispute above raised two — one to the owner when it was filed, one
 	// back when it was decided — so this lists an inbox with rows in it rather

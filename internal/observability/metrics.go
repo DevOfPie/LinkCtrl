@@ -37,6 +37,8 @@ type Metrics struct {
 	jobLastRun *prometheus.GaugeVec
 
 	auditBytes prometheus.Gauge
+
+	feedChecks *prometheus.CounterVec
 }
 
 // redirectBuckets straddle the 20ms cached-redirect target, densely below it
@@ -110,6 +112,21 @@ func NewMetrics() *Metrics {
 			Help: "On-disk size of audit_logs across every partition, including indexes. " +
 				"Audit retention defaults to keeping everything, so this only ever grows until AUDIT_RETENTION_DAYS is set.",
 		}),
+
+		// The opt-in reputation feed (M32). Absent entirely on a default
+		// instance, because nothing increments it until a feed is configured —
+		// which makes the series itself the answer to "is this box sending
+		// destinations anywhere".
+		//
+		// `error` is the label that matters operationally: a feed failure fails
+		// open to the built-in tiers, so an outage at the third party is
+		// invisible in the product's behaviour and visible only here.
+		feedChecks: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "linkctrl_destination_feed_checks_total",
+			Help: "Third-party reputation feed checks by result: clean, malicious, " +
+				"error (the feed did not answer usefully; the check fails open), or " +
+				"skipped (the instance owner has allowed that host).",
+		}, []string{"result"}),
 	}
 
 	buildInfo := prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -125,6 +142,7 @@ func NewMetrics() *Metrics {
 		m.throttled,
 		m.jobRuns, m.jobLastRun,
 		m.auditBytes,
+		m.feedChecks,
 		buildInfo,
 		// Go runtime and process collectors: memory, goroutines, GC, file
 		// descriptors, CPU. Free, standard, and the first thing anyone asks
@@ -370,4 +388,20 @@ func (m *Metrics) SetAuditLogBytes(n int64) {
 		return
 	}
 	m.auditBytes.Set(float64(n))
+}
+
+// --- reputation feeds --------------------------------------------------------
+
+// ObserveFeedCheck records one third-party reputation check.
+//
+// The count is what makes a failing feed observable at all. A check that errors
+// fails open to the built-in tiers by design, so the destination is accepted and
+// nothing in the product's behaviour says the feed stopped answering — an
+// operator who enabled a feed and is relying on it would otherwise find out by
+// noticing nothing was ever refused.
+func (m *Metrics) ObserveFeedCheck(result string) {
+	if m == nil {
+		return
+	}
+	m.feedChecks.WithLabelValues(result).Inc()
 }

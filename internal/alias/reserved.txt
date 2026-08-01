@@ -39,6 +39,8 @@ invite
 invites
 disputes
 dispute
+feeds
+feed
 oauth
 auth
 callback

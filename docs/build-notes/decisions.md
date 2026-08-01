@@ -83,6 +83,7 @@ file. Append a row when you append an entry.
 | [M30, seeding the list D39 moved out of the binary](#2026-08-01--m30-seeding-the-list-d39-moved-out-of-the-binary) | Why the seed is a migration and not a boot-time reconcile, and the two candidates that lost; why the rows need a source of their own, and the one-source-per-reconciliation rule that follows; the widened match and the rule for later migrations; how a matched row's source picks the reason code |
 | [M31, the appeal path and who decides](#2026-08-01--m31-the-appeal-path-and-who-decides) | Why the tier is re-derived rather than supplied; one judgement, two consumers, and the second door the surfaces test now polices; the two refusals `allow` gives instead of doing nothing; why the dispute carries no free text; `destinations.review` — owner-only, non-delegable, instance-wide, and the finding that follows |
 | [M32, a disclosure needs somewhere to live](#2026-08-01--m32-a-disclosure-needs-somewhere-to-live) | What a reputation feed actually sends, and why it is an exception to a promise; D40; why a read-only page does not reverse D38; the no-POST test as the mechanism |
+| [M32, an exception built so that it stays one](#2026-08-01--m32-an-exception-built-so-that-it-stays-one) | Off as the absence of a client, and the zero-egress test that proves something; why asking the feed last *is* the independence argument; owner-overridable without an allow column, and the three mechanisms that failed; why failing open has to be counted; what the generic adapter refuses; why the disclosure is gated on nothing; D1's outcome mail |
 
 ---
 
@@ -6246,3 +6247,159 @@ The risk is not the page. It is that the next instance-wide setting wants a row
 on it, and the one after that wants a toggle beside the row — at which point
 D38 has been reversed by nobody in particular. The no-POST test is what makes
 that reversal an explicit act rather than a drift.
+
+---
+
+## 2026-08-01 — M32, an exception built so that it stays one
+
+The feed itself, and the four questions building it forced. D40 had already
+settled where the disclosure lives; none of these had an answer yet.
+
+### Off is the absence of a client, not a flag on one
+
+The milestone's first bullet is *with the feature off, zero destination URLs
+leave the instance, asserted by test*, and the shape of the code is what makes
+that assertable rather than merely true today.
+
+`feed.New` returns a **nil `*Client` with a nil error** when `FEED_URL` is
+empty. `main.go` assigns it into `link.FeedChecker` only when it is non-nil — a
+typed nil in that interface would be a non-nil interface holding nothing, which
+is the one way this could go wrong — and the guard in `Service.askFeed` is
+`s.feed == nil`. There is therefore no boolean anywhere whose false branch could
+be written the wrong way round, and no object holding a URL that something might
+later call by accident.
+
+The end-to-end test is worth describing because the obvious version of it proves
+nothing. A test that starts no server and counts zero requests passes just as
+happily against a fixture that was never wired up. So one server runs for the
+whole test, every destination-judging surface is exercised against an instance
+with no feed — create, update, root redirect, and filing a dispute — and then the
+*same server in the same process* is proven reachable by a second fixture that
+does have a feed. The zero means something because the one next to it is not
+zero.
+
+### The feed is asked last, and that is the whole independence argument
+
+*A test proves every built-in tier behaves identically with feeds on, off, or
+erroring.* That could have been a test comparing three tables. It is instead a
+property of control flow: `Judge` runs the unappealable tier, the embedded list,
+the runtime blocklist and the heuristics, and only reaches the feed if all four
+returned nothing. A built-in refusal has already returned by the time the feed
+exists in the story.
+
+Two things fall out that a comparison test would not have got. A destination the
+built-in tiers refuse is **never sent anywhere** — so an instance that blocks
+`169.254.169.254` does not hand that string to a third party on the way to
+refusing it — and the test asserts exactly that, against a feed configured to
+object to everything: seven of the eight cases answer identically, the eighth is
+the one nothing built in refused, and the six hosts refused locally never appear
+in what the feed received.
+
+### Owner-overridable, without an allow column
+
+The hard one. The bullet requires a feed verdict be *disputable,
+owner-overridable*. Disputable came free — the tier is low confidence and M31's
+gate already admits those. Overridable did not, and the three obvious mechanisms
+each fail:
+
+| Mechanism | Why not |
+| --- | --- |
+| An allow row in `blocked_destinations` | [01500](../../internal/store/migrations/01500_destination_blocking.sql) has no allow column on purpose: a list that can permit a destination is a list that can overrule the unappealable tier one entry at a time |
+| Persist the verdict as a `source = 'feed'` row and let an allow delete it | The verdict is re-asked on every write, so the next create re-adds the row. The override lasts until somebody types the URL again — the same silent-revert failure `entryToLift` already refuses for `source = 'env'` |
+| A second allow-list, scoped to feeds | Reintroduces the thing 01500's comment refuses, one table over, where nobody reading 01500 will find it |
+
+The answer needed no new state at all: **the owner's `allowed` dispute is the
+override**. It is already a recorded, audited, permission-gated act, and
+`internal/link` reads it — with one query, `HostHasAllowedDispute`, at one call
+site — before the request goes out.
+
+Three things make that safe rather than clever. M31 refuses to file a dispute
+about anything but a low-confidence refusal, so no row in that table can ever
+carry an unappealable or embedded-tier reason code to be read as permission. The
+read happens at the feed step, which every other tier has already returned
+before, so there is no verdict left above it for a suppression to reach. And it
+is an **exact host match**, not the blocklist's label-boundary walk: allowing
+`evil.example` says nothing about `login.evil.example`, because widening a
+decision nobody made is how this kind of mechanism goes wrong.
+
+One consequence is better than the requirement asked for. The lookup runs
+*before* the outbound request, so overruling a verdict also stops that host being
+sent — the override ends the egress as well as the refusal, which is the only
+form of "overridable" that is honest about a verdict re-derived from a live third
+party on every write.
+
+The cost, stated: M31's package comment said *a decision reaches the runtime list
+and nothing else*, and that is no longer true. It has been rewritten rather than
+left standing, and `liftedByDecision` is the one-entry map that names the
+exception where somebody editing it will see it.
+
+### Failing open is invisible, so it is counted
+
+A feed that times out, 500s, redirects, streams forever, or answers a shape this
+adapter cannot read produces `ResultError`, and the destination is **accepted**.
+The built-in tiers had already accepted it; failing open loses the third party's
+opinion and nothing else, and the alternative is somebody else's outage deciding
+that this instance may not create links.
+
+Which means an operator who switched a feed on and is relying on it cannot tell,
+from the product's behaviour, that it stopped answering — a broken feed and no
+feed look identical. That is what
+`linkctrl_destination_feed_checks_total{result="error"}` is for, and why the
+counter is labelled by result rather than being a bare check count: an outage and
+a busy afternoon must not be the same series.
+
+Two smaller decisions in the same spirit. A verdict field the feed stopped
+sending is an **error, not a clean answer** — the default that suggests itself
+turns a feed that changed its response shape into a feed that silently refuses
+nothing. And a failure to read the owner's own decisions skips the feed rather
+than asking it: when this instance cannot tell whether a host was already
+allowed, the failure direction that keeps a promise is the one where nothing
+leaves.
+
+### The adapter is generic because choosing a feed is a product decision
+
+One HTTP adapter — method, parameter name, auth header, and a dotted path into
+the JSON response — rather than a named integration. *Which feeds get first-class
+support is a later product call, not a blocker*, and shipping
+`GoogleSafeBrowsing` would have been making that call inside the milestone that
+was told not to.
+
+Four things the adapter refuses, each because the failure is a privacy promise
+being wrong rather than a request failing. `FEED_NAME` is **required** alongside
+the URL: an instance may not send destinations somewhere its own disclosure page
+cannot name. The URL must be **https**, not narrowable — destinations already
+going to somebody else's server must not go there in clear as well. **Redirects
+are not followed**, because a feed answering `302` is a feed pointing this
+process at a server the operator never named, and naming it is the entire
+transaction. And the endpoint printed on `/feeds` has its **query string
+removed**, because a feed URL commonly carries an API key in one and that page is
+readable by every account on the instance.
+
+### The disclosure is gated on nothing, and that is the permission decision
+
+This milestone adds no permission, so D18 has no limb to match here. It does make
+one authorization choice worth recording: `/feeds` and `GET /api/v1/feeds` are
+readable by any signed-in account, gated on nothing at all — the only entry in
+the identity menu that is.
+
+The reasoning is the same one D40 used to allow the page to exist beside D38.
+What the page describes is what happens to *the reader's own* destinations.
+Gating it on `destinations.review` would disclose the practice to the owner who
+configured it and to nobody else, which is a disclosure in the sense that a
+filing cabinet is a publication.
+
+### The dispute outcome, by email (D1's addendum)
+
+`notify` grew `RecipientByID` and `Mail`, and the mailer's optionality stays
+where it already lived — in that package, checked once, at the send site. So
+`internal/dispute` never asks whether a relay is configured; it writes the inbox
+row, and then calls `Mail`, which does nothing on an instance without one. In-app
+is the baseline by ordering rather than by convention: the mail is only attempted
+after the inbox row succeeded, because emailing somebody about a decision the
+dashboard will not show them is worse than the silence.
+
+This is the only message this product sends to somebody who did not choose to be
+an administrator, and its subject matter is a URL a stranger chose. The host is
+defanged before it reaches the template and neutralized again inside `RenderMail`
+— twice, because a second layer that only works when the first one did is not a
+layer.

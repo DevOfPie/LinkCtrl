@@ -62,6 +62,7 @@ scrape_configs:
 | `linkctrl_job_runs_total{job,result}` | `ok`, `error` or `skipped`. |
 | `linkctrl_job_last_success_timestamp_seconds{job}` | Staleness of each job. |
 | `linkctrl_build_info{version,commit,go}` | Always 1; the labels are the point. |
+| `linkctrl_destination_feed_checks_total{result}` | Third-party reputation checks: `clean`, `malicious`, `error`, `skipped`. **Absent entirely unless `LINKCTRL_FEED_URL` is set**, which makes the series itself the answer to "is this instance sending destinations anywhere". |
 
 Plus the standard `go_*` and `process_*` collectors.
 
@@ -108,6 +109,7 @@ rate(linkctrl_db_pool_acquire_waits_total{pool="redirect"}[5m]) > 0
 | Limiter stopped limiting | `rate(linkctrl_rate_limit_overflow_total[15m]) > 0` | The key table filled, so requests are being allowed uncounted. The design fails open deliberately — a limiter must not become an outage — which is exactly why this needs an alert rather than a log line. |
 | Credential limit stopped being shared | `rate(linkctrl_rate_limited_total{limit="login"}[5m])` unchanged while Redis is unhealthy, plus the log line below | The limit fell back to per-replica buckets, so N replicas now allow N times it. Correct by design — it never refuses because Redis is unwell — but the effective limit is looser until Redis returns. |
 | Redirects being throttled | `rate(linkctrl_rate_limited_total{limit="redirect_404"}[5m]) > 1` | Either someone is scanning for aliases, or `TRUSTED_PROXIES` is wrong and every visitor shares one bucket. Check which before tuning the limit. |
+| Reputation feed not answering | `rate(linkctrl_destination_feed_checks_total{result="error"}[15m]) > 0` | Only if you configured one. A feed check fails **open**: the destination is accepted and the built-in tiers decide, so the product behaves exactly as it does with no feed at all. That is deliberate — a third party's outage must not stop you making links — and it is also why a feed that silently stopped working is invisible anywhere but here. |
 | 5xx on any surface | `rate(linkctrl_http_requests_total{status="5xx"}[5m]) > 0` | |
 | Rows in a default partition | see [below](#partitions) | Silent data misrouting; next month's partition will fail to attach. |
 

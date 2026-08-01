@@ -48,6 +48,29 @@ SELECT * FROM destination_disputes
 -- index, whose predicate this matches exactly.
 SELECT count(*) FROM destination_disputes WHERE status = 'open';
 
+-- name: HostHasAllowedDispute :one
+-- Whether the instance owner has allowed this host (M32).
+--
+-- Read at exactly one call site — internal/link's feed step — and that
+-- confinement is the whole safety argument. It suppresses the third-party
+-- reputation feed for a host the owner already decided about, which is what
+-- makes a feed verdict owner-overridable without 01500 growing the allow column
+-- it deliberately does not have.
+--
+-- It cannot widen anything else. The three tiers above the feed have all
+-- returned by the time this runs, and M31 refuses to file a dispute about any
+-- refusal but a low-confidence one, so no row here can carry an unappealable or
+-- embedded-tier reason code to be read as permission.
+--
+-- Equality rather than the blocklist's candidate walk: allowing 'evil.example'
+-- says nothing about 'login.evil.example', and 01700's partial index matches
+-- this predicate exactly.
+SELECT EXISTS (
+    SELECT 1 FROM destination_disputes
+     WHERE host = lower(sqlc.arg(host)::text)
+       AND status = 'allowed'
+);
+
 -- name: DecideDestinationDispute :one
 -- Records a decision, and only on a dispute nobody has decided yet.
 --

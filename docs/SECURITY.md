@@ -53,7 +53,7 @@ Stated as claims, because each one is testable and several have tests naming the
 | Outbound mail | Plain text only — no HTML part, so no remote image that reports when a message was opened and no anchor text that disagrees with its link. Every interpolated value has its control and bidirectional-formatting characters removed before it reaches a template, so nothing a person typed can inject a header, forge a second message, or make an address render as one it is not. A relay that will not take STARTTLS is refused rather than downgraded to plaintext. |
 | Analytics | No IP address is stored in any column of `click_events`. A visitor is `HMAC(daily salt, ip ‖ user-agent ‖ workspace)` and the salts are deleted after two days, which is the de-identification step rather than housekeeping. Session and audit rows keep a prefix only: /24 for IPv4, /48 for IPv6. |
 | Errors | Internal error text never reaches a client. An unrecognised error is a flat 500; the cause is in the log, because error strings carry table names and connection strings. |
-| Egress | No telemetry, no phone-home, no third-party calls in the default configuration. GeoIP is a local file. A configured SMTP relay is the one outbound connection the product can make, and it is off unless `SMTP_HOST` is set. |
+| Egress | No telemetry, no phone-home, no third-party calls in the default configuration. GeoIP is a local file. **Two** outbound connections are possible and both are off until an operator configures them: an SMTP relay (`SMTP_HOST`), and a reputation feed (`FEED_URL`) which sends the destinations your users type to a third party. The feed is the consequential one and it discloses itself — see *Reputation feeds* below. Nothing else in the product opens a socket outwards, and a source scan over the package that judges destinations fails on any outbound-HTTP or name-resolution symbol, so a later "just check the host resolves" cannot become undisclosed egress. |
 
 ## What is not defended
 
@@ -155,14 +155,39 @@ this product has no instance-level principal, which is also why the signup mode
 lives in the environment. **Keep sign-ups closed, or run one organization, if
 that reach matters to you.**
 
-**What tiered blocking still does not do.** Nothing decides whether a destination
-is a phishing page. The high-confidence list ships with infrastructure hosts, not
-reputation data, because a list that costs a rebuild to change is the wrong
-instrument for data that changes weekly. A refusal from one of the two heuristics
-can be upheld but not allowed: it is computed from the URL every time rather than
-held as a list row, so there is nothing to delete and — deliberately — no row
-anybody can add that permits a destination. Overruling one of those is a code
-change. On an instance where untrusted people can create links, assume they will.
+**What tiered blocking still does not do.** Nothing *in the default
+configuration* decides whether a destination is a phishing page. The
+high-confidence list ships with infrastructure hosts, not reputation data,
+because a list that costs a rebuild to change is the wrong instrument for data
+that changes weekly. A refusal from one of the two heuristics can be upheld but
+not allowed: it is computed from the URL every time rather than held as a list
+row, so there is nothing to delete and — deliberately — no row anybody can add
+that permits a destination. Overruling one of those is a code change. On an
+instance where untrusted people can create links, assume they will.
+
+**Reputation feeds, if you switch one on, send your users' destinations to a
+third party.** `LINKCTRL_FEED_URL` is unset by default and that is the whole of
+the promise that no destination leaves the box; setting it is the exception, and
+it is one you are making on behalf of people who are not you. What then leaves is
+the destination URL and nothing else — no account, no address, no workspace, no
+instance name — over `https`, to the endpoint you named, when a link is created
+or edited, when the root redirect is set, and when a refusal is disputed. Never
+on the redirect path, and existing links are not re-checked.
+
+Four bounds hold. The feed is asked **last**, so a destination any built-in tier
+refuses is never sent anywhere and no built-in answer changes with a feed on, off
+or erroring. A feed that does not answer **fails open** and increments
+`linkctrl_destination_feed_checks_total{result="error"}` — which means a feed
+that silently stopped working looks exactly like no feed at all, so alert on that
+counter if you depend on one. Its verdicts are **low confidence**: disputable,
+and an owner overruling one from `/disputes` also stops that host being sent
+again. And the instance **discloses it** at `/feeds` and `GET /api/v1/feeds`, to
+every signed-in account rather than to administrators only, in both states — a
+read-only page with no controls, because only you can change any of this and a
+disclosure that could be edited from the dashboard would be a settings page this
+product has no principal for (decision D40). Feed responses are treated as
+hostile input: bounded in size, redirects not followed, and an unreadable verdict
+counted as an error rather than guessed at.
 
 **Blocked attempts are recorded, and the attempted URL is hostile input.** Every
 refusal writes a `destination.blocked` audit event carrying the tier, the rule,

@@ -241,6 +241,19 @@ func pageData(t *testing.T) map[string]any {
 			"NextCursor": "abc",
 			"Notice":     "", "Error": "",
 		},
+		// The feed disclosure, in the state that has something to disclose. The
+		// off state is the default and is covered on its own by
+		// TestTheDisclosureIsHonestInBothStates, which renders both and reads
+		// the words — this entry exists so the branch with a third party's name
+		// in it is exercised by the every-page render too.
+		"feeds": map[string]any{
+			"Title": "Reputation feeds", "Nav": "feeds", "Identity": owner(),
+			"Disclosure": map[string]any{
+				"Enabled": true, "Name": "Example Reputation",
+				"Endpoint": "https://feed.example/v1/check",
+				"Method":   "POST", "TimeoutSeconds": 2.0,
+			},
+		},
 		// Every invitation state in one render — pending with a Revoke button,
 		// and the three that have none — plus the freshly created panel, which
 		// is the only place the token is ever shown.

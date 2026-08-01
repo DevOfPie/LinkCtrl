@@ -43,9 +43,18 @@ type disputeFixture struct {
 	disputes *dispute.Service
 	owner    *auth.Identity
 	ctx      context.Context
+	// sender is non-nil only on a fixture built with a mailer, which is the
+	// difference D1's addendum turns on: in-app delivery is the baseline and
+	// the email is the addition, so most of this file runs without one.
+	sender *recordingSender
 }
 
-func newDispute(t *testing.T) *disputeFixture {
+func newDispute(t *testing.T) *disputeFixture { return newDisputeWith(t, false) }
+
+// newDisputeWithMail is newDispute on an instance that has an SMTP relay.
+func newDisputeWithMail(t *testing.T) *disputeFixture { return newDisputeWith(t, true) }
+
+func newDisputeWith(t *testing.T, withMailer bool) *disputeFixture {
 	t.Helper()
 	pool := newDB(t)
 
@@ -62,6 +71,11 @@ func newDispute(t *testing.T) *disputeFixture {
 
 	auditSvc := audit.NewService(pool)
 	notifySvc := notify.NewService(pool)
+	var sender *recordingSender
+	if withMailer {
+		sender = &recordingSender{}
+		notifySvc = notifySvc.WithMail(newMailService(t, pool, sender), "https://links.example.com")
+	}
 	links := link.NewService(pool, link.Config{
 		Policy: link.DefaultDestinationPolicy(), BaseURL: "http://lnk.test",
 		SplitHosts: true, Audit: auditSvc,
@@ -87,6 +101,7 @@ func newDispute(t *testing.T) *disputeFixture {
 	f := &disputeFixture{
 		t: t, pool: pool, auth: authSvc, links: links, invites: inviteSvc,
 		notify: notifySvc, disputes: disputes, owner: owner, ctx: ctx,
+		sender: sender,
 	}
 	// Re-read, so the owner carries destinations.review from the migration's
 	// grant rather than from whatever Register happened to compute.
@@ -590,6 +605,101 @@ func TestTheReviewPermissionIsNotDelegable(t *testing.T) {
 	}); err == nil {
 		t.Fatal("a key was minted holding destinations.review")
 	}
+}
+
+// TestTheOutcomeIsEmailedOnlyWhenAMailerExists is D1's addendum, both halves.
+//
+// The claim is an ordering, not a feature flag: in-app delivery is the baseline
+// and the email is the addition. So the same decision is made twice, on two
+// instances that differ only in whether an SMTP relay is configured, and the
+// inbox row has to be identical on both while the outbox is empty on one.
+//
+// This is the only notification in the feature addressed to somebody who did not
+// choose to be an administrator, and the outcome is the one thing they are
+// actually waiting for — a person who filed a dispute may not open the dashboard
+// again for a week.
+func TestTheOutcomeIsEmailedOnlyWhenAMailerExists(t *testing.T) {
+	decide := func(f *disputeFixture) notify.Notification {
+		f.t.Helper()
+		f.blockHost("mailed.example", link.SourceReview)
+		editor := f.editor("editor@example.com")
+		filed, err := f.disputes.File(f.ctx, editor, "https://mailed.example/x")
+		if err != nil {
+			t.Fatalf("file: %v", err)
+		}
+		if _, err := f.disputes.Uphold(f.ctx, f.owner, filed.ID); err != nil {
+			t.Fatalf("uphold: %v", err)
+		}
+		got := f.inbox(editor.UserID, dispute.KindDecided)
+		if len(got) != 1 {
+			t.Fatalf("the filer has %d %s notifications, want 1", len(got), dispute.KindDecided)
+		}
+		return got[0]
+	}
+
+	silent := newDispute(t)
+	baseline := decide(silent)
+	if rows := mailOutboxRows(t, silent.pool); len(rows) != 0 {
+		t.Errorf("an instance with no mailer queued %d message(s); the mailer is "+
+			"optional and nothing may depend on it", len(rows))
+	}
+
+	mailed := newDisputeWithMail(t)
+	withMail := decide(mailed)
+
+	// The baseline is unchanged by the addition. If these ever diverge, the
+	// in-app notification has started depending on the mailer.
+	if withMail.Title != baseline.Title || withMail.Body != baseline.Body {
+		t.Errorf("the dashboard notification differs when a mailer exists:\n with: %q / %q\n"+
+			"without: %q / %q", withMail.Title, withMail.Body, baseline.Title, baseline.Body)
+	}
+
+	rows := mailOutboxRows(t, mailed.pool)
+	if len(rows) != 1 {
+		t.Fatalf("outbox has %d rows, want 1: %+v", len(rows), rows)
+	}
+	got := rows[0]
+	if got.recipient != "editor@example.com" {
+		t.Errorf("recipient = %q, want the person who filed it", got.recipient)
+	}
+	if got.kind != notify.MailDisputeDecided {
+		t.Errorf("kind = %q, want %q", got.kind, notify.MailDisputeDecided)
+	}
+	// The host reaches the message defanged. It is a string a stranger chose,
+	// being mailed to somebody who did not ask for it, so it must arrive as
+	// something no client will make clickable.
+	if !contains(got.body, "mailed[.]example") {
+		t.Errorf("the mail does not carry the defanged host:\n%s", got.body)
+	}
+	if contains(got.body, "https://mailed.example") {
+		t.Errorf("the mail carries a live URL:\n%s", got.body)
+	}
+}
+
+// mailOutboxRows reads the queued mail. A local reader rather than the mail
+// fixture's, because that one hangs off a fixture this file does not build.
+type mailOutboxRow struct{ recipient, kind, subject, body string }
+
+func mailOutboxRows(t *testing.T, pool *pgxpool.Pool) []mailOutboxRow {
+	t.Helper()
+	rows, err := pool.Query(t.Context(),
+		`SELECT recipient, kind, subject, body FROM mail_outbox ORDER BY created_at, id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []mailOutboxRow
+	for rows.Next() {
+		var r mailOutboxRow
+		if err := rows.Scan(&r.recipient, &r.kind, &r.subject, &r.body); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
 }
 
 func contains(haystack, needle string) bool {

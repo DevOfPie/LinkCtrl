@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
@@ -48,6 +49,16 @@ const (
 // filename in internal/ui/templates/mail, without the extension, and it is also
 // what lands in the outbox's `kind` column.
 const MailAuditGrowth = "audit-growth"
+
+// MailDisputeDecided names the template for a dispute outcome (D1's addendum to
+// M32). Same convention as above: the filename, without the extension.
+//
+// The template name is here rather than in internal/dispute for one reason —
+// this package owns the mailer, and a consumer that names a template it cannot
+// render is a send that fails at the relay instead of at boot. internal/ui
+// parses every template in that directory at startup, so a name that has no file
+// takes the process down before anybody disputes anything.
+const MailDisputeDecided = "dispute-decided"
 
 // RoleOwner is the role notified about things that concern the organization
 // rather than a person.
@@ -227,6 +238,55 @@ func (s *Service) EveryOwner(ctx context.Context) ([]Recipient, error) {
 		}
 	}
 	return out, nil
+}
+
+// RecipientByID resolves one user into the pair a mail needs: their address and
+// what to greet them by.
+//
+// A deleted account resolves to the zero Recipient with a nil error rather than
+// to ErrNotFound, because every caller is a notification about something that
+// already happened and none of them should fail because the person it concerns
+// has since left. A zero Recipient has no address, and Mail below does nothing
+// with one.
+func (s *Service) RecipientByID(ctx context.Context, userID uuid.UUID) (Recipient, error) {
+	row, err := s.q.GetUserByID(ctx, userID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return Recipient{}, nil
+	case err != nil:
+		return Recipient{}, fmt.Errorf("notify: load recipient: %w", err)
+	}
+	return Recipient{UserID: row.ID, Email: row.Email, Name: row.Name}, nil
+}
+
+// Mail queues the email form of a notification, if there is a mailer.
+//
+// The optionality lives here and nowhere else, which is the whole point of
+// routing consumers through this package: a caller writes the inbox row and then
+// calls this, and on an instance with no SMTP_HOST the second call returns
+// immediately and the outbox stays empty. No consumer branches on whether mail
+// is configured, so none of them can get the branch wrong.
+//
+// AppURL is added to the data here rather than by each caller, for the reason
+// mailAuditGrowth reads it from the service: there is no request in scope on the
+// paths that send, and an operator with two instances needs to know which one is
+// writing to them.
+func (s *Service) Mail(ctx context.Context, to Recipient, template string, data map[string]string) error {
+	if s.mailer == nil || to.Email == "" {
+		return nil
+	}
+	instance := s.appURL
+	if instance == "" {
+		instance = "this instance"
+	}
+	full := make(map[string]string, len(data)+3)
+	for k, v := range data {
+		full[k] = v
+	}
+	full["Name"] = to.Greeting()
+	full["Instance"] = instance
+	full["AppURL"] = s.appURL
+	return s.mailer.Enqueue(ctx, to.Email, template, full)
 }
 
 // OwnersOf lists the users to tell about something concerning the organization.

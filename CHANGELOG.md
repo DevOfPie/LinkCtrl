@@ -81,6 +81,37 @@ migrations run at boot.
   offers only *Uphold*), and an entry that came from
   `LINKCTRL_DESTINATION_BLOCKLIST` would come back at the next restart — take it
   out of the environment instead.
+- **An optional third-party reputation feed, off by default, and the disclosure
+  that comes with it.** Every other check LinkCtrl makes on a destination is
+  local. Setting `LINKCTRL_FEED_URL` adds one that is not: the destination
+  somebody typed is **sent to a server you name** each time a link is created or
+  edited, the root redirect is set, or a refusal is disputed. Nothing is sent on
+  the redirect path and existing links are never re-checked. The destination is
+  the entire payload — no account, no address, no workspace, no name for your
+  instance. `LINKCTRL_FEED_NAME` is required alongside the URL, because an
+  instance may not send destinations somewhere it cannot name, and the endpoint
+  must be `https`.
+- **The instance discloses it, at `/feeds` and `GET /api/v1/feeds`**, to every
+  signed-in account rather than to administrators only — what it describes is
+  what happens to their own destinations. It names the feed, states what is sent
+  and when, and says that only the operator can change it; with no feed
+  configured it says plainly that nothing leaves. The page is read-only and
+  accepts no `POST`, asserted by test: this product has no instance-level
+  principal, so instance-wide settings are not changed from the dashboard.
+- **A feed is a low-confidence signal and never a dependency.** It is asked
+  **last**, only about destinations every built-in check already accepted — so a
+  destination your own rules refuse is never sent anywhere, and those rules
+  answer identically with a feed on, off, or failing. A refusal it produces is
+  `low_confidence.feed_reputation`, appealable like any other, and an owner
+  allowing it also stops that host being sent again. A feed that times out,
+  errors, or answers something unreadable accepts the destination and increments
+  `linkctrl_destination_feed_checks_total{result="error"}` — alert on it, because
+  a feed that quietly stopped working is otherwise indistinguishable from no
+  feed.
+- **Dispute outcomes are emailed** when a mailer is configured. The dashboard
+  notification is unchanged and does not depend on one; the email is the
+  addition, and it is the only message this product sends to somebody who did not
+  choose to be an administrator.
 
 ### Changed
 

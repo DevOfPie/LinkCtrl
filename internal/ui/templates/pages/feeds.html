@@ -1,0 +1,128 @@
+{{/* The reputation-feed disclosure.
+
+     THIS PAGE IS READ-ONLY, AND THAT IS A DECISION RATHER THAN A STYLE. D40.
+
+     There is no <form> here, no <button>, no <input>, and no path in this
+     product that would accept one: TestTheDisclosurePageAcceptsNoWrite asserts
+     both halves — that the rendered HTML contains no control, and that every
+     unsafe method against /feeds and /api/v1/feeds is refused.
+
+     D38 removed the ability to CHANGE instance-wide settings from the
+     dashboard, because this product has no instance-level principal — under
+     open signup, every stranger who registers owns an organization. Reading is
+     not changing. Being told what an instance does with your destinations is
+     not a privilege that needs a principal, which is why this page is drawn for
+     every signed-in user and gated on no permission at all.
+
+     The risk this page carries is not the page. It is that the next
+     instance-wide setting wants a row here, and the one after that wants a
+     toggle beside the row, at which point D38 has been reversed by nobody in
+     particular. The test is the mechanism that makes such a reversal an
+     explicit act.
+
+     The wording is the deliverable as much as the code is (m32.md, Risks). An
+     operator who switches this on without understanding it has been failed by
+     this page. So it says four things plainly and in this order: which third
+     party, what is sent, when it is sent, and who can change it. */}}
+{{define "content"}}
+<div class="mb-6">
+  <h1 class="text-xl font-semibold tracking-tight">Reputation feeds</h1>
+  <p class="mt-1 text-sm text-muted">
+    What this instance does with the destinations you point links at.
+  </p>
+</div>
+
+{{if .Disclosure.Enabled}}
+<div class="rounded-lg border border-warn-line bg-warn-soft p-6">
+  <p class="text-sm font-medium text-warn-ink">
+    Destinations on this instance are sent to a third party.
+  </p>
+  <p class="mt-2 text-sm text-warn-ink">
+    The operator of this instance has switched on a reputation feed. Every time a
+    destination is checked, the address you typed is sent to
+    <span class="font-medium">{{.Disclosure.Name}}</span>, which answers whether it
+    believes that destination is malicious.
+  </p>
+</div>
+
+<div class="mt-6 rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-4 text-sm font-medium text-ink">The detail</h2>
+  <dl class="space-y-4 text-sm">
+    <div>
+      <dt class="text-muted">Who it goes to</dt>
+      <dd class="mt-0.5 font-medium text-ink">{{.Disclosure.Name}}</dd>
+      {{/* Deliberately not an anchor. The endpoint is a third party's address
+           and this page is about not sending people places without telling
+           them; a click target here would be exactly that, one layer up. */}}
+      <dd class="mt-0.5 break-all font-mono text-xs text-subtle">{{.Disclosure.Endpoint}}</dd>
+    </div>
+    <div>
+      <dt class="text-muted">What is sent</dt>
+      <dd class="mt-0.5 text-ink">
+        The destination URL, and nothing else. No account, no address, no
+        workspace, no name for this instance — the request carries the URL and
+        the operator's own credential for that feed.
+      </dd>
+    </div>
+    <div>
+      <dt class="text-muted">When it is sent</dt>
+      <dd class="mt-0.5 text-ink">
+        Whenever a destination is checked: creating a link, editing one, setting
+        the link domain's root redirect, and asking for a refusal to be
+        reviewed. Nothing is sent when a visitor follows a link, and existing
+        links are never re-checked in the background.
+      </dd>
+    </div>
+    <div>
+      <dt class="text-muted">What the answer does</dt>
+      <dd class="mt-0.5 text-ink">
+        A feed is a low-confidence signal and nothing more. It is asked last,
+        only about destinations this instance's own checks already accepted, and
+        a refusal it produces can be disputed like any other — the instance
+        owner can overrule it, and doing so also stops that host being sent
+        again. If the feed does not answer, the destination is accepted:
+        the built-in checks work with the feed off, erroring, or unreachable.
+      </dd>
+    </div>
+    <div>
+      <dt class="text-muted">Who can change it</dt>
+      <dd class="mt-0.5 text-ink">
+        Only the operator, by editing this instance's configuration and
+        restarting it. There is no setting on this page, and no request to this
+        product can switch a feed on or off.
+      </dd>
+    </div>
+    <div>
+      <dt class="text-muted">Request</dt>
+      <dd class="mt-0.5 font-mono text-xs text-subtle">
+        {{.Disclosure.Method}} · times out after {{.Disclosure.TimeoutSeconds}}s
+      </dd>
+    </div>
+  </dl>
+</div>
+{{else}}
+<div class="rounded-lg border border-ok-line bg-ok-soft p-6">
+  <p class="text-sm font-medium text-ok-ink">
+    No destination leaves this instance.
+  </p>
+  <p class="mt-2 text-sm text-ok-ink">
+    No reputation feed is configured, which is how this product ships. Nothing
+    you point a link at is sent anywhere: every check this instance makes about a
+    destination is made here, against a list compiled into the binary, a list
+    held in this instance's own database, and rules that read the URL's own text.
+  </p>
+</div>
+
+<div class="mt-6 rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-2 text-sm font-medium text-ink">If that ever changes</h2>
+  <p class="text-sm text-muted">
+    An operator can switch on a third-party reputation feed. If they do, this
+    page names the feed and says what is sent to it, and the banner above turns
+    into a warning — so the answer to "does this instance send my destinations
+    anywhere" is always on this page, whichever way it is. Only the operator can
+    make that change, by editing this instance's configuration; nothing in this
+    dashboard and no API call can.
+  </p>
+</div>
+{{end}}
+{{end}}

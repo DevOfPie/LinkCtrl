@@ -17,6 +17,7 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 | `/keys` | Mint, list and revoke API keys. |
 | `/notifications` | Things the instance wanted you to know about, and mark-read. |
 | `/disputes` | The review queue: destinations somebody was refused and has asked you to look at. Needs `destinations.review`. |
+| `/feeds` | Whether this instance sends the destinations you type to a third party, and to whom. Read-only, and readable by everybody — what it describes is what happens to your own data. |
 | `/account` | Your profile, password and appearance. |
 
 It works without JavaScript. htmx makes search and filtering swap a fragment
@@ -35,10 +36,14 @@ short, and nothing is only reachable through it.
 
 Your **email address** opens a menu holding the administrative surfaces —
 **Members**, **Invitations**, **Workspaces** and **Blocked destinations**, each
-shown only if you hold the permission its page needs — plus **Account** and
-**Sign out**. They live here
+shown only if you hold the permission its page needs — plus **Reputation
+feeds**, **Account** and **Sign out**. They live here
 rather than at the top level because each is visited when something *changes*,
 where the three top-level destinations are where work happens.
+
+**Reputation feeds** is the one entry gated on no permission at all, and
+deliberately so: it says whether this instance sends the destinations *you* type
+to a third party, so an editor is exactly the reader it is for.
 
 Both are popovers, which the browser opens and closes on its own: they work with
 a keyboard, close on **Escape** or a click anywhere outside, and open only one at
@@ -315,6 +320,7 @@ updating.
 | `low_confidence.shortener_chain` | The destination is itself a short link, on a host the instance ships as a known shortener, or a child of one | Yes — and allowing it removes the entry |
 | `low_confidence.punycode_homograph` | The host is spelled to imitate a different name | It can be reviewed and upheld, but not allowed |
 | `low_confidence.url_credentials` | Credentials before the host, which hide where the URL goes | Same |
+| `low_confidence.feed_reputation` | A third-party reputation feed the operator configured says the destination is malicious. Only appears on an instance that has one — see `/feeds` | Yes — and allowing it also stops that host being sent to the feed again |
 
 The codes that are not tiered — `required`, `too_long`, `invalid`, `no_scheme`,
 `no_host` — are unchanged. Those are malformed input rather than a refusal, and
@@ -348,6 +354,27 @@ Two allows are refused with `409` rather than doing nothing: a
 (`liftable` is `false` on those), and an entry that came from
 `LINKCTRL_DESTINATION_BLOCKLIST` would come back at the next restart — take it
 out of the environment instead.
+
+A `feed_reputation` refusal is `liftable` and deletes nothing, which is the one
+allow that works that way. There is no blocklist row behind it — the verdict is
+re-asked on every write — so the decision itself is the override: after it, that
+host is neither refused nor sent to the feed again. It is scoped to the exact
+host, so allowing `evil.example` says nothing about `login.evil.example`.
+
+#### What this instance does with your destinations
+
+`GET /api/v1/feeds` answers whether destinations are being sent to a third party,
+and to whom. On a default instance it is `{"enabled": false}` and that is the
+whole answer: nothing leaves. It is readable with any credential, because what it
+describes is what happens to the caller's own data, and it is the same disclosure
+the dashboard shows at `/feeds`.
+
+```sh
+curl -sS "$BASE/api/v1/feeds" -H "Authorization: Bearer $KEY"
+```
+
+There is no write counterpart. A feed is switched on in the instance's
+configuration and nowhere else.
 
 **Every destination this API returns is defanged**, in `host_defanged` and
 `destination_defanged`, and there is no way to obtain the original through it.

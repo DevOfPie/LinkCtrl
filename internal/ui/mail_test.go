@@ -25,6 +25,16 @@ func mailData() map[string]string {
 		"Email":        "invitee@example.com",
 		"URL":          "https://links.example.com/invite/2ZQ3jd0eGkE",
 		"Expires":      "7 August 2026, 09:00 UTC",
+		// The dispute outcome (M32, D1's addendum). Host and reason code are
+		// what internal/dispute actually hands over: the host already defanged,
+		// and the reason code from this program's own vocabulary. The
+		// inert-input test overwrites both with something hostile, which is the
+		// case that matters — this is the one message whose subject matter is a
+		// string somebody else chose.
+		"Status":     "upheld",
+		"Host":       "evil[.]example",
+		"ReasonCode": "low_confidence.feed_reputation",
+		"Outcome":    "The refusal stands, so that destination still cannot be used here.",
 	}
 }
 
@@ -137,6 +147,15 @@ func TestEveryMailRendersUntrustedInputInert(t *testing.T) {
 		"Email":        "invitee\u202e@example.com",
 		"URL":          "https://links.example.com/invite/x\nBcc: someone@example.com",
 		"Expires":      "never\r\nMAIL FROM:<attacker@example.com>",
+		// The dispute outcome (M32). Host is the interesting one: it is the
+		// only value in any of these templates that a *stranger* chose and that
+		// this product then mails to somebody who did not ask for it. It arrives
+		// defanged from internal/dispute, and is hostile here anyway, because a
+		// second layer that only works when the first one did is not a layer.
+		"Status":     "upheld\r\nBcc: everyone@example.com",
+		"Host":       "evil[.]example\r\n.\r\nMAIL FROM:<attacker@example.com>",
+		"ReasonCode": "low_confidence.feed_reputation\nSubject: You have been paid",
+		"Outcome":    "The refusal stands.\r\n\u202eBcc: someone@example.com",
 	}
 
 	for _, name := range r.MailTemplates() {

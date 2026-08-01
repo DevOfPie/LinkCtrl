@@ -66,6 +66,7 @@ type Config struct {
 	Analytics AnalyticsConfig
 	Audit     AuditConfig
 	SMTP      SMTPConfig
+	Feed      FeedConfig
 	Shutdown  ShutdownConfig
 
 	APIKeyPepper Secret `env:"API_KEY_PEPPER,required,unset"`
@@ -297,6 +298,55 @@ func (s SMTPConfig) Enabled() bool { return s.Host != "" }
 // Addr is the host:port to dial.
 func (s SMTPConfig) Addr() string { return net.JoinHostPort(s.Host, strconv.Itoa(s.Port)) }
 
+// FeedConfig is the optional third-party reputation feed (M32). Off unless URL
+// is set, and off is the default.
+//
+// This is the only setting in this file whose default is chosen by a promise
+// rather than by an engineering trade. Every other blocking decision this
+// product makes is local — a compiled host list, a Postgres table, heuristics
+// that read a URL's own text. Answering *is this destination malicious* means
+// sending the destination to somebody else's server, which is a deliberate
+// exception to Plan.md's "no destination leaves the box uninvited" and is why
+// switching it on costs an operator a named feed rather than a boolean.
+//
+// FeedName is required alongside FeedURL for the same reason: the disclosure
+// this feature ships names the third party, and a disclosure that cannot is not
+// one. See docs/build-notes/decisions.md, D40.
+type FeedConfig struct {
+	// URL is the endpoint, and the switch. Empty means no feed, no client, and
+	// no code path that sends a destination anywhere.
+	URL string `env:"FEED_URL"`
+	// Name is the third party in words — "Google Safe Browsing", "urlscan.io" —
+	// as the disclosure page and the docs print it.
+	Name string `env:"FEED_NAME"`
+
+	// Method is GET or POST. POST by default, which is what most reputation
+	// APIs take and which keeps the destination out of the feed's access log
+	// query string.
+	Method string `env:"FEED_METHOD" envDefault:"POST"`
+	// Param names the field carrying the destination: a query parameter on GET,
+	// a JSON key on POST.
+	Param string `env:"FEED_PARAM" envDefault:"url"`
+	// VerdictField is the dotted path into the JSON response holding the
+	// answer, e.g. "data.malicious".
+	VerdictField string `env:"FEED_VERDICT_FIELD" envDefault:"blocked"`
+
+	// AuthHeader and AuthToken authenticate to the feed. The header is only
+	// sent when the token is set.
+	AuthHeader string `env:"FEED_AUTH_HEADER" envDefault:"Authorization"`
+	AuthToken  Secret `env:"FEED_AUTH_TOKEN,unset"`
+
+	// Timeout bounds one check. Spent inside a link creation somebody is
+	// waiting on, so it is small: two seconds is long enough for a healthy API
+	// on another continent and short enough that a sick one is not felt as the
+	// dashboard being broken.
+	Timeout time.Duration `env:"FEED_TIMEOUT" envDefault:"2s"`
+}
+
+// Enabled reports whether a feed is configured. The one question every consumer
+// asks, so it is a method rather than a comparison repeated in four places.
+func (f FeedConfig) Enabled() bool { return f.URL != "" }
+
 type ShutdownConfig struct {
 	DrainDelay time.Duration `env:"SHUTDOWN_DRAIN_DELAY" envDefault:"5s"`
 	Timeout    time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"15s"`
@@ -324,6 +374,7 @@ var FileSecretVars = []string{
 	"API_KEY_PEPPER",
 	"DATABASE_URL",
 	"SMTP_PASSWORD",
+	"FEED_AUTH_TOKEN",
 }
 
 // resolveFileSecrets implements the LINKCTRL_X_FILE convention: when set, the
@@ -763,6 +814,57 @@ func (c Config) Validate() error {
 		}
 		if c.SMTP.Timeout <= 0 {
 			add("SMTP_TIMEOUT: must be positive, got %s", c.SMTP.Timeout)
+		}
+	}
+
+	// The reputation feed. Every check is inside the Enabled guard, like the
+	// mailer's: an instance with no FEED_URL is the default deployment and must
+	// not be told about settings it never set.
+	//
+	// FEED_NAME is required rather than defaulted, and that is the one rule here
+	// worth arguing about. A default of "a third party" would let an instance
+	// come up sending destinations somewhere its own disclosure page cannot
+	// name, which is the exact failure D40's page exists to prevent.
+	if c.Feed.Enabled() {
+		if u, err := url.Parse(c.Feed.URL); err != nil {
+			add("FEED_URL: not a valid URL: %v", err)
+		} else if u.Scheme != "https" {
+			// https only, and not narrowable by an operator who wants to test
+			// against a local endpoint. Destinations are being sent to somebody
+			// else's server; sending them in clear as well would make the
+			// disclosure's "sent to <third party>" quietly mean "and to whoever
+			// is on the path".
+			add("FEED_URL: must use https, got %q; destinations are sent to this "+
+				"endpoint and must not travel in clear", u.Scheme)
+		}
+		if c.Feed.Name == "" {
+			add("FEED_NAME: is required once FEED_URL is set. It names the third " +
+				"party destinations are sent to, and the instance discloses it at " +
+				"/feeds and in the docs")
+		}
+		switch strings.ToUpper(c.Feed.Method) {
+		case "GET", "POST":
+		default:
+			add("FEED_METHOD: must be GET or POST, got %q", c.Feed.Method)
+		}
+		if c.Feed.Param == "" {
+			add("FEED_PARAM: must name the field carrying the destination")
+		}
+		if c.Feed.VerdictField == "" {
+			add("FEED_VERDICT_FIELD: must name the response field holding the verdict")
+		}
+		if c.Feed.AuthHeader == "" && !c.Feed.AuthToken.IsZero() {
+			add("FEED_AUTH_HEADER: cannot be empty when FEED_AUTH_TOKEN is set")
+		}
+		// Bounded on both sides. Zero or negative would mean no timeout at all
+		// on a call made inside a form submission, and anything past the request
+		// deadline is a knob whose upper half cannot take effect.
+		if c.Feed.Timeout <= 0 {
+			add("FEED_TIMEOUT: must be positive, got %s", c.Feed.Timeout)
+		} else if c.Feed.Timeout > c.HTTP.RequestTimeout {
+			add("FEED_TIMEOUT (%s): must not exceed HTTP_REQUEST_TIMEOUT (%s); a feed "+
+				"check happens inside a request somebody is waiting on",
+				c.Feed.Timeout, c.HTTP.RequestTimeout)
 		}
 	}
 

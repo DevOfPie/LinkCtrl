@@ -157,6 +157,16 @@
          belongs to nothing must still be able to leave, and it is the one thing
          this menu always holds. */}}
     {{if .HasOrganization}}
+    {{/* The reputation-feed disclosure (M32, D40). The one entry in this menu
+         gated on no permission at all, and that is the point of it: what the
+         page discloses is where *your* destinations go, so an editor is exactly
+         the reader it is for. Gating it on destinations.review would disclose
+         the practice only to the person who already configured it.
+
+         It sits in the menu rather than taking a fourth top-level slot for the
+         reason M28 argued for the other entries (D35): it is read once, when
+         somebody wants to know, and never while work is being done. */}}
+    <a href="/feeds" class="block px-3 py-2 text-sm {{if eq .Nav "feeds"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">Reputation feeds</a>
     <a href="/account" class="block px-3 py-2 text-sm {{if eq .Nav "account"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">Account</a>
     {{end}}
     <form method="post" action="/logout">
