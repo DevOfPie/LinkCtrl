@@ -60,6 +60,7 @@ file. Append a row when you append an entry.
 | [M32.5, refusing a client rather than a destination](#2026-07-31--m325-bot-blocking-and-why-it-is-not-in-the-blocking-cluster) | A third threat model, kept away from M30's two; why it lands before M33 and M34; the first decision on the redirect hot path; why the bypass was split off to Phase 3 |
 | [Documents nobody was asked about](#2026-07-31--the-gate-that-never-asked-about-readme) | Why four milestones drifted; why the gate was widened instead of M21 reopened; truing a baseline before installing a gate; two audit overclaims found on the way |
 | [M26.5, settling the header before four milestones fill it](#2026-07-31--m265-the-header-before-four-milestones-compete-for-it) | F6 and F7 as one milestone; why identity-scoped and organization-scoped controls separate; details/summary and what it costs; what is deliberately left out |
+| [M26.6, two retry loops that multiply](#2026-07-31--m266-a-stalled-redis-and-two-retry-loops-that-multiply) | Correcting F2's attribution; why a total budget beats a per-attempt one; why it lands before the next SLO measurement; the false-negative trade a lower timeout buys |
 
 ---
 
@@ -3942,3 +3943,73 @@ available as its own future scope if the owner wants it.
 Mobile navigation is likewise out. The bar already hides the address below `sm`,
 and a responsive nav is a larger piece of work whose diff would swamp the two
 findings this closes.
+
+---
+
+## 2026-07-31 — M26.6, a stalled Redis and two retry loops that multiply
+
+F2, approved by the owner 2026-07-31 and scheduled rather than left for M45.
+
+### The finding's attribution was wrong, and the correction is the point
+
+F2 recorded the symptom accurately — 9.07s to invalidate an alias against a
+blackholing proxy, where a refused connection takes 264ms — and attributed it to
+go-redis not honouring the per-attempt context while establishing a connection.
+
+Reading the tree for scheduling turned up simpler arithmetic. `deleteFromRedis`
+retries three times. `MaxRetries` is never set when the client is built, so
+go-redis applies its own default of three. `REDIS_DIAL_TIMEOUT` is 1s.
+3 × 3 × 1s is 9s, and 9.07s was measured.
+
+Two retry layers multiplying, neither aware of the other, over a dial budget
+twenty times the 50ms read budget beside it. That is a different defect from a
+context being ignored, and it has a different fix: bound the total rather than
+teach one layer to respect a deadline it was already given.
+
+The correction is written into the finding row rather than replacing its
+evidence, and the milestone treats the arithmetic as a hypothesis to confirm by
+attribution rather than as a conclusion. A fix aimed at the wrong layer would
+leave the defect in place and consume the evidence that it exists.
+
+### A total budget, not a smaller per-attempt one
+
+The obvious fix is to lower the dial timeout. It is the wrong shape: the
+per-attempt budget was never the problem, and shrinking it leaves the
+multiplication intact while making a merely slow Redis look dead.
+
+What the caller needs is a bound on the whole operation, chosen against
+`HTTP_REQUEST_TIMEOUT` — 15s — so that the invalidation cannot bring an edit
+near its own deadline. A bound is a number, and the number belongs in this file
+with the reasoning that produced it rather than in a constant with a shrug.
+
+Bounded failure is still failure. Invalidation that gives up still logs and
+still leaves the entry to expire by TTL; correctness never depended on the cache
+and this does not make it start.
+
+### Why here, and not M45
+
+Three later milestones are better done on top of a client whose worst case is
+known. [M32.5](phase-details/m32.5.md) re-runs the k6 SLO measurement, and
+`MaxRetries` and the dial timeout are client-wide settings that the redirect path
+uses too — measuring latency first and changing timeout behaviour afterwards
+would invalidate the measurement. [M34](phase-details/m34.md) bumps the cache key
+and [M40](phase-details/m40.md) adds custom domains, both widening the
+invalidation surface this defect lives in.
+
+Placing it immediately after [M26.5](phase-details/m26.5.md) also keeps it well
+inside [M32.9](phase-details/m32.9.md)'s review range, and there is nothing to
+wait for: it depends on no milestone and no decision.
+
+### The trade the fix makes
+
+Lowering any timeout buys a bound on a stalled Redis and pays for it with false
+negatives on a slow one. A dial budget cut too far makes a healthy-but-loaded
+Redis look down and pushes its load onto Postgres — which is a real failure
+introduced in exchange for the one being removed, on the dependency this project
+has repeatedly insisted is optional.
+
+Both values are already operator-tunable, which is the mitigation rather than the
+answer. The shipped default is a judgement, and the milestone is required to
+state which stall shapes it actually tested: a proxy that accepts and then never
+speaks is one shape, and a server that completes the handshake and hangs
+mid-command is another that a fix tuned to the first may not bound.

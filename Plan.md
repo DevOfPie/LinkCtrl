@@ -479,11 +479,12 @@ reclassified rather than quietly skipped.
 
 ## Phase 2 build plan
 
-30 milestones, M21–M45, continuing Phase 1's numbering. Fractional numbers
+31 milestones, M21–M45, continuing Phase 1's numbering. Fractional numbers
 insert without renumbering the work either side (Phase 1's M0.5 precedent):
 `X.9` is reserved for scheduled reviews, `X.1`–`X.8` for scope added after the
-plan was finalised — so far three, all 2026-07-31: the dashboard header at
-M26.5, dark mode at M24.5 and bot blocking at M32.5. The numbering
+plan was finalised — so far four, all 2026-07-31: dark mode at M24.5,
+the dashboard header at M26.5, the Redis stall bound at M26.6 and bot blocking
+at M32.5. The numbering
 rules are in [planning.md](docs/build-notes/planning.md). One milestone per
 commit.
 
@@ -508,6 +509,7 @@ once (M35).
 | [M25](docs/build-notes/phase-details/m25.md) | Workspace and organization switcher | — | Groundwork for M27/M28 |
 | [M26](docs/build-notes/phase-details/m26.md) | Mailer: optional SMTP delivery | — | Optional SMTP mailer |
 | [M26.5](docs/build-notes/phase-details/m26.5.md) | Dashboard header: identity menu and notification bell | — *(before M27)* | — *(owner-added scope, 2026-07-31)* |
+| [M26.6](docs/build-notes/phase-details/m26.6.md) | Bounded Redis failure, when the server never answers | — *(before M32.5, M34, M40)* | — *(owner-approved finding F2, 2026-07-31)* |
 | [M27](docs/build-notes/phase-details/m27.md) | Organizations: invitations and joining | M21 M22 M25 M26 | Organizations row (invites) |
 | [M28](docs/build-notes/phase-details/m28.md) | Team management, workspaces, org creation | M27 | Organizations row (complete) · workspace and org creation |
 | [M29](docs/build-notes/phase-details/m29.md) | Self-serve signup, switchable at runtime | M26 M27 | Self-serve signup |
