@@ -51,7 +51,11 @@ UPDATE notifications
 --
 -- Who to tell about something that concerns the organization rather than a
 -- person. Active users only: a deactivated account cannot sign in to read it.
-SELECT u.id
+--
+-- The address comes back with the id because both deliveries address the same
+-- person: the inbox row is keyed by user, the mail by address, and looking the
+-- second one up separately would mean a query per recipient.
+SELECT u.id, u.email, u.name
   FROM memberships m
   JOIN roles r ON r.id = m.role_id
   JOIN users u ON u.id = m.user_id

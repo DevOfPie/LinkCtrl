@@ -265,7 +265,7 @@ partition, refreshed hourly on every replica. The alert recipe is in
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `LINKCTRL_AUDIT_SIZE_WARN_BYTES` | `5368709120` | 5 GiB. Once the audit partitions pass this, every organization owner gets an in-app notification, at most one a week each. **On by default**, unlike the retention window. `0` disables it. |
+| `LINKCTRL_AUDIT_SIZE_WARN_BYTES` | `5368709120` | 5 GiB. Once the audit partitions pass this, every organization owner gets an in-app notification, at most one a week each — and the same warning by email if a [mailer](#mail) is configured. **On by default**, unlike the retention window. `0` disables it. |
 
 The asymmetry is deliberate. Retention defaults to inaction because acting
 unasked destroys data; the warning defaults to acting because inaction is what
@@ -274,6 +274,92 @@ instance nobody configured is the one that gets warned.
 
 Reading the log needs the `audit.read` permission, held by owners and admins.
 It cannot be granted to an API key — see [SECURITY.md](SECURITY.md).
+
+## Mail
+
+**Off by default.** Leave `SMTP_HOST` empty and the instance behaves exactly as
+it does with this section deleted: notifications are delivered in the dashboard
+and nowhere else, nothing is queued, and no outbound connection is ever made.
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `LINKCTRL_SMTP_HOST` | *(empty)* | **The switch.** Empty means no mailer. |
+| `LINKCTRL_SMTP_PORT` | `587` | `465` for implicit TLS, `25` for a local relay. |
+| `LINKCTRL_SMTP_TLS` | `starttls` | `starttls`, `tls` or `none`. `starttls` **refuses to send** if the relay does not offer STARTTLS, rather than falling back to plaintext. |
+| `LINKCTRL_SMTP_FROM` | *(empty)* | Required once a host is set. A bare address or `LinkCtrl <links@example.com>`. Parsed at boot, not at the first send. |
+| `LINKCTRL_SMTP_USERNAME` | *(empty)* | PLAIN authentication. Set both this and the password, or neither. |
+| `LINKCTRL_SMTP_PASSWORD` | *(empty)* | Also accepts a `_FILE` suffix, for mounted secrets. Held as a secret that refuses to print itself. |
+| `LINKCTRL_SMTP_TIMEOUT` | `10s` | Bounds one delivery attempt end to end: dial, handshake, `DATA`. |
+
+### What is supported, and what is not
+
+The surface is deliberately small, because TLS modes and auth mechanisms are
+where a mail configuration turns into a compatibility matrix.
+
+**Supported:** STARTTLS on submission, implicit TLS, or an unencrypted
+connection to a relay that needs no credentials; PLAIN authentication, over an
+encrypted connection only.
+
+**Not supported:** LOGIN, CRAM-MD5, XOAUTH2, client certificates, and any relay
+that requires one of them. There is no fallback and no negotiation — a relay
+that will not take PLAIN over TLS cannot be used, and finding that out from this
+paragraph is better than finding it out from a bounce.
+
+Credentials over an unencrypted connection are refused by validation rather than
+warned about. Go's SMTP client refuses to send PLAIN in clear too, so accepting
+the combination here would only move the failure to the first send.
+
+### How mail is delivered
+
+Nothing sends on the request path. A message is rendered, written to the
+`mail_outbox` table, and delivered by the `mail` job on the scheduler — the same
+scheduler that maintains partitions. Three consequences worth knowing:
+
+- **Mail queued before a restart is still delivered after it.** That is the
+  reason for the table. An invitation lost to a deploy landing mid-retry would
+  be invisible on both ends: nobody receives it, and nobody knows one was
+  attempted.
+- **Delivery is not instant.** The job runs every 30 seconds, and once at
+  startup.
+- **Retry is bounded**: five attempts, backing off 1m, 2m, 4m, 8m, 16m. After
+  the fifth the row is marked `failed` and kept, with the relay's error in
+  `last_error`. Sent and failed rows are deleted 30 days later; pending rows
+  never are.
+
+To see what happened to a message:
+
+```sh
+docker compose exec -T postgres psql -U linkctrl -d linkctrl -c \
+  "SELECT created_at, recipient, kind, status, attempts, last_error FROM mail_outbox ORDER BY created_at DESC LIMIT 20;"
+```
+
+Message bodies are **plain text only**. There is no HTML part, which is what
+removes remote images that report when a message was opened and anchor text that
+disagrees with its link. Every value interpolated into a message has its control
+and bidirectional-formatting characters removed first, so nothing a person typed
+can become a header or a second message.
+
+### What sends mail today
+
+One thing: the audit-growth warning. Once `audit_logs` passes
+`AUDIT_SIZE_WARN_BYTES`, every organization owner gets the in-app notification —
+and, with a mailer configured, the same warning by email. The in-app
+notification is the baseline and does not depend on the mailer.
+
+Invitations, address verification and dispute outcomes are specified for later
+milestones in [Plan.md](../Plan.md#phase-2-build-plan). Each degrades to its
+mail-free behaviour when no mailer is configured.
+
+### Boot behaviour
+
+Startup opens a connection to the relay, greets it, and hangs up. Success is
+logged; failure is logged as an **error and the process continues**. A relay
+being unreachable is not a reason for a link shortener to stop serving
+redirects, and anything queued meanwhile is retried from the outbox.
+
+A *configuration* mistake is still fatal, as every other one is: an unparseable
+`SMTP_FROM`, an unknown TLS mode, a username without a password, or credentials
+that would go over the wire in clear all refuse to boot.
 
 ## Shutdown
 

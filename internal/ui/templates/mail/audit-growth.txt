@@ -1,0 +1,22 @@
+Subject: The audit log on {{.Instance}} has passed its size threshold
+
+Hello {{.Name}},
+
+The audit log on {{.Instance}} now uses {{.Size}} on disk, past the
+{{.Threshold}} threshold.
+
+Audit history is kept forever until LINKCTRL_AUDIT_RETENTION_DAYS is set, so it
+will keep growing. Nothing has been deleted and nothing will be until you set
+that variable: this is a notice, not an action taken on your behalf. What to do
+about it is in docs/operations.md, under "Audit log growth".
+
+You are getting this because you are an owner on this instance. It is sent at
+most once a week while the threshold stays crossed, and setting
+LINKCTRL_AUDIT_SIZE_WARN_BYTES to 0 switches it off.
+
+The same notice is in your dashboard inbox:
+
+    {{.AppURL}}/notifications
+
+--
+LinkCtrl

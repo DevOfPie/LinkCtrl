@@ -53,8 +53,13 @@ func TestMigrationsProduceExpectedSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tables != 31 {
-		t.Errorf("got %d tables, want 31 (all 20 Plan.md entities)", tables)
+	// 31 was the Phase 1 count: all 20 Plan.md entities, plus the join and
+	// support tables they need. M26 adds mail_outbox, which is not an entity —
+	// it is the delivery queue decision D23 chose over an in-memory retry — so
+	// the number moves and the sentence says why rather than the count silently
+	// growing whenever somebody adds a table.
+	if tables != 32 {
+		t.Errorf("got %d tables, want 32 (all 20 Plan.md entities, plus mail_outbox)", tables)
 	}
 
 	// The UTC guarantee the partition scheme depends on.

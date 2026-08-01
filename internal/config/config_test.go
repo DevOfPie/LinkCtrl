@@ -264,6 +264,44 @@ func TestValidateIndividualRules(t *testing.T) {
 		{"shutdown exceeds grace period", map[string]string{
 			"LINKCTRL_SHUTDOWN_DRAIN_DELAY": "20s", "LINKCTRL_SHUTDOWN_TIMEOUT": "20s",
 		}, "stop_grace_period"},
+
+		// The mailer. Every one of these is only reachable once SMTP_HOST is
+		// set, which is what TestMailerIsOffAndSilentByDefault holds the other
+		// side of.
+		{"mailer with no sender", map[string]string{
+			"LINKCTRL_SMTP_HOST": "smtp.example.com",
+		}, "SMTP_FROM"},
+		{"mailer with an unparseable sender", map[string]string{
+			"LINKCTRL_SMTP_HOST": "smtp.example.com", "LINKCTRL_SMTP_FROM": "not an address",
+		}, "SMTP_FROM"},
+		{"unknown tls mode", map[string]string{
+			"LINKCTRL_SMTP_HOST": "smtp.example.com", "LINKCTRL_SMTP_FROM": "l@example.com",
+			"LINKCTRL_SMTP_TLS": "ssl",
+		}, "SMTP_TLS"},
+		{"port out of range", map[string]string{
+			"LINKCTRL_SMTP_HOST": "smtp.example.com", "LINKCTRL_SMTP_FROM": "l@example.com",
+			"LINKCTRL_SMTP_PORT": "70000",
+		}, "SMTP_PORT"},
+		{"a username with no password", map[string]string{
+			"LINKCTRL_SMTP_HOST": "smtp.example.com", "LINKCTRL_SMTP_FROM": "l@example.com",
+			"LINKCTRL_SMTP_USERNAME": "postmaster",
+		}, "set both or neither"},
+		{"a password with no username", map[string]string{
+			"LINKCTRL_SMTP_HOST": "smtp.example.com", "LINKCTRL_SMTP_FROM": "l@example.com",
+			"LINKCTRL_SMTP_PASSWORD": "hunter2",
+		}, "set both or neither"},
+		// Credentials over an unencrypted connection are refused rather than
+		// warned about: Go's own SMTP client refuses PLAIN in clear too, so
+		// accepting it here would only move the failure to the first send.
+		{"credentials without encryption", map[string]string{
+			"LINKCTRL_SMTP_HOST": "smtp.example.com", "LINKCTRL_SMTP_FROM": "l@example.com",
+			"LINKCTRL_SMTP_USERNAME": "postmaster", "LINKCTRL_SMTP_PASSWORD": "hunter2",
+			"LINKCTRL_SMTP_TLS": "none",
+		}, "in clear"},
+		{"zero timeout", map[string]string{
+			"LINKCTRL_SMTP_HOST": "smtp.example.com", "LINKCTRL_SMTP_FROM": "l@example.com",
+			"LINKCTRL_SMTP_TIMEOUT": "0s",
+		}, "SMTP_TIMEOUT"},
 	}
 
 	for _, tc := range tests {
@@ -282,6 +320,119 @@ func TestValidateIndividualRules(t *testing.T) {
 				t.Errorf("error does not mention %q.\nGot: %v", tc.wantMention, err)
 			}
 		})
+	}
+}
+
+// M26's headline claim, at the configuration layer: an instance that sets
+// nothing has no mailer, and none of the mailer's rules can refuse its boot.
+//
+// The second half matters as much as the first. Every SMTP rule sits inside the
+// Enabled guard, so a default instance must parse cleanly even with values that
+// would be refused outright once a host is named — otherwise "off by default"
+// would mean "off, unless you left something in your .env".
+func TestMailerIsOffAndSilentByDefault(t *testing.T) {
+	setEnv(t, validEnv())
+
+	c, err := Parse()
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if c.SMTP.Enabled() {
+		t.Error("SMTP is enabled on a configuration that names no host")
+	}
+
+	// Values that are errors once a host is set, on an instance with no host.
+	env := validEnv()
+	env["LINKCTRL_SMTP_TLS"] = "ssl"
+	env["LINKCTRL_SMTP_FROM"] = "not an address"
+	env["LINKCTRL_SMTP_USERNAME"] = "postmaster"
+	setEnv(t, env)
+
+	c, err = Parse()
+	if err != nil {
+		t.Fatalf("mailer settings refused a boot on an instance with no SMTP_HOST: %v", err)
+	}
+	if c.SMTP.Enabled() {
+		t.Error("SMTP is enabled without a host")
+	}
+}
+
+// The whole supported surface, accepted. A configuration that a self-hoster
+// would actually write must parse, or every rule above is only proving that the
+// mailer is hard to switch on.
+func TestMailerAcceptsEachSupportedMode(t *testing.T) {
+	for _, mode := range []string{SMTPStartTLS, SMTPImplicit} {
+		t.Run(mode, func(t *testing.T) {
+			env := validEnv()
+			env["LINKCTRL_SMTP_HOST"] = "smtp.example.com"
+			env["LINKCTRL_SMTP_PORT"] = "465"
+			env["LINKCTRL_SMTP_FROM"] = "LinkCtrl <links@example.com>"
+			env["LINKCTRL_SMTP_USERNAME"] = "postmaster"
+			env["LINKCTRL_SMTP_PASSWORD"] = "hunter2"
+			env["LINKCTRL_SMTP_TLS"] = mode
+			setEnv(t, env)
+
+			c, err := Parse()
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if !c.SMTP.Enabled() {
+				t.Fatal("SMTP is not enabled with a host set")
+			}
+			if got := c.SMTP.Addr(); got != "smtp.example.com:465" {
+				t.Errorf("Addr() = %q", got)
+			}
+			// The password is a Secret, so a config dump or a formatted panic
+			// cannot print it. Same treatment as the database DSN and the
+			// API-key pepper, and worth asserting rather than assuming.
+			dumped := fmt.Sprintf("%v %#v", c.SMTP, c.SMTP) +
+				fmt.Sprintf(" %v %q %#v", c.SMTP.Password, c.SMTP.Password, c.SMTP.Password)
+			if strings.Contains(dumped, "hunter2") {
+				t.Error("the SMTP password printed itself")
+			}
+			if c.SMTP.Password.Reveal() != "hunter2" {
+				t.Error("the SMTP password did not survive parsing")
+			}
+		})
+	}
+
+	// A relay that wants no encryption and no credentials — a local postfix, a
+	// mailhog in development — is a legitimate configuration and must parse.
+	env := validEnv()
+	env["LINKCTRL_SMTP_HOST"] = "localhost"
+	env["LINKCTRL_SMTP_PORT"] = "1025"
+	env["LINKCTRL_SMTP_FROM"] = "links@example.com"
+	env["LINKCTRL_SMTP_TLS"] = SMTPNone
+	setEnv(t, env)
+	if _, err := Parse(); err != nil {
+		t.Errorf("Parse refused an unauthenticated local relay: %v", err)
+	}
+}
+
+// SMTP_PASSWORD was in Removed through Phase 1, because there was no mail
+// feature to authenticate to. M26 built one, so the variable is read again and
+// the entry had to go — a warning that a variable does nothing, on an instance
+// where it does something, is the exact defect the Removed list exists to
+// prevent, arriving from the other side.
+func TestSMTPPasswordIsNoLongerReportedAsRemoved(t *testing.T) {
+	if _, ok := Removed["SMTP_PASSWORD"]; ok {
+		t.Fatal("SMTP_PASSWORD is still listed as removed, but Parse reads it")
+	}
+
+	env := validEnv()
+	env["LINKCTRL_SMTP_HOST"] = "smtp.example.com"
+	env["LINKCTRL_SMTP_FROM"] = "links@example.com"
+	env["LINKCTRL_SMTP_USERNAME"] = "postmaster"
+	env["LINKCTRL_SMTP_PASSWORD"] = "hunter2"
+	setEnv(t, env)
+
+	if _, err := Parse(); err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	for _, w := range RemovedInUse() {
+		if strings.Contains(w, "SMTP_PASSWORD") {
+			t.Errorf("startup would warn that a variable it reads is unread: %q", w)
+		}
 	}
 }
 

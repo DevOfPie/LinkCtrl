@@ -192,6 +192,20 @@ type LinkTag struct {
 	WorkspaceID uuid.UUID
 }
 
+type MailOutbox struct {
+	ID            uuid.UUID
+	Recipient     string
+	Subject       string
+	Body          string
+	Kind          string
+	Status        string
+	Attempts      int32
+	NextAttemptAt time.Time
+	LastError     string
+	CreatedAt     time.Time
+	SentAt        *time.Time
+}
+
 type Membership struct {
 	ID             uuid.UUID
 	UserID         uuid.UUID

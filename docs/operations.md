@@ -145,12 +145,13 @@ a follower whose scheduler has stopped.
 | Job | Every | Does |
 | --- | --- | --- |
 | `rollup` | 60s | Recomputes recent days from raw events and upserts. Whole days, never incremental — an "add what arrived since the watermark" design double-counts on retry and, once it drifts, stays wrong invisibly. |
+| `mail` | 30s | Drains `mail_outbox`. Does not run at all with no mailer configured, because nothing is ever queued then. Five attempts per message, backing off 1m to 16m; a message that never gets through is marked `failed` and kept with the relay's error. Faster than the hourly jobs because an invitation is something a person is waiting for. See [configuration.md](configuration.md#mail). |
 | `partitions` | 1h | Creates monthly partitions two months ahead. |
 | `retention` | 1h | Drops monthly partitions that are entirely outside their table's window — `ANALYTICS_RETENTION_DAYS` for `click_events` and `visitors`, `AUDIT_RETENTION_DAYS` for `audit_logs`. Runs after `partitions`, so a run can never drop what it just created. With the audit default of `0` it drops no audit partition at all. |
 | `salt-purge` | 1h | Deletes analytics salts older than two days. **This is the de-identification step, not housekeeping**: once a salt is gone, that day's visitor hashes cannot be linked to an address by anyone. |
 | `audit-growth-warning` | 1h | Notifies every organization owner once `audit_logs` passes `AUDIT_SIZE_WARN_BYTES`, at most weekly each. Skipped entirely when the threshold is `0`. |
 | `partition-check` | 1h | Warns if rows landed in a default partition. |
-| `housekeeping` | 1h | The reapers. Hard-deletes links whose 30-day trash window has passed — reserving any alias that ever received traffic in the same statement, so it is never reissued — and deletes sessions and revoked API keys past their retention. Each purged link is logged by alias; that log line is the only record of the deletion. |
+| `housekeeping` | 1h | The reapers. Hard-deletes links whose 30-day trash window has passed — reserving any alias that ever received traffic in the same statement, so it is never reissued — and deletes sessions, revoked API keys and finished outbox rows past their retention. Each purged link is logged by alias; that log line is the only record of the deletion. |
 
 All of them run once at startup rather than waiting a full interval, so a fresh
 instance has current numbers.
@@ -254,11 +255,11 @@ Tune `5e9` to the volume you actually have — the number that matters is your
 own. An instance with a year of history and no growth is fine at any size; one
 doubling monthly is not fine at any size.
 
-The owner-facing notification for the same threshold is
-[M22](build-notes/phase-details/m22.md)'s, is **on by default** rather than
-opt-in, and is emailed once [M26](build-notes/phase-details/m26.md)'s mailer is
-configured. Until M22 lands, these alerts are the whole mechanism — which is why
-the metric ships here and not with the notification that reads it.
+The owner-facing notification for the same threshold is **on by default** rather
+than opt-in, and is emailed as well once a [mailer](configuration.md#mail) is
+configured. The metric and this alert recipe stay the primary mechanism: they
+reach whoever watches Prometheus, where the notification reaches whoever signs
+in.
 
 Each drop is logged at info with the partition name. That log line is the only
 record that irreversible deletion happened, so keep it.

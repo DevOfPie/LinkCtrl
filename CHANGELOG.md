@@ -111,6 +111,35 @@ migrations run at boot.
   yet. This release is the groundwork that lands before invitations do, so the
   identity resolution underneath is settled before a feature starts producing
   memberships.
+- **An optional SMTP mailer, off by default.** Set `LINKCTRL_SMTP_HOST` and the
+  instance can send mail; leave it empty — which is the default — and nothing
+  changes at all: no outbound connection, nothing queued, and every feature that
+  could email behaves exactly as it does today. It lands before the features
+  that need it so email is part of each one from its first commit rather than
+  retrofitted.
+- **Sends never happen on the request path.** A message is written to a new
+  `mail_outbox` table and delivered by a job on the scheduler that already
+  maintains partitions, so mail queued before a restart is still delivered
+  after it. Retry is bounded — five attempts backing off 1m to 16m — and a
+  message that never got through is kept, with the relay's error, rather than
+  disappearing.
+- **The audit-growth warning is the first thing that emails.** Owners already
+  got it in the dashboard; with a mailer configured they get it by email too,
+  under the same once-a-week guard. The in-app notification remains the
+  baseline and does not depend on the mailer.
+- Messages are **plain text only**. No HTML part means no remote image that
+  reports when a message was opened and no anchor text that disagrees with its
+  link, and every value put into a message has its control and
+  bidirectional-formatting characters stripped first — so nothing anyone types
+  can inject a header or forge a second message.
+- The supported configuration is deliberately narrow: STARTTLS, implicit TLS, or
+  an unencrypted local relay, with PLAIN authentication over an encrypted
+  connection. LOGIN, CRAM-MD5, XOAUTH2 and client certificates are not
+  supported, and `SMTP_TLS=starttls` **refuses to send** rather than falling back
+  to plaintext against a relay that does not offer it.
+- `LINKCTRL_SMTP_PASSWORD` **exists again.** It was accepted and ignored before
+  0.1.0, then removed because there was no mail feature to authenticate to.
+  There is one now.
 
 ### Notes for operators
 
@@ -122,7 +151,8 @@ migrations run at boot.
 - Notifications added no database columns. The table shipped in 0.1.0 and
   per-kind detail goes in its `data` jsonb, so this upgrade is additive in the
   ordinary way and needs no backfill.
-- There is no email yet, and no push. In-app only until a mailer exists.
+- There is no push, and no per-event preference machinery. In-app is the
+  baseline; email is an addition an operator switches on.
 - The switcher adds three nullable columns —
   `users.default_workspace_id`, `users.last_workspace_id` and
   `sessions.workspace_id` — all NULL after the migration, which is why
@@ -131,6 +161,13 @@ migrations run at boot.
 - Nothing about tenancy has changed yet: one personal organization and one
   workspace are still provisioned per account, and no product surface creates a
   second membership. What changed is that when one exists, it will be reachable.
+- The mailer adds one table, `mail_outbox`, and changes nothing else. An
+  instance that never sets `LINKCTRL_SMTP_HOST` will never write a row to it.
+- **If you configure a mailer, own the sending domain's DNS.** SPF, DKIM and
+  DMARC are set where the domain lives, not here. Nothing signs outbound mail.
+- Queued messages are stored rendered, so anyone who can read the database can
+  read them. Sent and failed rows are deleted after 30 days; pending rows are
+  never deleted by age.
 
 ## [0.1.0] - 2026-07-31
 

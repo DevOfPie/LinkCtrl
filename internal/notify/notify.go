@@ -39,6 +39,11 @@ const (
 	KindAuditGrowth = "audit.growth"
 )
 
+// MailAuditGrowth names the mail template for the same warning. It is the
+// filename in internal/ui/templates/mail, without the extension, and it is also
+// what lands in the outbox's `kind` column.
+const MailAuditGrowth = "audit-growth"
+
 // RoleOwner is the role notified about things that concern the organization
 // rather than a person.
 const RoleOwner = "owner"
@@ -77,10 +82,38 @@ type Filter struct {
 // Service writes and reads notifications.
 type Service struct {
 	q *dbgen.Queries
+	// mailer is nil unless an SMTP relay is configured, which is the whole of
+	// the mail-free degradation path: no branch on a flag, no error to swallow,
+	// nothing queued. In-app delivery is the baseline and never depends on it.
+	mailer Enqueuer
+	// appURL is the origin a mail links back to. Empty when no mailer is
+	// configured, because nothing reads it then.
+	appURL string
+}
+
+// Enqueuer is internal/mail's writing half, as this package needs it.
+//
+// Declared here rather than imported so that notify keeps depending on nothing
+// but the store: the consumer owns the interface, and a test satisfies it with
+// a slice.
+type Enqueuer interface {
+	Enqueue(ctx context.Context, to, kind string, data map[string]string) error
 }
 
 func NewService(pool *pgxpool.Pool) *Service {
 	return &Service{q: dbgen.New(pool)}
+}
+
+// WithMail attaches a mailer, so notifications that have an email form are also
+// sent as one.
+//
+// A setter rather than a constructor argument because the mailer is optional
+// and every existing caller passes nothing. Handing a nil Enqueuer here is the
+// same as never calling it: a nil interface, checked once at the send site.
+func (s *Service) WithMail(m Enqueuer, appURL string) *Service {
+	s.mailer = m
+	s.appURL = appURL
+	return s
 }
 
 // Notifier is the writing half, as its consumers see it. An interface so a
@@ -131,16 +164,46 @@ func (s *Service) Notify(ctx context.Context, userID uuid.UUID, e Event) error {
 	return nil
 }
 
+// Recipient is one person to tell, in both forms: the id an inbox row is keyed
+// by, and the address a mail goes to.
+//
+// One type rather than two lookups. Every consumer that emails also files the
+// in-app notification — in-app is the baseline and mail is the addition — so
+// fetching the address separately would be a query per recipient for something
+// the first query already had in hand.
+type Recipient struct {
+	UserID uuid.UUID
+	Email  string
+	// Name is what a mail greets them by. Empty is common — the column defaults
+	// to it — so callers use Greeting rather than this.
+	Name string
+}
+
+// Greeting is the name to address this person by, falling back to the address.
+//
+// "Hello owner@example.com" is a worse sentence than "Hello Ada" and a better
+// one than "Hello ,".
+func (r Recipient) Greeting() string {
+	if r.Name != "" {
+		return r.Name
+	}
+	return r.Email
+}
+
 // OwnersOf lists the users to tell about something concerning the organization.
-func (s *Service) OwnersOf(ctx context.Context, orgID uuid.UUID) ([]uuid.UUID, error) {
-	ids, err := s.q.ListUsersWithRoleInOrg(ctx, dbgen.ListUsersWithRoleInOrgParams{
+func (s *Service) OwnersOf(ctx context.Context, orgID uuid.UUID) ([]Recipient, error) {
+	rows, err := s.q.ListUsersWithRoleInOrg(ctx, dbgen.ListUsersWithRoleInOrgParams{
 		OrganizationID: orgID,
 		RoleSlug:       RoleOwner,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("notify: list owners: %w", err)
 	}
-	return ids, nil
+	out := make([]Recipient, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, Recipient{UserID: r.ID, Email: r.Email, Name: r.Name})
+	}
+	return out, nil
 }
 
 // NotifiedSince reports whether this user already has a notification of this
@@ -352,8 +415,8 @@ func (s *Service) WarnAuditGrowth(ctx context.Context, size, threshold int64) er
 			errs = append(errs, err)
 			continue
 		}
-		for _, userID := range owners {
-			recent, err := s.NotifiedSince(ctx, userID, KindAuditGrowth, since)
+		for _, owner := range owners {
+			recent, err := s.NotifiedSince(ctx, owner.UserID, KindAuditGrowth, since)
 			if err != nil {
 				errs = append(errs, err)
 				continue
@@ -361,7 +424,7 @@ func (s *Service) WarnAuditGrowth(ctx context.Context, size, threshold int64) er
 			if recent {
 				continue
 			}
-			if err := s.Notify(ctx, userID, Event{
+			if err := s.Notify(ctx, owner.UserID, Event{
 				Kind:  KindAuditGrowth,
 				Title: "The audit log has passed its size threshold",
 				Body: fmt.Sprintf(
@@ -373,11 +436,49 @@ func (s *Service) WarnAuditGrowth(ctx context.Context, size, threshold int64) er
 				// later UI can render them without parsing English back out.
 				Data: map[string]any{"bytes": size, "threshold": threshold},
 			}); err != nil {
+				// The mail is the addition, not the delivery. If the inbox row
+				// could not be written, the recipient has heard nothing at all
+				// and the re-notify guard has nothing to suppress the next run
+				// with, so sending a mail here would produce one every hour.
+				errs = append(errs, err)
+				continue
+			}
+			if err := s.mailAuditGrowth(ctx, owner, size, threshold); err != nil {
 				errs = append(errs, err)
 			}
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// mailAuditGrowth queues the email form of the warning, if there is a mailer.
+//
+// D5 made keep-forever safe by promising the growth would be visible; M21 made
+// it a metric, M22 an inbox row, and this is the third leg — an owner who does
+// not open the dashboard for a month still hears about it. With no mailer
+// configured this returns immediately and the outbox stays empty, which is what
+// keeps the mailer optional rather than quietly required.
+func (s *Service) mailAuditGrowth(ctx context.Context, to Recipient, size, threshold int64) error {
+	if s.mailer == nil {
+		return nil
+	}
+	if to.Email == "" {
+		return nil
+	}
+	// Instance rather than a hostname pulled from the request: this runs on the
+	// scheduler, where there is no request, and an owner with two instances
+	// needs to know which one is growing.
+	instance := s.appURL
+	if instance == "" {
+		instance = "this instance"
+	}
+	return s.mailer.Enqueue(ctx, to.Email, MailAuditGrowth, map[string]string{
+		"Instance":  instance,
+		"Name":      to.Greeting(),
+		"Size":      HumanBytes(size),
+		"Threshold": HumanBytes(threshold),
+		"AppURL":    s.appURL,
+	})
 }
 
 // HumanBytes renders a size the way an operator reads one. Binary units,

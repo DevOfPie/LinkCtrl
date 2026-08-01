@@ -171,7 +171,7 @@ func (q *Queries) ListOrganizationIDs(ctx context.Context) ([]uuid.UUID, error) 
 }
 
 const listUsersWithRoleInOrg = `-- name: ListUsersWithRoleInOrg :many
-SELECT u.id
+SELECT u.id, u.email, u.name
   FROM memberships m
   JOIN roles r ON r.id = m.role_id
   JOIN users u ON u.id = m.user_id
@@ -186,21 +186,31 @@ type ListUsersWithRoleInOrgParams struct {
 	RoleSlug       string
 }
 
+type ListUsersWithRoleInOrgRow struct {
+	ID    uuid.UUID
+	Email string
+	Name  string
+}
+
 // Who to tell about something that concerns the organization rather than a
 // person. Active users only: a deactivated account cannot sign in to read it.
-func (q *Queries) ListUsersWithRoleInOrg(ctx context.Context, arg ListUsersWithRoleInOrgParams) ([]uuid.UUID, error) {
+//
+// The address comes back with the id because both deliveries address the same
+// person: the inbox row is keyed by user, the mail by address, and looking the
+// second one up separately would mean a query per recipient.
+func (q *Queries) ListUsersWithRoleInOrg(ctx context.Context, arg ListUsersWithRoleInOrgParams) ([]ListUsersWithRoleInOrgRow, error) {
 	rows, err := q.db.Query(ctx, listUsersWithRoleInOrg, arg.OrganizationID, arg.RoleSlug)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []uuid.UUID{}
+	items := []ListUsersWithRoleInOrgRow{}
 	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
+		var i ListUsersWithRoleInOrgRow
+		if err := rows.Scan(&i.ID, &i.Email, &i.Name); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

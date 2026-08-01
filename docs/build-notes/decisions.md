@@ -54,6 +54,7 @@ file. Append a row when you append an entry.
 | [Capture, read-ahead, and cost](#2026-07-31--capture-read-ahead-and-measuring-what-the-contract-costs) | `/note` decides nothing; classification against the tree; upcoming-decisions holds questions only; predicted vs realized read cost; sub-milestone work may commit alone |
 | [M24.5 reopened: applied, not declared](#2026-07-31--m245-applying-the-theme-rather-than-declaring-it) | Why the tokens are unlayered rather than all in `@layer base`; a test that had to be shown red against the shipped stylesheet; resolving the cascade live instead of counting attributes; where the control went and why two sites is not two controls |
 | [M25, which workspace a request is in](#2026-07-31--m25-where-a-request-decides-which-workspace-it-is-in) | Three columns for three questions; precedence as one `ORDER BY`; why the switch needs a session; why the switcher draws nothing with one membership |
+| [M26, a mailer that is genuinely optional](#2026-07-31--m26-a-mailer-that-is-genuinely-optional) | Off-by-default as a nil interface rather than a flag; why a relay being down is not a boot failure; inert by construction in the renderer; attempts counted at claim time; plain text as the whole hostile-input answer |
 
 ---
 
@@ -3494,3 +3495,133 @@ The switcher costs one indexed query per page render, alongside the unread
 badge. A cached alternative would be a second copy of "which workspaces am I
 in", invalidated from the milestone that creates memberships, which is not a
 trade worth making before that milestone exists.
+
+---
+
+## 2026-07-31 — M26, a mailer that is genuinely optional
+
+D1 said the mailer ships and every consumer degrades mail-free; D23 said it goes
+through an outbox. Both were decided before any of it existed, so this milestone
+is mostly about the parts neither of them named.
+
+### Off by default is a nil interface, not a flag
+
+`SMTP_HOST` empty means no `mail.Service` is constructed at all. Consumers hold
+`notify.Enqueuer`, which is nil, and the one check lives at the send site.
+
+The alternative — a `Mailer` that exists and returns early on a `enabled` field —
+is the version where "optional" is a property somebody has to keep remembering.
+Every future consumer would carry the same `if !mailer.Enabled()` branch, and the
+first one that forgot it would fail at runtime on an instance that had configured
+nothing, which is the exact deployment this product is for. A nil interface makes
+the degraded path the one that needs no code.
+
+The claim is testable because of D23's table rather than in spite of it:
+`TestUnconfiguredMailerLeavesTheOutboxEmptyAndTheInboxWorking` asserts both that
+the owner still gets the notification and that `mail_outbox` has no rows. Only
+the second half distinguishes a mailer that degraded from one that quietly
+dropped the notification too, and "nothing was sent" could not have made that
+distinction.
+
+### A configuration mistake is fatal; a relay being down is not
+
+The milestone asked for connection details "validated at boot with a clear
+failure mode", and there are two failure modes hiding in that sentence.
+
+An unparseable `SMTP_FROM`, an unknown TLS mode, a username without a password,
+or credentials that would go over the wire in clear are refused by
+`config.Validate`, alongside every other configuration error, and the process
+does not start. They are typos, they are found by reading the environment, and
+none of them can fix itself.
+
+A relay that does not answer is different. Boot opens a connection, greets it and
+hangs up; failure logs at error and startup continues. This is the same call
+Redis already gets, and for a stronger reason: a link shortener that refuses to
+serve redirects because somebody's SMTP provider is having an afternoon has
+converted an optional dependency into an outage. The outbox is what makes it safe
+— anything queued while the relay is unreachable is still there when it returns.
+
+### Inert by construction, in the renderer
+
+`text/template` escapes nothing. That is the correct choice for a plain-text
+body and it means the one thing standing between a display name and the header
+block is whoever wrote the template remembering to sanitize.
+
+So the sanitizing moved into `RenderMail`, and the data it takes is
+`map[string]string` specifically so that it can walk every value on the way in. A
+struct or an `any` would have put the responsibility back on the template author.
+Control characters and bidirectional formatting characters are dropped — not
+escaped, because a plain-text body has no encoding layer for an escape to be
+undone by, so the only honest answer is for the character not to be there.
+
+Plain text is itself most of the answer to "renders untrusted input inert". A
+multipart message with an HTML part is where mail acquires remote images that
+report when it was opened, anchor text that disagrees with its href, and a
+rendering engine per client to be wrong about. Shipping text only removed that
+surface instead of defending it, which is why the risk section's warning about
+scope creep was answered by having less rather than by testing more.
+
+The remaining vector is injection, and it is guarded twice: the renderer strips,
+and `BuildMessage` refuses a header value containing a line break. Two guards
+because they fail differently — one would have to be bypassed, the other removed
+— and because the second is the one that still holds for a value that never went
+through a template.
+
+### Attempts are counted when a message is claimed, not when it is sent
+
+`ClaimDueMail` is an `UPDATE ... RETURNING` that spends the attempt and pushes
+`next_attempt_at` forward before anything is delivered. Counting at send time
+reads more naturally and is wrong in the case that matters: a process that dies
+mid-send has spent no attempt, so it retries the same message on restart, dies
+again, and a poisoned row becomes an infinite loop bounded by nothing.
+
+Leasing forward in the same statement gives crash recovery for free. A killed
+drainer leaves a row that becomes due again on its own rather than one stuck
+pending forever, and no reaper is needed to notice.
+
+`FOR UPDATE SKIP LOCKED` sits inside it even though leadership already keeps a
+second replica out of this job. Leadership is an advisory lock released when its
+holder dies, so a moment of overlap is possible; skip-locked makes that moment
+cost nothing instead of sending somebody two invitations.
+
+### The outbox has a window, because it is a record and not an archive
+
+Sent and failed rows are deleted after 30 days by the housekeeping job, beside
+the links, sessions and API keys it already reaps. Pending rows never are.
+
+This is a small addition the milestone did not ask for, and it is here because
+the alternative is shipping the one table in this schema that grows forever with
+nothing watching it — which is precisely the shape D5 spent a metric, an alert
+recipe and a notification learning about. Thirty days is long enough that "did
+that invitation ever go out?" is still answerable and short enough that nobody
+has to think about it.
+
+### What is not supported, said out loud
+
+STARTTLS, implicit TLS, or an unencrypted local relay; PLAIN authentication over
+an encrypted connection. Not LOGIN, CRAM-MD5, XOAUTH2 or client certificates.
+
+The milestone flagged the SMTP configuration surface as an invitation to scope
+creep, and the answer is a list of what does not work in
+`docs/configuration.md` rather than a matrix of half-tested mechanisms. A relay
+that will not take PLAIN over TLS cannot be used by this product; a paragraph
+saying so costs a reader thirty seconds, where discovering it from a bounce
+three days after an invitation was sent costs considerably more.
+
+`SMTP_TLS=starttls` refuses to send if the relay does not advertise STARTTLS,
+rather than continuing in clear. Falling back would send the password and the
+message unencrypted having been explicitly told to use TLS, which is the kind of
+helpfulness that ends up in an advisory.
+
+### The audit-growth warning is the consumer that already existed
+
+M26's consumer list names invitations, address verification and dispute
+outcomes, none of which are built. It also names the audit-growth alert, which
+is, and Plan.md's D5 attributes the emailing of it to this milestone
+specifically: *metric and alert (M21), owner notification (M22), emailed when a
+mailer exists (M26)*.
+
+Wiring it here is what gives the degradation claim something real to be tested
+against. It also completes D5's promise on its own terms — keep-forever is only
+safe if the growth it permits is visible, and an owner who does not open the
+dashboard for a month was not, until now, being told anything.

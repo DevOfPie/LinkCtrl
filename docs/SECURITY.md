@@ -44,10 +44,11 @@ Stated as claims, because each one is testable and several have tests naming the
 | Credential endpoints | Per-account lockout **and** per-address rate limiting, because one address guessing across a leaked list never trips a per-account counter, and many addresses attacking one account never trip a per-address one. |
 | API keys | Only an HMAC is stored; the token is shown once. Scopes are intersected with the holder's current role on every request, so demoting a user weakens their keys immediately. `apikeys.*`, `org.delete` and `audit.read` are **not delegable** — the first two because a key that can mint keys or delete the organization makes revoking a leaked one meaningless, the third because the audit log ties a network prefix to a named person. Reading it requires a signed-in session. |
 | Audit log | Administrative changes are recorded with the actor snapshotted at write time, so a record stays readable after the account is deleted, and with a network prefix rather than an address. Reading it needs `audit.read`, held by owners and admins. Retention is its own setting and defaults to keeping everything, so history is never deleted by an upgrade nobody configured. |
-| Secrets | Configuration secrets are a type that refuses to print itself through `fmt`, `slog` or `json`. A config dump or a formatted panic cannot leak the database password or the API-key pepper. |
+| Secrets | Configuration secrets are a type that refuses to print itself through `fmt`, `slog` or `json`. A config dump or a formatted panic cannot leak the database password, the API-key pepper or the SMTP password. |
+| Outbound mail | Plain text only — no HTML part, so no remote image that reports when a message was opened and no anchor text that disagrees with its link. Every interpolated value has its control and bidirectional-formatting characters removed before it reaches a template, so nothing a person typed can inject a header, forge a second message, or make an address render as one it is not. A relay that will not take STARTTLS is refused rather than downgraded to plaintext. |
 | Analytics | No IP address is stored in any column of `click_events`. A visitor is `HMAC(daily salt, ip ‖ user-agent ‖ workspace)` and the salts are deleted after two days, which is the de-identification step rather than housekeeping. Session and audit rows keep a prefix only: /24 for IPv4, /48 for IPv6. |
 | Errors | Internal error text never reaches a client. An unrecognised error is a flat 500; the cause is in the log, because error strings carry table names and connection strings. |
-| Egress | No telemetry, no phone-home, no third-party calls in the default configuration. GeoIP is a local file. |
+| Egress | No telemetry, no phone-home, no third-party calls in the default configuration. GeoIP is a local file. A configured SMTP relay is the one outbound connection the product can make, and it is off unless `SMTP_HOST` is set. |
 
 ## What is not defended
 
@@ -89,9 +90,25 @@ operator names, and that is the whole of it. On an instance where untrusted peop
 can create links, assume they will. Tiered blocking with an appeal path is
 specified for Phase 2 in Plan.md.
 
-**No MFA, and no email verification.** Phase 1 delivers no mail, so an account's
-address is unverified. Public registration is closed by default and there is no
-signup page; `SIGNUP_MODE=open` is honoured only by the JSON API. MFA is Phase 3.
+**No MFA, and no email verification.** An optional SMTP mailer now exists, but
+nothing yet verifies an address with it, so an account's address is unverified.
+Public registration is closed by default and there is no signup page;
+`SIGNUP_MODE=open` is honoured only by the JSON API. Verification gating open
+signup is specified for Phase 2 in Plan.md. MFA is Phase 3.
+
+**Queued mail is readable by anyone who can read the database.** The outbox
+stores each message rendered — recipient, subject and body — so it survives a
+restart and so an operator can see what was attempted. Sent and failed rows are
+kept for 30 days. Nothing that must never touch storage should go in a mail; the
+first mail this ships, the audit-growth warning, contains no secret.
+
+**Mail is not signed, and delivery is only as trustworthy as the relay.** There
+is no DKIM signing and no SPF or DMARC alignment done here — those belong to the
+relay and the sending domain's DNS, and an instance that points `SMTP_HOST` at a
+relay it does not control has handed that relay every message it sends. PLAIN is
+the only supported authentication mechanism; it is refused over an unencrypted
+connection, so the password is never sent in clear, but it is a reusable
+credential in the environment like any other.
 
 **The audit log has no behaviour.** The table is partitioned and maintained;
 nothing writes to it. Do not rely on it for forensics yet.
@@ -115,6 +132,9 @@ above.
   with `openssl rand -base64 48`, stored outside the repository. The values in
   `.env.example` are examples, and an instance running with them is compromised by
   anyone who has read the file.
+- **If you configure a mailer, own the sending domain's DNS.** SPF, DKIM and
+  DMARC are set where the domain lives, not here, and mail from a domain with
+  none of them is mail that gets filed as spam or forged by somebody else.
 - **Back up before upgrading**, and test the restore. Migrations run at boot and
   `down` migrations drop columns.
 

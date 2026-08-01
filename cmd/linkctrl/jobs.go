@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
+	"github.com/DevOfPie/LinkCtrl/internal/mail"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
@@ -40,8 +41,12 @@ type jobRunner struct {
 	notifier *notify.Service
 	// auditSizeWarnBytes is the threshold. Zero means never warn.
 	auditSizeWarnBytes int64
-	cancel             context.CancelFunc
-	done               chan struct{}
+	// mailer drains the outbox. Nil when no SMTP relay is configured, and then
+	// the job does not run at all — there is nothing to drain, because with no
+	// mailer nothing is ever enqueued.
+	mailer *mail.Service
+	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 // advisoryLockKey is a hand-picked constant — the ASCII bytes "lcjobs" plus a
@@ -53,6 +58,7 @@ const advisoryLockKey int64 = 0x6c63_6a6f_6273_0001
 
 func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analytics.Roller,
 	log *slog.Logger, metrics *observability.Metrics, notifier *notify.Service,
+	mailer *mail.Service,
 	analyticsRetentionDays, auditRetentionDays int, auditSizeWarnBytes int64,
 ) *jobRunner {
 	return &jobRunner{
@@ -62,6 +68,7 @@ func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analyt
 		auditRetentionDays:     auditRetentionDays,
 		notifier:               notifier,
 		auditSizeWarnBytes:     auditSizeWarnBytes,
+		mailer:                 mailer,
 		done:                   make(chan struct{}),
 	}
 }
@@ -78,13 +85,24 @@ func (j *jobRunner) start(parent context.Context) {
 		// ahead.
 		rollup := time.NewTicker(60 * time.Second)
 		hourly := time.NewTicker(time.Hour)
+		// Mail is on its own, faster clock. Nothing here is time-critical
+		// except this: an invitation is something a person is waiting for with
+		// a browser open, and an hour of latency would make the outbox feel
+		// like a fault rather than a queue. Thirty seconds costs one indexed
+		// query that usually returns nothing.
+		outbox := time.NewTicker(30 * time.Second)
 		defer rollup.Stop()
 		defer hourly.Stop()
+		defer outbox.Stop()
 
 		// Run once at startup rather than waiting a full interval, so a
 		// freshly started instance has current numbers.
 		j.runRollup(ctx)
 		j.runMaintenance(ctx)
+		// And so mail queued before a restart goes out at once rather than
+		// half a minute later. Surviving the restart is the reason the outbox
+		// exists; waiting after it would be a strange way to honour that.
+		j.runMail(ctx)
 
 		for {
 			select {
@@ -92,6 +110,8 @@ func (j *jobRunner) start(parent context.Context) {
 				return
 			case <-rollup.C:
 				j.runRollup(ctx)
+			case <-outbox.C:
+				j.runMail(ctx)
 			case <-hourly.C:
 				j.runMaintenance(ctx)
 			}
@@ -145,6 +165,29 @@ func (j *jobRunner) runRollup(ctx context.Context) {
 	defer cancel()
 	j.withLeadership(runCtx, "rollup", func(ctx context.Context) error {
 		return j.roller.RunRecent(ctx, time.Now())
+	})
+}
+
+// runMail drains the outbox.
+//
+// Under leadership, unlike the size measurement above, because sending is work
+// rather than observation: three replicas draining the same table would each
+// try to deliver the same message, and skip-locked would only narrow the window
+// rather than close it.
+//
+// The timeout is generous because the batch is a batch of network round trips
+// to somebody else's server. It is still bounded, so a relay that accepts
+// connections and then says nothing cannot hold the scheduler forever — and the
+// sender sets its own per-message deadline inside this one.
+func (j *jobRunner) runMail(ctx context.Context) {
+	if j.mailer == nil {
+		return
+	}
+	runCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	j.withLeadership(runCtx, "mail", func(ctx context.Context) error {
+		return j.mailer.Drain(ctx)
 	})
 }
 
@@ -297,6 +340,19 @@ func (j *jobRunner) housekeeping(ctx context.Context) error {
 		errs = append(errs, fmt.Errorf("delete revoked api keys: %w", err))
 	} else if n > 0 {
 		j.log.Debug("long-revoked api keys deleted", slog.Int64("count", n))
+	}
+
+	// Delivered and abandoned mail past its window. Same shape as the three
+	// above — rows whose deadline passed — and here for the same reason: the
+	// outbox is a record of what was attempted, not an archive, and a table
+	// nothing ever deletes from is the growth problem D5 spent a metric and a
+	// notification learning about.
+	if j.mailer != nil {
+		if n, err := j.mailer.PurgeFinished(ctx); err != nil {
+			errs = append(errs, err)
+		} else if n > 0 {
+			j.log.Debug("finished mail purged", slog.Int64("count", n))
+		}
 	}
 
 	return errors.Join(errs...)

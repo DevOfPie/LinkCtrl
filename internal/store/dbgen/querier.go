@@ -14,10 +14,31 @@ import (
 type Querier interface {
 	ArchiveLink(ctx context.Context, arg ArchiveLinkParams) (Link, error)
 	AttachTag(ctx context.Context, arg AttachTagParams) error
+	//
+	// One batch of due mail, claimed rather than merely selected.
+	//
+	// The UPDATE is what makes the claim: it spends the attempt and leases the row
+	// forward, in one statement, before anything is sent. Two consequences, and
+	// both are the point:
+	//
+	//   * A process killed between claiming and sending leaves a row that comes
+	//     back on its own when the lease expires, instead of one stuck pending.
+	//   * A crash loop is bounded. Counting the attempt at send time would let a
+	//     process that dies mid-send retry the same message forever.
+	//
+	// FOR UPDATE SKIP LOCKED inside the subquery keeps two drainers from claiming
+	// the same row. Leadership already keeps a second replica out of this job, but
+	// leadership is an advisory lock released when its holder dies, so a moment of
+	// overlap is possible; skip-locked makes that moment cost nothing rather than
+	// send a message twice.
+	//
+	// Ordered oldest first, so a backlog drains in the order it was queued.
+	ClaimDueMail(ctx context.Context, arg ClaimDueMailParams) ([]ClaimDueMailRow, error)
 	CountClickEvents(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	// Only issued when the caller explicitly asks for a total, because counting
 	// costs a scan the common page load should not pay for.
 	CountLinks(ctx context.Context, arg CountLinksParams) (int64, error)
+	CountPendingMail(ctx context.Context) (int64, error)
 	//
 	// The re-notify guard. A threshold that is still crossed is still crossed on
 	// the next run an hour later, and a notification per hour forever is how an
@@ -61,6 +82,11 @@ type Querier interface {
 	DeleteRevokedAPIKeys(ctx context.Context) (int64, error)
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
 	DetachAllTags(ctx context.Context, linkID uuid.UUID) error
+	// The mail outbox. Queued on the request path, drained by the scheduler.
+	//
+	// The message is stored rendered. Nothing here re-renders from a template, so a
+	// later template change cannot rewrite a mail somebody is already waiting for.
+	EnqueueMail(ctx context.Context, arg EnqueueMailParams) error
 	// The verification lookup, on the unique prefix index, joined with the user so
 	// authentication is one round trip. Revoked and expired keys are returned
 	// rather than filtered out: the caller distinguishes them so the response can
@@ -192,7 +218,11 @@ type Querier interface {
 	//
 	// Who to tell about something that concerns the organization rather than a
 	// person. Active users only: a deactivated account cannot sign in to read it.
-	ListUsersWithRoleInOrg(ctx context.Context, arg ListUsersWithRoleInOrgParams) ([]uuid.UUID, error)
+	//
+	// The address comes back with the id because both deliveries address the same
+	// person: the inbox row is keyed by user, the mail by address, and looking the
+	// second one up separately would mean a query per recipient.
+	ListUsersWithRoleInOrg(ctx context.Context, arg ListUsersWithRoleInOrgParams) ([]ListUsersWithRoleInOrgRow, error)
 	// The workspace switcher: what a user may act in, and what they have chosen.
 	//
 	// Resolution itself is in auth.sql, because it is identity, not a feature.
@@ -226,6 +256,25 @@ type Querier interface {
 	LockFirstUserSetup(ctx context.Context) error
 	MarkAllNotificationsRead(ctx context.Context, userID uuid.UUID) (int64, error)
 	//
+	// Retry exhausted. Terminal, and deliberately not deleted — a row that says
+	// what was attempted and why it never arrived is the whole point of an outbox
+	// over an in-memory retry loop.
+	MarkMailFailed(ctx context.Context, arg MarkMailFailedParams) error
+	//
+	// A failure that will be tried again. The error is kept verbatim: it is what an
+	// operator reads when somebody reports that mail never arrived.
+	//
+	// Replaces the lease ClaimDueMail set with the real backoff for this attempt,
+	// and does not touch attempts — the claim already spent it.
+	//
+	// Seconds rather than an interval parameter, matching the lockout query in
+	// auth.sql: an interval maps to pgtype.Interval, which would put a driver type
+	// in the service layer's signature for no benefit.
+	MarkMailRetry(ctx context.Context, arg MarkMailRetryParams) error
+	//
+	// attempts is not touched: ClaimDueMail already spent it.
+	MarkMailSent(ctx context.Context, id uuid.UUID) error
+	//
 	// Scoped by user_id as well as id, so someone else's notification is a
 	// zero-row update rather than a 403 that confirms the id exists.
 	//
@@ -250,6 +299,12 @@ type Querier interface {
 	// The de-identification step. Once the salt is gone the day's hashes cannot be
 	// linked back to an address.
 	PurgeExpiredSalts(ctx context.Context) (int64, error)
+	//
+	// Sent and failed rows past the retention window. The outbox is a record of
+	// what was attempted, not an archive: without this the table is the one thing
+	// in the schema that grows forever with no window and no metric, which is the
+	// shape D5 and M21 exist to avoid repeating.
+	PurgeFinishedMail(ctx context.Context, maxAgeDays int32) (int64, error)
 	// Returns the new count so the caller can apply the lockout policy without a
 	// second round trip and without a read-modify-write race between two
 	// concurrent attempts.

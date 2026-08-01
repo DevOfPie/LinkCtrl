@@ -16,10 +16,12 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/mail"
 	"net/netip"
 	"net/url"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -63,6 +65,7 @@ type Config struct {
 	Ingest    IngestConfig
 	Analytics AnalyticsConfig
 	Audit     AuditConfig
+	SMTP      SMTPConfig
 	Shutdown  ShutdownConfig
 
 	APIKeyPepper Secret `env:"API_KEY_PEPPER,required,unset"`
@@ -218,6 +221,55 @@ type AuditConfig struct {
 	SizeWarnBytes int64 `env:"AUDIT_SIZE_WARN_BYTES" envDefault:"5368709120"`
 }
 
+// TLS modes for the mailer. Three, and no more: the honest set is "the two ways
+// a modern submission server listens, plus a local relay that does not".
+const (
+	// SMTPStartTLS is submission on 587: connect in clear, then upgrade. The
+	// default, because it is what almost every provider documents.
+	SMTPStartTLS = "starttls"
+	// SMTPImplicit is SMTPS on 465: TLS from the first byte.
+	SMTPImplicit = "tls"
+	// SMTPNone is no encryption at all, for a relay on the same host or the same
+	// private network. Credentials are refused in this mode.
+	SMTPNone = "none"
+)
+
+// SMTPConfig is the optional mailer. Off unless Host is set.
+//
+// The surface is deliberately small. TLS modes and auth mechanisms are where a
+// mail configuration turns into a compatibility matrix, so this ships the set it
+// can honestly claim — STARTTLS, implicit TLS, or nothing, with PLAIN auth over
+// an encrypted connection — and documents the rest as unsupported rather than
+// implying it works and failing at the first send.
+type SMTPConfig struct {
+	// Host is the switch. Empty means no mailer, which is the default and the
+	// state every consumer must degrade to.
+	Host string `env:"SMTP_HOST"`
+	Port int    `env:"SMTP_PORT" envDefault:"587"`
+
+	// Username and Password authenticate with PLAIN. Both or neither.
+	Username string `env:"SMTP_USERNAME"`
+	Password Secret `env:"SMTP_PASSWORD,unset"`
+
+	// From is the envelope sender and the From header. Required once Host is
+	// set: a message with no sender is refused by most receivers, and finding
+	// that out from a bounce is worse than finding it out at boot.
+	From string `env:"SMTP_FROM"`
+
+	TLS string `env:"SMTP_TLS" envDefault:"starttls"`
+
+	// Timeout bounds one delivery attempt end to end — dial, handshake, DATA.
+	// A hung relay must not hold the scheduler.
+	Timeout time.Duration `env:"SMTP_TIMEOUT" envDefault:"10s"`
+}
+
+// Enabled reports whether a mailer is configured. The one question every
+// consumer asks, so it is a method rather than a comparison repeated five times.
+func (s SMTPConfig) Enabled() bool { return s.Host != "" }
+
+// Addr is the host:port to dial.
+func (s SMTPConfig) Addr() string { return net.JoinHostPort(s.Host, strconv.Itoa(s.Port)) }
+
 type ShutdownConfig struct {
 	DrainDelay time.Duration `env:"SHUTDOWN_DRAIN_DELAY" envDefault:"5s"`
 	Timeout    time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"15s"`
@@ -244,6 +296,7 @@ func Load() (Config, error) {
 var FileSecretVars = []string{
 	"API_KEY_PEPPER",
 	"DATABASE_URL",
+	"SMTP_PASSWORD",
 }
 
 // resolveFileSecrets implements the LINKCTRL_X_FILE convention: when set, the
@@ -300,8 +353,11 @@ var Removed = map[string]string{
 		"stored as SHA-256, CSRF is origin-based, and API keys use API_KEY_PEPPER; " +
 		"rotating this changed nothing, which is the opposite of what a variable " +
 		"with this name promises",
-	"SMTP_PASSWORD": "there is no mail feature to authenticate to; it was accepted, " +
-		"validated and never read",
+	// SMTP_PASSWORD was here, and is not any more. It was removed in Phase 1
+	// because there was no mail feature to authenticate to; M26 built one, so
+	// the variable is read again and a warning that it does nothing would now be
+	// the lie the Removed list exists to prevent. Entries leave this map when
+	// the behaviour comes back, which is the only reason one ever should.
 	"INGEST_WORKERS": "the ingester runs a single consumer, which is what makes " +
 		"batch coalescing work; a worker count would break it",
 	"VISITOR_SALT_ROTATION": "visitor salts rotate once per UTC day, which is the " +
@@ -601,6 +657,49 @@ func (c Config) Validate() error {
 	if c.Audit.SizeWarnBytes < 0 {
 		add("AUDIT_SIZE_WARN_BYTES: must be 0 (no warning) or positive, got %d",
 			c.Audit.SizeWarnBytes)
+	}
+
+	// The mailer. Every check is inside the Enabled guard: an instance with no
+	// SMTP_HOST is the default deployment and must not be told about mail
+	// settings it never set.
+	if c.SMTP.Enabled() {
+		if c.SMTP.Port < 1 || c.SMTP.Port > 65535 {
+			add("SMTP_PORT: must be between 1 and 65535, got %d", c.SMTP.Port)
+		}
+		switch c.SMTP.TLS {
+		case SMTPStartTLS, SMTPImplicit, SMTPNone:
+		default:
+			add("SMTP_TLS: must be one of %s, %s, %s; got %q",
+				SMTPStartTLS, SMTPImplicit, SMTPNone, c.SMTP.TLS)
+		}
+		if c.SMTP.From == "" {
+			add("SMTP_FROM: is required once SMTP_HOST is set, for example " +
+				`"LinkCtrl <links@example.com>"`)
+		} else if _, err := mail.ParseAddress(c.SMTP.From); err != nil {
+			// Parsed rather than pattern-matched, and parsed here rather than at
+			// the first send: an unparseable sender is a configuration mistake,
+			// and a configuration mistake found by a bounce three days later is
+			// the failure this whole file exists to prevent.
+			add("SMTP_FROM: %q is not a valid address: %v", c.SMTP.From, err)
+		}
+		// Both or neither. A username with no password authenticates as nobody
+		// and a password with no username is never sent, and both fail as
+		// "relay access denied" — an error that says nothing about the cause.
+		if (c.SMTP.Username == "") != c.SMTP.Password.IsZero() {
+			add("SMTP_USERNAME and SMTP_PASSWORD: set both or neither; " +
+				"one without the other cannot authenticate")
+		}
+		// Credentials in clear are refused rather than warned about. Go's own
+		// SMTP client refuses PLAIN over an unencrypted connection too, so
+		// permitting it here would only move the failure to the first send.
+		if c.SMTP.TLS == SMTPNone && c.SMTP.Username != "" {
+			add("SMTP_TLS=none with SMTP_USERNAME set would send the password in "+
+				"clear; use %s or %s, or drop the credentials for a local relay",
+				SMTPStartTLS, SMTPImplicit)
+		}
+		if c.SMTP.Timeout <= 0 {
+			add("SMTP_TIMEOUT: must be positive, got %s", c.SMTP.Timeout)
+		}
 	}
 
 	if c.Analytics.GeoIPPath != "" {

@@ -33,6 +33,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/geoip"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
+	"github.com/DevOfPie/LinkCtrl/internal/mail"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/httpserver"
@@ -295,6 +296,77 @@ func run(cfg config.Config, _ io.Writer) error {
 	// runner below, which is why it is built here rather than beside the API.
 	notifySvc := notify.NewService(pools.App)
 
+	// The dashboard's templates, and the mail bodies with them. Parsing happens
+	// here, at boot: a template error fails startup rather than the first
+	// request to reach that page, or the first mail nobody is watching for.
+	//
+	// Before the mailer rather than beside the router, because the mailer
+	// renders through it.
+	renderer, err := ui.New()
+	if err != nil {
+		return fmt.Errorf("parse dashboard templates: %w", err)
+	}
+	// A missing stylesheet is a degraded start, not a failed one — the pages
+	// still work unstyled. Loud in the log, because the fix is one command.
+	for _, name := range renderer.MissingAssets() {
+		log.Warn("embedded asset missing; the dashboard will render unstyled",
+			slog.String("asset", name),
+			slog.String("fix", "run `make css` (or `task css`) before `go build`"))
+	}
+
+	// The mailer. Optional and off unless SMTP_HOST is set, so an instance that
+	// configures nothing behaves exactly as it did before this existed: no
+	// sender, no job, and a nil Enqueuer at every consumer.
+	var mailSvc *mail.Service
+	if cfg.SMTP.Enabled() {
+		sender, err := mail.NewSMTPSender(mail.SMTPOptions{
+			Host:     cfg.SMTP.Host,
+			Port:     cfg.SMTP.Port,
+			Username: cfg.SMTP.Username,
+			Password: cfg.SMTP.Password.Reveal(),
+			From:     cfg.SMTP.From,
+			TLS:      cfg.SMTP.TLS,
+			Timeout:  cfg.SMTP.Timeout,
+		})
+		if err != nil {
+			return err
+		}
+		// Connection details are checked once, here, by greeting the relay and
+		// hanging up. A wrong host, a closed port or a rejected password is
+		// reported by the process that could have told you, instead of showing
+		// up weeks later as an invitation that never arrived.
+		//
+		// A warning and not a fatal error, for the same reason Redis is: the
+		// relay being down is not a reason for a link shortener to stop serving
+		// redirects, and anything queued meanwhile is retried from the outbox.
+		// A *configuration* mistake is still fatal — config.Validate refuses an
+		// unparseable sender or credentials that would go over the wire in
+		// clear — so this is only ever about reachability.
+		if err := sender.Verify(ctx); err != nil {
+			log.Error("smtp relay did not accept a connection at startup; "+
+				"queued mail will be retried until it does",
+				slog.String("relay", sender.Addr()),
+				slog.String("tls", cfg.SMTP.TLS),
+				slog.Any("error", err))
+		} else {
+			log.Info("smtp relay reachable",
+				slog.String("relay", sender.Addr()),
+				slog.String("tls", cfg.SMTP.TLS),
+				slog.Bool("authenticated", cfg.SMTP.Username != ""))
+		}
+
+		mailSvc, err = mail.NewService(pools.App, mail.Config{
+			Renderer: renderer, Sender: sender, Logger: log,
+		})
+		if err != nil {
+			return err
+		}
+		notifySvc = notifySvc.WithMail(mailSvc, cfg.AppOrigin())
+	} else {
+		log.Info("mail disabled (LINKCTRL_SMTP_HOST is empty); " +
+			"notifications are delivered in the dashboard only")
+	}
+
 	linkSvc := link.NewService(pools.App, link.Config{
 		Policy: link.DestinationPolicy{
 			Schemes:             cfg.Alias.DestSchemes,
@@ -395,7 +467,7 @@ func run(cfg config.Config, _ io.Writer) error {
 	metrics.Register(observability.NewIngestCollector(ingester))
 
 	roller := analytics.NewRoller(pools.App, log)
-	jobs := newJobRunner(pools.App, salts, roller, log, metrics, notifySvc,
+	jobs := newJobRunner(pools.App, salts, roller, log, metrics, notifySvc, mailSvc,
 		cfg.Analytics.RetentionDays, cfg.Audit.RetentionDays, cfg.Audit.SizeWarnBytes)
 	jobs.start(ctx)
 	defer jobs.stop()
@@ -414,20 +486,6 @@ func run(cfg config.Config, _ io.Writer) error {
 	if needsSetup, err := authSvc.NeedsSetup(ctx); err == nil && needsSetup {
 		log.Warn("no users exist; claim this instance with " +
 			"POST " + httpx.APIPrefix + "/auth/setup")
-	}
-
-	// The dashboard. Template parsing happens here, at boot: a template error
-	// fails startup rather than the first request to reach that page.
-	renderer, err := ui.New()
-	if err != nil {
-		return fmt.Errorf("parse dashboard templates: %w", err)
-	}
-	// A missing stylesheet is a degraded start, not a failed one — the pages
-	// still work unstyled. Loud in the log, because the fix is one command.
-	for _, name := range renderer.MissingAssets() {
-		log.Warn("embedded asset missing; the dashboard will render unstyled",
-			slog.String("asset", name),
-			slog.String("fix", "run `make css` (or `task css`) before `go build`"))
 	}
 
 	stats := analytics.NewReader(pools.App)
