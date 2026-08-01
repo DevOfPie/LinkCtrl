@@ -22,6 +22,11 @@ const InvalidationChannel = "lc:inval:" + CacheKeyVersion
 const (
 	kindAlias = "a"
 	kindRoot  = "r"
+	// kindDomain clears every alias on one domain, and its Key is a prefix
+	// rather than a whole key. A separate kind rather than N alias messages:
+	// a domain with a hundred thousand links would otherwise publish a hundred
+	// thousand messages to say one thing.
+	kindDomain = "d"
 )
 
 // invalidation is one published message.
@@ -289,6 +294,16 @@ func (s *Subscriber) apply(payload string, log *slog.Logger) {
 		// Redis copy, and every replica racing to delete the same key would
 		// turn one edit into N round trips for no benefit.
 		s.Resolver.mem.delete(msg.Key)
+	case kindDomain:
+		if msg.Key == "" || s.Resolver == nil {
+			return
+		}
+		// In-process only, for the same reason as an alias — and here the reason
+		// is much sharper. The publisher has already swept Redis; N replicas
+		// each running their own SCAN of the whole keyspace to delete keys that
+		// are already gone would turn one policy change into N keyspace walks on
+		// the server that is answering redirects.
+		s.Resolver.mem.deletePrefix(msg.Key)
 	case kindRoot:
 		if s.Root != nil {
 			s.Root.InvalidateRoot()

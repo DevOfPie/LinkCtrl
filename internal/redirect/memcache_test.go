@@ -32,6 +32,37 @@ func TestMemCacheSetGetDelete(t *testing.T) {
 	}
 }
 
+// TestMemCacheDeletePrefixIsScopedToOneDomain covers the invalidation a
+// domain-level setting change forces.
+//
+// The interesting half is what it leaves alone. deletePrefix walks every shard
+// and compares strings, so a prefix that matched too widely would silently
+// empty the cache for every domain on the instance — a correctness-preserving
+// bug that shows up only as latency, on the one path this project measures.
+func TestMemCacheDeletePrefixIsScopedToOneDomain(t *testing.T) {
+	c := newMemCache(10_000)
+	now := testNow
+	snap := &Snapshot{Status: "active", URL: "https://example.com/a"}
+
+	const mine, theirs = "lc:a:v1:dom-a:", "lc:a:v1:dom-b:"
+	for i := range 200 {
+		c.set(fmt.Sprintf("%s%d", mine, i), snap, time.Minute, now)
+		c.set(fmt.Sprintf("%s%d", theirs, i), snap, time.Minute, now)
+	}
+
+	c.deletePrefix(mine)
+
+	for i := range 200 {
+		if _, ok := c.get(fmt.Sprintf("%s%d", mine, i), now); ok {
+			t.Fatalf("%s%d survived the sweep; a link on that domain would keep "+
+				"applying the previous policy until its entry expired", mine, i)
+		}
+		if _, ok := c.get(fmt.Sprintf("%s%d", theirs, i), now); !ok {
+			t.Fatalf("%s%d was dropped by another domain's sweep", theirs, i)
+		}
+	}
+}
+
 func TestMemCacheExpiry(t *testing.T) {
 	c := newMemCache(10_000)
 	now := testNow

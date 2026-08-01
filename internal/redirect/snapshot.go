@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/DevOfPie/LinkCtrl/internal/domain"
 )
 
 // Snapshot is everything the redirect handler needs, in one cacheable value.
@@ -33,6 +35,21 @@ type Snapshot struct {
 	HasPassword  bool   `json:"p,omitempty"` // PHASE 2
 	MaxClicks    *int64 `json:"m,omitempty"` // PHASE 2
 	OneTime      bool   `json:"o,omitempty"` // PHASE 2
+
+	// Bot blocking (M32.5). Both halves of the precedence rule travel together,
+	// because the whole point is that a cache hit answers the question without
+	// asking anything: a link's setting alone cannot decide, and fetching the
+	// domain's separately would be the round trip this design exists to avoid.
+	//
+	// Adding them did NOT bump CacheKeyVersion, and that is a claim worth being
+	// explicit about. Both are omitempty, so an entry written by the previous
+	// build decodes with the zero values — inherit and off — which is exactly
+	// "no blocking". On any instance holding such an entry the columns did not
+	// exist a moment ago, so nobody can have switched blocking on yet, and the
+	// stale reading cannot differ from the true one. A field whose absence had
+	// meant something else would have needed the bump and a cold cache.
+	BotPolicy       domain.BotPolicy       `json:"bb,omitempty"`
+	DomainBotPolicy domain.DomainBotPolicy `json:"db,omitempty"`
 
 	// NotFound marks a negative cache entry. Storing misses matters: an
 	// unknown alias is the single most common request a public shortener

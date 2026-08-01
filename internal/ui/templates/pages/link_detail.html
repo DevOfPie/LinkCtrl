@@ -87,6 +87,28 @@
       <input id="tags" name="tags" type="text" value="{{.Form.Tags}}" placeholder="marketing, launch"
              class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
     </div>
+    <div>
+      <label for="bot_blocking" class="block text-sm font-medium text-ink">Automated clients</label>
+      {{/* Disabled, not hidden, when the domain enforces. A control that
+           vanished would look like the feature does not exist; one that is
+           visible and refuses to move says who decided instead. A disabled
+           select posts nothing, so the handler reads it as "leave alone" and
+           the value is never overwritten by a form the browser would not let
+           anybody change. */}}
+      <select id="bot_blocking" name="bot_blocking" {{if .BotsEnforced}}disabled{{end}}
+              class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none {{if .BotsEnforced}}bg-sunken text-muted{{else}}bg-raised text-ink{{end}}">
+        <option value="inherit"{{if not (or (eq .Form.BotBlocking "on") (eq .Form.BotBlocking "off"))}} selected{{end}}>Follow the domain</option>
+        <option value="on"{{if eq .Form.BotBlocking "on"}} selected{{end}}>Block</option>
+        <option value="off"{{if eq .Form.BotBlocking "off"}} selected{{end}}>Allow</option>
+      </select>
+      {{template "field_error" (index .FieldErrors "bot_blocking")}}
+      <p class="mt-1 text-xs text-subtle">
+        {{if .BotsEnforced}}Blocking is enforced for every link on {{.BotHost}} and cannot be turned off here.
+        {{else if .BotDomainOn}}Blocked bots get a 403. Following the domain means blocking, because {{.BotHost}} blocks by default.
+        {{else}}Blocked bots get a 403 that names nothing. Following the domain means allowing them, which is what {{.BotHost}} does today.{{end}}
+        Detection is a user-agent heuristic and a person it misjudges has no way past the refusal.
+      </p>
+    </div>
     <div class="sm:col-span-2">
       <label class="flex items-start gap-2 text-sm text-ink">
         <input type="checkbox" name="forward_query" value="1" class="mt-0.5 rounded border-line-strong"

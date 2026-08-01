@@ -55,6 +55,56 @@
 </div>
 {{end}}
 
+{{if .ShowBots}}
+<div class="mt-6 max-w-2xl rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-1 text-sm font-medium text-ink">Bot blocking</h2>
+  <p class="mb-4 text-sm text-muted">
+    Automated clients asking for a short link on
+    <span class="font-medium text-ink">{{.BotHost}}</span> can be refused with a
+    <span class="font-mono text-xs">403</span> instead of being redirected. Every link
+    follows this unless its owner says otherwise; enforcing it takes that choice away
+    from them.
+  </p>
+  <p class="mb-4 text-sm text-warn-ink">
+    Detection is the same user-agent heuristic the click statistics use. It treats a
+    missing user agent as a bot and matches on substrings including
+    <span class="font-mono text-xs">preview</span>,
+    <span class="font-mono text-xs">monitor</span> and
+    <span class="font-mono text-xs">checker</span>, and its false-positive rate has never
+    been measured. A person it misjudges gets the 403 with no way past it and no notice
+    to the link's owner.
+  </p>
+  {{if .CanEditDomain}}
+  <form method="post" action="/account/bots" class="space-y-4">
+    <label class="flex items-start gap-2 text-sm text-ink">
+      <input type="checkbox" name="block_bots" value="1" class="mt-0.5 rounded border-line-strong"
+             {{if .BlockBots}}checked{{end}}>
+      <span>Block bots on this domain
+        <span class="block text-xs text-subtle">Applies to every link that has not chosen for itself.</span>
+      </span>
+    </label>
+    <label class="flex items-start gap-2 text-sm text-ink">
+      <input type="checkbox" name="block_bots_enforced" value="1" class="mt-0.5 rounded border-line-strong"
+             {{if .BlockBotsEnforced}}checked{{end}}>
+      <span>Enforce it
+        <span class="block text-xs text-subtle">Every link blocks, including ones set to allow. Requires blocking to be on.</span>
+      </span>
+    </label>
+    {{with index .FieldErrors "block_bots_enforced"}}<p class="text-sm text-danger-ink">{{.}}</p>{{end}}
+    <button type="submit"
+            class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Save</button>
+  </form>
+  {{else}}
+  <p class="text-sm text-muted">
+    {{if .BlockBotsEnforced}}Enforced for every link on this domain.
+    {{else if .BlockBots}}On by default; a link may still allow bots.
+    {{else}}Off.{{end}}
+    Changing it needs the <span class="font-mono text-xs">domains.write</span> permission.
+  </p>
+  {{end}}
+</div>
+{{end}}
+
 {{if .Workspaces}}
 <div class="mt-6 max-w-2xl rounded-lg border border-line bg-raised p-6">
   <h2 class="mb-1 text-sm font-medium text-ink">Default workspace</h2>

@@ -96,6 +96,53 @@ verification that the design meets its target, not a capacity statement for a
 server.** A production host with real storage should do better; the shape of the
 result, not its absolute value, is what transfers.
 
+### Re-measured for M32.5 (2026-08-01)
+
+[M32.5](build-notes/phase-details/m32.5.md) is the first milestone to put a
+decision on the redirect path itself. Everything measured above was cached
+lookup and response; this adds a policy check and, when blocking is on, a pass
+over the user-agent string on every request.
+
+So the run was configured to exercise the expensive branch rather than the cheap
+one. `bot_blocking` was set to `on` for all 100,000 seeded links before the
+warm-up, both cache tiers were emptied, and the container restarted — so every
+one of the 240,001 measured requests resolved the precedence rule to "block" and
+then ran `analytics.Classify` against its user agent. k6 identifies itself as
+`k6/2.1.0 (https://k6.io/)`, which the classifier does not read as automated, so
+each request went on to redirect: verified before the run at
+`http://app:8080/ld1`, which answered **302** to a browser agent and **403** to
+`Mozilla/5.0 (compatible; Googlebot/2.1)` on the same link.
+
+| | Target | Measured |
+| --- | --- | --- |
+| Cached redirect, server-side | p99 < 20ms | **100% of 240,001 requests under 20ms**; 99.993% under 1ms; 99.982% under 0.5ms |
+| Cached redirect, generator-side | — | p99 **1.5ms**, median 481µs, p(95) 937µs |
+| Sustained rate | 2,000 rps for 2m | 2,000.14 rps, 240,001 requests, **zero failures** |
+| Dataset | 100k links, 5M events | 100,000 links, 5,000,000 events |
+| Cache mix | hits only | 240,001 memory, 0 redis, 0 database |
+| Redirect pool | — | 0 acquire waits |
+| Blocking | on for every measured link | `bot_blocking = 'on'` × 100,000 |
+
+Taken on image `sha256:2eb5fbe5008648a…` (`linkctrl:test`, built 2026-08-01
+from the M32.5 working tree at `v0.1.0-45-g2a9cde1-dirty`) on the same
+Windows 11 / Docker Desktop / WSL2 host as every figure above.
+
+**The gate is not visible in the result.** Six runs now read 100%, 100%, 100%,
+99.991%, 100% and 100% under 20ms, and this one is the second-tightest at the
+half-millisecond line. That is what a pure function over two struct fields and a
+substring scan should cost against a 20ms budget — but "should" is what this
+document exists to replace, and it is now measured with the work switched on
+rather than argued from the shape of the code.
+
+The reason there is nothing to see is the design rather than the arithmetic. The
+decision reads two fields the cached snapshot already carries, because the
+domain's policy is denormalized into each link's snapshot by the resolver's one
+query; the alternatives — a per-request domain lookup, or a second cache with
+its own invalidation — would both have shown up here.
+`TestBlockingCostsNoQueryOnTheRedirectPath` asserts the same thing structurally,
+by counting what reaches Postgres: one query for an uncached redirect, zero for
+a cached one.
+
 ## Reproducing it
 
 ```sh

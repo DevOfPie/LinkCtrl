@@ -37,6 +37,7 @@ UPDATE links
                             ELSE COALESCE(sqlc.narg(expires_at), expires_at) END,
        alias         = COALESCE(sqlc.narg(alias), alias),
        forward_query = COALESCE(sqlc.narg(forward_query), forward_query),
+       bot_blocking  = COALESCE(sqlc.narg(bot_blocking), bot_blocking),
        updated_at    = now()
  WHERE id = sqlc.arg(id) AND workspace_id = sqlc.arg(workspace_id) AND deleted_at IS NULL
 RETURNING *;
@@ -270,8 +271,21 @@ SELECT id, hostname FROM domains WHERE is_default AND deleted_at IS NULL;
 -- name: GetDefaultDomainSettings :one
 -- The instance's link domain and where its root points. Phase 1 has exactly one
 -- default domain; Phase 2 gives a workspace its own and this gains a filter.
-SELECT id, hostname, root_redirect_url FROM domains
+SELECT id, hostname, root_redirect_url, block_bots, block_bots_enforced
+FROM domains
 WHERE is_default AND deleted_at IS NULL;
+
+-- name: GetDomainBotSettings :one
+-- One domain's bot policy, by id.
+--
+-- Read on the management path only, and only when a link's own setting is being
+-- changed: the service has to know whether the domain enforces before it can
+-- tell the caller their `off` will not be honoured. The redirect path never
+-- runs this — it gets the same two columns from ResolveAliasForRedirect's join,
+-- which is the whole reason that join exists.
+SELECT id, hostname, block_bots, block_bots_enforced
+FROM domains
+WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: SetDefaultDomainRootRedirect :one
 -- NULL clears it, which restores the 404 the root answered before anyone set
@@ -279,4 +293,15 @@ WHERE is_default AND deleted_at IS NULL;
 UPDATE domains
    SET root_redirect_url = sqlc.narg(root_redirect_url), updated_at = now()
  WHERE is_default AND deleted_at IS NULL
-RETURNING id, hostname, root_redirect_url;
+RETURNING id, hostname, root_redirect_url, block_bots, block_bots_enforced;
+
+-- name: SetDefaultDomainBotBlocking :one
+-- Both switches at once, because they are one setting with two halves and the
+-- CHECK in 01800 refuses the combination that writing them separately would
+-- pass through on the way.
+UPDATE domains
+   SET block_bots          = sqlc.arg(block_bots)::boolean,
+       block_bots_enforced = sqlc.arg(block_bots_enforced)::boolean,
+       updated_at          = now()
+ WHERE is_default AND deleted_at IS NULL
+RETURNING id, hostname, root_redirect_url, block_bots, block_bots_enforced;

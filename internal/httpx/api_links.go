@@ -139,6 +139,11 @@ type updateLinkRequest struct {
 	ExpiresAt    *string   `json:"expires_at"`
 	Tags         *[]string `json:"tags"`
 	ForwardQuery *bool     `json:"forward_query"`
+	// BotBlocking is "inherit", "on" or "off". A pointer, like every other
+	// field here, so omitting it means "leave it alone" rather than "reset it to
+	// the default" — which for this setting would silently hand the decision
+	// back to the domain.
+	BotBlocking *string `json:"bot_blocking"`
 }
 
 func (a *LinkAPI) Update(w http.ResponseWriter, r *http.Request) {
@@ -158,6 +163,17 @@ func (a *LinkAPI) Update(w http.ResponseWriter, r *http.Request) {
 		URL: req.URL, Alias: req.Alias, Title: req.Title,
 		Description: req.Description, Tags: req.Tags,
 		ForwardQuery: req.ForwardQuery,
+	}
+	if req.BotBlocking != nil {
+		policy, ok := domain.ParseBotPolicy(*req.BotBlocking)
+		if !ok {
+			WriteError(w, r, domain.ValidationErrors{{
+				Field: "bot_blocking", Code: "invalid",
+				Message: `bot_blocking must be "inherit", "on" or "off"`,
+			}})
+			return
+		}
+		in.BotBlocking = &policy
 	}
 	if req.ExpiresAt != nil {
 		// An explicit null clears the expiry; an absent field leaves it alone.
@@ -322,35 +338,77 @@ func (a *LinkAPI) GetDomain(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, settings)
 }
 
-// UpdateDomain sets or clears the root redirect.
+// UpdateDomain changes the link domain's settings.
 //
-// PATCH with a required field rather than PUT of the whole object: there is one
-// setting here today, and a body that omits it should mean "change nothing"
-// rather than "clear it".
+// PATCH of whichever fields are present rather than PUT of the whole object.
+// Every field is a pointer for the same reason: an absent key means "change
+// nothing", and treating it as a value would let a client clear the root
+// redirect or hand every link's bot decision back to itself by sending `{}`.
+//
+// The two settings go through separate service calls because they are guarded
+// by the same permission and by nothing else in common — the root redirect is
+// refused outright on a single-host deployment, bot blocking never is. Applying
+// them in one call would mean failing a valid bot change because of the
+// deployment shape.
+//
+// A body carrying both therefore applies **in order, stopping at the first
+// refusal**, and the order is root redirect then bot blocking. That is stated
+// rather than hidden because it is observable: a request whose URL is rejected
+// changes nothing, while one whose URL is accepted and whose bot pair is not
+// leaves the URL changed. The alternative is a transaction across two service
+// methods with different guards, for a combination neither dashboard form ever
+// sends — both post one setting at a time.
 func (a *LinkAPI) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		// A pointer so an absent field is distinguishable from "" — the empty
-		// string is the documented way to clear the redirect, and treating a
-		// missing key the same way would let a client wipe the setting by
-		// sending {}.
-		RootRedirectURL *string `json:"root_redirect_url"`
+		RootRedirectURL   *string `json:"root_redirect_url"`
+		BlockBots         *bool   `json:"block_bots"`
+		BlockBotsEnforced *bool   `json:"block_bots_enforced"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		WriteError(w, r, err)
 		return
 	}
-	if req.RootRedirectURL == nil {
+	if req.RootRedirectURL == nil && req.BlockBots == nil && req.BlockBotsEnforced == nil {
 		WriteError(w, r, domain.ValidationErrors{{
 			Field: "root_redirect_url", Code: "required",
-			Message: "send a URL to set, or an empty string to clear",
+			Message: "send at least one setting: root_redirect_url, block_bots or block_bots_enforced",
 		}})
 		return
 	}
 
-	settings, err := a.Links.SetRootRedirect(r.Context(), IdentityFrom(r.Context()), *req.RootRedirectURL)
-	if err != nil {
-		WriteError(w, r, err)
-		return
+	actor := IdentityFrom(r.Context())
+	var settings *link.DomainSettings
+
+	if req.RootRedirectURL != nil {
+		updated, err := a.Links.SetRootRedirect(r.Context(), actor, *req.RootRedirectURL)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		settings = updated
 	}
+
+	if req.BlockBots != nil || req.BlockBotsEnforced != nil {
+		// Read the current pair first, because either flag may be sent alone and
+		// the two are written together — 01800's CHECK refuses the combination a
+		// two-step write would pass through on the way.
+		current, err := a.Links.DomainSettings(r.Context(), actor)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		block, enforced := current.BlockBots, current.BlockBotsEnforced
+		if req.BlockBots != nil {
+			block = *req.BlockBots
+		}
+		if req.BlockBotsEnforced != nil {
+			enforced = *req.BlockBotsEnforced
+		}
+		if settings, err = a.Links.SetBotBlocking(r.Context(), actor, block, enforced); err != nil {
+			WriteError(w, r, err)
+			return
+		}
+	}
+
 	WriteJSON(w, http.StatusOK, settings)
 }

@@ -160,6 +160,15 @@ type accountPageData struct {
 	LinkHost        string
 	RootRedirectURL string
 
+	// The bot-blocking panel is a separate section from the root redirect, and
+	// separately gated. ShowBots is true wherever the settings could be read at
+	// all, single-host included: short links are served either way, and so is
+	// the crawler traffic this refuses.
+	ShowBots          bool
+	BlockBots         bool
+	BlockBotsEnforced bool
+	BotHost           string
+
 	// WorkspacePinned says whether any workspace carries the pin, which decides
 	// whether the control shows *Last-Used* as the current choice. The template
 	// cannot fold over .Workspaces to work it out, and a second flag is cheaper
@@ -167,21 +176,42 @@ type accountPageData struct {
 	WorkspacePinned bool
 }
 
-// domainSection fills in the link-domain panel, or leaves it hidden.
-func (h *Web) domainSection(r *http.Request, data *accountPageData) {
-	if h.Links == nil || !h.Config.SplitHosts() {
+// domainSections fills in the two panels that describe the link domain.
+//
+// One read for both, because they come from one row. Two calls would be two
+// identical queries on every account page render, and the second would be the
+// kind of cost nobody notices until somebody counts.
+//
+// Their visibility is not shared, though, and that is the reason they are two
+// panels rather than one. The root redirect is meaningless without split hosts —
+// on a single-host deployment "/" is this very dashboard. Bot blocking is not:
+// short links are served either way, and so is the crawler traffic it refuses.
+// Folding them together would have hidden the whole feature from every
+// single-host instance, which is the shape a default install has.
+func (h *Web) domainSections(r *http.Request, data *accountPageData) {
+	if h.Links == nil {
 		return
 	}
-	settings, err := h.Links.DomainSettings(r.Context(), IdentityFrom(r.Context()))
+	actor := IdentityFrom(r.Context())
+	settings, err := h.Links.DomainSettings(r.Context(), actor)
 	if err != nil {
-		// A reader who cannot see it simply does not get the panel. This is one
-		// operator-chosen URL, not a failure worth replacing the page over.
+		// A reader who cannot see them simply does not get the panels. These are
+		// two operator-chosen settings, not a failure worth replacing the page
+		// over.
 		return
 	}
-	data.ShowDomain = true
-	data.CanEditDomain = IdentityFrom(r.Context()).Can(link.PermDomainsWrite)
-	data.LinkHost = h.Config.LinkOrigin()
-	data.RootRedirectURL = settings.RootRedirectURL
+	data.CanEditDomain = actor.Can(link.PermDomainsWrite)
+
+	if h.Config.SplitHosts() {
+		data.ShowDomain = true
+		data.LinkHost = h.Config.LinkOrigin()
+		data.RootRedirectURL = settings.RootRedirectURL
+	}
+
+	data.ShowBots = true
+	data.BotHost = settings.Hostname
+	data.BlockBots = settings.BlockBots
+	data.BlockBotsEnforced = settings.BlockBotsEnforced
 }
 
 // accountPage assembles the page, so the handlers that re-render it after a
@@ -211,7 +241,10 @@ func (h *Web) AccountPage(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("workspace") == "1" {
 		data.Notice = "Default workspace updated. It applies the next time you sign in."
 	}
-	h.domainSection(r, &data)
+	if r.URL.Query().Get("bots") == "1" {
+		data.Notice = "Bot blocking updated. Cached links were refreshed, so it applies now."
+	}
+	h.domainSections(r, &data)
 	h.render(w, r, http.StatusOK, "account", data)
 }
 
@@ -275,7 +308,7 @@ func (h *Web) DomainUpdate(w http.ResponseWriter, r *http.Request) {
 		r.PostFormValue("root_redirect_url"))
 	if err != nil {
 		data := h.accountPage(r)
-		h.domainSection(r, &data)
+		h.domainSections(r, &data)
 		// Show what they typed, not what is stored, so a rejected value can be
 		// corrected rather than retyped.
 		data.RootRedirectURL = r.PostFormValue("root_redirect_url")
@@ -292,4 +325,41 @@ func (h *Web) DomainUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	seeOther(w, r, "/account?domain=1")
+}
+
+// BotBlockingUpdate handles the domain bot-blocking form.
+//
+// Both checkboxes are read from one submission, because the two settings are
+// written together — enforcing without blocking is refused, and a form that
+// sent them separately would produce that state in between.
+func (h *Web) BotBlockingUpdate(w http.ResponseWriter, r *http.Request) {
+	if err := parseForm(w, r); err != nil {
+		h.errorPage(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
+		return
+	}
+
+	block := r.PostFormValue("block_bots") != ""
+	enforced := r.PostFormValue("block_bots_enforced") != ""
+
+	if _, err := h.Links.SetBotBlocking(r.Context(), IdentityFrom(r.Context()), block, enforced); err != nil {
+		data := h.accountPage(r)
+		h.domainSections(r, &data)
+		// Show what they ticked, not what is stored: a refused combination is
+		// corrected by changing one box, and re-rendering the stored pair would
+		// hide which one they had just moved.
+		data.BlockBots = block
+		data.BlockBotsEnforced = enforced
+
+		var ve domain.ValidationErrors
+		if errors.As(err, &ve) {
+			for _, fe := range ve {
+				data.FieldErrors[fe.Field] = fe.Message
+			}
+			h.render(w, r, http.StatusUnprocessableEntity, "account", data)
+			return
+		}
+		h.webError(w, r, err)
+		return
+	}
+	seeOther(w, r, "/account?bots=1")
 }

@@ -22,6 +22,38 @@ migrations run at boot.
 
 ### Added
 
+- **Automated clients can be refused, per link or for the whole link domain.**
+  A link's setting is *inherit*, *block* or *allow*; *inherit* is the default and
+  takes the domain's answer, which on a fresh instance is allow — so nothing
+  changes for anybody who does not switch it on. An operator with `domains.write`
+  can turn it on for the domain, and can additionally **enforce** it, which
+  overrules links set to allow. A link-level *allow* under an enforcing domain is
+  refused at the API and the control is disabled in the dashboard, rather than
+  being stored and quietly ignored. Both settings are on
+  `PATCH /api/v1/domain` and `PATCH /api/v1/links/{id}`, and both changes are
+  audited.
+- **A blocked client gets `403` and learns nothing.** The body is a fixed page
+  built into the binary, naming no alias and no destination, and the refusal
+  happens before the link's state is looked at — so a live link, an expired one
+  and an archived one return byte-identical responses. Being blocked reveals no
+  more than the `404` an unknown alias already returns.
+- **A refusal is counted, not logged.** It is a click event with `is_bot` already
+  true, and increments `linkctrl_redirects_total{outcome="blocked_bot"}`. It is
+  deliberately kept out of the audit log: a crawler hitting one blocked link
+  thousands of times a day would otherwise fill the table whose growth this
+  product alerts on.
+- **The redirect path costs nothing extra for it.** The decision reads two fields
+  the cached snapshot already carries, so a cached redirect still issues zero
+  queries — asserted by a test that counts what reaches Postgres. Measured on the
+  built image with blocking switched on for all 100,000 seeded links: 100% of
+  240,001 requests under 20ms at 2,000 rps, generator p99 1.5ms, in
+  [docs/slo.md](docs/slo.md).
+- **Detection is a heuristic and there is no way past it.** The same user-agent
+  classifier the analytics use decides — it treats a missing user agent as
+  automated and matches substrings including `preview`, `monitor` and `checker`,
+  and its false-positive rate has never been measured. A person it misjudges gets
+  the 403 with no challenge and no appeal, and the link's owner is not told. That
+  is why the default is off; a bypass is a separate, later piece of work.
 - **A hostile destination is refused before a link is made, in three tiers that
   differ in what it costs to overrule them.** A refusal's `422` carries a reason
   code naming both — `unappealable.private_address`,

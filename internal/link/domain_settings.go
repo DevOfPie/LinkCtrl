@@ -10,6 +10,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 )
 
 // DomainSettings is what an operator can configure about the hostname short
@@ -22,6 +23,14 @@ type DomainSettings struct {
 	// SplitHosts reports whether the setting is in effect at all. On a
 	// single-host deployment the root belongs to the dashboard.
 	SplitHosts bool `json:"split_hosts"`
+
+	// BlockBots is the domain's own answer, inherited by every link that has not
+	// said otherwise. BlockBotsEnforced additionally overrules the ones that
+	// have. Unlike the root redirect, neither depends on split hosts: short
+	// links are served on this instance either way, and so are the crawlers
+	// asking for them.
+	BlockBots         bool `json:"block_bots"`
+	BlockBotsEnforced bool `json:"block_bots_enforced"`
 }
 
 // DomainSettings reads the link domain's settings.
@@ -36,7 +45,12 @@ func (s *Service) DomainSettings(ctx context.Context, actor *auth.Identity) (*Do
 	if err != nil {
 		return nil, fmt.Errorf("read domain settings: %w", err)
 	}
-	out := &DomainSettings{Hostname: row.Hostname, SplitHosts: s.splitHosts}
+	out := &DomainSettings{
+		Hostname:          row.Hostname,
+		SplitHosts:        s.splitHosts,
+		BlockBots:         row.BlockBots,
+		BlockBotsEnforced: row.BlockBotsEnforced,
+	}
 	if row.RootRedirectUrl != nil {
 		out.RootRedirectURL = *row.RootRedirectUrl
 	}
@@ -140,7 +154,115 @@ func (s *Service) SetRootRedirect(ctx context.Context, actor *auth.Identity, raw
 		s.rootCache.InvalidateRoot()
 	}
 
-	out := &DomainSettings{Hostname: row.Hostname, SplitHosts: true}
+	out := &DomainSettings{
+		Hostname:          row.Hostname,
+		SplitHosts:        true,
+		BlockBots:         row.BlockBots,
+		BlockBotsEnforced: row.BlockBotsEnforced,
+	}
+	if row.RootRedirectUrl != nil {
+		out.RootRedirectURL = *row.RootRedirectUrl
+	}
+	return out, nil
+}
+
+// SetBotBlocking turns bot blocking on or off for the whole link domain, and
+// decides whether a link may overrule it.
+//
+// Guarded by domains.write rather than links.update, and the reason is the same
+// one the root redirect has: one hostname serves every workspace on this
+// instance, so this is not a setting about some links. Enforcing it decides for
+// all of them, including links whose owners deliberately turned blocking off.
+//
+// Unlike the root redirect it is NOT refused on a single-host deployment. That
+// refusal exists because "/" belongs to the dashboard there and honouring the
+// setting would take the dashboard away; nothing of the sort applies here.
+// Short links are served on a single-host instance exactly as on a split one,
+// and so is the crawler traffic this refuses.
+//
+// The cost of switching this on is worth stating where the operator's own
+// documentation will repeat it: analytics.Classify decides who is a bot, it
+// matches substrings including "preview", "monitor" and "checker", it treats an
+// absent user agent as automated, and its false-positive rate has never been
+// measured because until this milestone nothing depended on it. A person it
+// misclassifies gets a 403 and has no way past it — the bypass is Phase 3 — and
+// nobody tells the link's owner it happened.
+func (s *Service) SetBotBlocking(ctx context.Context, actor *auth.Identity, block, enforced bool) (*DomainSettings, error) {
+	if !actor.Can(PermDomainsWrite) {
+		return nil, fmt.Errorf("%w: changing domain settings requires %s",
+			domain.ErrForbidden, PermDomainsWrite)
+	}
+	// Enforcement without blocking is not a state. The database refuses it too
+	// (01800's CHECK), but a constraint violation reaches the caller as a 500
+	// describing a constraint name, and the person who ticked one box wants to
+	// be told which box to tick.
+	if enforced && !block {
+		return nil, domain.ValidationErrors{{
+			Field: "block_bots_enforced", Code: "requires_blocking",
+			Message: "enforcing bot blocking requires turning it on for the domain first",
+		}}
+	}
+
+	// Read before the write, for the audit record: "bot blocking is on" does not
+	// say whether that was a change, and the previous value is gone a moment
+	// later.
+	before, err := s.q.GetDefaultDomainSettings(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read domain settings: %w", err)
+	}
+
+	row, err := s.q.SetDefaultDomainBotBlocking(ctx, dbgen.SetDefaultDomainBotBlockingParams{
+		BlockBots: block, BlockBotsEnforced: enforced,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("set domain bot blocking: %w", err)
+	}
+
+	changed := before.BlockBots != row.BlockBots ||
+		before.BlockBotsEnforced != row.BlockBotsEnforced
+	if s.audit != nil && changed {
+		// After the write and outside it, like the root redirect: the change is
+		// what the operator asked for, and failing it because the record could
+		// not be written trades a missing log line for a setting that did not
+		// take effect.
+		if err := s.audit.Record(ctx, actor, audit.Event{
+			Action:     audit.ActionDomainBotBlockingChanged,
+			TargetType: "domain",
+			TargetID:   &row.ID,
+			// The folded three-state value rather than the two booleans: "on"
+			// and "enforced" are what the change means, and a reader should not
+			// have to recombine a pair of flags to see that every link on the
+			// instance just lost the ability to opt out.
+			Metadata: map[string]any{
+				"hostname": row.Hostname,
+				"from":     string(domain.DomainBots(before.BlockBots, before.BlockBotsEnforced)),
+				"to":       string(domain.DomainBots(row.BlockBots, row.BlockBotsEnforced)),
+			},
+		}); err != nil {
+			s.log.Warn("domain bot blocking changed but the audit record was not written",
+				slog.String("hostname", row.Hostname), slog.Any("error", err))
+		}
+	}
+
+	// Every link on this domain just got a different answer, and every cached
+	// snapshot carries the old one. This is the expensive invalidation and it is
+	// the direct price of the redirect path needing no second lookup; see
+	// redirect.Resolver.InvalidateDomain.
+	//
+	// Unconditional rather than skipped when nothing changed. A no-op write that
+	// left a stale cache in place would be indistinguishable from a change that
+	// did not take effect, and this runs at most as often as somebody submits
+	// the form.
+	if s.cache != nil {
+		s.cache.InvalidateDomain(ctx, row.ID)
+	}
+
+	out := &DomainSettings{
+		Hostname:          row.Hostname,
+		SplitHosts:        s.splitHosts,
+		BlockBots:         row.BlockBots,
+		BlockBotsEnforced: row.BlockBotsEnforced,
+	}
 	if row.RootRedirectUrl != nil {
 		out.RootRedirectURL = *row.RootRedirectUrl
 	}

@@ -132,16 +132,18 @@ type DestinationDispute struct {
 }
 
 type Domain struct {
-	ID              uuid.UUID
-	OrganizationID  *uuid.UUID
-	Hostname        string
-	IsDefault       bool
-	VerifiedAt      *time.Time
-	SslStatus       string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	DeletedAt       *time.Time
-	RootRedirectUrl *string
+	ID                uuid.UUID
+	OrganizationID    *uuid.UUID
+	Hostname          string
+	IsDefault         bool
+	VerifiedAt        *time.Time
+	SslStatus         string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	DeletedAt         *time.Time
+	RootRedirectUrl   *string
+	BlockBots         bool
+	BlockBotsEnforced bool
 }
 
 type Folder struct {
@@ -203,6 +205,7 @@ type Link struct {
 	PurgeAfter           *time.Time
 	SearchVector         interface{}
 	CampaignID           *uuid.UUID
+	BotBlocking          string
 }
 
 type LinkClickDaily struct {

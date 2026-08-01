@@ -119,6 +119,12 @@ type Link struct {
 	// most callers do not expect ?utm_source to reach them.
 	ForwardQuery bool `json:"forward_query"`
 
+	// BotBlocking is this link's own setting, not the answer. What is actually
+	// in effect depends on the domain above it, and only domain.BlocksBots
+	// decides that — reporting the resolved boolean here instead would be a
+	// second answer that a reader could compare against the first.
+	BotBlocking BotPolicy `json:"bot_blocking"`
+
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 
 	// Approximate: updated in batches with the click events, so it lags by up

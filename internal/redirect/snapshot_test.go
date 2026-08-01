@@ -3,6 +3,8 @@ package redirect
 import (
 	"testing"
 	"time"
+
+	"github.com/DevOfPie/LinkCtrl/internal/domain"
 )
 
 var testNow = time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
@@ -124,5 +126,44 @@ func TestSnapshotRoundTrips(t *testing.T) {
 	}
 	if !neg.NotFound || neg.Decide(testNow) != OutcomeNotFound {
 		t.Error("a negative entry did not decode as not-found")
+	}
+}
+
+// TestBotPolicySurvivesTheWire is the claim M32.5 made when it added two fields
+// without bumping CacheKeyVersion.
+//
+// Two halves, and the second is the one that matters. A payload written by the
+// previous build has neither field, and it must decode as "no blocking" — that
+// is what makes the omitted version bump safe, and if it ever stopped being
+// true, a rolling upgrade would start refusing traffic on the strength of a
+// field nobody set.
+func TestBotPolicySurvivesTheWire(t *testing.T) {
+	in := &Snapshot{
+		URL: "https://example.com/x", Status: "active",
+		BotPolicy: domain.BotAllow, DomainBotPolicy: domain.DomainBotsEnforced,
+	}
+	b, err := in.encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := decodeSnapshot(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.BotPolicy != in.BotPolicy || out.DomainBotPolicy != in.DomainBotPolicy {
+		t.Errorf("bot policy did not survive the round trip: (%q, %q) != (%q, %q)",
+			out.BotPolicy, out.DomainBotPolicy, in.BotPolicy, in.DomainBotPolicy)
+	}
+
+	// Exactly what the previous build wrote for an active link.
+	old, err := decodeSnapshot([]byte(`{"i":"00000000-0000-0000-0000-000000000000",` +
+		`"w":"00000000-0000-0000-0000-000000000000","u":"https://example.com/x","s":"active"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if domain.BlocksBots(old.BotPolicy, old.DomainBotPolicy) {
+		t.Errorf("a snapshot written before bot blocking existed decoded as blocking "+
+			"(%q, %q); the cache key version was left alone on the strength of this "+
+			"not happening", old.BotPolicy, old.DomainBotPolicy)
 	}
 }

@@ -2,6 +2,7 @@ package redirect
 
 import (
 	"hash/maphash"
+	"strings"
 	"sync"
 	"time"
 )
@@ -105,6 +106,28 @@ func (c *memCache) delete(key string) {
 	s.mu.Lock()
 	delete(s.entries, key)
 	s.mu.Unlock()
+}
+
+// deletePrefix drops every entry whose key starts with prefix.
+//
+// One caller: a domain-level setting change, which alters the answer for every
+// alias underneath it at once. It walks all thirty-two shards under their write
+// locks rather than being given the keys, because the keys are exactly what
+// nobody has — the cache holds whichever aliases happened to be asked for, and
+// the list of links on the domain is neither the same set nor knowable here.
+//
+// Bounded by MemCacheSize, not by the number of links: at the default that is
+// ten thousand string comparisons on an administrative action.
+func (c *memCache) deletePrefix(prefix string) {
+	for _, s := range c.shards {
+		s.mu.Lock()
+		for k := range s.entries {
+			if strings.HasPrefix(k, prefix) {
+				delete(s.entries, k)
+			}
+		}
+		s.mu.Unlock()
+	}
 }
 
 // flush empties every shard.

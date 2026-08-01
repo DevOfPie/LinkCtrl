@@ -572,14 +572,30 @@ paths:
     patch:
       tags: [domain]
       operationId: updateDomain
-      summary: Set or clear the link domain's root redirect
+      summary: Change the link domain's settings
       description: >
-        Requires the `domains.write` permission. The destination is validated
-        exactly as a link's is: `http` or `https` only, with private, loopback,
-        link-local, carrier-NAT and cloud-metadata addresses refused. An empty
-        string clears the redirect, restoring the `404` the root answers by
-        default. Refused with `422` on a single-host deployment, where the root
-        belongs to the dashboard.
+        Requires the `domains.write` permission. Send whichever settings are
+        being changed; an omitted field is left alone, and a body with none of
+        them is refused with `422`. A body carrying both settings applies them in
+        order — root redirect first, then bot blocking — and stops at the first
+        refusal, so a rejected URL changes nothing while an accepted one followed
+        by a rejected bot pair leaves the URL changed.
+
+
+        `root_redirect_url` is validated exactly as a link's destination is:
+        `http` or `https` only, with private, loopback, link-local, carrier-NAT
+        and cloud-metadata addresses refused. An empty string clears it,
+        restoring the `404` the root answers by default. It is refused with
+        `422` on a single-host deployment, where the root belongs to the
+        dashboard.
+
+
+        `block_bots` refuses automated clients on every link that has not chosen
+        for itself; `block_bots_enforced` additionally overrules the ones that
+        chose to allow them. Enforcing without blocking is refused with `422`.
+        Neither depends on the deployment being split-host. A refused client
+        receives a `403` that names nothing, and detection is a user-agent
+        heuristic with no bypass — see `bot_blocking` on a link.
       requestBody:
         required: true
         content:
@@ -587,11 +603,17 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [root_redirect_url]
               properties:
                 root_redirect_url:
                   type: string
                   description: Absolute http(s) URL, or an empty string to clear.
+                block_bots:
+                  type: boolean
+                  description: Refuse automated clients on links that have not chosen for themselves.
+                block_bots_enforced:
+                  type: boolean
+                  description: >
+                    Also refuse them on links set to allow. Requires block_bots.
       responses:
         "200":
           description: The updated settings
@@ -2146,7 +2168,7 @@ components:
       additionalProperties: false
       required:
         [id, workspace_id, alias, short_url, url, status, tags, forward_query,
-         click_count, created_at, updated_at]
+         bot_blocking, click_count, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         workspace_id: { type: string, format: uuid }
@@ -2169,6 +2191,8 @@ components:
         forward_query:
           type: boolean
           description: When true, a visitor's query string is merged into the destination on redirect. The destination's own parameters win on conflict.
+        bot_blocking:
+          $ref: "#/components/schemas/BotBlocking"
         expires_at: { type: string, format: date-time }
         click_count:
           type: integer
@@ -2179,10 +2203,28 @@ components:
         updated_at: { type: string, format: date-time }
         archived_at: { type: string, format: date-time }
 
+    BotBlocking:
+      type: string
+      enum: [inherit, on, off]
+      description: >
+        Whether this link refuses automated clients. `inherit` is the default
+        and takes the domain's answer, which on a fresh instance is "allow".
+
+
+        This is the link's own setting, not what is in effect: a domain with
+        `block_bots_enforced` blocks regardless, and `off` is refused with `422`
+        while that holds rather than being stored and ignored.
+
+
+        A refused client receives `403` with a body naming nothing, identical
+        whatever state the link is in, so being blocked reveals no more than a
+        `404` would. There is no challenge or bypass: a person the user-agent
+        heuristic misjudges cannot get through, and nobody is notified.
+
     DomainSettings:
       type: object
       additionalProperties: false
-      required: [hostname, split_hosts]
+      required: [hostname, split_hosts, block_bots, block_bots_enforced]
       properties:
         hostname:
           type: string
@@ -2198,6 +2240,17 @@ components:
             True when the dashboard and short links are served on separate
             hostnames. The root redirect applies only then; setting it otherwise
             is refused.
+        block_bots:
+          type: boolean
+          description: >
+            The domain's own answer for automated clients, inherited by every
+            link whose `bot_blocking` is `inherit`.
+        block_bots_enforced:
+          type: boolean
+          description: >
+            True when the domain's answer overrules a link that set
+            `bot_blocking` to `off`. Only meaningful with `block_bots` true, and
+            the pair cannot be stored any other way.
 
     FeedDisclosure:
       type: object
@@ -2312,6 +2365,8 @@ components:
         forward_query:
           type: boolean
           description: Toggles query forwarding for the link.
+        bot_blocking:
+          $ref: "#/components/schemas/BotBlocking"
 
     DayPoint:
       type: object

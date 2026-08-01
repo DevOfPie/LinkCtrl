@@ -299,6 +299,7 @@ func NewRouter(d Deps) http.Handler {
 		app.Handle("POST /setup", guard(http.HandlerFunc(web.SetupSubmit)))
 		app.Handle("POST /account/password", guard(signedIn(web.PasswordChange)))
 		app.Handle("POST /account/domain", signedIn(web.DomainUpdate))
+		app.Handle("POST /account/bots", signedIn(web.BotBlockingUpdate))
 
 		// Redeeming an invitation is public, because the person doing it may
 		// have no account yet — and on a default instance, where the mailer is

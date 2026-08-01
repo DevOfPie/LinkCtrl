@@ -214,6 +214,14 @@ type Querier interface {
 	// default domain; Phase 2 gives a workspace its own and this gains a filter.
 	GetDefaultDomainSettings(ctx context.Context) (GetDefaultDomainSettingsRow, error)
 	GetDestinationDispute(ctx context.Context, id uuid.UUID) (DestinationDispute, error)
+	// One domain's bot policy, by id.
+	//
+	// Read on the management path only, and only when a link's own setting is being
+	// changed: the service has to know whether the domain enforces before it can
+	// tell the caller their `off` will not be honoured. The redirect path never
+	// runs this — it gets the same two columns from ResolveAliasForRedirect's join,
+	// which is the whole reason that join exists.
+	GetDomainBotSettings(ctx context.Context, id uuid.UUID) (GetDomainBotSettingsRow, error)
 	// Redemption's only lookup, and the row it locks.
 	//
 	// FOR UPDATE OF i serializes two redemptions of the same token: the second
@@ -694,6 +702,22 @@ type Querier interface {
 	// distinguish 404 (unknown or archived) from 410 (expired) and can cache a
 	// negative result. Filtering here would make every non-serving state look
 	// identical.
+	//
+	// The one join this query has, and the rule above is why it reads the way it
+	// does. M32.5 needs the domain's bot-blocking settings on the redirect path,
+	// and the alternative — a second lookup, or a second cache with its own
+	// invalidation — would put either an extra round trip or an extra staleness
+	// window on the hottest path in the product. This is neither: `domain_id` is
+	// the domains primary key, the table holds one row on every deployment built so
+	// far, and the two booleans ride home inside the round trip that was happening
+	// anyway. The cached snapshot then carries them, so a cache hit answers the
+	// whole question — link policy and domain policy together — without asking
+	// anything.
+	//
+	// No `d.deleted_at IS NULL` here, deliberately. A soft-deleted domain row still
+	// joins, which is exactly the behaviour this query had before the join existed;
+	// adding the filter would silently turn every link on such a domain into a 404,
+	// which is a change nobody asked this milestone to make.
 	ResolveAliasForRedirect(ctx context.Context, arg ResolveAliasForRedirectParams) (ResolveAliasForRedirectRow, error)
 	// Read once at boot and cached. The default domain is matched on the flag
 	// rather than on a hostname string, so it never has to agree with
@@ -780,6 +804,10 @@ type Querier interface {
 	// any retry.
 	RollupLinkDaily(ctx context.Context, arg RollupLinkDailyParams) error
 	RollupWorkspaceDaily(ctx context.Context, arg RollupWorkspaceDailyParams) error
+	// Both switches at once, because they are one setting with two halves and the
+	// CHECK in 01800 refuses the combination that writing them separately would
+	// pass through on the way.
+	SetDefaultDomainBotBlocking(ctx context.Context, arg SetDefaultDomainBotBlockingParams) (SetDefaultDomainBotBlockingRow, error)
 	// NULL clears it, which restores the 404 the root answered before anyone set
 	// anything.
 	SetDefaultDomainRootRedirect(ctx context.Context, rootRedirectUrl *string) (SetDefaultDomainRootRedirectRow, error)

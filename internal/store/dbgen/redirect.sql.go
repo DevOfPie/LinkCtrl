@@ -47,21 +47,25 @@ func (q *Queries) IsAliasTaken(ctx context.Context, arg IsAliasTakenParams) (boo
 const resolveAliasForRedirect = `-- name: ResolveAliasForRedirect :one
 
 SELECT
-    id,
-    workspace_id,
-    domain_id,
-    alias,
-    primary_url,
-    status,
-    expires_at,
-    password_hash,
-    max_clicks,
-    one_time,
-    forward_query
-FROM links
-WHERE domain_id = $1
-  AND alias = $2
-  AND deleted_at IS NULL
+    l.id,
+    l.workspace_id,
+    l.domain_id,
+    l.alias,
+    l.primary_url,
+    l.status,
+    l.expires_at,
+    l.password_hash,
+    l.max_clicks,
+    l.one_time,
+    l.forward_query,
+    l.bot_blocking,
+    d.block_bots,
+    d.block_bots_enforced
+FROM links l
+JOIN domains d ON d.id = l.domain_id
+WHERE l.domain_id = $1
+  AND l.alias = $2
+  AND l.deleted_at IS NULL
 `
 
 type ResolveAliasForRedirectParams struct {
@@ -70,17 +74,20 @@ type ResolveAliasForRedirectParams struct {
 }
 
 type ResolveAliasForRedirectRow struct {
-	ID           uuid.UUID
-	WorkspaceID  uuid.UUID
-	DomainID     uuid.UUID
-	Alias        string
-	PrimaryUrl   string
-	Status       string
-	ExpiresAt    *time.Time
-	PasswordHash *string
-	MaxClicks    *int64
-	OneTime      bool
-	ForwardQuery bool
+	ID                uuid.UUID
+	WorkspaceID       uuid.UUID
+	DomainID          uuid.UUID
+	Alias             string
+	PrimaryUrl        string
+	Status            string
+	ExpiresAt         *time.Time
+	PasswordHash      *string
+	MaxClicks         *int64
+	OneTime           bool
+	ForwardQuery      bool
+	BotBlocking       string
+	BlockBots         bool
+	BlockBotsEnforced bool
 }
 
 // The redirect hot path.
@@ -98,6 +105,22 @@ type ResolveAliasForRedirectRow struct {
 // distinguish 404 (unknown or archived) from 410 (expired) and can cache a
 // negative result. Filtering here would make every non-serving state look
 // identical.
+//
+// The one join this query has, and the rule above is why it reads the way it
+// does. M32.5 needs the domain's bot-blocking settings on the redirect path,
+// and the alternative — a second lookup, or a second cache with its own
+// invalidation — would put either an extra round trip or an extra staleness
+// window on the hottest path in the product. This is neither: `domain_id` is
+// the domains primary key, the table holds one row on every deployment built so
+// far, and the two booleans ride home inside the round trip that was happening
+// anyway. The cached snapshot then carries them, so a cache hit answers the
+// whole question — link policy and domain policy together — without asking
+// anything.
+//
+// No `d.deleted_at IS NULL` here, deliberately. A soft-deleted domain row still
+// joins, which is exactly the behaviour this query had before the join existed;
+// adding the filter would silently turn every link on such a domain into a 404,
+// which is a change nobody asked this milestone to make.
 func (q *Queries) ResolveAliasForRedirect(ctx context.Context, arg ResolveAliasForRedirectParams) (ResolveAliasForRedirectRow, error) {
 	row := q.db.QueryRow(ctx, resolveAliasForRedirect, arg.DomainID, arg.Alias)
 	var i ResolveAliasForRedirectRow
@@ -113,6 +136,9 @@ func (q *Queries) ResolveAliasForRedirect(ctx context.Context, arg ResolveAliasF
 		&i.MaxClicks,
 		&i.OneTime,
 		&i.ForwardQuery,
+		&i.BotBlocking,
+		&i.BlockBots,
+		&i.BlockBotsEnforced,
 	)
 	return i, err
 }

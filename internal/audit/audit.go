@@ -109,6 +109,23 @@ const (
 	// because this table is read verbatim by the audit API and every consumer
 	// written after this one would otherwise have to remember.
 	ActionDestinationBlocked = "destination.blocked"
+
+	// Bot blocking (M32.5). Two actions because they are two grants: changing a
+	// link needs links.update, changing the domain needs domains.write, and the
+	// second decides for every link on the instance at once. An operator asking
+	// "who made this domain refuse crawlers" is asking a different question from
+	// "who turned it on for this link", and one action with a target type would
+	// make them the same query.
+	//
+	// What is deliberately NOT here is the refusal itself. Every blocked request
+	// would be a row, and a crawler that finds a blocked link asks for it
+	// thousands of times — the growth this table has a warning threshold for. A
+	// refusal is traffic and is counted as traffic: a click event with is_bot
+	// true, and a metric. These two record the administrative decision that made
+	// the refusals happen, which is the thing anyone would later want to ask
+	// about.
+	ActionLinkBotBlockingChanged   = "link.bot_blocking_changed"
+	ActionDomainBotBlockingChanged = "domain.bot_blocking_changed"
 )
 
 // Event is one thing that happened.

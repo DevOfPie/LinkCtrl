@@ -13,6 +13,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/DevOfPie/LinkCtrl/internal/alias"
+	"github.com/DevOfPie/LinkCtrl/internal/analytics"
+	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/ratelimit"
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
@@ -23,6 +25,19 @@ var notFoundPage []byte
 
 //go:embed static/410.html
 var gonePage []byte
+
+// blockedPage is what a refused bot receives (M32.5).
+//
+// Embedded, so it is bytes in the binary before main runs — the strongest form
+// of "pre-rendered at init" available, and the reason the refusal costs no
+// template execution on a tree that has never rendered one. It is a fixed page
+// that names no alias and no destination: a refusal echoing either would make
+// the shortener a confirmation oracle for which short codes are real and where
+// they point, which is precisely what a crawler asking ten thousand times is
+// trying to find out.
+//
+//go:embed static/403.html
+var blockedPage []byte
 
 // RedirectHandler serves GET|HEAD /{alias}.
 //
@@ -159,6 +174,30 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		res = resolved
 	}
 
+	// The bot gate (M32.5), and it runs before Decide deliberately.
+	//
+	// Answering the same refusal whatever state the link is in is what keeps
+	// blocking from becoming a better enumeration oracle than the 404 path
+	// already is: a crawler that could tell an active blocked link (403) from an
+	// expired one (410) would learn something from being refused. It learns
+	// nothing instead.
+	//
+	// Not charged to the probe limiter either. The alias exists — asking for it
+	// is not probing, and the client is being refused for what it is rather than
+	// for what it asked.
+	if blockedAsBot(res.Snapshot, r.UserAgent()) {
+		h.Metrics.ObserveRedirect("blocked_bot", string(res.Source), time.Since(start))
+		h.blocked(w, r)
+		// Counted, never audited. The audit log is for administrative change,
+		// and a crawler hitting one link ten thousand times would write ten
+		// thousand rows into the table M21 built a growth alert for. It is
+		// already a click with is_bot true — the recorder derives that from the
+		// same Classify call this gate used — so the traffic is visible where
+		// traffic is read.
+		h.record(r, res.Snapshot, start)
+		return
+	}
+
 	outcome := res.Snapshot.Decide(start)
 	// Observed here, before the response is written, so the measurement covers
 	// resolution and decision rather than however long a client takes to read
@@ -192,19 +231,7 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// to the old destination long after an edit — with no way to recall it.
 	// no-store for the same reason.
 	h.Location(w, target, h.status())
-
-	if h.Recorder != nil && r.Method != http.MethodHead {
-		h.Recorder.Record(ClickEvent{
-			LinkID:      res.Snapshot.LinkID,
-			WorkspaceID: res.Snapshot.WorkspaceID,
-			OccurredAt:  start,
-			IP:          clientIPString(r),
-			UserAgent:   r.UserAgent(),
-			Referrer:    r.Referer(),
-			Language:    r.Header.Get("Accept-Language"),
-			LatencyUS:   latencyUS(time.Since(start)),
-		})
-	}
+	h.record(r, res.Snapshot, start)
 
 	if h.LogSample > 0 && h.counter.Add(1)%h.LogSample == 0 {
 		h.Logger.Info("redirect",
@@ -213,6 +240,65 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			slog.Int64("duration_us", time.Since(start).Microseconds()),
 		)
 	}
+}
+
+// blockedAsBot reports whether this request is an automated client the link
+// refuses (M32.5).
+//
+// Two string comparisons when blocking is off, which is every link on a default
+// instance, and one pass over the user agent when it is on. Nothing here reads
+// the database, the cache or the session: both settings arrived inside the
+// snapshot the resolver had already produced.
+//
+// The two halves are separate on purpose. domain.BlocksBots is the only place
+// precedence is decided, for the redirect path and the management surfaces
+// alike; analytics.Classify is the same pure function the click recorder uses,
+// called rather than copied, so what gets blocked cannot drift from what gets
+// counted as a bot. A second classifier here would produce exactly that drift,
+// silently, and the analytics would go on insisting the refused traffic was
+// human.
+//
+// Order matters for cost, not for correctness: the policy check is cheap and
+// usually false, so Classify runs only on links that actually block.
+func blockedAsBot(snap *redirect.Snapshot, ua string) bool {
+	if snap == nil || snap.NotFound {
+		return false
+	}
+	if !domain.BlocksBots(snap.BotPolicy, snap.DomainBotPolicy) {
+		return false
+	}
+	return analytics.Classify(ua).IsBot
+}
+
+// record hands a click to the recorder, if there is one.
+//
+// Shared by the redirect and the refusal so the two cannot drift into
+// disagreeing about what a click event carries. HEAD is excluded in both: it is
+// a client asking about the link rather than following it, and counting it
+// would inflate every figure a link's owner reads.
+func (h *RedirectHandler) record(r *http.Request, snap *redirect.Snapshot, start time.Time) {
+	if h.Recorder == nil || snap == nil || r.Method == http.MethodHead {
+		return
+	}
+	h.Recorder.Record(ClickEvent{
+		LinkID:      snap.LinkID,
+		WorkspaceID: snap.WorkspaceID,
+		OccurredAt:  start,
+		IP:          clientIPString(r),
+		UserAgent:   r.UserAgent(),
+		Referrer:    r.Referer(),
+		Language:    r.Header.Get("Accept-Language"),
+		LatencyUS:   latencyUS(time.Since(start)),
+	})
+}
+
+// blocked refuses an automated client.
+//
+// The same headers and the same shape as the other error pages, and a body that
+// is fixed at compile time. There is no branch on which state the link was in,
+// because there is no state to reveal.
+func (h *RedirectHandler) blocked(w http.ResponseWriter, r *http.Request) {
+	h.errorPage(w, r, http.StatusForbidden, blockedPage)
 }
 
 // Location writes the redirect response.

@@ -42,8 +42,16 @@ const TrashRetentionDays = 30
 
 // Invalidator clears cached snapshots when a link changes. The redirect cache
 // implements it in M7; a nil Invalidator is valid and means "no cache".
+//
+// InvalidateDomain is the M32.5 addition and it is on the same interface rather
+// than a second one, because a caller that holds a cache it can only half
+// invalidate is a caller that will eventually forget which half. It clears
+// every alias on the domain, which is what a domain-level setting change
+// requires: the cached snapshot carries the domain's bot policy so the redirect
+// path needs no second lookup, and the bill for that arrives here.
 type Invalidator interface {
 	InvalidateAlias(ctx context.Context, domainID uuid.UUID, alias string)
+	InvalidateDomain(ctx context.Context, domainID uuid.UUID)
 }
 
 type Service struct {
@@ -325,6 +333,10 @@ type UpdateInput struct {
 	ClearExpiry  bool
 	Tags         *[]string
 	ForwardQuery *bool
+	// BotBlocking is the link's own answer to "refuse automated clients":
+	// inherit, on, or off. Nil leaves it alone, which is what the dashboard form
+	// sends when the domain enforces and the control is disabled.
+	BotBlocking *domain.BotPolicy
 }
 
 func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID, in UpdateInput) (*domain.Link, error) {
@@ -387,6 +399,35 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 			Field: "expires_at", Code: "in_past", Message: "expiry must be in the future",
 		})
 	}
+
+	// The bot-blocking setting, and the one refusal it carries.
+	//
+	// An enforcing domain overrides a link that says off, and the override is
+	// already unconditional in domain.BlocksBots — so accepting the value here
+	// would store a setting that does nothing and tell the caller it worked.
+	// That is the failure mode this refusal exists for: somebody turns bot
+	// blocking off for their link, the API says 200, and bots keep being
+	// refused with nothing anywhere explaining why.
+	var newPolicy *string
+	if in.BotBlocking != nil {
+		dom, derr := s.q.GetDomainBotSettings(ctx, existing.DomainID)
+		if derr != nil {
+			return nil, fmt.Errorf("read domain bot settings: %w", derr)
+		}
+		policy := domain.DomainBots(dom.BlockBots, dom.BlockBotsEnforced)
+		switch {
+		case *in.BotBlocking == domain.BotAllow && domain.BotPolicyLocked(policy):
+			errs = append(errs, domain.FieldError{
+				Field: "bot_blocking", Code: "domain_enforced",
+				Message: "bot blocking is enforced for every link on " + dom.Hostname +
+					" and cannot be turned off per link",
+			})
+		default:
+			v := string(*in.BotBlocking)
+			newPolicy = &v
+		}
+	}
+
 	if len(errs) > 0 {
 		return nil, errs
 	}
@@ -407,6 +448,7 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 		ClearExpiry:  in.ClearExpiry,
 		Alias:        newAlias,
 		ForwardQuery: in.ForwardQuery,
+		BotBlocking:  newPolicy,
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -477,6 +519,29 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 		s.cache.InvalidateAlias(ctx, existing.DomainID, existing.Alias)
 		if newAlias != nil {
 			s.cache.InvalidateAlias(ctx, existing.DomainID, *newAlias)
+		}
+	}
+
+	// Who decided this link would refuse automated clients, and when.
+	//
+	// Recorded only when the value actually moved: a form that posts every field
+	// re-sends the current setting on every save, and a log where most entries
+	// say nothing changed is a log nobody reads. This is the administrative half
+	// of the feature and it is the half the audit trail is for — the refusals
+	// themselves are traffic, and are counted rather than recorded.
+	if s.audit != nil && newPolicy != nil && *newPolicy != existing.BotBlocking {
+		if err := s.audit.Record(ctx, actor, audit.Event{
+			Action:     audit.ActionLinkBotBlockingChanged,
+			TargetType: "link",
+			TargetID:   &row.ID,
+			Metadata: map[string]any{
+				"alias": row.Alias,
+				"from":  existing.BotBlocking,
+				"to":    *newPolicy,
+			},
+		}); err != nil {
+			s.log.Warn("bot blocking changed but the audit record was not written",
+				slog.String("alias", row.Alias), slog.Any("error", err))
 		}
 	}
 
@@ -599,6 +664,7 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 			Status:       r.Status,
 			ExpiresAt:    r.ExpiresAt,
 			ForwardQuery: r.ForwardQuery,
+			BotBlocking:  r.BotBlocking,
 			ClickCount:   r.ClickCount,
 			LastClickAt:  r.LastClickAt,
 			CreatedAt:    r.CreatedAt,
@@ -795,6 +861,7 @@ func (s *Service) toDomain(l dbgen.Link, tags []domain.Tag) *domain.Link {
 			domain.LinkStatus(l.Status), l.ExpiresAt, time.Now()),
 		Tags:         tags,
 		ForwardQuery: l.ForwardQuery,
+		BotBlocking:  domain.BotPolicy(l.BotBlocking),
 		ExpiresAt:    l.ExpiresAt,
 		ClickCount:   l.ClickCount,
 		LastClickAt:  l.LastClickAt,

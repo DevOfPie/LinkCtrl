@@ -84,6 +84,8 @@ file. Append a row when you append an entry.
 | [M31, the appeal path and who decides](#2026-08-01--m31-the-appeal-path-and-who-decides) | Why the tier is re-derived rather than supplied; one judgement, two consumers, and the second door the surfaces test now polices; the two refusals `allow` gives instead of doing nothing; why the dispute carries no free text; `destinations.review` — owner-only, non-delegable, instance-wide, and the finding that follows |
 | [M32, a disclosure needs somewhere to live](#2026-08-01--m32-a-disclosure-needs-somewhere-to-live) | What a reputation feed actually sends, and why it is an exception to a promise; D40; why a read-only page does not reverse D38; the no-POST test as the mechanism |
 | [M32, an exception built so that it stays one](#2026-08-01--m32-an-exception-built-so-that-it-stays-one) | Off as the absence of a client, and the zero-egress test that proves something; why asking the feed last *is* the independence argument; owner-overridable without an allow column, and the three mechanisms that failed; why failing open has to be counted; what the generic adapter refuses; why the disclosure is gated on nothing; D1's outcome mail |
+| [M32.5, the first decision on the hot path](#2026-08-01--m325-the-first-decision-on-the-hot-path) | Why the domain's policy rides inside each link's snapshot, and the two designs that lost; the invalidation bill that follows, and why `SCAN` is the honest way to pay it; why the refusal comes before the outcome switch; three states in text, and the CHECK that makes precedence nine cells; two audit actions and the refusal that is not one; the measurement, taken with blocking on |
+| [M32.5, amending a bullet that contradicted itself](#2026-08-01--m325-amending-a-bullet-that-contradicted-itself) | The bullet before and after; why a self-contradictory bullet amends rather than prompts; the before/after oracle table showing blocking subtracts signal; why an unknown alias still answers 404 |
 
 ---
 
@@ -6403,3 +6405,202 @@ an administrator, and its subject matter is a URL a stranger chose. The host is
 defanged before it reaches the template and neutralized again inside `RenderMail`
 — twice, because a second layer that only works when the first one did is not a
 layer.
+
+---
+
+## 2026-08-01 — M32.5, the first decision on the hot path
+
+The design entry for this milestone was written on 2026-07-31, before it was
+built, and it stands. This one records what building it decided, which is almost
+entirely about one constraint: *no new I/O on the redirect path*. That sentence
+turns out to determine the schema, the cache, the invalidation and the shape of
+the refusal.
+
+### The domain's policy rides inside each link's snapshot
+
+Blocking needs two things per request: the link's setting and the domain's. The
+link's is easy — the snapshot already carries eight columns from the same row.
+The domain's is the whole design problem, and there were three ways to get it.
+
+| Design | What it costs |
+| --- | --- |
+| **Chosen** — join `domains` into `ResolveAliasForRedirect` and carry both settings in the snapshot | One extra tuple fetch on the *uncached* path, inside a query that was happening anyway. Zero on the cached path. The bill is invalidation: a domain change invalidates every link under it. |
+| Look the domain up per request | A round trip per redirect, on the one path this project makes a promise about. Refused on sight. |
+| A second cache, per domain, beside the alias cache | No round trip, but a second TTL, a second invalidation path, and a second staleness window that can disagree with the first. Two caches whose entries must be consistent with each other is the bug this product spends `CacheKeyVersion` avoiding. |
+
+The second row is what the measurement would have shown, and it is worth being
+concrete about how visible it would have been: a per-request domain lookup was
+briefly wired in as a sabotage of the query-count test, and twenty cached
+redirects issued twenty queries. That is the design that was rejected, failing
+the assertion that rejects it.
+
+The third row is the interesting loss. It is cheap in exactly the way the chosen
+design is expensive — one entry to invalidate instead of a hundred thousand —
+and it was refused because the two caches would be independently stale. A
+replica holding a fresh domain entry and a stale link entry answers with a
+policy that never existed, and nothing anywhere would report it. The chosen
+design cannot produce that state: there is one entry, and it is either current
+or gone.
+
+### The invalidation bill, and why SCAN is the honest way to pay it
+
+`InvalidateDomain` clears the in-process tier by key prefix, sweeps Redis with
+`SCAN`/`UNLINK`, and publishes a `d`-kind invalidation so every other replica
+clears its own memory tier by the same prefix. Three deliberate choices in that.
+
+**`SCAN` and `UNLINK`, not `KEYS` and `DEL`.** `KEYS` blocks Redis for the length
+of the whole keyspace, on the server that is at that moment answering redirects,
+and `UNLINK` frees memory on a background thread rather than inside the command.
+The cost of `SCAN` is that it walks the keyspace to find our prefix, which is
+affordable precisely because this runs when somebody submits a form and never on
+the redirect path.
+
+**A separate five-second budget**, rather than sharing `InvalidateBudget`. That
+one bounds a single `DEL`; this bounds a walk whose length is the number of
+cached aliases. Sharing a number would mean either a bound that cannot finish a
+real sweep or one that lets a single stalled command hold an operator's form
+submission for five seconds. Exhausting it is logged and degrades to TTL
+staleness — the same failure the single-alias path already documents, at the
+same order of consequence.
+
+**Other replicas clear memory only.** The publisher has already swept Redis; N
+replicas each running their own keyspace walk to delete keys that are already
+gone would turn one policy change into N walks against the server serving
+redirects.
+
+### The refusal comes before the outcome switch, and that is the security property
+
+The obvious place for the gate is inside `case redirect.OutcomeRedirect`, where
+the request is about to be sent onward. That was wrong, and the test that says so
+is `TestABlockedBotLearnsNothingAboutTheLink`.
+
+Placed there, a blocked crawler receives `403` for a live link, `410` for an
+expired one and `404` for an archived one — so being refused becomes a *better*
+enumeration oracle than the 404 path, not an equal one. It confirms which short
+codes are real and tells you their lifecycle state. Placed before the switch, all
+three answer identically, and the crawler learns exactly what it learned before:
+nothing beyond what a 404 already gives away.
+
+The body is embedded rather than rendered, which is the strongest available
+reading of "pre-rendered at init" — the bytes are in the binary before `main`
+runs. It names no alias and no destination for the same reason.
+
+### Three states in text, and the CHECK that makes precedence nine cells
+
+The link's setting is `text` with a `CHECK`, not a nullable boolean.
+NULL-means-inherit is shorter and is a trap: every reader has to remember that
+NULL is not "off", and the one that forgets stops blocking silently.
+
+The domain's is two booleans, because they answer two questions — does this
+domain block, and may a link disagree — with a `CHECK` refusing *enforced without
+blocking*. That constraint is what makes the domain genuinely three-valued, and
+it is the reason precedence is a nine-cell table rather than a twelve-cell one
+with three cells whose meaning somebody would have had to invent at the hot path.
+
+The override lives in `domain.BlocksBots` and not only in the validation that
+refuses a new link-level *off*. It has to: enforcement is switched on *after*
+links already carry their settings, and a rule enforced only at write time would
+leave every pre-existing `off` honoured forever.
+
+### Two audit actions, and the refusal that is deliberately not one
+
+`link.bot_blocking_changed` and `domain.bot_blocking_changed`, because they are
+two grants — `links.update` changed one link, `domains.write` changed every link
+on the instance — and an operator asking who did the second is not asking the
+same question as who did the first. Neither is written when the value did not
+move, because the dashboard form posts every field on every save.
+
+The refusal itself is not audited, and that is the load-bearing omission. A
+crawler that finds a blocked link asks for it thousands of times a day; each one
+would be a row in the table M21 built a growth *warning* for. It is a click event
+with `is_bot` already true — derived by the same `Classify` call the gate
+used — so it is visible where traffic is read, which is where it belongs.
+
+### The measurement, taken with blocking on
+
+The inherited rule says re-measure when the redirect path is touched. Taken
+literally that would have meant measuring the *cheap* branch: on a default
+instance the gate is two string comparisons and returns false before the
+classifier runs. So `bot_blocking` was set to `on` for all 100,000 seeded links
+first, both cache tiers emptied and the container restarted, which makes every
+measured request resolve precedence to "block" and then run the classifier.
+Recorded in [../slo.md](../slo.md): 100% of 240,001 requests under 20ms,
+generator p99 1.5ms, cache mix 100% memory.
+
+### What was not built, and is now visible in the product
+
+Nothing here changes the Phase 3 split the design entry recorded, but two costs
+became concrete enough to write into `Plan.md`'s limitations rather than leave in
+a build note. A misclassified person has no recourse and the link's owner is not
+told — the mitigation is the default, and the default is off. And the domain
+setting is instance-wide, like `domains.write` and the low-confidence blocklist
+before it, so enforcing it decides for every workspace on the box. That is the
+shape F15 already describes, one degree wider.
+
+
+---
+
+## 2026-08-01 — M32.5, amending a bullet that contradicted itself
+
+The orchestrator's amendment at [step 3.4](phase-loop.md#3-land). The worker
+built to a reading, said so, and left the amendment where it belongs.
+
+### The bullet as it stood
+
+> The response is identical whether the link exists, is expired, or is blocked
+> for a bot, so blocking adds no enumeration signal the 404 path does not already
+> give. Asserted by test comparing the three responses byte for byte.
+
+### The bullet as amended
+
+> **For a blocked bot, the response is identical whether the link is live,
+> expired, or archived** — one 403, byte for byte, asserted by test across all
+> three states. Blocking therefore adds no enumeration signal the redirect path
+> does not already give: existence was already distinguishable before this
+> milestone (302 or 410 versus 404), and collapsing three states into one
+> response removes signal rather than adding it.
+
+### The tree fact that forced it
+
+Not a tree fact so much as an internal one, which is why this is an amendment
+and not a prompt: **the bullet contradicts the bullet above it.** That one
+requires a blocked bot receive **403**. A 403 cannot be byte-identical to the
+404 an unknown alias receives or the 410 an expired link receives, because the
+status line differs by construction and `404.html` and `410.html` differ in body
+today.
+
+So the literal reading is unachievable, and unachievable is not a choice anybody
+could have made differently — which is the test for amending rather than asking.
+Exactly one coherent reading survives, and it is the one that makes the
+enumeration argument true.
+
+### Why the reading is the right one, and not just the possible one
+
+The claim being defended is that switching bot blocking on does not hand a
+crawler a better oracle than it already had. Check it both ways.
+
+| | unknown alias | live | expired | archived |
+| --- | --- | --- | --- | --- |
+| **Before** | 404 | 302 | 410 | 404 |
+| **With blocking on** | 404 | 403 | 403 | 403 |
+
+Before the milestone a crawler could already tell an existing link from a
+missing one, and could further tell live from expired. After it, everything that
+exists answers 403 identically. Existence remains distinguishable — it always
+was — and the finer distinction between live and expired is *lost*. Blocking
+subtracts from what a crawler learns.
+
+An unknown alias still answers 404 rather than 403, because a negative cache
+snapshot carries no domain policy, and giving it one would mean the per-request
+lookup this milestone's *no new I/O* rule refuses. That asymmetry is the reason
+the amended bullet says "live, expired, or archived" rather than "exists or
+does not".
+
+### The thing worth noticing about how this surfaced
+
+The worker could have quietly asserted whichever pair of responses its
+implementation happened to make equal, and the test would have been green and
+the claim meaningless. It instead named the contradiction, said which reading it
+built to, and left the decision. That is the split doing the work it exists for:
+a definition of done is only worth something if the actor meeting it cannot also
+edit it.

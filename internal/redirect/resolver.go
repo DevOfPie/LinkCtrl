@@ -13,6 +13,7 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 )
 
@@ -115,7 +116,14 @@ func NewResolver(pool *pgxpool.Pool, rdb *goredis.Client, opts Options) *Resolve
 // single domain, so Phase 2 custom domains need no key change and no cache
 // flush on upgrade.
 func key(domainID uuid.UUID, alias string) string {
-	return "lc:a:" + CacheKeyVersion + ":" + domainID.String() + ":" + alias
+	return keyPrefix(domainID) + alias
+}
+
+// keyPrefix is every cached alias on one domain. Split out because a
+// domain-level setting change has to reach all of them and has no list of
+// aliases to work from.
+func keyPrefix(domainID uuid.UUID) string {
+	return "lc:a:" + CacheKeyVersion + ":" + domainID.String() + ":"
 }
 
 // Resolve returns the snapshot for an alias, consulting memory, then Redis,
@@ -249,6 +257,14 @@ func (r *Resolver) fromDatabase(ctx context.Context, domainID uuid.UUID, alias, 
 		HasPassword:  row.PasswordHash != nil,
 		MaxClicks:    row.MaxClicks,
 		OneTime:      row.OneTime,
+		// Carried, not decided. Storing the resolved boolean instead would be
+		// cheaper per request and would put the answer somewhere other than
+		// domain.BlocksBots — an encoding of a decision whose inputs are no
+		// longer readable, which is how the redirect path and the dashboard come
+		// to disagree about what a link is doing. The two fields are two string
+		// comparisons at request time; that is not the cost worth trading.
+		BotPolicy:       domain.BotPolicy(row.BotBlocking),
+		DomainBotPolicy: domain.DomainBots(row.BlockBots, row.BlockBotsEnforced),
 	}
 	r.store(ctx, k, snap, now)
 	return snap, nil
@@ -307,6 +323,118 @@ func (r *Resolver) InvalidateAlias(ctx context.Context, domainID uuid.UUID, alia
 	// gap; before it existed, an edit took up to REDIRECT_TTL to be visible on
 	// a replica that had already cached the alias.
 	r.publish(ctx, invalidation{Kind: kindAlias, Key: k})
+}
+
+// InvalidateDomain drops every cached entry on a domain. Implements
+// link.Invalidator.
+//
+// This is the expensive invalidation and there is no cheap version of it. A
+// snapshot carries the domain's bot policy so that a cache hit can answer
+// without a second lookup (see fromDatabase), and the price of that is paid
+// here: changing the policy changes the answer for every alias underneath, and
+// every cached copy of every one of them is now wrong.
+//
+// Same order as InvalidateAlias, for the same reasons. Memory first so this
+// replica is correct immediately — it is the one the operator is about to
+// reload. Then Redis, waited on, because an entry left there is authoritative
+// and refills the memory tier this call just cleared. Then the broadcast, so
+// the other replicas clear their own memory tiers after the shared copy is
+// already gone.
+func (r *Resolver) InvalidateDomain(ctx context.Context, domainID uuid.UUID) {
+	prefix := keyPrefix(domainID)
+	r.mem.deletePrefix(prefix)
+
+	if r.redis == nil {
+		return
+	}
+	if err := r.sweepRedis(ctx, prefix); err != nil {
+		r.log.Error("failed to invalidate a domain's cached links; some may keep "+
+			"applying the previous bot-blocking policy until they expire",
+			slog.String("domain_id", domainID.String()),
+			slog.Duration("stale_for_up_to", r.opts.TTL),
+			slog.Any("error", err))
+	}
+
+	r.publish(ctx, invalidation{Kind: kindDomain, Key: prefix})
+}
+
+// domainSweepBudget bounds a whole domain invalidation.
+//
+// Deliberately much larger than InvalidateBudget, and for a reason that is not
+// generosity: that budget bounds a single DEL, while this bounds a walk of the
+// keyspace whose length is the number of cached aliases. Sharing one number
+// would mean either a bound that cannot finish the sweep on a real instance or
+// one that lets a single stalled DEL hold an operator's form submission for
+// five seconds. They are different operations and they get different bounds.
+const domainSweepBudget = 5 * time.Second
+
+// sweepScanCount is the SCAN batch size. Large enough that a hundred thousand
+// keys is a few hundred round trips rather than a few thousand, small enough
+// that no single call blocks Redis for long — SCAN's cost is per call, and the
+// whole point of using it over KEYS is not stalling the server other requests
+// are being served from.
+const sweepScanCount = 500
+
+// sweepRedis removes every key under a prefix.
+//
+// SCAN and UNLINK rather than KEYS and DEL. KEYS blocks Redis for the length of
+// the whole keyspace, on a server that is at that moment answering redirects;
+// UNLINK frees memory on a background thread rather than in the command. The
+// cost of SCAN is that it iterates the whole keyspace to find our prefix, which
+// is acceptable precisely because this runs when somebody changes a policy and
+// never on the redirect path.
+//
+// Bounded from outside the call, like deleteFromRedis, because a stalled read
+// does not honour the context go-redis is handed (M26.6, D26). An unfinished
+// sweep is reported so the operator learns their change may take until TTL to
+// reach every replica, rather than believing it landed everywhere.
+func (r *Resolver) sweepRedis(ctx context.Context, prefix string) error {
+	base, cancel := context.WithTimeout(context.WithoutCancel(ctx), domainSweepBudget)
+
+	done := make(chan error, 1)
+	go func() {
+		defer cancel()
+		done <- r.scanDelete(base, prefix)
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-base.Done():
+		// The same last look deleteFromRedis takes: the budget can expire in the
+		// instant the sweep finishes, and a bare select would pick between them
+		// at random.
+		select {
+		case err := <-done:
+			return err
+		default:
+			return fmt.Errorf("domain invalidation budget of %s spent", domainSweepBudget)
+		}
+	}
+}
+
+func (r *Resolver) scanDelete(ctx context.Context, prefix string) error {
+	var cursor uint64
+	for {
+		keys, next, err := r.redis.Scan(ctx, cursor, prefix+"*", sweepScanCount).Result()
+		if err != nil {
+			return fmt.Errorf("scan %s*: %w", prefix, err)
+		}
+		if len(keys) > 0 {
+			if err := r.redis.Unlink(ctx, keys...).Err(); err != nil {
+				return fmt.Errorf("unlink %d keys under %s: %w", len(keys), prefix, err)
+			}
+		}
+		cursor = next
+		if cursor == 0 {
+			return nil
+		}
+		// A spent budget ends the walk rather than starting a batch that cannot
+		// finish inside it.
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+	}
 }
 
 // invalidateAttempts is how many times a delete is tried before the entry is

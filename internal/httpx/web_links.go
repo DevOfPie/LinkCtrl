@@ -88,6 +88,9 @@ func (h *Web) Dashboard(w http.ResponseWriter, r *http.Request) {
 type linkFormData struct {
 	URL, Alias, Title, Description, ExpiresAt, Tags string
 	ForwardQuery                                    bool
+	// BotBlocking is the link's own setting as the select renders it: inherit,
+	// on or off.
+	BotBlocking string
 }
 
 type linksPageData struct {
@@ -273,6 +276,18 @@ type linkDetailPageData struct {
 	FieldErrors  map[string]string
 	Notice       string
 	Error        string
+
+	// BotsEnforced says the domain overrules this link's own setting, which is
+	// what disables the control rather than letting somebody store a value that
+	// does nothing. BotDomainOn is the weaker case: the domain blocks, but the
+	// link may still opt out — the template needs it to say what "inherit"
+	// currently resolves to.
+	BotsEnforced bool
+	BotDomainOn  bool
+	// BotHost names the domain in the explanation. Empty when the settings could
+	// not be read, in which case the control renders with no extra prose rather
+	// than with a sentence about nothing.
+	BotHost string
 }
 
 func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetailPageData, bool) {
@@ -318,6 +333,7 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 		Title:        l.Title,
 		Description:  l.Description,
 		ForwardQuery: l.ForwardQuery,
+		BotBlocking:  string(l.BotBlocking),
 	}
 	if l.ExpiresAt != nil {
 		form.ExpiresAt = l.ExpiresAt.UTC().Format("2006-01-02T15:04")
@@ -339,6 +355,18 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 		Form:         form,
 		FieldErrors:  map[string]string{},
 	}
+
+	// What the domain above this link says. A read failure leaves the control
+	// rendering as an ordinary select: this is one page's explanatory text, not
+	// a reason to replace the page, and the service refuses an unhonourable
+	// value on submit regardless of what was rendered.
+	if settings, serr := h.Links.DomainSettings(r.Context(), actor); serr == nil {
+		policy := domain.DomainBots(settings.BlockBots, settings.BlockBotsEnforced)
+		data.BotsEnforced = domain.BotPolicyLocked(policy)
+		data.BotDomainOn = settings.BlockBots
+		data.BotHost = settings.Hostname
+	}
+
 	switch {
 	case r.URL.Query().Get("created") == "1":
 		data.Notice = "Link created: " + l.ShortURL
@@ -389,6 +417,21 @@ func (h *Web) LinkUpdate(w http.ResponseWriter, r *http.Request) {
 		ForwardQuery: &forward,
 	}
 
+	// The one field this form may legitimately omit. A disabled select posts
+	// nothing, which is exactly how the enforced case has to reach the service:
+	// as "leave it alone", not as a value the service would then have to refuse
+	// on a form the browser never let anybody change. An unreadable value is
+	// refused rather than ignored, because the only way one arrives is a
+	// hand-made POST.
+	if raw := r.PostFormValue("bot_blocking"); raw != "" {
+		policy, ok := domain.ParseBotPolicy(raw)
+		if !ok {
+			h.errorPage(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
+			return
+		}
+		in.BotBlocking = &policy
+	}
+
 	rerender := func(fields map[string]string, general string) {
 		data, ok := h.loadLinkDetail(w, r)
 		if !ok {
@@ -399,6 +442,7 @@ func (h *Web) LinkUpdate(w http.ResponseWriter, r *http.Request) {
 			ExpiresAt:    r.PostFormValue("expires_at"),
 			Tags:         r.PostFormValue("tags"),
 			ForwardQuery: forward,
+			BotBlocking:  r.PostFormValue("bot_blocking"),
 		}
 		data.FieldErrors = fields
 		data.Error = general
