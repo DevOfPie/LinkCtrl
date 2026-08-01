@@ -1,0 +1,459 @@
+package link
+
+import (
+	"errors"
+	"net/url"
+	"os"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/DevOfPie/LinkCtrl/internal/domain"
+)
+
+// TestUnappealableTierHasNoOverrideSwitch is the milestone's central claim, and
+// it is written to fail when somebody *adds* the switch back rather than only
+// when they flip one.
+//
+// The reflection walk is the load-bearing part. Asserting that private addresses
+// are refused under the default policy would pass just as happily with a
+// BlockPrivateIPs field sitting there set to true, which is exactly the state
+// this test exists to prevent — so instead it enumerates every field of
+// DestinationPolicy, refuses to run against a field it has not been taught
+// about, and sets the ones it knows to the most permissive value each can hold.
+// If the struct grows a knob, this fails and somebody has to say out loud why a
+// tier documented as unappealable now has one.
+func TestUnappealableTierHasNoOverrideSwitch(t *testing.T) {
+	// The most permissive policy that can be expressed at all.
+	p := DestinationPolicy{}
+	for i := 0; i < reflect.TypeOf(p).NumField(); i++ {
+		f := reflect.TypeOf(p).Field(i)
+		switch f.Name {
+		case "Schemes":
+			// Everything config validation would refuse, and more. The point is
+			// that even a policy nothing could produce cannot loosen the tier.
+			p.Schemes = []string{"http", "https", "javascript", "data", "file"}
+		case "MaxLength":
+			p.MaxLength = 1 << 20
+		default:
+			t.Fatalf("DestinationPolicy grew field %q. Prove it cannot loosen the "+
+				"unappealable tier, then teach this test its most permissive value.", f.Name)
+		}
+	}
+
+	// Every address the unappealable tier exists for, plus the spellings a
+	// browser resolves and netip.ParseAddr does not.
+	unappealable := []string{
+		"http://169.254.169.254/latest/meta-data/",
+		"http://0xa9fea9fe/latest/meta-data/",
+		"http://2852039166/",
+		"http://10.0.0.1/admin",
+		"http://192.168.1.1/",
+		"http://127.0.0.1:8080/",
+		"http://2130706433/",
+		"http://localhost:3000/",
+		"http://app.localhost/",
+		"http://[::1]/",
+		"http://[::ffff:169.254.169.254]/",
+		"http://100.64.0.1/",
+	}
+	for _, raw := range unappealable {
+		t.Run(raw, func(t *testing.T) {
+			_, err := ValidateDestination(raw, p)
+			if err == nil {
+				t.Fatalf("accepted %q under the most permissive policy expressible", raw)
+			}
+			if got := codesOf(t, err); !strings.HasPrefix(got, string(TierUnappealable)+".") {
+				t.Errorf("refused %q with code %q, want an %s.* code: the tier a "+
+					"refusal reports is what tells a caller whether an appeal exists",
+					raw, got, TierUnappealable)
+			}
+		})
+	}
+}
+
+// The other half of the same claim: the two appealable tiers can only ever add
+// refusals. Neither the embedded list nor the heuristics has a return value that
+// means "allowed", so no entry anybody adds to either — and no row M31's review
+// queue removes from the Postgres list — can hand a private address an approval
+// that ValidateDestination would then have to honour.
+func TestAppealableTiersCanOnlyRefuse(t *testing.T) {
+	if got := reflect.TypeOf(highConfidence).NumOut(); got != 1 {
+		t.Fatalf("highConfidence returns %d values; it must return only a refusal", got)
+	}
+	if got := reflect.TypeOf(highConfidence).Out(0).String(); got != "*link.Block" {
+		t.Errorf("highConfidence returns %s, want *link.Block; a type meaning "+
+			"'allowed' is the one thing this tier must not be able to say", got)
+	}
+	if got := reflect.TypeOf(lowConfidenceHeuristics).Out(0).String(); got != "*link.Block" {
+		t.Errorf("lowConfidenceHeuristics returns %s, want *link.Block", got)
+	}
+
+	// And they are consulted after the unappealable tier has already refused,
+	// so there is no order in which their answer could be reached first.
+	if _, err := ValidateDestination("http://169.254.169.254/", DefaultDestinationPolicy()); err == nil {
+		t.Fatal("the metadata endpoint must be refused before any tier that can be appealed")
+	}
+}
+
+// The embedded tier is confined to exact matches on purpose: a false positive
+// there costs a rebuild, and a suffix match multiplies how often that happens
+// until operators route around the feature.
+func TestEmbeddedTierMatchesExactHostsOnly(t *testing.T) {
+	const listed = "metadata.google.internal"
+	if _, ok := embeddedHosts[listed]; !ok {
+		t.Skipf("%s is not on the proposed list; nothing to assert about matching", listed)
+	}
+	if highConfidence(listed) == nil {
+		t.Errorf("%q is on the embedded list and was not refused", listed)
+	}
+	for _, near := range []string{
+		"sub." + listed,               // a child, which a suffix match would catch
+		"notmetadata.google.internal", // a different name that ends the same way
+		"google.internal",             // the parent
+	} {
+		if highConfidence(near) != nil {
+			t.Errorf("%q was refused by the embedded tier; that tier is exact "+
+				"matches only, or every false positive becomes a rebuild", near)
+		}
+	}
+}
+
+// parseHostList panics rather than skipping a line it cannot honour, because a
+// blocklist that silently drops an entry leaves the operator believing a host is
+// refused when it is not.
+func TestEmbeddedListRefusesEntriesItCannotHonour(t *testing.T) {
+	bad := map[string]string{
+		"a scheme":       "https://evil.example",
+		"a path":         "evil.example/login",
+		"a port":         "evil.example:8443",
+		"credentials":    "user@evil.example",
+		"a wildcard":     "*.evil.example",
+		"a leading dot":  ".evil.example",
+		"a trailing dot": "evil.example.",
+		// An address is the unappealable tier's business. Allowing one here
+		// would invite a reader to believe that deleting the line makes the
+		// address acceptable, which it does not.
+		"an address":        "169.254.169.254",
+		"an obfuscated one": "2852039166",
+		"a hex-written one": "0xa9fea9fe",
+	}
+	for name, entry := range bad {
+		t.Run(name, func(t *testing.T) {
+			if err := checkListEntry(entry); err == nil {
+				t.Errorf("accepted list entry %q", entry)
+			}
+		})
+	}
+	// The shapes that must keep working, or the list cannot hold what it is for.
+	for _, entry := range []string{"metadata", "metadata.goog", "kubernetes.default.svc", "instance-data"} {
+		if err := checkListEntry(entry); err != nil {
+			t.Errorf("rejected legitimate entry %q: %v", entry, err)
+		}
+	}
+}
+
+// "Heuristics never write into the embedded tier — asserted structurally, not by
+// convention." The structure is that a heuristic has nowhere to put a tier: the
+// evaluator stamps every match TierLowConfidence, and no field of the heuristic
+// type could carry a different answer.
+func TestHeuristicsCannotNameATier(t *testing.T) {
+	ht := reflect.TypeOf(heuristic{})
+	for i := 0; i < ht.NumField(); i++ {
+		f := ht.Field(i)
+		if f.Type == reflect.TypeOf(TierLowConfidence) {
+			t.Fatalf("heuristic.%s is a Tier. A heuristic that can name its own "+
+				"tier can promote itself into the one that costs a rebuild to "+
+				"overrule, which is what confines that tier to exact matches.", f.Name)
+		}
+	}
+	if ht.NumField() != 3 {
+		t.Errorf("heuristic has %d fields; if one was added, check it cannot carry a tier",
+			ht.NumField())
+	}
+
+	// Every registered rule is exercised on an ordinary URL, so a heuristic that
+	// panics on one is caught here rather than on somebody's first link — and so
+	// the registry cannot quietly grow an entry nothing ever calls.
+	u, err := url.Parse("https://example.com/path")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range heuristics {
+		if h.rule == "" || h.detail == "" || h.match == nil {
+			t.Errorf("heuristic %+v is incomplete", h)
+			continue
+		}
+		if h.match(u, "example.com") {
+			t.Errorf("heuristic %q refuses https://example.com/path", h.rule)
+		}
+	}
+}
+
+func TestHeuristicsCatchWhatTheyClaimTo(t *testing.T) {
+	blocked := map[string]string{
+		// Credentials before the host: the authority is evil.example, and the
+		// part a reader's eye lands on is not.
+		"https://paypal.com@evil.example/signin": RuleURLCredentials,
+		"https://user:pass@example.com/":         RuleURLCredentials,
+		// xn--pple-43d is "аpple" with a Cyrillic а.
+		"https://xn--pple-43d.com/": RulePunycodeHomograph,
+	}
+	for raw, wantRule := range blocked {
+		t.Run(raw, func(t *testing.T) {
+			u, host := parseForTest(t, raw)
+			b := lowConfidenceHeuristics(u, host)
+			if b == nil {
+				t.Fatalf("no heuristic matched %q, expected %s", raw, wantRule)
+			}
+			if b.Rule != wantRule {
+				t.Errorf("matched %q, want %q", b.Rule, wantRule)
+			}
+			if b.Tier != TierLowConfidence {
+				t.Errorf("tier = %q, want %q", b.Tier, TierLowConfidence)
+			}
+		})
+	}
+
+	// The counterpart, which is the expensive half to get wrong. Every one of
+	// these is an ordinary destination and a heuristic that refuses it is a
+	// heuristic operators turn off.
+	for _, raw := range []string{
+		"https://example.com/path?a=1",
+		"https://xn--mller-kva.de/", // müller.de — an ordinary German name
+		"https://xn--n3h.example/",  // ☃.example — a symbol, imitating nothing
+		"https://93.184.216.34/",
+		// A short link is no longer refused by anything computed: the shortener
+		// hosts are rows in blocked_destinations (D39), so this registry has
+		// nothing to say about one and must not acquire an opinion by accident.
+		"https://bit.ly/abc",
+	} {
+		t.Run(raw, func(t *testing.T) {
+			u, host := parseForTest(t, raw)
+			if b := lowConfidenceHeuristics(u, host); b != nil {
+				t.Errorf("refused an ordinary destination with %q", b.Rule)
+			}
+		})
+	}
+}
+
+// Freshly-registered domains is excluded by D13 — it needs a domain-age source,
+// which means egress, which collides with the promise that no destination leaves
+// the box uninvited. Pinned here so re-adding it is a deliberate act with a
+// failing test attached, rather than something that arrives with a library.
+func TestFreshlyRegisteredDomainsIsNotAHeuristic(t *testing.T) {
+	for _, h := range heuristics {
+		if strings.Contains(h.rule, "age") || strings.Contains(h.rule, "fresh") ||
+			strings.Contains(h.rule, "registered") {
+			t.Errorf("heuristic %q looks like domain age, excluded by D13: it needs "+
+				"an egress data source. M32's opt-in feed path is where it belongs.", h.rule)
+		}
+	}
+}
+
+// D39, as a property of the tree rather than a sentence in a decision log.
+//
+// The rule it states is that a list is compiled when overruling it *should* be
+// hard, and is runtime data otherwise — so the test has to show both halves.
+// Asserting only that the shortener file is gone would pass just as happily on a
+// tree that had stopped compiling any list at all, which is the opposite
+// mistake and the more likely one: embedding a list is the cheapest way to add
+// one, and it is cheapest at exactly the moment somebody is adding data that
+// does not belong in the binary.
+func TestOnlyTheTierThatCostsARebuildIsCompiled(t *testing.T) {
+	// The high-confidence list is still compiled, because overruling it is meant
+	// to cost a release. Its contents are structural claims about metadata
+	// services and control planes, and they stay true for years.
+	if _, err := os.Stat("blocked_hosts.txt"); err != nil {
+		t.Errorf("blocked_hosts.txt: %v. The high-confidence tier is the one list "+
+			"that is meant to be compiled; a tier nobody has to rebuild to "+
+			"overrule is not the high-confidence tier.", err)
+	}
+	if len(embeddedHosts) == 0 {
+		t.Error("the embedded list is empty; the compiled tier refuses nothing")
+	}
+
+	// And the shortener list is not, because a match on it raises a flag the
+	// owner may overrule from the review queue. Compiling it charged a release
+	// cycle to data carrying no authority.
+	if _, err := os.Stat("shortener_hosts.txt"); !os.IsNotExist(err) {
+		t.Errorf("shortener_hosts.txt is back in the package (%v). Per D39 those "+
+			"hosts are rows in blocked_destinations, seeded by migration 01500 "+
+			"and editable without a rebuild.", err)
+	}
+	for _, h := range heuristics {
+		if h.rule == RuleShortenerChain {
+			t.Errorf("%q is a compiled heuristic again. A rule whose whole content "+
+				"is a list of names is data: keeping it here means a new shortener "+
+				"costs a release.", h.rule)
+		}
+	}
+}
+
+// Which rule a matched row reports, and the reason the source column exists at
+// all beyond bookkeeping.
+func TestTheMatchedRowsSourceDecidesTheRule(t *testing.T) {
+	cases := map[string]string{
+		SourceShortener: RuleShortenerChain,
+		SourceEnv:       RuleOperatorBlocklist,
+		SourceReview:    RuleOperatorBlocklist,
+		// A source no release has heard of. The column has no CHECK constraint
+		// and M32's feeds will add to it, so this is a future state rather than
+		// a corruption — and it is still a host somebody listed. Minting a code
+		// from the column's contents would put a string in a 422 that no
+		// documentation explains.
+		"some_later_feed": RuleOperatorBlocklist,
+	}
+	for source, wantRule := range cases {
+		t.Run(source, func(t *testing.T) {
+			b := blockForSource(source)
+			if b.Rule != wantRule {
+				t.Errorf("source %q reports rule %q, want %q", source, b.Rule, wantRule)
+			}
+			// No source promotes a row out of the tier the owner can overrule.
+			// A shortener row that refused at high confidence would cost a
+			// rebuild to appeal, which is exactly what D39 moved it out of.
+			if b.Tier != TierLowConfidence {
+				t.Errorf("source %q refuses at tier %q, want %q",
+					source, b.Tier, TierLowConfidence)
+			}
+			if b.Detail == "" {
+				t.Errorf("source %q refuses with no explanation", source)
+			}
+		})
+	}
+}
+
+// The label-boundary rule LINKCTRL_DESTINATION_BLOCKLIST has always had, now
+// expressed as the set of hosts the database is asked about.
+func TestHostCandidatesRespectLabelBoundaries(t *testing.T) {
+	got := hostCandidates("deep.sub.evil.example")
+	want := []string{"deep.sub.evil.example", "sub.evil.example", "evil.example", "example"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("candidates = %v, want %v", got, want)
+	}
+
+	// An entry for evil.example is in the candidate set of its children and is
+	// not in the candidate set of a name that merely ends with those letters.
+	for _, host := range []string{"notevil.example", "myevil.example", "evil.example.org"} {
+		for _, c := range hostCandidates(host) {
+			if c == "evil.example" {
+				t.Errorf("%q would match a blocklist entry for evil.example", host)
+			}
+		}
+	}
+
+	// A trailing dot is the same name fully qualified, and must not produce a
+	// different candidate set — or a blocklist is bypassed by typing one.
+	if !reflect.DeepEqual(hostCandidates("evil.example."), hostCandidates("evil.example")) {
+		t.Error("a trailing dot changed the candidate set; that is a one-character bypass")
+	}
+
+	// The shortener hosts are matched by this rule now rather than by exact
+	// equality, so the case that used to guard the heuristic is asserted here: a
+	// name that merely contains a shortener's is not that shortener.
+	for _, c := range hostCandidates("sub.bit.ly.evil-looking-but-not-a-shortener.example") {
+		if c == "bit.ly" {
+			t.Error("a host that merely contains bit.ly would match the seeded row")
+		}
+	}
+	// A child of one is, which is wider than the compiled list was and is the
+	// right width for the tier that is allowed to guess.
+	var covered bool
+	for _, c := range hostCandidates("links.bit.ly") {
+		covered = covered || c == "bit.ly"
+	}
+	if !covered {
+		t.Error("links.bit.ly is not covered by a row for bit.ly")
+	}
+}
+
+func TestReasonCodesNameTierAndRule(t *testing.T) {
+	if got := TierLowConfidence.Code(RulePunycodeHomograph); got != "low_confidence.punycode_homograph" {
+		t.Errorf("code = %q", got)
+	}
+	tier, rule, ok := tierOf("high_confidence.embedded_host")
+	if !ok || tier != TierHighConfidence || rule != RuleEmbeddedHost {
+		t.Errorf("tierOf = (%q, %q, %v)", tier, rule, ok)
+	}
+
+	// The shape errors are not refusals by a tier and must not be recorded as
+	// blocked attempts: a URL somebody left blank is a typo, and burying the
+	// real refusals under typos is how an audit log stops being read.
+	for _, code := range []string{"required", "too_long", "invalid", "no_scheme", "no_host", ""} {
+		if _, _, ok := tierOf(code); ok {
+			t.Errorf("%q was read as a tiered refusal", code)
+		}
+	}
+}
+
+// The URL is stored as evidence, and evidence gets rendered. Both halves matter:
+// inert as markup, so it cannot become script wherever it is displayed, and
+// inert as a link, so nobody follows it by reflex while reading the record.
+func TestDefangRendersHostileURLsInert(t *testing.T) {
+	cases := map[string]string{
+		"javascript:alert(1)":                                    "javascript[:]alert(1)",
+		"https://evil.example/x":                                 "https[:]//evil[.]example/x",
+		"https://evil.example/<script>alert(1)</script>":         "https[:]//evil[.]example/%3Cscript%3Ealert(1)%3C/script%3E",
+		`https://evil.example/?q="><img src=x onerror=alert(1)>`: "https[:]//evil[.]example/?q=%22%3E%3Cimg%20src=x%20onerror=alert(1)%3E",
+		// An open-redirect payload: the path holds another URL, and the record
+		// of the refusal must not contain a followable link to it.
+		"https://evil.example/r?to=https://worse.example/": "https[:]//evil[.]example/r?to=https[:]//worse[.]example/",
+	}
+	for raw, want := range cases {
+		if got := Defang(raw); got != want {
+			t.Errorf("Defang(%q)\n = %q\nwant %q", raw, got, want)
+		}
+	}
+
+	// The properties, rather than the exact spelling, for anything that reaches
+	// this function from outside a test.
+	for _, raw := range []string{
+		"javascript:alert(1)",
+		"https://evil.example/<script>",
+		"https://evil.example/\u202egnp.exe", // a right-to-left override, which reverses what a reader sees
+		"https://аррӏе.example/",
+		strings.Repeat("https://evil.example/", 500),
+	} {
+		got := Defang(raw)
+		if strings.ContainsAny(got, "<>\"'&`") {
+			t.Errorf("Defang(%q) = %q still contains an HTML-active character", raw, got)
+		}
+		if strings.Contains(got, "://") {
+			t.Errorf("Defang(%q) = %q is still a followable URL", raw, got)
+		}
+		if strings.Contains(strings.ToLower(got), "javascript:") {
+			t.Errorf("Defang(%q) = %q still carries a live scheme", raw, got)
+		}
+		if len(got) > 6*defangMaxBytes {
+			t.Errorf("Defang(%q) produced %d bytes; the stored evidence must be bounded",
+				raw, len(got))
+		}
+	}
+}
+
+// --- helpers -----------------------------------------------------------------
+
+func parseForTest(t *testing.T, raw string) (*url.URL, string) {
+	t.Helper()
+	normalized, err := ValidateDestination(raw, DefaultDestinationPolicy())
+	if err != nil {
+		t.Fatalf("ValidateDestination(%q): %v", raw, err)
+	}
+	u, err := url.Parse(normalized)
+	if err != nil {
+		t.Fatalf("parse %q: %v", normalized, err)
+	}
+	return u, strings.ToLower(u.Hostname())
+}
+
+// codesOf returns the reason code of the first field error, which is the one a
+// form highlights and the one the audit record carries.
+func codesOf(t *testing.T, err error) string {
+	t.Helper()
+	var ve domain.ValidationErrors
+	if !errors.As(err, &ve) || len(ve) == 0 {
+		t.Fatalf("error %T carries no field errors: %v", err, err)
+	}
+	return ve[0].Code
+}

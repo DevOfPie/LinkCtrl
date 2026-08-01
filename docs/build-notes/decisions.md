@@ -78,6 +78,9 @@ file. Append a row when you append an entry.
 | [M28.5, building the exit and the empty state behind it](#2026-08-01--m285-building-the-exit-and-the-empty-state-behind-it) | The seam mechanism recorded against D16, and why a membership count is not a second axis; `org.delete` against D18, which limb it matched and the limb D18 does not have; where the empty state is enforced and where it is only drawn; what the teardown leaves behind, and what it does not |
 | [M29, verifying an address before the account exists](#2026-08-01--m29-verifying-an-address-before-the-account-exists) | Why open registration creates nothing until the link is followed, and the two designs that lost; `pending_registrations` and its two partial indexes; why a failed enqueue fails the request here but not for an invitation; the one derivation on top of the mode, and why the refusal names neither bound |
 | [M29, the toggle that was built and then removed](#2026-08-01--m29-the-toggle-that-was-built-and-then-removed) | D38; why `owner-only` did not name a small set; the table of who could move it per ceiling; the two repairs refused and why; what the scope row lost |
+| [M30, three tiers, and the two switches that had to go](#2026-08-01--m30-three-tiers-and-the-two-switches-that-had-to-go) | Why `DESTINATION_BLOCK_PRIVATE_IPS` and a widenable `DESTINATION_SCHEMES` had to go; one door for the validator, enforced by parsing the tree; what "structurally" was taken to mean; what the embedded list holds and what it refuses to hold; punycode without a dependency; defanging on the way in, and the first version that was wrong; env reconciliation; the reason-code break |
+| [M30, the owner signs off on two lists and one withdrawal](#2026-08-01--m30-the-owner-signs-off-on-two-lists-and-one-withdrawal) | Why the embedded entries are structural and not reputation claims; confirming a Phase 1 switch's withdrawal and what survives it; D39, why one curated list is compiled and one is not |
+| [M30, seeding the list D39 moved out of the binary](#2026-08-01--m30-seeding-the-list-d39-moved-out-of-the-binary) | Why the seed is a migration and not a boot-time reconcile, and the two candidates that lost; why the rows need a source of their own, and the one-source-per-reconciliation rule that follows; the widened match and the rule for later migrations; how a matched row's source picks the reason code |
 
 ---
 
@@ -5661,3 +5664,362 @@ its face. *Owner-only* reads as a small set right up until you notice that
 registration hands out ownerships. It took building the grant and asking who
 actually holds it to see, and the worker seeing it there — rather than an
 operator seeing it on a public instance — is the process working, not failing.
+
+---
+
+## 2026-08-01 — M30, three tiers, and the two switches that had to go
+
+The milestone's own sentence is the whole design: *no configuration, list entry,
+or future review path can accept a metadata or private address*. Everything below
+is what that sentence cost once it was read as binding rather than as a mood.
+
+### Two override switches existed, and both were removed
+
+Phase 1 shipped `LINKCTRL_DESTINATION_BLOCK_PRIVATE_IPS`, defaulting true, with a
+test named `TestPrivateAddressBlockingCanBeDisabled` whose comment argued the
+case: *a self-hoster pointing links at an intranet is a legitimate configuration,
+so this must be a policy rather than a hard rule*. That is a coherent argument
+and it is answered by asking who the refusal protects. It is not the operator. It
+is the visitor whose browser does the fetching, who never saw the `.env` file,
+and who is not the party the setting consults. An operator who sets it false has
+decided on somebody else's behalf that their browser may be aimed at
+`169.254.169.254`.
+
+The intranet case survives without the switch, because the refusal is on
+*addresses* and not on names: `http://intranet.corp.example/` resolving to
+`10.0.0.5` is accepted exactly as before. What is lost is pointing a public short
+link at a literal private address, and that is the case the switch existed for.
+
+`LINKCTRL_DESTINATION_SCHEMES` was the second, and it is the subtler one. It
+looks like a narrowing knob — and narrowing is why it exists, `https` alone being
+a reasonable thing to want — but nothing stopped `http,https,javascript`. Plan.md
+puts non-`http(s)` schemes in the unappealable tier, so the variable was an
+override switch on a tier documented as having none. It is now validated at
+startup against a subset of `{http, https}`: it can still narrow and can no
+longer widen.
+
+Both are removals of documented Phase 1 behaviour, and neither is named in
+`m30.md`. They follow from the bullet rather than from a separate decision, which
+is why they were built rather than raised as a prompt — but they are named here,
+and in the report the orchestrator carried, because "the milestone implied it" is
+exactly the reasoning that should not be invisible afterwards.
+
+`DESTINATION_BLOCK_PRIVATE_IPS` went into `config.Removed`, following the pattern
+M15 established: a variable that no longer does anything is reported at startup
+rather than deleted quietly, because silent removal reproduces the defect from
+the other side — the operator still has the line and still believes it works.
+
+### One door, enforced by parsing the tree rather than by discipline
+
+The plan review found the same bypass in two of three candidate orderings: a
+later milestone adds a surface that writes a destination, calls
+`ValidateDestination` because that is what every existing call site appears to
+do, inherits the SSRF refusals, and silently skips every tier above them. Nothing
+fails. No test goes red.
+
+So `ValidateDestination` now has exactly one caller in the entire program —
+`Service.checkDestination` — and `TestEveryDestinationSurfaceGoesThroughTheCheck`
+walks every non-test `.go` file in the module with `go/ast` and fails if a second
+one appears. The same test pins the three surfaces that may call
+`checkDestination`: `Create`, `Update`, `SetRootRedirect`. M34, M36 and M42 each
+add a fourth, and each will meet this test as the thing that tells them so. M36
+did not declare M30 as a dependency; its file and both ordering tables now say it
+does.
+
+A source-scanning test is unusual and the alternative was considered: a comment
+in `destination.go` saying "call `checkDestination` instead". That comment would
+be read at the moment somebody is already writing the wrong call, which is the
+one moment it does not help.
+
+### Structural, not conventional
+
+Two claims in `m30.md` are asserted structurally, and it is worth recording what
+"structurally" was taken to mean, because the phrase can be satisfied cheaply.
+
+*Heuristics never write into the embedded tier.* The `heuristic` type has no
+field of type `Tier` — a heuristic answers yes or no and the evaluator stamps
+`TierLowConfidence`, so there is no value a heuristic could return that names a
+different tier. A reflection test fails if that type grows a `Tier` field. And
+because a type cannot stop code from reaching into the map itself, a second test
+parses this package and fails on any assignment to `embeddedHosts` outside
+`init`.
+
+*No configuration can accept a private address.*
+`TestUnappealableTierHasNoOverrideSwitch` enumerates every field of
+`DestinationPolicy` by reflection, **fails on a field it has not been taught
+about**, and sets the ones it knows to the most permissive value each can hold
+before asserting the addresses are still refused. Asserting the refusal under the
+default policy would have passed just as happily with a `BlockPrivateIPs` field
+sitting there set to true, which is the state the test exists to prevent. Adding
+that field back was one of the sabotages, and it is what the test reports.
+
+### What the embedded list holds, and what it deliberately does not
+
+The list is structural claims only: cloud and cluster metadata hostnames —
+`metadata.google.internal`, `metadata.goog`, `metadata`,
+`instance-data.ec2.internal`, `instance-data`, `kubernetes.default.svc`,
+`kubernetes.default.svc.cluster.local`. No public short link has a legitimate
+reason to point at another network's metadata service, and the claim stays true
+for years.
+
+Reputation-flavoured contents are absent on purpose. A list that costs a rebuild
+to change is the wrong instrument for data that changes weekly: it would be stale
+on the day it shipped and every correction would cost a release. M31's review
+queue and M32's opt-in feeds are what that data is for, and putting the slowest
+tier in charge of the fastest-moving data would have been the kind of decision
+that looks thorough and degrades quietly.
+
+The list entries are validated at load and the parser **panics** on a malformed
+one rather than skipping it, because a blocklist that silently drops a line
+leaves the operator believing a host is refused when it is not. An IP literal is
+refused as an entry: addresses are the unappealable tier's business, and allowing
+one here would invite a reader to believe deleting the line makes the address
+acceptable, which it does not.
+
+Both this list and `shortener_hosts.txt` shipped as **proposed** contents pending
+owner sign-off, which `m30.md`'s Risks section required.
+
+### Punycode without a dependency
+
+The homograph heuristic needs a punycode decoder, and `golang.org/x/net/idna` is
+not in `go.mod`. Adding a direct dependency to a module that has kept its
+dependency list short is a decision worth more than sixty lines of RFC 3492, so
+the decoder is in-package and pinned by the specification's own test vectors.
+
+What it detects is narrower than "uses non-ASCII": a label is a homograph when
+every rune maps onto an ASCII letter or digit and at least one does so by
+resemblance rather than by being that character. `müller.de` and `テスト.example`
+are ordinary names and are untouched; `аpple.com` (one Cyrillic а) and
+`аррӏе.com` (entirely Cyrillic) are not. The confusables table is Cyrillic, Greek
+and fullwidth Latin rather than the full Unicode set, which is a data file and a
+dependency — and does not need to be complete, because this is the tier that
+guesses and is overruled from the review queue.
+
+Freshly-registered domains did not ship: D13 excludes it, it needs a domain-age
+source, and that means egress. A test now fails if a heuristic named for domain
+age appears, so re-adding it is a deliberate act rather than something that
+arrives with a library.
+
+### The evidence is defanged on the way in, not on the way out
+
+`m30.md` asks that the attempted URL be escaped and defanged wherever it is
+displayed. It is stored defanged instead — `https[:]//evil[.]example/...`, with
+everything HTML-active percent-escaped — because the audit read API returns
+metadata verbatim to whatever is asking, and a URL that is inert in the column is
+inert in every consumer that has not been written yet. Defanging at display would
+put the obligation on M31's review queue, on any UI after it, and on whoever
+greps the table during an incident.
+
+The first implementation neutralized only the first `://` and the first `.`. That
+is wrong in a way worth recording: a destination whose path contains another URL
+— which is most open-redirect payloads — kept a live `https://` inside it, so the
+record of a refusal contained a followable link to the thing that was refused.
+Every colon and every dot are neutralized now, which also makes the output
+checkable by a property rather than by reading it: no `://` survives anywhere.
+
+### The environment list is reconciled, not merely inserted
+
+`LINKCTRL_DESTINATION_BLOCKLIST` seeds `blocked_destinations` at boot with
+`source = 'env'`, and the same boot deletes `env` rows the variable no longer
+names. Without the delete the variable would be a one-way ratchet whose entries
+could only be undone with SQL. The delete is scoped to `source = 'env'` and
+touches nothing the review queue added — a restart quietly reversing a moderation
+decision is the one failure this path must not have.
+
+Seeding is fatal at boot and runs before the listener opens. An instance that
+came up with a stale blocklist is one whose refusals do not match its
+configuration, and it is better not to start than to be quietly wrong about what
+it refuses.
+
+### Reason codes changed shape, and that is a breaking change
+
+Codes are now `<tier>.<rule>`, so one string answers both questions a caller has:
+how sure was the refusal, and what did it match. `private_address` became
+`unappealable.private_address`; the old `host_blocked` became
+`low_confidence.operator_blocklist`. A client branching on the old codes needs
+updating, and CHANGELOG.md and usage.md both say so. The codes for malformed
+input — `required`, `too_long`, `invalid`, `no_scheme`, `no_host` — keep their
+names, because they are typos rather than refusals by a tier, and recording them
+as blocked attempts would bury the ones worth reading.
+
+### No permission was added, and D18 was not consulted
+
+The phase's inherited rule says a milestone records which limb of D18 its new
+permission matched, or that it matched neither. M30 adds none, so there is no
+limb to name — and that is a decision rather than an omission. The list has no
+API: it is read on the management path, fed from the environment at boot, and
+otherwise changed by the instance owner through M31's review queue, which brings
+its own permission with the surface that needs it. Seeding one now would grant
+something nothing can yet exercise.
+
+Nor is there a UI. The rule that every UI feature has API support is not engaged,
+because there is no feature on either surface — blocking is a refusal inside
+operations that already exist. What did change on the API is the vocabulary of
+`errors[].code`, and `api/openapi.yaml` now describes the `<tier>.<rule>` shape
+without enumerating the rules: later milestones add them, and a client must
+tolerate a code it has not seen.
+
+### What blocking does not touch
+
+The redirect tree is unchanged — the diff contains no edit to
+`internal/httpx/redirect.go` — and a link accepted before its host was listed
+keeps redirecting. Plan.md calls re-checking accepted links a separate job and a
+separate decision, and reading a blocklist on the hot path would contradict the
+rule every milestone in this phase inherits. The test that holds this was
+sabotaged by temporarily making the redirect handler consult the list, confirmed
+red, and the handler restored by counter-edit.
+
+---
+
+## 2026-08-01 — M30, the owner signs off on two lists and one withdrawal
+
+[m30.md](phase-details/m30.md)'s Risks section required owner sign-off on the
+embedded list's contents. Three things were put, and the answers are recorded
+here before they are acted on rather than after.
+
+### The high-confidence list is approved as proposed
+
+Seven entries, unchanged: `metadata.google.internal`, `metadata.goog`,
+`metadata`, `instance-data.ec2.internal`, `instance-data`,
+`kubernetes.default.svc`, `kubernetes.default.svc.cluster.local`.
+
+What makes them belong in a tier that costs a rebuild to overrule is that every
+one is a **structural** claim rather than a reputation claim. "This name is a
+cloud metadata service" stays true for years; "this host is malicious" is true
+this week. The link-local *address* is already unappealable, so these entries
+add only the *name*, which an address check cannot see, and removing one would
+not make the corresponding address acceptable.
+
+Reputation entries were offered and declined. Mixing the two kinds in one file
+is the failure mode: a later editor cannot tell which entries are facts about
+infrastructure and which are judgements about a third party, and every
+correction to the latter costs a release. That data belongs to
+[M31](phase-details/m31.md)'s queue and [M32](phase-details/m32.md)'s opt-in
+feeds, which is where the plan already put it.
+
+### Removing `LINKCTRL_DESTINATION_BLOCK_PRIVATE_IPS` is confirmed
+
+Phase 1 shipped it, documented it, and defended it with a test whose comment
+argued a self-hoster pointing links at an intranet is a legitimate
+configuration. It is gone, and the owner confirmed that knowingly rather than
+having it removed as a side effect of a bullet.
+
+The bullet is unambiguous — *no configuration, list entry, or future review path
+can accept a metadata or private address* — and a switch is a configuration. The
+tier is named unappealable; a tier with an off switch in `.env` is not that, and
+the whole reason the tiers exist is that the party Phase 1's refusals protect is
+the visitor, who never sees the operator's environment file.
+
+What survives is more than it sounds. The refusal is on **literal addresses**,
+not names, so `http://intranet.corp/thing` is still accepted when it resolves
+into RFC 1918 space; what is refused is writing `http://10.0.0.5/thing` into a
+link. The narrowed variant — a switch re-admitting RFC 1918 but never
+link-local — was offered and declined, because "unappealable except these" is a
+nuance that erodes.
+
+Operators are not left guessing: the variable went into `config.Removed`, so a
+stale line in an existing `.env` produces a startup warning naming what happened,
+and never a refusal to boot.
+
+### D39 — the shortener list is runtime data, not compiled
+
+The one thing that changed. `internal/link/shortener_hosts.txt` moves out of the
+binary and into the `blocked_destinations` table as its own source, editable
+without a rebuild.
+
+The distinction it makes explicit is the one the tiers are built on. The embedded
+file is compiled because its contents are structural and almost never change; a
+list of URL shorteners is neither — new ones appear constantly, and a compiled
+list of them is stale in exactly the way the high-confidence tier is designed not
+to be. Being on it was never an accusation anyway: it raises a *low-confidence*
+flag, which the owner may overrule from the review queue, so compiling it in
+imposed a release cycle on data that carries no authority.
+
+The cost, named because it is the honest objection: one curated list is now
+compiled and one is not, which reads as an inconsistency until you notice the
+rule underneath — a list is compiled when overruling it *should* be hard. That
+is the whole tier system restated at the level of where a file lives.
+
+---
+
+## 2026-08-01 — M30, seeding the list D39 moved out of the binary
+
+D39 said where the shortener hosts live and left how they get there to the
+build. That is the whole of this entry: the mechanism, and the two candidates
+that lost, because a seed is the kind of choice that looks like plumbing and
+decides whether the decision above it actually holds.
+
+### Seeded by the migration that creates the table
+
+The nineteen hosts are an `INSERT` at the bottom of
+`01500_destination_blocking.sql`, `source = 'shortener'`.
+
+The property being bought is that **a migration runs once and never asserts
+those rows again**. An owner who deletes `bit.ly` has deleted it: no restart and
+no rebuild brings it back, which is exactly what D39 asked for and what the old
+`//go:embed` could not give.
+
+Data seeded by migration is already how this repository ships rows the product
+needs — `00700_seed.sql` for roles and permissions, `00800` and `00900` and
+`01300` for permissions added later — so this is the established shape rather
+than a new one.
+
+### The two that lost
+
+**Reconcile from an embedded file at boot**, the way
+`LINKCTRL_DESTINATION_BLOCKLIST` is reconciled. This is the obvious answer and
+it is wrong, which is why it is worth recording: the file would still be in the
+binary, the rows would be rewritten at every start, and a deletion would survive
+exactly until the next restart. That is the release cycle D39 removed wearing a
+different hat, and it would have been worse than the compiled list — at least a
+rebuild is honest about being a rebuild.
+
+**Ship nothing and let operators fill it in.** Cheapest, and it quietly deletes
+a milestone bullet: shortener chains are one of the low-confidence heuristics
+`m30.md` names, and a heuristic with an empty list is a heuristic that never
+fires. A default nobody has to discover is the whole value of shipping a list.
+
+### Why the rows need a source of their own
+
+The reconciliation that keeps the environment list true deletes `source = 'env'`
+rows the variable no longer names. The environment names no shortener, ever, so
+a seeded row that borrowed `'env'` would be deleted on the first boot. Borrowing
+`'review'` fails the other way: M31's queue would show nineteen hosts as
+decisions somebody made, and nobody made them.
+
+So `'shortener'` is a third value, and the general rule it makes visible is that
+**every reconciliation in this program is scoped to exactly one source**. That
+is what the column is for. `SourceEnv`, `SourceReview` and `SourceShortener` are
+named constants in `internal/link` so the vocabulary has one home, and the
+column still has no `CHECK` constraint — M32's feeds will add to it, and the
+additive-DDL rule is why that must not be a migration rewriting a line.
+
+### Two consequences, named rather than discovered later
+
+**The match widened.** The compiled list matched exact hosts; a row in this
+table matches on a label boundary like every other row, so `bit.ly` now also
+covers `links.bit.ly`. One matching rule for the whole table beats a second one
+that has to be remembered, and this is the tier that is allowed to guess. The
+case that used to guard the heuristic —
+`sub.bit.ly.evil-looking-but-not-a-shortener.example` is not `bit.ly` — is
+asserted against the candidate set now, where the matching actually happens.
+
+**A later migration must add only hosts no earlier one seeded.** Re-asserting a
+host would undo the owner's deletion, and `ON CONFLICT DO NOTHING` cannot
+protect against that once the row is gone. The migration says so where somebody
+adding to it will read it.
+
+### What the refusal reports
+
+`MatchBlockedDestination` already returned the row's source, so the rule is
+picked from it: `'shortener'` reports `low_confidence.shortener_chain`, and
+everything else reports `low_confidence.operator_blocklist`. An unrecognized
+source takes the second branch deliberately — the column will grow values this
+release has not heard of, and minting a reason code out of the column's contents
+would put strings in a `422` that no documentation explains and no client was
+written against.
+
+The tier is stamped `TierLowConfidence` in both branches with no source able to
+say otherwise, which is the same confinement the heuristic type has: a shortener
+row that could refuse at high confidence would cost a rebuild to appeal, which
+is what D39 moved it out of.

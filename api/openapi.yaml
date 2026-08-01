@@ -1689,7 +1689,19 @@ components:
             required: [field, code, message]
             properties:
               field: { type: string }
-              code: { type: string }
+              code:
+                type: string
+                description: >-
+                  Machine-readable reason. Branch on this rather than on
+                  `message`. A destination refused by the blocking tiers uses
+                  `<tier>.<rule>` — `unappealable.*` can never be permitted on
+                  any instance, `high_confidence.*` needs the instance rebuilt
+                  with an edited list, and `low_confidence.*` can be overruled
+                  by the instance owner. Codes for malformed input (`required`,
+                  `too_long`, `invalid`, `no_scheme`, `no_host`) carry no
+                  prefix. Not enumerated: later milestones add rules, and a
+                  client must tolerate a code it has not seen.
+                example: unappealable.private_address
               message: { type: string }
 
     AccountCreated:

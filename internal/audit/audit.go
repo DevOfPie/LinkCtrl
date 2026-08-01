@@ -93,6 +93,22 @@ const (
 	// must not have.
 	ActionOrganizationCreated = "organization.created"
 	ActionOrganizationDeleted = "organization.deleted"
+
+	// Destination blocking (M30). The one action here that records something
+	// that did *not* happen: every other constant above names a change that was
+	// made, and this names a change that was refused.
+	//
+	// It is recorded anyway, and it is the reason blocking and the audit writer
+	// were planned as one pair of milestones. A refusal nobody can count is a
+	// policy nobody can tune: the metadata carries the tier and the rule, so
+	// "which heuristic is producing all the false positives" is a question the
+	// log can answer, and M31's review queue is built on the answer.
+	//
+	// The metadata's `url_defanged` is the attempted destination, stored inert
+	// rather than raw. Defanging happens at the write and not at display,
+	// because this table is read verbatim by the audit API and every consumer
+	// written after this one would otherwise have to remember.
+	ActionDestinationBlocked = "destination.blocked"
 )
 
 // Event is one thing that happened.

@@ -165,12 +165,22 @@ overrule them:
 | --- | --- | --- |
 | Unappealable | Private and metadata addresses, non-`http(s)` schemes | Nothing. Not a moderation decision. |
 | High confidence | Exact host matches from a curated embedded list | Editing the embedded list and rebuilding |
-| Low confidence | Heuristics: punycode homographs, credentials in the URL, shortener chains, freshly registered domains | The instance owner, from the review queue |
+| Low confidence | Heuristics: punycode homographs, credentials in the URL, shortener chains — *freshly registered domains excluded, D13* — and a runtime-mutable Postgres blocklist | The instance owner, from the review queue |
 
 Only part of this is new. `LINKCTRL_DESTINATION_BLOCKLIST` already refuses host
 suffixes an operator names, and it is the shape the low-confidence tier grows out
 of — what it lacks is a reason attached to the refusal, a record that the attempt
-happened, and any way to change it short of a restart.
+happened, and any way to change it short of a restart. M30 gave it all three: the
+variable now seeds a `blocked_destinations` table at boot and is reconciled
+against it, so the entries gained a tier, a reason code and an audit trail
+without the operator changing anything.
+
+M30 also took two override switches away, because a tier documented as having
+none must not have any. `LINKCTRL_DESTINATION_BLOCK_PRIVATE_IPS` is removed —
+private and metadata addresses are refused unconditionally — and
+`LINKCTRL_DESTINATION_SCHEMES` is confined at startup to a subset of
+`http,https`, so it can narrow the allowlist and never widen it. Freshly
+registered domains is the one listed heuristic that did not ship (D13).
 
 The middle tier costing a rebuild is the same mechanism `reserved.txt` and
 `profanity.txt` already use, and it is not upstream gatekeeping — an operator owns
@@ -532,7 +542,7 @@ once (M35).
 | [M33](docs/build-notes/phase-details/m33.md) | Deep-link path forwarding | — *(before M34)* | Deep-link path forwarding |
 | [M34](docs/build-notes/phase-details/m34.md) | Routing rules: conditions, first-match evaluation | M23 M30 M33 | Rules row · region/city decision |
 | [M35](docs/build-notes/phase-details/m35.md) | Gated links: password, signed, one-time, max-click | M34 *(ordering)* | Password/one-time/max-click/signed |
-| [M36](docs/build-notes/phase-details/m36.md) | Split testing: weighted, sequential, fallback, flags | M34 M35 | A/B testing row |
+| [M36](docs/build-notes/phase-details/m36.md) | Split testing: weighted, sequential, fallback, flags | M34 M35 M30 | A/B testing row |
 | [M37](docs/build-notes/phase-details/m37.md) | Dimension visualizations, rollup cadence first | — | Dimension visualizations · rollup cost |
 | [M38](docs/build-notes/phase-details/m38.md) | Folders: API and tree UI | — | Folders row |
 | [M39](docs/build-notes/phase-details/m39.md) | Per-domain ownership | M21 | Per-domain ownership |
@@ -601,6 +611,7 @@ The *why* for each is in decisions.md.
 | D36 | A member left with no organization | 2026-08-01 | **Deletion proceeds; belonging to nothing becomes a real state.** The account survives with no membership, is prompted on next sign-in to create an organization, and can take no action until it has one. Chosen over refusing (which makes a default instance's first organization effectively undeletable) and over deleting orphaned accounts (which makes one click destroy people, with no trash and an audit trail still naming them). Requires `ResolveWorkspaceForUser` to treat *no workspace* as an empty state rather than a broken instance, and requires first-organization creation to be reachable by an account holding no permissions — [M28.5](docs/build-notes/phase-details/m28.5.md) records which mechanism it used, against D16. |
 | D37 | An organization holding links | 2026-08-01 | **Refuses deletion, mirroring D32.** Archived links included. An org-level cascade through the same links would make D32 bypassable by deleting one level up. Accepted cost: with no bulk delete until 2+, emptying a large organization is a link at a time. |
 | D38 | Who may change the signup mode | 2026-08-01 | **The operator, and nobody else.** `LINKCTRL_SIGNUP_MODE` is the mode — no `settings` table, no `settings.write`, no runtime toggle in UI or API. [M29](docs/build-notes/phase-details/m29.md) built the toggle first and the build is what disqualified it: `settings.write` on the `owner` role does not name a small set, because registration provisions every self-registered account an organization it owns, so under an `open` ceiling every stranger who signed up could move an instance-wide setting. Binding it to a founding organization was refused as inventing an instance-level principal inside a signup milestone. The scope row moves from *switchable at runtime by an owner* to *configured by the operator*, and the runtime toggle is parked in *Not in Phase 2*. |
+| D39 | Where a curated list lives | 2026-08-01 | **A list is compiled into the binary when overruling it *should* be hard, and is runtime data otherwise.** [M30](docs/build-notes/phase-details/m30.md)'s high-confidence host list stays embedded — its entries are structural claims about cloud metadata services and control planes that stay true for years. The shortener-host list moves into `blocked_destinations` as its own source: new shorteners appear constantly, and a match only raises a low-confidence flag the owner may overrule, so compiling it imposed a release cycle on data carrying no authority. |
 
 ### Not in Phase 2
 

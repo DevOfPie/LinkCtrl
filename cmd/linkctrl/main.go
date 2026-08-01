@@ -424,11 +424,13 @@ func run(cfg config.Config, _ io.Writer) error {
 	teamSvc := team.NewService(pools.App, team.Config{Audit: auditSvc, Log: log})
 
 	linkSvc := link.NewService(pools.App, link.Config{
+		// The unappealable tier is not configured here and cannot be: private
+		// and metadata addresses are refused unconditionally, and the scheme
+		// list is confined by config validation to a subset of http,https. What
+		// remains is a length bound.
 		Policy: link.DestinationPolicy{
-			Schemes:             cfg.Alias.DestSchemes,
-			MaxLength:           cfg.Alias.DestMaxLength,
-			BlockPrivateIPs:     cfg.Alias.DestBlockPrivateIPs,
-			BlockedHostSuffixes: cfg.Alias.DestBlocklist,
+			Schemes:   cfg.Alias.DestSchemes,
+			MaxLength: cfg.Alias.DestMaxLength,
 		},
 		Aliases: alias.Policy{
 			ReservedExtra: cfg.Alias.ReservedExtra,
@@ -455,6 +457,18 @@ func run(cfg config.Config, _ io.Writer) error {
 		Log:       log,
 	})
 	rootRedirect.Load = linkSvc.LoadRootRedirect
+
+	// LINKCTRL_DESTINATION_BLOCKLIST becomes rows, once per boot.
+	//
+	// Before the listener opens, because a link created in the window between
+	// accepting requests and reconciling the list is a link the operator's own
+	// blocklist did not see. Fatal on failure for the same reason: an instance
+	// that came up with a stale blocklist is one whose refusals do not match its
+	// configuration, and it is better to not start than to be quietly wrong
+	// about what it refuses.
+	if err := linkSvc.SeedBlocklist(ctx, cfg.Alias.DestBlocklist); err != nil {
+		return fmt.Errorf("seed destination blocklist: %w", err)
+	}
 
 	// The other half of invalidation: this replica hearing what the others
 	// published. Off the request path entirely — it only ever deletes from the

@@ -58,6 +58,10 @@ func newAPI(t *testing.T) *apiFixture {
 	linkSvc := link.NewService(pool, link.Config{
 		Policy:  link.DefaultDestinationPolicy(),
 		BaseURL: cfg.BaseURL,
+		// Wired as main.go wires it, since M30. A blocked destination writes an
+		// audit record, and a fixture without a recorder would let the tests that
+		// read that record pass by never producing one.
+		Audit: audit.NewService(pool),
 	})
 
 	// Not started: the usage tracker's ticker is not wanted in tests, and the

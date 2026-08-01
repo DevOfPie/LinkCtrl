@@ -1,0 +1,78 @@
+# The high-confidence destination blocklist.
+#
+# The entries below were signed off by the instance owner unchanged (M30). What
+# they have in common is the reason they can live here at all, and it is the
+# test for anything added later: every one is a structural claim about
+# infrastructure, never a claim about somebody's reputation.
+#
+# One entry per line, lowercase. Blank lines and lines beginning with # are
+# ignored. Every entry is an EXACT host: this list refuses "metadata.goog" and
+# does not refuse "x.metadata.goog", and it has no wildcards and no suffixes.
+# That is a deliberate confinement, not a missing feature — see below.
+#
+# --- what this list is ------------------------------------------------------
+#
+# The middle of three tiers, and the only one whose contents are a judgement:
+#
+#   unappealable     Phase 1's SSRF refusals — private, loopback, link-local,
+#                    carrier-NAT and metadata ADDRESSES, and non-http(s)
+#                    schemes. No switch, no list, no review path.
+#   high confidence  this file. Overruled by editing it and rebuilding.
+#   low confidence   heuristics and the runtime Postgres blocklist. Overruled
+#                    by the instance owner from M31's review queue.
+#
+# Overruling this tier costs a rebuild on purpose. That is the same mechanism
+# reserved.txt and profanity.txt already use, and it is not upstream
+# gatekeeping: an operator owns their copy and can patch it. It makes the
+# dangerous override a deliberate, reviewable, version-controlled change
+# instead of a click at 2am.
+#
+# This is the only curated list the binary compiles in, and D39 is the rule
+# that decides: a list is compiled when overruling it SHOULD be hard, and is
+# runtime data otherwise. The known URL shorteners used to sit beside this file
+# and are now rows in blocked_destinations, seeded by migration 01500 — a
+# shortener host is neither a structural claim nor an authoritative one, so
+# compiling it charged a release cycle to data carrying no authority. Anything
+# proposed for this file has to answer that question first.
+#
+# The price is that a false positive here is expensive, which is exactly why
+# entries are confined to exact matches and why nothing computed ever lands
+# here. A heuristic cannot write into this file — the heuristic signature in
+# blocking.go carries no tier, so there is no value one could return that would
+# put it in this tier — because a heuristic that could promote itself would make
+# every false positive a rebuild, and the feature would become one operators
+# route around.
+#
+# --- why these entries, and not others --------------------------------------
+#
+# Everything below is a STRUCTURAL claim, never a reputation claim: these hosts
+# name infrastructure that no public short link has a legitimate reason to point
+# at, and the claim stays true for years.
+#
+# Reputation-flavoured contents — phishing hosts, malware distributors, hosts
+# somebody reported last week — are deliberately absent. A compiled-in list is
+# the wrong instrument for data that changes weekly: it would be stale on the
+# day it shipped and every correction would cost a release. That is what M31's
+# review queue and M32's opt-in feeds are for, and pretending otherwise here
+# would put the slowest tier in charge of the fastest-moving data.
+#
+# Note what this list does NOT do for the entries below: removing one does not
+# make the corresponding ADDRESS acceptable. 169.254.169.254 is refused by the
+# unappealable tier whatever this file says. What these entries add is the name,
+# which the address check cannot see — and they do not close DNS rebinding,
+# where a name resolves to something public at creation and to metadata when a
+# visitor follows the link. That limitation is Phase 1's and is recorded in
+# docs/SECURITY.md rather than pretended away here.
+
+# --- cloud and cluster metadata services, reachable by name -----------------
+# Every one of these resolves, from inside the network that runs it, to a
+# credential-bearing endpoint. A short link pointing at one is a request that
+# somebody else's browser fetch their own infrastructure's secrets. The
+# link-local address form is already unappealable; these are the names.
+metadata.google.internal
+metadata.goog
+metadata
+instance-data.ec2.internal
+instance-data
+kubernetes.default.svc
+kubernetes.default.svc.cluster.local

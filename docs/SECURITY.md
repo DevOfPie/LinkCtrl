@@ -89,11 +89,51 @@ interface.
 existing key, because the stored HMACs were computed with the old value. There is
 no dual-read window.
 
-**No malicious-destination blocking yet.** Nothing checks whether a destination is
-a phishing page. `LINKCTRL_DESTINATION_BLOCKLIST` refuses host suffixes an
-operator names, and that is the whole of it. On an instance where untrusted people
-can create links, assume they will. Tiered blocking with an appeal path is
-specified for Phase 2 in Plan.md.
+**Destination blocking is tiered, and one tier is deliberately absolute.** A
+destination is refused by one of three tiers, and the reason code in the 422 says
+which: `unappealable.*`, `high_confidence.*` or `low_confidence.*`.
+
+| Tier | What it refuses | Overruled by |
+| --- | --- | --- |
+| Unappealable | Non-`http(s)` schemes; private, loopback, link-local, carrier-NAT and cloud-metadata addresses | **Nothing.** No configuration, no list entry, no review |
+| High confidence | Exact hosts on the list compiled into the binary (`internal/link/blocked_hosts.txt`) | Editing that file and rebuilding |
+| Low confidence | Two heuristics — punycode homographs and credentials before the host — plus the `blocked_destinations` table, which holds what you listed in `LINKCTRL_DESTINATION_BLOCKLIST` and the known URL shorteners the schema ships with | The instance owner, with a `DELETE` |
+
+Only one of those lists is compiled in, and the rule is what it costs to be
+wrong: a list is compiled when overruling it *should* be hard. The embedded file
+makes structural claims about metadata services and control planes, which stay
+true for years. The shortener hosts are a `blocked_destinations` row each,
+seeded once by the migration that creates the table and never re-asserted, so
+removing one is permanent and needs neither a rebuild nor a restart.
+
+The unappealable tier has no off switch and that is the point: it protects the
+visitor whose browser would do the fetching, and the visitor is not the party who
+would be appealing. An operator who could approve `169.254.169.254` on request
+would have turned any review path into the SSRF the validator exists to prevent.
+
+The check runs on the management path — creating a link, editing one, and setting
+the domain's root redirect — and never on the redirect path. **Links accepted
+before a host was blocked keep redirecting**: re-checking what was already
+accepted is a separate job, and reading a blocklist on the hot path is not
+something this product does.
+
+**What tiered blocking still does not do.** Nothing decides whether a destination
+is a phishing page. The high-confidence list ships with infrastructure hosts, not
+reputation data, because a list that costs a rebuild to change is the wrong
+instrument for data that changes weekly. There is no owner review queue yet, so a
+low-confidence false positive currently needs a `blocked_destinations` row
+deleted by hand — including one of the seeded shorteners, if you run an instance
+where linking to one is ordinary. On an instance where untrusted people can
+create links, assume they will.
+
+**Blocked attempts are recorded, and the attempted URL is hostile input.** Every
+refusal writes a `destination.blocked` audit event carrying the tier, the rule,
+the surface and an `ip_prefix` — never an address. The attempted URL is stored as
+evidence in a defanged form (`https[:]//evil[.]example/...`, everything
+HTML-active percent-escaped), so nothing that renders the audit log can turn it
+into markup or into a link somebody follows by reflex. Anyone who can create a
+link can therefore add rows to `audit_logs`; `LINKCTRL_AUDIT_RETENTION_DAYS` and
+the size warning are what bound that.
 
 **No MFA. Addresses are verified only on the self-serve path.** Public
 registration confirms the address before the account exists — the form writes a

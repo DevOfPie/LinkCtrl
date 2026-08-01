@@ -172,10 +172,33 @@ answering.
 | `LINKCTRL_ALIAS_MIN_USER_LENGTH` | `3` | Floor for custom aliases. |
 | `LINKCTRL_ALIAS_RESERVED_EXTRA` | *(empty)* | Comma-separated words to refuse, merged with the built-in list. Additions extend it and cannot shrink it: every route the server registers is on the built-in list, and an alias shadowing one would take a working page out of service. |
 | `LINKCTRL_ALIAS_PROFANITY_FILTER` | `true` | `false` switches off the built-in profanity list. Reserved words are unaffected — one is taste, the other is routing correctness. |
-| `LINKCTRL_DESTINATION_SCHEMES` | `http,https` | Allowlist. Validation refuses anything else, so `javascript:`, `data:` and whatever the next browser ships are excluded by default rather than by blocklist. |
+| `LINKCTRL_DESTINATION_SCHEMES` | `http,https` | Allowlist. It may **narrow** the built-in pair and may never widen it: naming anything other than `http` or `https` is refused at startup. `javascript:`, `data:` and whatever the next browser ships are excluded by default rather than by blocklist, and there is no setting that adds one back. Set it to `https` alone if you want TLS-only destinations. |
 | `LINKCTRL_DESTINATION_MAX_LENGTH` | `2048` | |
-| `LINKCTRL_DESTINATION_BLOCK_PRIVATE_IPS` | `true` | Refuses private, loopback, link-local, carrier-NAT and cloud-metadata addresses. Turning this off lets a short link point at `169.254.169.254`, which makes the shortener a tool for having someone else's browser probe their own network. |
-| `LINKCTRL_DESTINATION_BLOCKLIST` | *(empty)* | Comma-separated host suffixes to refuse. |
+| `LINKCTRL_DESTINATION_BLOCKLIST` | *(empty)* | Comma-separated hosts to refuse, matched on a label boundary — `evil.example` also refuses `login.evil.example` and does not refuse `notevil.example`. Since 0.2.0 these seed the runtime blocklist table at every boot rather than being held in memory: entries you remove from this variable are retired on the next restart, and rows from any other source are never touched by it. |
+
+The `blocked_destinations` table this variable feeds also arrives with about
+twenty known URL-shortener hosts, seeded by the migration that creates it and
+marked `source = 'shortener'`. They are there because a short link pointing at
+another short link hides the real destination from everyone in the chain; the
+refusal is low confidence and appealable. There is no variable for them and none
+is planned — the row *is* the setting:
+
+```sql
+DELETE FROM blocked_destinations WHERE host = 'bit.ly';
+```
+
+That is permanent. Nothing re-asserts those rows, so a restart does not bring
+one back, and no rebuild is involved either way. Adding a shortener the list
+does not know about is the same statement with `INSERT`.
+
+`LINKCTRL_DESTINATION_BLOCK_PRIVATE_IPS` **was removed in 0.2.0.** Private,
+loopback, link-local, carrier-NAT and cloud-metadata addresses are now refused
+unconditionally, because that refusal protects the visitor whose browser would do
+the fetching and they are not the party who was turning it off. A stale line in
+your `.env` is reported at startup and otherwise ignored. To point links at an
+intranet, give the host a name that resolves there — hostnames are not checked
+against these ranges, and that limitation is
+[documented](SECURITY.md), not a loophole to rely on.
 
 ## Authentication
 

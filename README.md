@@ -163,6 +163,17 @@ Known limitations and deferred work, so nobody discovers them in production:
   close to a location history.
 - **No folders, no custom domains, no QR codes, and no password/one-time
   links.** The tables exist; the features are Phase 2.
+- **Hostile destinations are refused in tiers, and only one tier is absolute.**
+  Non-`http(s)` schemes and private, loopback, link-local, carrier-NAT and
+  cloud-metadata addresses are refused with no way to switch it off. Above that
+  sit a small curated list compiled into the binary and a runtime blocklist —
+  the hosts you list, the known URL shorteners the schema ships with, and two
+  heuristics for punycode homographs and credentials before the host — which
+  will sometimes be wrong. **There is no owner review queue yet**, so overruling
+  a low-confidence refusal currently means deleting a `blocked_destinations` row
+  by hand, and nothing decides whether a destination is a phishing page.
+  Blocking runs when a link is created or edited, never on the redirect path: a
+  link accepted before its host was blocked keeps working.
 - **Open sign-ups have no CAPTCHA.** Email confirmation before the account
   exists, and the shared sign-in rate limit, are the whole defence. On a public
   instance that is the largest abuse surface there is, which is why the shipped

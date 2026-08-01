@@ -22,6 +22,64 @@ migrations run at boot.
 
 ### Added
 
+- **A hostile destination is refused before a link is made, in three tiers that
+  differ in what it costs to overrule them.** A refusal's `422` carries a reason
+  code naming both — `unappealable.private_address`,
+  `high_confidence.embedded_host`, `low_confidence.punycode_homograph` — so a
+  caller can tell "this will never be allowed" from "ask the instance owner".
+  Non-`http(s)` schemes and private, loopback, link-local, carrier-NAT and
+  cloud-metadata addresses are the unappealable tier and have no off switch of
+  any kind. A curated list compiled into the binary is the middle tier; changing
+  it costs a rebuild, on purpose. Heuristics and a `blocked_destinations` table
+  are the bottom tier, meant to be changed without one.
+- **Three low-confidence rules, all of them appealable.** A host spelled to
+  imitate another in punycode (`аpple.com` with a Cyrillic а), credentials before
+  the host (`https://paypal.com@evil.example/`), and a destination that is itself
+  a public short link. Each will sometimes be wrong, which is why they are the
+  tier the instance owner overrules. The first two are computed; the third is a
+  list of about twenty known shortener hosts that the schema seeds into
+  `blocked_destinations`, so **removing one is a `DELETE` and not a rebuild**,
+  and it stays removed.
+- **The check runs everywhere a destination is written**: creating a link,
+  editing one, and setting the link domain's root redirect. It does **not** run
+  on the redirect path — a link accepted before its host was listed keeps
+  working, because re-checking accepted links is a separate job and reading a
+  blocklist on the hot path is not something this product does.
+- **Every refusal is in the audit log**, as `destination.blocked`, with the tier,
+  the rule, which surface it came from, an `ip_prefix` — never an address — and
+  the attempted URL kept as evidence. That URL is stored defanged
+  (`https[:]//evil[.]example/...`, anything HTML-active percent-escaped), so
+  nothing that displays the log can render it as markup or as a link somebody
+  clicks. Note that anyone who can create a link can now add audit rows;
+  `LINKCTRL_AUDIT_RETENTION_DAYS` is what bounds that.
+
+### Changed
+
+- **`LINKCTRL_DESTINATION_BLOCKLIST` now seeds a database table** instead of
+  being held in memory. It keeps working and still matches on a label boundary.
+  What changed is that its entries gained a reason code and an audit trail, and
+  that they are *reconciled* at every boot: a host you remove from the variable
+  is retired on the next restart. Entries the instance owner adds directly are
+  never touched by that reconciliation.
+- **Destination validation error codes are now `<tier>.<rule>`.** `private_address`
+  became `unappealable.private_address`, and the old `host_blocked` became
+  `low_confidence.operator_blocklist`. **A client branching on these codes needs
+  updating.** Codes for malformed input — `required`, `too_long`, `invalid`,
+  `no_scheme`, `no_host` — are unchanged.
+- **`LINKCTRL_DESTINATION_SCHEMES` may only narrow the allowlist.** Naming
+  anything other than `http` or `https` is now refused at startup. Setting it to
+  `https` alone still works and is the reason the variable exists.
+
+### Removed
+
+- **`LINKCTRL_DESTINATION_BLOCK_PRIVATE_IPS`.** Private, loopback, link-local,
+  carrier-NAT and cloud-metadata addresses are refused unconditionally. The
+  variable was an off switch on a protection whose beneficiary is the visitor
+  whose browser would do the fetching, and the visitor was not the one turning it
+  off. A stale line in your `.env` is reported at startup and otherwise ignored.
+  **If you relied on it to point links at an intranet, use a hostname that
+  resolves there** — hostnames are not checked against these ranges.
+
 - **Anybody can sign themselves up, if the operator switches it on.** There is a
   `/signup` page, and `POST /api/v1/auth/register` honours the same setting.
   `LINKCTRL_SIGNUP_MODE` chooses between closed, invitation-only and open, and it

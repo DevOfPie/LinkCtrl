@@ -141,14 +141,22 @@ type RedirectConfig struct {
 }
 
 type AliasConfig struct {
-	Length              int      `env:"ALIAS_LENGTH" envDefault:"7"`
-	MinUserLength       int      `env:"ALIAS_MIN_USER_LENGTH" envDefault:"3"`
-	ReservedExtra       []string `env:"ALIAS_RESERVED_EXTRA" envSeparator:","`
-	ProfanityFilter     bool     `env:"ALIAS_PROFANITY_FILTER" envDefault:"true"`
-	DestSchemes         []string `env:"DESTINATION_SCHEMES" envSeparator:"," envDefault:"http,https"`
-	DestMaxLength       int      `env:"DESTINATION_MAX_LENGTH" envDefault:"2048"`
-	DestBlockPrivateIPs bool     `env:"DESTINATION_BLOCK_PRIVATE_IPS" envDefault:"true"`
-	DestBlocklist       []string `env:"DESTINATION_BLOCKLIST" envSeparator:","`
+	Length          int      `env:"ALIAS_LENGTH" envDefault:"7"`
+	MinUserLength   int      `env:"ALIAS_MIN_USER_LENGTH" envDefault:"3"`
+	ReservedExtra   []string `env:"ALIAS_RESERVED_EXTRA" envSeparator:","`
+	ProfanityFilter bool     `env:"ALIAS_PROFANITY_FILTER" envDefault:"true"`
+	// DestSchemes may narrow the scheme allowlist and may never widen it:
+	// Validate refuses anything outside {http, https}. Non-http(s) schemes are
+	// the unappealable tier (M30), and a variable that could add "javascript"
+	// back would be an override switch on a tier documented as having none.
+	DestSchemes   []string `env:"DESTINATION_SCHEMES" envSeparator:"," envDefault:"http,https"`
+	DestMaxLength int      `env:"DESTINATION_MAX_LENGTH" envDefault:"2048"`
+
+	// DestBlocklist is the operator's own host list. Since M30 it seeds the
+	// runtime Postgres blocklist at boot rather than being consulted in memory,
+	// and it is reconciled on every boot — an entry removed from here is
+	// retired, and nothing the owner added through review is touched.
+	DestBlocklist []string `env:"DESTINATION_BLOCKLIST" envSeparator:","`
 }
 
 type SignupMode string
@@ -383,6 +391,12 @@ var Removed = map[string]string{
 		"period the purge window de-identifies against",
 	"BOT_FILTER_ENABLED": "bots are always classified and recorded; headline " +
 		"figures exclude them in the queries instead",
+	"DESTINATION_BLOCK_PRIVATE_IPS": "private, loopback, link-local, carrier-NAT " +
+		"and cloud-metadata addresses are refused unconditionally since M30. It " +
+		"was an off switch on the one tier that must not have one: the person it " +
+		"protects is the visitor whose browser would do the fetching, and they " +
+		"are not the person who would be turning it off. Point links at an " +
+		"intranet with a hostname that resolves there, not with a literal address",
 }
 
 // RemovedInUse reports removed variables that are still set, ready to log.
@@ -672,6 +686,28 @@ func (c Config) Validate() error {
 		if v < 0 {
 			add("%s: must be 0 (no limit) or positive, got %d", name, v)
 		}
+	}
+
+	// The scheme allowlist may be narrowed and never widened. An operator who
+	// wants https-only destinations is making their instance stricter and is
+	// welcome to; an operator who adds "javascript" has re-opened the redirect
+	// XSS the allowlist exists to close, on behalf of visitors who never agreed
+	// to it. Refused at startup rather than at the first link, because a running
+	// instance that accepts javascript: URLs has already accepted some.
+	for _, s := range c.Alias.DestSchemes {
+		switch strings.ToLower(strings.TrimSpace(s)) {
+		case "http", "https":
+		case "":
+			add("DESTINATION_SCHEMES: contains an empty entry; " +
+				"check for a stray comma")
+		default:
+			add("DESTINATION_SCHEMES: %q cannot be permitted. The list may only "+
+				"narrow the built-in http,https — non-http(s) schemes are refused "+
+				"unappealably, and this variable is not a way around that", s)
+		}
+	}
+	if len(c.Alias.DestSchemes) == 0 {
+		add("DESTINATION_SCHEMES: must name at least one of http, https")
 	}
 
 	if c.Analytics.RetentionDays < 0 {

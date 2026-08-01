@@ -148,7 +148,7 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 		})
 	}
 
-	normalizedURL, err := ValidateDestination(in.URL, s.policy)
+	normalizedURL, err := s.checkDestination(ctx, actor, in.URL, surfaceLinkCreate)
 	if err != nil {
 		var ve domain.ValidationErrors
 		if errors.As(err, &ve) {
@@ -312,7 +312,7 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 	var errs domain.ValidationErrors
 	var normalizedURL string
 	if in.URL != nil {
-		normalizedURL, err = ValidateDestination(*in.URL, s.policy)
+		normalizedURL, err = s.checkDestination(ctx, actor, *in.URL, surfaceLinkUpdate)
 		if err != nil {
 			var ve domain.ValidationErrors
 			if errors.As(err, &ve) {

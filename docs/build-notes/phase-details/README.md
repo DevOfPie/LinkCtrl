@@ -34,7 +34,7 @@ milestone, is in [workflow.md](../workflow.md).
 | [M28](m28.md) | Team management, workspaces, org creation | M27 | done |
 | [M28.5](m28.5.md) | Organization deletion and tenancy teardown | M28 | done |
 | [M29](m29.md) | Self-serve signup, configured by the operator | M26 M27 | done |
-| [M30](m30.md) | Destination blocking: tiers and logging | M21 | not started |
+| [M30](m30.md) | Destination blocking: tiers and logging | M21 | done |
 | [M31](m31.md) | Blocked-attempt disputes and owner review | M30 M22 | not started |
 | [M32](m32.md) | Opt-in reputation and malware feeds | M30 M31 | not started |
 | [M32.5](m32.5.md) | Bot blocking, per domain and per link | — (before M33, M34) | not started |
@@ -42,7 +42,7 @@ milestone, is in [workflow.md](../workflow.md).
 | [M33](m33.md) | Deep-link path forwarding | — (before M34) | not started |
 | [M34](m34.md) | Routing rules: conditions, first-match evaluation | M23 M30 M33 | not started |
 | [M35](m35.md) | Gated links: password, signed, one-time, max-click | M34 (ordering) | not started |
-| [M36](m36.md) | Split testing: weighted, sequential, fallback, flags | M34 M35 | not started |
+| [M36](m36.md) | Split testing: weighted, sequential, fallback, flags | M34 M35 M30 | not started |
 | [M37](m37.md) | Dimension visualizations, rollup cadence first | — | not started |
 | [M38](m38.md) | Folders: API and tree UI | — | not started |
 | [M39](m39.md) | Per-domain ownership | M21 | not started |

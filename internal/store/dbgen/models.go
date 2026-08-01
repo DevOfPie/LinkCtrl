@@ -60,6 +60,14 @@ type AutomationRule struct {
 	UpdatedAt     time.Time
 }
 
+type BlockedDestination struct {
+	Host      string
+	Source    string
+	Reason    string
+	CreatedAt time.Time
+	CreatedBy *uuid.UUID
+}
+
 type Campaign struct {
 	ID          uuid.UUID
 	WorkspaceID uuid.UUID

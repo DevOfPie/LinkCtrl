@@ -276,7 +276,7 @@ Every failure is `application/problem+json`. Branch on `type`, never on prose:
   "detail": "One or more fields are invalid.",
   "instance": "/api/v1/links",
   "errors": [
-    { "field": "url", "code": "private_address",
+    { "field": "url", "code": "unappealable.private_address",
       "message": "destination must not be a private, loopback or link-local address" }
   ]
 }
@@ -294,6 +294,28 @@ Every failure is `application/problem+json`. Branch on `type`, never on prose:
 
 Unknown JSON fields are rejected rather than ignored: a misspelled field silently
 dropped means you believe you set something you did not.
+
+#### Refused destinations
+
+A destination refused by the blocking tiers carries a `code` of
+`<tier>.<rule>`, so one string says both how sure the refusal was and what it
+matched. **This changed in 0.2.0**: the codes were previously bare rules
+(`private_address`, `host_blocked`), and a client branching on them needs
+updating.
+
+| Code | Means | Can it be appealed |
+| --- | --- | --- |
+| `unappealable.scheme_not_allowed` | Not `http` or `https` | No |
+| `unappealable.private_address` | A private, loopback, link-local, carrier-NAT or cloud-metadata address, in any spelling a browser resolves | No |
+| `high_confidence.embedded_host` | An exact host on the list compiled into this build | Only by rebuilding the instance |
+| `low_confidence.operator_blocklist` | A host the operator listed, or a child of one | Yes, by the instance owner |
+| `low_confidence.punycode_homograph` | The host is spelled to imitate a different name | Yes |
+| `low_confidence.url_credentials` | Credentials before the host, which hide where the URL goes | Yes |
+| `low_confidence.shortener_chain` | The destination is itself a short link, on a host the instance ships as a known shortener, or a child of one | Yes |
+
+The codes that are not tiered — `required`, `too_long`, `invalid`, `no_scheme`,
+`no_host` — are unchanged. Those are malformed input rather than a refusal, and
+they are not recorded as blocked attempts.
 
 ### Redirect behaviour
 

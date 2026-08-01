@@ -74,15 +74,16 @@ func (s *Service) SetRootRedirect(ctx context.Context, actor *auth.Identity, raw
 
 	var stored *string
 	if trimmed := strings.TrimSpace(rawURL); trimmed != "" {
-		normalized, err := ValidateDestination(trimmed, s.policy)
+		// The same check as a link's, through the same door — which matters more
+		// here than anywhere. A root redirect that skipped the tiers would be a
+		// cleaner attack than the one they exist to prevent, because reaching it
+		// needs no link and no alias, only the bare domain. checkDestination
+		// reports against root_redirect_url rather than url, so the form
+		// highlights the box the operator typed in.
+		normalized, err := s.checkDestination(ctx, actor, trimmed, surfaceRootRedirect)
 		if err != nil {
 			var ve domain.ValidationErrors
 			if errors.As(err, &ve) {
-				// Reported against this field rather than "url", so the form
-				// highlights the box the operator typed in.
-				for i := range ve {
-					ve[i].Field = "root_redirect_url"
-				}
 				return nil, ve
 			}
 			return nil, err

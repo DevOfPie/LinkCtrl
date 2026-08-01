@@ -12,22 +12,33 @@ import (
 )
 
 // DestinationPolicy governs which URLs a link may point at.
+//
+// Note what is not here any more. This struct used to carry BlockPrivateIPs and
+// BlockedHostSuffixes, and M30 took both away for opposite reasons.
+//
+// BlockPrivateIPs was an override switch on the unappealable tier: setting it
+// false accepted 169.254.169.254, which is the SSRF this validator exists to
+// prevent, decided by an operator on behalf of visitors who never agreed to it.
+// The refusals below are now unconditional and there is no field through which
+// they could be turned off — asserted by TestUnappealableTierHasNoOverrideSwitch,
+// which walks this struct by reflection and fails when it grows a field.
+//
+// BlockedHostSuffixes left for the opposite reason: it was the low-confidence
+// tier before there was one, and it now lives in Postgres where the instance
+// owner can change it without a restart. LINKCTRL_DESTINATION_BLOCKLIST still
+// works and still means the same thing; it seeds those rows at boot.
 type DestinationPolicy struct {
-	// Schemes is the allowlist. Anything outside it is refused.
+	// Schemes is the allowlist. Anything outside it is refused. Config
+	// validation confines it to a subset of {http, https}, so it can narrow the
+	// unappealable tier and never widen it.
 	Schemes   []string
 	MaxLength int
-	// BlockPrivateIPs refuses literal addresses in private, loopback,
-	// link-local and unique-local ranges.
-	BlockPrivateIPs bool
-	// BlockedHostSuffixes refuses matching hosts, matched on label boundaries.
-	BlockedHostSuffixes []string
 }
 
 func DefaultDestinationPolicy() DestinationPolicy {
 	return DestinationPolicy{
-		Schemes:         []string{"http", "https"},
-		MaxLength:       2048,
-		BlockPrivateIPs: true,
+		Schemes:   []string{"http", "https"},
+		MaxLength: 2048,
 	}
 }
 
@@ -44,6 +55,12 @@ func DefaultDestinationPolicy() DestinationPolicy {
 // Defending against that requires resolving at redirect time on the hot path,
 // which cannot be afforded, or an egress policy outside this process. Recorded
 // in docs/build-notes/SECURITY.md rather than pretended away.
+//
+// This is the unappealable tier and only the unappealable tier. It is called
+// from exactly one place — Service.checkDestination — and that is enforced by
+// TestEveryDestinationSurfaceGoesThroughTheCheck rather than by discipline,
+// because a caller that reached this function directly would inherit the SSRF
+// refusals while silently skipping every tier above them.
 func ValidateDestination(raw string, p DestinationPolicy) (string, error) {
 	var errs domain.ValidationErrors
 
@@ -88,7 +105,7 @@ func ValidateDestination(raw string, p DestinationPolicy) (string, error) {
 	}
 	if !contains(p.Schemes, scheme) {
 		return "", append(errs, domain.FieldError{
-			Field: "url", Code: "scheme_not_allowed",
+			Field: "url", Code: TierUnappealable.Code(RuleSchemeForbidden),
 			Message: fmt.Sprintf("scheme %q is not allowed; use %s",
 				scheme, strings.Join(p.Schemes, " or ")),
 		})
@@ -120,53 +137,40 @@ func ValidateDestination(raw string, p DestinationPolicy) (string, error) {
 		u.Host = lowerHost
 	}
 
-	if p.BlockPrivateIPs {
-		addr, addrErr := netip.ParseAddr(lowerHost)
-		switch {
-		case addrErr == nil && isRestricted(addr):
-			return "", append(errs, domain.FieldError{
-				Field: "url", Code: "private_address",
-				Message: "destination must not be a private, loopback or link-local address",
-			})
-		case addrErr != nil && looksNumeric(lowerHost):
-			// A host that is not a parseable address but is not a hostname
-			// either. netip.ParseAddr accepts only dotted-quad IPv4 and rejects
-			// leading zeros, so 2130706433, 0177.0.0.1, 0x7f000001, 127.1 and
-			// 0xa9fea9fe all fail to parse — and skipping the check on a parse
-			// failure would wave every one of them through. Browsers use the
-			// WHATWG parser and resolve all of them, 0xa9fea9fe to the cloud
-			// metadata endpoint this check exists to keep visitors away from.
-			//
-			// Refused rather than canonicalized: no legitimate destination is
-			// written this way, so rejecting is both safer and clearer than
-			// reimplementing an alternate address grammar to block it.
-			return "", append(errs, domain.FieldError{
-				Field: "url", Code: "private_address",
-				Message: "destination host must be a hostname or a standard IP address",
-			})
-		}
-		// "localhost" is not an IP literal but resolves to loopback everywhere.
-		if lowerHost == "localhost" || strings.HasSuffix(lowerHost, ".localhost") {
-			return "", append(errs, domain.FieldError{
-				Field: "url", Code: "private_address",
-				Message: "destination must not point at localhost",
-			})
-		}
+	// Unconditional. There is no policy field, environment variable, list entry
+	// or review path that reaches this block, and adding one would be the whole
+	// of what M30 refuses: the party these refusals protect — a visitor whose
+	// browser would do the fetching — is not the party who would be appealing.
+	addr, addrErr := netip.ParseAddr(lowerHost)
+	switch {
+	case addrErr == nil && isRestricted(addr):
+		return "", append(errs, domain.FieldError{
+			Field: "url", Code: TierUnappealable.Code(RulePrivateAddress),
+			Message: "destination must not be a private, loopback or link-local address",
+		})
+	case addrErr != nil && looksNumeric(lowerHost):
+		// A host that is not a parseable address but is not a hostname
+		// either. netip.ParseAddr accepts only dotted-quad IPv4 and rejects
+		// leading zeros, so 2130706433, 0177.0.0.1, 0x7f000001, 127.1 and
+		// 0xa9fea9fe all fail to parse — and skipping the check on a parse
+		// failure would wave every one of them through. Browsers use the
+		// WHATWG parser and resolve all of them, 0xa9fea9fe to the cloud
+		// metadata endpoint this check exists to keep visitors away from.
+		//
+		// Refused rather than canonicalized: no legitimate destination is
+		// written this way, so rejecting is both safer and clearer than
+		// reimplementing an alternate address grammar to block it.
+		return "", append(errs, domain.FieldError{
+			Field: "url", Code: TierUnappealable.Code(RulePrivateAddress),
+			Message: "destination host must be a hostname or a standard IP address",
+		})
 	}
-
-	for _, suffix := range p.BlockedHostSuffixes {
-		suffix = strings.ToLower(strings.TrimSpace(suffix))
-		if suffix == "" {
-			continue
-		}
-		// Match on a label boundary, so blocking "evil.com" does not also
-		// block "notevil.com".
-		if lowerHost == suffix || strings.HasSuffix(lowerHost, "."+suffix) {
-			return "", append(errs, domain.FieldError{
-				Field: "url", Code: "host_blocked",
-				Message: fmt.Sprintf("destination host %q is not allowed", lowerHost),
-			})
-		}
+	// "localhost" is not an IP literal but resolves to loopback everywhere.
+	if lowerHost == "localhost" || strings.HasSuffix(lowerHost, ".localhost") {
+		return "", append(errs, domain.FieldError{
+			Field: "url", Code: TierUnappealable.Code(RulePrivateAddress),
+			Message: "destination must not point at localhost",
+		})
 	}
 
 	return u.String(), nil

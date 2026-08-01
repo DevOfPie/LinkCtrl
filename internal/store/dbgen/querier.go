@@ -160,6 +160,13 @@ type Querier interface {
 	// Reaper. Kept long enough to be visible in the key list after revocation, and
 	// long enough for the audit question above to be answerable.
 	DeleteRevokedAPIKeys(ctx context.Context) (int64, error)
+	// Retires environment entries the operator has since removed.
+	//
+	// Scoped to source = 'env' and nothing else. A restart must never delete what an
+	// owner decided in the review queue, nor the shortener hosts seeded by
+	// migration, which is the one way a boot-time reconciliation could quietly undo
+	// a decision somebody made.
+	DeleteStaleEnvBlockedDestinations(ctx context.Context, keep []string) (int64, error)
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
 	// A real delete, not a soft one, and that is the decision D32 guards.
 	//
@@ -526,6 +533,27 @@ type Querier interface {
 	// rather than a fresh timestamp, so "when did you first see this" survives a
 	// double click.
 	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (int64, error)
+	// The low-confidence destination blocklist (M30).
+	//
+	// Read on the management path only. The redirect tree never touches this table:
+	// blocking decides what may be stored, not what may be served, and putting a
+	// query here on the hot path would buy nothing a link that was refused at
+	// creation does not already have.
+	// Whether any of a host's label-boundary suffixes is on the list.
+	//
+	// The caller passes the full host and every parent of it — a.b.example becomes
+	// {a.b.example, b.example, example} — so the label-boundary rule is enforced by
+	// what is asked for rather than by a pattern match, and the whole question is
+	// one index probe. Longest first in the caller, and ORDER BY length here, so a
+	// specific entry wins over the parent it sits under and the reason an operator
+	// reads is the one they wrote for that host.
+	//
+	// The source comes back because it decides which rule the refusal reports: a
+	// seeded shortener says shortener_chain and everything else says
+	// operator_blocklist. One row rather than one query per source — a host that is
+	// both listed by the operator and a known shortener is one refusal, and the
+	// more specific entry is the longer one, which this already returns.
+	MatchBlockedDestination(ctx context.Context, candidates []string) (MatchBlockedDestinationRow, error)
 	// The same lookup without the lock, for rendering the redemption page.
 	//
 	// A GET must not take a row lock: the page is served to anybody holding the
@@ -737,6 +765,14 @@ type Querier interface {
 	// service made cannot be applied to a row in another tenant.
 	UpdateMembershipRole(ctx context.Context, arg UpdateMembershipRoleParams) (int64, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	// Writes one entry from LINKCTRL_DESTINATION_BLOCKLIST at boot.
+	//
+	// ON CONFLICT DO UPDATE rather than DO NOTHING: an operator who moves a host
+	// into their environment expects the environment to own it from then on, and a
+	// row left claiming it came from a review would send M31 looking for a review
+	// that never happened. created_at is left alone, because the entry is the same
+	// entry it was before the restart.
+	UpsertEnvBlockedDestination(ctx context.Context, arg UpsertEnvBlockedDestinationParams) error
 }
 
 var _ Querier = (*Queries)(nil)
