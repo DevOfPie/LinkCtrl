@@ -129,7 +129,7 @@ Then:
 | Tests | Unit and integration green under `-race` |
 | Generated code | If any `.sql` changed: `make sqlc` produces no diff |
 | OpenAPI | If any API surface changed: `make openapi` passes |
-| Docs | Plan.md reflects new truth; decisions.md has the *why* for anything non-obvious |
+| Docs | Plan.md reflects new truth; decisions.md has the *why* for anything non-obvious. **If the milestone changed what an operator or reader would observe**, `README.md` and `docs/SECURITY.md` say so too — a claim either file makes that the milestone just made false is a failing gate, not cleanup for the phase's documentation pass |
 | Links | Every relative link and anchor in tracked `.md` resolves |
 | Scope | **No more than one milestone per commit.** Never bundle two; splitting one across several is fine. Work smaller than a milestone — a process or workflow change — is not a milestone and commits on its own, as soon as it is complete. |
 

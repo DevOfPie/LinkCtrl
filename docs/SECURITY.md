@@ -43,7 +43,7 @@ Stated as claims, because each one is testable and several have tests naming the
 | Sessions | Server-side, opaque, in `__Host-` prefixed cookies — no `Domain` attribute, so the cookie is locked to the exact host that set it. Both an idle and an absolute TTL, enforced at read time so a shortened TTL takes effect immediately. |
 | Credential endpoints | Per-account lockout **and** per-address rate limiting, because one address guessing across a leaked list never trips a per-account counter, and many addresses attacking one account never trip a per-address one. |
 | API keys | Only an HMAC is stored; the token is shown once. Scopes are intersected with the holder's current role on every request, so demoting a user weakens their keys immediately. `apikeys.*`, `org.delete` and `audit.read` are **not delegable** — the first two because a key that can mint keys or delete the organization makes revoking a leaked one meaningless, the third because the audit log ties a network prefix to a named person. Reading it requires a signed-in session. |
-| Audit log | Administrative changes are recorded with the actor snapshotted at write time, so a record stays readable after the account is deleted, and with a network prefix rather than an address. Reading it needs `audit.read`, held by owners and admins. Retention is its own setting and defaults to keeping everything, so history is never deleted by an upgrade nobody configured. |
+| Audit log | An event that *is* recorded carries the actor snapshotted at write time, so it stays readable after the account is deleted, and a network prefix rather than an address. Reading needs `audit.read`, held by owners and admins, and not delegable to an API key. Retention is its own setting and defaults to keeping everything, so history is never deleted by an upgrade nobody configured. **Coverage is one event so far** — see *What is not defended*. |
 | Secrets | Configuration secrets are a type that refuses to print itself through `fmt`, `slog` or `json`. A config dump or a formatted panic cannot leak the database password, the API-key pepper or the SMTP password. |
 | Outbound mail | Plain text only — no HTML part, so no remote image that reports when a message was opened and no anchor text that disagrees with its link. Every interpolated value has its control and bidirectional-formatting characters removed before it reaches a template, so nothing a person typed can inject a header, forge a second message, or make an address render as one it is not. A relay that will not take STARTTLS is refused rather than downgraded to plaintext. |
 | Analytics | No IP address is stored in any column of `click_events`. A visitor is `HMAC(daily salt, ip ‖ user-agent ‖ workspace)` and the salts are deleted after two days, which is the de-identification step rather than housekeeping. Session and audit rows keep a prefix only: /24 for IPv4, /48 for IPv6. |
@@ -110,8 +110,12 @@ the only supported authentication mechanism; it is refused over an unencrypted
 connection, so the password is never sent in clear, but it is a reusable
 credential in the environment like any other.
 
-**The audit log has no behaviour.** The table is partitioned and maintained;
-nothing writes to it. Do not rely on it for forensics yet.
+**The audit log works, but almost nothing writes to it yet.** The writer, the
+read API, retention and the growth metric all exist. The only event recorded
+today is **changing a domain's root redirect**. Link creation and editing, key
+minting and revocation, and sign-in are *not* trailed — each arrives with the
+Phase 2 milestone that owns it. Do not treat a quiet audit log as evidence that
+nothing happened.
 
 **No malware scanning of destinations, no rate limit on redirect volume per
 link.** A popular link and a link being used for amplification look the same.
