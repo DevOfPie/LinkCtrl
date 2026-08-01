@@ -593,6 +593,26 @@ The *why* for each is in decisions.md.
   Webhook delivery rides Postgres (M42); the recorder comment is trued up in M45.
 - Sharing the 404-probe limiter across replicas — a network round trip on the 20ms
   path, and an optional dependency made load-bearing.
+- **Redis resilience beyond a bounded failure** — a circuit breaker that tracks
+  health across requests, and durable invalidation via an outbox or retry queue.
+  [M26.6](docs/build-notes/phase-details/m26.6.md) bounds the worst case, which
+  makes both unnecessary rather than merely unaffordable; a failed invalidation
+  still logs and still expires by TTL, and changing what it *means* is a
+  delivery-guarantee feature rather than a timeout fix.
+- **Notification severity, grouping and filtering** — [M22](docs/build-notes/phase-details/m22.md)'s
+  model has no severity column and nothing ranks kinds.
+  [M26.5](docs/build-notes/phase-details/m26.5.md)'s bell shows the most recent
+  unread for that reason. Adding the concept is a schema change and wants its own
+  milestone rather than riding on a layout one.
+- **Mobile navigation rework** — the header hides the signed-in address below
+  `sm` and will continue to. A responsive nav is larger than the header
+  milestone that would otherwise absorb it.
+- **Per-bot allowlists, and improving bot classification** —
+  [M32.5](docs/build-notes/phase-details/m32.5.md) blocks all-or-nothing on one
+  boolean. Letting an unfurler through while refusing a scraper needs a taxonomy
+  `analytics.Classify` does not have, and editing its marker list would silently
+  move every existing analytics figure at the same time. Both are separate
+  changes with their own false-positive arguments.
 - Storing region or city.
 - The cookies routing condition (D2), and the new-vs-returning analytics split (D12).
 - `links.status = 'disabled'` gaining a writer (D10).
