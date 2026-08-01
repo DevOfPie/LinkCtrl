@@ -74,6 +74,7 @@ file. Append a row when you append an entry.
 | [M27, amending the bullet that said a permission exists](#2026-08-01--m27-amending-the-bullet-that-said-a-permission-exists) | The bullet before and after; why `orgs.create` is M28's; what D6 actually attached to membership-only; how milestones absorb each other's work |
 | [M28, managing a member without inventing a second way to be one](#2026-08-01--m28-managing-a-member-without-inventing-a-second-way-to-be-one) | The two bounds and why both hold at once; the last-owner lock; D31 union, D32 and D34 guards; D33 delegability; D35 and the nav slot; the UUIDv7 slug collision |
 | [M28, the audit bullet that quietly required a feature](#2026-08-01--m28-the-audit-bullet-that-quietly-required-a-feature) | The bullet before and after; why this was assertion-level and not an amendment; M28.5's placement under planning.md; why a teardown milestone leads with refusals |
+| [M28.5, the two answers that had to precede the code](#2026-08-01--m285-the-two-answers-that-had-to-precede-the-code) | D36 belongs-to-nothing as a real state, and the `orgs.create` seam it opens; D37 links refuse an org deletion, mirroring D32; why the expensive answer won |
 
 ---
 
@@ -5253,3 +5254,60 @@ answered yet — what happens to a member whose *only* organization is being
 deleted. That question is written into the milestone as something to settle
 before code, the way M28's rank table was, because discovering it in review is
 how it becomes a privilege or availability bug.
+
+---
+
+## 2026-08-01 — M28.5, the two answers that had to precede the code
+
+D36 and D37, answered by the owner at M28.5's validation, before any of it was
+built — which is what the milestone file demanded of exactly these two.
+
+### D36 — deletion proceeds, and having no organization becomes a real state
+
+An organization is deleted even when a member has no other one. The account
+survives, holding no membership; on next sign-in it is prompted to create an
+organization; and until it has one, it can do nothing.
+
+This is the expensive answer and it was chosen over the two cheap ones. Refusing
+while anyone would be orphaned makes the first organization on a default
+instance effectively undeletable, because an owner cannot arrange other people's
+memberships for them. Deleting the orphaned accounts makes one click destroy
+people, with no trash to restore them from and an audit trail still naming them.
+
+What it costs is honest work rather than a bad outcome. `ResolveWorkspaceForUser`
+currently treats "no workspace" as a broken instance, not an empty one, and that
+assumption is load-bearing in the session path — the path [D31](../../Plan.md)
+deliberately left untouched during M28. Turning *belongs to nothing* into a state
+the product renders rather than an error it hits is most of this milestone.
+
+**The consequence that is easy to miss, and is therefore a bullet rather than a
+footnote.** An account with no membership holds no role, and therefore holds no
+permissions — including `orgs.create`, which [D16](../../Plan.md) grants through
+the `owner` role and which `POST /organizations` enforces
+(`internal/httpx/router.go:311`, `api_team.go:185`). So "prompted to create an
+organization" is not reachable by the account it is being offered to, as the tree
+stands. M28.5 has to make first-organization creation reachable from a
+zero-membership state and record how, against D16's rule that the permission is
+a grant and not a check on how an account was made. Reading a *membership count*
+is a check on present state rather than on provenance, which is the distinction
+D16 was drawing — but the milestone states which mechanism it used either way,
+because this is precisely the seam where a second authorization axis gets
+introduced by accident.
+
+### D37 — an organization holding links refuses deletion, mirroring D32
+
+[D32](../../Plan.md) refuses to delete a *workspace* holding any link, archived
+included. An organization-level deletion that cascaded through those same links
+would make D32 bypassable by deleting one level up, which is not a rule but a
+speed bump.
+
+The cost is real and is not hidden: there is no bulk delete — Plan.md places it
+in 2+ — so emptying a large organization is a link at a time, and an operator
+with hundreds of them has no practical path that does not involve SQL. That is
+the outcome guards exist to prevent, and it is accepted here on the grounds that
+the alternative is worse: a deletion that quietly removes link history the
+workspace-level guard was written to protect.
+
+It also means M28.5's refusals now nest rather than compete — links block their
+workspace, the last workspace blocks its own deletion (D34), and links block the
+organization outright.
