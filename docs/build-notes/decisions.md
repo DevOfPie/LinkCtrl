@@ -58,6 +58,8 @@ file. Append a row when you append an entry.
 | [Plan drift is allowed; silent plan drift is not](#2026-07-31--plan-drift-is-allowed-silent-plan-drift-is-not) | Facts a bullet gets wrong versus what a bullet asserts; why one is corrected and the other prompts; the three things an amendment entry carries; why step 3.4 needed the rule as much as step 1 |
 | [M24.5, amendment: eight pages were nine](#2026-07-31--m245-amendment-the-eight-pages-were-nine) | The backfilled record of the edit that rode in on 9bb315f — the bullet before, after, and the tree fact; why it was a fact and not an assertion |
 | [M32.5, refusing a client rather than a destination](#2026-07-31--m325-bot-blocking-and-why-it-is-not-in-the-blocking-cluster) | A third threat model, kept away from M30's two; why it lands before M33 and M34; the first decision on the redirect hot path; why the bypass was split off to Phase 3 |
+| [Documents nobody was asked about](#2026-07-31--the-gate-that-never-asked-about-readme) | Why four milestones drifted; why the gate was widened instead of M21 reopened; truing a baseline before installing a gate; two audit overclaims found on the way |
+| [M26.5, settling the header before four milestones fill it](#2026-07-31--m265-the-header-before-four-milestones-compete-for-it) | F6 and F7 as one milestone; why identity-scoped and organization-scoped controls separate; details/summary and what it costs; what is deliberately left out |
 
 ---
 
@@ -3813,3 +3815,130 @@ absent user agent as a bot. Those heuristics were built to bucket a statistic,
 and their false-positive rate has never been measured because nothing depended
 on it. Switching blocking on moves that unmeasured risk onto whoever chose it,
 which is the most honest arrangement available before a bypass exists.
+
+---
+
+## 2026-07-31 — The gate that never asked about README
+
+Prompted by the owner scheduling F5. No milestone number: this is a change to how
+the loop runs, plus the backlog that change exposed.
+
+### Four milestones, one cause
+
+F5 reported that `docs/SECURITY.md` and `README.md` both still said the audit log
+has no behaviour. Checking the class rather than the instance found more: of the
+seven milestones landed in Phase 2, M23, M24 and M24.5 had updated README, while
+M21, M22, M25 and M26 had not. Notifications, the workspace switcher and the
+mailer were absent from it entirely.
+
+The cause is not attention. workflow.md's *Before completing a commit* table has
+a Docs row naming Plan.md and decisions.md, and stopping there. README.md and
+docs/SECURITY.md appear only in M45's documentation-pass table — so for the whole
+phase, nothing asked about them at the one moment somebody had the context to
+answer. Three milestones updated README because their authors thought to; four
+did not, because nothing required it. That is a gate problem wearing a
+carelessness costume.
+
+### Why the gate was widened rather than M21 reopened
+
+F5's own conclusion was that this reopens M21, on the reasoning that the false
+sentence is about M21's subject. That reasoning does not survive reading
+`m21.md`: it enumerates the documents that milestone promised to update — the
+`partitions.go` comment and operations.md — and both were updated. Every bullet
+it carries is satisfied.
+
+Reopening it would put `in progress (reopened)` on work that is genuinely
+complete. That is the exact mirror of the failure reopening exists to prevent: a
+`done` row asserting something untrue is bad, and so is a reopened row asserting
+incompleteness that is not there. A milestone is not the right instrument for a
+defect in the rule that governs every milestone.
+
+The same test disposes of M22, M25 and M26. README never claimed they were
+absent — it simply never mentioned them. An omission is not a false claim, so
+none of them shipped a `done` row asserting anything wrong either.
+
+### Truing the baseline before installing the gate
+
+Both were done in one commit, deliberately. A gate installed over documents that
+are already wrong cannot distinguish "this commit kept them true" from "this
+commit left them as wrong as it found them", so the first milestone to run under
+the new rule would inherit an unreadable signal.
+
+### Two overclaims found on the way
+
+Correcting the audit sentences meant reading what the audit log actually does,
+which turned up something nobody had reported. `internal/audit` defines exactly
+one action — `domain.root_redirect_changed`. SECURITY.md's claims table said
+"administrative changes are recorded", and the README row first drafted to
+replace the false one repeated the same phrase.
+
+Both now name the coverage. A security document that overstates what it records
+is worse than one that admits it records nothing: it invites an operator to read
+a quiet log as evidence that nothing happened. m21.md's opening always said five
+later milestones would add the other events; the reader-facing documents were the
+ones implying they already had.
+
+---
+
+## 2026-07-31 — M26.5, the header before four milestones compete for it
+
+Owner-added scope, approved 2026-07-31, closing F6 and F7 together.
+
+### Why one milestone and not two
+
+They are separately reportable and were separately reported, but they are one
+edit. Both redesign the same strip of `layout.html`, and building them apart
+means touching the file every page renders twice for one visual outcome — with
+the second pass rebalancing whatever the first one settled. The findings stay two
+rows because approving one and not the other is a coherent thing for the owner to
+want; the work is one milestone because doing half of it well is not.
+
+### Why now, before M27
+
+The same argument that put M24.5 before the phase's UI-building run. The header
+carries five nav items, a switcher, an address and a sign-out button, and the
+milestones queued behind this one each add a dashboard surface: M28's team
+management, M31's review queue, M38's folder tree, M41's campaigns. Four
+milestones each choosing independently where their entry point goes produces four
+conventions. Settling it first produces one.
+
+It is also cheap now and expensive later in a specific way: every one of those
+milestones will have written tests asserting its own nav item, and moving the
+convention afterwards means editing all of them.
+
+### Identity-scoped and organization-scoped do not merge
+
+Account and Sign out go into the identity menu; the workspace switcher stays
+where M25 put it. The temptation is to sweep everything on the right-hand side
+into one menu, and it is wrong: which workspace you are acting in is a property
+of the request, changed often and by people who hold several, while Account and
+Sign out are things you do to yourself. Merging them would bury a control M25
+deliberately put in the chrome — a person changes workspace from wherever they
+are, not by opening a menu about themselves first.
+
+### `<details>`, and what it costs
+
+`ui` is stdlib-only and the CSP forbids inline handlers, so a menu is
+`<details>`/`<summary>` or it is JavaScript, and JavaScript would need an
+exemption this milestone is not worth. That buys keyboard operability and
+scripting-off correctness for free.
+
+It costs the ARIA menu pattern. `<details>` is a disclosure widget, not a
+`role="menu"`, and a screen-reader user gets disclosure semantics rather than
+menu semantics. That is a real difference and it is written into the milestone
+file's risks rather than left for somebody to find, because the alternative —
+faking menu roles on a disclosure widget — is worse than honestly being a
+disclosure widget.
+
+### What is left out, and why it is not a compromise
+
+The note asked for a dropdown of "high importance or recent" notifications. There
+is no severity in M22's model — no column, no kind ranking — so "high importance"
+cannot be implemented without inventing one. Adding a schema concept inside a
+layout milestone is how a milestone stops being reviewable, so the preview is the
+most recent unread and the milestone says that is what it is. Severity is
+available as its own future scope if the owner wants it.
+
+Mobile navigation is likewise out. The bar already hides the address below `sm`,
+and a responsive nav is a larger piece of work whose diff would swamp the two
+findings this closes.
