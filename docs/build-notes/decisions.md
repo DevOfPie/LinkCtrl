@@ -90,6 +90,7 @@ file. Append a row when you append an entry.
 | [Draining the queue, and the four rows that could not be verified](#2026-08-01--draining-the-queue-and-the-four-rows-that-could-not-be-verified) | Seven tasks to workflow-changes; why four defect reports did not become findings rows; the tooling gap blocking their verification; what a closure pointing at 2+ does and does not cover |
 | [Five answers, and the port that made a liar of one of them](#2026-08-01--five-answers-and-the-port-that-made-a-liar-of-one-of-them) | W15's diagnosis corrected — it was a misread port, not a stale credential; D41 and why M33.5 is the first legal slot after a review; the demo's coverage test and its tax; cross-workspace move to Phase 3; W13 approved without amending the no-delegation rule |
 | [M28 reopened, and four verdicts sent to be refuted](#2026-08-01--m28-reopened-and-four-verdicts-sent-to-be-refuted) | Two verdicts overturned and why; testing the mechanism instead of the affordance; the trigger correction a regression test would have missed; why the tests were green |
+| [Two rules the last run earned](#2026-08-01--two-rules-the-last-run-earned) | W17, why a review gets its own session and why the condition is not "a review is next"; how it coexists with context-is-not-a-stop-condition; W18 and what is exempt from seeding the demo |
 | [M28, the page field that shadowed the shell](#2026-08-01--m28-the-page-field-that-shadowed-the-shell) | Why the field was renamed rather than retyped; a structural test parsed from source instead of a list of types, and its two stated limits; why the regression tests say *in one organization*; the read-only member's role composition; the fixture that overwrote the page's own list |
 
 ---
@@ -7012,3 +7013,79 @@ resolve/list `deleted_at` asymmetry. They are open, unreviewed, and not this
 milestone's claim. F21 and F22 are in the same partial as the switcher fix and
 would have been cheap to take, which is exactly why it is worth recording that
 they were not.
+
+
+---
+
+## 2026-08-01 — Two rules the last run earned
+
+No milestone produced these. Both were asked for by the owner after a run that
+landed eleven milestones and then did a review badly, and both are cases of the
+run supplying its own evidence.
+
+### W17 — a review gets its own session
+
+The loop no longer enters an `X.9` review it did not start the session with. It
+stops, says the review is next, and asks for a fresh session.
+
+The condition is deliberately *this run has already landed a milestone*, not *a
+review is next*. Written the second way, the session started in order to do the
+review would stop on its own first move and the loop would deadlock politely,
+which is a worse failure than the one being fixed because it looks like
+obedience.
+
+It reads like a contradiction of the rule directly beneath it — *context is long,
+or running out* is explicitly **not** a stop condition — and it is not. That rule
+is about quantity and it stands: building continues until the phase ends, and
+this loop's most common historical failure is stopping early for reasons it
+invented. This one is about the kind of work. A review re-reads every milestone
+in its range against its own claims, in independent passes per dimension, and
+puts every candidate to something trying to refute it. It is the most
+context-hungry work in the project and the most quietly damaged by having less,
+because a thin review does not fail — it returns fewer findings and reads like
+good news about the code.
+
+[M32.9](phase-details/m32.9.md) is the evidence, and it is uncomfortable
+evidence because the milestone file predicted it in advance: *a Phase 2 pass
+returning single digits should be treated as a signal about the review, not a
+compliment to the code*. The review was reached at the end of a ten-milestone
+run, returned three findings, and had to record its own shortfall. Nothing in
+the loop said stop, so the loop did not.
+
+The adversarial verification that followed makes the same point from the other
+side. Four verdicts went to independent refuters and **two came back
+overturned** — both mine, both wrong in the same way, and neither caught by
+re-reading. Depth is not something an actor can assess about its own pass.
+
+### W18 — a visible feature extends the demo seeder
+
+A new inherited rule in
+[phase-details/README.md](phase-details/README.md#what-every-milestone-inherits),
+and a `Demo` row in workflow.md's commit gate pointing at it rather than
+restating it.
+
+The demo instance is what this project points people at, and it has shown links
+and clicks since Phase 1 seeded it. Eleven milestones of Phase 2 have landed —
+invitations, members, workspaces, organization teardown, disputes, destination
+blocking, feeds, bot blocking — and a visitor sees none of them, because a
+feature nobody seeds is a feature only reachable by building its state by hand.
+
+Scoped to *something somebody can see*, and the exclusion matters as much as the
+rule: a timeout bound, an invalidation path, a permission nobody exercises
+directly have nothing to look at, and demanding demo rows for them would be
+ceremony. [M26.6](phase-details/m26.6.md) is the shape that is exempt;
+[M27](phase-details/m27.md) is the shape that is not.
+
+Until [M33.5](phase-details/m33.5.md) lands, this is a rule kept by reading it —
+M33.5 is what makes it enforceable, with a coverage test that fails when a listed
+feature has no seeded rows. Writing the rule first is deliberate: M33 sits
+between here and there, and the alternative is a milestone that ships in the
+window where the obligation exists and nothing checks it.
+
+### What both have in common
+
+Each converts something that had to be noticed into something that is checked. A
+review's depth was previously guarded by whoever happened to be running it
+remembering that reviews want room; demo coverage was guarded by nobody at all.
+Neither survived contact with a long unattended run, which is the only real test
+a process rule gets.

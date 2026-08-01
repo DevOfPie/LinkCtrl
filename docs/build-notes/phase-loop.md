@@ -283,6 +283,7 @@ continue:
 | The same gap survived two workers | Same |
 | The owner said stop work | [Stop work](#stop-work) |
 | The owner asked to stop at the checkpoint, and 3.9 just finished | [Stopping at the checkpoint](#stopping-at-the-checkpoint) — the `Stop:` line in the note is what carries it |
+| The next milestone is an `X.9` review **and this run has already landed one** | [A review gets its own session](#a-review-gets-its-own-session) |
 
 **That table is exhaustive.** Landing a milestone is not an event; it is one
 iteration. The default after step 3 is step 1 again, and it takes a row above to
@@ -297,11 +298,11 @@ rather than left to judgement. None of them is a reason.
 | --- | --- |
 | Context is long, or running out | Keep the note true and carry on. Context is summarized automatically and the run continues; wrapping up early throws away a working run to avoid a problem that handles itself. |
 | A worker returned, and its milestone was accepted and pushed | That is one iteration ending, not the run. Spawn the next worker in the same turn. |
-| The next milestone is large, or touches many files | Start it. Step 2 is interruptible at any point, which is what the note is for. |
+| The next milestone is large, or touches many files | Start it. Step 2 is interruptible at any point, which is what the note is for. An `X.9` review is the one exception, and it is a [§4](#4-repeat-or-stop) row rather than a judgement about size. |
 | The next milestone needs a long job — k6, a reseed, a rebuild | Start it. A job being slow is not a job being risky. |
 | Two, or three, or five milestones have landed | The phase ends at its last row, not at a round number. |
 | It looks like a clean place to hand off | Handing off is the note's job, and the note is already written. A "clean boundary" is indistinguishable from the next iteration. |
-| The work so far deserves review | Land it and keep going. It is committed and pushed; the owner can read it whenever they like without the loop pausing. |
+| The work so far deserves review | Land it and keep going. It is committed and pushed; the owner can read it whenever they like without the loop pausing. This means somebody *reading* the work, not the `X.9` review milestone — that one is a scheduled row with its own stop condition. |
 
 Reporting mid-run is fine and costs nothing — say what landed, then start the
 next milestone in the same turn. What is not fine is ending the turn on a
@@ -324,7 +325,33 @@ release actions reach outside the repo — tagging, pushing a tag, opening the
 phase PR are each confirmed before they happen, and merging is the owner's
 alone.
 
----
+### A review gets its own session
+
+**The loop does not enter an `X.9` review it did not start the session with.**
+Reaching one after landing milestones is a [§4](#4-repeat-or-stop) stop: report
+where things stand, say the review is next, and ask the owner to start a fresh
+session for it.
+
+A fresh session that opens on a review runs it immediately. The condition is
+*this run has already landed a milestone*, not *a review is next* — otherwise
+the session started to do the review would stop on its own first move, and the
+loop would deadlock politely.
+
+This is **not** the context rule in the table below, and the difference is worth
+holding. That rule says a long context is never a reason to stop, and it stands:
+building continues until the phase ends. This one is about the *kind* of work.
+A review re-reads every milestone in its range against its own claims, across
+several independent dimensions, and puts each finding to something that tries to
+refute it. That is the most context-hungry work in the project, and it is the
+work most quietly damaged by having less — a shallow review does not fail, it
+returns fewer findings and reads like good news.
+
+It is written down because it already happened. [M32.9](phase-details/m32.9.md)
+was reached at the end of a run that had landed ten milestones, produced three
+findings, and had to record in its own decisions entry that a single-digit pass
+is a signal about the review rather than a compliment to the code. The milestone
+file had said exactly that in advance. The loop ran the review anyway, because
+nothing told it not to.
 
 ## Stop work
 

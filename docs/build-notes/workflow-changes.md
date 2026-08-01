@@ -54,6 +54,8 @@ without knowing what to grep for.
 
 | # | Change | Commit | Entry |
 | --- | --- | --- | --- |
+| W17 | The loop stops rather than entering an `X.9` review it did not start the session with, and asks for a fresh one | *(this commit)* | [Two rules the last run earned](decisions.md#2026-08-01--two-rules-the-last-run-earned) |
+| W18 | A milestone that adds a visible feature extends the demo seeder — an inherited rule, and a row in the commit gate | *(this commit)* | [Two rules the last run earned](decisions.md#2026-08-01--two-rules-the-last-run-earned) |
 | W15 | [dev-notes/instances.md](../dev-notes/instances.md) now records how to claim a freshly migrated instance through `/setup`, the test instance's current credential, and a warning that signing in against the wrong port fails as *the email or password is incorrect* | *(this commit)* | [Draining the queue](decisions.md#2026-08-01--draining-the-queue-and-the-four-rows-that-could-not-be-verified) and its correction |
 | W7 | Trackers gained a no-silent-removal rule, upcoming-decisions gained a section for questions no milestone forces, and this file was created | *this commit* | [Nothing leaves a tracker silently](decisions.md) |
 | W6 | The per-commit Docs gate now names `README.md` and `docs/SECURITY.md`, not only Plan.md and decisions.md | `b068b73` | [The gate that never asked about README](decisions.md) |
