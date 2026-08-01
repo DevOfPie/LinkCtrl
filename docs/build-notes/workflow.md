@@ -32,7 +32,7 @@ the conflict is a bug — report it, do not pick.
 ```
 in spec      → fix now, inside the current milestone
 out of spec  → DO NOT FIX
-               append one row to Plan.md → "Deferred findings"
+               append one row to deferred-findings.md
                continue the current milestone
 ```
 
@@ -59,6 +59,48 @@ Not a defect — defects follow the trigger above. Features follow
 [planning.md](planning.md): establish absence, decide the phase, place by
 number (`X.9` is reserved for scheduled reviews), write the five artifacts,
 verify. The owner decides scope; planning.md decides everything else.
+
+### Something is noticed, and now is not the time
+
+`/note` appends one line to `.queue.md` and returns. Capture decides nothing: it
+does not classify, does not read the tree, does not touch the milestone in
+flight. A line believed to block the current work is marked `blocking?` — the
+*orchestrator* judges that at the next step boundary, never the capturing actor
+and never a worker.
+
+`/process-queue` drains it, at a milestone boundary and nowhere else: classify
+what arrived unclassified, then verify every classification and **prompt on any
+dispute**, then route. Types are by what they change, not by how they were
+found:
+
+| Type | Is | Routes to |
+| --- | --- | --- |
+| **issue** | a change to existing function or design | [deferred-findings.md](deferred-findings.md), one row |
+| **feature** | an addition of new function or design | [planning.md](planning.md)'s five artifacts |
+| **task** | a change to workflow or process, not to the product | its own commit, per the scope gate |
+
+`.queue.md` is untracked and transient, for the reason `.current-task.md` is:
+appending to it mid-milestone must not dirty the tree that `make demo-update`
+and `make release-check` refuse to run on. It therefore survives nothing — no
+clone, no fresh checkout. A row that overwinters there is a row in the wrong
+file, and draining is what makes it durable.
+
+### A decision is coming, and the loop has not reached it yet
+
+`/preview-decisions` reads ahead: it runs [step 1](phase-loop.md#1-validate)'s
+*decisions cover it* check across the milestones not yet built and writes what
+it finds to [upcoming-decisions.md](upcoming-decisions.md), unanswered. Answering
+one there is worth exactly what answering it in the loop is worth, and costs the
+loop no stall.
+
+One direction only. An entry leaves that file when it is answered, and the answer
+is appended to [decisions.md](decisions.md) with its `D` number on the date it is
+*used*, noting the date it was given. Upcoming-decisions is never where a
+decision lives; it is where a question waits.
+
+Each entry records what it assumes about a tree that is not built yet.
+Validation re-checks those assumptions when it reaches the milestone, and a false
+one re-opens the question rather than inheriting a stale answer.
 
 ### The phase is being worked
 
@@ -89,7 +131,7 @@ Then:
 | OpenAPI | If any API surface changed: `make openapi` passes |
 | Docs | Plan.md reflects new truth; decisions.md has the *why* for anything non-obvious |
 | Links | Every relative link and anchor in tracked `.md` resolves |
-| Scope | **One milestone per commit, maximum.** Never bundle two. Splitting one across several is fine. |
+| Scope | **No more than one milestone per commit.** Never bundle two; splitting one across several is fine. Work smaller than a milestone — a process or workflow change — is not a milestone and commits on its own, as soon as it is complete. |
 
 Commit messages are long prose explaining *why*, not what. The diff shows what.
 
@@ -147,6 +189,8 @@ phase touched.
 | `CHANGELOG.md` | Entry for what shipped, with its limitations |
 | `docs/*.md` | Configuration, usage, operations, deployment, CLI, releasing — every documented behaviour still behaves that way |
 | `docs/build-notes/decisions.md` | Append-only. Never edit an entry; a later entry corrects an earlier one |
+| `docs/build-notes/upcoming-decisions.md` | Answered entries removed, their answers in decisions.md with `D` numbers; entries for milestones now built are gone |
+| `docs/build-notes/doc-cost.md` | Regenerated (`make doc-cost`), so the phase's recurring read cost is on record and its growth is in the diff |
 | `docs/SECURITY.md` | New defences, new gaps, new operator responsibilities |
 | `docs/build-notes/workflow.md` | This file. Rules learned this phase |
 | `docs/build-notes/phase-loop.md` | The loop that ran this phase, and where it needed a human anyway |
@@ -183,6 +227,15 @@ and status in the decision log are both wrong.
 would reasonably want to decide. Proceed without asking for reversible work that
 follows from the current milestone.
 
+**Every decision prompt carries options, costs, and a recommendation.** Each
+option says what it buys *and* what it costs. The recommended one leads, marked,
+and states its own con — a recommendation from the actor that will also do the
+work drifts toward whatever is cheapest to build, and naming that cost is what
+holds it honest. Name the default too: what happens if the answer is "you
+decide", so nobody has to re-derive the choice in order to skip it. If nothing
+can be recommended, say why. Omitting the recommendation is a thing to justify,
+not a thing to leave out quietly.
+
 ---
 
 ## Quick reference
@@ -197,6 +250,7 @@ make rebuild            # test instance from nothing, migrated
 make down               # stop and remove volumes
 make instances          # both instances, and whether they are up
 make demo-update        # refresh the demo — after a milestone, not during one
+make doc-cost           # what the always-read docs cost, predicted vs realized
 ```
 
 Targets act on the **test** instance unless given `INSTANCE=demo`. Destructive

@@ -51,6 +51,7 @@ file. Append a row when you append an entry.
 | [The loop splits in two](#2026-07-31--the-loop-splits-into-an-orchestrator-and-workers) | Premature stopping as a context symptom; why the builder does not commit its own work; the seam at 3.3/3.4; what the split costs |
 | [M24.6, and a test that could not see the defect](#2026-07-31--m246-and-a-test-that-could-not-see-the-defect) | The unlayered-`:root` cascade bug; why the token scan missed it; verifying mechanisms instead of outcomes; why a new milestone rather than reopening M24.5 |
 | [M24.6 withdrawn; M24.5 reopened](#2026-07-31--m246-withdrawn-m245-reopened-and-appends-get-a-number) | Corrects the entry above: a `done` row may not assert something false; reopening as the rule; why every append now carries its milestone number |
+| [Capture, read-ahead, and cost](#2026-07-31--capture-read-ahead-and-measuring-what-the-contract-costs) | `/note` decides nothing; classification against the tree; upcoming-decisions holds questions only; predicted vs realized read cost; sub-milestone work may commit alone |
 
 ---
 
@@ -3151,3 +3152,161 @@ The useful consequence is that an unmarked decision entry becomes a positive
 claim — that no milestone produced it, that it is a process change or a phase
 close — rather than an absence nobody can interpret. This entry carries no
 number for exactly that reason.
+
+---
+
+## 2026-07-31 — Capture, read-ahead, and measuring what the contract costs
+
+No milestone produced this. The owner proposed seven process changes at once;
+four landed now and three were deferred to after M45, and this records why the
+split fell where it did.
+
+### The problem all four solve is the same one
+
+Every one of them is about something the loop cannot currently hold. A thought
+the owner has mid-milestone has nowhere to go that is not an interruption. A
+decision the loop will need in three milestones is invisible until the loop is
+standing still in front of it. And the documentation that makes the loop work is
+read into a context window on every task, growing, with nothing measuring it.
+
+Each gap was being paid for out of the owner's attention, which is the resource
+this process exists to conserve.
+
+### Capture decides nothing, and that is the whole design
+
+`/note` appends a line to an untracked `.queue.md` and returns. It does not
+classify, does not read the tree, does not interrupt the milestone in flight.
+
+The owner's original proposal had three commands — Add Issue, Add Task, Add
+Feature — and a rule that anything blocking be planned immediately. Both were
+narrowed, for the same reason. Classification at capture time asks for a
+judgement at the moment the owner has least attention, and it is the moment they
+have least information too: the tree is what decides whether a note is a defect
+or a feature request, and `/process-queue` has the tree in front of it while
+`/note` deliberately does not. So the type became optional, unclassified is the
+normal case, and a guess is explicitly forbidden — because once the context that
+made it is gone, an inferred type is indistinguishable from the owner's own.
+
+The three names survived as the taxonomy, in the owner's definitions: an
+**issue** changes existing function or design, a **feature** adds new function or
+design, a **task** changes workflow or process without touching the product.
+Those map cleanly onto three destinations that already existed, which is the
+evidence they are the right three.
+
+Immediate planning of blocking notes was cut harder. A capture command that can
+preempt the current milestone reintroduces exactly the unplanned scope the
+deferral system exists to prevent, and it hands the decision to whichever actor
+happens to be running — which for most of a phase is a worker, the one actor
+that may never answer a prompt. So `/note` may *flag* `blocking?` and the
+orchestrator judges it at step 3.9. Nothing is lost: a genuinely blocking note
+stops the loop within one milestone boundary, and the flag keeps its question
+mark to make clear it is a report and not a finding.
+
+The queue is untracked for the reason `.current-task.md` is: `/note` appends
+mid-milestone, and a tracked file would dirty the tree that `make demo-update`
+and `make release-check` refuse to run on. The cost is that it survives no
+clone, so the rule that makes it safe is that draining is mandatory and a row
+that overwinters there is a row in the wrong file.
+
+`/process-queue` classifies, then **verifies** — the owner's addition, and the
+better half of the command. Step 1 judges a note by its wording; step 2 judges it
+against the tree, and the tree disagrees more often than the wording admits. The
+common disagreement has real consequences: a note typed `issue` that is really a
+feature gets a findings row instead of five artifacts and an owner decision on
+scope. Every dispute is a prompt, because the tree carries what is true and the
+owner carries what they meant, and the disagreement is usually about which of
+those the note was about.
+
+### Reading ahead of the loop
+
+An unanswered prompt is the only stop condition the loop inflicts on itself.
+`/preview-decisions` runs step 1's *decisions cover it* check across milestones
+not yet built and writes the questions to `upcoming-decisions.md`, so they can be
+answered in any session rather than while the run is halted.
+
+The file holds questions and never answers — one direction, out to decisions.md
+with a `D` number. Two files that can both hold a decision is two places to look
+for it, and the append-only log is the one that has to win.
+
+The risk of answering early is a decision resting on a tree that has not been
+built yet, so every entry names what it assumes, and validation re-checks those
+assumptions when it arrives. A false assumption re-opens the question instead of
+letting the milestone inherit a stale answer. An early answer is otherwise
+exactly as binding as one given in the loop; the timing is a scheduling
+convenience, not a lower standard, which is why entries carry options and a
+recommendation like any other prompt.
+
+### Prompts got a required shape
+
+Options with what each buys and costs, a recommendation, and a named default for
+"you decide". The one non-obvious clause is that the recommended option must
+state its own con: the actor writing the recommendation is the actor that will
+implement it, and that biases toward whatever is cheapest to build. Naming the
+cost is what holds it honest. Nothing enforces this — no test can — and it is
+written as a standing rule rather than a gate for that reason.
+
+### Measuring the contract, and why both measurements
+
+The owner asked for a record of load-bearing files and their token cost. A
+hand-kept per-task ledger was rejected: it would be the highest-frequency write
+in the system, on the critical path of every task, holding estimated numbers,
+which this repository's own standing rule against unmeasured figures forbids.
+
+`make doc-cost` reports two columns instead. **Predicted** is each file's size
+charged in full to every trigger whose documented read set names it — exact in
+bytes, and a ceiling. **Realized** is what `Read` actually returned, parsed from
+this machine's session transcripts — exact, and a floor, since content also
+arrives through Bash and search results.
+
+Only the pair is useful, which was the owner's point when they asked why not
+both. A size report alone would charge decisions.md 44k tokens on every task; the
+transcripts show it is read at **0.02 of its size**, because it is grepped rather
+than read whole. The same report shows workflow.md at 0.69 and phase-loop.md at
+0.56 — those *are* read substantially whole, every resume, and their size is the
+recurring tax worth paying down. Neither number alone says which is which. The
+gap is the signal, and its direction over time is the alarm: realized rising
+toward predicted means something started reading whole what it used to grep.
+
+It landed now rather than after M45, at the owner's call, on the reasoning that a
+baseline is only worth having before the thing it measures grows. decisions.md is
+already larger than every other build-note combined and is append-only, so the
+growth is certain and one-directional.
+
+The report carries no generation timestamp. The commit date is the date, it is
+not invented, and its absence means regenerating on an unchanged tree produces no
+diff — so every diff in that file is real growth rather than churn.
+
+### The scope gate had no room for any of this
+
+Every change here is a *task* by the definition above, and none is a milestone.
+The gate read "one milestone per commit, maximum", which left process work with
+no sanctioned way to be committed at all. It now reads "no more than one
+milestone per commit", and says explicitly that work smaller than a milestone
+commits on its own. The rule always meant this; it had only ever been written
+against the case it was guarding.
+
+Separately, workflow.md's issue trigger still sent findings to a "Deferred
+findings" section of Plan.md that moved to deferred-findings.md a phase ago. It
+was wrong in the file read on every task, which is the worst place for a stale
+instruction, and is corrected.
+
+### Deferred to after M45
+
+Process Issues, Review PR, and Review Findings. All three write outside the
+repository or reschedule work, and all three are better specified after a phase
+close has been run once. Two constraints are recorded now while the reasoning is
+fresh:
+
+GitHub issues are an **inbox, never a queue** — they are drained into
+deferred-findings.md or planning.md, and the issue mirrors its artifact's state
+rather than holding any of its own. The owner's requirement is that reporters see
+progress as it happens rather than in a batch at the end, so the loop will push
+label changes as status rows change, log any failure, and verify later; the
+alternative — reconciling at phase close — makes an issue's silence
+indistinguishable from no progress.
+
+Review Findings cannot simply be added, because workflow.md currently states that
+approved findings "collect into the phase's final milestone". A command that
+schedules them anywhere makes that sentence false, and by this repository's own
+precedence rule a conflict between two documents is a bug to fix rather than to
+work around.

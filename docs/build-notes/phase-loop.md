@@ -34,7 +34,7 @@ Five rules outrank every step:
 
 | Rule | Meaning |
 | --- | --- |
-| **Ask, never assume** | Any choice the owner would want → decision prompt, then *wait*. Picking one and proceeding is a process failure even when the pick is right. |
+| **Ask, never assume** | Any choice the owner would want → decision prompt, then *wait*. Picking one and proceeding is a process failure even when the pick is right. Every prompt carries options, costs and a recommendation, per [workflow.md](workflow.md#standing-rules). |
 | **Prompts belong to the orchestrator** | Only the orchestrator talks to the owner. A worker that meets a prompt writes it verbatim into the note, returns it unanswered, and stops. |
 | **Never cross a phase boundary** | The loop ends at the phase's last milestone. Starting the next phase is a new instruction, not the next iteration. |
 | **Only the table stops you** | [§4](#4-repeat-or-stop) lists every stop condition and is exhaustive. A reason that is not in it is not a reason — continue. Stopping early is the most common way this loop has failed. |
@@ -204,7 +204,20 @@ gate, not a courtesy.
    milestone is not finished. Failure → a new worker from step 2; its fix is
    amended into the commit, which has not been pushed. **Do not push.**
 8. `git push` to the phase branch
-9. Reset `.current-task.md` to the next milestone at step 1
+9. Reset `.current-task.md` to the next milestone at step 1, then scan
+   `.queue.md` for rows marked `blocking?` — **those only**
+
+The queue scan is the one point in the loop that reads it, and it reads it for
+one thing. A `blocking?` row means the owner believes the next milestone would
+build something the note makes wrong, and judging that is the orchestrator's, at
+this boundary and nowhere earlier: a worker never sees the queue, and `/note`
+itself decides nothing. Blocking in fact → **prompt** and wait. Not blocking →
+say so in the report and continue.
+
+Unmarked rows are not read, not counted, and not acted on. They wait for
+`/process-queue`, which the owner runs deliberately — draining routes work into
+Plan.md and deferred-findings.md, and an unattended run that quietly grew its own
+scope is the failure the whole deferral system exists to prevent.
 
 demo-update sits between commit and push because it rebuilds from the commit
 just made: it is the last gate that can still fail before the work is published.
@@ -297,8 +310,15 @@ Working state only. Everything else already has a home:
 | --- | --- |
 | Milestone status | phase-details/README.md — status lives there and only there |
 | Why anything was decided | decisions.md |
+| A decision not yet taken | upcoming-decisions.md |
 | Out-of-spec findings | deferred-findings.md |
+| Anything the owner said in passing | `.queue.md`, via `/note` |
 | Scope, definitions of done | Plan.md, phase-details/ |
+
+Two untracked files sit in the repo root and they are not interchangeable.
+`.current-task.md` is *this milestone's* working state and is reset at step 3.9.
+`.queue.md` is a list of things to deal with **later**, survives milestones, and
+empties only when `/process-queue` drains it.
 
 A line that would still matter after the milestone lands is in the wrong file.
 Move it, do not copy it.

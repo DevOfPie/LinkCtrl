@@ -38,6 +38,13 @@ coverage.html
 # production image.
 node_modules/
 
+# Captured notes waiting to be classified and routed, per the queue trigger in
+# docs/build-notes/workflow.md. Untracked for the same reason .current-task.md
+# is: /note appends to it mid-milestone, and a tracked file would dirty the tree
+# that `make demo-update` and `make release-check` refuse to run on. It is
+# transient by design — /process-queue drains it into files that are tracked.
+.queue.md
+
 # Working state for the milestone in flight, per docs/build-notes/phase-loop.md.
 # Deliberately untracked: `git status --porcelain` skips ignored files, so it
 # cannot dirty the tree that `make demo-update` and `make release-check` refuse

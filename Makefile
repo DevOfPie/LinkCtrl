@@ -160,6 +160,15 @@ check-links: ## Verify every relative link and anchor in tracked markdown
 shellcheck: ## Lint every shell script
 	shellcheck scripts/*.sh
 
+# Not a gate. The operating contract is documentation and documentation is read
+# into a context window on every task, so its size is a cost that recurs and
+# compounds; this measures it before it is large enough to hurt. Regenerating on
+# an unchanged tree produces no diff, so every diff in the report is real growth.
+.PHONY: doc-cost
+doc-cost: ## What the always-read docs cost — predicted vs realized
+	@scripts/doc-cost.sh > docs/build-notes/doc-cost.md
+	@echo "wrote docs/build-notes/doc-cost.md"
+
 .PHONY: vuln
 vuln: ## Check for known vulnerabilities
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
