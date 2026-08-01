@@ -119,6 +119,20 @@
   </button>
   <div id="linkctrl-identity-menu" popover="auto"
        class="fixed inset-auto top-[3.75rem] right-[max(1rem,calc(50%_-_35rem))] z-20 w-56 max-w-[calc(100vw_-_2rem)] rounded-lg border border-line bg-raised py-1 shadow-lg">
+    {{/* Invitations hangs here rather than in the top-level nav, and that is a
+         deliberate deference rather than a placement nobody thought about.
+         M26.5 cut that nav to three destinations for a recorded reason, and
+         TestTopLevelNavHoldsThreeDestinations asserts the count exactly so the
+         next milestone that wants a slot has to argue for it rather than drift
+         into one. M28 builds the member list, which is the surface that pairs
+         with this one, and that is where the argument belongs — one slot for
+         both, made once.
+
+         Gated on members.write, which is exactly what the page behind it
+         requires: a menu entry that leads to a 403 is worse than no entry. */}}
+    {{if .Identity.Can "members.write"}}
+    <a href="/invites" class="block px-3 py-2 text-sm {{if eq .Nav "invites"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">Invitations</a>
+    {{end}}
     <a href="/account" class="block px-3 py-2 text-sm {{if eq .Nav "account"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">Account</a>
     <form method="post" action="/logout">
       <button type="submit" class="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-sunken">Sign out</button>

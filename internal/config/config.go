@@ -164,6 +164,17 @@ type AuthConfig struct {
 	SessionAbsoluteTTL time.Duration `env:"SESSION_ABSOLUTE_TTL" envDefault:"720h"`
 	SessionIdleTTL     time.Duration `env:"SESSION_IDLE_TTL" envDefault:"168h"`
 
+	// InviteTTL is how long an invitation stays redeemable, measured from when
+	// it was created (decision D29).
+	//
+	// A knob rather than a constant, for the reason D5 refused a constant for
+	// audit retention: time is the one thing an operator cannot work around
+	// without a rebuild. The clock starts at creation and not at delivery,
+	// because mail leaves through the outbox on the scheduler's tick (D23) and
+	// there is no send moment to start it from — so a slow relay spends the
+	// operator's TTL, which is exactly why it is tunable.
+	InviteTTL time.Duration `env:"INVITE_TTL" envDefault:"168h"`
+
 	// RFC 9106 recommends at least 19 MiB for the memory-constrained profile;
 	// 64 MiB is the comfortable default. Validate enforces the floor, because
 	// lowering this is the easiest way to silently weaken password storage.
@@ -598,6 +609,15 @@ func (c Config) Validate() error {
 	if c.Auth.SessionIdleTTL > c.Auth.SessionAbsoluteTTL {
 		add("SESSION_IDLE_TTL (%s): must not exceed SESSION_ABSOLUTE_TTL (%s)",
 			c.Auth.SessionIdleTTL, c.Auth.SessionAbsoluteTTL)
+	}
+	// Zero is refused rather than read as "never expires". D29 rejected
+	// no-expiry outright: single-use bounds an invite to one account, and under
+	// D27 a stale one is still a live grant to the named address, so nothing
+	// else bounds it in time. An operator who wants a very long window says so
+	// in hours.
+	if c.Auth.InviteTTL <= 0 {
+		add("INVITE_TTL: must be positive, got %s; there is no way to disable "+
+			"invitation expiry", c.Auth.InviteTTL)
 	}
 
 	// A long negative TTL makes a newly created link look broken to anyone who

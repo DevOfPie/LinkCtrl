@@ -181,7 +181,8 @@ answering.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `LINKCTRL_SIGNUP_MODE` | `closed` | `closed`, `invite` or `open`. `invite` behaves as closed until Phase 2. The first-run setup endpoint works regardless, then closes permanently. Read only by `POST /api/v1/auth/register`: there is no signup page, so `open` admits API clients and not browsers, and a registration creates a new isolated organization and workspace rather than adding a member to yours. A signup page waits for Phase 2, where invitations make the second half of that sentence stop being a surprise. |
+| `LINKCTRL_SIGNUP_MODE` | `closed` | `closed`, `invite` or `open`. **`closed` admits no new account by any path, invitations included** — an invitation can then only add somebody who already has an account, and that ceiling is absolute. `invite` and `open` both let an invitation create the account it names; `open` additionally opens `POST /api/v1/auth/register` to anybody, and a registration there creates a new isolated organization and workspace rather than adding a member to yours. The first-run setup endpoint works regardless, then closes permanently. |
+| `LINKCTRL_INVITE_TTL` | `168h` | How long an invitation stays redeemable. The clock starts when it is created, not when the mail goes out — delivery is asynchronous through the outbox — so a slow relay spends this window. It must be positive: expiry cannot be switched off, and revoking is how an invitation is ended early. |
 | `LINKCTRL_SESSION_ABSOLUTE_TTL` | `720h` | Hard deadline from creation. |
 | `LINKCTRL_SESSION_IDLE_TTL` | `168h` | Maximum gap between requests. Must not exceed the absolute TTL. Enforced at read time, so a change takes effect immediately. |
 | `LINKCTRL_LOGIN_LOCKOUT_THRESHOLD` | `5` | Failed attempts before a 15-minute per-account lockout. |

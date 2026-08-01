@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/netip"
 	"regexp"
 	"strings"
@@ -37,6 +38,15 @@ type Identity struct {
 	OrgID       uuid.UUID
 	SessionID   uuid.UUID
 	Role        string
+	// RoleRank orders roles against each other: lower binds tighter, so owner
+	// (10) outranks admin (20) outranks editor (30) outranks viewer (40).
+	//
+	// Carried on the identity rather than looked up where it is needed because
+	// it is a property of who the actor is, exactly like Role, and the first
+	// consumer — the invitation role ceiling (D28) — must not be able to reach
+	// the wrong membership by asking a second time. It fails closed: an identity
+	// whose role could not be resolved gets NoRoleRank, which outranks nothing.
+	RoleRank int32
 	// APIKeyID is set when the request authenticated with an API key instead
 	// of a session cookie. Services consult it for the few operations that
 	// must require an interactive sign-in; everything else is deliberately
@@ -544,11 +554,11 @@ func (s *Service) identityFor(ctx context.Context, userID uuid.UUID, email, name
 		set[p] = struct{}{}
 	}
 
-	role := ""
+	role, rank := "", int32(NoRoleRank)
 	if r, err := s.q.GetUserRoleInWorkspace(ctx, dbgen.GetUserRoleInWorkspaceParams{
 		UserID: userID, ID: wsID,
 	}); err == nil {
-		role = r.Slug
+		role, rank = r.Slug, r.Rank
 	}
 
 	return &Identity{
@@ -558,9 +568,17 @@ func (s *Service) identityFor(ctx context.Context, userID uuid.UUID, email, name
 		WorkspaceID: wsID,
 		OrgID:       orgID,
 		Role:        role,
+		RoleRank:    rank,
 		permissions: set,
 	}, nil
 }
+
+// NoRoleRank is the rank of an identity whose role could not be resolved.
+//
+// math.MaxInt32 and not zero, and that choice is the whole safety property:
+// rank counts *downward* in authority, so a zero would read as outranking the
+// owner role. Anything comparing ranks fails closed against this value.
+const NoRoleRank = math.MaxInt32
 
 func verifiedAt(yes bool) *time.Time {
 	if !yes {

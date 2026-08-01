@@ -10,6 +10,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
@@ -31,6 +32,9 @@ type Web struct {
 	Links  *link.Service
 	Stats  *analytics.Reader
 	Notify *notify.Service
+	// Invites serves both halves of the invitation surface: the administrator's
+	// page and the public redemption form.
+	Invites *invite.Service
 }
 
 // shell is what the layout template needs on every page.

@@ -69,6 +69,9 @@ file. Append a row when you append an entry.
 | [M26.6, what actually costs nine seconds](#2026-07-31--m266-what-actually-costs-nine-seconds) | Measuring the layer instead of deriving it; why F2's nine seconds were a test client's and not a deployment's; D26 and why 250ms; enforcing a budget go-redis will not honour; the two stall shapes tested and the one that is not; why the redirect path was left alone, and the 108ms an uncached one costs while Redis stalls (F9) |
 | [M26.6, amending the milestone that diagnosed itself wrong](#2026-07-31--m266-amending-the-milestone-that-diagnosed-itself-wrong) | The table before and after, and the one measured line that forced it; why a fact amends and an assertion prompts; the milestone catching its own diagnosis |
 | [M27, the three questions an invite could not be built without](#2026-07-31--m27-the-three-questions-an-invite-could-not-be-built-without) | D27 address-bound invites and the enumeration hazard it creates; D28 the inviter's rank as a ceiling, and why members.write stays delegable; D29 the TTL knob and why a constant was refused |
+| [M27, building an invitation so that no refusal answers a question](#2026-07-31--m27-building-an-invitation-so-that-no-refusal-answers-a-question) | The one error every redemption failure returns and the dummy verification behind it; why the page does not print the invited address; why the two validation errors are safe; the one outstanding invitation per address, and why an expired one is revoked rather than indexed around |
+| [M27, where the invitation surface hangs, and what M27 left to M28](#2026-07-31--m27-where-the-invitation-surface-hangs-and-what-m27-left-to-m28) | Why Invitations is in the identity menu and not the top-level nav; the `orgs.create` bullet read against M28's own file, and what M27 asserts instead |
+| [M27, amending the bullet that said a permission exists](#2026-08-01--m27-amending-the-bullet-that-said-a-permission-exists) | The bullet before and after; why `orgs.create` is M28's; what D6 actually attached to membership-only; how milestones absorb each other's work |
 
 ---
 
@@ -4816,3 +4819,192 @@ potential issue to revisit rather than absorbed here: bulk delete, a link move,
 and archive-then-cascade are three different features with three different
 false-positive arguments, and none of them is M28's. It is queued for
 `/process-queue` to classify against the tree.
+
+---
+
+## 2026-07-31 — M27, building an invitation so that no refusal answers a question
+
+D27 made redemption compare addresses, and said in the same breath that the
+comparison must fail identically whether the address is unknown, already a
+member, or simply not the invited one. That is one sentence in a decision and
+most of the work in the milestone, so here is what it turned into.
+
+### One error, and the work spent to reach it
+
+`invite.ErrNotRedeemable` is every redemption failure: no such token, expired,
+revoked, already spent, wrong address, wrong password, already a member, and an
+address with no account on a closed instance. Eight causes, one error, one
+`404`, one body. The real cause is logged at debug and returned to nobody.
+
+Status codes are the part that gets forgotten. A service that returns one error
+and an HTTP layer that maps "wrong password" to `401` and "no such token" to
+`404` has undone the whole thing, so the mapping lives in `WriteError` beside
+every other one and is written as a single case.
+
+Timing is the other part. `Login` already spends a dummy argon2 verification when
+the address is unknown, because otherwise the response time answers the question
+the status code refuses to. Redemption has the same shape and more branches, so
+every refusal *after the invitation row is read* calls the same `refuse` helper,
+and that helper's first act is `DummyVerify`. A refusal therefore costs what a
+real verification costs, whichever branch produced it.
+
+The two checks that run **before** anything is looked up are the exception, and
+deliberately so: a password below the twelve-character floor and an address that
+is not an address are validation errors, reported as such, with a field name. It
+is safe because neither answer depends on any account existing — and the length
+floor in particular is safe only because it has never moved. Every stored
+password already satisfies it, so "too short" cannot mean "this account is old".
+Had the floor ever been raised, checking it up front would have become an oracle,
+and the check would have had to move.
+
+### The page does not print the address it was issued to
+
+The redemption page names the organization and the role, and not the address.
+Somebody who picked the link out of a forwarded message would otherwise be told
+exactly what to type, which is the one thing D27's binding exists to prevent —
+and on an `invite`-mode instance, typing it would create the account.
+
+The cost is real: a legitimate invitee who mistypes gets the same generic refusal
+as an attacker, with no hint. That is the same trade the sign-in form makes, and
+the page says which address it wants ("the address this invitation was sent to")
+without saying what it is.
+
+### One outstanding invitation per address
+
+A partial unique index on `(organization_id, email_lower)` where the invitation is
+neither revoked nor redeemed. Without it, inviting the same person twice leaves
+two live tokens, and revoking the one an administrator can see leaves the other
+redeemable — a revocation that does not revoke.
+
+The index cannot mention expiry, because `now()` is not immutable and Postgres
+will not index on it. So an expired invitation still occupies the address, and
+the service revokes it on the way to issuing a replacement. Re-inviting after a
+lapse therefore works; re-inviting *over a live invitation* is refused rather
+than silently superseding a link somebody is holding.
+
+Inviting somebody who is already a member is refused at creation, and that
+refusal is not an enumeration leak: the actor holds `members.write` on that
+organization, so its membership is something they may already read. Redemption
+asks the same question again about a user it has resolved, and answers it with
+the generic refusal — because there, the asker is a stranger.
+
+### What the tests had to be sharpened to prove
+
+Two of the sabotage passes are worth recording, because they found that a test
+was weaker than it read.
+
+Breaking the address comparison turned the refusal test red, as intended. Breaking
+the *single-use* write did not: a second redemption is caught by the memberships
+unique index before it reaches the conditional `UPDATE`, so single-use is
+guaranteed by the schema and the status check as well as by that write. The test
+now asserts `redeemed_by` names the account that joined and that a second attempt
+does not move `redeemed_at`, which is sensitive to the row rather than to the
+membership. The conditional `UPDATE` itself remains reachable only by two
+transactions interleaving, and no sequential test can turn it red — which is
+worth saying rather than pretending otherwise.
+
+---
+
+## 2026-07-31 — M27, where the invitation surface hangs, and what M27 left to M28
+
+Two placement questions, both answered by deferring to a decision or a file that
+already existed.
+
+### Invitations is in the identity menu, not the top-level nav
+
+[M26.5](phase-details/m26.5.md) cut the top-level nav to three destinations —
+Dashboard, Links, API keys — and `TestTopLevelNavHoldsThreeDestinations` asserts
+the count exactly, with a comment saying why: four milestones are queued behind
+it, each wanting a slot, and the count is asserted so that taking one is an
+argument rather than a drift.
+
+M27 needed somewhere to put a page. Adding a fourth entry would have meant
+editing that test, which is the loop quietly overruling a recorded decision on
+its way past. So Invitations hangs in the identity menu beside Account, gated on
+`members.write` so it never leads to a `403`.
+
+This is deference, not a claim that the menu is the right home. [M28](phase-details/m28.md)
+builds the member list, which is the surface that pairs with this one, and it is
+the milestone that should make the argument for a nav slot — one slot for both,
+made once, with both pages to point at. If the answer is yes, moving this link is
+a one-line change.
+
+### `orgs.create` belongs to M28, and M27 says what it can
+
+M27's bullet reads: *the invited account remains capable of owning an
+organization later without needing a second account — the `orgs.create`
+permission exists and can be granted to it (M28, decision D16)*.
+
+Read alone, "the permission exists" is a thing M27 would have to build.
+[m28.md](phase-details/m28.md) says otherwise, in its own *Done means*: **"A new
+`orgs.create` permission, with its seed migration and delegability decision."**
+Building it here would take a bullet off a later milestone and leave M28's row
+claiming work that was already done — the scope leak the milestone split exists
+to prevent, and it would run the other way from the usual one.
+
+So M27 builds none of it, and asserts instead what is actually its own: the
+account an invitation creates is an *ordinary* account. Active, with a password
+of its own, no flag or column distinguishing it, and reachable by a plain role
+grant — the test promotes an invited account to owner and checks it then holds an
+owner-only permission. That is what "remains capable of owning an organization
+later" means in the tree, and it is the property M28's grant will depend on.
+
+The em-dash clause is a pointer to where the mechanism lands, not a second
+milestone's work smuggled into this one. Recorded here rather than amended into
+the bullet, because a worker does not amend and the reading is worth writing down
+either way.
+
+---
+
+## 2026-08-01 — M27, amending the bullet that said a permission exists
+
+The orchestrator's amendment, made at [step 3.4](phase-loop.md#3-land). It
+completes the entry above: the worker read the bullet correctly, stopped at the
+line a worker may not cross, and this is the crossing.
+
+A **fact**, so it amends rather than prompts. Whether `orgs.create` exists in the
+tree today is not a thing anyone could have decided differently — it is a grep.
+
+### The bullet as it stood
+
+> The invited account remains capable of owning an organization later **without
+> needing a second account** — the `orgs.create` permission exists and can be
+> granted to it ([M28](phase-details/m28.md), decision D16). This is the
+> requirement D6 attached to membership-only.
+
+### The bullet as amended
+
+> The invited account remains capable of owning an organization later **without
+> needing a second account** — it is an ordinary account, and any role or
+> permission can be granted to it by the ordinary path. This is the requirement
+> D6 attached to membership-only. The `orgs.create` permission itself is M28's
+> to build, with its own seed migration and delegability decision (decision
+> D16); M27 owes the *capability*, not the permission, and proves it by granting
+> an invited account an owner role and checking it then holds an owner-only
+> permission.
+
+### The tree fact that forced it
+
+`orgs.create` does not exist. It appears in no migration and nowhere in
+`internal/auth`. Meanwhile [m28.md](phase-details/m28.md)'s own *Done means*
+claims it in as many words — *"A new `orgs.create` permission, with its seed
+migration and delegability decision"* — and its Risks section builds on it
+further. So the bullet's present tense was wrong in both directions at once: the
+permission does not exist, and it is not M27's to create.
+
+The sentence still had a true claim inside it, and that claim is the one D6
+actually attached to membership-only: an invited account must not be a
+second-class one. Under the amendment M27 owes exactly that, and
+`TestInvitedAccountStaysCapableOfOwningAnOrganization` is what pays it — an
+invited account is granted an owner role and then holds an owner-only
+permission.
+
+### Why this was worth catching rather than waving through
+
+Because the cheap reading was available and would have looked like diligence.
+`orgs.create` is one seed migration on the 00800 pattern; a worker keen to
+satisfy every word could have written it in twenty minutes, and M28 would then
+have opened with a bullet already done and a delegability decision already taken
+somewhere else. Milestones that quietly absorb each other's work are how a
+twenty-five-milestone plan stops meaning anything, and the only defence is
+reading the *other* file when a bullet points at it.

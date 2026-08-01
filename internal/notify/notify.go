@@ -37,6 +37,11 @@ const (
 	// retention defaults to keeping everything (D5), which is only a safe
 	// default while somebody is told what it costs.
 	KindAuditGrowth = "audit.growth"
+
+	// KindInviteAccepted tells the person who sent an invitation that it was
+	// redeemed. The organization gained a member, and the one account that
+	// certainly wants to know is the one that chose to add them.
+	KindInviteAccepted = "invite.accepted"
 )
 
 // MailAuditGrowth names the mail template for the same warning. It is the

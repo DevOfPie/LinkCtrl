@@ -278,7 +278,12 @@ CRM · email marketing · website builder · advertising system · full CMS.
 `Domain` · `ClickEvent` · `Visitor` · `Webhook` · `APIKey` · `AutomationRule` ·
 `AuditLog` · `Notification`
 
-31 tables. ERD and per-entity implementation status: `docs/data-model.md`
+33 tables: the 31 Phase 1 ones, plus `mail_outbox` ([M26](docs/build-notes/phase-details/m26.md), D23)
+and `invitations` ([M27](docs/build-notes/phase-details/m27.md)). Neither is a new
+entity — one is a delivery queue, the other a grant with a lifetime — and both are
+typed rather than dormant jsonb because the feature reading them shipped with them.
+
+ERD and per-entity implementation status: `docs/data-model.md`
 *(not yet written — scheduled in [M45](docs/build-notes/phase-details/m45.md))*.
 
 Rules:
@@ -647,6 +652,8 @@ Deliberately accepted in Phase 1.
 | Behind a proxy, limits need `TRUSTED_PROXIES` | Otherwise every request carries the proxy's address and all traffic shares one bucket. This is a correctness requirement once a limit is on, not only an analytics one. |
 | `links.click_count` is approximate | Written with the click rows, but an unclean shutdown loses at most one batch of both. |
 | `api_keys.last_used_at` is approximate | Buffered and flushed on a 30s cadence, so an unclean shutdown loses the most recent timestamps. Authentication must not cost a write. |
+| Nothing manages a member once they have joined | [M27](docs/build-notes/phase-details/m27.md) issues, lists and revokes invitations; an invitation can be revoked only until it is accepted. Changing somebody's role or removing them from an organization is [M28](docs/build-notes/phase-details/m28.md). Until then the only correction available is at the database. |
+| An invitation cannot be re-sent, only re-issued | Only the token's hash is stored, so the link exists once, in the response that created it. Losing it means revoking the invitation and issuing another — the same trade an API key makes, for the same reason. |
 | API keys cannot manage API keys | `apikeys.*` is not delegable, so minting and revoking need a session. Rotation is scheduled as self-rotation-only: [M44](docs/build-notes/phase-details/m44.md). |
 | Analytics drops under overload | Bounded queue; drops counted and alertable. Backpressure would slow redirects. |
 | The dimension rollup grows with traffic | 16-21s per 60s run at 5.7M events, and the cost is the 553k upserts a whole-day recompute implies rather than the scan. It will exceed its own interval as data grows. Measured in [docs/slo.md](docs/slo.md); the cached redirect path is unaffected, which is what the split pool is for. Scheduled: [M37](docs/build-notes/phase-details/m37.md). |

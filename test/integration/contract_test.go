@@ -301,6 +301,44 @@ func TestAPIMatchesItsContract(t *testing.T) {
 		"workspace_id": nil,
 	}, http.StatusNoContent)
 
+	// --- invitations --------------------------------------------------------
+	// The link comes back in the create response and nowhere else, so the
+	// redemption below has to read it out of this body — which is also the
+	// documented claim being exercised.
+	invitation := c.do("POST", p+"/invitations", map[string]any{
+		"email": "invited@example.com", "role": "editor",
+	}, http.StatusCreated)
+	inviteURL := field(t, invitation, "url")
+	_, token, ok := strings.Cut(inviteURL, "/invite/")
+	if !ok || token == "" {
+		t.Fatalf("invitation url %q does not carry a token", inviteURL)
+	}
+	// One outstanding invitation per address, so revoking the visible one cannot
+	// leave another live.
+	c.do("POST", p+"/invitations", map[string]any{
+		"email": "invited@example.com",
+	}, http.StatusUnprocessableEntity)
+	c.do("GET", p+"/invitations", nil, http.StatusOK)
+
+	revocable := c.do("POST", p+"/invitations", map[string]any{
+		"email": "second@example.org", "role": "viewer",
+	}, http.StatusCreated)
+	revocableID := field(t, revocable, "id")
+	c.do("DELETE", p+"/invitations/"+revocableID, nil, http.StatusNoContent)
+	// Revoking twice is not-found, the same answer an id from another
+	// organization gets, so an id cannot be probed.
+	c.do("DELETE", p+"/invitations/"+revocableID, nil, http.StatusNotFound)
+
+	c.do("POST", p+"/invitations/redeem", map[string]any{
+		"token": token, "email": "invited@example.com", "password": password,
+	}, http.StatusOK)
+	// Single-use, and the second attempt gets the same 404 every other failure
+	// gets — including a wrong address, which is what keeps redemption from
+	// answering whether an address is registered.
+	c.do("POST", p+"/invitations/redeem", map[string]any{
+		"token": token, "email": "invited@example.com", "password": password,
+	}, http.StatusNotFound)
+
 	// --- link deletion, password, logout ------------------------------------
 	c.do("DELETE", p+"/links/"+linkID, nil, http.StatusNoContent)
 	c.do("POST", p+"/auth/password", map[string]string{

@@ -51,6 +51,20 @@ const PermRead = "audit.read"
 // Dotted noun.verb, matching the permission slugs an operator already reads.
 const (
 	ActionDomainRootRedirectChanged = "domain.root_redirect_changed"
+
+	// The invitation lifecycle (M27). Three actions rather than one with a
+	// state in the metadata: an operator asking "who let this person in" is
+	// reading for an action, and a filter on `action` is the query the read API
+	// already supports.
+	//
+	// The redeemed event is the one with a different actor. Issuing and revoking
+	// are recorded against the administrator who did them; redeeming is recorded
+	// against the person who joined, because that is who took the action, and it
+	// is what makes "invited alice@…, alice@… joined" two records that can be
+	// read as one fact.
+	ActionInvitationCreated  = "invitation.created"
+	ActionInvitationRevoked  = "invitation.revoked"
+	ActionInvitationRedeemed = "invitation.redeemed"
 )
 
 // Event is one thing that happened.

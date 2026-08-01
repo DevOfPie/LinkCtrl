@@ -9,6 +9,7 @@ import (
 
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 )
 
@@ -152,6 +153,25 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 				Field: "email", Code: "invalid",
 				Message: "that does not look like an email address",
 			}},
+		})
+
+	case errors.Is(err, invite.ErrNotRedeemable):
+		// One answer for every redemption failure: unknown token, expired,
+		// revoked, already spent, wrong address, wrong password, already a
+		// member, or an address with no account on a closed instance. Same
+		// status, same body, every time — the service already spends the same
+		// argon2 work on each of them, and a status code that differed would
+		// undo that (D27, and M27's no-enumeration bullet).
+		//
+		// 404 rather than 403: the token identifies the thing being asked for,
+		// and refusing to say whether it exists is exactly what "not found"
+		// means. A 403 would concede that it does.
+		WriteProblem(w, r, Problem{
+			Type:   problemBase + "invitation-not-redeemable",
+			Title:  "Invitation cannot be redeemed",
+			Status: http.StatusNotFound,
+			Detail: "This invitation is not valid. It may have expired, been " +
+				"revoked, or already been used — or the details do not match it.",
 		})
 
 	case errors.Is(err, domain.ErrNotImplemented):

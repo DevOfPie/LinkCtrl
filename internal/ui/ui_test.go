@@ -26,6 +26,9 @@ func owner() *identityStub {
 		Email: "o@example.com", Name: "Owner", Role: "owner",
 		perms: map[string]bool{
 			"links.create": true, "links.update": true, "links.delete": true,
+			// The nav's invitation entry is drawn from the shell on every page,
+			// so an owner holds it here and every page exercises that branch.
+			"members.write": true,
 		},
 	}
 }
@@ -180,6 +183,59 @@ func pageData(t *testing.T) map[string]any {
 			},
 			"NextCursor": "abc",
 			"Notice":     "", "Error": "",
+		},
+		// Every invitation state in one render — pending with a Revoke button,
+		// and the three that have none — plus the freshly created panel, which
+		// is the only place the token is ever shown.
+		"invites": map[string]any{
+			"Title": "Invitations", "Nav": "invites", "Identity": owner(),
+			"Invitations": []map[string]any{
+				{
+					"ID": "0198c9c5-0000-7000-8000-000000000007", "Email": "new@example.com",
+					"Role": "editor", "InvitedBy": "o@example.com", "Status": "pending",
+					"CreatedAt": now, "ExpiresAt": now.Add(168 * time.Hour),
+				},
+				{
+					"ID": "0198c9c5-0000-7000-8000-000000000008", "Email": "gone@example.com",
+					"Role": "viewer", "InvitedBy": "", "Status": "revoked",
+					"CreatedAt": now, "ExpiresAt": now,
+				},
+				{
+					"ID": "0198c9c5-0000-7000-8000-000000000009", "Email": "old@example.com",
+					"Role": "viewer", "InvitedBy": "o@example.com", "Status": "expired",
+					"CreatedAt": now, "ExpiresAt": now,
+				},
+				{
+					"ID": "0198c9c5-0000-7000-8000-00000000000a", "Email": "joined@example.com",
+					"Role": "admin", "InvitedBy": "o@example.com", "Status": "redeemed",
+					"CreatedAt": now, "ExpiresAt": now,
+				},
+			},
+			"RoleOptions": []map[string]any{
+				{"Slug": "admin", "Name": "Admin", "Description": "Manage links and members.", "Rank": 20},
+				{"Slug": "editor", "Name": "Editor", "Description": "Create and edit links.", "Rank": 30},
+			},
+			"Created": map[string]any{
+				"Email": "new@example.com", "Role": "editor", "Emailed": false,
+				"URL": "http://links.test/invite/2ZQ3jd0eGkEaBcDeFgHiJkLmNoPqRsTuVwXyZ012",
+			},
+			"Form":        map[string]string{"Email": "", "Role": "editor"},
+			"FieldErrors": map[string]string{},
+			"Notice":      "", "Error": "", "MailConfigured": false,
+		},
+		// The public half. No identity at all, which is the state it is designed
+		// for: whoever opens it may have no account yet.
+		"invite": map[string]any{
+			"Title": "Invitation", "Nav": "", "Identity": (*identityStub)(nil),
+			"Token": "2ZQ3jd0eGkEaBcDeFgHiJkLmNoPqRsTuVwXyZ012",
+			"Valid": true,
+			"Offer": map[string]any{
+				"OrganizationName": "Acme", "Role": "editor",
+				"ExpiresAt": now.Add(168 * time.Hour),
+			},
+			"Form":        map[string]string{"Email": "", "Name": ""},
+			"FieldErrors": map[string]string{},
+			"Error":       "", "NewAccounts": true,
 		},
 	}
 

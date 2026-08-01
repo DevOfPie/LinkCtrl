@@ -18,6 +18,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
+	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 )
@@ -64,15 +65,30 @@ func newAPI(t *testing.T) *apiFixture {
 		t.Fatal(err)
 	}
 
+	// No mailer, which is the default instance: invitations are issued with a
+	// copyable link and nothing is queued.
+	inviteSvc, err := invite.NewService(pool, invite.Config{
+		AppURL:      cfg.AppOrigin(),
+		TTL:         168 * time.Hour,
+		NewAccounts: cfg.Auth.SignupMode != config.SignupClosed,
+		Hasher:      authSvc.Hasher(),
+		Audit:       audit.NewService(pool),
+		Notify:      notify.NewService(pool),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	srv := httptest.NewServer(httpx.NewRouter(httpx.Deps{
-		Config: cfg,
-		Health: &httpx.Health{DB: pool},
-		Auth:   authSvc,
-		Keys:   keySvc,
-		Links:  linkSvc,
-		Stats:  analytics.NewReader(pool),
-		Audit:  audit.NewService(pool),
-		Notify: notify.NewService(pool),
+		Config:  cfg,
+		Health:  &httpx.Health{DB: pool},
+		Auth:    authSvc,
+		Keys:    keySvc,
+		Links:   linkSvc,
+		Stats:   analytics.NewReader(pool),
+		Audit:   audit.NewService(pool),
+		Notify:  notify.NewService(pool),
+		Invites: inviteSvc,
 	}))
 	t.Cleanup(srv.Close)
 

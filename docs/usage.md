@@ -167,8 +167,10 @@ members.read members.write  workspace.read workspace.write
 a key that can mint keys makes revoking a leaked one meaningless, and an
 irreversible action should need an interactive sign-in.
 
-The `members.*` and `workspace.write` scopes are grantable but gate no endpoint
-yet; member management is Phase 2. Granting them changes nothing today.
+`members.write` gates the invitation endpoints, and it **is** grantable: an
+invitation can only carry a role at or below its issuer's own, and a key's issuer
+is whoever created it, so a key holding it cannot reach past its owner.
+`members.read` and `workspace.write` are grantable but gate no endpoint yet.
 
 ### Worked examples
 
@@ -308,17 +310,72 @@ a click.
 | Editor | Create, edit and delete links and tags; read analytics. **Cannot mint API keys** — an editor who could would be able to grant themselves scopes beyond their own role. |
 | Viewer | Read links, tags and analytics. |
 
-Phase 1 auto-provisions one personal organization and workspace per user, and
-the account that claims the instance is its owner. Invitations and shared
-workspaces are Phase 2, so in practice everyone is an owner of their own
-workspace today — but the evaluator is real, and changing a role changes
-behaviour immediately, including for existing API keys.
+Registration auto-provisions one personal organization and workspace per user,
+and the account that claims the instance is its owner. Accepting an invitation
+is what puts somebody in a role that is not owner. The evaluator is real, and
+changing a role changes behaviour immediately, including for existing API keys.
+
+## Inviting somebody
+
+*Invitations*, in the menu behind your address in the header, is where you add
+people to your organization. It needs the **`members.write`** permission, which
+owner and admin hold.
+
+An invitation is one grant of one membership, and four things are true of it:
+
+- **It is tied to the address you send it to.** Whoever opens the link has to
+  enter that address to redeem it, so forwarding it into a group chat does not
+  let somebody else join. That is what makes the link safe to copy, which
+  matters because on an instance with no mailer the link is the only way to
+  deliver one.
+- **It carries a role at or below your own.** An owner can invite an owner; an
+  admin cannot. The form offers you exactly what you may issue.
+- **It works once**, and stops working when you revoke it or when
+  `LINKCTRL_INVITE_TTL` runs out — seven days by default, counted from when you
+  created it rather than from when the mail left.
+- **It is shown once.** Only a hash is stored, exactly as for an API key, so a
+  lost link is re-issued by revoking and inviting again.
+
+With a mailer configured the invitation is emailed; either way the link appears
+on the page for you to copy. Accepting adds the organization to an account the
+person already has, or creates one for them — **unless
+`LINKCTRL_SIGNUP_MODE=closed`**, where no invitation may create an account and
+only somebody who already has one can join.
+
+Somebody who joins by invitation gets a membership and nothing else: no personal
+organization or workspace of their own, which is what would make them a separate
+tenant rather than a colleague.
+
+The same operations are in the API:
+
+```sh
+# Issue one. The response carries the link, and it appears nowhere else.
+curl -sS -X POST .../api/v1/invitations \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"email":"colleague@example.com","role":"editor"}'
+
+curl -sS .../api/v1/invitations -H "Authorization: Bearer $KEY"
+curl -sS -X DELETE .../api/v1/invitations/$ID -H "Authorization: Bearer $KEY"
+
+# Accepting takes no credential at all — it is how somebody gets their first.
+curl -sS -X POST .../api/v1/invitations/redeem -H 'Content-Type: application/json' \
+  -d '{"token":"…","email":"colleague@example.com","password":"…"}'
+```
+
+Every way redemption can fail answers the same `404` with the same body: a
+token that was never issued, one that expired, one already used, the wrong
+address, the wrong password, or an address with no account on a closed instance.
+That is deliberate. Anything else would let whoever holds a link ask the server
+whether a given address has an account here.
+
+Issuing, revoking and accepting are all in the audit log, and an accepted
+invitation shows up in the inviter's notification inbox.
 
 ## Which workspace you are in
 
 Every request acts in exactly one workspace. With one membership — which is
-every account until invitations ship — there is nothing to choose and the
-dashboard shows no switcher at all.
+every account that has not accepted an invitation — there is nothing to choose
+and the dashboard shows no switcher at all.
 
 Once there is more than one, a control appears in the header. Switching moves
 *that browser*, immediately and for the rest of the session, so two windows can

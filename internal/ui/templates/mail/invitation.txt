@@ -1,0 +1,23 @@
+Subject: {{.Inviter}} invited you to {{.Organization}} on LinkCtrl
+
+Hello,
+
+{{.Inviter}} has invited you to join {{.Organization}} on LinkCtrl as {{.Role}}.
+
+To accept, open this link and enter the address this invitation was sent to
+({{.Email}}), together with your password:
+
+    {{.URL}}
+
+If you do not have an account yet, that form creates one. If you already do,
+use the password you sign in with — accepting adds the organization to the
+account you already have rather than making you a second one.
+
+The link works once and stops working on {{.Expires}}. It is tied to the
+address above, so forwarding it to somebody else will not let them join.
+
+If you were not expecting this, ignore it. Nothing happens until somebody
+accepts, and whoever sent it can revoke it at any time.
+
+--
+LinkCtrl

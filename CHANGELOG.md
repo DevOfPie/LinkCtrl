@@ -22,6 +22,47 @@ migrations run at boot.
 
 ### Added
 
+- **You can invite somebody into your organization.** *Invitations*, in the menu
+  behind your address in the header, issues a single-use link that adds one
+  person as one role. Emailed when a mailer is configured, and copyable either
+  way — on an instance with no relay, which is the default, that link is the
+  whole delivery mechanism. `POST`, `GET` and `DELETE /api/v1/invitations` do the
+  same, behind the `members.write` permission that owners and admins hold. This
+  is that permission's first enforcement.
+- **An invitation is tied to the address it names, not to whoever holds it.**
+  Accepting requires entering the address it was sent to, so a link forwarded
+  into a group chat cannot add somebody nobody chose. The cost is stated plainly:
+  pasting one into a channel for "whoever needs this" is now a thing the product
+  refuses, and joining under a different address needs a new invitation.
+- **The role an invitation carries is capped at the issuer's own.** An owner can
+  invite an owner; an admin can invite an admin, editor or viewer, and never an
+  owner. Because the ceiling is the issuer's own rank, `members.write` is safe to
+  grant to an API key, and it is grantable.
+- `LINKCTRL_INVITE_TTL`, defaulting to `168h`. The clock starts when the
+  invitation is created rather than when the mail leaves, because delivery is
+  asynchronous through the outbox — so a slow relay spends the window, which is
+  why it is tunable. Expiry cannot be switched off; revoking is how an invitation
+  ends early.
+- **Accepting an invitation adds a membership and nothing else.** No personal
+  organization or workspace is provisioned for the person joining: they are a
+  colleague in an organization that already exists, not a tenant of their own.
+  The account is otherwise ordinary. This is also the first way an account can
+  hold two memberships, so it is the first time the workspace switcher in the
+  header has anything to switch between.
+- **`LINKCTRL_SIGNUP_MODE=closed` now means closed to invitations too.** Under
+  `closed` an invitation may only add somebody who already has an account;
+  `invite` and `open` let it create one. `invite` previously behaved exactly as
+  `closed`, and the configuration reference said so — that sentence is gone
+  because it is no longer true.
+- **Every way accepting can fail answers identically.** An unknown token, an
+  expired or revoked or already-used one, the wrong address, the wrong password,
+  somebody who is already a member, or an address with no account on a closed
+  instance: one status code, one body, and the same password-hashing cost spent
+  on each. Anything else would let whoever holds a link ask the server whether a
+  given address has an account here.
+- Issued, revoked and accepted are audit events, and accepting notifies whoever
+  sent the invitation in their dashboard inbox.
+
 - **The dashboard header has an identity menu and a notification bell.** Your
   email address was inert text with Account and Sign out scattered around it, and
   Notifications was a nav link whose badge could say how many but never what.

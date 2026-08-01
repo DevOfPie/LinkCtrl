@@ -18,6 +18,13 @@ func mailData() map[string]string {
 		"Size":      "6.0 GiB",
 		"Threshold": "5.0 GiB",
 		"AppURL":    "https://links.example.com",
+		// The invitation (M27).
+		"Inviter":      "Ada Lovelace",
+		"Organization": "Analytical Engines",
+		"Role":         "editor",
+		"Email":        "invitee@example.com",
+		"URL":          "https://links.example.com/invite/2ZQ3jd0eGkE",
+		"Expires":      "7 August 2026, 09:00 UTC",
 	}
 }
 
@@ -121,6 +128,15 @@ func TestEveryMailRendersUntrustedInputInert(t *testing.T) {
 		// A lone dot on its own line ends the SMTP DATA phase. The transport
 		// dot-stuffs, and the value cannot make a line of its own anyway.
 		"AppURL": "https://links.example.com\n.\nMAIL FROM:<attacker@example.com>",
+		// The invitation's own values (M27). An inviter's display name is the
+		// one field on this template a stranger chooses, and the invited address
+		// is chosen by whoever holds members.write — so both are hostile here.
+		"Inviter":      "Ada\r\nBcc: everyone@example.com",
+		"Organization": "Engines\nSubject: Your invitation was cancelled",
+		"Role":         "editor\r\n.\r\nQUIT",
+		"Email":        "invitee\u202e@example.com",
+		"URL":          "https://links.example.com/invite/x\nBcc: someone@example.com",
+		"Expires":      "never\r\nMAIL FROM:<attacker@example.com>",
 	}
 
 	for _, name := range r.MailTemplates() {

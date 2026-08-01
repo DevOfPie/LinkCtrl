@@ -74,6 +74,8 @@ tags:
     description: Programmatic credentials
   - name: audit
     description: What changed, who changed it, and when
+  - name: invitations
+    description: Adding people to an organization
   - name: notifications
     description: Your own in-app inbox
   - name: workspaces
@@ -747,6 +749,176 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/Validation"
+
+  /invitations:
+    post:
+      tags: [invitations]
+      operationId: createInvitation
+      summary: Invite somebody into your organization
+      description: |
+        Issues a single-use, revocable, expiring grant of one membership.
+
+        **The link is in this response and nowhere else.** Only a hash of the
+        token is stored, exactly as for a session or an API key, so a lost link
+        is re-issued by revoking and inviting again rather than recovered.
+
+        **It is bound to the address it names.** Redemption compares the
+        redeeming account's address against this one, so forwarding the link
+        does not let somebody else join. That is what makes a copyable link
+        safe to copy.
+
+        **The role is capped at your own rank.** `owner` outranks `admin`
+        outranks `editor` outranks `viewer`; asking for one above yours answers
+        `403`. Omitting `role` invites at `viewer`, so a caller that did not
+        think about it admits the least.
+
+        `emailed` is `false` on an instance with no SMTP relay configured. That
+        is the default and not a failure — the link in this response is then the
+        whole delivery mechanism.
+
+        Requires `members.write`, which **is** delegable to an API key: the
+        ceiling is the inviter's own rank, which a key inherits from its
+        creator, so a key holding it cannot widen its own reach.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvitationRequest"
+      responses:
+        "201":
+          description: The invitation, with the only copy of its link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedInvitation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+    get:
+      tags: [invitations]
+      operationId: listInvitations
+      summary: The organization's invitations, newest first
+      description: |
+        Every invitation ever issued for this organization, including the ones
+        that were revoked, expired or accepted — `status` tells them apart, and
+        it is derived from the clock rather than stored, so an invitation that
+        lapsed a second ago reads `expired` without a job having touched it.
+
+        No token is returned. Only its hash is stored.
+
+        Not paginated: an organization's invitations are a handful of rows by
+        construction. Requires `members.write`.
+      responses:
+        "200":
+          description: Every invitation for the caller's organization
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Invitation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /invitations/redeem:
+    post:
+      tags: [invitations]
+      operationId: redeemInvitation
+      summary: Accept an invitation
+      description: |
+        The one operation here that takes no credential — it is how somebody
+        who has none acquires one. It carries the same tight per-address limit
+        as sign-in, and shares that budget with `POST /auth/login`.
+
+        `email` must be the address the invitation was issued to. If an account
+        exists there, `password` authenticates it and the membership is added to
+        it. If none exists, the account is created — unless
+        `LINKCTRL_SIGNUP_MODE` is `closed`, where **no invitation creates an
+        account** and only an existing one can join.
+
+        Redemption creates a membership and nothing else: no personal
+        organization and no workspace of your own. The account is otherwise
+        ordinary, and can be granted the ability to own an organization later
+        without needing a second one.
+
+        **Every failure is the same `404`.** Unknown token, expired, revoked,
+        already used, wrong address, wrong password, already a member, or an
+        address with no account on a closed instance — one status, one body, and
+        the same work spent on each. Anything else would answer "does this
+        address have an account". The two `422`s are about the values you sent
+        and disclose nothing: an address that is not an address, and a password
+        below the twelve-character floor.
+
+        No session is started. Call `POST /auth/login` with the same
+        credentials.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RedeemInvitationRequest"
+      responses:
+        "200":
+          description: Joined
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RedeemedInvitation"
+        "404":
+          description: |
+            The invitation cannot be redeemed. Deliberately indistinguishable
+            from every other reason it could not be.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          $ref: "#/components/responses/Validation"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /invitations/{id}:
+    delete:
+      tags: [invitations]
+      operationId: revokeInvitation
+      summary: Revoke an invitation
+      description: |
+        The link stops working immediately.
+
+        An invitation belonging to another organization answers `404`, the same
+        as one that never existed, so ids cannot be probed. So does one that was
+        already revoked or already accepted — an accepted invitation produced a
+        member, and reporting "revoked" for it would claim something that did
+        not happen. Removing a member is a different operation, and not one this
+        version has.
+
+        Requires `members.write`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /notifications:
     get:
@@ -1483,6 +1655,125 @@ components:
           type: string
           format: date-time
           description: Optional; must be in the future. Absent means the key never expires.
+
+    InvitationStatus:
+      type: string
+      enum: [pending, expired, revoked, redeemed]
+      description: |
+        Derived from the row and the clock rather than stored, so `expired`
+        needs no job to become true. Precedence is revoked, then redeemed, then
+        expired: a revoked invitation that has also lapsed reads `revoked`,
+        because that is what somebody did to it.
+
+    Invitation:
+      type: object
+      additionalProperties: false
+      required: [id, email, role, invited_by, status, created_at, expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        email:
+          type: string
+          description: The address this invitation is bound to. Only it can redeem.
+        role:
+          type: string
+          description: The role the membership will carry.
+        invited_by:
+          type: string
+          description: |
+            Who sent it, as an address. Empty once that account is gone — the
+            invitation outlives it, the same way an audit record does.
+        status:
+          $ref: "#/components/schemas/InvitationStatus"
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        revoked_at: { type: string, format: date-time }
+        redeemed_at: { type: string, format: date-time }
+
+    CreatedInvitation:
+      type: object
+      additionalProperties: false
+      description: |
+        An Invitation plus the two things that exist only in the response that
+        made it. Spelled out rather than composed with allOf, for the reason
+        CreatedAPIKey is: `additionalProperties: false` on the base would reject
+        the very fields this schema adds.
+      required: [id, email, role, invited_by, status, created_at, expires_at, url, emailed]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        role: { type: string }
+        invited_by: { type: string }
+        status:
+          $ref: "#/components/schemas/InvitationStatus"
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        revoked_at: { type: string, format: date-time }
+        redeemed_at: { type: string, format: date-time }
+        url:
+          type: string
+          description: |
+            The copyable link, and the only place the token ever appears. Give
+            it to the person named in `email`; it works for nobody else.
+        emailed:
+          type: boolean
+          description: |
+            Whether a message was queued. `false` on an instance with no SMTP
+            relay, which is the default and not a failure.
+
+    CreateInvitationRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          description: The address to invite. The invitation works for this one only.
+        role:
+          type: string
+          enum: [owner, admin, editor, viewer]
+          description: |
+            At or below your own rank; above it answers `403`. Omitted means
+            `viewer`.
+
+    RedeemInvitationRequest:
+      type: object
+      additionalProperties: false
+      required: [token, email, password]
+      properties:
+        token:
+          type: string
+          description: The token from the invitation link's last path segment.
+        email:
+          type: string
+          description: |
+            The address the invitation was issued to. Any other address is
+            refused, and refused identically to every other failure.
+        name:
+          type: string
+          description: |
+            Used only when the account is being created; defaults to the local
+            part of the address. Ignored when the account already exists.
+        password:
+          type: string
+          minLength: 12
+          description: |
+            The password of the existing account, or the password of the account
+            being created.
+
+    RedeemedInvitation:
+      type: object
+      additionalProperties: false
+      required: [user_id, organization_id, organization_name, role, account_created]
+      properties:
+        user_id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        organization_name: { type: string }
+        role: { type: string }
+        account_created:
+          type: boolean
+          description: |
+            True when the account did not exist and was made here. False means
+            an account you already had gained a membership.
 
     AuditEntry:
       type: object

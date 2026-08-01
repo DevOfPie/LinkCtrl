@@ -62,7 +62,10 @@ func (a *AuthAPI) Setup(w http.ResponseWriter, r *http.Request) {
 // Register creates an account, subject to SIGNUP_MODE.
 func (a *AuthAPI) Register(w http.ResponseWriter, r *http.Request) {
 	if a.Config.Auth.SignupMode != config.SignupOpen {
-		// Invite mode is Phase 2; until then anything but open is closed.
+		// `invite` is not open registration and never was: it admits accounts
+		// through POST /invitations/redeem, where an administrator named the
+		// address first. This endpoint is *public* signup, so anything but
+		// `open` refuses here.
 		WriteProblem(w, r, Problem{
 			Type: problemBase + "signup-closed", Title: "Registration is closed",
 			Status: http.StatusForbidden,

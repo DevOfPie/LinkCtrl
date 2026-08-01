@@ -8,6 +8,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
+	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
@@ -32,7 +33,11 @@ type Deps struct {
 	Audit *audit.Service
 	// Notify serves the per-user inbox, and backs the nav's unread count.
 	Notify *notify.Service
-	Web    *Web
+	// Invites serves the invitation lifecycle. Nil leaves both the endpoints
+	// and the dashboard page unregistered, which is what the parity test
+	// against openapi.yaml compares itself to.
+	Invites *invite.Service
+	Web     *Web
 	// Metrics is optional. Nil disables instrumentation entirely rather than
 	// registering into a global registry, so two servers in one test process
 	// cannot collide.
@@ -159,6 +164,24 @@ func NewRouter(d Deps) http.Handler {
 		app.Handle("GET "+APIPrefix+"/audit", RequireAuth(http.HandlerFunc(a.List)))
 	}
 
+	if d.Invites != nil {
+		inv := &InvitationAPI{Invites: d.Invites}
+		for pattern, h := range map[string]http.HandlerFunc{
+			"POST " + APIPrefix + "/invitations":        inv.Create,
+			"GET " + APIPrefix + "/invitations":         inv.List,
+			"DELETE " + APIPrefix + "/invitations/{id}": inv.Revoke,
+		} {
+			app.Handle(pattern, RequireAuth(h))
+		}
+		// Redemption is the one endpoint here that must work with no credential
+		// at all — it is how somebody acquires their first one. It verifies a
+		// password, so it carries the login limit rather than the API one, and
+		// shares the limiter with /auth/login so alternating between the two
+		// does not double an attacker's budget.
+		app.Handle("POST "+APIPrefix+"/invitations/redeem",
+			RateLimit(d.Limits.Login, "login", d.Metrics, nil)(http.HandlerFunc(inv.Redeem)))
+	}
+
 	if d.Notify != nil {
 		n := &NotificationAPI{Notify: d.Notify}
 		for pattern, h := range map[string]http.HandlerFunc{
@@ -207,6 +230,15 @@ func NewRouter(d Deps) http.Handler {
 		app.Handle("POST /account/domain",
 			web.RequireWebAuth(http.HandlerFunc(web.DomainUpdate)))
 
+		// Redeeming an invitation is public, because the person doing it may
+		// have no account yet — and on a default instance, where the mailer is
+		// off, a copied link is the only way this page is ever reached. The
+		// POST verifies a password, so it carries the login limit.
+		if web.Invites != nil {
+			app.HandleFunc("GET /invite/{token}", web.InvitePage)
+			app.Handle("POST /invite/{token}", guard(http.HandlerFunc(web.InviteAccept)))
+		}
+
 		// Everything else redirects anonymous visitors to the login form,
 		// where the API would return a problem document.
 		for pattern, fn := range map[string]http.HandlerFunc{
@@ -229,6 +261,16 @@ func NewRouter(d Deps) http.Handler {
 			"POST /workspace/default":       web.WorkspaceDefault,
 		} {
 			app.Handle(pattern, web.RequireWebAuth(fn))
+		}
+
+		if web.Invites != nil {
+			for pattern, fn := range map[string]http.HandlerFunc{
+				"GET /invites":              web.InvitesPage,
+				"POST /invites":             web.InviteCreate,
+				"POST /invites/{id}/revoke": web.InviteRevoke,
+			} {
+				app.Handle(pattern, web.RequireWebAuth(fn))
+			}
 		}
 	}
 
@@ -431,6 +473,7 @@ var dashboardPatterns = []string{
 	"/{$}", "/login", "/logout", "/setup", "/dashboard", "/docs",
 	"/links", "/links/", "/keys", "/keys/", "/account", "/account/",
 	"/notifications", "/notifications/", "/theme", "/workspace/",
+	"/invites", "/invites/", "/invite/",
 }
 
 // infrastructurePatterns are the routes registered outside dashboardPatterns:

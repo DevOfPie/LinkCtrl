@@ -99,27 +99,40 @@ func CookieName(secure bool) string {
 	return SessionCookieNameInsecure
 }
 
-// NewSessionToken returns a random token and its storage hash.
+// NewOpaqueToken returns a random bearer-shaped secret and its storage hash.
 //
-// Only the hash is persisted. A database leak therefore does not hand over
-// live sessions, which is the same reasoning as never storing a raw password.
-// SHA-256 rather than argon2 is correct here: the token is full-entropy
-// random, so key-stretching adds nothing, and session validation happens on
-// every request where 64 MiB of work would be untenable.
-func NewSessionToken() (token string, hash []byte, err error) {
-	buf := make([]byte, sessionTokenBytes)
+// Only the hash is ever persisted. A database leak therefore does not hand over
+// live credentials, which is the same reasoning as never storing a raw
+// password. SHA-256 rather than argon2 is correct here: the token is
+// full-entropy random, so key-stretching adds nothing, and these are verified
+// on paths where 64 MiB of work would be untenable.
+//
+// Generalized out of NewSessionToken when invitations needed the same
+// construction (M27). One implementation rather than two, so "hashed like a
+// session token" is a fact about the code and not a claim in a comment.
+func NewOpaqueToken(n int) (token string, hash []byte, err error) {
+	buf := make([]byte, n)
 	if _, err := rand.Read(buf); err != nil {
-		return "", nil, fmt.Errorf("auth: read session token: %w", err)
+		return "", nil, fmt.Errorf("auth: read token: %w", err)
 	}
 	token = base64.RawURLEncoding.EncodeToString(buf)
-	return token, HashSessionToken(token), nil
+	return token, HashOpaqueToken(token), nil
 }
 
-// HashSessionToken returns the storage hash for a token.
-func HashSessionToken(token string) []byte {
+// HashOpaqueToken returns the storage hash for a token minted by
+// NewOpaqueToken.
+func HashOpaqueToken(token string) []byte {
 	sum := sha256.Sum256([]byte(token))
 	return sum[:]
 }
+
+// NewSessionToken returns a random session token and its storage hash.
+func NewSessionToken() (token string, hash []byte, err error) {
+	return NewOpaqueToken(sessionTokenBytes)
+}
+
+// HashSessionToken returns the storage hash for a session token.
+func HashSessionToken(token string) []byte { return HashOpaqueToken(token) }
 
 // SessionTTL bundles the two expiry rules.
 type SessionTTL struct {

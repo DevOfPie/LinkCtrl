@@ -30,7 +30,7 @@ milestone, is in [workflow.md](../workflow.md).
 | [M26](m26.md) | Mailer: optional SMTP delivery | — | done |
 | [M26.5](m26.5.md) | Dashboard header: identity menu and notification bell | — (before M27) | done |
 | [M26.6](m26.6.md) | Bounded Redis failure, when the server never answers | — (before M32.5, M34, M40) | done |
-| [M27](m27.md) | Organizations: invitations and joining | M21 M22 M25 M26 | not started |
+| [M27](m27.md) | Organizations: invitations and joining | M21 M22 M25 M26 | done |
 | [M28](m28.md) | Team management, workspaces, org creation | M27 | not started |
 | [M29](m29.md) | Self-serve signup, switchable at runtime | M26 M27 | not started |
 | [M30](m30.md) | Destination blocking: tiers and logging | M21 | not started |

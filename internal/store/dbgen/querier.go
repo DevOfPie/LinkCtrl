@@ -38,6 +38,15 @@ type Querier interface {
 	// Only issued when the caller explicitly asks for a total, because counting
 	// costs a scan the common page load should not pay for.
 	CountLinks(ctx context.Context, arg CountLinksParams) (int64, error)
+	// Whether the person at this address is already in this organization.
+	//
+	// Asked at creation, where the actor holds members.write on the organization
+	// and could read its member list anyway, so answering it discloses nothing they
+	// could not already see. Redemption asks the same question of a user id it has
+	// already resolved, and answers it with the same generic refusal as every other
+	// failure.
+	CountMembershipsForEmail(ctx context.Context, arg CountMembershipsForEmailParams) (int64, error)
+	CountMembershipsForUser(ctx context.Context, arg CountMembershipsForUserParams) (int64, error)
 	CountPendingMail(ctx context.Context) (int64, error)
 	//
 	// The re-notify guard. A threshold that is still crossed is still crossed on
@@ -56,6 +65,8 @@ type Querier interface {
 	// API keys and the permission vocabulary their scopes are drawn from.
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error)
 	CreateDestination(ctx context.Context, arg CreateDestinationParams) (Destination, error)
+	// Invitations: issuing, listing, revoking and redeeming (M27).
+	CreateInvitation(ctx context.Context, arg CreateInvitationParams) (Invitation, error)
 	// Links, destinations and tags.
 	CreateLink(ctx context.Context, arg CreateLinkParams) (Link, error)
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
@@ -92,9 +103,22 @@ type Querier interface {
 	// rather than filtered out: the caller distinguishes them so the response can
 	// say which it was, and a deleted user's key resolves to no row at all.
 	GetAPIKeyByPrefix(ctx context.Context, prefix string) (GetAPIKeyByPrefixRow, error)
+	GetBuiltinRoleBySlug(ctx context.Context, slug string) (GetBuiltinRoleBySlugRow, error)
 	// The instance's link domain and where its root points. Phase 1 has exactly one
 	// default domain; Phase 2 gives a workspace its own and this gains a filter.
 	GetDefaultDomainSettings(ctx context.Context) (GetDefaultDomainSettingsRow, error)
+	// Redemption's only lookup, and the row it locks.
+	//
+	// FOR UPDATE OF i serializes two redemptions of the same token: the second
+	// blocks until the first commits and then reads redeemed_at set, so single-use
+	// is enforced by the database rather than by a check-then-act in Go. The joined
+	// tables are not locked — they are read for their labels, and locking a role
+	// row would block every other invite that names it.
+	//
+	// Expiry and revocation are deliberately NOT in the WHERE clause. The caller
+	// has to tell "no such token" from "expired" apart to decide what to log, and
+	// it answers all of them identically to the person redeeming (decision D27).
+	GetInvitationByTokenHash(ctx context.Context, tokenHash []byte) (GetInvitationByTokenHashRow, error)
 	// --- job bookkeeping ---------------------------------------------------------
 	// The point a job is known to have completed through. Rollups recompute rather
 	// than accumulate, so this is not a correctness dependency for a run that
@@ -114,6 +138,10 @@ type Querier interface {
 	// the 2s target as click_events grows into the tens of millions.
 	GetLinkStats(ctx context.Context, arg GetLinkStatsParams) ([]GetLinkStatsRow, error)
 	GetLinkTags(ctx context.Context, linkID uuid.UUID) ([]GetLinkTagsRow, error)
+	// What to call the organization in an invitation. A primary-key lookup on a
+	// path that is already writing a row, rather than carrying a name on every
+	// identity for the one surface that needs it.
+	GetOrganizationName(ctx context.Context, id uuid.UUID) (string, error)
 	// The live-activity feed. Bounded and index-backed on (link_id, occurred_at).
 	GetRecentClicks(ctx context.Context, arg GetRecentClicksParams) ([]GetRecentClicksRow, error)
 	GetRoleBySlug(ctx context.Context, slug string) (Role, error)
@@ -177,6 +205,20 @@ type Querier interface {
 	// to the workspace the reader happens to be in would hide exactly the actions
 	// worth reviewing.
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error)
+	// The four seeded roles, most powerful first. Feeds the invite form's role
+	// choices, filtered by the inviter's own rank in the service (decision D28).
+	ListBuiltinRoles(ctx context.Context) ([]ListBuiltinRolesRow, error)
+	// The administrator's list, newest first.
+	//
+	// No pagination and no cursor. An organization's outstanding invitations are a
+	// handful of rows by construction, and redeemed ones stop accumulating the
+	// moment people join; the link list's machinery here would be a page that
+	// cannot fill.
+	//
+	// The inviter is joined as a label rather than an id, for the same reason the
+	// audit log stores one: the row has to stay readable after that account is
+	// gone, and the LEFT JOIN is what lets it.
+	ListInvitations(ctx context.Context, organizationID uuid.UUID) ([]ListInvitationsRow, error)
 	// Keyset pagination over (created_at, id).
 	//
 	// The cursor is a composite so ordering is total: created_at alone is not
@@ -271,6 +313,9 @@ type Querier interface {
 	//     SELECT pg_advisory_xact_lock(7810213058373316608);
 	LockFirstUserSetup(ctx context.Context) error
 	MarkAllNotificationsRead(ctx context.Context, userID uuid.UUID) (int64, error)
+	// The single-use write. Conditional on the invite still being redeemable, so
+	// even without the lock above this could not be spent twice.
+	MarkInvitationRedeemed(ctx context.Context, arg MarkInvitationRedeemedParams) (int64, error)
 	//
 	// Retry exhausted. Terminal, and deliberately not deleted — a row that says
 	// what was attempted and why it never arrived is the whole point of an outbox
@@ -298,6 +343,12 @@ type Querier interface {
 	// rather than a fresh timestamp, so "when did you first see this" survives a
 	// double click.
 	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (int64, error)
+	// The same lookup without the lock, for rendering the redemption page.
+	//
+	// A GET must not take a row lock: the page is served to anybody holding the
+	// link, and a locking read there would let a stranger hold a write lock on the
+	// row by opening a page.
+	PeekInvitationByTokenHash(ctx context.Context, tokenHash []byte) (PeekInvitationByTokenHashRow, error)
 	// The end of the trash window: hard-delete links whose purge_after has passed.
 	//
 	// One statement, so the reservation and the deletion cannot be separated by a
@@ -399,6 +450,21 @@ type Querier interface {
 	// session's id to leave the browser the user is changing their password in
 	// still signed in.
 	RevokeAllUserSessions(ctx context.Context, arg RevokeAllUserSessionsParams) error
+	// Scoped by organization as well as id, so an id from another organization is
+	// indistinguishable from one that does not exist: both change zero rows.
+	//
+	// Already-revoked and already-redeemed are excluded rather than tolerated. A
+	// redeemed invite has produced a member, and reporting "revoked" for it would
+	// claim something the tree does not support.
+	RevokeInvitation(ctx context.Context, arg RevokeInvitationParams) (int64, error)
+	// Clears an expired invite out of the outstanding slot so a replacement can be
+	// issued.
+	//
+	// The partial unique index cannot exclude expired rows — `now()` is not
+	// immutable, so Postgres will not index on it — which means an invite that
+	// lapsed still occupies the address. This runs immediately before the insert,
+	// in the same transaction, and touches nothing that is still redeemable.
+	RevokeLapsedInvitation(ctx context.Context, arg RevokeLapsedInvitationParams) (int64, error)
 	RevokeSession(ctx context.Context, id uuid.UUID) error
 	// Every dimension in one pass over click_events.
 	//

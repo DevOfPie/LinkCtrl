@@ -32,6 +32,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/geoip"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
+	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/mail"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
@@ -368,6 +369,27 @@ func run(cfg config.Config, _ io.Writer) error {
 			"notifications are delivered in the dashboard only")
 	}
 
+	// Invitations. Built after the mailer, because whether one exists is the
+	// whole difference between "we emailed it" and "copy this link" — and a nil
+	// Enqueuer here is the mail-free instance, not an error.
+	//
+	// NewAccounts follows SIGNUP_MODE and is computed here rather than passed as
+	// the mode, so the service reads a property of what it may do instead of
+	// re-deciding what a configuration word means (D7).
+	inviteSvc, err := invite.NewService(pools.App, invite.Config{
+		AppURL:      cfg.AppOrigin(),
+		TTL:         cfg.Auth.InviteTTL,
+		NewAccounts: cfg.Auth.SignupMode != config.SignupClosed,
+		Hasher:      authSvc.Hasher(),
+		Audit:       auditSvc,
+		Notify:      notifySvc,
+		Mail:        inviteMailer(mailSvc),
+		Log:         log,
+	})
+	if err != nil {
+		return err
+	}
+
 	linkSvc := link.NewService(pools.App, link.Config{
 		Policy: link.DestinationPolicy{
 			Schemes:             cfg.Alias.DestSchemes,
@@ -498,11 +520,12 @@ func run(cfg config.Config, _ io.Writer) error {
 		Stats:        stats,
 		Audit:        auditSvc,
 		Notify:       notifySvc,
+		Invites:      inviteSvc,
 		Metrics:      metrics,
 		Limits:       limits,
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
-			Links: linkSvc, Stats: stats, Notify: notifySvc,
+			Links: linkSvc, Stats: stats, Notify: notifySvc, Invites: inviteSvc,
 		},
 	})
 
@@ -617,4 +640,17 @@ func healthcheck(args []string) error {
 		return fmt.Errorf("readyz returned %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// inviteMailer hands the outbox to the invitation service, or nothing at all.
+//
+// A typed nil pointer inside an interface is not a nil interface, so passing
+// mailSvc straight through on a mail-free instance would give the service an
+// Enqueuer that is non-nil and panics on first use — and the first use is
+// somebody being invited. This is the one place that conversion happens.
+func inviteMailer(m *mail.Service) invite.Enqueuer {
+	if m == nil {
+		return nil
+	}
+	return m
 }

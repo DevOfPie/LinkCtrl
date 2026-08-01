@@ -130,6 +130,21 @@ type Folder struct {
 	DeletedAt   *time.Time
 }
 
+type Invitation struct {
+	ID             uuid.UUID
+	OrganizationID uuid.UUID
+	Email          string
+	EmailLower     *string
+	RoleID         uuid.UUID
+	TokenHash      []byte
+	InvitedBy      *uuid.UUID
+	CreatedAt      time.Time
+	ExpiresAt      time.Time
+	RevokedAt      *time.Time
+	RedeemedAt     *time.Time
+	RedeemedBy     *uuid.UUID
+}
+
 type JobState struct {
 	Job       string
 	LastRunAt *time.Time

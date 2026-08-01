@@ -36,6 +36,7 @@ forgot
 reset
 verify
 invite
+invites
 oauth
 auth
 callback
