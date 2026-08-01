@@ -25,10 +25,10 @@ const (
 // them from the fixture means a page that quietly stops carrying an identity
 // fails this test instead of silently lowering the expected count.
 //
-// The invitation page joins them for a different reason from the other three:
-// it is served to somebody who may have no account at all, which is the whole
-// point of it, so there is no identity for the header to draw.
-var chromelessPages = []string{"login", "setup", "error", "invite"}
+// The invitation, signup and verification pages join them for a different
+// reason from the other three: each is served to somebody who has no account at
+// all, which is the whole point of them, so there is no identity to draw.
+var chromelessPages = []string{"login", "setup", "error", "invite", "signup", "verify"}
 
 // TestExactlyOneIdentityMenuAndBellPerPage is M24.5's assertion applied to the
 // two controls this milestone moves, and for the same reason.

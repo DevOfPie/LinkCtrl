@@ -41,6 +41,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/platform/postgres"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/redis"
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
+	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 	"github.com/DevOfPie/LinkCtrl/internal/team"
@@ -370,17 +371,43 @@ func run(cfg config.Config, _ io.Writer) error {
 			"notifications are delivered in the dashboard only")
 	}
 
+	// Whether this instance accepts new accounts, and by which paths.
+	//
+	// Built before invitations because both answer to the same mode. It is
+	// LINKCTRL_SIGNUP_MODE and nothing else (D38) — no stored toggle, nothing a
+	// session can move — with one derivation on top: a nil mailer lowers `open`
+	// to `invite`, because there is then no way to verify an address (D1). The
+	// string conversion is safe by construction, since config validation has
+	// already refused anything but the three words this type also uses.
+	signupSvc, err := signup.NewService(pools.App, signup.Config{
+		Mode:   signup.Mode(cfg.Auth.SignupMode),
+		AppURL: cfg.AppOrigin(),
+		Hasher: authSvc.Hasher(),
+		Mail:   signupMailer(mailSvc),
+	})
+	if err != nil {
+		return err
+	}
+	// Said once, at boot, because it is the one way an operator can configure
+	// open sign-ups and not get them. The signup page refuses on GET, but
+	// nobody watches for a page they are not being shown.
+	if signupSvc.Configured() == signup.Open && signupSvc.Effective() != signup.Open {
+		log.Warn("LINKCTRL_SIGNUP_MODE is open but no mailer is configured; "+
+			"public registration verifies an address by email, so sign-ups are invitation-only",
+			slog.String("effective_signup_mode", string(signupSvc.Effective())))
+	}
+
 	// Invitations. Built after the mailer, because whether one exists is the
 	// whole difference between "we emailed it" and "copy this link" — and a nil
 	// Enqueuer here is the mail-free instance, not an error.
 	//
-	// NewAccounts follows SIGNUP_MODE and is computed here rather than passed as
-	// the mode, so the service reads a property of what it may do instead of
-	// re-deciding what a configuration word means (D7).
+	// NewAccounts follows the effective signup mode and is computed here rather
+	// than passed as the mode, so the service reads a property of what it may do
+	// instead of re-deciding what a configuration word means (D7).
 	inviteSvc, err := invite.NewService(pools.App, invite.Config{
 		AppURL:      cfg.AppOrigin(),
 		TTL:         cfg.Auth.InviteTTL,
-		NewAccounts: cfg.Auth.SignupMode != config.SignupClosed,
+		NewAccounts: signupSvc.Effective().AdmitsNewAccounts(),
 		Hasher:      authSvc.Hasher(),
 		Audit:       auditSvc,
 		Notify:      notifySvc,
@@ -496,7 +523,7 @@ func run(cfg config.Config, _ io.Writer) error {
 	metrics.Register(observability.NewIngestCollector(ingester))
 
 	roller := analytics.NewRoller(pools.App, log)
-	jobs := newJobRunner(pools.App, salts, roller, log, metrics, notifySvc, mailSvc,
+	jobs := newJobRunner(pools.App, salts, roller, log, metrics, notifySvc, mailSvc, signupSvc,
 		cfg.Analytics.RetentionDays, cfg.Audit.RetentionDays, cfg.Audit.SizeWarnBytes)
 	jobs.start(ctx)
 	defer jobs.stop()
@@ -528,12 +555,13 @@ func run(cfg config.Config, _ io.Writer) error {
 		Notify:       notifySvc,
 		Invites:      inviteSvc,
 		Team:         teamSvc,
+		Signup:       signupSvc,
 		Metrics:      metrics,
 		Limits:       limits,
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
 			Links: linkSvc, Stats: stats, Notify: notifySvc, Invites: inviteSvc,
-			Team: teamSvc,
+			Team: teamSvc, Signup: signupSvc,
 		},
 	})
 
@@ -657,6 +685,17 @@ func healthcheck(args []string) error {
 // Enqueuer that is non-nil and panics on first use — and the first use is
 // somebody being invited. This is the one place that conversion happens.
 func inviteMailer(m *mail.Service) invite.Enqueuer {
+	if m == nil {
+		return nil
+	}
+	return m
+}
+
+// signupMailer is inviteMailer for the signup service, and exists for exactly
+// the same typed-nil reason. It matters more here: a nil Enqueuer is what drops
+// the signup ceiling to `invite` (D1), so getting this conversion wrong would
+// offer open sign-ups on an instance that cannot verify an address.
+func signupMailer(m *mail.Service) signup.Enqueuer {
 	if m == nil {
 		return nil
 	}

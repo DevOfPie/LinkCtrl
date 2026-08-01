@@ -22,6 +22,13 @@
       <button type="submit" class="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Sign in</button>
     </form>
   </div>
+  {{/* Drawn only when the instance is actually accepting sign-ups. A link to a
+       page that answers 403 is worse than no link, and an instance configured
+       `open` with no mailer is not open (D1) — so this follows the effective
+       mode rather than the variable. */}}
+  {{if .SignupOpen}}
+  <p class="mt-6 text-center text-sm text-muted">No account? <a href="/signup" class="font-medium text-accent-ink hover:underline">Create one</a></p>
+  {{end}}
   {{/* The preference is per-browser, so it has to be settable with no session.
        Account settings hold the other copy of this control. */}}
   <div class="mt-6 flex justify-center">

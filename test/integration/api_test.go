@@ -21,6 +21,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
+	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/team"
 )
 
@@ -32,6 +33,7 @@ type apiFixture struct {
 	server *httptest.Server
 	client *http.Client
 	pool   *pgxpool.Pool
+	auth   *auth.Service
 	keys   *auth.APIKeyService
 }
 
@@ -66,12 +68,26 @@ func newAPI(t *testing.T) *apiFixture {
 		t.Fatal(err)
 	}
 
-	// No mailer, which is the default instance: invitations are issued with a
-	// copyable link and nothing is queued.
+	// A mailer, unlike most fixtures. It is what makes `open` reachable: with
+	// no relay the effective signup mode drops to `invite` (D1) and no
+	// registration is possible, so the contract test could not exercise the
+	// endpoint at all.
+	mailSvc := newMailService(t, pool, &recordingSender{})
+
+	signupSvc, err := signup.NewService(pool, signup.Config{
+		Mode:   signup.Mode(cfg.Auth.SignupMode),
+		AppURL: cfg.AppOrigin(),
+		Hasher: authSvc.Hasher(),
+		Mail:   mailSvc,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	inviteSvc, err := invite.NewService(pool, invite.Config{
 		AppURL:      cfg.AppOrigin(),
 		TTL:         168 * time.Hour,
-		NewAccounts: cfg.Auth.SignupMode != config.SignupClosed,
+		NewAccounts: signupSvc.Effective().AdmitsNewAccounts(),
 		Hasher:      authSvc.Hasher(),
 		Audit:       audit.NewService(pool),
 		Notify:      notify.NewService(pool),
@@ -93,6 +109,7 @@ func newAPI(t *testing.T) *apiFixture {
 		Notify:  notify.NewService(pool),
 		Invites: inviteSvc,
 		Team:    teamSvc,
+		Signup:  signupSvc,
 	}))
 	t.Cleanup(srv.Close)
 
@@ -102,6 +119,7 @@ func newAPI(t *testing.T) *apiFixture {
 		server: srv,
 		client: &http.Client{Jar: jar},
 		pool:   pool,
+		auth:   authSvc,
 		keys:   keySvc,
 	}
 }

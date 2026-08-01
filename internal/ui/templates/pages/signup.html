@@ -1,0 +1,53 @@
+{{define "content"}}
+<div class="mx-auto mt-16 max-w-sm">
+  <div class="mb-8 text-center">
+    <h1 class="text-2xl font-semibold tracking-tight">Create an account</h1>
+    <p class="mt-1 text-sm text-muted">On LinkCtrl</p>
+  </div>
+
+  {{if .Sent}}
+  {{/* Nothing has been created at this point, and the page says so rather than
+       congratulating somebody on an account that does not exist. The address is
+       echoed back because the commonest failure here is a typo in it. */}}
+  <div class="rounded-lg border border-line bg-raised p-6 shadow-sm">
+    <h2 class="text-sm font-medium text-ink">Check your inbox</h2>
+    <p class="mt-2 text-sm text-muted">We sent a confirmation link to <span class="font-medium text-ink">{{.Email}}</span>. Open it to finish creating the account.</p>
+    <p class="mt-2 text-sm text-muted">Nothing exists yet — the account is created when you confirm the address. The link stops working after a day; if it does not arrive, sign up again and the new link replaces it.</p>
+    <a href="/login" class="mt-4 inline-block text-sm font-medium text-accent-ink hover:underline">Back to sign in</a>
+  </div>
+  {{else}}
+  <div class="rounded-lg border border-line bg-raised p-6 shadow-sm">
+    {{template "flash_error" .Error}}
+    {{/* What an account gets, before the form rather than after it. Decision D6:
+         a self-registered account is a tenant of its own, and an invited one is a
+         colleague in somebody else's organization. Somebody who came here
+         expecting to join a team needs to read that before they type. */}}
+    <p class="mb-4 text-sm text-muted">You get an organization and a workspace of your own, and you are their owner. This does <span class="font-medium text-ink">not</span> join an organization that already exists — to do that you need an invitation from somebody in it.</p>
+    <form method="post" action="/signup" class="space-y-4">
+      <div>
+        <label for="name" class="block text-sm font-medium text-ink">Name</label>
+        <input id="name" name="name" type="text" autofocus autocomplete="name" value="{{.Form.Name}}"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        {{template "field_error" (index .FieldErrors "name")}}
+      </div>
+      <div>
+        <label for="email" class="block text-sm font-medium text-ink">Email</label>
+        <input id="email" name="email" type="email" required autocomplete="username" value="{{.Form.Email}}"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        <p class="mt-1 text-xs text-subtle">We send a confirmation link here. The account does not work until you open it.</p>
+        {{template "field_error" (index .FieldErrors "email")}}
+      </div>
+      <div>
+        <label for="password" class="block text-sm font-medium text-ink">Password</label>
+        <input id="password" name="password" type="password" required minlength="12" autocomplete="new-password"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        <p class="mt-1 text-xs text-subtle">At least 12 characters. Length is the only rule.</p>
+        {{template "field_error" (index .FieldErrors "password")}}
+      </div>
+      <button type="submit" class="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Create account</button>
+    </form>
+  </div>
+  <p class="mt-6 text-center text-sm text-muted">Already have an account? <a href="/login" class="font-medium text-accent-ink hover:underline">Sign in</a></p>
+  {{end}}
+</div>
+{{end}}

@@ -22,6 +22,24 @@ migrations run at boot.
 
 ### Added
 
+- **Anybody can sign themselves up, if the operator switches it on.** There is a
+  `/signup` page, and `POST /api/v1/auth/register` honours the same setting.
+  `LINKCTRL_SIGNUP_MODE` chooses between closed, invitation-only and open, and it
+  is the only way to choose: there is no toggle in the dashboard and no endpoint
+  that changes it.
+- **A self-registered account gets an organization and workspace of its own**,
+  and is their owner. It does not join yours — an invitation is what does that,
+  and it gives membership and nothing else. The sign-up form says so in words,
+  because switching sign-ups on to add a colleague and getting a stranger with a
+  private instance-within-the-instance is exactly the surprise this ordering
+  exists to avoid.
+- **Open registration confirms the address before the account exists.** The form
+  answers `202`, writes a pending row and mails a single-use link that lapses
+  after a day; the user, organization and workspace are created when the link is
+  followed. So `open` requires a configured mailer, and with none the instance
+  stays invitation-only — `/signup` refuses on the way in rather than after a
+  password has been typed. Registering the same address again replaces the
+  outstanding link, which is what to do when the mail does not arrive.
 - **You can manage the people already in your organization.** *Members*, in the
   menu behind your address in the header, lists every membership with its role
   and lets you change or end one. `GET /api/v1/members`, `PATCH` and `DELETE
@@ -294,6 +312,21 @@ migrations run at boot.
 
 ### Notes for operators
 
+- **`LINKCTRL_SIGNUP_MODE` keeps its meaning and gains a browser.** It was read
+  only by `POST /api/v1/auth/register`; it now governs the `/signup` page as
+  well. It is still set in the environment and nowhere else — no runtime toggle
+  was added, deliberately, because an instance-wide setting held on the owner
+  role would be held by everyone who signed up on an open instance.
+- **`open` needs `LINKCTRL_SMTP_HOST`.** Public registration confirms the address
+  before creating the account, so with no relay the effective mode is
+  invitation-only whatever the variable says. `/signup` answers 403 and the
+  server states the derivation once at boot.
+- **`POST /api/v1/auth/register` answers `202`, not `201`,** and no longer
+  returns a user id. Nothing exists when it returns; the account is created by
+  the emailed link. A client that expected `201` and a `user_id` needs changing.
+- One additive table, `pending_registrations` — the waiting room for an address
+  that has not been proven yet. Lapsed and spent rows are swept hourly. No new
+  permission.
 - Every record stores a network prefix — /24 for IPv4, /48 for IPv6 — and never
   an address, matching what sessions already did. The actor's label is
   snapshotted when the event is written, so a record stays readable after the

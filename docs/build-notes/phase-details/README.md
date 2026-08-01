@@ -33,7 +33,7 @@ milestone, is in [workflow.md](../workflow.md).
 | [M27](m27.md) | Organizations: invitations and joining | M21 M22 M25 M26 | done |
 | [M28](m28.md) | Team management, workspaces, org creation | M27 | done |
 | [M28.5](m28.5.md) | Organization deletion and tenancy teardown | M28 | done |
-| [M29](m29.md) | Self-serve signup, switchable at runtime | M26 M27 | not started |
+| [M29](m29.md) | Self-serve signup, configured by the operator | M26 M27 | done |
 | [M30](m30.md) | Destination blocking: tiers and logging | M21 | not started |
 | [M31](m31.md) | Blocked-attempt disputes and owner review | M30 M22 | not started |
 | [M32](m32.md) | Opt-in reputation and malware feeds | M30 M31 | not started |

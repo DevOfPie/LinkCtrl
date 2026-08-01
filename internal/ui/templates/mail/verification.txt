@@ -1,0 +1,21 @@
+Subject: Confirm your address to finish creating your LinkCtrl account
+
+Hello,
+
+Somebody asked to create a LinkCtrl account for this address ({{.Email}}).
+
+Open this link to confirm the address and finish creating the account:
+
+    {{.URL}}
+
+Nothing has been created yet. The account, with an organization and a workspace
+of its own, is made when you open that link and confirm — so if you do nothing,
+nothing happens.
+
+The link works once and stops working on {{.Expires}}.
+
+If you did not ask for this, ignore it. Somebody typed your address into a
+sign-up form; no account exists and none will.
+
+--
+LinkCtrl

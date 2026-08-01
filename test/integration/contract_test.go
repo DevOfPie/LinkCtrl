@@ -176,9 +176,14 @@ func TestAPIMatchesItsContract(t *testing.T) {
 
 	c.do("GET", p+"/me", nil, http.StatusOK)
 
+	// 202, not 201. Nothing exists yet — the account is created when the
+	// emailed link is followed, which is what verifying the address before the
+	// account is usable means (D1). The fixture's LINKCTRL_SIGNUP_MODE is
+	// `open` and it configures a mailer, which is the only combination in which
+	// this answers anything but 403.
 	c.do("POST", p+"/auth/register", map[string]string{
 		"email": "second@example.com", "password": password,
-	}, http.StatusCreated)
+	}, http.StatusAccepted)
 	// The 422 for a malformed email — the response that was a 500 until the
 	// contract work found the unmapped error.
 	c.doBadRequest("POST", p+"/auth/register", map[string]string{

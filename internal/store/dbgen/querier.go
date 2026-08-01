@@ -34,6 +34,10 @@ type Querier interface {
 	//
 	// Ordered oldest first, so a backlog drains in the order it was queued.
 	ClaimDueMail(ctx context.Context, arg ClaimDueMailParams) ([]ClaimDueMailRow, error)
+	// Spends a registration. Conditional on it still being unspent, so this could
+	// not succeed twice even without the lock above; zero rows rolls the
+	// transaction back.
+	ConsumePendingRegistration(ctx context.Context, id uuid.UUID) (int64, error)
 	CountClickEvents(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	// Only issued when the caller explicitly asks for a total, because counting
 	// costs a scan the common page load should not pay for.
@@ -87,6 +91,12 @@ type Querier interface {
 	// Users, sessions and tenancy provisioning.
 	// Drives the first-run setup flow: /setup exists only while this is zero.
 	CountUsers(ctx context.Context) (int64, error)
+	// Whether an address already has an account, for the signup form.
+	//
+	// Counted rather than selected: the caller needs the answer and nothing else,
+	// and returning the row would put somebody else's name and hash in a variable
+	// that only ever gets compared against zero.
+	CountUsersByEmail(ctx context.Context, email string) (int64, error)
 	// What D32 refuses a workspace deletion on.
 	//
 	// Soft-deleted links are excluded on purpose. `links`, `tags` and `folders` all
@@ -106,6 +116,10 @@ type Querier interface {
 	CreateLink(ctx context.Context, arg CreateLinkParams) (Link, error)
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
 	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (Organization, error)
+	// Self-serve signup: the registrations waiting on an address to be proven
+	// (M29). The mode itself is `LINKCTRL_SIGNUP_MODE` and is never read from the
+	// database (D38), so nothing here answers what the instance admits.
+	CreatePendingRegistration(ctx context.Context, arg CreatePendingRegistrationParams) (PendingRegistration, error)
 	// ON CONFLICT DO NOTHING returns no row when another replica inserted first,
 	// which the caller detects and re-reads. Two replicas using different salts
 	// for the same day would split every visitor in two.
@@ -135,6 +149,14 @@ type Querier interface {
 	// `organization_id IS NULL`, so it and the `reserved_aliases` rows keyed to it
 	// are untouched.
 	DeleteOrganization(ctx context.Context, id uuid.UUID) (int64, error)
+	// Clears whatever is outstanding for an address so a fresh attempt can take the
+	// slot.
+	//
+	// Superseding rather than refusing, because the ordinary reason somebody
+	// registers twice is that the first mail never arrived. The old token stops
+	// working at the same moment, which is what makes this safe: there is never
+	// more than one live link per address.
+	DeleteOutstandingRegistration(ctx context.Context, email string) (int64, error)
 	// Reaper. Kept long enough to be visible in the key list after revocation, and
 	// long enough for the audit question above to be answerable.
 	DeleteRevokedAPIKeys(ctx context.Context) (int64, error)
@@ -226,6 +248,11 @@ type Querier interface {
 	// path that is already writing a row, rather than carrying a name on every
 	// identity for the one surface that needs it.
 	GetOrganizationName(ctx context.Context, id uuid.UUID) (string, error)
+	// Verification's lookup, inside the transaction that spends the row.
+	//
+	// FOR UPDATE, so two clicks on the same link serialize and the second sees the
+	// row the first consumed.
+	GetPendingRegistrationByTokenHash(ctx context.Context, tokenHash []byte) (PendingRegistration, error)
 	// The live-activity feed. Bounded and index-backed on (link_id, occurred_at).
 	GetRecentClicks(ctx context.Context, arg GetRecentClicksParams) ([]GetRecentClicksRow, error)
 	GetRoleBySlug(ctx context.Context, slug string) (Role, error)
@@ -528,6 +555,14 @@ type Querier interface {
 	// in the schema that grows forever with no window and no metric, which is the
 	// shape D5 and M21 exist to avoid repeating.
 	PurgeFinishedMail(ctx context.Context, maxAgeDays int32) (int64, error)
+	// The sweep. Removes registrations nobody completed, and consumed rows whose
+	// account has long since been created.
+	//
+	// Both, because neither is a record of anything: an account that exists is
+	// evidence enough that its address was proven, and the audit log carries what
+	// happened. This table is a waiting room, not an archive — the one shape it
+	// must not have is the unbounded growth D5 and M21 exist to stop repeating.
+	PurgeLapsedRegistrations(ctx context.Context, keepDays int32) (int64, error)
 	// Returns the new count so the caller can apply the lockout policy without a
 	// second round trip and without a read-modify-write race between two
 	// concurrent attempts.

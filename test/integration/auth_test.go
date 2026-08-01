@@ -54,15 +54,17 @@ func TestMigrationsProduceExpectedSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 31 was the Phase 1 count: all 20 Plan.md entities, plus the join and
-	// support tables they need. Two Phase 2 tables have been added since, and
-	// neither is an entity: mail_outbox is the delivery queue decision D23 chose
-	// over an in-memory retry, and invitations is the grant M27 issues — live
-	// and typed rather than dormant jsonb, because the feature that reads it
-	// arrived in the same commit. The number moves and the sentence says why
-	// rather than the count silently growing whenever somebody adds a table.
-	if tables != 33 {
-		t.Errorf("got %d tables, want 33 (all 20 Plan.md entities, plus mail_outbox "+
-			"and invitations)", tables)
+	// support tables they need. Three Phase 2 tables have been added since, and
+	// none of them is an entity: mail_outbox is the delivery queue decision D23
+	// chose over an in-memory retry, invitations is the grant M27 issues, and
+	// pending_registrations is M29's waiting room — a self-serve registration
+	// that has not proven its address yet, which is why no account exists for it.
+	// Each is live and typed rather than dormant jsonb, because the feature that
+	// reads it arrived in the same commit. The number moves and the sentence says
+	// why, rather than the count silently growing whenever somebody adds a table.
+	if tables != 34 {
+		t.Errorf("got %d tables, want 34 (all 20 Plan.md entities, plus mail_outbox, "+
+			"invitations and pending_registrations)", tables)
 	}
 
 	// The UTC guarantee the partition scheme depends on.

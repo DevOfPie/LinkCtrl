@@ -14,6 +14,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
+	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/team"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
 )
@@ -41,6 +42,10 @@ type Web struct {
 	// account belonging to nothing is held on, which is why an instance wired
 	// without it can never reach that state either.
 	Team *team.Service
+	// Signup owns whether this instance accepts new accounts, and the public
+	// form. Nil leaves the signup and verification pages unregistered, and every
+	// registration refused.
+	Signup *signup.Service
 }
 
 // shell is what the layout template needs on every page.
@@ -322,6 +327,10 @@ type loginPageData struct {
 	Next   string
 	Error  string
 	Notice string
+	// SignupOpen draws the "create an account" link. A link that leads to a
+	// refusal is worse than no link, and on an instance with no mailer `open`
+	// is not open — so this is the effective mode and not the configured one.
+	SignupOpen bool
 }
 
 func (h *Web) LoginPage(w http.ResponseWriter, r *http.Request) {
@@ -336,12 +345,17 @@ func (h *Web) LoginPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := loginPageData{shell: h.shell(r, "Sign in", "")}
+	data := loginPageData{shell: h.shell(r, "Sign in", ""), SignupOpen: h.signupOpen()}
 	if r.URL.Query().Get("next") != "" {
 		data.Next = safeNext(r.URL.Query().Get("next"))
 	}
 	if r.URL.Query().Get("signedout") == "1" {
 		data.Notice = "You have been signed out."
+	}
+	// Where a completed verification lands. The account exists and the address
+	// is proven; all that is left is the password they chose at the form.
+	if r.URL.Query().Get("verified") == "1" {
+		data.Notice = "Your address is confirmed and your account is ready. Sign in below."
 	}
 	h.render(w, r, http.StatusOK, "login", data)
 }
@@ -360,9 +374,10 @@ func (h *Web) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		data := loginPageData{
-			shell: h.shell(r, "Sign in", ""),
-			Email: r.PostFormValue("email"),
-			Next:  safeNext(r.PostFormValue("next")),
+			shell:      h.shell(r, "Sign in", ""),
+			Email:      r.PostFormValue("email"),
+			Next:       safeNext(r.PostFormValue("next")),
+			SignupOpen: h.signupOpen(),
 		}
 		switch {
 		case errors.Is(err, auth.ErrAccountLocked):

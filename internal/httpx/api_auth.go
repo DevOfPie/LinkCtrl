@@ -1,11 +1,13 @@
 package httpx
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/signup"
 )
 
 // AuthAPI serves the JSON authentication endpoints.
@@ -15,7 +17,11 @@ import (
 // form first and retrofitting an endpoint is how that criterion gets broken;
 // the forms will post to these same service calls.
 type AuthAPI struct {
-	Auth   *auth.Service
+	Auth *auth.Service
+	// Signup owns registration since M29: whether this instance accepts one at
+	// all, and the two halves of an accepted one. Nil refuses every
+	// registration, which is the direction an unwired dependency has to fail in.
+	Signup *signup.Service
 	Config config.Config
 }
 
@@ -59,18 +65,20 @@ func (a *AuthAPI) Setup(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Register creates an account, subject to SIGNUP_MODE.
+// Register starts a public registration, subject to the instance's effective
+// signup mode.
+//
+// `invite` is not open registration and never was: it admits accounts through
+// POST /invitations/redeem, where an administrator named the address first. This
+// endpoint is *public* signup, so anything but `open` refuses here.
+//
+// 202 rather than 201, and the change is the milestone's point. Nothing exists
+// when this returns — no user, no organization, no workspace — because under D1
+// the address is proven before the account is usable, and the strongest form of
+// that is an account which does not exist yet. The verification link creates it.
 func (a *AuthAPI) Register(w http.ResponseWriter, r *http.Request) {
-	if a.Config.Auth.SignupMode != config.SignupOpen {
-		// `invite` is not open registration and never was: it admits accounts
-		// through POST /invitations/redeem, where an administrator named the
-		// address first. This endpoint is *public* signup, so anything but
-		// `open` refuses here.
-		WriteProblem(w, r, Problem{
-			Type: problemBase + "signup-closed", Title: "Registration is closed",
-			Status: http.StatusForbidden,
-			Detail: "This instance does not accept public registration.",
-		})
+	if a.Signup == nil {
+		writeSignupClosed(w, r)
 		return
 	}
 
@@ -80,15 +88,36 @@ func (a *AuthAPI) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := a.Auth.Register(r.Context(), auth.RegisterInput{
+	out, err := a.Signup.Register(r.Context(), signup.RegisterInput{
 		Email: req.Email, Name: req.Name, Password: req.Password,
 	})
 	if err != nil {
+		if errors.Is(err, signup.ErrClosed) {
+			writeSignupClosed(w, r)
+			return
+		}
 		WriteError(w, r, err)
 		return
 	}
-	WriteJSON(w, http.StatusCreated, map[string]any{
-		"user_id": id.UserID, "email": id.Email, "workspace_id": id.WorkspaceID,
+	WriteJSON(w, http.StatusAccepted, map[string]any{
+		"email":      out.Email,
+		"status":     "verification_sent",
+		"expires_at": out.ExpiresAt,
+	})
+}
+
+// writeSignupClosed is the one refusal both registration surfaces give when the
+// effective mode is not `open`.
+//
+// It says nothing about *why* — whether `LINKCTRL_SIGNUP_MODE` is lower or
+// there is no mailer to verify an address with. Both are the operator's
+// business and neither is a stranger's, and distinguishing them would describe
+// how the instance is configured to whoever asked.
+func writeSignupClosed(w http.ResponseWriter, r *http.Request) {
+	WriteProblem(w, r, Problem{
+		Type: problemBase + "signup-closed", Title: "Registration is closed",
+		Status: http.StatusForbidden,
+		Detail: "This instance does not accept public registration.",
 	})
 }
 

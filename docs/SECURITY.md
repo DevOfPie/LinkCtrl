@@ -95,11 +95,31 @@ operator names, and that is the whole of it. On an instance where untrusted peop
 can create links, assume they will. Tiered blocking with an appeal path is
 specified for Phase 2 in Plan.md.
 
-**No MFA, and no email verification.** An optional SMTP mailer now exists, but
-nothing yet verifies an address with it, so an account's address is unverified.
-Public registration is closed by default and there is no signup page;
-`SIGNUP_MODE=open` is honoured only by the JSON API. Verification gating open
-signup is specified for Phase 2 in Plan.md. MFA is Phase 3.
+**No MFA. Addresses are verified only on the self-serve path.** Public
+registration confirms the address before the account exists — the form writes a
+pending row and mails a single-use link, and the user, organization and workspace
+are created when it is followed — so `open` requires a configured mailer and
+drops to invitation-only without one. Every other path leaves the address
+unverified: the first-run setup account is trusted by construction, and an
+invited one proves receipt of a link rather than readership of an inbox. MFA is
+Phase 3.
+
+**Who may sign up is the operator's setting and nobody else's.**
+`LINKCTRL_SIGNUP_MODE` is the mode, there is no runtime toggle, and no session
+or API call changes it — which is deliberate rather than unfinished. This
+product has no instance-level principal: an account is an owner *of an
+organization*, and a self-registered one owns the organization it was given, so
+any permission gating this on the owner role would have been held by every
+stranger who signed up on an open instance. Decision D38 removed the toggle
+instead of narrowing it. Changing the mode requires whoever can edit the
+environment and restart the process.
+
+**Open sign-ups have no CAPTCHA and no proof-of-work.** Registration shares the
+sign-in rate limit per address, and confirming an address by email is what stops
+an account existing for one nobody controls. Neither stops a distributed run from
+filling the pending table or sending mail to addresses that did not ask for it.
+Leave `LINKCTRL_SIGNUP_MODE` at `closed` or `invite` unless public sign-up is
+something the instance actually wants.
 
 **Queued mail is readable by anyone who can read the database.** The outbox
 stores each message rendered — recipient, subject and body — so it survives a

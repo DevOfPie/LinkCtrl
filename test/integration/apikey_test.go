@@ -511,12 +511,16 @@ func TestRevokingAnotherUsersKeyIsNotFound(t *testing.T) {
 	f.setupOwner()
 	key := f.createKey("owners-key", "links.read")
 
-	// A second account, whose own role also permits key management.
-	resp := f.do(http.MethodPost, "/api/v1/auth/register", map[string]string{
-		"email": "other@example.com", "name": "Other", "password": "a-sufficiently-long-password",
-	})
-	_ = resp.Body.Close()
-	resp = f.do(http.MethodPost, "/api/v1/auth/login", map[string]string{
+	// A second account, whose own role also permits key management. Made through
+	// the service rather than through POST /auth/register: since M29 that
+	// endpoint mails a verification link and creates nothing, and what this test
+	// needs is a second account, not a second registration.
+	if _, err := f.auth.Register(t.Context(), auth.RegisterInput{
+		Email: "other@example.com", Name: "Other", Password: "a-sufficiently-long-password",
+	}); err != nil {
+		t.Fatalf("register the second account: %v", err)
+	}
+	resp := f.do(http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"email": "other@example.com", "password": "a-sufficiently-long-password",
 	})
 	_ = resp.Body.Close()

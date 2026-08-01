@@ -118,18 +118,32 @@ paths:
     post:
       tags: [auth]
       operationId: register
-      summary: Create an account
-      description: Subject to the instance's signup mode; new instances are closed.
+      summary: Start creating an account
+      description: |
+        Open to anybody only when the instance's **effective** signup mode is
+        `open`. That mode is `LINKCTRL_SIGNUP_MODE`, which the operator sets and
+        nothing else can: there is no endpoint that changes it. Anything but
+        `open` answers 403, and the refusal is the same whichever reason applies.
+
+        **This creates no account.** The address is verified first, so the
+        response is `202` and what exists afterwards is a pending registration
+        and an emailed link. Following that link is what creates the user, an
+        organization and a workspace, with the registrant as its owner — a
+        self-registered account is a tenant of its own, unlike an invited one,
+        which gets membership in the inviter's organization and nothing else.
+
+        Because verification is by email, `open` requires a configured mailer.
+        With none, the effective mode is `invite` and this endpoint refuses.
       security: []
       requestBody:
         $ref: "#/components/requestBodies/Credentials"
       responses:
-        "201":
-          description: Account created
+        "202":
+          description: Verification sent; no account exists yet
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AccountCreated"
+                $ref: "#/components/schemas/RegistrationPending"
         "403":
           description: Registration is closed on this instance
           content:
@@ -1689,6 +1703,25 @@ components:
           type: string
           format: uuid
           description: The auto-provisioned personal workspace.
+
+    RegistrationPending:
+      type: object
+      additionalProperties: false
+      required: [email, status, expires_at]
+      description: |
+        A registration waiting on its address. Nothing has been created: the
+        account, its organization and its workspace are written when the emailed
+        link is followed.
+      properties:
+        email:
+          type: string
+          format: email
+          description: The normalized address the link was sent to.
+        status: { type: string, enum: [verification_sent] }
+        expires_at:
+          type: string
+          format: date-time
+          description: When the link stops working. Registering again replaces it.
 
     SessionCreated:
       type: object

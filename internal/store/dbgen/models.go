@@ -254,6 +254,18 @@ type Organization struct {
 	DeletedAt  *time.Time
 }
 
+type PendingRegistration struct {
+	ID           uuid.UUID
+	Email        string
+	EmailLower   *string
+	Name         string
+	PasswordHash string
+	TokenHash    []byte
+	CreatedAt    time.Time
+	ExpiresAt    time.Time
+	ConsumedAt   *time.Time
+}
+
 type Permission struct {
 	ID          uuid.UUID
 	Slug        string

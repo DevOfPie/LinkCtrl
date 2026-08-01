@@ -76,6 +76,8 @@ file. Append a row when you append an entry.
 | [M28, the audit bullet that quietly required a feature](#2026-08-01--m28-the-audit-bullet-that-quietly-required-a-feature) | The bullet before and after; why this was assertion-level and not an amendment; M28.5's placement under planning.md; why a teardown milestone leads with refusals |
 | [M28.5, the two answers that had to precede the code](#2026-08-01--m285-the-two-answers-that-had-to-precede-the-code) | D36 belongs-to-nothing as a real state, and the `orgs.create` seam it opens; D37 links refuse an org deletion, mirroring D32; why the expensive answer won |
 | [M28.5, building the exit and the empty state behind it](#2026-08-01--m285-building-the-exit-and-the-empty-state-behind-it) | The seam mechanism recorded against D16, and why a membership count is not a second axis; `org.delete` against D18, which limb it matched and the limb D18 does not have; where the empty state is enforced and where it is only drawn; what the teardown leaves behind, and what it does not |
+| [M29, verifying an address before the account exists](#2026-08-01--m29-verifying-an-address-before-the-account-exists) | Why open registration creates nothing until the link is followed, and the two designs that lost; `pending_registrations` and its two partial indexes; why a failed enqueue fails the request here but not for an invitation; the one derivation on top of the mode, and why the refusal names neither bound |
+| [M29, the toggle that was built and then removed](#2026-08-01--m29-the-toggle-that-was-built-and-then-removed) | D38; why `owner-only` did not name a small set; the table of who could move it per ceiling; the two repairs refused and why; what the scope row lost |
 
 ---
 
@@ -5471,3 +5473,191 @@ Postgres takes `FOR KEY SHARE` on a parent row when inserting a child that
 references it, and that conflicts with `FOR UPDATE`, so a locked organization
 cannot acquire a workspace and a locked workspace cannot acquire a link while the
 guard is deciding.
+
+
+---
+
+## 2026-08-01 — M29, verifying an address before the account exists
+
+M29 gives `LINKCTRL_SIGNUP_MODE` the browser form Phase 1 never had, and makes
+open registration prove an address before an account exists. Who *sets* the mode
+is D38's, recorded in the entry below this one; what follows here is everything
+the build decided that survived it.
+
+### Registration creates nothing; the link does
+
+D1 says `open` requires a mailer and that registration "verifies the address
+before the account is usable". The strongest form of that, and the one built, is
+that **there is no account**: `POST /api/v1/auth/register` and the `/signup` form
+write a `pending_registrations` row — argon2 hash, token hash, expiry — mail a
+single-use link, and answer `202`. The user, its organization and its workspace
+are created inside one transaction when the link is followed, with
+`email_verified_at` set.
+
+Two designs were weighed against this. Creating the user with a fourth
+`users.status` would have needed the status CHECK widened and would have left an
+organization and a workspace behind for every address anybody ever typed into the
+form — an unverified stranger becoming a tenant is precisely what D6's ordering
+argument is about. Creating the user active and gating login on a verification
+row would have put the same debris in the database and made "usable" a property
+computed at sign-in rather than a fact about what exists.
+
+Consequences worth naming:
+
+- **`201` became `202`, and the body no longer carries a `user_id`.** There is
+  nothing to identify. Recorded in CHANGELOG.md as a client-visible change.
+- **The effective mode is re-checked at verification.** A link lives for a day
+  and an operator can lower the mode and restart inside that window; a
+  registration started while sign-ups were open must not still land afterwards,
+  because D7's bound is a state the instance is in and not a moment a request
+  passed through.
+- **The emailed link is a page with a button, not a URL that acts.** Mail clients
+  and security scanners fetch the URLs in a message; a GET that created an
+  account would let one of them finish somebody else's registration before it had
+  been read. The same shape invitation redemption already has.
+- **Verification ends at the sign-in form rather than in a session.** The
+  plaintext password never survived the request that hashed it, so unlike the
+  setup and invitation forms there is nothing to sign in with.
+- **The window is a constant, not a variable.** `VerificationTTL` is 24h. D29
+  made the invitation window tunable because it is an administrator's policy
+  about somebody else's onboarding; this is a person finishing something they
+  started minutes ago, and registering again supersedes the outstanding link, so
+  nobody is ever waiting for it to lapse.
+
+### `pending_registrations`, and why it is a table rather than a column
+
+One table, live and typed rather than dormant jsonb (00600's rule), because the
+feature that reads it arrives in the same commit — the reasoning 01200 gave for
+`invitations`, and the shape too: a bearer-shaped secret stored only as its
+SHA-256, with an expiry and a single-use marker.
+
+Two partial unique indexes carry rules that would otherwise be application
+conventions. `(token_hash)` unique, because a collision would mean two
+registrations one token completes. `(email_lower) WHERE consumed_at IS NULL`, so
+there is never more than one live link per address — and registering again
+*supersedes* rather than being refused, because the ordinary reason somebody
+registers twice is that the first mail never arrived, and refusing there would
+leave the address stuck until the window lapsed.
+
+It is swept hourly, under leadership, for lapsed rows and for spent ones past a
+short retention: a waiting room with no sweep is the one table that grows forever
+with nothing watching it, which is what D5 and M21 exist to stop repeating.
+
+### The mailer is the whole delivery path, so a failed enqueue fails the request
+
+An invitation queues mail *and* returns a copyable link, so a relay failure is
+logged and the administrator still has something to hand over. Here nobody is
+standing beside the person registering: the mail is the only way the link
+reaches them, so `Register` returns the enqueue error rather than swallowing it.
+The pending row is useless without it, and the next attempt supersedes it.
+
+### One derivation, no policy
+
+`Effective()` is `LINKCTRL_SIGNUP_MODE` lowered to `invite` when no mailer is
+configured, and that is the only computation the package performs on the mode.
+It takes no context and returns no error, because there is nothing to read — the
+answer is fixed for the life of the process, which is what makes "no session or
+API call can change the mode" a property of the shape rather than of a check.
+
+The refusal that follows says nothing about *which* bound applies. Whether the
+variable is lower or the relay is missing are both the operator's business and
+neither is a stranger's, and distinguishing them in a public 403 would describe
+how the instance is configured to whoever asked. The operator gets the
+distinction where it is useful: one line in the log at boot, and the row in
+configuration.md.
+
+The signup page refuses on the **GET**, not at the post. Somebody who fills in a
+password and then learns there was never a form to submit has been treated
+worse than somebody told at the door, and it costs nothing to ask first.
+
+### The toggle lives nowhere, and four routes needed no reserved word
+
+`settings`, `signup`, `register` and `verify` were all already in
+`internal/alias/reserved.txt`, so none of the new routes needed a reserved-word
+change — and `settings` stays reserved even though D38 left nothing at
+`/settings`, because a released alias is worth less than the route a later
+milestone might want there.
+
+## 2026-08-01 — M29, the toggle that was built and then removed
+
+D38, and the amendment to [m29.md](phase-details/m29.md) it forced. The worker
+built the runtime toggle the milestone specified, found while building it that
+the milestone's own word for who may use it does not mean what it appears to,
+raised it rather than shipping, and stopped. The owner removed the feature.
+
+### The bullets as they stood
+
+> A small `settings` table exists (decision recorded) holding the runtime signup
+> mode.
+
+> `LINKCTRL_SIGNUP_MODE` is a **ceiling, not a default**: the DB toggle chooses
+> within it under `closed < invite < open`, and a test proves no session or API
+> call can raise the effective mode above the environment's ceiling.
+
+> The toggle is owner-only in UI and API, and **flipping it is an audit event**.
+
+### The bullets as amended
+
+> **`LINKCTRL_SIGNUP_MODE` is the mode, and the only way to set it** (decision
+> D38, 2026-08-01). There is no `settings` table, no `settings.write`
+> permission, and no runtime toggle in the UI or the API. Changing how an
+> instance admits accounts is an operator action — an `.env` edit and a
+> restart — and a test proves no session or API call can change the effective
+> mode at all.
+
+The audit-event clause goes with the toggle, since there is no longer a flip to
+record.
+
+### The tree fact that forced it
+
+`settings.write` was seeded onto the `owner` role, which is a faithful reading of
+*owner-only*. But `owner` is not an instance-level role in this product — it is
+per-organization, and since [M27](phase-details/m27.md) and
+[M28](phase-details/m28.md), registration provisions **every self-registered
+account** an organization it owns. So the holders of an instance-wide permission
+were:
+
+| Ceiling | Who could move the toggle |
+| --- | --- |
+| `closed`, `invite` | the setup account, plus owners somebody deliberately made — *owner-only* is exactly right |
+| `open` | **every account that signed up** |
+
+The failure is confined to `open`, which is the one mode the feature existed to
+enable. The migration comment written during the build said the quiet part
+plainly — *there is no instance-level principal in this product* — which is the
+whole finding.
+
+### Why the scope row moved rather than the permission
+
+Three repairs were available and the owner took the one that removes the
+feature.
+
+Binding `settings.write` to the instance's founding organization would make
+*owner-only* true, and it invents a root organization the plan does not have.
+Every later instance-wide setting would inherit that concept, so a signup
+milestone would have quietly decided the tenancy model for M39's domains and
+whatever follows.
+
+Excluding owners whose only organization is their personal one is the obvious
+idea and does not work: the setup account's organization *is* its personal one,
+so a fresh instance would have nobody who could move the toggle at all. Recorded
+because it is the first thing the next person will think of.
+
+What is lost is real and is not disguised. The scope row said *switchable at
+runtime by an owner* and now says *configured by the operator*; the runtime
+toggle is parked in *Not in Phase 2* with this reasoning attached. Self-serve
+signup still ships — the mailer-gated verification, the pending registration,
+D6's provisioning and D7's absolute `closed` are untouched. What an owner cannot
+do is change the mode without the operator.
+
+### What this cost, and why it was still the right order
+
+A worker built a `settings` table, a permission, two API endpoints and a
+settings page, and all of it comes out. That is the expensive way to learn this.
+
+The cheap way was not available: the milestone had been validated against the
+tree, the decisions it named covered it, and nothing in `m29.md` was false on
+its face. *Owner-only* reads as a small set right up until you notice that
+registration hands out ownerships. It took building the grant and asking who
+actually holds it to see, and the worker seeing it there — rather than an
+operator seeing it on a public instance — is the process working, not failing.

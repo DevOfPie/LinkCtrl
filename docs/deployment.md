@@ -230,9 +230,16 @@ curl -sS -X POST https://links.example.com/api/v1/auth/setup \
   -d '{"email":"you@example.com","name":"You","password":"a-long-passphrase"}'
 ```
 
-`SIGNUP_MODE=closed` (the default) means nobody else can register. The setup
-endpoint is exempt — otherwise a closed instance could never create its first
-account — and it closes the moment it succeeds.
+`SIGNUP_MODE=closed` (the default) means nobody else can register, and nothing
+inside the running instance changes that — there is no runtime toggle, so
+leaving it at `closed` settles the question until somebody edits this file. The
+setup endpoint is exempt, otherwise a closed instance could never create its
+first account, and it closes the moment it succeeds.
+
+To let people in later, set `SIGNUP_MODE` here and restart. `open` additionally
+needs `LINKCTRL_SMTP_HOST`, since public registration confirms the address by
+email before creating the account; without a relay the instance stays at
+invitation-only and says so in the log at boot.
 
 ## 5. Back it up
 

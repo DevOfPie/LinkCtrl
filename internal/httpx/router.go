@@ -12,6 +12,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
+	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/team"
 )
 
@@ -43,7 +44,11 @@ type Deps struct {
 	// unregistered, which is what the parity test against openapi.yaml compares
 	// itself to.
 	Team *team.Service
-	Web  *Web
+	// Signup owns whether the instance accepts new accounts. Nil leaves the
+	// public signup pages unregistered and every registration refused, which is
+	// the direction a missing dependency has to fail in.
+	Signup *signup.Service
+	Web    *Web
 	// Metrics is optional. Nil disables instrumentation entirely rather than
 	// registering into a global registry, so two servers in one test process
 	// cannot collide.
@@ -94,7 +99,7 @@ func NewRouter(d Deps) http.Handler {
 	app := http.NewServeMux()
 
 	if d.Auth != nil {
-		authAPI := &AuthAPI{Auth: d.Auth, Config: d.Config}
+		authAPI := &AuthAPI{Auth: d.Auth, Signup: d.Signup, Config: d.Config}
 		// Credential endpoints carry the login limit rather than the API one.
 		// Per-account lockout already exists and is not enough on its own: it
 		// answers "many guesses at one account", while this answers "many guesses
@@ -278,6 +283,25 @@ func NewRouter(d Deps) http.Handler {
 		if web.Invites != nil {
 			app.HandleFunc("GET /invite/{token}", web.InvitePage)
 			app.Handle("POST /invite/{token}", guard(http.HandlerFunc(web.InviteAccept)))
+		}
+
+		// Self-serve signup, and the link that finishes one. Both are public by
+		// definition — the person using them has no account yet — and both carry
+		// the login limit rather than the API one: the first creates a password
+		// and the second turns a token into an account, so neither may be
+		// attempted at machine speed. Sharing the limiter with /login is
+		// deliberate, so alternating between the surfaces does not double an
+		// attacker's budget.
+		//
+		// Registered whether or not sign-ups are open, so that a closed instance
+		// answers the refusal these handlers write rather than the alias
+		// catch-all's 404: "there is no sign-up here" and "there is no such
+		// link" are different answers, and only one of them is true.
+		if web.Signup != nil {
+			app.HandleFunc("GET /signup", web.SignupPage)
+			app.Handle("POST /signup", guard(http.HandlerFunc(web.SignupSubmit)))
+			app.HandleFunc("GET /verify/{token}", web.VerifyPage)
+			app.Handle("POST /verify/{token}", guard(http.HandlerFunc(web.VerifySubmit)))
 		}
 
 		// Everything else redirects anonymous visitors to the login form,
@@ -541,6 +565,7 @@ var dashboardPatterns = []string{
 	"/invites", "/invites/", "/invite/",
 	"/members", "/members/", "/workspaces", "/workspaces/",
 	"/organizations", "/organizations/",
+	"/signup", "/verify/",
 }
 
 // infrastructurePatterns are the routes registered outside dashboardPatterns:

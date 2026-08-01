@@ -14,6 +14,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/mail"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
+	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 )
@@ -45,6 +46,10 @@ type jobRunner struct {
 	// the job does not run at all — there is nothing to drain, because with no
 	// mailer nothing is ever enqueued.
 	mailer *mail.Service
+	// signup sweeps registrations nobody completed. Never nil in the process —
+	// the service is always built — but held as a pointer so a test runner
+	// without one skips the sweep rather than panicking.
+	signup *signup.Service
 	cancel context.CancelFunc
 	done   chan struct{}
 }
@@ -58,7 +63,7 @@ const advisoryLockKey int64 = 0x6c63_6a6f_6273_0001
 
 func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analytics.Roller,
 	log *slog.Logger, metrics *observability.Metrics, notifier *notify.Service,
-	mailer *mail.Service,
+	mailer *mail.Service, signups *signup.Service,
 	analyticsRetentionDays, auditRetentionDays int, auditSizeWarnBytes int64,
 ) *jobRunner {
 	return &jobRunner{
@@ -69,6 +74,7 @@ func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analyt
 		notifier:               notifier,
 		auditSizeWarnBytes:     auditSizeWarnBytes,
 		mailer:                 mailer,
+		signup:                 signups,
 		done:                   make(chan struct{}),
 	}
 }
@@ -263,6 +269,20 @@ func (j *jobRunner) runMaintenance(ctx context.Context) {
 	if err == nil && j.notifier != nil {
 		j.withLeadership(runCtx, "audit-growth-warning", func(ctx context.Context) error {
 			return j.notifier.WarnAuditGrowth(ctx, auditBytes, j.auditSizeWarnBytes)
+		})
+	}
+
+	// Registrations nobody completed, and spent rows past their short window.
+	// Under leadership because it is a delete, and hourly because nothing here
+	// is urgent — a lapsed row does nothing until it is swept, it simply must
+	// not accumulate forever.
+	if j.signup != nil {
+		j.withLeadership(runCtx, "signup-purge", func(ctx context.Context) error {
+			n, err := j.signup.PurgeLapsed(ctx)
+			if err == nil && n > 0 {
+				j.log.Info("lapsed sign-up registrations purged", slog.Int64("count", n))
+			}
+			return err
 		})
 	}
 

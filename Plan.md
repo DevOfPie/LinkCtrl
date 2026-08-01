@@ -218,7 +218,7 @@ anything is being refused.
 | One auto-provisioned personal org + workspace per user | 1 |
 | Organizations: sharing, invites, team management | 2 |
 | Workspace creation, and organization creation from an existing account | 2 |
-| Self-serve signup, switchable at runtime by an owner | 2 |
+| Self-serve signup, configured by the operator | 2 |
 | Optional SMTP mailer, for invitations and address verification | 2 |
 | Activity feed, comments | 2+ |
 
@@ -226,16 +226,21 @@ Signup sits in Phase 2 next to invitations because of the second row, not becaus
 it is hard. Registration provisions a new organization and workspace and makes
 the registrant its owner, so opening signup on Phase 1's tenancy model admits
 *tenants*, not colleagues: a new account sees nothing of an existing workspace and
-cannot be given access to one. An owner switching on "allow sign-ups" to add a
+cannot be given access to one. Switching on "allow sign-ups" to add a
 co-worker would get a stranger with their own private instance-within-the-instance
 — the feature working exactly as designed and being useless for the thing it was
 turned on to do. It also has no email delivery to verify an address against.
 Shipping it before invitations means shipping the surprise; shipping it after
-means the toggle does what its label says.
+means the setting does what its label says.
 
-`LINKCTRL_SIGNUP_MODE` stays in Phase 1 as it is, honest about its values and
-narrow in its reach: it is read only by `POST /api/v1/auth/register`, so `open`
-admits API clients and not browsers. The configuration reference says so.
+`LINKCTRL_SIGNUP_MODE` stayed in Phase 1 as it was, honest about its values and
+narrow in its reach: read only by `POST /api/v1/auth/register`, so `open`
+admitted API clients and not browsers. [M29](docs/build-notes/phase-details/m29.md)
+built the rest and left the variable as the mode (D38). A browser form exists,
+`open` requires a mailer because registration confirms the address before the
+account is created, and the shipped default stays `closed`. Who sets it did not
+move: it is the operator's, in the environment, because this product has no
+instance-level principal for it to belong to.
 
 ### Other surfaces
 
@@ -518,7 +523,7 @@ once (M35).
 | [M27](docs/build-notes/phase-details/m27.md) | Organizations: invitations and joining | M21 M22 M25 M26 | Organizations row (invites) |
 | [M28](docs/build-notes/phase-details/m28.md) | Team management, workspaces, org creation | M27 | Organizations row (complete) · workspace and org creation |
 | [M28.5](docs/build-notes/phase-details/m28.5.md) | Organization deletion and tenancy teardown | M28 | — *(owner-added scope, 2026-08-01)* |
-| [M29](docs/build-notes/phase-details/m29.md) | Self-serve signup, switchable at runtime | M26 M27 | Self-serve signup |
+| [M29](docs/build-notes/phase-details/m29.md) | Self-serve signup, configured by the operator | M26 M27 | Self-serve signup |
 | [M30](docs/build-notes/phase-details/m30.md) | Destination blocking: tiers and logging | M21 | Malicious destination blocking (tiers, logging) |
 | [M31](docs/build-notes/phase-details/m31.md) | Blocked-attempt disputes and owner review | M30 M22 | Disputes with owner review |
 | [M32](docs/build-notes/phase-details/m32.md) | Opt-in reputation and malware feeds | M30 M31 | Third-party feeds |
@@ -595,6 +600,7 @@ The *why* for each is in decisions.md.
 | D35 | Team surfaces take no top-level nav slot | 2026-08-01 | Members, Invitations and Workspaces all hang off the identity menu. [M26.5](docs/build-notes/phase-details/m26.5.md) cut the nav to three destinations and asked the next milestone wanting a slot to argue for one; M28's argument is that all three are visited when something *changes* rather than while work is done, and that promoting one would mean choosing between three faces of one subject. `TestTopLevelNavHoldsThreeDestinations` still asserts the count exactly. |
 | D36 | A member left with no organization | 2026-08-01 | **Deletion proceeds; belonging to nothing becomes a real state.** The account survives with no membership, is prompted on next sign-in to create an organization, and can take no action until it has one. Chosen over refusing (which makes a default instance's first organization effectively undeletable) and over deleting orphaned accounts (which makes one click destroy people, with no trash and an audit trail still naming them). Requires `ResolveWorkspaceForUser` to treat *no workspace* as an empty state rather than a broken instance, and requires first-organization creation to be reachable by an account holding no permissions — [M28.5](docs/build-notes/phase-details/m28.5.md) records which mechanism it used, against D16. |
 | D37 | An organization holding links | 2026-08-01 | **Refuses deletion, mirroring D32.** Archived links included. An org-level cascade through the same links would make D32 bypassable by deleting one level up. Accepted cost: with no bulk delete until 2+, emptying a large organization is a link at a time. |
+| D38 | Who may change the signup mode | 2026-08-01 | **The operator, and nobody else.** `LINKCTRL_SIGNUP_MODE` is the mode — no `settings` table, no `settings.write`, no runtime toggle in UI or API. [M29](docs/build-notes/phase-details/m29.md) built the toggle first and the build is what disqualified it: `settings.write` on the `owner` role does not name a small set, because registration provisions every self-registered account an organization it owns, so under an `open` ceiling every stranger who signed up could move an instance-wide setting. Binding it to a founding organization was refused as inventing an instance-level principal inside a signup milestone. The scope row moves from *switchable at runtime by an owner* to *configured by the operator*, and the runtime toggle is parked in *Not in Phase 2*. |
 
 ### Not in Phase 2
 
@@ -624,6 +630,17 @@ The *why* for each is in decisions.md.
   [M26.5](docs/build-notes/phase-details/m26.5.md)'s bell shows the most recent
   unread for that reason. Adding the concept is a schema change and wants its own
   milestone rather than riding on a layout one.
+- **A runtime signup toggle changeable from the dashboard** — moved out of
+  [M29](docs/build-notes/phase-details/m29.md) on 2026-08-01, per D38, and the
+  scope row above reworded from *switchable at runtime by an owner* to
+  *configured by the operator*. It was built and then removed rather than never
+  attempted: the build is what showed "owner-only" does not name a small set,
+  because every self-registered account owns the organization registration
+  gives it, so on the one ceiling the feature existed to enable — `open` —
+  every stranger who signed up could move the toggle. Restoring it needs an
+  instance-level principal this product does not have, and inventing one inside
+  a signup milestone is what D38 declined to do.
+
 - **Mobile navigation rework** — the header hides the signed-in address below
   `sm` and will continue to. A responsive nav is larger than the header
   milestone that would otherwise absorb it.
@@ -664,6 +681,8 @@ Deliberately accepted in Phase 1.
 | Emptying an organization is one link at a time too | D37 refuses to delete an organization holding any link in any of its workspaces, archived ones included, for the reason D32 refuses it one level up — an org-level cascade would make the workspace rule bypassable. With no bulk delete, a large organization has no practical path that does not involve SQL. Replaces *nothing deletes an organization*, which [M28.5](docs/build-notes/phase-details/m28.5.md) ended. |
 | An organization's audit trail is readable only from inside it | The records survive the organization they describe — `audit_logs.organization_id` carries no foreign key — but `GET /api/v1/audit` is scoped to the caller's own organization and nobody can be in a deleted one. So a deleted organization's trail is intact in the table and reachable only with database access. |
 | An account belonging to no organization can do exactly one thing | D36 lets deletion orphan people rather than refuse on their behalf. The account survives and signs in, but every dashboard route redirects to the page offering a new organization until it has one — including *Account*, so a password cannot be changed from that state. |
+| Changing the signup mode needs the operator | `LINKCTRL_SIGNUP_MODE` is the mode and nothing in the running instance moves it (D38), so letting somebody in means an `.env` edit and a restart — or an invitation, which needs neither. The toggle that would have avoided that was built and removed: this product has no instance-level principal, so *owner-only* would have meant every account that signed up on an open instance. [M29](docs/build-notes/phase-details/m29.md); recorded in [docs/SECURITY.md](docs/SECURITY.md). |
+| A verification link cannot be re-sent, only re-issued | Only the token's hash is stored, so the emailed link exists once. Registering the same address again supersedes the outstanding one and mails a new link, which is the recovery path; there is no "resend" that reuses the old token. |
 | An invitation cannot be re-sent, only re-issued | Only the token's hash is stored, so the link exists once, in the response that created it. Losing it means revoking the invitation and issuing another — the same trade an API key makes, for the same reason. |
 | API keys cannot manage API keys | `apikeys.*` is not delegable, so minting and revoking need a session. Rotation is scheduled as self-rotation-only: [M44](docs/build-notes/phase-details/m44.md). |
 | Analytics drops under overload | Bounded queue; drops counted and alertable. Backpressure would slow redirects. |

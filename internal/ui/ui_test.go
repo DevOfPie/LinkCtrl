@@ -322,6 +322,23 @@ func pageData(t *testing.T) map[string]any {
 			"FieldErrors": map[string]string{},
 			"Error":       "", "NewAccounts": true,
 		},
+		// Self-serve signup (M29), and no identity either: whoever opens this
+		// has no account by definition. The form state rather than the "check
+		// your inbox" state, because it is the branch with everything in it.
+		"signup": map[string]any{
+			"Title": "Create an account", "Nav": "", "Identity": (*identityStub)(nil),
+			"Sent": false, "Email": "",
+			"Form":        map[string]string{"Email": "someone@example.com", "Name": ""},
+			"FieldErrors": map[string]string{"password": "the password must be at least 12 characters"},
+			"Error":       "That email address is already registered.",
+		},
+		// The confirmation the emailed link lands on, in the state that has the
+		// button: an error renders a link instead, which is two lines.
+		"verify": map[string]any{
+			"Title": "Confirm your address", "Nav": "", "Identity": (*identityStub)(nil),
+			"Token": "2ZQ3jd0eGkEaBcDeFgHiJkLmNoPqRsTuVwXyZ012",
+			"Error": "",
+		},
 	}
 
 	// Shell fields every page carries, supplied once rather than in each entry

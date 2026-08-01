@@ -356,9 +356,10 @@ An invitation is one grant of one membership, and four things are true of it:
 
 With a mailer configured the invitation is emailed; either way the link appears
 on the page for you to copy. Accepting adds the organization to an account the
-person already has, or creates one for them — **unless
-`LINKCTRL_SIGNUP_MODE=closed`**, where no invitation may create an account and
-only somebody who already has one can join.
+person already has, or creates one for them — **unless the instance's signup
+mode is `closed`**, where no invitation may create an account and only somebody
+who already has one can join. That mode is `LINKCTRL_SIGNUP_MODE` and the
+operator sets it; see [Sign-ups](#sign-ups) below.
 
 Somebody who joins by invitation gets a membership and nothing else: no personal
 organization or workspace of their own, which is what would make them a separate
@@ -535,6 +536,50 @@ curl -sS -X POST .../api/v1/organizations \
 Both refusals — links present, last workspace — answer `409` with the reason in
 `detail`. The API does not move your session into a new organization; call
 `POST /api/v1/workspaces/{id}/switch` with the `workspace_id` it returned.
+
+## Sign-ups
+
+Whether anybody may create an account here is **`LINKCTRL_SIGNUP_MODE`**, and
+the operator is the only one who sets it. There is no toggle in the dashboard
+and no endpoint that changes it: admitting accounts to an instance is not
+something one organization's owner decides for everybody, so changing it is an
+`.env` edit and a restart (decision D38).
+
+Three modes, in increasing order of who is admitted:
+
+| Mode | Who may get an account |
+| --- | --- |
+| `closed` | Nobody new, by any path. An invitation may only add somebody who already has an account here. |
+| `invite` | Anybody an invitation names. There is no public form. |
+| `open` | Anybody, at `/signup`, after confirming their address by email. |
+
+The shipped default is `closed`.
+
+**`open` needs a mailer.** Registration confirms the address before the account
+exists, so with no `LINKCTRL_SMTP_HOST` configured the effective mode is
+`invite`: `/signup` answers 403 rather than presenting a form that could not be
+completed, and the server states the derivation once at boot.
+
+### What a self-registered account gets
+
+Its **own organization and workspace**, with the registrant as owner. It does not
+join yours. Somebody who accepts an invitation gets the opposite — membership in
+the inviting organization and nothing else — so if the thing you want is a
+colleague, what you want is an invitation, not `SIGNUP_MODE=open`.
+
+### What registering actually does
+
+Nothing, until the address is proven. `POST /api/v1/auth/register` and the
+`/signup` form both answer with a queued verification mail and a `202`; no user,
+organization or workspace exists yet. Following the link and confirming is what
+creates all three, and the link works once and lapses after a day. Registering
+again replaces an outstanding link, which is what to do when the mail does not
+arrive. Lowering the mode invalidates the links already sent: verification asks
+the mode again, so a restart into `closed` strands them.
+
+Registration shares the sign-in rate limit, per address, so alternating between
+the two surfaces does not double anybody's budget. There is **no CAPTCHA**. On a
+public instance, open sign-ups are the largest abuse surface there is.
 
 ## Which workspace you are in
 
