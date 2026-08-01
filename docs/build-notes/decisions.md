@@ -82,6 +82,7 @@ file. Append a row when you append an entry.
 | [M30, the owner signs off on two lists and one withdrawal](#2026-08-01--m30-the-owner-signs-off-on-two-lists-and-one-withdrawal) | Why the embedded entries are structural and not reputation claims; confirming a Phase 1 switch's withdrawal and what survives it; D39, why one curated list is compiled and one is not |
 | [M30, seeding the list D39 moved out of the binary](#2026-08-01--m30-seeding-the-list-d39-moved-out-of-the-binary) | Why the seed is a migration and not a boot-time reconcile, and the two candidates that lost; why the rows need a source of their own, and the one-source-per-reconciliation rule that follows; the widened match and the rule for later migrations; how a matched row's source picks the reason code |
 | [M31, the appeal path and who decides](#2026-08-01--m31-the-appeal-path-and-who-decides) | Why the tier is re-derived rather than supplied; one judgement, two consumers, and the second door the surfaces test now polices; the two refusals `allow` gives instead of doing nothing; why the dispute carries no free text; `destinations.review` — owner-only, non-delegable, instance-wide, and the finding that follows |
+| [M32, a disclosure needs somewhere to live](#2026-08-01--m32-a-disclosure-needs-somewhere-to-live) | What a reputation feed actually sends, and why it is an exception to a promise; D40; why a read-only page does not reverse D38; the no-POST test as the mechanism |
 
 ---
 
@@ -6194,3 +6195,54 @@ somebody filling the queue: a caller who wants a thousand rows in front of the
 owner needs a thousand distinct blocked hosts. Partial, so a host upheld today
 and argued about again next month is a new question rather than a permanently
 closed one.
+
+
+---
+
+## 2026-08-01 — M32, a disclosure needs somewhere to live
+
+D40, and the amendment to [m32.md](phase-details/m32.md) it settles.
+
+M32's bullet required the feed opt-in be disclosed *in both the docs and the
+settings UI*. There is no settings UI: [D38](../../Plan.md) deleted it one
+milestone earlier, when building M29's toggle showed that `settings.write` on
+the `owner` role does not name a small set. So the milestone asked for a
+disclosure on a surface that no longer exists.
+
+Where a disclosure lives is not a fact to be corrected — it is a choice about
+who finds out — so it went to the owner rather than being amended away.
+
+### What is actually being disclosed
+
+Worth stating plainly, because the milestone's Risks section says the wording is
+as much the deliverable as the code. Every blocking decision this product makes
+today is local: a compiled host list, a Postgres table, and heuristics that
+inspect a URL's own text. A reputation feed cannot work that way. Answering
+*is this destination malicious* means **sending the destination to somebody
+else's server**, on every link create and update.
+
+That is a deliberate exception to [Plan.md](../../Plan.md)'s *No destination
+leaves the box uninvited*, and it is the entire reason the feature is off by
+default and needs a named feed to switch on. The failure this disclosure exists
+to prevent is an operator enabling it without registering that their users'
+destinations start leaving the instance.
+
+### The answer, and the line it must not cross
+
+A **read-only instance page**, plus the docs. Documentation-only was refused as
+too thin for the one milestone whose job is qualifying a privacy promise:
+nothing would tell a running instance's users their destinations are being sent
+anywhere, nor an operator who inherited the box without reading anything.
+
+The page carries **no controls and accepts no POST**, and that is asserted by
+test rather than left as a habit. It reads as a contradiction of D38 and is not,
+on a distinction worth writing down: D38 removed the ability to *change*
+instance-wide settings from the dashboard, because there is no principal who can
+be trusted with that when every self-registered account owns an organization.
+Reading is not changing, and being told what an instance does with your data is
+not a privilege that needs a principal.
+
+The risk is not the page. It is that the next instance-wide setting wants a row
+on it, and the one after that wants a toggle beside the row — at which point
+D38 has been reversed by nobody in particular. The no-POST test is what makes
+that reversal an explicit act rather than a drift.
