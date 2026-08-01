@@ -115,6 +115,22 @@ type Destination struct {
 	DeletedAt   *time.Time
 }
 
+type DestinationDispute struct {
+	ID             uuid.UUID
+	Host           string
+	UrlDefanged    string
+	ReasonCode     string
+	Status         string
+	OrganizationID *uuid.UUID
+	WorkspaceID    *uuid.UUID
+	CreatedBy      *uuid.UUID
+	CreatedByLabel string
+	CreatedAt      time.Time
+	DecidedBy      *uuid.UUID
+	DecidedByLabel string
+	DecidedAt      *time.Time
+}
+
 type Domain struct {
 	ID              uuid.UUID
 	OrganizationID  *uuid.UUID

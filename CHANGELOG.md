@@ -52,6 +52,35 @@ migrations run at boot.
   nothing that displays the log can render it as markup or as a link somebody
   clicks. Note that anyone who can create a link can now add audit rows;
   `LINKCTRL_AUDIT_RETENTION_DAYS` is what bounds that.
+- **A low-confidence refusal can be appealed, and the instance owner decides.**
+  Somebody who was refused asks for a review — from the link form, or
+  `POST /api/v1/disputes` — and the request appears in a queue at `/disputes`
+  with a notification to the owner. Allowing it deletes the blocklist entry and
+  the destination becomes usable immediately; upholding it leaves the refusal
+  standing. Either way the person who asked is notified, and either way it is an
+  audit event (`dispute.allowed`, `dispute.upheld`).
+- **The other two tiers have no appeal path at all.** A private address, a
+  forbidden scheme or a host on the curated compiled list answers `422` with
+  `not_disputable` and never reaches the queue. The party those refusals protect
+  is the visitor, not the person appealing, and an owner who could approve
+  `169.254.169.254` on request would have turned the queue into the SSRF the
+  validator exists to prevent.
+- **The queue is built as an attack surface, because it is one.** It shows an
+  instance owner a URL a stranger chose. Every destination in it is defanged in
+  the database and in the API, is never rendered as a link or in anything a
+  browser resolves, and **the server never fetches it** — no preview, no
+  screenshot, no favicon, no liveness check. A test parses the feature's source
+  and fails on any outbound-HTTP symbol, so that stays true.
+- **`destinations.review`**, a new permission, granted to the **owner** role
+  only and never to an API key. Admins do not hold it: it decides what every
+  workspace on the instance may link to, which is wider than the one
+  organization an admin administers. A key cannot hold it because allowing a
+  destination would let that same key point links there.
+- Two refusals `allow` gives instead of pretending to work: a punycode or
+  credentials refusal has no blocklist row to delete (the queue marks it and
+  offers only *Uphold*), and an entry that came from
+  `LINKCTRL_DESTINATION_BLOCKLIST` would come back at the next restart — take it
+  out of the environment instead.
 
 ### Changed
 

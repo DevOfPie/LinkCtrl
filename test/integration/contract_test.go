@@ -263,10 +263,58 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	// a position it does not describe.
 	c.do("GET", p+"/audit?cursor=not-a-cursor", nil, http.StatusUnprocessableEntity)
 
+	// --- disputes -----------------------------------------------------------
+	// Also session-only, and for the escalating reason rather than the
+	// disclosing one: a key holding destinations.review could allow a
+	// destination and then point links at it (D18).
+	//
+	// A row has to exist for anything to be refused, so one is inserted the way
+	// an operator would. The seeded shorteners would have served, but naming the
+	// host here keeps the test readable when somebody edits that seed.
+	if _, err := c.f.pool.Exec(t.Context(),
+		`INSERT INTO blocked_destinations (host, source, reason)
+		 VALUES ('contract-blocked.example', 'review', 'contract test')`); err != nil {
+		t.Fatalf("seed a blocked destination: %v", err)
+	}
+
+	filed := c.do("POST", p+"/disputes", map[string]any{
+		"url": "https://contract-blocked.example/x",
+	}, http.StatusCreated)
+	disputeID := field(t, filed, "id")
+	// One open dispute per host: the second is the documented 409.
+	c.do("POST", p+"/disputes", map[string]any{
+		"url": "https://contract-blocked.example/y",
+	}, http.StatusConflict)
+	// The two tiers with no appeal path, as the documented 422. A private
+	// address and a host on the compiled list both answer `not_disputable`,
+	// which is the whole of the milestone's first bullet seen from outside.
+	c.doBadRequest("POST", p+"/disputes", map[string]any{
+		"url": "http://169.254.169.254/latest/meta-data/",
+	}, http.StatusUnprocessableEntity)
+	c.doBadRequest("POST", p+"/disputes", map[string]any{
+		"url": "https://metadata.google.internal/computeMetadata/",
+	}, http.StatusUnprocessableEntity)
+
+	c.do("GET", p+"/disputes", nil, http.StatusOK)
+	c.do("GET", p+"/disputes?open=true&limit=10", nil, http.StatusOK)
+	c.do("GET", p+"/disputes?cursor=not-a-cursor", nil, http.StatusUnprocessableEntity)
+
+	// Upheld first, then a second dispute allowed, so both decisions are
+	// exercised and both 409s stay reachable: deciding twice, and an id from
+	// nowhere.
+	c.do("POST", p+"/disputes/"+disputeID+"/uphold", nil, http.StatusOK)
+	c.do("POST", p+"/disputes/"+disputeID+"/uphold", nil, http.StatusConflict)
+	c.do("POST", p+"/disputes/"+uuid.NewString()+"/allow", nil, http.StatusNotFound)
+
+	second := c.do("POST", p+"/disputes", map[string]any{
+		"url": "https://contract-blocked.example/z",
+	}, http.StatusCreated)
+	c.do("POST", p+"/disputes/"+field(t, second, "id")+"/allow", nil, http.StatusOK)
+
 	// --- notifications ------------------------------------------------------
-	// Nothing has raised one on this fixture, which is the point of listing an
-	// empty inbox: `items: []` has to satisfy the schema too, and a null there
-	// would only show up on a fresh instance.
+	// The dispute above raised two — one to the owner when it was filed, one
+	// back when it was decided — so this lists an inbox with rows in it rather
+	// than the empty one it listed before M31.
 	c.do("GET", p+"/notifications", nil, http.StatusOK)
 	c.do("GET", p+"/notifications?unread=true&limit=10", nil, http.StatusOK)
 	c.do("GET", p+"/notifications/unread", nil, http.StatusOK)

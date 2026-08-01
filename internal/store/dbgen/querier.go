@@ -51,6 +51,9 @@ type Querier interface {
 	// failure.
 	CountMembershipsForEmail(ctx context.Context, arg CountMembershipsForEmailParams) (int64, error)
 	CountMembershipsForUser(ctx context.Context, arg CountMembershipsForUserParams) (int64, error)
+	// What the queue's heading says there is to do. Served by the partial unique
+	// index, whose predicate this matches exactly.
+	CountOpenDestinationDisputes(ctx context.Context) (int64, error)
 	// What D37 refuses an organization deletion on, and it is deliberately the same
 	// shape as CountWorkspaceLinks one level up.
 	//
@@ -134,6 +137,25 @@ type Querier interface {
 	CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error)
+	// Records a decision, and only on a dispute nobody has decided yet.
+	//
+	// The `status = 'open'` predicate is the concurrency control: two owners
+	// clicking allow and uphold on the same row produce one decision and one
+	// no-rows, rather than a last-writer-wins that leaves the audit record and the
+	// blocklist disagreeing about what happened.
+	DecideDestinationDispute(ctx context.Context, arg DecideDestinationDisputeParams) (DestinationDispute, error)
+	// Removes one host from the low-confidence runtime list.
+	//
+	// The only deletion in this program that is not a reconciliation, and the only
+	// one an `allow` decision performs. Scoped to an exact host — the row that was
+	// matched, which the caller has already read — so a decision about
+	// 'login.evil.example' cannot take 'evil.example' off the list by accident.
+	//
+	// It cannot reach the other two tiers, and there is nothing to scope against
+	// them: the embedded list is a compiled file and the unappealable tier has no
+	// row anywhere. That is the structural half of "decisions act only on the
+	// runtime low-confidence list".
+	DeleteBlockedDestination(ctx context.Context, host string) (int64, error)
 	// Reaper. Revoked rows are kept briefly so "sign out everywhere" is visible in
 	// the session list before it disappears.
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
@@ -191,6 +213,7 @@ type Querier interface {
 	// The instance's link domain and where its root points. Phase 1 has exactly one
 	// default domain; Phase 2 gives a workspace its own and this gains a filter.
 	GetDefaultDomainSettings(ctx context.Context) (GetDefaultDomainSettingsRow, error)
+	GetDestinationDispute(ctx context.Context, id uuid.UUID) (DestinationDispute, error)
 	// Redemption's only lookup, and the row it locks.
 	//
 	// FOR UPDATE OF i serializes two redemptions of the same token: the second
@@ -299,6 +322,19 @@ type Querier interface {
 	// Audit log. Append-only: there is no update and no delete here, and that is the
 	// point of the table. Rows leave only when retention drops a whole partition.
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) error
+	// Blocked-attempt disputes (M31).
+	//
+	// Read and written on the management path only. Like the blocklist it argues
+	// with, nothing here is reachable from the redirect tree: a dispute is about
+	// what may be *stored*, and a link that was refused at creation never became a
+	// row for a visitor to resolve.
+	// Files one dispute.
+	//
+	// The unique partial index on (host) WHERE status = 'open' is what makes a
+	// second open dispute about the same host a constraint violation rather than a
+	// duplicate row, so the "already under review" answer is decided by the database
+	// and not by a check-then-insert that two requests can both pass.
+	InsertDestinationDispute(ctx context.Context, arg InsertDestinationDisputeParams) (DestinationDispute, error)
 	// Notifications. The table shipped dormant in 00600; nothing here adds a
 	// column, per the rule that a dormant table's structure goes in its jsonb until
 	// the feature that needs a column arrives. `data` carries whatever a kind needs.
@@ -333,6 +369,16 @@ type Querier interface {
 	// The four seeded roles, most powerful first. Feeds the invite form's role
 	// choices, filtered by the inviter's own rank in the service (decision D28).
 	ListBuiltinRoles(ctx context.Context) ([]ListBuiltinRolesRow, error)
+	// The queue, newest first, keyset on (created_at, id).
+	//
+	// Instance-wide rather than scoped to the reader's organization, because the
+	// list a decision acts on is instance-wide (01500) and a queue narrower than the
+	// authority it exercises would hide rows the reader is nonetheless deciding for.
+	// The permission is what bounds who sees it.
+	//
+	// @open_only lets the page show the work and the archive from one query, which
+	// is the same shape ListNotifications' unread filter has.
+	ListDestinationDisputes(ctx context.Context, arg ListDestinationDisputesParams) ([]DestinationDispute, error)
 	// The administrator's list, newest first.
 	//
 	// No pagination and no cursor. An organization's outstanding invitations are a

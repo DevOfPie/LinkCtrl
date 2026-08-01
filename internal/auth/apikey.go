@@ -147,11 +147,19 @@ func APIKeyHash(pepper []byte, prefix, secret string) []byte {
 // second check in the handler or the service — the endpoint authorizes on the
 // permission like every other endpoint — so if machine export ever outweighs
 // the disclosure, deleting this one line is the whole change. See decisions.md.
+//
+// destinations.review is the escalating limb again, and more directly than key
+// management is. Allowing a disputed destination deletes a row from the
+// instance-wide low-confidence blocklist, after which every destination under
+// that host becomes creatable — by the key that removed it, among others. A key
+// that can decide what it is allowed to point at has widened its own reach by an
+// action it took itself (M31, applying D18).
 var NonDelegableScopes = map[string]struct{}{
-	PermAPIKeysRead:  {},
-	PermAPIKeysWrite: {},
-	"org.delete":     {},
-	"audit.read":     {},
+	PermAPIKeysRead:       {},
+	PermAPIKeysWrite:      {},
+	"org.delete":          {},
+	"audit.read":          {},
+	"destinations.review": {},
 }
 
 // APIKeyInfo is a key as its owner sees it. The secret is absent by

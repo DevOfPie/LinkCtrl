@@ -26,6 +26,24 @@
       <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Create</button>
     </div>
   </form>
+  {{/* The appeal, offered only after a low-confidence refusal (M31).
+
+       It is a separate form rather than a second button inside the one above,
+       because it posts somewhere else and must not carry the alias. The value it
+       carries is the destination the person typed, unrendered anywhere on this
+       page — the field above already holds it, and this input is `hidden`, so
+       nothing here turns a refused URL into something a browser resolves.
+
+       The other two tiers deliberately reach nothing: `.DisputeURL` is set only
+       when the reason code names the low-confidence tier, and dispute.File
+       re-derives the tier server-side anyway. */}}
+  {{if .DisputeURL}}
+  <form method="post" action="/disputes" class="mt-4 border-t border-line pt-4">
+    <input type="hidden" name="url" value="{{.DisputeURL}}">
+    <p class="text-sm text-muted">This instance refused that destination on a rule that can be wrong. You can ask the owner to look at it.</p>
+    <button type="submit" class="mt-2 rounded-md border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-surface">Ask for a review</button>
+  </form>
+  {{end}}
 </div>
 {{end}}
 

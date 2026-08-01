@@ -17,6 +17,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
+	"github.com/DevOfPie/LinkCtrl/internal/dispute"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
@@ -102,18 +103,32 @@ func newAPI(t *testing.T) *apiFixture {
 
 	teamSvc := team.NewService(pool, team.Config{Audit: audit.NewService(pool)})
 
+	// The appeal path for a blocked destination (M31). Wired as main.go wires
+	// it, with the link service as its judge: which tier refused a destination
+	// has one answer in this program, and a second evaluator here would be a
+	// second answer waiting to disagree.
+	disputeSvc, err := dispute.NewService(pool, dispute.Config{
+		Judge:  linkSvc,
+		Audit:  audit.NewService(pool),
+		Notify: notify.NewService(pool),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	srv := httptest.NewServer(httpx.NewRouter(httpx.Deps{
-		Config:  cfg,
-		Health:  &httpx.Health{DB: pool},
-		Auth:    authSvc,
-		Keys:    keySvc,
-		Links:   linkSvc,
-		Stats:   analytics.NewReader(pool),
-		Audit:   audit.NewService(pool),
-		Notify:  notify.NewService(pool),
-		Invites: inviteSvc,
-		Team:    teamSvc,
-		Signup:  signupSvc,
+		Config:   cfg,
+		Health:   &httpx.Health{DB: pool},
+		Auth:     authSvc,
+		Keys:     keySvc,
+		Links:    linkSvc,
+		Stats:    analytics.NewReader(pool),
+		Audit:    audit.NewService(pool),
+		Notify:   notify.NewService(pool),
+		Invites:  inviteSvc,
+		Team:     teamSvc,
+		Signup:   signupSvc,
+		Disputes: disputeSvc,
 	}))
 	t.Cleanup(srv.Close)
 

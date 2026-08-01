@@ -16,6 +16,7 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 | `/links/{id}` | Everything about one link: edit destination, alias, title, description, expiry and tags; per-window analytics (7/30/90 days) with device, browser, OS, referrer, language and country breakdowns; recent activity; archive, restore and delete. |
 | `/keys` | Mint, list and revoke API keys. |
 | `/notifications` | Things the instance wanted you to know about, and mark-read. |
+| `/disputes` | The review queue: destinations somebody was refused and has asked you to look at. Needs `destinations.review`. |
 | `/account` | Your profile, password and appearance. |
 
 It works without JavaScript. htmx makes search and filtering swap a fragment
@@ -33,8 +34,9 @@ full surface: everything, paged, with mark-read. The preview is deliberately
 short, and nothing is only reachable through it.
 
 Your **email address** opens a menu holding the administrative surfaces —
-**Members**, **Invitations** and **Workspaces**, each shown only if you hold the
-permission its page needs — plus **Account** and **Sign out**. They live here
+**Members**, **Invitations**, **Workspaces** and **Blocked destinations**, each
+shown only if you hold the permission its page needs — plus **Account** and
+**Sign out**. They live here
 rather than at the top level because each is visited when something *changes*,
 where the three top-level destinations are where work happens.
 
@@ -168,10 +170,11 @@ members.read members.write  workspace.read workspace.write
 orgs.create
 ```
 
-`apikeys.read`, `apikeys.write`, `org.delete` and `audit.read` are never
-grantable to a key — a key that can mint keys makes revoking a leaked one
-meaningless, an irreversible action should need an interactive sign-in, and the
-audit log ties a network prefix to a named person.
+`apikeys.read`, `apikeys.write`, `org.delete`, `audit.read` and
+`destinations.review` are never grantable to a key — a key that can mint keys
+makes revoking a leaked one meaningless, an irreversible action should need an
+interactive sign-in, the audit log ties a network prefix to a named person, and a
+key that could allow a blocked destination could then point links at it.
 
 Everything else is grantable, and each one has a reason it is safe to be.
 `members.write` gates invitations and member management, and a key holding it
@@ -308,14 +311,49 @@ updating.
 | `unappealable.scheme_not_allowed` | Not `http` or `https` | No |
 | `unappealable.private_address` | A private, loopback, link-local, carrier-NAT or cloud-metadata address, in any spelling a browser resolves | No |
 | `high_confidence.embedded_host` | An exact host on the list compiled into this build | Only by rebuilding the instance |
-| `low_confidence.operator_blocklist` | A host the operator listed, or a child of one | Yes, by the instance owner |
-| `low_confidence.punycode_homograph` | The host is spelled to imitate a different name | Yes |
-| `low_confidence.url_credentials` | Credentials before the host, which hide where the URL goes | Yes |
-| `low_confidence.shortener_chain` | The destination is itself a short link, on a host the instance ships as a known shortener, or a child of one | Yes |
+| `low_confidence.operator_blocklist` | A host the operator listed, or a child of one | Yes — and allowing it removes the entry |
+| `low_confidence.shortener_chain` | The destination is itself a short link, on a host the instance ships as a known shortener, or a child of one | Yes — and allowing it removes the entry |
+| `low_confidence.punycode_homograph` | The host is spelled to imitate a different name | It can be reviewed and upheld, but not allowed |
+| `low_confidence.url_credentials` | Credentials before the host, which hide where the URL goes | Same |
 
 The codes that are not tiered — `required`, `too_long`, `invalid`, `no_scheme`,
 `no_host` — are unchanged. Those are malformed input rather than a refusal, and
 they are not recorded as blocked attempts.
+
+#### Appealing one
+
+Only the `low_confidence.*` tier can be appealed. `POST /api/v1/disputes` with
+the URL that was refused files one; there is no field naming the refusal,
+because the server re-derives the tier from the URL and will not take your word
+for it.
+
+```sh
+curl -sS -X POST "$BASE/api/v1/disputes" -b cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example-shortener.test/abc"}'
+```
+
+`422` with a code of `not_disputable` means the refusal was unappealable or came
+from the compiled list, and no review changes either. `not_blocked` means nothing
+refuses that destination any more. `409` means the host is already waiting.
+
+Whoever holds `destinations.review` — the **owner** role, and no API key — reads
+the queue with `GET /api/v1/disputes?open=true` and answers with
+`POST /api/v1/disputes/{id}/allow` or `.../uphold`. Allowing deletes the
+blocklist entry; upholding changes nothing. Both are audit events and both notify
+the person who asked.
+
+Two allows are refused with `409` rather than doing nothing: a
+`punycode_homograph` or `url_credentials` refusal holds no entry to delete
+(`liftable` is `false` on those), and an entry that came from
+`LINKCTRL_DESTINATION_BLOCKLIST` would come back at the next restart — take it
+out of the environment instead.
+
+**Every destination this API returns is defanged**, in `host_defanged` and
+`destination_defanged`, and there is no way to obtain the original through it.
+Nothing on the server fetches a disputed URL — no preview, no screenshot, no
+liveness check — because a shortener that fetches a URL somebody submitted is the
+SSRF the address refusals exist to prevent.
 
 ### Redirect behaviour
 

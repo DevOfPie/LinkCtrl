@@ -169,11 +169,19 @@ Known limitations and deferred work, so nobody discovers them in production:
   sit a small curated list compiled into the binary and a runtime blocklist —
   the hosts you list, the known URL shorteners the schema ships with, and two
   heuristics for punycode homographs and credentials before the host — which
-  will sometimes be wrong. **There is no owner review queue yet**, so overruling
-  a low-confidence refusal currently means deleting a `blocked_destinations` row
-  by hand, and nothing decides whether a destination is a phishing page.
-  Blocking runs when a link is created or edited, never on the redirect path: a
-  link accepted before its host was blocked keeps working.
+  will sometimes be wrong. A low-confidence refusal can be appealed: whoever was
+  refused asks for a review, and the instance owner allows or upholds it from
+  `/disputes`. The other two tiers have no appeal path at all, and a punycode or
+  credentials refusal can be upheld but not allowed, because it is computed from
+  the URL rather than held as a list entry. Nothing decides whether a destination
+  is a phishing page. Blocking runs when a link is created or edited, never on
+  the redirect path: a link accepted before its host was blocked keeps working.
+- **The review queue is instance-wide, and so is the permission.**
+  `destinations.review` is granted to the **owner** role — of any organization on
+  the instance — and never to an API key. On an instance with open sign-ups, that
+  means anyone who registers becomes an owner who can read every dispute and lift
+  any low-confidence entry for everybody. Run one organization, or keep sign-ups
+  closed, until this product has an instance-level principal.
 - **Open sign-ups have no CAPTCHA.** Email confirmation before the account
   exists, and the shared sign-in rate limit, are the whole defence. On a public
   instance that is the largest abuse surface there is, which is why the shipped

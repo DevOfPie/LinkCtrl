@@ -327,7 +327,7 @@ func TestTheMatchedRowsSourceDecidesTheRule(t *testing.T) {
 // The label-boundary rule LINKCTRL_DESTINATION_BLOCKLIST has always had, now
 // expressed as the set of hosts the database is asked about.
 func TestHostCandidatesRespectLabelBoundaries(t *testing.T) {
-	got := hostCandidates("deep.sub.evil.example")
+	got := HostCandidates("deep.sub.evil.example")
 	want := []string{"deep.sub.evil.example", "sub.evil.example", "evil.example", "example"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("candidates = %v, want %v", got, want)
@@ -336,7 +336,7 @@ func TestHostCandidatesRespectLabelBoundaries(t *testing.T) {
 	// An entry for evil.example is in the candidate set of its children and is
 	// not in the candidate set of a name that merely ends with those letters.
 	for _, host := range []string{"notevil.example", "myevil.example", "evil.example.org"} {
-		for _, c := range hostCandidates(host) {
+		for _, c := range HostCandidates(host) {
 			if c == "evil.example" {
 				t.Errorf("%q would match a blocklist entry for evil.example", host)
 			}
@@ -345,14 +345,14 @@ func TestHostCandidatesRespectLabelBoundaries(t *testing.T) {
 
 	// A trailing dot is the same name fully qualified, and must not produce a
 	// different candidate set — or a blocklist is bypassed by typing one.
-	if !reflect.DeepEqual(hostCandidates("evil.example."), hostCandidates("evil.example")) {
+	if !reflect.DeepEqual(HostCandidates("evil.example."), HostCandidates("evil.example")) {
 		t.Error("a trailing dot changed the candidate set; that is a one-character bypass")
 	}
 
 	// The shortener hosts are matched by this rule now rather than by exact
 	// equality, so the case that used to guard the heuristic is asserted here: a
 	// name that merely contains a shortener's is not that shortener.
-	for _, c := range hostCandidates("sub.bit.ly.evil-looking-but-not-a-shortener.example") {
+	for _, c := range HostCandidates("sub.bit.ly.evil-looking-but-not-a-shortener.example") {
 		if c == "bit.ly" {
 			t.Error("a host that merely contains bit.ly would match the seeded row")
 		}
@@ -360,7 +360,7 @@ func TestHostCandidatesRespectLabelBoundaries(t *testing.T) {
 	// A child of one is, which is wider than the compiled list was and is the
 	// right width for the tier that is allowed to guess.
 	var covered bool
-	for _, c := range hostCandidates("links.bit.ly") {
+	for _, c := range HostCandidates("links.bit.ly") {
 		covered = covered || c == "bit.ly"
 	}
 	if !covered {

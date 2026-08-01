@@ -8,6 +8,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
+	"github.com/DevOfPie/LinkCtrl/internal/dispute"
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
@@ -48,7 +49,13 @@ type Deps struct {
 	// public signup pages unregistered and every registration refused, which is
 	// the direction a missing dependency has to fail in.
 	Signup *signup.Service
-	Web    *Web
+	// Disputes serves the blocked-attempt appeal path and the review queue. Nil
+	// leaves both the endpoints and the dashboard page unregistered, which is
+	// what the parity test against openapi.yaml compares itself to — and which
+	// also takes the "ask for a review" button off the links form, so a refusal
+	// never offers a door that is not there.
+	Disputes *dispute.Service
+	Web      *Web
 	// Metrics is optional. Nil disables instrumentation entirely rather than
 	// registering into a global registry, so two servers in one test process
 	// cannot collide.
@@ -219,6 +226,18 @@ func NewRouter(d Deps) http.Handler {
 		}
 	}
 
+	if d.Disputes != nil {
+		dp := &DisputeAPI{Disputes: d.Disputes}
+		for pattern, h := range map[string]http.HandlerFunc{
+			"POST " + APIPrefix + "/disputes":             dp.File,
+			"GET " + APIPrefix + "/disputes":              dp.List,
+			"POST " + APIPrefix + "/disputes/{id}/allow":  dp.Allow,
+			"POST " + APIPrefix + "/disputes/{id}/uphold": dp.Uphold,
+		} {
+			app.Handle(pattern, RequireAuth(h))
+		}
+	}
+
 	if d.Notify != nil {
 		n := &NotificationAPI{Notify: d.Notify}
 		for pattern, h := range map[string]http.HandlerFunc{
@@ -333,6 +352,17 @@ func NewRouter(d Deps) http.Handler {
 				"GET /invites":              web.InvitesPage,
 				"POST /invites":             web.InviteCreate,
 				"POST /invites/{id}/revoke": web.InviteRevoke,
+			} {
+				app.Handle(pattern, signedIn(fn))
+			}
+		}
+
+		if web.Disputes != nil {
+			for pattern, fn := range map[string]http.HandlerFunc{
+				"GET /disputes":              web.DisputesPage,
+				"POST /disputes":             web.DisputeFile,
+				"POST /disputes/{id}/allow":  web.DisputeAllow,
+				"POST /disputes/{id}/uphold": web.DisputeUphold,
 			} {
 				app.Handle(pattern, signedIn(fn))
 			}
@@ -562,7 +592,7 @@ var dashboardPatterns = []string{
 	"/{$}", "/login", "/logout", "/setup", "/dashboard", "/docs",
 	"/links", "/links/", "/keys", "/keys/", "/account", "/account/",
 	"/notifications", "/notifications/", "/theme", "/workspace/",
-	"/invites", "/invites/", "/invite/",
+	"/invites", "/invites/", "/invite/", "/disputes", "/disputes/",
 	"/members", "/members/", "/workspaces", "/workspaces/",
 	"/organizations", "/organizations/",
 	"/signup", "/verify/",

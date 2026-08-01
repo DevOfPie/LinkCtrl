@@ -143,6 +143,15 @@
     {{if .Identity.Can "workspace.write"}}
     <a href="/workspaces" class="block px-3 py-2 text-sm {{if eq .Nav "workspaces"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">Workspaces</a>
     {{end}}
+    {{/* The review queue joins the administrative entries rather than taking a
+         fourth top-level slot, and for the same reason the other three did not:
+         it is visited when something needs deciding, never while work is being
+         done. destinations.review is held by the owner role alone, so most
+         accounts — including every admin who arrived by invitation — see
+         nothing here. */}}
+    {{if .Identity.Can "destinations.review"}}
+    <a href="/disputes" class="block px-3 py-2 text-sm {{if eq .Nav "disputes"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">Blocked destinations</a>
+    {{end}}
     {{/* Account goes with the rest: it is a page, and a page needs an
          organization to render in (D36). Sign out never does — an account that
          belongs to nothing must still be able to leave, and it is the one thing

@@ -81,6 +81,7 @@ file. Append a row when you append an entry.
 | [M30, three tiers, and the two switches that had to go](#2026-08-01--m30-three-tiers-and-the-two-switches-that-had-to-go) | Why `DESTINATION_BLOCK_PRIVATE_IPS` and a widenable `DESTINATION_SCHEMES` had to go; one door for the validator, enforced by parsing the tree; what "structurally" was taken to mean; what the embedded list holds and what it refuses to hold; punycode without a dependency; defanging on the way in, and the first version that was wrong; env reconciliation; the reason-code break |
 | [M30, the owner signs off on two lists and one withdrawal](#2026-08-01--m30-the-owner-signs-off-on-two-lists-and-one-withdrawal) | Why the embedded entries are structural and not reputation claims; confirming a Phase 1 switch's withdrawal and what survives it; D39, why one curated list is compiled and one is not |
 | [M30, seeding the list D39 moved out of the binary](#2026-08-01--m30-seeding-the-list-d39-moved-out-of-the-binary) | Why the seed is a migration and not a boot-time reconcile, and the two candidates that lost; why the rows need a source of their own, and the one-source-per-reconciliation rule that follows; the widened match and the rule for later migrations; how a matched row's source picks the reason code |
+| [M31, the appeal path and who decides](#2026-08-01--m31-the-appeal-path-and-who-decides) | Why the tier is re-derived rather than supplied; one judgement, two consumers, and the second door the surfaces test now polices; the two refusals `allow` gives instead of doing nothing; why the dispute carries no free text; `destinations.review` — owner-only, non-delegable, instance-wide, and the finding that follows |
 
 ---
 
@@ -6023,3 +6024,173 @@ The tier is stamped `TierLowConfidence` in both branches with no source able to
 say otherwise, which is the same confinement the heuristic type has: a shortener
 row that could refuse at high confidence would cost a rebuild to appeal, which
 is what D39 moved it out of.
+
+---
+
+## 2026-08-01 — M31, the appeal path and who decides
+
+M30 built three tiers and said the bottom one could be overruled without a
+rebuild. This is the mechanism, and every choice in it falls out of one sentence
+in the milestone file: *the review queue exists to hand an instance owner a URL a
+stranger wants them to look at.* That is an attack surface described plainly, and
+what follows is what treating it as one cost.
+
+### The tier is re-derived, never supplied
+
+A dispute names a URL and nothing else. `POST /api/v1/disputes` carries no
+refusal id, no reason code and no tier, and there is deliberately no field it
+could carry one in — the service asks the same evaluator the link form asks, and
+reads the answer.
+
+That is what makes "creatable only from a low-confidence refusal" enforceable
+rather than aspirational. The obvious alternative was to key a dispute to the
+`destination.blocked` audit record that refused it, which reads well until you
+notice what it means: the client would name a row, the server would trust its
+`tier` field, and "which tier refused this" would have two answers that could
+disagree. A record of an attempt is evidence, not an authorization token.
+
+The refusals with no appeal path are one comparison against a tier this package
+never assigns. There is no ordering of request fields that reaches past it.
+
+### One judgement, two consumers, and a second door to police
+
+`checkDestination` used to be both the evaluator and the recorder. A dispute
+needs the first without the second: the refusal it argues about is already in the
+audit log, and writing a second `destination.blocked` per dispute would inflate
+exactly the count an operator reads to decide whether a heuristic earns its keep.
+
+So the evaluation is now `link.Service.Judge`, returning a `Verdict`, and
+`checkDestination` is Judge plus the audit record plus the form field. That
+opens a door M30's bypass test did not know about — a future surface could reach
+Judge directly and skip the record — so `TestEveryDestinationSurfaceGoesThroughTheCheck`
+now polices three sets rather than two: who may call the validator (Judge alone),
+who may call Judge (checkDestination and `dispute.File`), and who may call
+checkDestination (the three writing surfaces). Adding a fourth entry to the
+middle set is a claim that some caller needs the verdict and not the record. That
+is occasionally true and usually a bug, which is why it costs an edit.
+
+### What an allow can actually do, and the two times it refuses
+
+An allow deletes one row from `blocked_destinations`. That is the whole of its
+reach, and it is structural rather than a check: the embedded tier is a compiled
+file and the unappealable tier has no row anywhere, so there is nothing else for
+it to delete — and 01500 has no allow column, so there is nothing it could add.
+
+Two consequences, both of which the queue states rather than discovering by
+failing:
+
+**A rule no row produced cannot be lifted.** `punycode_homograph` and
+`url_credentials` are computed from the URL every time it is judged. A dispute
+about one is still worth filing and worth reading — it is how an operator learns
+their heuristics are producing false positives, which is the number M30 built the
+audit record to expose — but the honest decisions are *uphold* or a change to the
+rule. `Dispute.liftable` says so, the page draws only *Uphold*, and `allow`
+answers `409` rather than deleting nothing and reporting success. This is a real
+gap in "a tier that guesses needs a cheap way to be wrong", and it is recorded as
+a known limitation rather than papered over: closing it would mean an allow-list,
+which is the one thing 01500 refuses to have.
+
+**An environment entry belongs to the environment.** Boot reconciles
+`LINKCTRL_DESTINATION_BLOCKLIST` back into the table, so deleting an `env` row
+here would last until the next restart and then revert. A moderation decision
+that quietly undoes itself is worse than one that refuses, so `allow` answers
+`409` naming the variable.
+
+Both checks run before anything is written, so a refused decision leaves the list
+and the dispute exactly as they were and the owner can still uphold.
+
+### The dispute carries no free text
+
+There was going to be a note field — the filer explaining themselves, the owner
+recording why. Both were dropped, and the reason is the milestone's own framing.
+A note is a second stranger-controlled string rendered to the person who
+administers the instance, and the defences that make the destination safe to
+display do not transfer: defanging prose turns "Thanks. Please review." into
+"Thanks[.] Please review[.]", and *not* defanging it puts an un-neutralized
+attacker-chosen string on the page beside a carefully neutralized one.
+
+What is lost is context, and it is less than it looks: the row already carries
+the host, the attempted URL, the reason code, who asked and when. What is gained
+is that the queue's stranger-controlled surface is exactly one field wide, and
+that field is inert in the column.
+
+### Where the defanging happens
+
+On the way in for the URL, on the way out for the host, and the split is
+deliberate. `url_defanged` is stored inert because it is evidence and nothing
+queries it — the same rule `audit_logs.metadata` has followed since M30, and for
+the same reason: a value that cannot be rendered live is one no consumer written
+later can render live by forgetting. `host` is stored plainly because it is the
+key a decision acts on, and is defanged in every representation that leaves the
+service, the JSON API included.
+
+The rendering is asserted against the HTML rather than against the template:
+`TestTheQueueNeverRendersADisputedDestinationAsALink` checks that no
+URL-bearing attribute holds a disputed destination, that none of them holds
+anything but a local path, that no destination appears inside an anchor at all,
+and that no `://` survives anywhere on the page. It was verified by breaking it
+three ways before it was trusted — rendering the destination as an anchor, adding
+a favicon `<img src>`, and dropping the `liftable` guard — because a security
+test that has never failed has not been shown to test anything.
+
+### Nothing fetches, and it is a gate rather than a rule
+
+`TestTheQueueFetchesNothing` parses every file the feature is made of and fails
+on any outbound-HTTP symbol: the client half of `net/http`, a raw dial, a name
+lookup, a reverse proxy, a subprocess. A companion test walks the tree for files
+whose names say "dispute" and fails when one is not covered, so the list cannot
+rot by omission. A third asserts no struct in the package *holds* such a type,
+because a client field would pass a grep until the day something called it.
+
+This is a test rather than a comment because of how the failure would arrive. A
+preview thumbnail, a favicon, an "is this still up" badge — each is a reasonable
+feature request, and each would make the server fetch a URL a stranger chose from
+inside the network the private-address refusals exist to protect. The person who
+implements it will not be reading this file.
+
+### `destinations.review`: owner-only, non-delegable, instance-wide
+
+**Non-delegable**, on D18's escalating limb rather than its disclosing one.
+Allowing a destination removes a host from the instance-wide list, after which
+every destination under that host becomes creatable — including by the key that
+removed it. That is a credential widening its own reach through an action it took
+itself. `auth.NonDelegableScopes` is the only enforcement, so reversing this is
+deleting one line.
+
+**Owner only, admin excluded** — 01300's reasoning rather than 00900's. An
+admin arrives by invitation on a default instance, and this permission decides
+what *every* organization on the instance may link to. The two administrative
+roles are the right set for reading one organization's audit log and the wrong
+set for moderating a list that crosses all of them.
+
+**Instance-wide, queue and decision together.** The list is instance-wide by
+01500's deliberate choice, so a per-organization queue would hide rows the same
+reader is nonetheless deciding for — the view would be narrower than the
+authority. The alternative, scoping the blocklist per organization, is a change
+to M30's design and not M31's to make.
+
+That leaves a real consequence, and it is written down rather than hoped over: on
+an instance with two organizations, either owner sees every dispute filed on it,
+including who filed it, and can lift an entry for both. With
+`LINKCTRL_SIGNUP_MODE=open` that reach is one registration away. It is the shape
+`domains.write` has had since 00800 and one degree wider, and its root cause is
+D38's finding that this product has no instance-level principal — "the instance
+owner" is not something the permission system can name. Recorded as finding F15
+and as a known limitation in Plan.md, because every fix is a design decision the
+owner takes rather than a correction a worker makes.
+
+### Filing needs no permission of its own
+
+`links.create`, deliberately. A dispute is the second half of an attempt somebody
+was already allowed to make, and the refusal they were shown says "the instance
+owner can review it" — which would be a lie for everyone who can create links if
+filing needed a grant nobody has.
+
+### One open dispute per host
+
+A partial unique index on `(host) WHERE status = 'open'`, so the database decides
+it and two concurrent requests cannot both pass. It is the cheapest bound on
+somebody filling the queue: a caller who wants a thousand rows in front of the
+owner needs a thousand distinct blocked hosts. Partial, so a host upheld today
+and argued about again next month is a new question rather than a permanently
+closed one.

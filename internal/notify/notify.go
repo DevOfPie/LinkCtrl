@@ -195,6 +195,40 @@ func (r Recipient) Greeting() string {
 	return r.Email
 }
 
+// EveryOwner lists the users to tell about something concerning the *instance*
+// rather than one organization.
+//
+// The distinction is not decoration. A destination blocklist, and the disputes
+// about it, cross every organization on the box (M31), so the people who can act
+// are the owners of all of them — and telling only the first organization's
+// owners would be silently wrong on any instance with a second one, which is the
+// bug WarnAuditGrowth's comment already names for its own loop.
+//
+// Deduplicated by user, because one account can own two organizations and would
+// otherwise receive the same notification twice.
+func (s *Service) EveryOwner(ctx context.Context) ([]Recipient, error) {
+	orgs, err := s.q.ListOrganizationIDs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("notify: list organizations: %w", err)
+	}
+	seen := make(map[uuid.UUID]struct{}, len(orgs))
+	var out []Recipient
+	for _, orgID := range orgs {
+		owners, err := s.OwnersOf(ctx, orgID)
+		if err != nil {
+			return nil, err
+		}
+		for _, o := range owners {
+			if _, dup := seen[o.UserID]; dup {
+				continue
+			}
+			seen[o.UserID] = struct{}{}
+			out = append(out, o)
+		}
+	}
+	return out, nil
+}
+
 // OwnersOf lists the users to tell about something concerning the organization.
 func (s *Service) OwnersOf(ctx context.Context, orgID uuid.UUID) ([]Recipient, error) {
 	rows, err := s.q.ListUsersWithRoleInOrg(ctx, dbgen.ListUsersWithRoleInOrgParams{

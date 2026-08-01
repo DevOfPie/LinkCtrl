@@ -30,6 +30,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/build"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
+	"github.com/DevOfPie/LinkCtrl/internal/dispute"
 	"github.com/DevOfPie/LinkCtrl/internal/geoip"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
@@ -470,6 +471,21 @@ func run(cfg config.Config, _ io.Writer) error {
 		return fmt.Errorf("seed destination blocklist: %w", err)
 	}
 
+	// The appeal path for that list, and the queue an owner works through.
+	//
+	// It takes the link service as its judge rather than re-deriving anything:
+	// which tier refused a destination has exactly one answer in this program,
+	// and a second evaluator here would be a second answer waiting to disagree.
+	disputeSvc, err := dispute.NewService(pools.App, dispute.Config{
+		Judge:  linkSvc,
+		Audit:  auditSvc,
+		Notify: notifySvc,
+		Log:    log,
+	})
+	if err != nil {
+		return err
+	}
+
 	// The other half of invalidation: this replica hearing what the others
 	// published. Off the request path entirely — it only ever deletes from the
 	// in-process tiers — and a nil Redis client makes Run return immediately,
@@ -570,12 +586,13 @@ func run(cfg config.Config, _ io.Writer) error {
 		Invites:      inviteSvc,
 		Team:         teamSvc,
 		Signup:       signupSvc,
+		Disputes:     disputeSvc,
 		Metrics:      metrics,
 		Limits:       limits,
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
 			Links: linkSvc, Stats: stats, Notify: notifySvc, Invites: inviteSvc,
-			Team: teamSvc, Signup: signupSvc,
+			Team: teamSvc, Signup: signupSvc, Disputes: disputeSvc,
 		},
 	})
 

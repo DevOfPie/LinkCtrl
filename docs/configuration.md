@@ -191,6 +191,13 @@ That is permanent. Nothing re-asserts those rows, so a restart does not bring
 one back, and no rebuild is involved either way. Adding a shortener the list
 does not know about is the same statement with `INSERT`.
 
+Since 0.2.0 the same deletion is a button. A person refused by any
+`low_confidence.*` rule can ask for a review, and whoever holds
+`destinations.review` decides it at `/disputes`; allowing removes the row. That
+path deliberately will not touch a `source = 'env'` row — this variable owns
+those, and boot would put one back — so an entry you listed here is retired by
+editing the variable and restarting, exactly as before.
+
 `LINKCTRL_DESTINATION_BLOCK_PRIVATE_IPS` **was removed in 0.2.0.** Private,
 loopback, link-local, carrier-NAT and cloud-metadata addresses are now refused
 unconditionally, because that refusal protects the visitor whose browser would do

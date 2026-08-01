@@ -97,7 +97,7 @@ which: `unappealable.*`, `high_confidence.*` or `low_confidence.*`.
 | --- | --- | --- |
 | Unappealable | Non-`http(s)` schemes; private, loopback, link-local, carrier-NAT and cloud-metadata addresses | **Nothing.** No configuration, no list entry, no review |
 | High confidence | Exact hosts on the list compiled into the binary (`internal/link/blocked_hosts.txt`) | Editing that file and rebuilding |
-| Low confidence | Two heuristics — punycode homographs and credentials before the host — plus the `blocked_destinations` table, which holds what you listed in `LINKCTRL_DESTINATION_BLOCKLIST` and the known URL shorteners the schema ships with | The instance owner, with a `DELETE` |
+| Low confidence | Two heuristics — punycode homographs and credentials before the host — plus the `blocked_destinations` table, which holds what you listed in `LINKCTRL_DESTINATION_BLOCKLIST` and the known URL shorteners the schema ships with | The instance owner, from the review queue at `/disputes` |
 
 Only one of those lists is compiled in, and the rule is what it costs to be
 wrong: a list is compiled when overruling it *should* be hard. The embedded file
@@ -117,14 +117,52 @@ before a host was blocked keep redirecting**: re-checking what was already
 accepted is a separate job, and reading a blocklist on the hot path is not
 something this product does.
 
+**A low-confidence refusal can be appealed, and the queue is built as an attack
+surface.** Whoever was refused asks for a review — from the link form, or
+`POST /api/v1/disputes` — and the request appears at `/disputes` with a
+notification to the owner, who allows it (the blocklist entry is deleted) or
+upholds it. Both decisions are audit events and both notify the person who asked.
+
+The queue's whole job is to show an administrator a URL a stranger chose, so:
+
+- **Nothing fetches it.** No preview, no screenshot, no favicon, no liveness
+  check — anywhere behind that page. A fetch would be exactly the SSRF the
+  address refusals exist to prevent, arriving as a convenience feature, and a
+  test parses the feature's source and fails on any outbound-HTTP symbol so it
+  stays that way.
+- **The destination is defanged in the database and in the API**, and is never
+  rendered as a link or in anything a browser resolves. There is no un-defanged
+  form obtainable through the API.
+- **The filer supplies no free text.** A dispute is a host and nothing else, so
+  the stranger-controlled surface is one field wide and that field is inert.
+- **The unappealable and high-confidence tiers have no dispute path**, in either
+  direction: filing one answers `422 not_disputable`, and a decision can only
+  ever delete a `blocked_destinations` row.
+
+**Who can review, and the reach that comes with it.** `destinations.review` is
+granted to the **owner** role and to nothing else — admins do not hold it — and
+`auth.NonDelegableScopes` keeps it off every API key, because a key that can
+allow a destination could then point links at it.
+
+It is nonetheless wider than one organization, and you should size that before
+opening sign-ups. The blocklist is instance-wide, so the queue and its decisions
+are too: the owner of *any* organization on the instance sees every dispute filed
+on it — including the address of whoever filed it — and can lift an entry for
+everybody. With `LINKCTRL_SIGNUP_MODE=open` that is one registration away, since
+registering provisions an organization and makes the registrant its owner. This
+is the same shape `domains.write` has and one degree wider; the cause is that
+this product has no instance-level principal, which is also why the signup mode
+lives in the environment. **Keep sign-ups closed, or run one organization, if
+that reach matters to you.**
+
 **What tiered blocking still does not do.** Nothing decides whether a destination
 is a phishing page. The high-confidence list ships with infrastructure hosts, not
 reputation data, because a list that costs a rebuild to change is the wrong
-instrument for data that changes weekly. There is no owner review queue yet, so a
-low-confidence false positive currently needs a `blocked_destinations` row
-deleted by hand — including one of the seeded shorteners, if you run an instance
-where linking to one is ordinary. On an instance where untrusted people can
-create links, assume they will.
+instrument for data that changes weekly. A refusal from one of the two heuristics
+can be upheld but not allowed: it is computed from the URL every time rather than
+held as a list row, so there is nothing to delete and — deliberately — no row
+anybody can add that permits a destination. Overruling one of those is a code
+change. On an instance where untrusted people can create links, assume they will.
 
 **Blocked attempts are recorded, and the attempted URL is hostile input.** Every
 refusal writes a `destination.blocked` audit event carrying the tier, the rule,

@@ -274,7 +274,7 @@ func lowConfidenceHeuristics(u *url.URL, host string) *Block {
 
 // --- the low-confidence Postgres list ----------------------------------------
 
-// hostCandidates is a host and every parent of it, longest first.
+// HostCandidates is a host and every parent of it, longest first.
 //
 // The label-boundary rule the environment blocklist has always had, expressed as
 // the set of things to ask the database for: blocking "evil.example" refuses
@@ -282,7 +282,12 @@ func lowConfidenceHeuristics(u *url.URL, host string) *Block {
 // candidates for the second are {notevil.example, example} and neither is the
 // listed entry. Asking for all of them at once makes the match an index probe
 // rather than a scan with a LIKE.
-func hostCandidates(host string) []string {
+//
+// Exported for M31's review queue. A decision to allow a destination has to
+// remove the row that actually refused it, which may be a parent of the host
+// that was typed — so the queue asks the same question this package does, with
+// the same rule, rather than inventing a second matching rule that could drift.
+func HostCandidates(host string) []string {
 	host = strings.TrimSuffix(strings.ToLower(host), ".")
 	if host == "" {
 		return nil
@@ -305,7 +310,7 @@ func hostCandidates(host string) []string {
 // change stops working exactly when the instance is unhealthy, and a link
 // created in that window is a link nobody reviewed.
 func (s *Service) listedInDatabase(ctx context.Context, host string) (*Block, error) {
-	candidates := hostCandidates(host)
+	candidates := HostCandidates(host)
 	if len(candidates) == 0 {
 		return nil, nil
 	}
@@ -378,7 +383,35 @@ func (s destinationSurface) field() string {
 	return "url"
 }
 
-// checkDestination is the only way a destination becomes acceptable.
+// Verdict is what the tiers make of a destination. Nothing is recorded, nothing
+// is stored, and no field says what to do about it.
+//
+// It exists because two callers need the same judgement for different reasons. A
+// destination-writing surface needs it in order to refuse and to record the
+// refusal. M31's dispute path needs it to answer a question no surface asks —
+// *may this refusal be appealed at all* — and must not write a second
+// `destination.blocked` record for a refusal that already happened, because
+// double-counting is exactly what would ruin the numbers the log exists to let
+// an operator tune.
+type Verdict struct {
+	// Normalized is the destination as it would be stored. Non-empty only when
+	// nothing refused it.
+	Normalized string
+	// Host is the destination's folded host, or "" when the URL never got far
+	// enough to have one.
+	Host string
+	// Block is the tiered refusal, or nil. Present for every refusal that names
+	// a tier, the unappealable ones included — the validator raises those as
+	// reason codes rather than as a Block, and Judge recovers the tier so that
+	// "which tier refused this" is one question with one answer.
+	Block *Block
+	// Errs is the refusal as whoever typed the URL receives it. Its Field is
+	// unset; the surface that reports it decides which input to highlight.
+	// Empty exactly when Normalized is set.
+	Errs domain.ValidationErrors
+}
+
+// Judge runs every tier against a destination and reports what they make of it.
 //
 // It is the single call site of ValidateDestination in the whole program, and
 // that is enforced by test rather than by discipline. The plan review found this
@@ -387,26 +420,25 @@ func (s destinationSurface) field() string {
 // the existing code appears to do, and inherits the SSRF refusals while silently
 // skipping every tier above them. Having one door removes the choice.
 //
-// Returns the normalized destination, or a domain.ValidationErrors carrying a
-// reason code that names the tier and the rule.
-func (s *Service) checkDestination(
-	ctx context.Context, actor *auth.Identity, raw string, surface destinationSurface,
-) (string, error) {
-	field := surface.field()
-
+// Its own callers are policed too, by the same test, because a caller reaching
+// past checkDestination to here would get the verdict without the audit record.
+// That is legitimate for a dispute, which is arguing about a refusal already on
+// record, and is a silent gap for anything that writes a destination.
+func (s *Service) Judge(ctx context.Context, raw string) (Verdict, error) {
 	normalized, err := ValidateDestination(raw, s.policy)
 	if err != nil {
 		var ve domain.ValidationErrors
 		if !errors.As(err, &ve) {
-			return "", err
+			return Verdict{}, err
 		}
-		for i := range ve {
-			ve[i].Field = field
-			if tier, rule, ok := tierOf(ve[i].Code); ok {
-				s.recordBlocked(ctx, actor, raw, surface, tier, rule)
+		v := Verdict{Errs: ve}
+		for _, fe := range ve {
+			if tier, rule, ok := tierOf(fe.Code); ok {
+				v.Block = &Block{Tier: tier, Rule: rule, Detail: fe.Message}
+				break
 			}
 		}
-		return "", ve
+		return v, nil
 	}
 
 	// Parsing again rather than threading the parsed URL out of the validator:
@@ -416,7 +448,7 @@ func (s *Service) checkDestination(
 	// wrong reason.
 	u, perr := url.Parse(normalized)
 	if perr != nil {
-		return "", fmt.Errorf("reparse normalized destination: %w", perr)
+		return Verdict{}, fmt.Errorf("reparse normalized destination: %w", perr)
 	}
 	host := strings.ToLower(u.Hostname())
 
@@ -424,18 +456,52 @@ func (s *Service) checkDestination(
 	if block == nil {
 		block, err = s.listedInDatabase(ctx, host)
 		if err != nil {
-			return "", err
+			return Verdict{}, err
 		}
 	}
 	if block == nil {
 		block = lowConfidenceHeuristics(u, host)
 	}
 	if block == nil {
-		return normalized, nil
+		return Verdict{Normalized: normalized, Host: host}, nil
+	}
+	return Verdict{
+		Host: host, Block: block, Errs: domain.ValidationErrors{block.Error("")},
+	}, nil
+}
+
+// checkDestination is the only way a destination becomes acceptable.
+//
+// Judge decides; this reports the decision against the surface's own form field
+// and writes the audit record. Every surface that writes a destination goes
+// through here, enforced by TestEveryDestinationSurfaceGoesThroughTheCheck.
+//
+// Returns the normalized destination, or a domain.ValidationErrors carrying a
+// reason code that names the tier and the rule.
+func (s *Service) checkDestination(
+	ctx context.Context, actor *auth.Identity, raw string, surface destinationSurface,
+) (string, error) {
+	v, err := s.Judge(ctx, raw)
+	if err != nil {
+		return "", err
+	}
+	if len(v.Errs) == 0 {
+		return v.Normalized, nil
 	}
 
-	s.recordBlocked(ctx, actor, raw, surface, block.Tier, block.Rule)
-	return "", domain.ValidationErrors{block.Error(field)}
+	// Copied rather than stamped in place. The Verdict is the caller's value and
+	// a surface must not reach into it to relabel a field, or the next surface to
+	// read the same Verdict would find one belonging to a form it never rendered.
+	ve := make(domain.ValidationErrors, len(v.Errs))
+	copy(ve, v.Errs)
+	field := surface.field()
+	for i := range ve {
+		ve[i].Field = field
+	}
+	if v.Block != nil {
+		s.recordBlocked(ctx, actor, raw, surface, v.Block.Tier, v.Block.Rule)
+	}
+	return "", ve
 }
 
 // recordBlocked writes the audit event for a refusal.

@@ -9,6 +9,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
+	"github.com/DevOfPie/LinkCtrl/internal/dispute"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
@@ -46,6 +47,11 @@ type Web struct {
 	// form. Nil leaves the signup and verification pages unregistered, and every
 	// registration refused.
 	Signup *signup.Service
+	// Disputes serves the review queue and the appeal a refused creator files.
+	// Nil leaves the page unregistered and takes the "ask for a review" button
+	// off the link form, because a refusal must not offer a door that is not
+	// there.
+	Disputes *dispute.Service
 }
 
 // shell is what the layout template needs on every page.

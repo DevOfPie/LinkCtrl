@@ -37,6 +37,8 @@ reset
 verify
 invite
 invites
+disputes
+dispute
 oauth
 auth
 callback

@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -101,8 +102,32 @@ type linksPageData struct {
 	Filtered    bool
 	Form        linkFormData
 	FieldErrors map[string]string
-	Notice      string
-	Error       string
+	// DisputeURL is the destination an appeal may be filed about, or "" when
+	// there is nothing to appeal. Set only after a low-confidence refusal, which
+	// is the one tier M31 gives a dispute path — the other two protect a party
+	// that is not the one appealing.
+	DisputeURL string
+	Notice     string
+	Error      string
+}
+
+// disputableURL reports the destination a refusal may be appealed about.
+//
+// The tier is the first half of the reason code M30 mints, so reading it here
+// puts the button exactly where a dispute would be accepted. It is a rendering
+// hint and never an authorization: dispute.File re-judges the URL server-side,
+// so a wrong guess here costs a refused POST rather than opening a path.
+func disputableURL(err error, raw string) string {
+	var ve domain.ValidationErrors
+	if raw == "" || !errors.As(err, &ve) {
+		return ""
+	}
+	for _, fe := range ve {
+		if strings.HasPrefix(fe.Code, string(link.TierLowConfidence)+".") {
+			return raw
+		}
+	}
+	return ""
 }
 
 func (h *Web) loadLinksPage(w http.ResponseWriter, r *http.Request) (linksPageData, bool) {
@@ -125,6 +150,19 @@ func (h *Web) loadLinksPage(w http.ResponseWriter, r *http.Request) (linksPageDa
 		// days" sent people looking for a button that does not exist.
 		data.Notice = "Link deleted. Its alias stays reserved for 30 days, then the link " +
 			"is purged permanently. Recovery inside that window is a database operation."
+	}
+	// Where an appeal lands. It comes back here rather than to a page of its own
+	// because there is nothing to show: the interesting state is now in somebody
+	// else's queue, and the person who filed it hears the outcome as a
+	// notification rather than by watching a page.
+	switch q.Get("dispute") {
+	case "filed":
+		data.Notice = "Sent for review. You will be notified when the instance owner decides."
+	case "duplicate":
+		data.Notice = "That destination is already waiting for review."
+	case "refused":
+		data.Error = "That refusal cannot be appealed. Private addresses, non-web schemes " +
+			"and destinations on the curated list are refused for everyone, and no review changes that."
 	}
 
 	f := domain.LinkFilter{
@@ -205,6 +243,12 @@ func (h *Web) LinkCreate(w http.ResponseWriter, r *http.Request) {
 		}
 		data.FieldErrors = fields
 		data.Error = general
+		// Offered only where the service would accept one, and only when the
+		// dispute surface is wired at all. A button that leads to a 404 is worse
+		// than no button.
+		if h.Disputes != nil {
+			data.DisputeURL = disputableURL(err, strings.TrimSpace(r.PostFormValue("url")))
+		}
 		h.render(w, r, http.StatusUnprocessableEntity, "links", data)
 		return
 	}

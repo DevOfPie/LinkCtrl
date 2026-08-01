@@ -28,10 +28,27 @@ import (
 // an unusual test; the alternative is a comment nobody reads at the moment they
 // would need to.
 
-// destinationCallSites are the only functions permitted to call the
+// validatorCallers are the only functions permitted to call the
 // unappealable-tier validator directly. One entry, deliberately.
 var validatorCallers = map[string]string{
+	"Judge": "internal/link/blocking.go",
+}
+
+// judgeCallers are the functions permitted to ask for a verdict without an audit
+// record being written.
+//
+// Two, and they are not the same kind of thing. checkDestination is the door
+// every writing surface goes through, and it records. dispute.File asks because
+// M31's whole question is "which tier refused this, and may it be appealed" —
+// about a refusal that is already on record, so recording it again would
+// double-count the numbers an operator tunes the heuristics against.
+//
+// A third entry is a claim that some new caller needs the verdict and not the
+// record. That is occasionally true and usually a bug, which is why adding one
+// costs an edit here.
+var judgeCallers = map[string]string{
 	"checkDestination": "internal/link/blocking.go",
+	"File":             "internal/dispute/dispute.go",
 }
 
 // destinationSurfaces are the functions permitted to call checkDestination —
@@ -50,6 +67,12 @@ func TestEveryDestinationSurfaceGoesThroughTheCheck(t *testing.T) {
 		"a caller that reaches the validator directly inherits the SSRF refusals "+
 			"and skips the embedded list, the operator blocklist, the heuristics "+
 			"and the audit record. Route it through Service.checkDestination.")
+
+	judged := callersOf(t, "Judge")
+	assertCallers(t, "Judge", judged, judgeCallers,
+		"reaching Judge past checkDestination buys the tiers' verdict without the "+
+			"`destination.blocked` record. A surface that writes a destination must "+
+			"not do that; add it to destinationSurfaces instead.")
 
 	surfaces := callersOf(t, "checkDestination")
 	assertCallers(t, "checkDestination", surfaces, destinationSurfaces,

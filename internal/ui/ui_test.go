@@ -30,6 +30,8 @@ func owner() *identityStub {
 			// the shell on every page, so an owner holds all three permissions
 			// here and every page exercises those branches.
 			"members.read": true, "members.write": true, "workspace.write": true,
+			// The review queue's entry, held by the owner role alone (M31).
+			"destinations.review": true,
 			// Held by the owner role and by nothing else (D16), which is what
 			// draws the organization form on the workspaces page.
 			"orgs.create": true,
@@ -121,7 +123,58 @@ func pageData(t *testing.T) map[string]any {
 			"Search":  "demo", "Status": "", "Sort": "newest", "Filtered": true,
 			"Form":        map[string]string{"URL": "", "Alias": ""},
 			"FieldErrors": map[string]string{"url": "bad"},
-			"Notice":      "Created.", "Error": "",
+			// The appeal affordance, drawn only after a low-confidence refusal.
+			// Set here so the branch is exercised on every run rather than only
+			// by the test that reads it.
+			"DisputeURL": "https://bit.ly/xyz",
+			"Notice":     "Created.", "Error": "",
+		},
+		// The review queue, with every state it can draw in one render: an open
+		// dispute that can be allowed, an open one that cannot (a heuristic has
+		// no blocklist row to remove), and both decided outcomes.
+		//
+		// The two defanged strings are what the service actually produces —
+		// link.Defang's output — because the test that reads this page asserts
+		// against the rendered HTML and a fixture holding a live URL would let
+		// the assertion pass for the wrong reason.
+		"disputes": map[string]any{
+			"Title": "Blocked destinations", "Nav": "disputes", "Identity": owner(),
+			"OpenCount": int64(2), "OpenOnly": true,
+			"Items": []map[string]any{
+				{
+					"ID": "0198c9c5-0000-7000-8000-000000000030", "Status": "open",
+					"Host":        "evil[.]example",
+					"Destination": "https[:]//evil[.]example/promo%3Cscript%3E",
+					"ReasonCode":  "low_confidence.operator_blocklist",
+					"FiledBy":     "editor@example.com", "CreatedAt": now,
+					"Liftable": true, "DecidedAt": (*time.Time)(nil),
+				},
+				{
+					"ID": "0198c9c5-0000-7000-8000-000000000031", "Status": "open",
+					"Host":        "xn--80ak6aa92e[.]com",
+					"Destination": "https[:]//xn--80ak6aa92e[.]com/",
+					"ReasonCode":  "low_confidence.punycode_homograph",
+					"FiledBy":     "editor@example.com", "CreatedAt": now,
+					"Liftable": false, "DecidedAt": (*time.Time)(nil),
+				},
+				{
+					"ID": "0198c9c5-0000-7000-8000-000000000032", "Status": "allowed",
+					"Host":        "bit[.]ly",
+					"Destination": "https[:]//bit[.]ly/abc",
+					"ReasonCode":  "low_confidence.shortener_chain",
+					"FiledBy":     "editor@example.com", "CreatedAt": now,
+					"Liftable": true, "DecidedBy": "o@example.com", "DecidedAt": &now,
+				},
+				{
+					"ID": "0198c9c5-0000-7000-8000-000000000033", "Status": "upheld",
+					"Host":        "phish[.]example",
+					"Destination": "https[:]//phish[.]example/",
+					"ReasonCode":  "low_confidence.operator_blocklist",
+					"FiledBy":     "gone@example.com", "CreatedAt": now,
+					"Liftable": true, "DecidedBy": "", "DecidedAt": &now,
+				},
+			},
+			"NextCursor": "abc", "Notice": "", "Error": "",
 		},
 		"link_detail": map[string]any{
 			"Title": "/demo", "Nav": "links", "Identity": owner(),

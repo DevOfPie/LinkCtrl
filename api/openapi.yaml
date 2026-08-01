@@ -74,6 +74,8 @@ tags:
     description: Programmatic credentials
   - name: audit
     description: What changed, who changed it, and when
+  - name: disputes
+    description: Appealing a blocked destination, and the queue that decides them
   - name: invitations
     description: Adding people to an organization
   - name: members
@@ -767,6 +769,187 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/Validation"
+
+  /disputes:
+    post:
+      tags: [disputes]
+      operationId: fileDispute
+      summary: Ask for a refused destination to be reviewed
+      description: |
+        Files a dispute about a destination this instance refused, and puts it
+        in front of whoever holds `destinations.review`.
+
+        **Only a low-confidence refusal can be disputed.** The tier is
+        re-derived from the URL on the server, by the same evaluator that
+        refused the link, so there is no field here that names a refusal, a
+        tier, or a reason code — and therefore no way to claim one. Two kinds
+        of refusal have no appeal path at all and answer `422` with
+        `not_disputable`:
+
+        * **Unappealable** — private, loopback, link-local and cloud-metadata
+          addresses, and non-`http(s)` schemes. These protect the instance from
+          being used as an SSRF proxy, and the party they protect is not the
+          party appealing.
+        * **High confidence** — the curated list compiled into the binary.
+          Overruling it is meant to cost a rebuild, which a click is not.
+
+        A destination nothing refuses answers `422` with `not_blocked`, and a
+        host already waiting for review answers `409`.
+
+        Requires `links.create`: a dispute is the second half of an attempt the
+        caller was already allowed to make, so it needs no grant of its own.
+
+        **Nothing fetches the URL.** Not here, not in the queue, not ever. No
+        preview, no screenshot, no liveness check.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  description: The destination that was refused, as it was typed.
+      responses:
+        "201":
+          description: The dispute, waiting for a decision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dispute"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+    get:
+      tags: [disputes]
+      operationId: listDisputes
+      summary: The review queue, newest first
+      description: |
+        Every dispute on the instance, not only those filed in the caller's own
+        organization. The blocklist a decision acts on is instance-wide, so a
+        queue scoped narrower would hide rows the same reader is nonetheless
+        deciding for. `destinations.review` is what bounds who sees it, and it
+        is granted to the owner role alone.
+
+        **Requires a session, not an API key.** `destinations.review` is not
+        delegable: allowing a destination deletes a blocklist entry, after which
+        the key that deleted it may point links there — a credential widening
+        its own reach.
+
+        **Every destination in the response is defanged**, in `host_defanged`
+        and `destination_defanged`. The scheme delimiter and every dot are
+        bracketed and everything outside a narrow safe set is percent-escaped,
+        so nothing here auto-links and nothing here is live markup. That is the
+        stored form, not a rendering: a client cannot obtain the original from
+        this API.
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string }
+          description: Opaque, from `next_cursor` of the previous page.
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+          description: Page size; out-of-range values fall back to the server default.
+        - name: open
+          in: query
+          schema: { type: boolean }
+          description: "`true` returns only disputes nobody has decided yet."
+      responses:
+        "200":
+          description: One page of disputes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DisputePage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /disputes/{id}/allow:
+    post:
+      tags: [disputes]
+      operationId: allowDispute
+      summary: Lift the blocklist entry that refused the destination
+      description: |
+        Deletes one row from the runtime low-confidence blocklist and closes the
+        dispute as `allowed`. The person who filed it is notified in-app, and
+        the decision is an audit event.
+
+        **It reaches the runtime list and nothing else.** The curated list is a
+        compiled file and the unappealable refusals have no row anywhere, so
+        there is no other entry this could remove — and there is no row anybody
+        can add that makes a destination acceptable.
+
+        Answers `409` rather than pretending to succeed when:
+
+        * the refusal is `low_confidence.punycode_homograph` or
+          `low_confidence.url_credentials`, which are computed from the URL
+          every time it is judged and hold no row to delete. Such a dispute
+          reports `liftable: false`;
+        * the entry came from `LINKCTRL_DESTINATION_BLOCKLIST`, which boot
+          reconciles back into the table — removing it here would revert at the
+          next restart;
+        * the dispute has already been decided.
+      parameters:
+        - $ref: "#/components/parameters/DisputeID"
+      responses:
+        "200":
+          description: The decided dispute
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dispute"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /disputes/{id}/uphold:
+    post:
+      tags: [disputes]
+      operationId: upholdDispute
+      summary: Leave the refusal standing
+      description: |
+        Closes the dispute as `upheld`, changing no list. Available for every
+        open dispute, including the ones `allow` cannot act on.
+
+        Still an audit event: "somebody looked and said no" is a different fact
+        from "nobody has looked yet", and a log that recorded only the decisions
+        which changed something could not tell them apart.
+      parameters:
+        - $ref: "#/components/parameters/DisputeID"
+      responses:
+        "200":
+          description: The decided dispute
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dispute"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /invitations:
     post:
@@ -1585,6 +1768,12 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    DisputeID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+      description: The dispute being decided.
     FromDay:
       name: from
       in: query
@@ -2420,6 +2609,74 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AuditEntry"
+        next_cursor:
+          type: string
+          description: Opaque keyset cursor; present when `has_more`.
+        has_more: { type: boolean }
+
+    Dispute:
+      type: object
+      additionalProperties: false
+      required:
+        [id, host_defanged, destination_defanged, reason_code, status, filed_by,
+         created_at, liftable]
+      description: |
+        One appeal against a blocked destination.
+
+        **Both URL-shaped fields are defanged and there is no un-defanged form
+        available anywhere in this API.** That is deliberate: this object is
+        handed to whoever administers the instance, describing a destination a
+        stranger chose, and a consumer written later must not be able to render
+        it live by forgetting to escape it.
+      properties:
+        id: { type: string, format: uuid }
+        host_defanged:
+          type: string
+          description: |
+            The destination's host, inert. `evil.example` reads
+            `evil[.]example`.
+        destination_defanged:
+          type: string
+          description: |
+            The attempted URL, inert. Every `:` and `.` is bracketed and
+            everything outside a narrow safe set is percent-escaped, so no
+            `://` survives and nothing auto-links.
+        reason_code:
+          type: string
+          description: |
+            M30's `<tier>.<rule>`. Always a `low_confidence.` code, because no
+            other tier can be disputed.
+          example: low_confidence.operator_blocklist
+        status:
+          type: string
+          enum: [open, allowed, upheld]
+        filed_by:
+          type: string
+          description: |
+            The address of whoever filed it, snapshotted when the dispute was
+            written so it stays readable after the account is deleted.
+        created_at: { type: string, format: date-time }
+        decided_by:
+          type: string
+          description: Absent until somebody decides.
+        decided_at: { type: string, format: date-time }
+        liftable:
+          type: boolean
+          description: |
+            Whether `allow` could do anything. `false` for a refusal computed
+            from the URL rather than held as a blocklist row — a punycode
+            homograph, or credentials before the host — where the honest
+            decisions are `uphold` or a change to the rule.
+
+    DisputePage:
+      type: object
+      additionalProperties: false
+      required: [items, has_more]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Dispute"
         next_cursor:
           type: string
           description: Opaque keyset cursor; present when `has_more`.
