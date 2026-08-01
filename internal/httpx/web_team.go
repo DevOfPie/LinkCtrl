@@ -201,11 +201,22 @@ type workspacesPageData struct {
 	// the account from the setup form and nobody else, so most readers never see
 	// this section at all.
 	CanCreateOrganization bool
-	Form                  struct{ Name, OrganizationName string }
-	FieldErrors           map[string]string
-	OrgFieldErrors        map[string]string
-	Notice                string
-	Error                 string
+	// CanDeleteOrganization is `org.delete` (M28.5), held by the owner role
+	// alone. Drawn from the permission rather than from the role, so it stays
+	// true of whoever actually holds it.
+	CanDeleteOrganization bool
+	// OrganizationID and OrganizationName describe the organization this page is
+	// about, for the deletion control: an irreversible action has to name what it
+	// will destroy, and the id is what the form posts back as its confirmation.
+	// The name comes from the switcher's list, which the shell has already
+	// loaded, rather than from a query of its own.
+	OrganizationID   uuid.UUID
+	OrganizationName string
+	Form             struct{ Name, OrganizationName string }
+	FieldErrors      map[string]string
+	OrgFieldErrors   map[string]string
+	Notice           string
+	Error            string
 }
 
 func (h *Web) loadWorkspacesPage(w http.ResponseWriter, r *http.Request) (workspacesPageData, bool) {
@@ -216,6 +227,14 @@ func (h *Web) loadWorkspacesPage(w http.ResponseWriter, r *http.Request) (worksp
 		OrgFieldErrors:        map[string]string{},
 		CanWrite:              actor.Can(team.PermWorkspaceWrite),
 		CanCreateOrganization: actor.Can(team.PermOrgsCreate),
+		CanDeleteOrganization: actor.Can(team.PermOrgDelete),
+		OrganizationID:        actor.OrgID,
+	}
+	for _, ws := range data.shell.Workspaces {
+		if ws.OrganizationID == actor.OrgID {
+			data.OrganizationName = ws.OrganizationName
+			break
+		}
 	}
 	items, err := h.Team.Workspaces(r.Context(), actor)
 	if err != nil {
@@ -301,15 +320,27 @@ func (h *Web) WorkspaceDelete(w http.ResponseWriter, r *http.Request) {
 // workspaces — so leaving them there would show them a list their new
 // organization is not in. A failed switch is not undone; the organization
 // exists either way, and the switcher in the chrome reaches it.
+//
+// Two callers post here and a refusal has to go back to whichever one it came
+// from: the workspaces page's organization form, and the page an account that
+// belongs to nothing is held on (D36). Re-rendering the workspaces page for the
+// second would fail on the way in — listing workspaces needs workspace.read,
+// which an account with no membership does not hold — so the branch below is
+// about which page exists for this reader, not about presentation.
 func (h *Web) OrganizationCreate(w http.ResponseWriter, r *http.Request) {
 	if err := parseForm(w, r); err != nil {
 		h.errorPage(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
 		return
 	}
 	name := r.PostFormValue("name")
+	actor := IdentityFrom(r.Context())
 
-	org, err := h.Team.CreateOrganization(r.Context(), IdentityFrom(r.Context()), name)
+	org, err := h.Team.CreateOrganization(r.Context(), actor, name)
 	if err != nil {
+		if !actor.HasOrganization() {
+			h.renderOrganizationNewError(w, r, err, name)
+			return
+		}
 		h.renderWorkspacesError(w, r, err, func(d *workspacesPageData) {
 			d.Form.OrganizationName = name
 			d.OrgFieldErrors, d.FieldErrors = d.FieldErrors, map[string]string{}
@@ -317,12 +348,114 @@ func (h *Web) OrganizationCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if serr := h.Auth.SwitchWorkspace(r.Context(), IdentityFrom(r.Context()),
-		org.WorkspaceID); serr != nil {
+	if serr := h.Auth.SwitchWorkspace(r.Context(), actor, org.WorkspaceID); serr != nil {
 		seeOther(w, r, "/workspaces")
 		return
 	}
 	seeOther(w, r, "/workspaces?done=organization")
+}
+
+// renderOrganizationNewError puts a refusal back on the only page an orphaned
+// account can see. Anything without a message a reader could act on falls
+// through to webError, which is where a genuine fault belongs.
+func (h *Web) renderOrganizationNewError(
+	w http.ResponseWriter, r *http.Request, err error, name string,
+) {
+	fields, general := fieldErrors(err)
+	if msg := conflictMessage(err); msg != "" {
+		general = msg
+	}
+	if len(fields) == 0 && general == "" {
+		h.webError(w, r, err)
+		return
+	}
+	data := organizationNewPageData{
+		shell:       h.shell(r, "Create an organization", ""),
+		FieldErrors: fields,
+		Error:       general,
+	}
+	data.Form.Name = name
+	h.render(w, r, http.StatusUnprocessableEntity, "organization_new", data)
+}
+
+// OrganizationDelete tears down the organization the reader is acting in.
+//
+// Afterwards they are somewhere else by definition, and which somewhere depends
+// on what else they belong to — another organization, or nothing at all. Rather
+// than work that out here, this hands the browser to /dashboard and lets the
+// ordinary resolution decide: somebody with another membership lands on it, and
+// somebody with none is met by RequireOrganization and offered one. The session
+// needs no repair on the way, because sessions.workspace_id is SET NULL by the
+// cascade and ResolveWorkspaceForUser answers again from scratch.
+func (h *Web) OrganizationDelete(w http.ResponseWriter, r *http.Request) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		h.webError(w, r, err)
+		return
+	}
+	if err := h.Team.DeleteOrganization(r.Context(), IdentityFrom(r.Context()), id); err != nil {
+		h.renderWorkspacesError(w, r, err, nil)
+		return
+	}
+	seeOther(w, r, "/dashboard")
+}
+
+// --- belonging to nothing (D36) ----------------------------------------------
+
+type organizationNewPageData struct {
+	shell
+	Form        struct{ Name string }
+	FieldErrors map[string]string
+	Error       string
+}
+
+// OrganizationNewPage is the whole product for an account that belongs to
+// nothing.
+//
+// It exists because D36 chose to let deletion orphan people rather than refuse
+// on their behalf, and an orphaned account with no page to land on would be an
+// error message where an empty state belongs. Everything else is refused while
+// they are here — see RequireOrganization — so this page carries no navigation
+// of its own beyond signing out.
+//
+// Somebody who *does* belong to an organization is sent to /workspaces instead,
+// which is where the same form lives for them, alongside the workspaces it would
+// otherwise be missing. One form, two homes, rather than two forms.
+func (h *Web) OrganizationNewPage(w http.ResponseWriter, r *http.Request) {
+	if IdentityFrom(r.Context()).HasOrganization() {
+		seeOther(w, r, "/workspaces")
+		return
+	}
+	h.render(w, r, http.StatusOK, "organization_new", organizationNewPageData{
+		shell:       h.shell(r, "Create an organization", ""),
+		FieldErrors: map[string]string{},
+	})
+}
+
+// RequireOrganization sends an account that belongs to nothing to the page that
+// offers it one, and lets everybody else past.
+//
+// It is an affordance and not the authorization boundary, which is the
+// distinction worth keeping straight: an identity with no organization holds an
+// empty permission set, so every service call it could reach already refuses on
+// the check it always made. What this adds is that the refusals are never seen —
+// a page rendered for a workspace that does not exist is an error where the
+// milestone asks for an empty state, and eight pages each discovering that
+// separately is eight chances to get it wrong once.
+//
+// Applied to the dashboard tree only. The JSON API needs no equivalent: its
+// operations authorize on permissions, an orphaned caller holds none, and the
+// handful of endpoints that are user-scoped rather than organization-scoped —
+// the notification inbox, the workspace list — correctly answer with an empty
+// list, which is the state rendered rather than an error.
+func (h *Web) RequireOrganization(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !IdentityFrom(r.Context()).HasOrganization() {
+			seeOther(w, r, "/organizations/new")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // renderWorkspacesError puts a refusal back on the page that caused it, the way

@@ -276,8 +276,9 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	// a real preference even though it changes nothing.
 	var wsList struct {
 		Items []struct {
-			ID      string `json:"id"`
-			Current bool   `json:"current"`
+			ID             string `json:"id"`
+			OrganizationID string `json:"organization_id"`
+			Current        bool   `json:"current"`
 		} `json:"items"`
 	}
 	if err := json.Unmarshal(c.do("GET", p+"/workspaces", nil, http.StatusOK), &wsList); err != nil {
@@ -287,6 +288,7 @@ func TestAPIMatchesItsContract(t *testing.T) {
 		t.Fatalf("expected exactly one current workspace, got %+v", wsList.Items)
 	}
 	workspaceID := wsList.Items[0].ID
+	organizationID := wsList.Items[0].OrganizationID
 
 	c.do("POST", p+"/workspaces/"+workspaceID+"/switch", nil, http.StatusNoContent)
 	// A workspace this account has nothing to do with is not-found, not
@@ -403,11 +405,23 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	// delete documents.
 	c.do("DELETE", p+"/workspaces/"+workspaceID, nil, http.StatusConflict)
 
-	c.do("POST", p+"/organizations", map[string]any{"name": "Acme"}, http.StatusCreated)
+	acme := c.do("POST", p+"/organizations", map[string]any{"name": "Acme"}, http.StatusCreated)
 	// Deliberately below the schema's own floor: the point is the server's 422,
 	// which a spec-side request check would pre-empt and prove nothing about.
 	c.doBadRequest("POST", p+"/organizations", map[string]any{"name": ""},
 		http.StatusUnprocessableEntity)
+
+	// Deleting one. The current organization still holds the link created at the
+	// top of this test, which is the documented 409 — and the second registered
+	// account's personal organization is what keeps the *other* 409, the
+	// instance's last organization, from being the one that fires.
+	c.do("DELETE", p+"/organizations/"+organizationID, nil, http.StatusConflict)
+	// An id that is not the organization being acted in is not-found, so an id
+	// cannot be probed and a mistyped one deletes nothing. Switching into the new
+	// organization is therefore how it gets deleted.
+	c.do("DELETE", p+"/organizations/"+uuid.NewString(), nil, http.StatusNotFound)
+	c.do("POST", p+"/workspaces/"+field(t, acme, "workspace_id")+"/switch", nil, http.StatusNoContent)
+	c.do("DELETE", p+"/organizations/"+field(t, acme, "id"), nil, http.StatusNoContent)
 
 	// --- link deletion, password, logout ------------------------------------
 	c.do("DELETE", p+"/links/"+linkID, nil, http.StatusNoContent)

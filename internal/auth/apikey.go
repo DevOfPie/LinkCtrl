@@ -426,6 +426,16 @@ func (s *APIKeyService) Authenticate(ctx context.Context, token string) (*Identi
 		// person it acts as. No session id: a key is not a browser, and a
 		// switch made in one must not move a key's requests.
 		ws, err := s.auth.resolveWorkspace(ctx, row.UserID, nil)
+		if errors.Is(err, ErrNoWorkspace) {
+			// The one caller that does *not* get D36's empty identity. Belonging
+			// to nothing is a state a person is walked through — sign in, be
+			// offered an organization — and a key has nobody to walk. It is also
+			// the rarer half of the state: deleting an organization cascades its
+			// keys away, so this is a key whose owner lost their membership
+			// while the key survived. Answering "invalid" is honest for both:
+			// the credential resolves to no tenancy and can do nothing.
+			return nil, ErrAPIKeyInvalid
+		}
 		if err != nil {
 			return nil, err
 		}

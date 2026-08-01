@@ -4,14 +4,18 @@ package integration
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
@@ -21,6 +25,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/team"
+	"github.com/DevOfPie/LinkCtrl/internal/ui"
 )
 
 // M28. Team management, workspaces and organization creation — and the three
@@ -807,5 +812,672 @@ func TestTeamChangesAreAudited(t *testing.T) {
 		 WHERE action = $1 AND metadata->>'from' = 'editor' AND metadata->>'to' = 'viewer'`,
 		audit.ActionMemberRoleChanged); n != 1 {
 		t.Error("the role-change record does not say what the role changed from and to")
+	}
+}
+
+// ─── organization deletion (M28.5: D36, D37) ────────────────────────────────
+
+// otherOrganization puts a second organization on the instance, so the
+// last-organization refusal is not the one under test.
+//
+// A separate registered account rather than a second organization for the
+// owner: the refusals below are about the *instance* having one left, and the
+// clearest way to say "there is another" is that somebody else has one.
+func (f *teamFixture) otherOrganization(t *testing.T) *auth.Identity {
+	t.Helper()
+	id, err := f.auth.Register(t.Context(), auth.RegisterInput{
+		Email: "elsewhere@example.com", Password: teamPassword,
+	})
+	if err != nil {
+		t.Fatalf("register the second organization's owner: %v", err)
+	}
+	return id
+}
+
+// org.delete, enforced for the first time since Phase 1 seeded it.
+//
+// Held by the owner role alone, and M28's ceiling already forbids an admin
+// acquiring it — granting the owner role requires being an owner — so the set of
+// accounts that can reach this is exactly the set an owner chose.
+func TestDeletingAnOrganizationRequiresOrgDelete(t *testing.T) {
+	f := newTeamFixture(t)
+	other := f.otherOrganization(t)
+
+	for _, role := range []string{"admin", "editor", "viewer"} {
+		id := f.member(t, role+"@example.com", role)
+		if id.Can(team.PermOrgDelete) {
+			t.Errorf("an invited %s holds %s", role, team.PermOrgDelete)
+		}
+		if err := f.team.DeleteOrganization(t.Context(), id, id.OrgID); !errors.Is(err, domain.ErrForbidden) {
+			t.Errorf("an %s deleted the organization: %v", role, err)
+		}
+	}
+	if n := f.count(t, `SELECT count(*) FROM organizations WHERE id = $1`, f.owner.OrgID); n != 1 {
+		t.Fatal("a refused deletion removed the organization anyway")
+	}
+
+	// Another organization's id is not-found rather than forbidden, the same
+	// answer one that never existed gets, so an id cannot be probed — and a
+	// mistyped one deletes nothing rather than the wrong thing.
+	if err := f.team.DeleteOrganization(t.Context(), f.owner, other.OrgID); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("deleting another organization by id answered %v, want not-found", err)
+	}
+	if err := f.team.DeleteOrganization(t.Context(), f.owner, uuid.Must(uuid.NewV7())); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("deleting an id from nowhere answered %v, want not-found", err)
+	}
+	if n := f.count(t, `SELECT count(*) FROM organizations WHERE id = $1`, other.OrgID); n != 1 {
+		t.Fatal("naming another organization's id deleted it")
+	}
+
+	if err := f.team.DeleteOrganization(t.Context(), f.owner, f.owner.OrgID); err != nil {
+		t.Fatalf("the owner could not delete their own organization: %v", err)
+	}
+	// The row, not the return value. A deletion that reports success and leaves
+	// the organization standing passes every assertion above it.
+	if n := f.count(t, `SELECT count(*) FROM organizations WHERE id = $1`, f.owner.OrgID); n != 0 {
+		t.Error("the organization survived a deletion that reported success")
+	}
+}
+
+// D37: an organization holding any link refuses deletion, mirroring D32 one
+// level up so that deleting above a workspace is not a way around it.
+//
+// Archived links count for the same reason they do at the workspace level — an
+// archived link keeps its alias and its click history — and the link lives in a
+// *second* workspace here, because the guard has to look across all of them
+// rather than at the one the actor happens to be in.
+func TestAnOrganizationHoldingLinksRefusesToBeDeleted(t *testing.T) {
+	f := newTeamFixture(t)
+	f.otherOrganization(t)
+
+	ws, err := f.team.CreateWorkspace(t.Context(), f.owner, "Campaigns")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inWorkspace := f.identityIn(t, "owner@example.com", ws.ID)
+	created, err := f.links.Create(t.Context(), inWorkspace, link.CreateInput{
+		URL: "https://example.com/one", Alias: "one",
+	})
+	if err != nil {
+		t.Fatalf("create link: %v", err)
+	}
+
+	// Acting from the organization's *first* workspace, which holds nothing: the
+	// refusal is about the organization, not about where the caller is standing.
+	fromDefault := f.identityIn(t, "owner@example.com", f.owner.WorkspaceID)
+	if err := f.team.DeleteOrganization(t.Context(), fromDefault, f.owner.OrgID); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("an organization holding a link in another workspace was deleted: %v", err)
+	}
+
+	// Archiving is not a way around it, exactly as at the workspace level.
+	if _, err := f.links.Archive(t.Context(), inWorkspace, created.ID); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	if err := f.team.DeleteOrganization(t.Context(), fromDefault, f.owner.OrgID); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("archiving the link let the organization be deleted: %v", err)
+	}
+	if n := f.count(t, `SELECT count(*) FROM links WHERE id = $1`, created.ID); n != 1 {
+		t.Fatal("a refused deletion cascaded the link away anyway")
+	}
+
+	// Deleting the link is the way through, and it is the cost D37 states out
+	// loud: with no bulk delete, that is one link at a time.
+	if err := f.links.Delete(t.Context(), inWorkspace, created.ID); err != nil {
+		t.Fatalf("delete link: %v", err)
+	}
+	if err := f.team.DeleteOrganization(t.Context(), fromDefault, f.owner.OrgID); err != nil {
+		t.Fatalf("an emptied organization still refused deletion: %v", err)
+	}
+	if n := f.count(t, `SELECT count(*) FROM workspaces WHERE organization_id = $1`, f.owner.OrgID); n != 0 {
+		t.Error("the organization's workspaces survived its deletion")
+	}
+}
+
+// The instance's last organization is refused, on the reasoning that refuses the
+// last owner and the last workspace: the state is unreachable by any other route
+// and unrecoverable without SQL.
+func TestTheLastOrganizationOnTheInstanceCannotBeDeleted(t *testing.T) {
+	f := newTeamFixture(t)
+
+	if err := f.team.DeleteOrganization(t.Context(), f.owner, f.owner.OrgID); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("the instance's only organization was deleted: %v", err)
+	}
+
+	// With a second one it becomes possible, and the second is then the last, so
+	// it is refused in turn — which is what distinguishes a rule from a refusal
+	// to touch organizations at all.
+	second, err := f.team.CreateOrganization(t.Context(), f.owner, "Second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.team.DeleteOrganization(t.Context(), f.owner, f.owner.OrgID); err != nil {
+		t.Fatalf("delete with a spare organization: %v", err)
+	}
+	inSecond := f.identityIn(t, "owner@example.com", second.WorkspaceID)
+	if err := f.team.DeleteOrganization(t.Context(), inSecond, second.ID); !errors.Is(err, domain.ErrConflict) {
+		t.Errorf("the remaining organization was deleted: %v", err)
+	}
+}
+
+// D36, the answer that makes this milestone large: deletion proceeds even when
+// it leaves somebody belonging to nothing.
+//
+// The account survives whole — it is not deleted, not suspended, not anonymized
+// — and the session path treats *no workspace* as an empty state rather than as
+// the broken instance it called it before M28.5. Both halves are asserted,
+// because an account that survives but cannot authenticate is the same outcome
+// as one that was deleted.
+func TestDeletingAnOrganizationLeavesItsMembersBelongingToNothing(t *testing.T) {
+	f := newTeamFixture(t)
+	f.otherOrganization(t)
+	orphan := f.member(t, "orphan@example.com", "editor")
+
+	// Something to sign in with afterwards, established before the deletion so
+	// the assertion is about the session surviving rather than about a new one.
+	if _, err := f.auth.Login(t.Context(), auth.LoginInput{
+		Email: "orphan@example.com", Password: teamPassword,
+	}); err != nil {
+		t.Fatalf("sign in before the deletion: %v", err)
+	}
+
+	if err := f.team.DeleteOrganization(t.Context(), f.owner, f.owner.OrgID); err != nil {
+		t.Fatalf("delete organization: %v", err)
+	}
+
+	// The account is untouched. Nothing deletes an account as a side effect of
+	// deleting an organization.
+	if n := f.count(t,
+		`SELECT count(*) FROM users WHERE id = $1 AND status = 'active' AND deleted_at IS NULL`,
+		orphan.UserID); n != 1 {
+		t.Fatal("the orphaned account did not survive the organization")
+	}
+	if n := f.count(t, `SELECT count(*) FROM memberships WHERE user_id = $1`, orphan.UserID); n != 0 {
+		t.Fatalf("the orphaned account holds %d memberships, want none", n)
+	}
+
+	// It resolves, rather than erroring. This is the line every authenticated
+	// request in the product passes through, which is why it is asserted here
+	// and not left to a rendered page.
+	id, err := f.auth.IdentityForEmail(t.Context(), "orphan@example.com")
+	if err != nil {
+		t.Fatalf("an account belonging to nothing failed to resolve: %v", err)
+	}
+	if id.OrgID != uuid.Nil || id.WorkspaceID != uuid.Nil {
+		t.Errorf("the orphaned identity carries org %s / workspace %s, want neither",
+			id.OrgID, id.WorkspaceID)
+	}
+	if id.HasOrganization() {
+		t.Error("HasOrganization is true for an account with no membership")
+	}
+	if len(id.Permissions()) != 0 {
+		t.Errorf("the orphaned identity holds %v; belonging to nothing must grant nothing",
+			id.Permissions())
+	}
+	if id.Role != "" || id.RoleRank != auth.NoRoleRank {
+		t.Errorf("the orphaned identity is %q at rank %d, want no role at NoRoleRank",
+			id.Role, id.RoleRank)
+	}
+
+	// And signing in works, which is the half that would otherwise turn one
+	// owner's teardown into an authentication outage for the person it orphaned.
+	res, err := f.auth.Login(t.Context(), auth.LoginInput{
+		Email: "orphan@example.com", Password: teamPassword,
+	})
+	if err != nil {
+		t.Fatalf("an account belonging to nothing could not sign in: %v", err)
+	}
+	if res.Identity.HasOrganization() {
+		t.Error("signing in conjured an organization for an account with no membership")
+	}
+	authed, err := f.auth.Authenticate(t.Context(), res.Token)
+	if err != nil {
+		t.Fatalf("the session of an account belonging to nothing does not authenticate: %v", err)
+	}
+	if authed.HasOrganization() || len(authed.Permissions()) != 0 {
+		t.Error("the authenticated orphan carries tenancy it should not have")
+	}
+
+	// A service call refuses on the permission it always checked. There is no
+	// second authorization path for this state, which is the point.
+	if _, err := f.team.Members(t.Context(), authed); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("an account belonging to nothing listed members: %v", err)
+	}
+	if _, err := f.links.List(t.Context(), authed, domain.LinkFilter{}); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("an account belonging to nothing listed links: %v", err)
+	}
+}
+
+// The `orgs.create` seam, and the boundary either side of it.
+//
+// An account with no membership holds no role and therefore no orgs.create, so
+// without a second door the product's own prompt would lead to a 403. The
+// mechanism is a membership count read at that one call site — a check on
+// present state, which is what D16 distinguished from a check on how an account
+// was made. What makes it a seam rather than a hole is the boundary: the moment
+// an account holds any membership at all, only the permission answers.
+func TestFirstOrganizationCreationIsReachableFromBelongingToNothing(t *testing.T) {
+	f := newTeamFixture(t)
+	f.otherOrganization(t)
+
+	// The boundary, established first: somebody who *is* in an organization and
+	// lacks orgs.create is refused, count or no count.
+	viewer := f.member(t, "viewer@example.com", "viewer")
+	if viewer.Can(team.PermOrgsCreate) {
+		t.Fatal("an invited viewer holds orgs.create")
+	}
+	if _, err := f.team.CreateOrganization(t.Context(), viewer, "Not theirs"); !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("a viewer with a membership created an organization: %v", err)
+	}
+
+	if err := f.team.DeleteOrganization(t.Context(), f.owner, f.owner.OrgID); err != nil {
+		t.Fatalf("delete organization: %v", err)
+	}
+
+	orphan := f.identity(t, "viewer@example.com")
+	if orphan.Can(team.PermOrgsCreate) {
+		t.Fatal("an account with no membership holds orgs.create; the seam is " +
+			"supposed to be a check at the call site, not a synthesized grant")
+	}
+	created, err := f.team.CreateOrganization(t.Context(), orphan, "Theirs at last")
+	if err != nil {
+		t.Fatalf("an account belonging to nothing could not create its first organization: %v", err)
+	}
+
+	// Provisioned whole, and the permission takes over from here: they are now an
+	// owner, so the count is never consulted again.
+	acting := f.identityIn(t, "viewer@example.com", created.WorkspaceID)
+	if acting.Role != "owner" || !acting.Can(team.PermOrgsCreate) {
+		t.Fatalf("the first organization's creator is %q holding %v, want an owner "+
+			"with orgs.create", acting.Role, acting.Permissions())
+	}
+	if n := f.count(t, `SELECT count(*) FROM memberships WHERE user_id = $1`, orphan.UserID); n != 1 {
+		t.Errorf("the account holds %d memberships, want the one it just made", n)
+	}
+}
+
+// The audit trail outlives the organization it describes.
+//
+// `audit_logs.organization_id` carries no foreign key, which is what makes this
+// true rather than anything the deletion does — so it is asserted rather than
+// reviewed, because a later migration adding that key would erase the record of
+// every teardown and nothing else would notice.
+func TestTheAuditTrailSurvivesTheOrganizationItDescribes(t *testing.T) {
+	f := newTeamFixture(t)
+	other := f.otherOrganization(t)
+
+	// Some history to outlive the organization, written the way it normally is.
+	ws, err := f.team.CreateWorkspace(t.Context(), f.owner, "Doomed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.team.DeleteWorkspace(t.Context(), f.owner, ws.ID); err != nil {
+		t.Fatal(err)
+	}
+	before := f.count(t, `SELECT count(*) FROM audit_logs WHERE organization_id = $1`, f.owner.OrgID)
+	if before == 0 {
+		t.Fatal("nothing was recorded before the deletion; the test would prove nothing")
+	}
+
+	if err := f.team.DeleteOrganization(t.Context(), f.owner, f.owner.OrgID); err != nil {
+		t.Fatalf("delete organization: %v", err)
+	}
+
+	if n := f.count(t, `SELECT count(*) FROM organizations WHERE id = $1`, f.owner.OrgID); n != 0 {
+		t.Fatal("the organization row survived its deletion")
+	}
+	if n := f.count(t, `SELECT count(*) FROM audit_logs WHERE organization_id = $1`, f.owner.OrgID); n != before+1 {
+		t.Errorf("the deleted organization has %d audit records, want the %d it had "+
+			"plus the deletion; a tenancy teardown must not erase its own record",
+			n, before)
+	}
+
+	// The deletion record names what was deleted, because the row that held the
+	// name is gone and this is the only remaining trace of it.
+	if n := f.count(t, `
+		SELECT count(*) FROM audit_logs
+		 WHERE action = $1 AND target_type = 'organization' AND target_id = $2
+		   AND organization_id = $2 AND actor_label = 'owner@example.com'
+		   AND metadata->>'name' = 'Owner'`,
+		audit.ActionOrganizationDeleted, f.owner.OrgID); n != 1 {
+		t.Error("the organization deletion record is missing, or does not name what was deleted")
+	}
+
+	// And nothing was recorded against the organization that was not deleted.
+	if n := f.count(t, `SELECT count(*) FROM audit_logs WHERE organization_id = $1 AND action = $2`,
+		other.OrgID, audit.ActionOrganizationDeleted); n != 0 {
+		t.Error("the deletion was recorded against an organization that still exists")
+	}
+}
+
+// What the cascade takes, and what it leaves.
+//
+// Asserted table by table rather than summarized, because this is the first
+// operation in the product that deletes rows Phase 1's schema only ever
+// inserted: what the foreign keys actually do on delete is a fact about the tree
+// and not an assumption to build on.
+func TestDeletingAnOrganizationTakesItsTenancyAndNothingElse(t *testing.T) {
+	f := newTeamFixture(t)
+	other := f.otherOrganization(t)
+	member := f.member(t, "member@example.com", "editor")
+
+	if _, err := f.team.CreateWorkspace(t.Context(), f.owner, "Second"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.invites.Create(t.Context(), f.owner,
+		invite.CreateInput{Email: "pending@example.com", Role: "viewer"}); err != nil {
+		t.Fatal(err)
+	}
+	key, err := f.keys.Create(t.Context(), f.owner, auth.CreateAPIKeyInput{
+		Name: "doomed", Scopes: []string{"links.read"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.team.DeleteOrganization(t.Context(), f.owner, f.owner.OrgID); err != nil {
+		t.Fatalf("delete organization: %v", err)
+	}
+
+	for _, gone := range []struct {
+		what, sql string
+	}{
+		{"workspaces", `SELECT count(*) FROM workspaces WHERE organization_id = $1`},
+		{"memberships", `SELECT count(*) FROM memberships WHERE organization_id = $1`},
+		{"invitations", `SELECT count(*) FROM invitations WHERE organization_id = $1`},
+		{"api keys", `SELECT count(*) FROM api_keys WHERE organization_id = $1`},
+	} {
+		if n := f.count(t, gone.sql, f.owner.OrgID); n != 0 {
+			t.Errorf("%d %s survived the organization", n, gone.what)
+		}
+	}
+
+	// The key is dead as a credential too, not merely as a row.
+	if _, err := f.keys.Authenticate(t.Context(), key.Key); err == nil {
+		t.Error("an API key issued in a deleted organization still authenticates")
+	}
+
+	// The accounts survive, both of them, and so does the instance's default
+	// domain — it belongs to no organization, so the aliases reserved against it
+	// are untouched by any organization being deleted.
+	for _, email := range []string{"owner@example.com", "member@example.com"} {
+		if n := f.count(t, `SELECT count(*) FROM users WHERE email_lower = lower($1)`, email); n != 1 {
+			t.Errorf("the account %s did not survive", email)
+		}
+	}
+	if n := f.count(t, `SELECT count(*) FROM domains WHERE organization_id IS NULL`); n != 1 {
+		t.Error("the instance default domain was taken with the organization")
+	}
+	_ = member
+
+	// And the other organization is entirely untouched, which is what makes the
+	// cascade a tenancy boundary rather than a blast radius.
+	if n := f.count(t, `SELECT count(*) FROM memberships WHERE organization_id = $1`, other.OrgID); n != 1 {
+		t.Error("deleting one organization reached into another")
+	}
+	if _, err := f.auth.IdentityForEmail(t.Context(), "elsewhere@example.com"); err != nil {
+		t.Errorf("the other organization's owner stopped resolving: %v", err)
+	}
+}
+
+// ─── the dashboard, for an account that belongs to nothing ──────────────────
+
+// browser brings up the full HTML surface and drives it the way one does: a
+// cookie jar, form posts, and no transparent redirect following, because the
+// redirects are the assertions.
+func (f *teamFixture) browser(t *testing.T) (*httptest.Server, *http.Client) {
+	t.Helper()
+	cfg := config.Config{
+		AppEnv: config.Development, BaseURL: "http://links.test", SecureCookies: false,
+	}
+	cfg.Auth.SignupMode = config.SignupInvite
+	cfg.Auth.SessionAbsoluteTTL = 30 * 24 * time.Hour
+	cfg.Auth.SessionIdleTTL = 7 * 24 * time.Hour
+
+	renderer, err := ui.New()
+	if err != nil {
+		t.Fatalf("parse templates: %v", err)
+	}
+	notifySvc := notify.NewService(f.pool)
+	stats := analytics.NewReader(f.pool)
+	srv := httptest.NewServer(httpx.NewRouter(httpx.Deps{
+		Config: cfg, Auth: f.auth, Keys: f.keys, Links: f.links, Stats: stats,
+		Notify: notifySvc, Invites: f.invites, Team: f.team,
+		Web: &httpx.Web{
+			UI: renderer, Config: cfg, Auth: f.auth, Keys: f.keys,
+			Links: f.links, Stats: stats, Notify: notifySvc,
+			Invites: f.invites, Team: f.team,
+		},
+	}))
+	t.Cleanup(srv.Close)
+
+	jar, err := newCookieJar()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return srv, &http.Client{
+		Jar: jar,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
+// D36's dashboard half: the account is prompted to create an organization, and
+// can take no other action until it has one.
+//
+// Asserted across every dashboard route the router mounts rather than on the one
+// page that does the prompting, because the failure this guards against is a
+// page that renders for a workspace which does not exist — and that is a
+// different page every time somebody adds one. The list below is the whole
+// signed-in surface; a route added without RequireOrganization fails here.
+func TestAnAccountThatBelongsToNothingIsPromptedForAnOrganization(t *testing.T) {
+	f := newTeamFixture(t)
+	f.otherOrganization(t)
+	f.member(t, "orphan@example.com", "editor")
+	if err := f.team.DeleteOrganization(t.Context(), f.owner, f.owner.OrgID); err != nil {
+		t.Fatalf("delete organization: %v", err)
+	}
+
+	srv, client := f.browser(t)
+	send := func(method, path string, form url.Values) *http.Response {
+		t.Helper()
+		var body io.Reader
+		if form != nil {
+			body = strings.NewReader(form.Encode())
+		}
+		req, err := http.NewRequestWithContext(t.Context(), method, srv.URL+path, body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if form != nil {
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+	read := func(resp *http.Response) string {
+		t.Helper()
+		defer func() { _ = resp.Body.Close() }()
+		b, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	redirectsToPrompt := func(method, path string, form url.Values) {
+		t.Helper()
+		resp := send(method, path, form)
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusSeeOther {
+			t.Errorf("%s %s = %d, want 303 to the organization prompt", method, path, resp.StatusCode)
+			return
+		}
+		if loc := resp.Header.Get("Location"); loc != "/organizations/new" {
+			t.Errorf("%s %s redirected to %q, want /organizations/new", method, path, loc)
+		}
+	}
+
+	// Signing in works, and lands where anybody else would — which is what makes
+	// the next assertion about the destination rather than about the sign-in.
+	login := send(http.MethodPost, "/login", url.Values{
+		"email": {"orphan@example.com"}, "password": {teamPassword},
+	})
+	defer func() { _ = login.Body.Close() }()
+	if login.StatusCode != http.StatusSeeOther {
+		t.Fatalf("an account belonging to nothing could not sign in: %d\n%s",
+			login.StatusCode, read(login))
+	}
+
+	// Every signed-in surface, refused. Reads and writes both: a page that
+	// rendered would be rendering a workspace that does not exist, and a write
+	// that reached its service would be refused there with a 403 page instead of
+	// the offer this state is supposed to end in.
+	for _, path := range []string{
+		"/dashboard", "/links", "/links/" + uuid.Must(uuid.NewV7()).String(),
+		"/keys", "/account", "/notifications", "/members", "/invites", "/workspaces",
+	} {
+		redirectsToPrompt(http.MethodGet, path, nil)
+	}
+	for _, post := range []struct {
+		path string
+		form url.Values
+	}{
+		{"/links", url.Values{"url": {"https://example.com"}}},
+		{"/keys", url.Values{"name": {"nope"}}},
+		{"/members", url.Values{"role": {"admin"}}},
+		{"/invites", url.Values{"email": {"someone@example.com"}}},
+		{"/workspaces", url.Values{"name": {"Nope"}}},
+		{"/account/password", url.Values{"current_password": {teamPassword}}},
+		{"/workspace/switch", url.Values{"workspace_id": {uuid.Must(uuid.NewV7()).String()}}},
+	} {
+		redirectsToPrompt(http.MethodPost, post.path, post.form)
+	}
+
+	// The one page that does render, and the one action it offers.
+	prompt := send(http.MethodGet, "/organizations/new", nil)
+	if prompt.StatusCode != http.StatusOK {
+		t.Fatalf("the organization prompt returned %d", prompt.StatusCode)
+	}
+	page := read(prompt)
+	for _, want := range []string{
+		"You are not in an organization",
+		`action="/organizations"`,
+		`action="/logout"`, // the other thing they must always be able to do
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the prompt page is missing %q", want)
+		}
+	}
+
+	// A refusal comes back on the prompt rather than on a page this reader
+	// cannot load: re-rendering the workspaces page would need workspace.read,
+	// which an account with no membership does not hold.
+	blank := send(http.MethodPost, "/organizations", url.Values{"name": {"  "}})
+	if blank.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("a blank organization name returned %d, want 422", blank.StatusCode)
+	}
+	if body := read(blank); !strings.Contains(body, "You are not in an organization") {
+		t.Error("the refusal did not come back on the prompt page")
+	}
+
+	// And creating one ends the state.
+	created := send(http.MethodPost, "/organizations", url.Values{"name": {"Fresh"}})
+	defer func() { _ = created.Body.Close() }()
+	if created.StatusCode != http.StatusSeeOther {
+		t.Fatalf("creating the first organization returned %d\n%s",
+			created.StatusCode, read(created))
+	}
+	if loc := created.Header.Get("Location"); loc != "/workspaces?done=organization" {
+		t.Errorf("after creating an organization the browser went to %q", loc)
+	}
+	dash := send(http.MethodGet, "/dashboard", nil)
+	defer func() { _ = dash.Body.Close() }()
+	if dash.StatusCode != http.StatusOK {
+		t.Errorf("the dashboard is still refused after creating an organization: %d", dash.StatusCode)
+	}
+	// The prompt turns away somebody who now belongs somewhere, so it cannot
+	// become a second, permanent route to the same form.
+	again := send(http.MethodGet, "/organizations/new", nil)
+	defer func() { _ = again.Body.Close() }()
+	if loc := again.Header.Get("Location"); again.StatusCode != http.StatusSeeOther || loc != "/workspaces" {
+		t.Errorf("the prompt answered a member with %d to %q, want 303 to /workspaces",
+			again.StatusCode, loc)
+	}
+}
+
+// The dashboard's own path to deletion, and the confirmation it is behind.
+func TestTheDashboardDeletesAnOrganization(t *testing.T) {
+	f := newTeamFixture(t)
+	f.otherOrganization(t)
+
+	srv, client := f.browser(t)
+	form := func(path string, vals url.Values) *http.Response {
+		t.Helper()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+			srv.URL+path, strings.NewReader(vals.Encode()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+
+	login := form("/login", url.Values{
+		"email": {"owner@example.com"}, "password": {teamPassword},
+	})
+	_ = login.Body.Close()
+
+	// The control is on the workspaces page, names what it will destroy, and
+	// says the refusal before it happens rather than after.
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/workspaces", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(raw)
+	if !strings.Contains(page, "/organizations/"+f.owner.OrgID.String()+"/delete") {
+		t.Fatal("the workspaces page offers no way to delete the organization")
+	}
+	if !strings.Contains(page, "hx-confirm=") || !strings.Contains(page, "cannot be undone") {
+		t.Error("the deletion control is not behind a confirmation that says it is irreversible")
+	}
+
+	deleted := form("/organizations/"+f.owner.OrgID.String()+"/delete", nil)
+	defer func() { _ = deleted.Body.Close() }()
+	if deleted.StatusCode != http.StatusSeeOther {
+		t.Fatalf("deleting the organization from the dashboard returned %d", deleted.StatusCode)
+	}
+	if n := f.count(t, `SELECT count(*) FROM organizations WHERE id = $1`, f.owner.OrgID); n != 0 {
+		t.Error("the organization survived the form post")
+	}
+	// The owner belonged to nothing else, so the browser lands on the prompt by
+	// the ordinary route rather than by anything the handler worked out.
+	next, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
+		srv.URL+deleted.Header.Get("Location"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	followed, err := client.Do(next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = followed.Body.Close() }()
+	if loc := followed.Header.Get("Location"); loc != "/organizations/new" {
+		t.Errorf("after deleting their only organization the owner went to %q", loc)
 	}
 }

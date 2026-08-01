@@ -143,7 +143,13 @@
     {{if .Identity.Can "workspace.write"}}
     <a href="/workspaces" class="block px-3 py-2 text-sm {{if eq .Nav "workspaces"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">Workspaces</a>
     {{end}}
+    {{/* Account goes with the rest: it is a page, and a page needs an
+         organization to render in (D36). Sign out never does — an account that
+         belongs to nothing must still be able to leave, and it is the one thing
+         this menu always holds. */}}
+    {{if .HasOrganization}}
     <a href="/account" class="block px-3 py-2 text-sm {{if eq .Nav "account"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">Account</a>
+    {{end}}
     <form method="post" action="/logout">
       <button type="submit" class="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-sunken">Sign out</button>
     </form>

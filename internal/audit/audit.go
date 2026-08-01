@@ -85,11 +85,14 @@ const (
 	ActionWorkspaceRenamed = "workspace.renamed"
 	ActionWorkspaceDeleted = "workspace.deleted"
 
-	// Organization creation. There is no organization.deleted here because
-	// nothing deletes one: `org.delete` is seeded and held by owners, but no
-	// milestone has built the operation it guards, and an action constant with
-	// no writer is a vocabulary entry an operator would search for in vain.
+	// The organization lifecycle (M28, M28.5). The deletion record is the one
+	// that outlives its subject: `audit_logs.organization_id` carries no foreign
+	// key, so this row survives the organization it describes, and the metadata
+	// carries the name and slug because the row that held them is gone. An audit
+	// trail erased by the teardown it records would be the one shape this table
+	// must not have.
 	ActionOrganizationCreated = "organization.created"
+	ActionOrganizationDeleted = "organization.deleted"
 )
 
 // Event is one thing that happened.

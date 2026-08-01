@@ -75,6 +75,7 @@ file. Append a row when you append an entry.
 | [M28, managing a member without inventing a second way to be one](#2026-08-01--m28-managing-a-member-without-inventing-a-second-way-to-be-one) | The two bounds and why both hold at once; the last-owner lock; D31 union, D32 and D34 guards; D33 delegability; D35 and the nav slot; the UUIDv7 slug collision |
 | [M28, the audit bullet that quietly required a feature](#2026-08-01--m28-the-audit-bullet-that-quietly-required-a-feature) | The bullet before and after; why this was assertion-level and not an amendment; M28.5's placement under planning.md; why a teardown milestone leads with refusals |
 | [M28.5, the two answers that had to precede the code](#2026-08-01--m285-the-two-answers-that-had-to-precede-the-code) | D36 belongs-to-nothing as a real state, and the `orgs.create` seam it opens; D37 links refuse an org deletion, mirroring D32; why the expensive answer won |
+| [M28.5, building the exit and the empty state behind it](#2026-08-01--m285-building-the-exit-and-the-empty-state-behind-it) | The seam mechanism recorded against D16, and why a membership count is not a second axis; `org.delete` against D18, which limb it matched and the limb D18 does not have; where the empty state is enforced and where it is only drawn; what the teardown leaves behind, and what it does not |
 
 ---
 
@@ -5311,3 +5312,162 @@ workspace-level guard was written to protect.
 It also means M28.5's refusals now nest rather than compete — links block their
 workspace, the last workspace blocks its own deletion (D34), and links block the
 organization outright.
+
+---
+
+## 2026-08-01 — M28.5, building the exit and the empty state behind it
+
+D36 and D37 were answered before the code (above). This entry is what building
+against them settled, and the three things m28.5.md asked to be **recorded**
+rather than merely done.
+
+### The `orgs.create` seam, recorded against D16
+
+An account with no membership holds no role, so it holds no permissions, so it
+does not hold `orgs.create` — and D36 makes that account a state the product
+walks somebody through rather than an error. Without a second door the offer of
+an organization leads to a 403.
+
+**The mechanism is a membership count, read inside `team.CreateOrganization`'s
+own transaction, at that one call site.** `CountUserMemberships` is consulted
+only when `Can(orgs.create)` has already answered no; a count above zero is the
+same refusal as before.
+
+Two alternatives were considered and rejected, and the reason is the same in both
+cases — blast radius.
+
+*Synthesising the permission into the identity* — an account with no membership
+resolves with `orgs.create` in its set — keeps a single evaluator and needs no
+change at any call site, which is genuinely attractive. It was rejected because
+it puts a second source into the permission set itself: every `Can()` call, every
+template affordance and every future call site would then be reading a set that
+two mechanisms can populate, and the cost of getting the condition wrong is the
+whole authorization surface rather than one operation.
+
+*A route-level exemption* — the handler decides — was rejected because this
+repository already decided that middleware knows the route and the service knows
+the object, and an authorization decision taken in `internal/httpx` would be the
+first exception to it.
+
+**Why this is not the second axis D16 was written to prevent.** D16 made
+`orgs.create` a grant rather than a check on how an account was made, because a
+provenance test — "did this account self-register?" — is a parallel system RBAC
+cannot see, audit or revoke. A membership count is not provenance. It is present
+state; it is monotone in the closing direction, since the moment an account holds
+any membership only the permission answers; and it cannot escalate, because the
+one operation it reaches ends by giving that account an owner membership, which
+is where `orgs.create` takes over. The zero-membership account is not a role
+standing beside RBAC — it is the empty case RBAC has no row for.
+
+The boundary is asserted in both directions by
+`TestFirstOrganizationCreationIsReachableFromBelongingToNothing`: a viewer *with*
+a membership is refused, the same account is permitted once orphaned, and it
+holds `orgs.create` by role immediately afterwards.
+
+### `org.delete` against D18: it matches neither limb, and that is worth stating
+
+The inherited permission rule requires each milestone that adds a permission to
+say which limb of D18 it matched. M28.5 adds no permission — `org.delete` has
+been seeded since Phase 1's `00700_seed.sql` and listed in
+`auth.NonDelegableScopes` since then too — so what is recorded is the delegability
+of the permission this milestone finally gives an operation.
+
+**It matches neither of D18's two limbs.** Deleting an organization discloses no
+identity tied to network data, and it cannot widen a key's reach: it removes
+tenancy rather than granting any. Read literally, D18 would therefore make it
+delegable, and the tree does not.
+
+The tree is right and D18's *text* is narrow. `NonDelegableScopes`' own comment
+already says so — "the rule this map encodes is now escalating, irreversible, or
+disclosing rather than only the first two" — and irreversibility is the ground
+`org.delete` has always been listed on: an action with no undo, no trash and no
+export belongs behind an interactive sign-in rather than behind a token in a CI
+variable. Nothing changed here; the entry exists so that the mismatch is on the
+record at the moment somebody looked, rather than being rediscovered by a later
+milestone applying D18's two limbs to a new irreversible permission and
+concluding it is delegable. That risk is a deferred-findings row (F12) rather
+than an amendment to D18, because rewording a decision is the owner's.
+
+### Where the empty state is enforced, and where it is only drawn
+
+D36's expensive half is teaching the session path that *belongs to nothing* is
+legitimate. Three places changed, and they are not the same kind of change.
+
+**`auth.ErrNoWorkspace` is the state.** `resolveWorkspace` used to call no rows a
+broken instance and every caller propagated the error. It now returns a sentinel,
+and login, session authentication and the CLI's lookup each turn it into
+`identityWithoutOrganization` — an identity with no workspace, no organization,
+no role, and an empty permission set. It stays an *error value* deliberately, so
+a caller that has not been taught about it fails loudly instead of quietly acting
+with a zero workspace id.
+
+**The API key path is the one caller that does not get that identity.** Belonging
+to nothing is a state a person is walked through, and a key has nobody to walk;
+it answers `ErrAPIKeyInvalid`. The state is rare there by construction — deleting
+an organization cascades its keys away — and is only reachable by a key whose
+owner lost their membership while the key survived, for which "this credential
+resolves to no tenancy" is the honest answer.
+
+**Enforcement is the empty permission set; `RequireOrganization` is an
+affordance.** Every service call such an identity could reach already refuses on
+the check it always made, which is why the middleware is described as drawing
+rather than deciding: what it prevents is a *page* rendering against a workspace
+that does not exist, and eight pages each discovering that separately is eight
+chances to get it wrong once. It is applied to the dashboard tree only. The JSON
+API needs no equivalent — its operations authorize on permissions, and the few
+endpoints that are user-scoped rather than organization-scoped (the notification
+inbox, the workspace list) correctly answer with an empty list, which *is* the
+state rendered rather than an error.
+
+One consequence is deliberate and is now a Plan.md limitation: *Account* is a
+page like the others, so an orphaned account cannot change its password until it
+has an organization. Sign out is never gated, which is the pair the header test
+asserts together — strip the chrome far enough and the one action that must
+survive goes with it.
+
+### What the teardown leaves behind
+
+**The audit trail, and nothing else.** `audit_logs.organization_id` carries no
+foreign key, so every record an organization wrote outlives it, deletion record
+included; the metadata carries the name and slug because the row that held them
+is gone. That is a property of the schema rather than of the delete, which is
+exactly why `TestTheAuditTrailSurvivesTheOrganizationItDescribes` asserts it — a
+later migration adding that key would erase the record of every teardown and
+nothing else in the tree would notice.
+
+Its honest limit is now a Plan.md limitation too: `GET /api/v1/audit` is scoped
+to the caller's organization and nobody can be in a deleted one, so the surviving
+trail is reachable only with database access. Building a cross-organization audit
+surface would be a feature, and it is not this one.
+
+**Nothing else survives, and the link guard is why.** m28.5.md asked whether
+aliases should be held back so they cannot be re-registered by somebody else. The
+question turns out to be answered one level down: D37 refuses the deletion while
+the organization holds any link, so an organization that reaches the delete has
+none, every alias it ever had was released by the link deletions that had to
+happen first, and the ones that had received traffic are already in
+`reserved_aliases` where the purge job put them. Holding anything else back would
+mean preserving rows nobody can reach on behalf of an organization nobody can
+enter. The instance default domain is untouched either way — its
+`organization_id` is NULL — so the reservations keyed to it are not at risk.
+
+### Two smaller things the build settled
+
+**The id in `DELETE /organizations/{id}` is a confirmation, not a selector.** It
+must be the organization the caller is acting in; anything else is not-found,
+which is the answer every other read in `internal/team` gives an id from
+elsewhere. The alternative — deleting any organization you own by id — would need
+permissions resolved in an organization the request is not in, which is
+machinery, and it would let a pasted id destroy the wrong tenant. Deleting a
+different organization means switching into it first, which is one extra call and
+a deliberate one.
+
+**Both refusals lock before they count.** `LockOrganizations` takes every live
+organization `FOR UPDATE` in id order, and `LockOrganizationWorkspaces` does the
+same for the target's workspaces. The ordering is not cosmetic: two concurrent
+deletions taking the same row locks in different orders is a deadlock, and a
+fixed order makes it a wait. Locking also buys the thing a count alone cannot —
+Postgres takes `FOR KEY SHARE` on a parent row when inserting a child that
+references it, and that conflicts with `FOR UPDATE`, so a locked organization
+cannot acquire a workspace and a locked workspace cannot acquire a link while the
+guard is deciding.

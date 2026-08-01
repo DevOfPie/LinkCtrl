@@ -281,6 +281,12 @@ func pageData(t *testing.T) map[string]any {
 		"workspaces": map[string]any{
 			"Title": "Workspaces", "Nav": "workspaces", "Identity": owner(),
 			"CanWrite": true, "CanCreateOrganization": true,
+			// org.delete is the owner's alone, and M28.5 gave it its first
+			// operation. Turned on here so the deletion section renders — it is
+			// the only place in the product that offers it.
+			"CanDeleteOrganization": true,
+			"OrganizationID":        "0198c9c5-0000-7000-8000-000000000020",
+			"OrganizationName":      "Owner",
 			"Workspaces": []map[string]any{
 				{"ID": "0198c9c5-0000-7000-8000-000000000010", "Name": "Default", "Slug": "default",
 					"Current": true, "Manageable": true},
@@ -291,6 +297,16 @@ func pageData(t *testing.T) map[string]any {
 			"FieldErrors":    map[string]string{"name": "a workspace in this organization already uses that name"},
 			"OrgFieldErrors": map[string]string{},
 			"Notice":         "", "Error": "",
+		},
+		// The page for an account that belongs to nothing (D36). Its shell is
+		// the one place HasOrganization is false, which is fixed up below the
+		// loop: the header has to draw without its destinations, and every other
+		// page has to keep drawing with them.
+		"organization_new": map[string]any{
+			"Title": "Create an organization", "Nav": "", "Identity": owner(),
+			"Form":        map[string]string{"Name": ""},
+			"FieldErrors": map[string]string{},
+			"Error":       "",
 		},
 		// The public half. No identity at all, which is the state it is designed
 		// for: whoever opens it may have no account yet.
@@ -326,7 +342,15 @@ func pageData(t *testing.T) map[string]any {
 		m["Path"] = "/dashboard"
 		m["Workspaces"] = twoWorkspaces()
 		m["UnreadPreview"] = unreadPreview(now)
+		m["HasOrganization"] = true
 	}
+	// The one exception, set after the loop rather than inside the entry so it
+	// cannot be quietly overwritten by it: this page exists precisely because an
+	// account can belong to nothing, and rendering it with a full header would
+	// exercise the wrong half of the layout.
+	organizationNew, _ := data["organization_new"].(map[string]any)
+	organizationNew["HasOrganization"] = false
+	organizationNew["Workspaces"] = []map[string]any{}
 	return data
 }
 

@@ -23,6 +23,13 @@ import (
 // to network data, and none lets a key widen its own reach, because a key's
 // permissions are its scopes intersected with its owner's role on every request
 // (D18).
+//
+// org.delete, added by M28.5, is the exception and was already decided: it has
+// sat in auth.NonDelegableScopes since Phase 1, on D18's **irreversible** limb —
+// an action with no undo belongs behind an interactive sign-in rather than
+// behind a token in a CI variable. M28.5 gives it its first operation and
+// changes nothing about that; the map is the only mechanism, and no handler here
+// asks which credential it was called with.
 type TeamAPI struct {
 	Team *team.Service
 }
@@ -196,4 +203,27 @@ func (a *TeamAPI) CreateOrganization(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	WriteJSON(w, http.StatusCreated, org)
+}
+
+// DeleteOrganization tears down the organization the caller is acting in.
+//
+// The id names the organization being deleted and must be the caller's current
+// one; anything else is 404, so an id cannot be probed and a mistyped one
+// deletes nothing. 409 while it still holds any link (D37) or while it is the
+// instance's only organization.
+//
+// Requires `org.delete`, held by the `owner` role alone and not delegable to an
+// API key — so this endpoint answers a session and nothing else, without
+// branching on the credential (D18, auth.NonDelegableScopes).
+func (a *TeamAPI) DeleteOrganization(w http.ResponseWriter, r *http.Request) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	if err := a.Team.DeleteOrganization(r.Context(), IdentityFrom(r.Context()), id); err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

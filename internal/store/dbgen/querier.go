@@ -47,6 +47,15 @@ type Querier interface {
 	// failure.
 	CountMembershipsForEmail(ctx context.Context, arg CountMembershipsForEmailParams) (int64, error)
 	CountMembershipsForUser(ctx context.Context, arg CountMembershipsForUserParams) (int64, error)
+	// What D37 refuses an organization deletion on, and it is deliberately the same
+	// shape as CountWorkspaceLinks one level up.
+	//
+	// Archived links count, soft-deleted ones do not — the reasoning is D32's and is
+	// written out there. What is new here is *why the org level asks the question at
+	// all*: cascading through these links would make D32 bypassable by deleting one
+	// level up, which turns a rule into a speed bump. So the organization refuses on
+	// exactly the rows its workspaces would refuse on.
+	CountOrganizationLinks(ctx context.Context, organizationID uuid.UUID) (int64, error)
 	// Whether this is the organization's last workspace.
 	//
 	// Deleting it would leave every member of the organization resolving into no
@@ -66,6 +75,15 @@ type Querier interface {
 	// ships with: the WHERE clause here has to match the index's predicate exactly
 	// or this becomes a sequential scan on every page render in the dashboard.
 	CountUnreadNotifications(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Whether an account belongs to anything at all.
+	//
+	// Read by exactly one caller: the first-organization path (D36). An account with
+	// no membership holds no role and therefore no `orgs.create`, so without this
+	// the prompt to create an organization would lead somewhere it is refused. This
+	// is a check on **present state** — how many memberships exist right now — and
+	// not on how the account was made, which is the distinction D16 was drawing when
+	// it made the permission a grant rather than a provenance test.
+	CountUserMemberships(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Users, sessions and tenancy provisioning.
 	// Drives the first-run setup flow: /setup exists only while this is zero.
 	CountUsers(ctx context.Context) (int64, error)
@@ -106,6 +124,17 @@ type Querier interface {
 	// the session list before it disappears.
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (int64, error)
+	// A real delete, not a soft one, and everything in 00200/00300/00500/01200 that
+	// references it cascades: workspaces and everything under them, memberships,
+	// invitations, API keys, and any custom domain.
+	//
+	// Two things deliberately do not. `audit_logs.organization_id` carries no
+	// foreign key, so the trail this organization wrote survives the row it
+	// describes — a tenancy teardown that erased its own record is the one shape an
+	// audit log must not have. And the instance default domain has
+	// `organization_id IS NULL`, so it and the `reserved_aliases` rows keyed to it
+	// are untouched.
+	DeleteOrganization(ctx context.Context, id uuid.UUID) (int64, error)
 	// Reaper. Kept long enough to be visible in the key list after revocation, and
 	// long enough for the audit question above to be answerable.
 	DeleteRevokedAPIKeys(ctx context.Context) (int64, error)
@@ -172,6 +201,12 @@ type Querier interface {
 	// two administrators acting at once could each read a state the other is
 	// changing — the check-then-act that the last-owner refusal exists to prevent.
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
+	// The organization being deleted, read after LockOrganizations has locked it.
+	//
+	// Its name and slug are read here because the audit record has to carry them:
+	// once the row is gone that record is the only remaining trace of what was
+	// deleted, exactly as it is for a workspace.
+	GetOrganization(ctx context.Context, id uuid.UUID) (Organization, error)
 	// Whether a user is in an organization at all, for the grant path:
 	// workspace-scoped access is given to somebody who is already a member, and
 	// this is what establishes that.
@@ -398,6 +433,41 @@ type Querier interface {
 	// removal or demotion of an owner, so two concurrent administrators cannot each
 	// observe two owners and each remove one.
 	LockOrganizationOwners(ctx context.Context, organizationID uuid.UUID) ([]uuid.UUID, error)
+	// The organization's workspaces, locked, so no link can be created in one while
+	// the link guard below is counting.
+	//
+	// Ordered for the same deadlock reason as LockOrganizations.
+	LockOrganizationWorkspaces(ctx context.Context, organizationID uuid.UUID) ([]uuid.UUID, error)
+	// Organization teardown (M28.5).
+	//
+	// Every statement here is either a guard or the delete it guards. The delete is
+	// one line; the guards are the milestone.
+	//
+	// **Locking, and why each of these returns rows rather than a count.** A count
+	// cannot be locked, so a guard written as `SELECT count(*)` is a check-then-act:
+	// two administrators acting at once each read a state the other is changing.
+	// The pattern is `LockOrganizationOwners`' — select the rows the decision is
+	// made on `FOR UPDATE`, count them in Go, and let the second transaction block
+	// until the first commits and then re-read what it left behind. Postgres also
+	// gives this a second effect that is the point of it here: inserting a row that
+	// references a locked parent takes `FOR KEY SHARE` on that parent, which
+	// conflicts with `FOR UPDATE` — so a locked organization cannot acquire a new
+	// workspace, and a locked workspace cannot acquire a new link, while the guard
+	// is deciding.
+	// Every live organization on the instance, locked, for the refusal that stops
+	// the last one being deleted.
+	//
+	// Instance-wide rather than scoped, because that is what the rule is about: an
+	// instance with no organization has no path back that does not involve SQL, the
+	// same argument that refuses the last owner and the last workspace.
+	//
+	// `ORDER BY id` is load-bearing rather than cosmetic. Two concurrent deletions
+	// of different organizations both take this lock, and taking a set of row locks
+	// in a different order in each transaction is a deadlock; a fixed order makes it
+	// a wait instead. It is also why this runs *before* the target row is read —
+	// the target is inside this set, so it is already locked by the time anything
+	// else touches it.
+	LockOrganizations(ctx context.Context) ([]uuid.UUID, error)
 	MarkAllNotificationsRead(ctx context.Context, userID uuid.UUID) (int64, error)
 	// The single-use write. Conditional on the invite still being redeemable, so
 	// even without the lock above this could not be spent twice.

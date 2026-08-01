@@ -471,6 +471,53 @@ nobody else — until an owner deliberately makes somebody else an owner. Creati
 one provisions its first workspace and your owner membership in the same
 transaction, and moves you into it.
 
+### Deleting an organization
+
+The same page deletes the organization you are in, if you hold **`org.delete`**
+— the owner role and nothing else, and no API key, ever. It removes every
+workspace in it and everything under them, every membership, every outstanding
+invitation and every API key issued in it, in one transaction. **There is no
+undo, no trash and no export.**
+
+```sh
+curl -sS -X DELETE .../api/v1/organizations/$ORG_ID \
+  -H "Authorization: Bearer $KEY"   # 403: org.delete is never grantable to a key
+```
+
+The id in the path must be the organization you are acting in. Any other id
+answers `404`, the same answer one that never existed gets, so a mistyped id
+deletes nothing and no id can be probed. To delete a different organization,
+switch into it first.
+
+Two refusals, both `409` with the reason in `detail`:
+
+- **While any workspace still holds a link**, archived ones included. This is
+  the workspace rule one level up: without it, deleting the organization would be
+  a way around the guard that protects a workspace's links. There is no bulk
+  delete, so a large organization is a link at a time and there is no shortcut.
+- **While it is the only organization on the instance.** An instance with none
+  cannot be used or repaired from the dashboard.
+
+**Members left belonging to nothing are not a refusal.** Somebody whose only
+organization this was keeps their account, their password and their sessions.
+They can sign in, and they are shown a page offering them an organization of
+their own; until they take it, every other page redirects them back to that
+offer — including *Account*, so a password cannot be changed from that state.
+Creating an organization there is permitted despite the account holding no
+permissions at all: it is the only operation with that exemption, and the moment
+the account has any membership, `orgs.create` decides again.
+
+**The audit trail survives.** `organization.deleted` is recorded with the name
+and slug of what was removed, and every earlier record the organization wrote
+stays in the table. It is not readable through the API afterwards — `GET
+/api/v1/audit` is scoped to the organization you are in, and nobody can be in a
+deleted one — so reading a deleted organization's history takes database access.
+
+Nothing else is kept, and the link refusal is why: an organization that can be
+deleted holds no links, so there are no aliases left to protect. Aliases that had
+received traffic were already reserved when those links were purged, against the
+instance domain, which belongs to no organization and is untouched.
+
 ```sh
 curl -sS -X POST .../api/v1/workspaces \
   -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \

@@ -344,10 +344,17 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 	// No session id: this is the request that creates one. So a sign-in starts
 	// at the pinned default, or at the last workspace used, and the session
 	// carries that from its first row rather than being corrected afterwards.
+	//
+	// An account that belongs to nothing signs in anyway (D36). The session is
+	// created with no workspace, which is a value the column already permits —
+	// sessions.workspace_id is nullable and is SET NULL when a workspace is
+	// deleted, so a signed-in browser was always going to reach this state; what
+	// changes here is that signing in can start in it.
 	ws, err := s.resolveWorkspace(ctx, user.ID, nil)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrNoWorkspace) {
 		return nil, err
 	}
+	orphaned := errors.Is(err, ErrNoWorkspace)
 
 	token, hash, err := NewSessionToken()
 	if err != nil {
@@ -356,21 +363,27 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 	expires := time.Now().Add(s.ttl.Absolute)
 
 	ipPrefix := AnonymizeIP(in.IP)
-	session, err := s.q.CreateSession(ctx, dbgen.CreateSessionParams{
-		ID:          uuid.Must(uuid.NewV7()),
-		UserID:      user.ID,
-		TokenHash:   hash,
-		IpPrefix:    nullable(ipPrefix),
-		UserAgent:   nullable(truncate(in.UserAgent, 512)),
-		ExpiresAt:   expires,
-		WorkspaceID: &ws.ID,
-	})
+	params := dbgen.CreateSessionParams{
+		ID:        uuid.Must(uuid.NewV7()),
+		UserID:    user.ID,
+		TokenHash: hash,
+		IpPrefix:  nullable(ipPrefix),
+		UserAgent: nullable(truncate(in.UserAgent, 512)),
+		ExpiresAt: expires,
+	}
+	if !orphaned {
+		params.WorkspaceID = &ws.ID
+	}
+	session, err := s.q.CreateSession(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
 	}
 
-	identity, err := s.identityFor(ctx, user.ID, user.Email, user.Name, ws.ID, ws.OrganizationID)
-	if err != nil {
+	var identity *Identity
+	if orphaned {
+		identity = identityWithoutOrganization(user.ID, user.Email, user.Name)
+	} else if identity, err = s.identityFor(
+		ctx, user.ID, user.Email, user.Name, ws.ID, ws.OrganizationID); err != nil {
 		return nil, err
 	}
 	identity.SessionID = session.ID
@@ -408,8 +421,14 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*Identity, er
 	// The session's id is passed, so wherever this browser last switched to wins
 	// over the account-level preference. That is the difference between "where
 	// do I start" and "where am I now", and it is why the two are stored apart.
+	//
+	// This is the line D36 is really about. Every authenticated request in the
+	// product passes through here, so treating "belongs to nothing" as a failure
+	// would turn one owner's tenancy teardown into an authentication outage for
+	// the person it orphaned — they would be unable to sign in and therefore
+	// unable to create the organization the product wants to offer them.
 	ws, err := s.resolveWorkspace(ctx, row.UserID, &row.ID)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrNoWorkspace) {
 		return nil, err
 	}
 
@@ -420,8 +439,11 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*Identity, er
 		_ = s.q.TouchSession(ctx, row.ID)
 	}
 
-	identity, err := s.identityFor(ctx, row.UserID, row.Email, row.Name, ws.ID, ws.OrganizationID)
-	if err != nil {
+	var identity *Identity
+	if errors.Is(err, ErrNoWorkspace) {
+		identity = identityWithoutOrganization(row.UserID, row.Email, row.Name)
+	} else if identity, err = s.identityFor(
+		ctx, row.UserID, row.Email, row.Name, ws.ID, ws.OrganizationID); err != nil {
 		return nil, err
 	}
 	identity.SessionID = row.ID
@@ -445,8 +467,11 @@ func (s *Service) IdentityForEmail(ctx context.Context, email string) (*Identity
 		return nil, ErrAccountInactive
 	}
 	// No session, so the account's own preference decides: the CLI acts where
-	// the person would land if they signed in.
+	// the person would land if they signed in — including, since D36, nowhere.
 	ws, err := s.resolveWorkspace(ctx, user.ID, nil)
+	if errors.Is(err, ErrNoWorkspace) {
+		return identityWithoutOrganization(user.ID, user.Email, user.Name), nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -538,6 +563,41 @@ func (s *Service) identityFor(ctx context.Context, userID uuid.UUID, email, name
 		permissions: set,
 	}, nil
 }
+
+// identityWithoutOrganization is who an account is when it belongs to nothing.
+//
+// Everything tenancy-shaped is zero: no workspace, no organization, no role, and
+// an empty permission set, so Can answers false for every permission there is
+// and every service call refuses on the check it already makes. That is the
+// whole enforcement — there is no second authorization path for this state, and
+// the one operation that must remain reachable from it (creating a first
+// organization) opens its own door, at its own call site, where a reader can see
+// it. See team.CreateOrganization and D36.
+//
+// RoleRank is NoRoleRank rather than zero for the reason the constant explains:
+// rank counts downward in authority, so a zero here would read as outranking the
+// owner role.
+//
+// A function rather than a method: it touches no database, and the point of it
+// is that there is nothing to load.
+func identityWithoutOrganization(userID uuid.UUID, email, name string) *Identity {
+	return &Identity{
+		UserID:      userID,
+		Email:       email,
+		Name:        name,
+		RoleRank:    NoRoleRank,
+		permissions: map[string]struct{}{},
+	}
+}
+
+// HasOrganization reports whether this identity belongs to an organization.
+//
+// False is a real, reachable state since D36 — an account whose only
+// organization was deleted keeps its account and loses its tenancy — and it is
+// what the dashboard reads to send somebody to the page that offers them one.
+// It is an affordance, never the enforcement: what such an identity may do is
+// decided by its empty permission set, like everybody else's.
+func (i *Identity) HasOrganization() bool { return i != nil && i.OrgID != uuid.Nil }
 
 // NoRoleRank is the rank of an identity whose role could not be resolved.
 //

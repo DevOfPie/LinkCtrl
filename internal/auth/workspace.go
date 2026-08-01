@@ -35,6 +35,23 @@ type Workspace struct {
 	Default bool `json:"default"`
 }
 
+// ErrNoWorkspace reports that an account belongs to no organization, and so
+// resolves into no workspace.
+//
+// It is a state, not a fault, and that is the whole of D36. Until organization
+// deletion existed this could not be reached — registration provisions a
+// membership in the same transaction as the user — so resolveWorkspace called it
+// a broken instance and every caller propagated the error. Deleting the last
+// organization somebody belongs to now produces it deliberately, on an account
+// that is otherwise entirely intact, and an availability path reached by every
+// authenticated request must not treat that as a failure.
+//
+// Callers turn it into an identity that holds nothing rather than into an error:
+// see identityWithoutOrganization. It stays an error value so that a caller
+// which has *not* been taught about it fails loudly instead of silently acting
+// with a zero workspace id.
+var ErrNoWorkspace = errors.New("auth: account belongs to no organization")
+
 // resolveWorkspace answers "which workspace is this user acting in", and is the
 // only path by which that question is answered.
 //
@@ -54,11 +71,7 @@ func (s *Service) resolveWorkspace(ctx context.Context, userID uuid.UUID, sessio
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			// A user with no membership at all. Registration provisions one in
-			// the same transaction as the user, so this is a broken instance
-			// rather than a state a caller can reach — and saying so is more
-			// use than "no rows".
-			return ws, fmt.Errorf("auth: user %s belongs to no workspace: %w", userID, err)
+			return ws, ErrNoWorkspace
 		}
 		return ws, fmt.Errorf("resolve workspace: %w", err)
 	}

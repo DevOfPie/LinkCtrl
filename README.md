@@ -84,13 +84,13 @@ answers, not the same ones with a domain name.
 | **Auth** | Email/password with argon2id, server-side sessions in `__Host-` cookies, per-account lockout and per-address rate limiting, real RBAC with four built-in roles and a working permission evaluator. |
 | **Abuse limits** | Per-address limits on credential endpoints, the API, and 404 probing. The last charges misses only, so a working link is never throttled by anyone's scanning. |
 | **API keys** | `lk_live_…` bearer tokens, scoped to permissions you hold, intersected with your current role on every request. Revocable, with usage timestamps. |
-| **Audit log** | Events recorded with the actor snapshotted at write time and a network prefix rather than an address, readable at `GET /api/v1/audit` behind a non-delegable permission. Retention is its own setting and defaults to keeping everything, so growth is reported rather than trimmed silently. Root-redirect changes, the invitation lifecycle, member and workspace changes and organization creation are recorded so far; the rest arrive with the Phase 2 features that produce them. |
+| **Audit log** | Events recorded with the actor snapshotted at write time and a network prefix rather than an address, readable at `GET /api/v1/audit` behind a non-delegable permission. Retention is its own setting and defaults to keeping everything, so growth is reported rather than trimmed silently. Root-redirect changes, the invitation lifecycle, member and workspace changes and the organization lifecycle are recorded so far; the rest arrive with the Phase 2 features that produce them. An organization's records outlive the organization, so a teardown does not erase its own trail. |
 | **Notifications** | An in-app inbox for things the instance wanted you to know about — the audit log outgrowing its threshold is the first — with mark-read. A bell in the header carries the count and previews the newest few, so answering "what is it" costs nothing; the full page is one click on. Emailed as well when a mailer is configured. |
 | **Mail** | Optional SMTP, off unless `SMTP_HOST` is set. Queued in an outbox and delivered by the scheduler, so a message survives a restart; plain text only, and every consumer works unchanged with no mailer at all. |
 | **Invitations** | Bring somebody into your organization with a single-use, revocable, expiring link. It is tied to the address you send it to, so forwarding it cannot add a stranger, and the role it carries is capped at your own. Emailed when a mailer is configured, copyable either way. Under `SIGNUP_MODE=closed` an invitation may only add an account that already exists. |
 | **Members** | A member list with role changes and removal, behind `members.read` and `members.write`. You manage only roles below your own — an admin manages editors and viewers, an owner manages everyone including other owners — and the last owner of an organization cannot be removed or demoted. Giving somebody a role in one workspace *adds* it there and takes nothing away anywhere. |
 | **Workspaces** | Every request resolves to exactly one, and a switcher moves the browser you are in without moving the others. Which workspace a new session starts in follows the one you used last, or a pin you set. Create, rename and delete them within an organization; deleting one is refused while it still holds any link, archived ones included, because everything in it cascades and there is no trash. |
-| **Organizations** | Create one of your own, provisioned with a workspace and an owner membership in a single transaction, behind a new `orgs.create` permission held by the owner role. On a default instance that means the account from the setup form and nobody else, until an owner grants it. |
+| **Organizations** | Create one of your own, provisioned with a workspace and an owner membership in a single transaction, behind a new `orgs.create` permission held by the owner role. On a default instance that means the account from the setup form and nobody else, until an owner grants it. Delete one behind `org.delete`, which owners alone hold and no API key may: it removes every workspace, membership, invitation and key in one transaction, is refused while any link remains or while it is the instance's last, and leaves the audit trail behind. Somebody left belonging to nothing keeps their account and is offered an organization of their own. |
 | **Dashboard** | Server-rendered HTML with htmx. Works without JavaScript; no build step at runtime — the header's menus are popovers, so the browser opens them, closes them on Escape and needs no script to do it. Needs a browser from mid-2023 (Chrome 114, Safari 17, Firefox 125) for that. Light and dark, following the operating system unless overridden per browser — the server renders the theme into the page, so there is no flash of the wrong one. |
 | **API** | REST with RFC 9457 problem responses, an OpenAPI 3 document, and Swagger UI at `/docs`. |
 | **Operations** | `/healthz`, `/readyz`, Prometheus metrics on a separate unpublished port, structured JSON logs, graceful shutdown that flushes buffered clicks. |
@@ -178,8 +178,17 @@ Known limitations and deferred work, so nobody discovers them in production:
   cascade from it and there is no trash to restore them from. There is no bulk
   delete and no way to move a link between workspaces, so a workspace with fifty
   links takes fifty deletions.
-- **Nothing deletes an organization.** The `org.delete` permission is seeded and
-  held by owners, but no operation is behind it yet.
+- **Emptying an organization is one link at a time too.** Deleting an
+  organization is refused while any of its workspaces still holds a link, for the
+  reason deleting a workspace is: otherwise deleting one level up would be a way
+  around the rule. The instance's last organization cannot be deleted at all.
+- **An account can end up belonging to nothing.** Deleting an organization is not
+  refused because somebody would be left with no other one — their account
+  survives and they are offered an organization of their own — but until they
+  take it, every page redirects them to that offer, *Account* included.
+- **A deleted organization's audit trail is readable only from the database.**
+  The records survive, but the audit API is scoped to the organization you are
+  in, and nobody can be in one that is gone.
 - **A member cannot leave an organization themselves.** Removal is done by
   somebody who holds `members.write` and outranks them.
 

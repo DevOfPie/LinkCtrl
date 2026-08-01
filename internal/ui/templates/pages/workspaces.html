@@ -80,4 +80,36 @@
   </form>
 </div>
 {{end}}
+
+{{if .CanDeleteOrganization}}
+{{/* Deleting the organization. `org.delete` is held by the owner role alone and
+     this is the first thing it has ever gated.
+
+     The confirmation says every irreversible thing it does, because there is no
+     soft delete, no trash and no export to fall back on — M28.5 leaves all
+     three out deliberately, so the sentence below is the entire safety net. It
+     also states the refusal in advance: an organization holding any link
+     declines (D37), and hearing that before clicking is worth more than hearing
+     it after. */}}
+<div class="mt-6 rounded-lg border border-danger-line bg-raised p-6">
+  <h2 class="text-sm font-medium text-danger-ink">Delete this organization</h2>
+  <p class="mt-1 text-sm text-muted">
+    Deletes {{if .OrganizationName}}<span class="font-medium text-ink">{{.OrganizationName}}</span>{{else}}this organization{{end}}
+    and everything in it: every workspace, every membership, every outstanding
+    invitation and every API key issued in it. There is no undo, no trash and no
+    export.
+  </p>
+  <p class="mt-1 text-sm text-muted">
+    It is refused while any workspace still holds a link, archived ones included,
+    and while this is the only organization on the instance. Everyone who belongs
+    to nothing else afterwards keeps their account and is asked to create an
+    organization of their own next time they sign in.
+  </p>
+  <form method="post" action="/organizations/{{.OrganizationID}}/delete" class="mt-4"
+        hx-post="/organizations/{{.OrganizationID}}/delete"
+        hx-confirm="Delete {{if .OrganizationName}}{{.OrganizationName}}{{else}}this organization{{end}}? Every workspace, membership, invitation and API key in it goes with it. This cannot be undone.">
+    <button type="submit" class="rounded-md border border-danger-line px-4 py-2 text-sm font-medium text-danger-ink hover:bg-danger-soft">Delete organization</button>
+  </form>
+</div>
+{{end}}
 {{end}}

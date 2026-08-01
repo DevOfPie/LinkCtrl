@@ -79,7 +79,7 @@ tags:
   - name: members
     description: Who is in an organization, at what role, and where that role reaches
   - name: organizations
-    description: Creating an organization of your own
+    description: Creating an organization of your own, and tearing one down
   - name: notifications
     description: Your own in-app inbox
   - name: workspaces
@@ -1140,6 +1140,70 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/Validation"
+
+  /organizations/{id}:
+    delete:
+      tags: [organizations]
+      operationId: deleteOrganization
+      summary: Delete the organization you are acting in
+      description: |
+        Removes the organization and everything the schema hangs off it: every
+        workspace, every membership, every outstanding invitation, and every API
+        key issued in it. **There is no soft delete, no restore and no export**,
+        and one transaction does the whole thing — a partially deleted
+        organization would leave members resolving into workspaces that no longer
+        exist.
+
+        `id` must be the organization you are currently acting in. Any other id
+        is `404`, the same answer one that never existed gets, so an id cannot be
+        probed and a mistyped one deletes nothing. To delete a different
+        organization, switch into it first.
+
+        **Refused while any of its workspaces holds a link**, archived ones
+        included, and the links must be deleted first. This mirrors the same
+        refusal on `DELETE /workspaces/{id}`: an organization-level cascade
+        through those links would make the workspace-level rule bypassable by
+        deleting one level up. There is no bulk delete, so emptying a large
+        organization is a link at a time.
+
+        **Also refused when it is the only organization on the instance.** An
+        instance without one cannot be used or repaired from the dashboard.
+
+        **Members left belonging to nothing are not a refusal.** Their accounts
+        survive with no membership, and they are asked to create an organization
+        of their own the next time they sign in.
+
+        The audit trail survives: `organization.deleted` is recorded, carrying
+        the name and slug of what was removed, and every earlier record this
+        organization wrote stays in the table.
+
+        Requires `org.delete`, held by the `owner` role alone. It is **not
+        delegable to an API key** — an irreversible action belongs behind an
+        interactive sign-in — so a bearer token never holds it and this endpoint
+        answers a session.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The organization you are acting in.
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: |
+            Refused: the organization still holds links, or it is the instance's
+            only one. `detail` says which.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 
   /notifications:
     get:

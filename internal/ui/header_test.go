@@ -117,6 +117,53 @@ func TestTopLevelNavHoldsThreeDestinations(t *testing.T) {
 	}
 }
 
+// TestTheHeaderOffersNothingToAnAccountThatBelongsToNothing is the layout half
+// of D36.
+//
+// An account whose only organization was deleted keeps its account and belongs
+// to nothing. Every top-level destination needs an organization to render in, so
+// RequireOrganization sends this reader back to the same page from all of them —
+// a nav made entirely of redirects. It draws none of them instead.
+//
+// Sign out is asserted present in the same test rather than in its own, because
+// the pair is the whole rule: strip the header down far enough and the one
+// action that must survive goes with it, leaving somebody trapped on a page
+// offering a single form.
+func TestTheHeaderOffersNothingToAnAccountThatBelongsToNothing(t *testing.T) {
+	body := renderPage(t, "organization_new", nil)
+
+	_, nav, opened := strings.Cut(body, "<nav ")
+	nav, _, found := strings.Cut(nav, `<div class="ml-auto`)
+	if !opened || !found {
+		t.Fatal("the page draws no header; an account with no organization is " +
+			"signed in, and a signed-in page without chrome cannot be signed out of")
+	}
+	var got []string
+	for _, m := range headerHrefs.FindAllStringSubmatch(nav, -1) {
+		got = append(got, m[1])
+	}
+	// The logo only. It leads to /dashboard, which redirects straight back here,
+	// which is the one link where that is the right answer.
+	if len(got) != 1 || got[0] != "/dashboard" {
+		t.Errorf("the top-level nav links to %v, want the logo alone: every "+
+			"destination needs an organization, so each one would bounce", got)
+	}
+
+	if strings.Contains(body, `href="/account"`) {
+		t.Error("the identity menu still offers Account; it is a page like the " +
+			"others and needs an organization to render in")
+	}
+	if !strings.Contains(body, `<form method="post" action="/logout">`) {
+		t.Fatal("the identity menu drops Sign out for an account that belongs to " +
+			"nothing, which is the one account that cannot do anything else")
+	}
+	// And the page itself offers the one permitted action.
+	if !strings.Contains(body, `action="/organizations"`) {
+		t.Error("the page does not offer the form that creates an organization, " +
+			"which is the only reason it exists")
+	}
+}
+
 // TestSignOutStaysAFormPost is the regression that would not be visible by
 // looking.
 //

@@ -38,9 +38,10 @@ type Deps struct {
 	// and the dashboard page unregistered, which is what the parity test
 	// against openapi.yaml compares itself to.
 	Invites *invite.Service
-	// Team serves member management, workspace lifecycle and organization
-	// creation. Nil leaves its endpoints and both dashboard pages unregistered,
-	// which is what the parity test against openapi.yaml compares itself to.
+	// Team serves member management, workspace lifecycle and the organization
+	// lifecycle. Nil leaves its endpoints and its three dashboard pages
+	// unregistered, which is what the parity test against openapi.yaml compares
+	// itself to.
 	Team *team.Service
 	Web  *Web
 	// Metrics is optional. Nil disables instrumentation entirely rather than
@@ -201,7 +202,13 @@ func NewRouter(d Deps) http.Handler {
 			"POST " + APIPrefix + "/workspaces":        tm.CreateWorkspace,
 			"PATCH " + APIPrefix + "/workspaces/{id}":  tm.RenameWorkspace,
 			"DELETE " + APIPrefix + "/workspaces/{id}": tm.DeleteWorkspace,
-			"POST " + APIPrefix + "/organizations":     tm.CreateOrganization,
+			// Creating an organization and tearing one down sit on the same
+			// collection. The delete carries an id even though it can only ever
+			// name the organization the caller is acting in: a path parameter
+			// that has to match is a confirmation, and an irreversible operation
+			// with no target in its URL is one a client can fire by accident.
+			"POST " + APIPrefix + "/organizations":        tm.CreateOrganization,
+			"DELETE " + APIPrefix + "/organizations/{id}": tm.DeleteOrganization,
 		} {
 			app.Handle(pattern, RequireAuth(h))
 		}
@@ -240,6 +247,17 @@ func NewRouter(d Deps) http.Handler {
 		// be able to double their budget by alternating between the two surfaces.
 		guard := RateLimit(d.Limits.Login, "login", d.Metrics, web.tooManyRequests)
 
+		// What every dashboard route needs: a session, and an organization to
+		// spend it in. The second is D36's — an account whose only organization
+		// was deleted keeps its account and belongs to nothing, and every page
+		// below assumes a workspace it can render. They are composed here rather
+		// than per route so a page added later cannot forget the second half; the
+		// two routes that must work *without* an organization are registered
+		// outside this helper, where their absence from it is visible.
+		signedIn := func(fn http.HandlerFunc) http.Handler {
+			return web.RequireWebAuth(web.RequireOrganization(fn))
+		}
+
 		// Public: sign-in, first-run setup, and the root redirect.
 		app.HandleFunc("GET /{$}", web.Root)
 		app.HandleFunc("GET /login", web.LoginPage)
@@ -250,10 +268,8 @@ func NewRouter(d Deps) http.Handler {
 		// account, so it has to be settable from the login page too.
 		app.HandleFunc("POST /theme", web.ThemeSet)
 		app.Handle("POST /setup", guard(http.HandlerFunc(web.SetupSubmit)))
-		app.Handle("POST /account/password",
-			guard(web.RequireWebAuth(http.HandlerFunc(web.PasswordChange))))
-		app.Handle("POST /account/domain",
-			web.RequireWebAuth(http.HandlerFunc(web.DomainUpdate)))
+		app.Handle("POST /account/password", guard(signedIn(web.PasswordChange)))
+		app.Handle("POST /account/domain", signedIn(web.DomainUpdate))
 
 		// Redeeming an invitation is public, because the person doing it may
 		// have no account yet — and on a default instance, where the mailer is
@@ -285,7 +301,7 @@ func NewRouter(d Deps) http.Handler {
 			"POST /workspace/switch":        web.WorkspaceSwitch,
 			"POST /workspace/default":       web.WorkspaceDefault,
 		} {
-			app.Handle(pattern, web.RequireWebAuth(fn))
+			app.Handle(pattern, signedIn(fn))
 		}
 
 		if web.Invites != nil {
@@ -294,24 +310,32 @@ func NewRouter(d Deps) http.Handler {
 				"POST /invites":             web.InviteCreate,
 				"POST /invites/{id}/revoke": web.InviteRevoke,
 			} {
-				app.Handle(pattern, web.RequireWebAuth(fn))
+				app.Handle(pattern, signedIn(fn))
 			}
 		}
 
 		if web.Team != nil {
 			for pattern, fn := range map[string]http.HandlerFunc{
-				"GET /members":                 web.MembersPage,
-				"POST /members":                web.MemberGrant,
-				"POST /members/{id}/role":      web.MemberRole,
-				"POST /members/{id}/remove":    web.MemberRemove,
-				"GET /workspaces":              web.WorkspacesPage,
-				"POST /workspaces":             web.WorkspaceCreate,
-				"POST /workspaces/{id}/rename": web.WorkspaceRename,
-				"POST /workspaces/{id}/delete": web.WorkspaceDelete,
-				"POST /organizations":          web.OrganizationCreate,
+				"GET /members":                    web.MembersPage,
+				"POST /members":                   web.MemberGrant,
+				"POST /members/{id}/role":         web.MemberRole,
+				"POST /members/{id}/remove":       web.MemberRemove,
+				"GET /workspaces":                 web.WorkspacesPage,
+				"POST /workspaces":                web.WorkspaceCreate,
+				"POST /workspaces/{id}/rename":    web.WorkspaceRename,
+				"POST /workspaces/{id}/delete":    web.WorkspaceDelete,
+				"POST /organizations/{id}/delete": web.OrganizationDelete,
 			} {
-				app.Handle(pattern, web.RequireWebAuth(fn))
+				app.Handle(pattern, signedIn(fn))
 			}
+
+			// The two routes an account that belongs to nothing must still
+			// reach, and the only ones registered without RequireOrganization
+			// (D36). Redirecting these to themselves would be the loop the whole
+			// state exists to avoid; the page turns a non-orphan away on its own,
+			// and the POST authorizes in the service like every other write.
+			app.Handle("GET /organizations/new", web.RequireWebAuth(http.HandlerFunc(web.OrganizationNewPage)))
+			app.Handle("POST /organizations", web.RequireWebAuth(http.HandlerFunc(web.OrganizationCreate)))
 		}
 	}
 
@@ -515,7 +539,8 @@ var dashboardPatterns = []string{
 	"/links", "/links/", "/keys", "/keys/", "/account", "/account/",
 	"/notifications", "/notifications/", "/theme", "/workspace/",
 	"/invites", "/invites/", "/invite/",
-	"/members", "/members/", "/workspaces", "/workspaces/", "/organizations",
+	"/members", "/members/", "/workspaces", "/workspaces/",
+	"/organizations", "/organizations/",
 }
 
 // infrastructurePatterns are the routes registered outside dashboardPatterns:

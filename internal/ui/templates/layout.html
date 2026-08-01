@@ -16,9 +16,18 @@
       <svg viewBox="0 0 24 24" class="h-5 w-5 fill-accent" aria-hidden="true"><path d="M10.6 13.4a1 1 0 0 1 0-1.4l3-3a1 1 0 0 1 1.4 1.4l-3 3a1 1 0 0 1-1.4 0Zm-2.2 5.1a4 4 0 0 1-2.9-6.8l2.2-2.2a1 1 0 1 1 1.4 1.4l-2.2 2.2a2 2 0 0 0 2.9 2.9l2.2-2.2a1 1 0 1 1 1.4 1.4l-2.2 2.2a4 4 0 0 1-2.8 1.1Zm7.2-7.2a1 1 0 0 1-.7-1.7l2.2-2.2a2 2 0 0 0-2.9-2.9L12 6.7a1 1 0 1 1-1.4-1.4l2.2-2.2a4 4 0 0 1 5.7 5.7l-2.2 2.2a1 1 0 0 1-.7.3Z"/></svg>
       LinkCtrl
     </a>
+    {{/* The three destinations, drawn only for somebody who has an organization
+         to spend them in. An account whose only organization was deleted keeps
+         its account and belongs to nothing (D36); every link here leads to a
+         page that would send it straight back to the one it is on, and a nav
+         made entirely of redirects reads as a broken product rather than as an
+         empty state. The count is still exactly three whenever it draws at all,
+         which is what TestTopLevelNavHoldsThreeDestinations holds. */}}
+    {{if .HasOrganization}}
     {{template "navlink" (dict "Href" "/dashboard" "Label" "Dashboard" "Active" (eq .Nav "dashboard"))}}
     {{template "navlink" (dict "Href" "/links" "Label" "Links" "Active" (eq .Nav "links"))}}
     {{template "navlink" (dict "Href" "/keys" "Label" "API keys" "Active" (eq .Nav "keys"))}}
+    {{end}}
     <div class="ml-auto flex items-center gap-2">
       {{template "workspace_switch" .}}
       {{template "notification_bell" .}}

@@ -68,10 +68,36 @@ migrations run at boot.
   rather than two. It is delegable to an API key: a key's scopes are intersected
   with its owner's role on every request, so an organization made through one
   leaves that key holding exactly what it was minted with.
-- **Seven more audit events**: a member added to a workspace, removed or
-  re-roled; a workspace created, renamed or deleted; an organization created. A
-  workspace deletion records the name, because the row it names is gone and the
-  record is the only trace left.
+- **An organization can be deleted.** `org.delete` has existed since the first
+  release, held by owners and gating nothing; this is the operation behind it.
+  *Workspaces*, in the menu behind your address, carries the control, and
+  `DELETE /api/v1/organizations/{id}` does the same. It removes every workspace,
+  membership, outstanding invitation and API key in the organization, in one
+  transaction. **There is no undo, no trash and no export**, and the id in the
+  path has to be the organization you are acting in — anything else is a `404`,
+  so a mistyped id deletes nothing. Unlike every other permission added this
+  cycle, `org.delete` is not grantable to an API key: an irreversible action
+  belongs behind an interactive sign-in.
+- **Deleting an organization is refused while it still holds any link**, archived
+  ones included, and while it is the only organization on the instance. The first
+  is the workspace rule one level up — without it, deleting an organization would
+  be a way around the refusal that protects a workspace's links — and it carries
+  the same cost: no bulk delete, so emptying a large organization is a link at a
+  time. The second is the same reasoning that refuses the last owner and the last
+  workspace.
+- **Belonging to no organization is now a state the product handles.** Deleting
+  an organization is *not* refused because somebody would be left with no other
+  one. Their account survives untouched, they can still sign in, and they are
+  offered an organization of their own instead of an error — until they take it,
+  every other page redirects them to that offer. This was the alternative to
+  refusing a deletion whenever anyone would be orphaned, which would make the
+  first organization on a default instance effectively permanent, and to deleting
+  those accounts, which would make one click destroy people.
+- **Eight more audit events**: a member added to a workspace, removed or
+  re-roled; a workspace created, renamed or deleted; an organization created or
+  deleted. A workspace or organization deletion records the name, because the row
+  it names is gone and the record is the only trace left. **An organization's
+  audit trail survives the organization**, deletion record included.
 - **You can invite somebody into your organization.** *Invitations*, in the menu
   behind your address in the header, issues a single-use link that adds one
   person as one role. Emailed when a mailer is configured, and copyable either

@@ -30,6 +30,19 @@
 // archiving is deliberately not an escape hatch: an archived link keeps its
 // alias and its click history. The guard goes in front of the cascade, and the
 // links have to be deleted first.
+//
+// M28.5 adds the exit, and two more decisions with it.
+//
+// **An organization holding any link refuses to be deleted** (D37), which is
+// D32 applied one level up for the reason that an org-level cascade through the
+// same links would make D32 bypassable by deleting above it.
+//
+// **Belonging to nothing is a real state** (D36). Deleting an organization
+// proceeds even when it leaves somebody with no membership anywhere; their
+// account survives, holding no role and therefore no permission, and the product
+// offers them an organization of their own instead of erroring at them. That
+// puts one seam in this package worth naming: an account in that state cannot
+// hold orgs.create, so CreateOrganization has a second door for it — see there.
 package team
 
 import (
@@ -60,12 +73,18 @@ import (
 // workspace.write already guards changing a workspace's settings; creating,
 // renaming and deleting one are the same authority over the same object, so no
 // new permission is introduced for them. orgs.create is new (D16, 01300).
+//
+// org.delete is the opposite case: seeded in Phase 1's 00700_seed.sql, granted
+// to owner alone, and until M28.5 it gated nothing at all. No migration adds it
+// here because there is nothing to add — what was missing was the operation, not
+// the permission.
 const (
 	PermMembersRead    = "members.read"
 	PermMembersWrite   = "members.write"
 	PermWorkspaceRead  = "workspace.read"
 	PermWorkspaceWrite = "workspace.write"
 	PermOrgsCreate     = "orgs.create"
+	PermOrgDelete      = "org.delete"
 )
 
 // Service manages members, workspaces and organization creation.

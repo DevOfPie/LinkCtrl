@@ -36,8 +36,10 @@ type Web struct {
 	// Invites serves both halves of the invitation surface: the administrator's
 	// page and the public redemption form.
 	Invites *invite.Service
-	// Team serves member management, workspace lifecycle and organization
-	// creation. Nil leaves both pages unregistered.
+	// Team serves member management, workspace lifecycle and the organization
+	// lifecycle. Nil leaves its three pages unregistered — including the one an
+	// account belonging to nothing is held on, which is why an instance wired
+	// without it can never reach that state either.
 	Team *team.Service
 }
 
@@ -75,15 +77,25 @@ type shell struct {
 	// render — the same trade the unread badge makes — because a switcher that
 	// only appears after a page refresh is worse than the query.
 	Workspaces []auth.Workspace
+	// HasOrganization is false for an account that belongs to nothing, which
+	// D36 made a state a signed-in person can legitimately be in. The header
+	// draws its destinations from it: every one of them leads somewhere that
+	// needs an organization, so offering them would be offering a redirect back
+	// to the page the reader is already on.
+	//
+	// Not an authorization check. What such an account may do is decided by its
+	// empty permission set, in the services, like everybody else's.
+	HasOrganization bool
 }
 
 func (h *Web) shell(r *http.Request, title, nav string) shell {
 	s := shell{
-		Title:    title,
-		Nav:      nav,
-		Identity: IdentityFrom(r.Context()),
-		Theme:    themeFrom(r),
-		Path:     r.URL.Path,
+		Title:           title,
+		Nav:             nav,
+		Identity:        IdentityFrom(r.Context()),
+		Theme:           themeFrom(r),
+		Path:            r.URL.Path,
+		HasOrganization: IdentityFrom(r.Context()).HasOrganization(),
 	}
 	// One notification query per page render, served by the partial index the
 	// table ships with, answering the badge count and the bell's preview
