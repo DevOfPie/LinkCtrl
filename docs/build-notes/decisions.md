@@ -86,6 +86,7 @@ file. Append a row when you append an entry.
 | [M32, an exception built so that it stays one](#2026-08-01--m32-an-exception-built-so-that-it-stays-one) | Off as the absence of a client, and the zero-egress test that proves something; why asking the feed last *is* the independence argument; owner-overridable without an allow column, and the three mechanisms that failed; why failing open has to be counted; what the generic adapter refuses; why the disclosure is gated on nothing; D1's outcome mail |
 | [M32.5, the first decision on the hot path](#2026-08-01--m325-the-first-decision-on-the-hot-path) | Why the domain's policy rides inside each link's snapshot, and the two designs that lost; the invalidation bill that follows, and why `SCAN` is the honest way to pay it; why the refusal comes before the outcome switch; three states in text, and the CHECK that makes precedence nine cells; two audit actions and the refusal that is not one; the measurement, taken with blocking on |
 | [M32.5, amending a bullet that contradicted itself](#2026-08-01--m325-amending-a-bullet-that-contradicted-itself) | The bullet before and after; why a self-contradictory bullet amends rather than prompts; the before/after oracle table showing blocking subtracts signal; why an unknown alias still answers 404 |
+| [M32.9, a first pass and an honest account of its depth](#2026-08-01--m329-a-first-pass-and-an-honest-account-of-its-depth) | The five named risks and how each held; F17, F18, F19; the refutation that narrowed F19; why three findings is a signal about the review rather than the code |
 
 ---
 
@@ -6604,3 +6605,68 @@ the claim meaningless. It instead named the contradiction, said which reading it
 built to, and left the decision. That is the split doing the work it exists for:
 a definition of done is only worth something if the actor meeting it cannot also
 edit it.
+
+---
+
+## 2026-08-01 — M32.9, a first pass and an honest account of its depth
+
+M32.9 requires that its own output be recorded — what was checked, what was
+found, what was refuted — *so a later reader can tell coverage from luck*. This
+is that record, and the first thing it has to say is that the pass is **not yet
+at the depth the milestone asks for**.
+
+### What was checked, and what held
+
+Each of the five structural risks m32.9 names by name:
+
+| Checked | Result |
+| --- | --- |
+| `closed` means no new account on every path | **Holds.** Enforcement is `invite.go:572` on `cfg.NewAccounts`, set from `signupSvc.Effective().AdmitsNewAccounts()` at `main.go:413` |
+| The unappealable tier reachable from configuration, a list entry, or review | **Unreachable.** `internal/dispute` contains no reference to it; the tier is produced only in `destination.go`. D38 and M30 removed the two switches that could have reached it |
+| Every audit action a milestone claims is actually emitted | **All emitted.** Every action constant has a writer outside `internal/audit` |
+| Invalidation reaching every replica, including caches added after M23 | **Holds.** All three published kinds — alias, domain, root — are handled at `invalidation.go:288`, and D20's reconnect flush covers both in-process tiers. M32.5 added no third tier; its policy rides inside the existing snapshot |
+| Notification delivery degrading with no mailer | **Holds.** Guarded at `notify.go:275` and `:620` |
+
+Also checked and sound: no raw address column exists anywhere in the schema
+(`ip_prefix` only); every one of the eighteen page templates has a `pageData`
+entry, so `TestEveryPageRenders` covers all of them.
+
+### What was found
+
+Three, all confirmed after an attempt to refute each: **F17** (SECURITY.md's
+audit enumeration is stale and the file contradicts itself), **F18** (the audit
+vocabulary is split across two packages, which is F17's mechanical cause), and
+**F19** (D7's rule has two implementations, only one of which enforces).
+
+### What was refuted, or narrowed
+
+F19 was filed as a live defect and **the refutation partly succeeded**. The two
+derivations agree in every reachable state today, because the only derivation
+`Effective()` performs is open-with-no-mailer becoming `invite`, which still
+admits accounts. The finding survives only as latent duplication, and it is
+recorded that way rather than at the severity it was first written at.
+
+The dispute queue's lack of organization scoping was examined and **is not a new
+finding** — it is F15, filed by M31 itself, and it is deliberate: the blocklist
+is instance-wide, so a narrower queue would hide rows the same reader is
+deciding for.
+
+### Why this is not yet a finished review
+
+Three findings is not a result to be pleased about. m32.9 says so itself: *a
+review that finds nothing is a review that was not adversarial enough*, and
+*a Phase 2 pass returning single digits should be treated as a signal about the
+review, not a compliment to the code*. Phase 1's equivalent produced 30, then
+71.
+
+What this pass did was walk the five risks the milestone names, plus privacy and
+page coverage. What it has not yet done is the thing the milestone actually asks
+for: re-read **each** of M21–M32.5 against its own definition of done, in
+independent passes per dimension, looking for the class of defect that is
+invisible from inside a milestone that is internally consistent — which is
+precisely what Phase 1's review existed to catch and what its two headline
+findings were.
+
+Recording the shortfall rather than declaring the milestone done is the point.
+A review whose coverage is overstated is worse than no review, because the next
+person builds on a claim of having looked.
