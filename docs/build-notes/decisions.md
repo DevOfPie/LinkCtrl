@@ -88,6 +88,7 @@ file. Append a row when you append an entry.
 | [M32.5, amending a bullet that contradicted itself](#2026-08-01--m325-amending-a-bullet-that-contradicted-itself) | The bullet before and after; why a self-contradictory bullet amends rather than prompts; the before/after oracle table showing blocking subtracts signal; why an unknown alias still answers 404 |
 | [M32.9, a first pass and an honest account of its depth](#2026-08-01--m329-a-first-pass-and-an-honest-account-of-its-depth) | The five named risks and how each held; F17, F18, F19; the refutation that narrowed F19; why three findings is a signal about the review rather than the code |
 | [Draining the queue, and the four rows that could not be verified](#2026-08-01--draining-the-queue-and-the-four-rows-that-could-not-be-verified) | Seven tasks to workflow-changes; why four defect reports did not become findings rows; the tooling gap blocking their verification; what a closure pointing at 2+ does and does not cover |
+| [Five answers, and the port that made a liar of one of them](#2026-08-01--five-answers-and-the-port-that-made-a-liar-of-one-of-them) | W15's diagnosis corrected — it was a misread port, not a stale credential; D41 and why M33.5 is the first legal slot after a review; the demo's coverage test and its tax; cross-workspace move to Phase 3; W13 approved without amending the no-delegation rule |
 
 ---
 
@@ -6760,3 +6761,88 @@ phase-details/ before classifying. It stays in the queue because planning.md
 gives the owner the *whether* and the *where* before any of the five artifacts
 are written, and writing them first would be the scope decision made by whoever
 happened to be routing.
+
+---
+
+## 2026-08-01 — Five answers, and the port that made a liar of one of them
+
+The owner's answers to what `/process-queue` could not route, and one correction
+the answering turned up.
+
+### The correction first, because it invalidates something written yesterday
+
+W15 was filed as *the test instance's password is unrecorded, and the value in
+the loop's own note was stale*. **That diagnosis was wrong.** The password was
+never tested against the test instance: every sign-in attempt this session went
+to `http://localhost:8080`, which is the **demo**. The test instance answers on
+**8081**, and [dev-notes/instances.md](../dev-notes/instances.md) has documented
+both ports all along.
+
+A sign-in against the wrong instance fails with *the email or password is
+incorrect*, which is indistinguishable from a bad password, and that is what
+turned one misread port into a confident finding about a credential. The tell
+was available and ignored: `make demo-update` prints *dashboard at
+http://localhost:8080* every time it runs.
+
+What was genuinely missing is smaller and now written down: how to **claim** a
+freshly migrated instance at all. `/setup` is the only path that works
+regardless of `LINKCTRL_SIGNUP_MODE`, it is served only while `users` is empty,
+and it answers `303 → /login` once claimed — so the redirect that looks like a
+missing route is the instance telling you it already has an owner. That, the
+current test credential, and a warning about the port are now in instances.md,
+and W15 moves to *Made*.
+
+The owner has since made the test instance standing-authorized: rebuild and
+modify at will, and treat being locked out of it as a high-priority issue to
+resolve immediately rather than a thing to report. `make rebuild` plus `/setup`
+is that resolution, and it is cheaper than recovering any credential.
+
+### D41 — a milestone for the demo's own data, at M33.5
+
+The demo has shown links and clicks since Phase 1 seeded it, while ten
+milestones of features landed that a visitor cannot see. The owner scheduled the
+fix **after the review**.
+
+Placement is M33.5 rather than anything in the 32 band, and the reason is
+[planning.md](planning.md)'s numbering rule rather than preference: `X.9` is
+reserved for reviews *so that reviews sit at the top of their band*, which means
+every insertion between `X` and `X+1` falls inside the following review's range.
+There is no slot above `M32.9`, and inserting below it would add scope inside a
+review that has already claimed to cover that range — making its coverage claim
+false, which is the one thing the numbering scheme exists to prevent. The first
+legal position after the review is therefore the mid-band slot above M33.
+
+The milestone's own interesting choice is that it ships a **coverage test**: a
+list of features the demo must show, failing when one has no seeded rows. That
+is what stops the demo rotting again, and it is honest about the cost — every
+later milestone shipping a demo-visible feature inherits a small obligation to
+extend the seeder. The file says so in its Risks section rather than letting
+M34 discover it.
+
+Two things it is forbidden to do, both because a demo instance is a real
+instance: it never enables a reputation feed, since that would send
+destinations to a third party from the box this project points people at; and it
+never changes `LINKCTRL_SIGNUP_MODE` to let its own seeded accounts in, because
+D7 says `closed` admits nobody by any path and a seeder is not an exception.
+
+### Moving links between workspaces goes to Phase 3
+
+Raised as the sharp edge of D32 — a workspace holding links refuses to be
+deleted, and with no bulk delete and no way to move links out, emptying one is a
+link at a time. The bulk-delete half was already scheduled at 2+; the *move*
+half was scheduled nowhere, which is what the queue row actually surfaced. It is
+now a Phase 3 scope row, so the gap is tracked rather than remembered.
+
+### W13 is approved, and the rule it collided with stands
+
+An `X.9` review will also audit doc-cost and token optimization. The note asked
+that this *trigger a worker*, which collides with
+[phase-loop.md](phase-loop.md#two-milestones-that-do-not-end-like-the-others)'s
+rule that reviews are never delegated, because their product is a conversation
+with the owner. The owner resolved it the way that costs no rule: **the
+orchestrator runs the audit itself.** No exception is added, and the
+no-delegation rule is left exactly as it was.
+
+It is approved to be made **after M32.9 completes**, not during. A change to
+what a review does, applied to a review already in flight, would leave that
+review's coverage claim describing two different procedures.

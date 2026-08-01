@@ -69,6 +69,32 @@ B survivable.
 No deadline, no milestone waiting. Read when convenient; an answer here is worth
 exactly what an answer anywhere else is worth.
 
+### An 'All Workspaces' dashboard scope — which phase, and whose milestone?
+
+**Needed by:** nothing yet. It is the feature half of a queue row split on
+2026-08-01; the other half — *the dashboard should show only the selected
+workspace* — turned out to be already built, so only this remains.
+
+The dashboard and links pages scope to the acting workspace and always have.
+What does not exist anywhere is a way to see **across** workspaces at once: no
+handler, no query and no UI takes an all-workspaces scope, and
+`actor.WorkspaceID` is a single value threaded through the service layer rather
+than a filter that could be widened.
+
+| Option | Buys | Costs |
+| --- | --- | --- |
+| **Phase 3, beside *Moving links between workspaces*** *(recommended)* | The two cross-workspace capabilities land together, and they share the hard part — every scoped query in `internal/link` and `internal/analytics` assumes one workspace id. Phase 2 has no milestone this belongs inside | Somebody with several workspaces keeps switching to compare, for the whole of Phase 2 |
+| A Phase 2 milestone of its own | The demo M33.5 is about to make multi-workspace instances the normal thing to look at, which is exactly when the gap gets noticed | It is a new scope row late in a phase whose remaining milestones are already substrate for each other, and it widens a query path M34–M37 are about to build on |
+| Fold into [M37](phase-details/m37.md) | M37 is the dashboard milestone, so the surface is already being touched | M37 is about how a *dimension* is visualized, not which workspaces are in scope. Different question wearing the same page |
+
+**Default if unanswered:** it stays unbuilt and unscheduled, which is the status
+quo and costs nothing until somebody asks for it a second time.
+
+**Assumes:** that the dashboard and links pages remain workspace-scoped — true
+and verified on 2026-08-01 by reproduction, not by reading — and that no
+milestone between here and M45 introduces a cross-workspace view for its own
+reasons.
+
 ### M26 — keep or strike the outbox's thirty-day purge?
 
 Finished `mail_outbox` rows are deleted after thirty days by the existing

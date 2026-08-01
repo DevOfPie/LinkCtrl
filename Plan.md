@@ -74,6 +74,7 @@ Authoritative. Where this table and prose elsewhere disagree, this table wins.
 | Folders — schema only, no API or UI | 1 |
 | Folders — API and tree UI | 2 |
 | Bulk operations, templates, import/export | 2+ |
+| Moving links between workspaces | 3 |
 | Version history, scheduled changes, approval workflows | 3+ |
 | Malicious destination blocking, tiered by confidence | 2 |
 | Blocked-attempt disputes, with owner review | 2 |
@@ -519,12 +520,13 @@ reclassified rather than quietly skipped.
 
 ## Phase 2 build plan
 
-32 milestones, M21–M45, continuing Phase 1's numbering. Fractional numbers
+33 milestones, M21–M45, continuing Phase 1's numbering. Fractional numbers
 insert without renumbering the work either side (Phase 1's M0.5 precedent):
 `X.9` is reserved for scheduled reviews, `X.1`–`X.8` for scope added after the
 plan was finalised — so far five: dark mode at M24.5, the dashboard header at
 M26.5, the Redis stall bound at M26.6 and bot blocking at M32.5, all
-2026-07-31; then organization deletion at M28.5 on 2026-08-01. The numbering
+2026-07-31; then organization deletion at M28.5 and the demo's own data at M33.5, both
+2026-08-01. The numbering
 rules are in [planning.md](docs/build-notes/planning.md). One milestone per
 commit.
 
@@ -560,6 +562,7 @@ once (M35).
 | [M32.5](docs/build-notes/phase-details/m32.5.md) | Bot blocking, per domain and per link | — *(before M33, M34)* | — *(owner-added scope, 2026-07-31)* |
 | [M32.9](docs/build-notes/phase-details/m32.9.md) | **Mid-phase adversarial review** | M21–M32.5 | — |
 | [M33](docs/build-notes/phase-details/m33.md) | Deep-link path forwarding | — *(before M34)* | Deep-link path forwarding |
+| [M33.5](docs/build-notes/phase-details/m33.5.md) | A demo that shows the phase, not just its links | M32.9 | — *(owner-added scope, 2026-08-01)* |
 | [M34](docs/build-notes/phase-details/m34.md) | Routing rules: conditions, first-match evaluation | M23 M30 M33 | Rules row · region/city decision |
 | [M35](docs/build-notes/phase-details/m35.md) | Gated links: password, signed, one-time, max-click | M34 *(ordering)* | Password/one-time/max-click/signed |
 | [M36](docs/build-notes/phase-details/m36.md) | Split testing: weighted, sequential, fallback, flags | M34 M35 M30 | A/B testing row |
@@ -633,6 +636,7 @@ The *why* for each is in decisions.md.
 | D38 | Who may change the signup mode | 2026-08-01 | **The operator, and nobody else.** `LINKCTRL_SIGNUP_MODE` is the mode — no `settings` table, no `settings.write`, no runtime toggle in UI or API. [M29](docs/build-notes/phase-details/m29.md) built the toggle first and the build is what disqualified it: `settings.write` on the `owner` role does not name a small set, because registration provisions every self-registered account an organization it owns, so under an `open` ceiling every stranger who signed up could move an instance-wide setting. Binding it to a founding organization was refused as inventing an instance-level principal inside a signup milestone. The scope row moves from *switchable at runtime by an owner* to *configured by the operator*, and the runtime toggle is parked in *Not in Phase 2*. |
 | D39 | Where a curated list lives | 2026-08-01 | **A list is compiled into the binary when overruling it *should* be hard, and is runtime data otherwise.** [M30](docs/build-notes/phase-details/m30.md)'s high-confidence host list stays embedded — its entries are structural claims about cloud metadata services and control planes that stay true for years. The shortener-host list moves into `blocked_destinations` as its own source: new shorteners appear constantly, and a match only raises a low-confidence flag the owner may overrule, so compiling it imposed a release cycle on data carrying no authority. |
 | D40 | Where the feed opt-in is disclosed | 2026-08-01 | **A read-only instance page, plus the docs.** [M32](docs/build-notes/phase-details/m32.md)'s bullet named a settings UI that [D38](#phase-2-decisions-taken-after-the-plan-was-finalised) had deleted. The disclosure gets a dashboard home so a signed-in user can find out what the instance does with their destinations, rather than that living only in files an operator reads once. The page **has no controls and accepts no POST**, asserted by test: D38 removed the ability to *change* instance-wide settings from the dashboard because this product has no instance-level principal, and reading is not changing. |
+| D41 | The demo's data, and where its milestone sits | 2026-08-01 | **A milestone of its own at [M33.5](docs/build-notes/phase-details/m33.5.md)**, after the mid-phase review, seeding the Phase 2 features a visitor currently cannot see. Placed above M33 rather than in the 32 band because `X.9` reviews sit at the top of their band by design: inserting below M32.9 would add scope inside a review that already claims to cover that range. It ships a coverage test that fails when a listed feature has no seeded rows — which taxes every later milestone with a demo-visible feature, deliberately. It never enables a reputation feed and never changes `LINKCTRL_SIGNUP_MODE`. |
 
 ### Not in Phase 2
 

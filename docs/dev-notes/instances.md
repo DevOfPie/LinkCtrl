@@ -82,6 +82,40 @@ instance's ports, and nothing else — every other setting takes the binary's
 default, and [.env.example](../../.env.example) documents the full set. `make up`
 does it for you if the file is missing.
 
+### Signing in to a fresh instance
+
+A migrated instance has no account. The first-run setup form claims it, and it
+is the only path that works regardless of `LINKCTRL_SIGNUP_MODE`:
+
+```
+http://localhost:8081/setup      # test; 8080 is the demo
+```
+
+It is served only while `users` is empty, and answers `303 → /login` once an
+account exists — so a redirect there means the instance is already claimed, not
+that the route is missing.
+
+**The test instance's account, as rebuilt 2026-08-01:**
+
+| | |
+| --- | --- |
+| Address | `dev@killerofpie.com` |
+| Password | `linkctrl-test-owner-2026` |
+
+Written down because it is the test instance and it is disposable — this is a
+local development credential for a stack that publishes nothing but HTTP on
+localhost, and `make rebuild` throws it away and needs a new one. Do not reuse
+the pattern anywhere that matters.
+
+If it stops working, do not go hunting for it: `make rebuild` and claim the
+instance again through `/setup`. That is faster than recovering a password and
+it is what the instance is for.
+
+**Check the port before concluding a credential is wrong.** The two instances
+answer on 8080 and 8081, and a sign-in attempt against the wrong one fails with
+*the email or password is incorrect* — which reads exactly like a bad password.
+This has already cost one debugging session.
+
 These files hold secrets and are **not** committed: `.gitignore` excludes
 `.env.*` and always has. They are written mode 600.
 
