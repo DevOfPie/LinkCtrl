@@ -186,7 +186,12 @@ func pageData(t *testing.T) map[string]any {
 	// Shell fields every page carries, supplied once rather than in each entry
 	// so a page added later cannot forget one and fail for a reason that has
 	// nothing to do with the page. Theme is on the layout, Path on the
-	// appearance and workspace controls, Workspaces on the switcher.
+	// appearance and workspace controls, Workspaces on the switcher,
+	// UnreadPreview on the notification bell.
+	//
+	// The preview is populated on every page rather than only where it is the
+	// subject, because the bell is drawn from the shell everywhere: a template
+	// error inside it breaks every page, not one.
 	for _, d := range data {
 		m, ok := d.(map[string]any)
 		if !ok {
@@ -195,8 +200,25 @@ func pageData(t *testing.T) map[string]any {
 		m["Theme"] = ""
 		m["Path"] = "/dashboard"
 		m["Workspaces"] = twoWorkspaces()
+		m["UnreadPreview"] = unreadPreview(now)
 	}
 	return data
+}
+
+// unreadPreview is the bell's data: two unread notifications, one with a body
+// and one without, so both branches of the item template render.
+func unreadPreview(now time.Time) []map[string]any {
+	return []map[string]any{
+		{
+			"ID": "0198c9c5-0000-7000-8000-000000000005", "Kind": "audit.growth",
+			"Title": "The audit log has passed its size threshold",
+			"Body":  "audit_logs now uses 5.2 GiB on disk.", "CreatedAt": now,
+		},
+		{
+			"ID": "0198c9c5-0000-7000-8000-000000000006", "Kind": "audit.growth",
+			"Title": "A notice with no body", "Body": "", "CreatedAt": now,
+		},
+	}
 }
 
 func TestEveryPageRenders(t *testing.T) {

@@ -36,6 +36,147 @@
 {{end}}
 {{end}}
 
+{{/* Both header menus, and the mechanism they share.
+     ---------------------------------------------------------------------------
+
+     The Popover API: a `<button popovertarget>` invoker and a `popover="auto"`
+     panel. Decision D24, and the reason is one word — Escape.
+
+     This started as `<details>`/`<summary>`, which is declarative, needs no
+     script and no CSP waiver, and is keyboard-operable. All true, and it still
+     could not close on Escape: no engine implements that for a disclosure, and
+     the milestone asks for exactly that. A popover buys the same declarative,
+     script-free, CSP-clean behaviour AND light dismiss — Escape, and a click
+     outside — which is why the element changed rather than the bullet.
+
+     `popover="auto"` is written out rather than left bare. Bare `popover` means
+     auto, but `popover="manual"` is one word away and it dismisses on neither
+     Escape nor an outside click, so the value that carries the behaviour is
+     stated where somebody editing this can see it. Only one auto popover is
+     open at a time — showing either closes the other — which is the exclusive
+     behaviour `<details name="…">` was doing here before.
+
+     Neither is a `role="menu"`. A screen reader announces a button and a group
+     rather than the ARIA menu pattern, and that is the honest trade for needing
+     no JavaScript. The invoker gets `aria-expanded` and `aria-details` from the
+     `popovertarget` attribute itself, mapped by the browser, which is the one
+     piece an ARIA menu would otherwise need script to keep truthful.
+
+     POSITIONING. An open popover is in the top layer, and a top-layer element's
+     containing block is the viewport — not the header, not any wrapper, whatever
+     `position: relative` it is nested inside. So `absolute right-0 top-full`,
+     which is what a dropdown normally wants, would place these two panels
+     against the page rather than against the bar. Both are therefore positioned
+     explicitly against the viewport, and looked at in a browser rather than
+     inferred from this markup:
+
+       top-[3.75rem]  the bar is h-14 (3.5rem) plus a 1px border, so this clears
+                      it by 3px and the panel reads as hanging off the header.
+       right-[max(1rem,calc(50%-35rem))]
+                      the container is `mx-auto max-w-6xl px-4`, so its content
+                      edge is 1rem from the window until the window passes 72rem
+                      and (50% - 36rem) + 1rem after that. `max()` is the whole
+                      expression: one value, correct at every width, no media
+                      query. `%` rather than `vw` because a percentage resolves
+                      against the layout viewport and so is not thrown off by a
+                      classic scrollbar.
+       inset-auto     the UA stylesheet gives `[popover]` `inset: 0`, which would
+                      otherwise stretch the panel across the window; the `top`
+                      and `right` above only replace two of its four sides.
+
+     Both panels right-align to that same edge rather than to their own invoker,
+     because without CSS anchor positioning — which is years newer than the
+     popover floor below — the markup cannot know where the invoker is, and the
+     email address in the identity button has no fixed width.
+
+     The floor this raises: Chrome 114, Safari 17, Firefox 125. Below it the
+     attribute is ignored and the panel renders as an ordinary block, which is
+     ugly and still leaves Account, Sign out and the notifications link on the
+     page — the failure mode worth having.
+     ------------------------------------------------------------------------ */}}
+
+{{/* The identity menu.
+
+     The signed-in address is the control, and the things you do to yourself —
+     Account, Sign out — hang off it instead of competing for a top-level nav
+     slot. That is the convention every dashboard a reader has used follows, and
+     the one this header departed from.
+
+     Sign out stays a form POST. It changes state, and a menu is not a reason to
+     demote it to a link that any prefetch could fire.
+
+     The address is `sr-only` below `sm` rather than `hidden`: the bar has always
+     hidden it on a narrow screen and still does, but the control has to keep an
+     accessible name at every width, and sign-out has to stay reachable on a
+     phone — it was a separate button before this menu existed. */}}
+{{define "identity_menu"}}
+<div class="flex items-center">
+  <button type="button" popovertarget="linkctrl-identity-menu"
+          class="flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted hover:bg-sunken hover:text-ink">
+    <svg viewBox="0 0 24 24" class="h-5 w-5 fill-current" aria-hidden="true"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.4 0-8 2.7-8 6a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1c0-3.3-3.6-6-8-6Z"/></svg>
+    <span class="sr-only sm:not-sr-only">{{.Identity.Email}}</span>
+    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true"><path d="M12 15.5a1 1 0 0 1-.7-.3l-4-4a1 1 0 1 1 1.4-1.4l3.3 3.3 3.3-3.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-.7.3Z"/></svg>
+  </button>
+  <div id="linkctrl-identity-menu" popover="auto"
+       class="fixed inset-auto top-[3.75rem] right-[max(1rem,calc(50%_-_35rem))] z-20 w-56 max-w-[calc(100vw_-_2rem)] rounded-lg border border-line bg-raised py-1 shadow-lg">
+    <a href="/account" class="block px-3 py-2 text-sm {{if eq .Nav "account"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">Account</a>
+    <form method="post" action="/logout">
+      <button type="submit" class="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-sunken">Sign out</button>
+    </form>
+  </div>
+</div>
+{{end}}
+
+{{/* The notification bell.
+
+     Replaces a nav link whose badge could say how many but never what. The
+     preview answers "what is it" without leaving the page you are on; the page
+     at /notifications is unchanged and stays the full surface, reachable from
+     the View all link below whatever the preview holds.
+
+     Bounded on purpose, at notify.PreviewLimit. A preview long enough to scroll
+     would be a worse copy of the page it links to.
+
+     The items are text rather than links. Nothing here is the only way to reach
+     a notification — every one of them is on /notifications, which is what View
+     all is for — and inventing a per-notification destination would be scope
+     this milestone does not have.
+
+     The empty state is the common case for a new account, so the panel says so
+     rather than opening onto a blank box. Both count and preview arrive from one
+     service call; see shell in internal/httpx/web.go. */}}
+{{define "notification_bell"}}
+<div class="flex items-center">
+  <button type="button" popovertarget="linkctrl-notification-menu"
+          class="flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 {{if eq .Nav "notifications"}}text-accent-ink{{else}}text-muted hover:bg-sunken hover:text-ink{{end}}">
+    <svg viewBox="0 0 24 24" class="h-5 w-5 fill-current" aria-hidden="true"><path d="M12 2a6 6 0 0 0-6 6v3.8l-1.9 3.7A1 1 0 0 0 5 17h14a1 1 0 0 0 .9-1.5L18 11.8V8a6 6 0 0 0-6-6Zm0 20a3 3 0 0 0 2.8-2H9.2a3 3 0 0 0 2.8 2Z"/></svg>
+    <span class="sr-only">Notifications</span>
+    {{if .Unread}}<span class="inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1.5 py-0.5 text-xs font-semibold text-on-accent" aria-label="{{.Unread}} unread">{{.Unread}}</span>{{end}}
+  </button>
+  <div id="linkctrl-notification-menu" popover="auto"
+       class="fixed inset-auto top-[3.75rem] right-[max(1rem,calc(50%_-_35rem))] z-20 w-80 max-w-[calc(100vw_-_2rem)] rounded-lg border border-line bg-raised shadow-lg">
+    <p class="border-b border-line px-3 py-2 text-xs font-medium uppercase tracking-wide text-subtle">Notifications</p>
+    {{if .UnreadPreview}}
+    <ul class="max-h-80 overflow-y-auto">
+      {{range .UnreadPreview}}
+      <li class="border-b border-line px-3 py-2 last:border-b-0">
+        <p class="text-sm font-medium text-ink">{{.Title}}</p>
+        {{if .Body}}<p class="mt-0.5 line-clamp-2 text-xs text-muted">{{.Body}}</p>{{end}}
+        <p class="mt-1 text-xs text-subtle">{{.CreatedAt.Format "2 Jan 2006, 15:04"}} UTC</p>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <div class="px-3 py-6 text-center">
+      <p class="text-sm text-muted">Nothing new.</p>
+      <p class="mt-1 text-xs text-subtle">Anything the instance needs to tell you about shows up here.</p>
+    </div>
+    {{end}}
+    <a href="/notifications" class="block border-t border-line px-3 py-2 text-sm font-medium text-accent-ink hover:bg-sunken">View all</a>
+  </div>
+</div>
+{{end}}
+
 {{/* The appearance switcher.
 
      A plain form POST, because the preference is per-browser rather than per

@@ -41,6 +41,13 @@ type shell struct {
 	// Unread is the notification badge. Zero renders no badge, which is also
 	// what a failed count renders — see below.
 	Unread int64
+	// UnreadPreview is what the bell shows when it is opened: the newest unread
+	// notifications, cut at notify.PreviewLimit. It arrives with Unread from the
+	// same call, so the bell costs the badge's query and not a second one.
+	//
+	// Empty is the ordinary state of a new account, and the bell renders an
+	// empty state rather than an empty box for it.
+	UnreadPreview []notify.Notification
 	// Theme is the explicit override, or "" to follow prefers-color-scheme.
 	// Rendered as an attribute on <html> by the layout, so the first response
 	// is already in the right theme and there is no correcting script — the
@@ -70,13 +77,14 @@ func (h *Web) shell(r *http.Request, title, nav string) shell {
 		Theme:    themeFrom(r),
 		Path:     r.URL.Path,
 	}
-	// One count per page render, served by the partial index the notifications
-	// table ships with. An error is swallowed to zero rather than propagated:
-	// this is a badge, and failing a page an operator asked for because a
-	// decoration could not be computed is the wrong trade.
+	// One notification query per page render, served by the partial index the
+	// table ships with, answering the badge count and the bell's preview
+	// together. An error is swallowed to zero rather than propagated: this is a
+	// badge, and failing a page an operator asked for because a decoration could
+	// not be computed is the wrong trade.
 	if h.Notify != nil && s.Identity != nil {
-		if n, err := h.Notify.Unread(r.Context(), s.Identity); err == nil {
-			s.Unread = n
+		if n, items, err := h.Notify.UnreadPreview(r.Context(), s.Identity, notify.PreviewLimit); err == nil {
+			s.Unread, s.UnreadPreview = n, items
 		}
 	}
 	// Same trade for the switcher: a page whose content the reader asked for

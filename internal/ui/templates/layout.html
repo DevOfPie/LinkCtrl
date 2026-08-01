@@ -19,17 +19,10 @@
     {{template "navlink" (dict "Href" "/dashboard" "Label" "Dashboard" "Active" (eq .Nav "dashboard"))}}
     {{template "navlink" (dict "Href" "/links" "Label" "Links" "Active" (eq .Nav "links"))}}
     {{template "navlink" (dict "Href" "/keys" "Label" "API keys" "Active" (eq .Nav "keys"))}}
-    {{template "navlink" (dict "Href" "/account" "Label" "Account" "Active" (eq .Nav "account"))}}
-    <a href="/notifications" class="relative {{if eq .Nav "notifications"}}text-sm font-medium text-accent-ink{{else}}text-sm font-medium text-muted hover:text-ink{{end}}">
-      Notifications
-      {{if .Unread}}<span class="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1.5 py-0.5 text-xs font-semibold text-on-accent" aria-label="{{.Unread}} unread">{{.Unread}}</span>{{end}}
-    </a>
-    <div class="ml-auto flex items-center gap-3">
+    <div class="ml-auto flex items-center gap-2">
       {{template "workspace_switch" .}}
-      <span class="hidden text-sm text-muted sm:inline">{{.Identity.Email}}</span>
-      <form method="post" action="/logout">
-        <button type="submit" class="rounded-md px-2 py-1 text-sm text-muted hover:bg-sunken hover:text-ink">Sign out</button>
-      </form>
+      {{template "notification_bell" .}}
+      {{template "identity_menu" .}}
     </div>
   </nav>
 </header>

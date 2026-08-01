@@ -30,6 +30,29 @@ SELECT id, user_id, workspace_id, kind, title, body, data, read_at, created_at
 SELECT count(*) FROM notifications
  WHERE user_id = @user_id AND read_at IS NULL;
 
+-- name: ListUnreadNotificationPreview :many
+--
+-- The whole of the header's notification lookup: the newest unread rows the bell
+-- previews, and the unread total the badge shows, in one round trip.
+--
+-- Two shapes already in this file, composed rather than a third one. The
+-- predicate is CountUnreadNotifications' predicate character for character, so
+-- notifications_user_unread_idx still serves it; the ordering is
+-- ListNotifications' ordering, so the preview is the same "newest first" the
+-- page shows.
+--
+-- `count(*) OVER ()` is what makes it one query instead of two. Window functions
+-- are evaluated before LIMIT, so the count is every unread row rather than the
+-- handful returned — which is the only reason the badge can keep being exact
+-- while the preview stays bounded. A page render costs one notification query
+-- here, as it did when it cost a bare count.
+SELECT id, user_id, workspace_id, kind, title, body, data, read_at, created_at,
+       count(*) OVER () AS unread_total
+  FROM notifications
+ WHERE user_id = @user_id AND read_at IS NULL
+ ORDER BY created_at DESC, id DESC
+ LIMIT @page_limit;
+
 -- name: MarkNotificationRead :execrows
 --
 -- Scoped by user_id as well as id, so someone else's notification is a

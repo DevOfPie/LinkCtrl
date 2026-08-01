@@ -276,11 +276,12 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f Filter) (*do
 	return page, nil
 }
 
-// Unread is the count behind the nav badge.
+// Unread is the count behind the badge, on its own.
 //
-// Called on every dashboard page render, which is why the query's predicate is
-// written to match the partial index the table ships with rather than merely to
-// be correct.
+// The API's counterpart of UnreadPreview: a client polling for a number does
+// not want the rows, and the endpoint that answers it renders nothing. The
+// dashboard shell uses UnreadPreview instead, because it needs both and one
+// query answers both.
 func (s *Service) Unread(ctx context.Context, actor *auth.Identity) (int64, error) {
 	if actor == nil {
 		return 0, nil
@@ -290,6 +291,64 @@ func (s *Service) Unread(ctx context.Context, actor *auth.Identity) (int64, erro
 		return 0, fmt.Errorf("count unread notifications: %w", err)
 	}
 	return n, nil
+}
+
+// PreviewLimit is how many unread notifications the header's bell shows before
+// deferring to the full page.
+//
+// Small on purpose. The bell answers "is there anything, and roughly what" — a
+// question a person asks in passing, from whatever page they were reading — and
+// /notifications answers "show me everything", with pagination and mark-read.
+// A preview long enough to scroll would be a worse version of the page it links
+// to, so it is cut well before that and says how many are left.
+const PreviewLimit = 5
+
+// UnreadPreview is the header's entire notification lookup: the exact unread
+// count for the badge, and the newest unread notifications for the bell.
+//
+// One call, one query, because this runs on every dashboard page render. The
+// count and the preview come back together rather than from a count followed by
+// a list — see the query's comment for how the total stays exact while the rows
+// stay bounded. Splitting them would double the per-render cost of a decoration.
+//
+// A limit of zero or less means PreviewLimit; anything larger is clamped to it,
+// so a caller cannot turn the header into an unbounded list.
+func (s *Service) UnreadPreview(ctx context.Context, actor *auth.Identity, limit int32) (int64, []Notification, error) {
+	if actor == nil {
+		return 0, nil, nil
+	}
+	if limit <= 0 || limit > PreviewLimit {
+		limit = PreviewLimit
+	}
+
+	rows, err := s.q.ListUnreadNotificationPreview(ctx, dbgen.ListUnreadNotificationPreviewParams{
+		UserID:    actor.UserID,
+		PageLimit: limit,
+	})
+	if err != nil {
+		return 0, nil, fmt.Errorf("list unread notification preview: %w", err)
+	}
+	if len(rows) == 0 {
+		// No rows is no unread, so there is no total to read off one.
+		return 0, nil, nil
+	}
+
+	items := make([]Notification, 0, len(rows))
+	for _, r := range rows {
+		items = append(items, toNotification(dbgen.Notification{
+			ID:          r.ID,
+			UserID:      r.UserID,
+			WorkspaceID: r.WorkspaceID,
+			Kind:        r.Kind,
+			Title:       r.Title,
+			Body:        r.Body,
+			Data:        r.Data,
+			ReadAt:      r.ReadAt,
+			CreatedAt:   r.CreatedAt,
+		}))
+	}
+	// Every row carries the same window total; the first is as good as any.
+	return rows[0].UnreadTotal, items, nil
 }
 
 // MarkRead marks one notification read, reporting whether it changed anything.

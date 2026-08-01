@@ -213,6 +213,22 @@ type Querier interface {
 	// links for the whole 30-day window and the tag list disagreed with the link
 	// list it filters.
 	ListTags(ctx context.Context, workspaceID uuid.UUID) ([]ListTagsRow, error)
+	//
+	// The whole of the header's notification lookup: the newest unread rows the bell
+	// previews, and the unread total the badge shows, in one round trip.
+	//
+	// Two shapes already in this file, composed rather than a third one. The
+	// predicate is CountUnreadNotifications' predicate character for character, so
+	// notifications_user_unread_idx still serves it; the ordering is
+	// ListNotifications' ordering, so the preview is the same "newest first" the
+	// page shows.
+	//
+	// `count(*) OVER ()` is what makes it one query instead of two. Window functions
+	// are evaluated before LIMIT, so the count is every unread row rather than the
+	// handful returned — which is the only reason the badge can keep being exact
+	// while the preview stays bounded. A page render costs one notification query
+	// here, as it did when it cost a bare count.
+	ListUnreadNotificationPreview(ctx context.Context, arg ListUnreadNotificationPreviewParams) ([]ListUnreadNotificationPreviewRow, error)
 	ListUserSessions(ctx context.Context, userID uuid.UUID) ([]ListUserSessionsRow, error)
 	ListUsers(ctx context.Context) ([]ListUsersRow, error)
 	//

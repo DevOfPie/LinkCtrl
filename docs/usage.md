@@ -21,6 +21,33 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 It works without JavaScript. htmx makes search and filtering swap a fragment
 instead of reloading, and that is the only thing it is used for.
 
+### The header
+
+Three destinations at the top level — Dashboard, Links, API keys — and on the
+right, in order: the workspace switcher, a notification bell and your email
+address.
+
+The **bell** carries the unread count and, opened, shows the newest few unread
+notifications with a **View all** link to `/notifications`, which is still the
+full surface: everything, paged, with mark-read. The preview is deliberately
+short, and nothing is only reachable through it.
+
+Your **email address** opens a menu holding **Account** and **Sign out**.
+
+Both are popovers, which the browser opens and closes on its own: they work with
+a keyboard, close on **Escape** or a click anywhere outside, and open only one at
+a time. No JavaScript is involved in any of that. They are not ARIA menus — a
+screen reader announces a button and a group rather than the `role="menu"`
+pattern, and that is the trade for needing no script.
+
+That sets a floor on the browser: **Chrome 114, Safari 17 or Firefox 125**, all
+from mid-2023. Something older ignores the panels' popover behaviour and draws
+them as plain blocks in the header; it looks wrong, and everything in them is
+still reachable.
+
+On a narrow screen the address itself is hidden and the menu is reached by its
+icon. The rest of the bar does not reflow — a responsive nav has not been built.
+
 ### Light and dark
 
 Every page follows your operating system's setting unless you say otherwise.

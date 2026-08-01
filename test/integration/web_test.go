@@ -34,9 +34,12 @@ type webFixture struct {
 	pool   *pgxpool.Pool
 }
 
-func newWeb(t *testing.T) *webFixture {
+func newWeb(t *testing.T) *webFixture { return newWebOn(t, newDB(t)) }
+
+// newWebOn is newWeb against a database the caller made, for the tests that need
+// something attached to the pool — a query tracer, say — before the app uses it.
+func newWebOn(t *testing.T, pool *pgxpool.Pool) *webFixture {
 	t.Helper()
-	pool := newDB(t)
 
 	cfg := config.Config{
 		AppEnv:        config.Development,

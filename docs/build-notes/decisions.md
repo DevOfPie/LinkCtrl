@@ -62,6 +62,10 @@ file. Append a row when you append an entry.
 | [M26.5, settling the header before four milestones fill it](#2026-07-31--m265-the-header-before-four-milestones-compete-for-it) | F6 and F7 as one milestone; why identity-scoped and organization-scoped controls separate; details/summary and what it costs; what is deliberately left out |
 | [M26.6, two retry loops that multiply](#2026-07-31--m266-a-stalled-redis-and-two-retry-loops-that-multiply) | Correcting F2's attribution; why a total budget beats a per-attempt one; why it lands before the next SLO measurement; the false-negative trade a lower timeout buys |
 | [Nothing leaves a tracker silently](#2026-07-31--nothing-leaves-a-tracker-silently) | Decisions dying in prose; a tracker for process changes; the two ways a row may leave a list; why upcoming-decisions gained a section nothing forces |
+| [M26.5, one query for a count and the rows](#2026-07-31--m265-one-query-for-a-count-and-the-rows-behind-it) | Why the bell costs no second query; `count(*) OVER ()` before `LIMIT`; counting statements rather than reading code; why preview items are text; hiding a label without hiding the control |
+| [M26.5, the Escape bullet and the element that cannot honour it](#2026-07-31--m265-the-escape-bullet-and-the-element-that-cannot-honour-it) | The bullet before and after, and the tree fact between them; why `<details>` or JavaScript was a false dichotomy; D24; why the expensive option won; what a markup test cannot assert |
+| [M26.5, WebKit verified, and what verification may cost](#2026-07-31--m265-webkit-verified-and-what-verification-is-allowed-to-cost) | D25, tooling is not shipped code; the three engines agreeing to the pixel; why the first measurement was wrong and what gave it away; the harness that is not in the repo |
+| [M26.5, positioning a panel that is not in the header](#2026-07-31--m265-positioning-a-panel-that-is-not-in-the-header) | Why a top-layer panel cannot be anchored to its invoker below the floor D24 set; the one `max()` that replaces a media query; why `popover="auto"` is spelled out; which engines were actually looked at, and which was not |
 
 ---
 
@@ -4081,3 +4085,309 @@ One consequence is worth stating because it is uncomfortable. Both seed entries
 record that the default, if nobody answers, is the behaviour already built —
 unasked-for work ships unless somebody objects. Writing that down does not fix
 it. It does mean the next person can see it happened.
+
+---
+
+## 2026-07-31 — M26.5, one query for a count and the rows behind it
+
+Built as planned above. Three things it decided that the planning entry did not.
+
+### The badge and the preview come back together, and the count stays exact
+
+The header ran one notification query per page render — a bare
+`count(*) WHERE read_at IS NULL`, matched to the partial index the table ships
+with. A bell needs rows as well as a number, and the obvious way to get them is
+a second query beside the first: on every page of the dashboard, for a panel
+most people never open.
+
+So there is one query, `ListUnreadNotificationPreview`, and it is composed from
+two shapes already in the file rather than being a third. The predicate is the
+count's predicate character for character, so the same partial index serves it.
+The ordering is the notifications page's ordering, so the preview is the same
+"newest first" the page shows.
+
+What makes it work is `count(*) OVER ()`. Window functions are evaluated before
+`LIMIT`, so the total counts every unread row while only five come back. That is
+the whole reason the badge can stay an exact count while the preview stays
+bounded — and it is why the bell did not cost the dashboard a second round trip
+per page.
+
+The claim is asserted by counting what reaches Postgres, not by reading the
+code: a pgx query tracer on the pool, a real page render, and a count of the
+statements naming the table. Matching on the table rather than on the generated
+constant is deliberate — a second lookup written some other way is exactly the
+regression a constant-name match would miss. The test also asserts the preview
+renders, because a query count over a bell that shows nothing proves nothing.
+
+`Unread` survives for `GET /api/v1/notifications/unread`, which answers a number
+to a client that wants a number and renders nothing.
+
+### The preview's items are text, and only "View all" is a link
+
+Every notification in the preview is on `/notifications`, so nothing in the panel
+is the only way to reach one. Making each item a link would have meant inventing
+a per-notification destination — there is no such page — or five links to the
+same place. Both are worse than a short list and one honest link at the bottom.
+
+### The address is hidden below `sm`; the control it opens is not
+
+The bar hid the signed-in address below `sm` and the milestone said it would
+continue to. Read literally that would have hidden the whole identity menu on a
+phone, and with it sign-out, which was a separate always-visible button before
+this milestone existed. Hiding the label is a layout decision; removing the only
+way to sign out on a small screen is a regression wearing its clothes.
+
+So the address is `sr-only` below `sm` rather than `display: none`: invisible,
+still announced, and the icon beside it is the control at every width. The bar
+still does not reflow, and the mobile nav is still not built.
+
+---
+
+## 2026-07-31 — M26.5, the Escape bullet and the element that cannot honour it
+
+An amendment to [m26.5.md](phase-details/m26.5.md), and the decision behind it
+(D24). It corrects the `<details>` reasoning in
+[the planning entry above](#2026-07-31--m265-the-header-before-four-milestones-compete-for-it),
+which is left standing as written because this file is append-only.
+
+The milestone asserted two things that cannot both be true. The worker built
+everything else, met the contradiction, and stopped rather than picking — which
+is the split working as intended.
+
+### The bullet as it stood
+
+> **No JavaScript.** `ui` is stdlib-only, the CSP forbids inline handlers, and
+> neither is being amended for this. Both menus are `<details>`/`<summary>`, which
+> means they are keyboard-operable and work with scripting off — the same
+> progressive-enhancement idiom as [M38](phase-details/m38.md)'s tree and M24.5's theme control.
+
+Beside it, unchanged then and unchanged now:
+
+> Both menus close on Escape and are reachable by keyboard alone, asserted by
+> test against the rendered markup rather than by inspection.
+
+### The bullet as amended
+
+> **No JavaScript.** `ui` is stdlib-only, the CSP forbids inline handlers, and
+> neither is being amended for this. Both menus use the **Popover API** — a
+> `<button popovertarget>` invoker and a `popover` panel — which is declarative,
+> needs no script and no CSP waiver, and is keyboard-operable. It replaces the
+> `<details>`/`<summary>` this milestone first specified, for the reason recorded
+> in decisions.md: a disclosure cannot close on Escape, and the bullet below
+> asks for exactly that. Same progressive-enhancement spirit as [M38](phase-details/m38.md)'s
+> tree and M24.5's theme control.
+
+A second bullet was added, carrying the cost the choice brings with it:
+
+> An open popover sits in the **top layer**, whose containing block is the
+> viewport rather than an ancestor, so `position: absolute` inside the header
+> does not anchor the panel to it. Positioning is therefore explicit and
+> verified in a browser at each engine, not assumed from the markup. The
+> supported floor rises to Chrome 114, Safari 17 and Firefox 125.
+
+One adaptation inside those quotes, so it is not mistaken for drift: m26.5.md
+links M38 as `m38.md`, which is correct from inside `phase-details/` and dead
+from here, so the two targets are rewritten to `phase-details/m38.md`. Link
+paths only — the wording is the bullet's own, before and after.
+
+### The tree fact that forced it
+
+`internal/ui/templates/partials/nav.html`, as built by the first worker, defines
+both menus as `<details name="linkctrl-header-menu">`. No browser implements
+Escape-to-close for `<details>`; it is a long-standing unimplemented request
+(whatwg/html#7407), not behaviour the element has. Escape closes `<dialog>` and
+popovers. So the markup satisfied the first bullet exactly and could not satisfy
+the second by any edit that kept the element — which is what makes this an
+amendment rather than a rejection for sloppy work.
+
+The planning entry's reasoning was that *a menu is `<details>`/`<summary>` or it
+is JavaScript*. That was the error, and it was a false dichotomy rather than a
+wrong conclusion from true premises: the Popover API is a third option that is
+declarative, script-free, CSP-clean, and closes on Escape and on an outside
+click — the last being an affordance `<details>` never had and the milestone
+never thought to ask for.
+
+### Why the expensive option won
+
+The owner chose it over keeping `<details>` and striking the Escape bullet. The
+cheap option was available, defaulted to, and named as the cheap one in the
+prompt. What decided it is that this header is the idiom four queued milestones
+will copy — [M28](phase-details/m28.md), [M31](phase-details/m31.md),
+[M38](phase-details/m38.md), [M41](phase-details/m41.md) each want a place in
+this bar — so the cost of getting it wrong is paid four more times, while the
+cost of getting it right is paid once, now, by a milestone that has not shipped
+yet.
+
+The honest cost is written into the milestone rather than discovered later. A
+top-layer element ignores its ancestor's containing block, so the panel is
+positioned against the viewport and has to be *looked at* in three engines. That
+is the one claim in M26.5 a rendered-markup test cannot make.
+
+---
+
+## 2026-07-31 — M26.5, positioning a panel that is not in the header
+
+D24 is taken; this is what building it decided. Three things, and the third is
+a limit rather than a choice.
+
+### One right edge, shared, because nothing can point at an invoker
+
+An open popover is in the top layer, and a top-layer element's containing block
+is the viewport. Not the header, not the wrapper it is written inside, whatever
+`position: relative` sits above it. So the dropdown idiom — `absolute right-0
+top-full` on a panel inside a `relative` wrapper — silently means something else
+here: the panel lands against the page instead of against the bar, and the
+markup gives no hint that it will.
+
+The instrument that would fix that properly is CSS anchor positioning, and it is
+years newer than the floor D24 accepted: Chrome 125, Firefox 140, Safari 26,
+against a popover floor of Chrome 114 / Safari 17 / Firefox 125. Adopting it
+would have raised the floor a second time, in the same milestone, for alignment.
+
+So both panels are positioned explicitly against the viewport, at the same right
+edge, and neither is anchored to the control that opens it:
+
+```
+top-[3.75rem]                       the bar is h-14 plus a 1px border
+right-[max(1rem,calc(50%-35rem))]   the container's own content edge
+inset-auto                          the UA gives [popover] inset: 0
+```
+
+The `max()` is the whole of the horizontal rule. The header is `mx-auto
+max-w-6xl px-4`, so its content edge is 1rem from the window until the window
+passes 72rem and `(50% − 36rem) + 1rem` after that; one expression covers both
+without a media query. It is written with `%` rather than `vw` because a
+percentage resolves against the layout viewport, and `vw` includes a classic
+scrollbar — a 15px error that appears on one platform and not the others.
+
+`inset-auto` is not tidying. The UA stylesheet gives `[popover]` `inset: 0`, and
+`top` and `right` replace only two of those four sides; without it the panel
+stretches across the window and the two offsets above look like they are being
+ignored.
+
+The visible consequence is that the bell's panel does not sit under the bell. It
+sits under the right end of the bar, where the identity panel also opens, which
+is what a single shared edge means. Only one auto popover is open at a time — a
+second closes the first — so they cannot collide.
+
+### `popover="auto"` is written out, because `manual` is one word away
+
+Bare `popover` means auto. It is still written in full, because the attribute's
+value is the entire behaviour this milestone changed elements to get:
+`popover="manual"` renders the same panel, opens from the same button, looks
+identical in every screenshot, and light dismisses on neither Escape nor an
+outside click. The test asserts the value rather than the attribute for the same
+reason.
+
+That is also what makes the Escape bullet assertable from markup at all. Escape
+is not something the page implements; it is what an auto popover does. The test
+therefore checks the two facts a browser reads — the panel's popover state, and
+the invoker being a real `<button>` rather than a `div` with an attribute — and
+does not pretend to press a key.
+
+### Two engines were looked at. The third was not, and could not be
+
+The amended bullet asks for positioning verified in a browser at each engine.
+Blink and Gecko were: the dashboard as the template renderer emits it, the built
+`app.css`, the panel opened, screenshotted at 1600×900 and 1024×768 — one width
+either side of the `max()` switchover — in both themes. Chrome 150.0.7871.187
+and Firefox 153.0.1.
+
+Measured off the screenshots rather than judged by eye, because "looks right" is
+what this positioning is most likely to be wrong while being. The identity
+panel's painted box:
+
+| Viewport | Panel box | Right offset | Top |
+| --- | --- | --- | --- |
+| 1600×900 | x 1136–1359 | 240px = `50% − 35rem` | 60px |
+| 1024×768 | x 784–1007 | 16px = `1rem` | 60px |
+
+240px is exactly the container's content edge at that width — `(1600 − 1152) / 2
++ 16` — and 16px is the gutter once the container stops growing, so both limbs
+of the `max()` are the ones that were meant to win. 60px is `3.75rem`, three
+pixels below the bar's 56px plus its 1px border. **Blink and Gecko produce the
+same numbers, to the pixel, at both widths.**
+
+**WebKit was not verified.** There is no WebKit engine on the machine this was
+built on, and Safari does not run on it. The claim for Safari 17 rests on the
+specification and on Blink and Gecko agreeing, which is weaker evidence than the
+bullet asks for and is recorded as such rather than quietly rounded up. Nothing
+in the expression is engine-specific — `max()`, `calc()`, percentage insets and
+the top layer's containing block are all long-settled — but "should be fine" is
+the sentence this repository has a rule against.
+
+### Below the floor, the panels are ugly rather than absent
+
+An engine that does not know the `popover` attribute ignores it and renders the
+panel as an ordinary block. Both panels then sit in the header, open, overlapping
+at the same coordinates. That is bad, and it is the better of the two failures
+available: the alternative, hiding them behind `@supports`, would take Account,
+Sign out and the notifications link off the page entirely for anyone on an old
+browser. Nothing was added to make either happen — this is what the markup does
+on its own, and it is written down so the next person does not have to find out.
+
+---
+
+## 2026-07-31 — M26.5, WebKit verified, and what verification is allowed to cost
+
+Corrects the entry above, which recorded **"WebKit was not verified"**. It has
+been. The correction is appended rather than edited in, per this file's rule, and
+the earlier paragraph stands as an accurate record of what was true when the
+worker stopped.
+
+### D25 — verification tooling is not shipped code
+
+The gap existed because this machine had no WebKit engine, no Node and no
+Playwright, and the phase-details README's inherited rule reads *`ui` stays
+stdlib-only — No Node, no CDN, CSP unchanged, no `unsafe-` waivers.* Whether
+that rule reaches test tooling was never decided, so the loop asked rather than
+assuming, and the owner drew the line: **shipped code stays stdlib-only; tooling
+that only verifies it may use Node, as long as Node stays out of everything
+except required test code.**
+
+That is worth a number because it recurs. Every later milestone that renders a
+surface faces the same question, and the answer being written down is what stops
+it being re-derived as "we don't do Node here" and a check going unrun.
+
+### What was measured, and how
+
+The header cannot be reached without a session, and the password for the test
+instance's only account was lost, so the page was not fetched from the running
+app. Instead the tracked templates — `layout.html` and `partials/nav.html` —
+were rendered directly by a throwaway harness supplying the same shell fields
+`internal/httpx` builds, and served over HTTP with the real built `app.css`.
+Every menu was opened by a real click on its invoker, not by script.
+
+| Panel | Viewport | Box | Top | Width | Escape closed |
+| --- | --- | --- | --- | --- | --- |
+| identity | 1600 | x 1136–1360 | 60px | 224px (`w-56`) | yes |
+| bell | 1600 | x 1040–1360 | 60px | 320px (`w-80`) | yes |
+| identity | 1024 | x 784–1008 | 60px | 224px | yes |
+| bell | 1024 | x 688–1008 | 60px | 320px | yes |
+
+WebKit 26.5, both themes, `position: fixed` in every case. **The numbers match
+the Blink and Gecko measurements in the entry above to the pixel**, so all three
+engines agree and the bullet's *verified in a browser at each engine* is met as
+written rather than amended down to what was convenient.
+
+### The first measurement was wrong, and that is the point
+
+The first WebKit run reported every panel centred in the viewport at the wrong
+size — and it was the harness, not the engine. The page linked `/static/css/app.css`
+and was opened over `file://`, where that path resolves to the filesystem root,
+so no author CSS loaded at all and what got measured was the UA stylesheet's
+`inset: 0; margin: auto` on an unstyled popover. Serving the same files over
+HTTP produced the table above.
+
+Recorded because it is the failure mode this project's *verify, do not assume*
+rule is actually about: the run produced numbers, the numbers looked like a real
+engine disagreement, and believing them would have sent a worker to fix a bug
+that did not exist. A measurement whose harness has not itself been checked is
+not evidence. The tell was that the panel widths came back as content-sized
+rather than the declared `w-56` and `w-80` — a CSS-not-loaded signature, not a
+positioning one.
+
+The harness lives in the session scratchpad and is not in the repository, so
+this check is not repeatable by anyone else today. That is a real gap and it is
+queued rather than fixed here, because no bullet in M26.5 asked for a browser
+test rig and adding one would be a second milestone riding on a layout one.

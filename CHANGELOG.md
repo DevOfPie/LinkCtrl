@@ -22,6 +22,27 @@ migrations run at boot.
 
 ### Added
 
+- **The dashboard header has an identity menu and a notification bell.** Your
+  email address was inert text with Account and Sign out scattered around it, and
+  Notifications was a nav link whose badge could say how many but never what.
+  The address is now the control: Account and Sign out live under it, and the top
+  level is down to Dashboard, Links and API keys. The bell keeps the unread count
+  and, opened, previews the newest few unread notifications with a **View all**
+  link. `/notifications` is unchanged and is still the full surface.
+- Both menus are built on the Popover API. They open from a keyboard, close on
+  Escape or a click outside, and need no JavaScript — no page in the dashboard
+  runs an inline handler. They are **not** ARIA menus: a screen reader announces
+  a button and a group rather than the `role="menu"` pattern, which is the
+  honest trade for needing no script.
+- **The dashboard now needs a browser from mid-2023 or later**: Chrome 114,
+  Safari 17, Firefox 125. That is what the Popover API costs. In anything older
+  the two panels render as ordinary blocks in the header — untidy, but Account,
+  Sign out and the notifications link all stay on the page.
+- **The bell costs no extra database work.** The header already ran one query per
+  page render for the unread count; it now returns the count and the preview
+  together, so a page still issues exactly one — asserted by a test that counts
+  what reaches Postgres.
+
 - **The audit log has behavior.** The table shipped in 0.1.0 with nothing writing
   to it; there is now a writer, a read API, and a retention policy of its own.
   Changing the link domain's root redirect is the first recorded action — the
@@ -83,8 +104,11 @@ migrations run at boot.
   reconnects**, because Redis pub/sub does not replay and a replica cannot know
   which invalidations it missed. The cost is a cold cache after a Redis blip;
   the alternative is serving a destination the owner already changed.
-- **Notifications, in the dashboard.** A nav badge, a notifications page and
-  `GET /api/v1/notifications` with mark-read and mark-all-read. Your own inbox
+- **Notifications, in the dashboard.** An unread count in the header, a
+  notifications page and `GET /api/v1/notifications` with mark-read and
+  mark-all-read. (The count began as a nav link and is now the bell described
+  above; both shipped unreleased, so this describes where it ended up.) Your own
+  inbox
   only — there is no permission for reading somebody else's, because there is no
   reason for one — and no endpoint that creates a notification: they record what
   the system observed, not what a caller asserts.

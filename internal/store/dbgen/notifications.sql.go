@@ -170,6 +170,78 @@ func (q *Queries) ListOrganizationIDs(ctx context.Context) ([]uuid.UUID, error) 
 	return items, nil
 }
 
+const listUnreadNotificationPreview = `-- name: ListUnreadNotificationPreview :many
+SELECT id, user_id, workspace_id, kind, title, body, data, read_at, created_at,
+       count(*) OVER () AS unread_total
+  FROM notifications
+ WHERE user_id = $1 AND read_at IS NULL
+ ORDER BY created_at DESC, id DESC
+ LIMIT $2
+`
+
+type ListUnreadNotificationPreviewParams struct {
+	UserID    uuid.UUID
+	PageLimit int32
+}
+
+type ListUnreadNotificationPreviewRow struct {
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	WorkspaceID *uuid.UUID
+	Kind        string
+	Title       string
+	Body        string
+	Data        []byte
+	ReadAt      *time.Time
+	CreatedAt   time.Time
+	UnreadTotal int64
+}
+
+// The whole of the header's notification lookup: the newest unread rows the bell
+// previews, and the unread total the badge shows, in one round trip.
+//
+// Two shapes already in this file, composed rather than a third one. The
+// predicate is CountUnreadNotifications' predicate character for character, so
+// notifications_user_unread_idx still serves it; the ordering is
+// ListNotifications' ordering, so the preview is the same "newest first" the
+// page shows.
+//
+// `count(*) OVER ()` is what makes it one query instead of two. Window functions
+// are evaluated before LIMIT, so the count is every unread row rather than the
+// handful returned — which is the only reason the badge can keep being exact
+// while the preview stays bounded. A page render costs one notification query
+// here, as it did when it cost a bare count.
+func (q *Queries) ListUnreadNotificationPreview(ctx context.Context, arg ListUnreadNotificationPreviewParams) ([]ListUnreadNotificationPreviewRow, error) {
+	rows, err := q.db.Query(ctx, listUnreadNotificationPreview, arg.UserID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUnreadNotificationPreviewRow{}
+	for rows.Next() {
+		var i ListUnreadNotificationPreviewRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.WorkspaceID,
+			&i.Kind,
+			&i.Title,
+			&i.Body,
+			&i.Data,
+			&i.ReadAt,
+			&i.CreatedAt,
+			&i.UnreadTotal,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsersWithRoleInOrg = `-- name: ListUsersWithRoleInOrg :many
 SELECT u.id, u.email, u.name
   FROM memberships m
