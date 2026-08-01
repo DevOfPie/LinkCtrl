@@ -30,6 +30,28 @@ func owner() *identityStub {
 	}
 }
 
+// twoWorkspaces is the switcher's data.
+//
+// Two of them, because the control draws nothing when there is one — which is
+// every instance today — and a fixture with a single entry would leave the
+// partial unexercised on every page it renders on.
+func twoWorkspaces() []map[string]any {
+	return []map[string]any{
+		{
+			"ID": "0198c9c5-0000-7000-8000-000000000010", "Name": "Default", "Slug": "default",
+			"OrganizationID":   "0198c9c5-0000-7000-8000-000000000020",
+			"OrganizationName": "Owner", "IsPersonal": true,
+			"Current": true, "Default": false,
+		},
+		{
+			"ID": "0198c9c5-0000-7000-8000-000000000011", "Name": "Marketing", "Slug": "marketing",
+			"OrganizationID":   "0198c9c5-0000-7000-8000-000000000021",
+			"OrganizationName": "Acme", "IsPersonal": false,
+			"Current": false, "Default": false,
+		},
+	}
+}
+
 // pageData returns representative data for every page, so the test renders
 // each one for real. A page added without an entry here fails the test, which
 // is the point: an unexercised template is a 500 waiting for a visitor.
@@ -61,7 +83,7 @@ func pageData(t *testing.T) map[string]any {
 		{Day: "2026-07-29", Clicks: 0},
 		{Day: "2026-07-30", Clicks: 30, Visitors: 8, Bots: 3},
 	}
-	return map[string]any{
+	data := map[string]any{
 		"login": map[string]any{
 			"Title": "Sign in", "Nav": "", "Identity": (*identityStub)(nil),
 			"Email": "", "Next": "/links", "Error": "Nope.", "Notice": "",
@@ -129,6 +151,10 @@ func pageData(t *testing.T) map[string]any {
 			"Title": "Account", "Nav": "account", "Identity": owner(),
 			"FieldErrors": map[string]string{},
 			"Notice":      "", "Error": "",
+			// Nothing pinned, which is the state every account is in until
+			// somebody chooses otherwise, and the one the control has to show
+			// as *Last-Used*.
+			"WorkspacePinned": false,
 		},
 		// Both states in one render: a read notification and an unread one, so
 		// the branch that draws the dot and the "mark read" button is exercised
@@ -156,6 +182,21 @@ func pageData(t *testing.T) map[string]any {
 			"Notice":     "", "Error": "",
 		},
 	}
+
+	// Shell fields every page carries, supplied once rather than in each entry
+	// so a page added later cannot forget one and fail for a reason that has
+	// nothing to do with the page. Theme is on the layout, Path on the
+	// appearance and workspace controls, Workspaces on the switcher.
+	for _, d := range data {
+		m, ok := d.(map[string]any)
+		if !ok {
+			continue
+		}
+		m["Theme"] = ""
+		m["Path"] = "/dashboard"
+		m["Workspaces"] = twoWorkspaces()
+	}
+	return data
 }
 
 func TestEveryPageRenders(t *testing.T) {
@@ -164,16 +205,6 @@ func TestEveryPageRenders(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 	data := pageData(t)
-	// Theme is on the layout, so every page needs it; Path is on the appearance
-	// control, which only two pages render. Both are supplied here rather than
-	// in each entry so a page added later cannot forget one and fail for a
-	// reason that has nothing to do with the page.
-	for _, d := range data {
-		if m, ok := d.(map[string]any); ok {
-			m["Theme"] = ""
-			m["Path"] = "/dashboard"
-		}
-	}
 
 	for _, page := range r.Pages() {
 		t.Run(page, func(t *testing.T) {

@@ -444,12 +444,6 @@ func TestExactlyOneAppearanceControlPerPage(t *testing.T) {
 	// sweep, and it is the half that matters — the sign-in control renders with
 	// no session at all.
 	data := pageData(t)
-	for _, d := range data {
-		if m, ok := d.(map[string]any); ok {
-			m["Theme"] = ""
-			m["Path"] = "/dashboard"
-		}
-	}
 
 	for _, page := range r.Pages() {
 		t.Run(page, func(t *testing.T) {

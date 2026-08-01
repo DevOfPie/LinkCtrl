@@ -76,6 +76,8 @@ tags:
     description: What changed, who changed it, and when
   - name: notifications
     description: Your own in-app inbox
+  - name: workspaces
+    description: Which workspace you are acting in, and which you may switch to
   - name: meta
     description: The API describing itself
 
@@ -847,6 +849,112 @@ paths:
         "422":
           $ref: "#/components/responses/Validation"
 
+  /workspaces:
+    get:
+      tags: [workspaces]
+      operationId: listWorkspaces
+      summary: The workspaces you may act in
+      description: |
+        Your own memberships, so there is no permission for it — the same
+        reasoning as the notification inbox.
+
+        `current` marks the workspace this request is acting in. `default`
+        marks the one pinned as where new sessions start; when nothing is
+        pinned no entry carries it, and sign-in follows the workspace you used
+        last.
+
+        Not paginated. A person's memberships are a handful of rows by
+        construction.
+      responses:
+        "200":
+          description: Every workspace the caller may act in
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Workspace"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /workspaces/default:
+    put:
+      tags: [workspaces]
+      operationId: setDefaultWorkspace
+      summary: Pin where new sessions start, or go back to last-used
+      description: |
+        `workspace_id: null` is a real value and the way back: it clears the
+        pin, and sign-in follows the workspace you used last again. That is the
+        state every account is in until somebody chooses otherwise.
+
+        Applies to sessions created *after* it — the browser you set it from
+        stays where it is.
+
+        **Requires a session, not an API key.** This is an account preference,
+        and a leaked key must not be able to decide where its owner's browser
+        lands.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace_id]
+              properties:
+                workspace_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: The workspace to pin, or `null` to follow last-used.
+      responses:
+        "204":
+          description: Preference stored
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /workspaces/{id}/switch:
+    post:
+      tags: [workspaces]
+      operationId: switchWorkspace
+      summary: Move this session into another workspace
+      description: |
+        Takes effect on the next request, and is remembered: the workspace
+        becomes where your next sign-in starts, unless a pinned default says
+        otherwise.
+
+        A workspace you are not a member of answers `404`, the same as one that
+        does not exist, so ids cannot be probed.
+
+        **Requires a session, not an API key.** A key acts in the workspace its
+        own row names, so switching would change nothing about its requests
+        while repointing where its owner lands.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Switched
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /openapi.json:
     get:
       tags: [meta]
@@ -1039,6 +1147,32 @@ components:
         permissions:
           type: array
           items: { type: string }
+
+    Workspace:
+      type: object
+      additionalProperties: false
+      required: [id, name, slug, organization_id, organization_name, is_personal, current, default]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        organization_id: { type: string, format: uuid }
+        organization_name:
+          type: string
+          description: |
+            Carried because a workspace name is only unique inside an
+            organization; two of them may both have a "Marketing".
+        is_personal:
+          type: boolean
+          description: True for the organization created with the account.
+        current:
+          type: boolean
+          description: The workspace this request is acting in.
+        default:
+          type: boolean
+          description: |
+            The pinned workspace, where new sessions start. No entry carries it
+            while the account follows last-used.
 
     LinkStatus:
       type: string

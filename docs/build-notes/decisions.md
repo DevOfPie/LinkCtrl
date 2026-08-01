@@ -53,6 +53,7 @@ file. Append a row when you append an entry.
 | [M24.6 withdrawn; M24.5 reopened](#2026-07-31--m246-withdrawn-m245-reopened-and-appends-get-a-number) | Corrects the entry above: a `done` row may not assert something false; reopening as the rule; why every append now carries its milestone number |
 | [Capture, read-ahead, and cost](#2026-07-31--capture-read-ahead-and-measuring-what-the-contract-costs) | `/note` decides nothing; classification against the tree; upcoming-decisions holds questions only; predicted vs realized read cost; sub-milestone work may commit alone |
 | [M24.5 reopened: applied, not declared](#2026-07-31--m245-applying-the-theme-rather-than-declaring-it) | Why the tokens are unlayered rather than all in `@layer base`; a test that had to be shown red against the shipped stylesheet; resolving the cascade live instead of counting attributes; where the control went and why two sites is not two controls |
+| [M25, which workspace a request is in](#2026-07-31--m25-where-a-request-decides-which-workspace-it-is-in) | Three columns for three questions; precedence as one `ORDER BY`; why the switch needs a session; why the switcher draws nothing with one membership |
 
 ---
 
@@ -3403,3 +3404,93 @@ it to account settings means. The milestone's phrase "exactly one control
 renders per page" is read here as the count being exact everywhere — one on the
 two sites named, none anywhere else — rather than as a control on every page,
 which is the arrangement the move exists to end.
+
+---
+
+## 2026-07-31 — M25, where a request decides which workspace it is in
+
+D22 answered *which* workspace a session starts in — last-used, remembered,
+with a pin available for anyone the derivation annoys. It did not say where
+"current" is kept, and that turned out to be the whole design.
+
+### Three columns, because they answer three questions
+
+`sessions.workspace_id` is where this browser is now. `users.default_workspace_id`
+is the pin. `users.last_workspace_id` is where the person was most recently.
+
+The obvious cheaper shape — one column on `users` meaning "current", with the
+pin applied at sign-in — collapses under its own combination. A pinned user who
+switches has either their switch overruled on the next request, or their pin
+silently overwritten by the switch; there is no third outcome, because both
+values would live in the same place. Applying the pin only at sign-in looks like
+a way out until you notice sessions here last thirty days: "at sign-in" is
+approximately never, so a person who pinned a workspace in the morning would
+find the pin had done nothing by the afternoon.
+
+Splitting them also buys the behaviour a person with two workspaces actually
+wants, which is two windows open on both. Current belongs to the session because
+that is the thing a person switches.
+
+### The precedence is an ORDER BY, and it is the only copy
+
+```
+1  the session's own workspace     rung 1 is dead when there is no session
+2  the pinned default              users.default_workspace_id
+3  the last used                   users.last_workspace_id
+4  the oldest one they are in      w.created_at, w.id — what shipped in 0.1.0
+```
+
+Each rung is a tiebreak on the one above, in a single query, so a user with one
+membership ties on all four and gets exactly the row the pre-M25 query returned.
+That is the milestone's no-op claim expressed as arithmetic rather than as an
+assurance, and `TestOneMembershipResolvesExactlyAsItDid` computes the old
+ordering itself rather than asking the service what it thinks.
+
+Membership is in the `WHERE`, never in the ordering. A preference pointing at a
+deleted workspace, or one the person has been removed from, stops matching and
+the next rung answers — so a stale preference degrades instead of erroring, and
+nothing has to clean up after a membership change.
+
+Four call sites were the milestone's stated risk: login, session
+authentication, the CLI's identity lookup, and an API key with no workspace of
+its own. They now share one unexported `resolveWorkspace`, and the old query name
+is gone from the tree, so a fifth caller cannot resolve the old way by copying an
+old line. Only the session id differs between them, which is exactly the
+difference that matters.
+
+### The clause that is a no-op today
+
+Resolution and the switcher both apply `memberships.workspace_id IS NULL OR
+= w.id`, which is the rule `GetUserPermissions` has always applied and the old
+default-workspace query never did. Every membership in existence is
+organization-wide, so it changes nothing now. It is here because the alternative
+is an identity resolved into a workspace it holds no permissions in — a
+dashboard that renders and can do nothing — and the milestone whose job is
+identity resolution is the right one to close that.
+
+### Switching needs a session; listing does not
+
+`SwitchWorkspace` and `SetDefaultWorkspace` refuse an API key, the same way
+changing a password does. A key acts in the workspace its own row names, so a key
+switching would change nothing about its own requests while repointing where its
+owner's browser lands — a side effect visible only to somebody else. Listing is
+open to any credential: it exposes the caller's own memberships and nothing more,
+which is why no permission was added for any of this. The milestone matched
+neither limb of D18 because it introduced no permission to match.
+
+A key that names *no* workspace does follow the owner's pin, since it has to
+resolve to something and the owner's own answer is the best available one.
+
+### The switcher renders when there is somewhere to go
+
+With one membership the header draws nothing at all. A dropdown listing the one
+workspace you are already in is a control that cannot do anything, and every
+instance in existence is in that state — so the milestone is invisible to all of
+them, which is a stronger claim than "the resolution is unchanged" and cheaper
+to hold. The account setting does render, because a preference has to live
+somewhere findable, and it reads *Last-Used* until somebody chooses otherwise.
+
+The switcher costs one indexed query per page render, alongside the unread
+badge. A cached alternative would be a second copy of "which workspaces am I
+in", invalidated from the milestone that creates memberships, which is not a
+trade worth making before that milestone exists.

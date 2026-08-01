@@ -365,9 +365,12 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 		return nil, fmt.Errorf("record login: %w", err)
 	}
 
-	ws, err := s.q.GetDefaultWorkspaceForUser(ctx, user.ID)
+	// No session id: this is the request that creates one. So a sign-in starts
+	// at the pinned default, or at the last workspace used, and the session
+	// carries that from its first row rather than being corrected afterwards.
+	ws, err := s.resolveWorkspace(ctx, user.ID, nil)
 	if err != nil {
-		return nil, fmt.Errorf("resolve workspace: %w", err)
+		return nil, err
 	}
 
 	token, hash, err := NewSessionToken()
@@ -378,12 +381,13 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 
 	ipPrefix := AnonymizeIP(in.IP)
 	session, err := s.q.CreateSession(ctx, dbgen.CreateSessionParams{
-		ID:        uuid.Must(uuid.NewV7()),
-		UserID:    user.ID,
-		TokenHash: hash,
-		IpPrefix:  nullable(ipPrefix),
-		UserAgent: nullable(truncate(in.UserAgent, 512)),
-		ExpiresAt: expires,
+		ID:          uuid.Must(uuid.NewV7()),
+		UserID:      user.ID,
+		TokenHash:   hash,
+		IpPrefix:    nullable(ipPrefix),
+		UserAgent:   nullable(truncate(in.UserAgent, 512)),
+		ExpiresAt:   expires,
+		WorkspaceID: &ws.ID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
@@ -425,9 +429,12 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*Identity, er
 		return nil, ErrAccountInactive
 	}
 
-	ws, err := s.q.GetDefaultWorkspaceForUser(ctx, row.UserID)
+	// The session's id is passed, so wherever this browser last switched to wins
+	// over the account-level preference. That is the difference between "where
+	// do I start" and "where am I now", and it is why the two are stored apart.
+	ws, err := s.resolveWorkspace(ctx, row.UserID, &row.ID)
 	if err != nil {
-		return nil, fmt.Errorf("resolve workspace: %w", err)
+		return nil, err
 	}
 
 	// last_seen_at drives idle expiry, but writing on every request would turn
@@ -461,9 +468,11 @@ func (s *Service) IdentityForEmail(ctx context.Context, email string) (*Identity
 	if user.Status != "active" {
 		return nil, ErrAccountInactive
 	}
-	ws, err := s.q.GetDefaultWorkspaceForUser(ctx, user.ID)
+	// No session, so the account's own preference decides: the CLI acts where
+	// the person would land if they signed in.
+	ws, err := s.resolveWorkspace(ctx, user.ID, nil)
 	if err != nil {
-		return nil, fmt.Errorf("resolve workspace: %w", err)
+		return nil, err
 	}
 	return s.identityFor(ctx, user.ID, user.Email, user.Name, ws.ID, ws.OrganizationID)
 }

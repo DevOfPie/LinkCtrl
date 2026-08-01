@@ -50,6 +50,16 @@ type shell struct {
 	// is on every shell rather than on the two pages that render the control,
 	// because a third render site should not also need a handler change.
 	Path string
+	// Workspaces is every workspace the signed-in user may act in. On the shell
+	// because the switcher belongs to the page chrome: a person changes
+	// workspace from wherever they happen to be, not by navigating to a page
+	// about workspaces first.
+	//
+	// The layout draws nothing when there is one of them, which is every
+	// instance today. It is still loaded, at the cost of one indexed query per
+	// render — the same trade the unread badge makes — because a switcher that
+	// only appears after a page refresh is worse than the query.
+	Workspaces []auth.Workspace
 }
 
 func (h *Web) shell(r *http.Request, title, nav string) shell {
@@ -67,6 +77,14 @@ func (h *Web) shell(r *http.Request, title, nav string) shell {
 	if h.Notify != nil && s.Identity != nil {
 		if n, err := h.Notify.Unread(r.Context(), s.Identity); err == nil {
 			s.Unread = n
+		}
+	}
+	// Same trade for the switcher: a page whose content the reader asked for
+	// must not fail because the chrome could not be drawn. An empty list renders
+	// no switcher, which is what a single-membership account gets anyway.
+	if h.Auth != nil && s.Identity != nil {
+		if ws, err := h.Auth.Workspaces(r.Context(), s.Identity); err == nil {
+			s.Workspaces = ws
 		}
 	}
 	return s

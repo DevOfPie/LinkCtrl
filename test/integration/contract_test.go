@@ -270,6 +270,37 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	// notification must be indistinguishable from one that was never there.
 	c.do("POST", p+"/notifications/"+uuid.NewString()+"/read", nil, http.StatusNoContent)
 
+	// --- workspaces ---------------------------------------------------------
+	// One membership on this fixture, which is the shape every instance has
+	// today: the switcher lists it, switching to it succeeds, and pinning it is
+	// a real preference even though it changes nothing.
+	var wsList struct {
+		Items []struct {
+			ID      string `json:"id"`
+			Current bool   `json:"current"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(c.do("GET", p+"/workspaces", nil, http.StatusOK), &wsList); err != nil {
+		t.Fatalf("workspaces response is not the documented shape: %v", err)
+	}
+	if len(wsList.Items) != 1 || !wsList.Items[0].Current {
+		t.Fatalf("expected exactly one current workspace, got %+v", wsList.Items)
+	}
+	workspaceID := wsList.Items[0].ID
+
+	c.do("POST", p+"/workspaces/"+workspaceID+"/switch", nil, http.StatusNoContent)
+	// A workspace this account has nothing to do with is not-found, not
+	// forbidden: an id must not be probeable for existence.
+	c.do("POST", p+"/workspaces/"+uuid.NewString()+"/switch", nil, http.StatusNotFound)
+	c.do("PUT", p+"/workspaces/default", map[string]any{
+		"workspace_id": workspaceID,
+	}, http.StatusNoContent)
+	// null is the documented way back to last-used, and has to survive the
+	// schema as a real value rather than as an omitted field.
+	c.do("PUT", p+"/workspaces/default", map[string]any{
+		"workspace_id": nil,
+	}, http.StatusNoContent)
+
 	// --- link deletion, password, logout ------------------------------------
 	c.do("DELETE", p+"/links/"+linkID, nil, http.StatusNoContent)
 	c.do("POST", p+"/auth/password", map[string]string{

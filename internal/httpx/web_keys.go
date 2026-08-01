@@ -159,6 +159,12 @@ type accountPageData struct {
 	CanEditDomain   bool
 	LinkHost        string
 	RootRedirectURL string
+
+	// WorkspacePinned says whether any workspace carries the pin, which decides
+	// whether the control shows *Last-Used* as the current choice. The template
+	// cannot fold over .Workspaces to work it out, and a second flag is cheaper
+	// than a template function that exists for one page.
+	WorkspacePinned bool
 }
 
 // domainSection fills in the link-domain panel, or leaves it hidden.
@@ -178,16 +184,32 @@ func (h *Web) domainSection(r *http.Request, data *accountPageData) {
 	data.RootRedirectURL = settings.RootRedirectURL
 }
 
-func (h *Web) AccountPage(w http.ResponseWriter, r *http.Request) {
+// accountPage assembles the page, so the handlers that re-render it after a
+// failed form do not each have to remember which sections it has.
+func (h *Web) accountPage(r *http.Request) accountPageData {
 	data := accountPageData{
 		shell:       h.shell(r, "Account", "account"),
 		FieldErrors: map[string]string{},
 	}
+	for _, ws := range data.Workspaces {
+		if ws.Default {
+			data.WorkspacePinned = true
+			break
+		}
+	}
+	return data
+}
+
+func (h *Web) AccountPage(w http.ResponseWriter, r *http.Request) {
+	data := h.accountPage(r)
 	if r.URL.Query().Get("changed") == "1" {
 		data.Notice = "Password changed. Every other session has been signed out."
 	}
 	if r.URL.Query().Get("domain") == "1" {
 		data.Notice = "Link domain updated."
+	}
+	if r.URL.Query().Get("workspace") == "1" {
+		data.Notice = "Default workspace updated. It applies the next time you sign in."
 	}
 	h.domainSection(r, &data)
 	h.render(w, r, http.StatusOK, "account", data)
@@ -213,10 +235,7 @@ func (h *Web) PasswordChange(w http.ResponseWriter, r *http.Request) {
 	confirm := r.PostFormValue("confirm_password")
 
 	fail := func(field, msg string) {
-		data := accountPageData{
-			shell:       h.shell(r, "Account", "account"),
-			FieldErrors: map[string]string{},
-		}
+		data := h.accountPage(r)
 		if field == "" {
 			data.Error = msg
 		} else {
@@ -255,10 +274,7 @@ func (h *Web) DomainUpdate(w http.ResponseWriter, r *http.Request) {
 	_, err := h.Links.SetRootRedirect(r.Context(), IdentityFrom(r.Context()),
 		r.PostFormValue("root_redirect_url"))
 	if err != nil {
-		data := accountPageData{
-			shell:       h.shell(r, "Account", "account"),
-			FieldErrors: map[string]string{},
-		}
+		data := h.accountPage(r)
 		h.domainSection(r, &data)
 		// Show what they typed, not what is stored, so a rejected value can be
 		// corrected rather than retyped.

@@ -287,6 +287,36 @@ workspaces are Phase 2, so in practice everyone is an owner of their own
 workspace today — but the evaluator is real, and changing a role changes
 behaviour immediately, including for existing API keys.
 
+## Which workspace you are in
+
+Every request acts in exactly one workspace. With one membership — which is
+every account until invitations ship — there is nothing to choose and the
+dashboard shows no switcher at all.
+
+Once there is more than one, a control appears in the header. Switching moves
+*that browser*, immediately and for the rest of the session, so two windows can
+sit in two workspaces. It is also remembered: the next time you sign in, you
+start where you last were.
+
+*Account* → **Default workspace** overrides that. **Last-Used** is the first
+option and the one every account is on; picking a workspace instead pins it, and
+new sessions start there however you were switching about. The pin applies to
+sessions started after it, so the browser you set it from stays where it is.
+
+The same three operations are in the API:
+
+```sh
+curl -H "Authorization: Bearer $LINKCTRL_KEY" https://links.example.com/api/v1/workspaces
+```
+
+`current` marks the one this request is acting in; `default` marks the pin, and
+nothing carries it while the account follows last-used. Switching
+(`POST /api/v1/workspaces/{id}/switch`) and pinning
+(`PUT /api/v1/workspaces/default`, with `null` to go back to last-used) require
+a signed-in session and answer `403` for an API key: a key acts in the workspace
+its own row names, so switching would change nothing about its own requests
+while repointing where you land.
+
 ## The link domain
 
 When short links have a hostname of their own — see

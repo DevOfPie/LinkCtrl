@@ -43,6 +43,11 @@ type Querier interface {
 	// which the caller detects and re-reads. Two replicas using different salts
 	// for the same day would split every visitor in two.
 	CreateSalt(ctx context.Context, arg CreateSaltParams) ([]byte, error)
+	// workspace_id is written at sign-in rather than left for the first switch, so
+	// a session says where it is from its first row. Resolution would answer the
+	// same either way — a NULL simply falls through to the user's preference — but
+	// a switcher that only takes effect after the first switch is a switcher whose
+	// state is unreadable until somebody uses it.
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	// --- tags -------------------------------------------------------------------
 	CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error)
@@ -64,9 +69,6 @@ type Querier interface {
 	// The instance's link domain and where its root points. Phase 1 has exactly one
 	// default domain; Phase 2 gives a workspace its own and this gains a filter.
 	GetDefaultDomainSettings(ctx context.Context) (GetDefaultDomainSettingsRow, error)
-	// The workspace a user lands in with no explicit selection. Ordered so the
-	// result is deterministic rather than whatever the planner returns first.
-	GetDefaultWorkspaceForUser(ctx context.Context, userID uuid.UUID) (Workspace, error)
 	// --- job bookkeeping ---------------------------------------------------------
 	// The point a job is known to have completed through. Rollups recompute rather
 	// than accumulate, so this is not a correctness dependency for a run that
@@ -191,6 +193,20 @@ type Querier interface {
 	// Who to tell about something that concerns the organization rather than a
 	// person. Active users only: a deactivated account cannot sign in to read it.
 	ListUsersWithRoleInOrg(ctx context.Context, arg ListUsersWithRoleInOrgParams) ([]uuid.UUID, error)
+	// The workspace switcher: what a user may act in, and what they have chosen.
+	//
+	// Resolution itself is in auth.sql, because it is identity, not a feature.
+	// These are the reads and writes the switcher and its account setting need.
+	// Every workspace a user may act in, with the organization it belongs to.
+	//
+	// DISTINCT because a user can hold both an organization-wide membership and a
+	// workspace-scoped one in the same organization, which the unique index
+	// permits; without it the switcher would list a workspace twice.
+	//
+	// is_default is carried here rather than fetched separately so a page render
+	// costs one query: the nav switcher needs the list, the account setting needs
+	// the list plus which entry is pinned, and neither should cost two round trips.
+	ListWorkspacesForUser(ctx context.Context, userID uuid.UUID) ([]ListWorkspacesForUserRow, error)
 	// Serializes the setup flow's count-then-create.
 	//
 	// Both setup surfaces read CountUsers and then, in a separate transaction,
@@ -277,6 +293,30 @@ type Querier interface {
 	// PHASE 2: custom domains. Present now because the cache key is already
 	// host-scoped, so enabling it later needs no key change.
 	ResolveDomainByHostname(ctx context.Context, lower string) (ResolveDomainByHostnameRow, error)
+	// The workspace a request acts in, and the only place that question is
+	// answered. Every identity — session, API key, CLI — comes through here.
+	//
+	// The precedence is the ORDER BY and nothing else, so there is one statement of
+	// it rather than one per caller:
+	//
+	//   1. the session's own current workspace, for a request that has a session
+	//   2. the workspace the user pinned as their default
+	//   3. the workspace they used last
+	//   4. the oldest workspace they are a member of
+	//
+	// Each rung is a tiebreak on the one above, so a user with a single membership
+	// ties on all four and lands where they always did. That is what makes the
+	// switcher a no-op for every instance that exists today.
+	//
+	// Membership is the WHERE clause, not the ordering, so a preference pointing at
+	// a workspace the user has been removed from — or one that has been deleted —
+	// cannot win. It simply stops matching and the next rung answers.
+	//
+	// session_id is optional. NULL leaves the LEFT JOIN unmatched and rung 1 dead,
+	// which is right for a login (the session does not exist yet), the CLI, and an
+	// API key. The join also requires the session to belong to this user, so a
+	// borrowed id resolves nothing.
+	ResolveWorkspaceForUser(ctx context.Context, arg ResolveWorkspaceForUserParams) (Workspace, error)
 	RestoreLink(ctx context.Context, arg RestoreLinkParams) (Link, error)
 	// Idempotent: revoking an already-revoked key keeps the original timestamp and
 	// still reports one row, so a repeated call is a success rather than a 404
@@ -319,8 +359,27 @@ type Querier interface {
 	// NULL clears it, which restores the 404 the root answered before anyone set
 	// anything.
 	SetDefaultDomainRootRedirect(ctx context.Context, rootRedirectUrl *string) (SetDefaultDomainRootRedirectRow, error)
+	// Pins a workspace as where new sessions start, or clears the pin.
+	//
+	// NULL is a real value here and means "follow last-used", which is the default
+	// the control offers. Clearing therefore needs no membership check; setting
+	// needs the same one as above.
+	SetDefaultWorkspaceForUser(ctx context.Context, arg SetDefaultWorkspaceForUserParams) (int64, error)
 	SetJobWatermark(ctx context.Context, arg SetJobWatermarkParams) error
+	// Remembers a selection, and refuses one the user is not entitled to.
+	//
+	// The membership check is in the statement rather than in a preceding SELECT so
+	// there is no window between the two. Zero rows means "not yours or not there",
+	// which the caller reports as not-found: a workspace id must not be probeable
+	// for existence.
+	SetLastWorkspaceForUser(ctx context.Context, arg SetLastWorkspaceForUserParams) (int64, error)
 	SetPrimaryDestination(ctx context.Context, arg SetPrimaryDestinationParams) error
+	// Moves one session, and only the session that asked.
+	//
+	// Scoped by user_id as well as id so a session id from elsewhere cannot be
+	// repointed, and revoked sessions are excluded because moving one would be
+	// writing to a credential that no longer authenticates.
+	SetSessionWorkspace(ctx context.Context, arg SetSessionWorkspaceParams) (int64, error)
 	// Soft delete with a purge deadline rather than an immediate DELETE. Restoring
 	// a link someone deleted by accident is a common request, and the alias stays
 	// reserved while the row exists.

@@ -94,6 +94,23 @@ migrations run at boot.
   everything forever is only safe if the instance nobody configured is the one
   that gets warned. Owners are told, at most once a week each, and only owners —
   nobody else can change the setting.
+- **A workspace switcher, in the dashboard and at
+  `GET /api/v1/workspaces`.** Which workspace a request acts in is now resolved
+  in one place for every credential, with a switch that moves the browser that
+  asked and is remembered for the next sign-in. `POST
+  /api/v1/workspaces/{id}/switch` and `PUT /api/v1/workspaces/default` are the
+  API half; both need a signed-in session, because a key acts in the workspace
+  its own row names and must not repoint where its owner lands.
+- **Where a new sign-in starts** follows the workspace you used last. An
+  *Account* setting pins one instead, and offers **Last-Used** as its first
+  option — the derived behaviour stays the default, and the override is there
+  for anyone it annoys. The pin applies to sessions started after it; switching
+  from the header still moves the browser you are in.
+- The header control **draws nothing while you have one workspace**, which is
+  every account on every instance today: nothing creates a second membership
+  yet. This release is the groundwork that lands before invitations do, so the
+  identity resolution underneath is settled before a feature starts producing
+  memberships.
 
 ### Notes for operators
 
@@ -106,6 +123,14 @@ migrations run at boot.
   per-kind detail goes in its `data` jsonb, so this upgrade is additive in the
   ordinary way and needs no backfill.
 - There is no email yet, and no push. In-app only until a mailer exists.
+- The switcher adds three nullable columns —
+  `users.default_workspace_id`, `users.last_workspace_id` and
+  `sessions.workspace_id` — all NULL after the migration, which is why
+  resolution falls through to the workspace every account already resolved to.
+  Additive, no backfill.
+- Nothing about tenancy has changed yet: one personal organization and one
+  workspace are still provisioned per account, and no product surface creates a
+  second membership. What changed is that when one exists, it will be reachable.
 
 ## [0.1.0] - 2026-07-31
 

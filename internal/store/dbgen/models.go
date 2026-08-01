@@ -278,15 +278,16 @@ type RoutingRule struct {
 }
 
 type Session struct {
-	ID         uuid.UUID
-	UserID     uuid.UUID
-	TokenHash  []byte
-	IpPrefix   *string
-	UserAgent  *string
-	CreatedAt  time.Time
-	LastSeenAt time.Time
-	ExpiresAt  time.Time
-	RevokedAt  *time.Time
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	TokenHash   []byte
+	IpPrefix    *string
+	UserAgent   *string
+	CreatedAt   time.Time
+	LastSeenAt  time.Time
+	ExpiresAt   time.Time
+	RevokedAt   *time.Time
+	WorkspaceID *uuid.UUID
 }
 
 type Tag struct {
@@ -298,22 +299,24 @@ type Tag struct {
 }
 
 type User struct {
-	ID               uuid.UUID
-	Email            string
-	EmailLower       *string
-	EmailVerifiedAt  *time.Time
-	Name             string
-	PasswordHash     *string
-	Status           string
-	FailedLoginCount int32
-	LockedUntil      *time.Time
-	MfaSecret        *string
-	MfaEnabledAt     *time.Time
-	AnonymizedAt     *time.Time
-	LastLoginAt      *time.Time
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	DeletedAt        *time.Time
+	ID                 uuid.UUID
+	Email              string
+	EmailLower         *string
+	EmailVerifiedAt    *time.Time
+	Name               string
+	PasswordHash       *string
+	Status             string
+	FailedLoginCount   int32
+	LockedUntil        *time.Time
+	MfaSecret          *string
+	MfaEnabledAt       *time.Time
+	AnonymizedAt       *time.Time
+	LastLoginAt        *time.Time
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	DeletedAt          *time.Time
+	DefaultWorkspaceID *uuid.UUID
+	LastWorkspaceID    *uuid.UUID
 }
 
 type Visitor struct {

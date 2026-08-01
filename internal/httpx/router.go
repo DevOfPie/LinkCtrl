@@ -98,6 +98,17 @@ func NewRouter(d Deps) http.Handler {
 		// credential too — and the lockout does not cover it.
 		app.Handle("POST "+APIPrefix+"/auth/password",
 			guard(RequireAuth(http.HandlerFunc(authAPI.ChangePassword))))
+
+		// The switcher. On the auth service because which workspace a request
+		// acts in is identity, not a feature of one.
+		ws := &WorkspaceAPI{Auth: d.Auth}
+		for pattern, h := range map[string]http.HandlerFunc{
+			"GET " + APIPrefix + "/workspaces":              ws.List,
+			"POST " + APIPrefix + "/workspaces/{id}/switch": ws.Switch,
+			"PUT " + APIPrefix + "/workspaces/default":      ws.SetDefault,
+		} {
+			app.Handle(pattern, RequireAuth(h))
+		}
 	}
 
 	if d.Links != nil {
@@ -214,6 +225,8 @@ func NewRouter(d Deps) http.Handler {
 			"POST /keys":                    web.KeyCreate,
 			"POST /keys/{id}/revoke":        web.KeyRevoke,
 			"GET /account":                  web.AccountPage,
+			"POST /workspace/switch":        web.WorkspaceSwitch,
+			"POST /workspace/default":       web.WorkspaceDefault,
 		} {
 			app.Handle(pattern, web.RequireWebAuth(fn))
 		}
@@ -417,7 +430,7 @@ func (h hostRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 var dashboardPatterns = []string{
 	"/{$}", "/login", "/logout", "/setup", "/dashboard", "/docs",
 	"/links", "/links/", "/keys", "/keys/", "/account", "/account/",
-	"/notifications", "/notifications/", "/theme",
+	"/notifications", "/notifications/", "/theme", "/workspace/",
 }
 
 // infrastructurePatterns are the routes registered outside dashboardPatterns:

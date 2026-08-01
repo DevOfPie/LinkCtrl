@@ -6,6 +6,36 @@
 
 {{define "flash_ok"}}{{if .}}<div class="mb-4 rounded-md border border-ok-line bg-ok-soft px-4 py-3 text-sm text-ok-ink">{{.}}</div>{{end}}{{end}}
 
+{{/* The workspace switcher.
+
+     Drawn only when there is more than one to switch between. Every instance
+     today has exactly one membership per user, and a dropdown with a single
+     entry is a control that can do nothing — so this renders nothing at all
+     until a second membership exists, which is the milestone's promise that the
+     switcher costs today's users nothing.
+
+     A plain form: a select and a button, no JavaScript. An auto-submitting
+     select needs a change handler, and the CSP forbids inline script for good
+     reasons that a convenience does not outweigh.
+
+     The path travels on the form so switching leaves you on the page you were
+     reading, looking at the other workspace's version of it. */}}
+{{define "workspace_switch"}}
+{{if gt (len .Workspaces) 1}}
+<form method="post" action="/workspace/switch" class="flex items-center gap-1">
+  <input type="hidden" name="next" value="{{.Path}}">
+  <select name="workspace_id" aria-label="Workspace"
+          class="rounded-md border border-line-strong bg-raised px-2 py-1 text-sm text-ink focus:border-accent focus:outline-none">
+    {{range .Workspaces}}
+    <option value="{{.ID}}"{{if .Current}} selected{{end}}>{{.OrganizationName}} · {{.Name}}</option>
+    {{end}}
+  </select>
+  <button type="submit"
+          class="rounded-md px-2 py-1 text-sm text-muted hover:bg-sunken hover:text-ink">Switch</button>
+</form>
+{{end}}
+{{end}}
+
 {{/* The appearance switcher.
 
      A plain form POST, because the preference is per-browser rather than per

@@ -55,6 +55,29 @@
 </div>
 {{end}}
 
+{{if .Workspaces}}
+<div class="mt-6 max-w-2xl rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-1 text-sm font-medium text-ink">Default workspace</h2>
+  <p class="mb-4 text-sm text-muted">
+    Where a new sign-in starts. <span class="font-medium text-ink">Last-Used</span>
+    follows whichever workspace you were in most recently; pin one instead if you
+    would rather always begin in the same place. Either way, switching from the
+    header moves this browser for the rest of the session.
+  </p>
+  <form method="post" action="/workspace/default" class="flex flex-wrap items-center gap-2">
+    <select name="workspace_id" aria-label="Default workspace"
+            class="rounded-md border border-line-strong bg-raised px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none">
+      <option value=""{{if not .WorkspacePinned}} selected{{end}}>Last-Used</option>
+      {{range .Workspaces}}
+      <option value="{{.ID}}"{{if .Default}} selected{{end}}>{{.OrganizationName}} · {{.Name}}</option>
+      {{end}}
+    </select>
+    <button type="submit"
+            class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Save</button>
+  </form>
+</div>
+{{end}}
+
 <div class="mt-6 max-w-2xl rounded-lg border border-line bg-raised p-6">
   <h2 class="mb-1 text-sm font-medium text-ink">Appearance</h2>
   <p class="mb-4 text-sm text-muted">

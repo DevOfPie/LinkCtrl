@@ -421,10 +421,13 @@ func (s *APIKeyService) Authenticate(ctx context.Context, token string) (*Identi
 	} else {
 		// A NULL workspace means "any workspace in the organization", which
 		// Phase 1 never issues but the column permits. Resolve it the same way
-		// a login does rather than failing.
-		ws, err := s.q.GetDefaultWorkspaceForUser(ctx, row.UserID)
+		// a login does rather than failing — including the owner's pinned
+		// default, since a key with no workspace of its own should follow the
+		// person it acts as. No session id: a key is not a browser, and a
+		// switch made in one must not move a key's requests.
+		ws, err := s.auth.resolveWorkspace(ctx, row.UserID, nil)
 		if err != nil {
-			return nil, fmt.Errorf("resolve workspace for api key: %w", err)
+			return nil, err
 		}
 		wsID, orgID = ws.ID, ws.OrganizationID
 	}
