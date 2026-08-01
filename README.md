@@ -145,7 +145,10 @@ Known limitations and deferred work, so nobody discovers them in production:
 - **Cross-replica cache invalidation needs Redis.** Edits are broadcast on a
   Redis pub/sub channel, so every replica clears its cache. With Redis down each
   replica falls back to waiting out `REDIRECT_TTL`, which is correct but slower
-  to converge.
+  to converge. A Redis that accepts connections and then stops answering is
+  bounded rather than waited on: an edit spends at most
+  `REDIS_INVALIDATE_BUDGET` on the cache, then commits anyway and logs that the
+  previous destination may be served until the entry expires.
 - **The analytics dimension rollup gets expensive with traffic.** It recomputes
   whole days every 60 seconds, which measured 16–21 seconds at 5.7M click events
   and will eventually exceed its own interval. Redirects are unaffected — that is

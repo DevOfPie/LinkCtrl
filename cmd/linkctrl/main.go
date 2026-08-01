@@ -273,11 +273,12 @@ func run(cfg config.Config, _ io.Writer) error {
 	// query on the application pool cannot leave a redirect waiting to acquire
 	// a connection.
 	resolver := redirect.NewResolver(pools.Redirect, rdb, redirect.Options{
-		TTL:          cfg.Redirect.TTL,
-		NegativeTTL:  cfg.Redirect.NegativeTTL,
-		RedisTimeout: cfg.Redis.ReadTimeout,
-		DBTimeout:    cfg.Redirect.Timeout,
-		Logger:       log,
+		TTL:              cfg.Redirect.TTL,
+		NegativeTTL:      cfg.Redirect.NegativeTTL,
+		RedisTimeout:     cfg.Redis.ReadTimeout,
+		InvalidateBudget: cfg.Redis.InvalidateBudget,
+		DBTimeout:        cfg.Redirect.Timeout,
+		Logger:           log,
 	})
 
 	// Created before the service and completed after it: the handler reads

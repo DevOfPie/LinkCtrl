@@ -3,16 +3,20 @@
 package integration
 
 import (
+	"bytes"
 	"context"
-	"io"
+	"log/slog"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
 
+	"github.com/DevOfPie/LinkCtrl/internal/auth"
+	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 )
@@ -33,6 +37,9 @@ type redisProxy struct {
 	conns     []net.Conn
 	reject    bool
 	blackhole bool
+	// flow is closed while bytes are being carried and open while they are not,
+	// so a relay blocks on a receive rather than spinning on a flag.
+	flow chan struct{}
 }
 
 func newRedisProxy(t *testing.T) *redisProxy {
@@ -51,8 +58,16 @@ func newRedisProxy(t *testing.T) *redisProxy {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := &redisProxy{t: t, ln: ln, upstream: opt.Addr}
-	t.Cleanup(func() { _ = ln.Close() })
+	flowing := make(chan struct{})
+	close(flowing)
+	p := &redisProxy{t: t, ln: ln, upstream: opt.Addr, flow: flowing}
+	t.Cleanup(func() {
+		// Order matters: a relay parked in the stall would otherwise still be
+		// holding a goroutine when the test ends.
+		p.stalled(false)
+		_ = ln.Close()
+		p.cut()
+	})
 
 	go p.serve()
 	return p
@@ -90,9 +105,38 @@ func (p *redisProxy) serve() {
 		p.conns = append(p.conns, client, server)
 		p.mu.Unlock()
 
-		go func() { _, _ = io.Copy(server, client); _ = server.Close() }()
-		go func() { _, _ = io.Copy(client, server); _ = client.Close() }()
+		go p.relay(server, client)
+		go p.relay(client, server)
 	}
+}
+
+// relay copies one direction, parking whenever the proxy is stalled.
+//
+// io.Copy would be enough for the other modes; this exists so a connection can
+// be held open with its bytes going nowhere, which is a different failure from
+// a connection that was never answered at all.
+func (p *redisProxy) relay(dst, src net.Conn) {
+	buf := make([]byte, 32*1024)
+	for {
+		n, err := src.Read(buf)
+		if n > 0 {
+			p.awaitFlow()
+			if _, werr := dst.Write(buf[:n]); werr != nil {
+				break
+			}
+		}
+		if err != nil {
+			break
+		}
+	}
+	_ = dst.Close()
+}
+
+func (p *redisProxy) awaitFlow() {
+	p.mu.Lock()
+	ch := p.flow
+	p.mu.Unlock()
+	<-ch
 }
 
 // addr is what a client should connect to.
@@ -126,9 +170,58 @@ func (p *redisProxy) blackholed(on bool) {
 	p.mu.Unlock()
 }
 
+// stalled keeps established connections open and stops carrying their bytes.
+//
+// The second shape of stall, and the one blackholed cannot produce: the
+// handshake already succeeded, the pool holds a connection it believes is
+// healthy, and the command written down it is simply never answered. A fix
+// tuned to a server that never speaks at all is not shown to bound this one.
+func (p *redisProxy) stalled(on bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	select {
+	case <-p.flow:
+		// Currently flowing.
+		if on {
+			p.flow = make(chan struct{})
+		}
+	default:
+		// Currently stalled.
+		if !on {
+			close(p.flow)
+		}
+	}
+}
+
+// client is a plain go-redis client on the proxy, carrying go-redis's own
+// defaults.
+//
+// Those defaults are not a deployment's, and the difference is worth naming
+// here because it is what deferred finding F2 turned on: ReadTimeout defaults
+// to 3s, while internal/platform/redis.Open sets it from REDIS_READ_TIMEOUT,
+// which ships at 50ms. A stall measured through this client therefore costs
+// sixty times what the same stall costs an operator. Use clientAsDeployed for
+// anything asserting how long a failure takes.
 func (p *redisProxy) client(t *testing.T) *goredis.Client {
 	t.Helper()
 	c := goredis.NewClient(&goredis.Options{Addr: p.addr()})
+	t.Cleanup(func() { _ = c.Close() })
+	return c
+}
+
+// clientAsDeployed builds the client internal/platform/redis.Open builds, with
+// the timeouts named rather than inherited, so a test asserting a bound says
+// which configuration it is asserting it for.
+func (p *redisProxy) clientAsDeployed(t *testing.T, dial, read time.Duration) *goredis.Client {
+	t.Helper()
+	c := goredis.NewClient(&goredis.Options{
+		Addr:         p.addr(),
+		DialTimeout:  dial,
+		ReadTimeout:  read,
+		WriteTimeout: read,
+		PoolSize:     50,
+		MinIdleConns: 2,
+	})
 	t.Cleanup(func() { _ = c.Close() })
 	return c
 }
@@ -406,10 +499,12 @@ func TestRedirectsSurviveRedisBeingDown(t *testing.T) {
 	if _, err := replica.Resolve(ctx, dom.ID, alias); err != nil {
 		t.Fatalf("a redirect failed while Redis was stalled: %v", err)
 	}
-	// A generous ceiling on purpose. Under a stalled Redis the delete path
-	// alone measured about nine seconds — deferred finding F2, out of spec here
-	// — so a tight budget would be asserting somebody else's bug. What this
-	// holds is that it terminates. The part M23 owns is pinned down by
+	// A generous ceiling on purpose, and it stays generous now that F2 is
+	// closed. This resolver is built without an InvalidateBudget and on a
+	// client carrying go-redis's 3s read timeout, so what it asserts is that
+	// the path terminates under defaults nobody tuned. The bound itself is
+	// asserted by TestAnEditIsBoundedWhenRedisStalls, which names the
+	// configuration it is asserting it for; the publish half is pinned down by
 	// TestPublishingAnInvalidationDoesNotWaitOnAStalledRedis.
 	assertInvalidateDoesNotHang(t, "with Redis stalled", func() {
 		replica.InvalidateAlias(ctx, dom.ID, alias)
@@ -421,6 +516,169 @@ func TestRedirectsSurviveRedisBeingDown(t *testing.T) {
 	waitFor(t, 15*time.Second, "the subscriber to recover after Redis returned", func() bool {
 		return viaProxy.Ping(context.Background()).Err() == nil
 	})
+}
+
+// The bound M26.6 exists to establish: an edit made while Redis has stopped
+// answering returns inside one total budget, instead of inside one budget per
+// retry — and the edit still lands.
+//
+// The read timeout below is 400ms rather than the shipped 50ms, and that choice
+// is what makes the test discriminating. The defect was multiplication: three
+// attempts at RedisTimeout each, so an operator's worst case was three times
+// whatever they had set REDIS_READ_TIMEOUT to. At the shipped 50ms the old loop
+// and the new one both finish near 215ms and no assertion could tell them
+// apart; at 400ms the old loop needs at least 1.26s while the budget here is
+// 250ms. An operator running Redis across a WAN is exactly who sets 400ms, and
+// F2's nine seconds were the same multiplication over a 3s read timeout.
+//
+// Both shapes of stall are covered, because a fix tuned to one is not shown to
+// bound the other: a server that never answers at all, and a server that
+// answered the handshake and then stopped carrying bytes. Not covered: a dial
+// whose packets are dropped outright, which needs a network this test cannot
+// arrange. That shape is bounded by the per-attempt deadline instead, since a
+// dial — unlike a stalled read — does honour the context it is given.
+func TestAnEditIsBoundedWhenRedisStalls(t *testing.T) {
+	const (
+		readTimeout = 400 * time.Millisecond
+		budget      = 250 * time.Millisecond
+		// The budget plus room for the edit's own transaction and for
+		// scheduling. The old loop needed 3 x readTimeout + 60ms of backoff, so
+		// this sits below that by more than a factor of two and above the
+		// budget by more than a factor of two.
+		bound = 600 * time.Millisecond
+	)
+
+	shapes := []struct {
+		name  string
+		stall func(*redisProxy)
+	}{
+		{"never answers", func(p *redisProxy) { p.blackholed(true); p.cut() }},
+		{"answered, then stopped mid-command", func(p *redisProxy) { p.stalled(true) }},
+	}
+
+	for _, shape := range shapes {
+		t.Run(shape.name, func(t *testing.T) {
+			pool := newDB(t)
+			ctx := t.Context()
+
+			authSvc := auth.NewService(pool, auth.ServiceConfig{
+				Params: fastParams,
+				TTL: auth.SessionTTL{
+					Absolute: 30 * 24 * time.Hour, Idle: 7 * 24 * time.Hour,
+				},
+			})
+			owner, err := authSvc.Register(ctx, auth.RegisterInput{
+				Email:    "owner@example.com",
+				Name:     "Owner",
+				Password: "a-sufficiently-long-password",
+			})
+			if err != nil {
+				t.Fatalf("register owner: %v", err)
+			}
+
+			proxy := newRedisProxy(t)
+			viaProxy := proxy.clientAsDeployed(t, time.Second, readTimeout)
+
+			logs := &syncBuffer{}
+			resolver := redirect.NewResolver(pool, viaProxy, redirect.Options{
+				TTL:              time.Hour,
+				NegativeTTL:      time.Minute,
+				RedisTimeout:     readTimeout,
+				InvalidateBudget: budget,
+				Logger:           slog.New(slog.NewTextHandler(logs, nil)),
+			})
+			links := link.NewService(pool, link.Config{
+				Policy:  link.DefaultDestinationPolicy(),
+				BaseURL: "http://lnk.test",
+				Cache:   resolver,
+			})
+
+			created, err := links.Create(ctx, owner, link.CreateInput{
+				URL: "https://example.com/before", Alias: "stalled1",
+			})
+			if err != nil {
+				t.Fatalf("create the link to edit: %v", err)
+			}
+
+			dom, err := dbgen.New(pool).ResolveDefaultDomain(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Warm both tiers, so the edit has something to invalidate and the
+			// second shape has an established connection to stall.
+			if _, err := resolver.Resolve(ctx, dom.ID, created.Alias); err != nil {
+				t.Fatalf("warm the cache: %v", err)
+			}
+			if _, ok := resolver.ResolveCached(dom.ID, created.Alias); !ok {
+				t.Fatal("the resolver did not cache the alias in process")
+			}
+
+			shape.stall(proxy)
+
+			after := "https://example.com/after"
+			start := time.Now()
+			updated, err := links.Update(ctx, owner, created.ID,
+				link.UpdateInput{URL: &after})
+			elapsed := time.Since(start)
+
+			if err != nil {
+				t.Fatalf("the edit failed because Redis was stalled; the cache is "+
+					"optional and correctness must never depend on it: %v", err)
+			}
+			if updated.URL != after {
+				t.Errorf("the edit returned %q, want %q", updated.URL, after)
+			}
+			if elapsed > bound {
+				t.Errorf("the edit took %s against a stalled Redis, want under %s. "+
+					"The invalidation budget is %s and it is meant to bound the "+
+					"whole retry loop; a per-attempt budget would spend %s three "+
+					"times over", elapsed, bound, budget, readTimeout)
+			}
+
+			// The edit is durable regardless of the cache, which is the half
+			// that must not be traded away for the bound.
+			var stored string
+			if err := pool.QueryRow(ctx,
+				`SELECT primary_url FROM links WHERE id = $1`, created.ID,
+			).Scan(&stored); err != nil {
+				t.Fatal(err)
+			}
+			if stored != after {
+				t.Errorf("the stored destination is %q, want %q: the edit must "+
+					"survive a cache that never answered", stored, after)
+			}
+
+			// A bounded failure is still a failure to invalidate, and the
+			// operator has to be able to find that out.
+			if _, ok := resolver.ResolveCached(dom.ID, created.Alias); ok {
+				t.Error("the in-process tier still holds the alias after an edit")
+			}
+			if !strings.Contains(logs.String(), "failed to invalidate cache entry") {
+				t.Errorf("nothing logged that the invalidation did not happen; a "+
+					"bound that hides the failure is worse than the delay it "+
+					"replaced. Log was:\n%s", logs.String())
+			}
+		})
+	}
+}
+
+// syncBuffer collects log output from the goroutines the invalidation path
+// spawns, which is why it is not a bare bytes.Buffer.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
 }
 
 // assertInvalidateDoesNotHang fails if an edit is still blocked after a budget

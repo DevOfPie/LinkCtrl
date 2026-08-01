@@ -47,6 +47,13 @@ type Options struct {
 	// few milliseconds, not the request.
 	RedisTimeout time.Duration
 
+	// InvalidateBudget bounds a whole invalidation — every attempt and every
+	// pause between them — rather than each attempt separately. A per-attempt
+	// budget multiplies: three attempts at RedisTimeout each meant an operator
+	// raising RedisTimeout raised the worst case on their own form submission
+	// by three times as much (M26.6, D26).
+	InvalidateBudget time.Duration
+
 	// DBTimeout bounds the Postgres fallback. Zero leaves it bounded only by the
 	// request context, which for a redirect is no bound worth having: the target
 	// is 100ms uncached, and a query still running after a second is not going to
@@ -78,6 +85,12 @@ func NewResolver(pool *pgxpool.Pool, rdb *goredis.Client, opts Options) *Resolve
 	}
 	if opts.RedisTimeout <= 0 {
 		opts.RedisTimeout = 50 * time.Millisecond
+	}
+	// Large enough to fit the three attempts and their pauses at the default
+	// RedisTimeout, so a budget nobody set changes nothing about how a healthy
+	// or briefly stalled cache behaves — it only caps the pathological end.
+	if opts.InvalidateBudget <= 0 {
+		opts.InvalidateBudget = 250 * time.Millisecond
 	}
 	// The collapsed database flight runs detached from any one request, so it
 	// needs a bound of its own even when the caller left DBTimeout at zero —
@@ -296,17 +309,65 @@ func (r *Resolver) InvalidateAlias(ctx context.Context, domainID uuid.UUID, alia
 	r.publish(ctx, invalidation{Kind: kindAlias, Key: k})
 }
 
-// deleteFromRedis removes a key, retrying a transient failure.
+// invalidateAttempts is how many times a delete is tried before the entry is
+// left to expire by TTL. Three, because the common failure is a brief stall
+// rather than a durable outage — and the cost of giving up is serving a
+// destination the owner has already changed.
+const invalidateAttempts = 3
+
+// deleteFromRedis removes a key, retrying a transient failure inside one total
+// budget.
 //
-// Three attempts, each with its own RedisTimeout budget, because the common
-// failure here is a brief stall rather than a durable outage — and the cost of
-// giving up is serving a destination the owner has already changed. Detached
-// from the caller's context: the invalidation must complete even if the request
-// that triggered the edit has gone away.
+// The budget is held out here rather than pushed into the context go-redis is
+// given, because that context does not bind a stalled read. Measured for M26.6
+// against a server that accepts the connection and then never answers: a client
+// whose ReadTimeout was 400ms took 402ms to fail a command carrying a 50ms
+// context, and one left at go-redis's 3s default took 3.0s. What bounds a
+// stalled read is the client's own ReadTimeout; the caller's deadline is
+// consulted for the dial and not for this. So a loop spending RedisTimeout on
+// each of three attempts multiplied whatever REDIS_READ_TIMEOUT was set to —
+// which is how the same three attempts measured 9.07s while M23 was being
+// built, against a test client that had left the timeout at the default.
+//
+// Bounding the wait from outside the call is what internal/ratelimit does for
+// the same failure and the same reason (M24). An attempt still running when the
+// budget is spent has its context cancelled, which a stalled read will not
+// notice; what makes the bound hold is that the caller has stopped waiting. A
+// delete that lands a moment later removes a key that should be gone anyway.
+//
+// Detached from the caller's context, because the invalidation must complete
+// even if the request that triggered the edit has gone away.
 func (r *Resolver) deleteFromRedis(ctx context.Context, k string) error {
-	base := context.WithoutCancel(ctx)
+	base, cancel := context.WithTimeout(
+		context.WithoutCancel(ctx), r.opts.InvalidateBudget)
+
+	done := make(chan error, 1)
+	go func() {
+		defer cancel()
+		done <- r.retryDelete(base, k)
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-base.Done():
+		// The budget can expire in the same instant the delete succeeds, and a
+		// bare select would then choose between them at random. Ask once more
+		// before reporting a failure that did not happen.
+		select {
+		case err := <-done:
+			return err
+		default:
+			return fmt.Errorf("invalidation budget of %s spent",
+				r.opts.InvalidateBudget)
+		}
+	}
+}
+
+// retryDelete runs the attempts inside whatever budget ctx already carries.
+func (r *Resolver) retryDelete(ctx context.Context, k string) error {
 	var err error
-	for attempt := range 3 {
+	for attempt := range invalidateAttempts {
 		if attempt > 0 {
 			// Short and fixed. This runs after a successful commit, on the
 			// write path rather than the redirect path, so a few milliseconds
@@ -315,16 +376,21 @@ func (r *Resolver) deleteFromRedis(ctx context.Context, k string) error {
 			timer := time.NewTimer(time.Duration(attempt) * 20 * time.Millisecond)
 			select {
 			case <-timer.C:
-			case <-base.Done():
+			case <-ctx.Done():
 				timer.Stop()
-				return base.Err()
+				return err
 			}
 		}
-		dctx, cancel := context.WithTimeout(base, r.opts.RedisTimeout)
+		dctx, cancel := context.WithTimeout(ctx, r.opts.RedisTimeout)
 		err = r.redis.Del(dctx, k).Err()
 		cancel()
 		if err == nil {
 			return nil
+		}
+		// A spent budget ends the loop rather than starting an attempt that
+		// cannot finish inside it.
+		if ctx.Err() != nil {
+			return err
 		}
 	}
 	return err

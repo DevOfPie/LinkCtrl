@@ -135,10 +135,23 @@ vanish at any moment. Losing it makes redirects slower, never wrong.
 | `LINKCTRL_CACHE_ENABLED` | `true` | `false` skips Redis entirely and serves from the in-process cache plus Postgres. |
 | `LINKCTRL_REDIS_URL` | `redis://redis:6379/0` | |
 | `LINKCTRL_REDIS_DIAL_TIMEOUT` | `1s` | |
-| `LINKCTRL_REDIS_READ_TIMEOUT` | `50ms` | Deliberately short. A slow cache must not become slow redirects; the resolver falls through to Postgres. |
+| `LINKCTRL_REDIS_READ_TIMEOUT` | `50ms` | Deliberately short. A slow cache must not become slow redirects; the resolver falls through to Postgres. It is also a redirect's whole patience per Redis call, and a stalled cache makes a redirect pay it rather than wait indefinitely. |
+| `LINKCTRL_REDIS_INVALIDATE_BUDGET` | `250ms` | The most an edit will wait for the cache to be told a link changed — the total across all three attempts, not each. Raising `REDIS_READ_TIMEOUT` therefore no longer multiplies into edit latency. Spending the budget is not an error: the edit is already committed, the failure is logged, and the stale entry expires with `REDIRECT_TTL`. |
 | `LINKCTRL_REDIS_POOL_SIZE` | `50` | |
 
 Redis being unavailable at startup is a warning, not a failure.
+
+A Redis that *accepts* a connection and then never answers is the failure worth
+knowing about, because it is the one that can hold a caller: go-redis bounds a
+stalled read by `REDIS_READ_TIMEOUT` and not by the deadline the caller passes.
+Measured, against a proxy that accepts and stays silent: an edit costs at most
+`REDIS_INVALIDATE_BUDGET` and then commits anyway, and a redirect costs one read
+timeout per Redis call and then falls through to Postgres. A redirect already
+answered from memory costs nothing; a cold one measured 108ms, because it spends
+the timeout twice — once on the lookup that never answers and once on the write
+that would have repopulated the cache. Both figures hold for a connection that
+was established and then went quiet mid-command. Neither depends on Redis
+answering.
 
 ## Redirects
 

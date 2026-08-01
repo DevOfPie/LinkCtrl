@@ -192,6 +192,25 @@ migrations run at boot.
 - Queued messages are stored rendered, so anyone who can read the database can
   read them. Sent and failed rows are deleted after 30 days; pending rows are
   never deleted by age.
+- **An edit made while Redis has stopped answering now has a stated bound.**
+  `LINKCTRL_REDIS_INVALIDATE_BUDGET`, default `250ms`, is the most an edit will
+  wait for the cache to be told a link changed — the total across all three
+  attempts rather than each. Previously each attempt got its own
+  `REDIS_READ_TIMEOUT`, so raising that knob multiplied it by three into the
+  latency of a form submission. Nothing about a healthy or briefly stalled cache
+  changes: every retry that used to succeed still fits inside the budget.
+- The bound covers a Redis that accepts a connection and never answers, and one
+  that answered and then went quiet mid-command. Both are bounded because the
+  caller stops waiting — a stalled read ignores the deadline the client is
+  given, which is the part that made this worth fixing rather than tuning.
+- **A bounded failure is still a failure to invalidate.** The edit is committed
+  either way, the failure is logged, and the stale cache entry expires with
+  `REDIRECT_TTL` exactly as before. Redirects are untouched, and were measured
+  rather than assumed: nothing on that path retries, so a stalled cache costs a
+  redirect one `REDIS_READ_TIMEOUT` per call and then Postgres answers it. A
+  redirect served from memory costs nothing; a cold one measured 108ms, since it
+  pays the timeout on the lookup and again on the write that would have
+  refilled the cache.
 
 ## [0.1.0] - 2026-07-31
 

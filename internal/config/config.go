@@ -116,11 +116,19 @@ type DBConfig struct {
 }
 
 type RedisConfig struct {
-	URL          string        `env:"REDIS_URL" envDefault:"redis://redis:6379/0"`
-	DialTimeout  time.Duration `env:"REDIS_DIAL_TIMEOUT" envDefault:"1s"`
-	ReadTimeout  time.Duration `env:"REDIS_READ_TIMEOUT" envDefault:"50ms"`
-	PoolSize     int           `env:"REDIS_POOL_SIZE" envDefault:"50"`
-	CacheEnabled bool          `env:"CACHE_ENABLED" envDefault:"true"`
+	URL         string        `env:"REDIS_URL" envDefault:"redis://redis:6379/0"`
+	DialTimeout time.Duration `env:"REDIS_DIAL_TIMEOUT" envDefault:"1s"`
+	ReadTimeout time.Duration `env:"REDIS_READ_TIMEOUT" envDefault:"50ms"`
+
+	// InvalidateBudget is the total an edit will wait for the cache to be
+	// invalidated, across every retry rather than per attempt. The retry loop
+	// used to spend ReadTimeout three times over, so raising ReadTimeout
+	// tripled the worst case an operator saw on a form submission; this is the
+	// one number that bounds it. D26.
+	InvalidateBudget time.Duration `env:"REDIS_INVALIDATE_BUDGET" envDefault:"250ms"`
+
+	PoolSize     int  `env:"REDIS_POOL_SIZE" envDefault:"50"`
+	CacheEnabled bool `env:"CACHE_ENABLED" envDefault:"true"`
 }
 
 type RedirectConfig struct {

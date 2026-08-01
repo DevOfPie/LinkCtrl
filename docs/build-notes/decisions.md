@@ -66,6 +66,8 @@ file. Append a row when you append an entry.
 | [M26.5, the Escape bullet and the element that cannot honour it](#2026-07-31--m265-the-escape-bullet-and-the-element-that-cannot-honour-it) | The bullet before and after, and the tree fact between them; why `<details>` or JavaScript was a false dichotomy; D24; why the expensive option won; what a markup test cannot assert |
 | [M26.5, WebKit verified, and what verification may cost](#2026-07-31--m265-webkit-verified-and-what-verification-is-allowed-to-cost) | D25, tooling is not shipped code; the three engines agreeing to the pixel; why the first measurement was wrong and what gave it away; the harness that is not in the repo |
 | [M26.5, positioning a panel that is not in the header](#2026-07-31--m265-positioning-a-panel-that-is-not-in-the-header) | Why a top-layer panel cannot be anchored to its invoker below the floor D24 set; the one `max()` that replaces a media query; why `popover="auto"` is spelled out; which engines were actually looked at, and which was not |
+| [M26.6, what actually costs nine seconds](#2026-07-31--m266-what-actually-costs-nine-seconds) | Measuring the layer instead of deriving it; why F2's nine seconds were a test client's and not a deployment's; D26 and why 250ms; enforcing a budget go-redis will not honour; the two stall shapes tested and the one that is not; why the redirect path was left alone, and the 108ms an uncached one costs while Redis stalls (F9) |
+| [M26.6, amending the milestone that diagnosed itself wrong](#2026-07-31--m266-amending-the-milestone-that-diagnosed-itself-wrong) | The table before and after, and the one measured line that forced it; why a fact amends and an assertion prompts; the milestone catching its own diagnosis |
 
 ---
 
@@ -4391,3 +4393,243 @@ The harness lives in the session scratchpad and is not in the repository, so
 this check is not repeatable by anyone else today. That is a real gap and it is
 queued rather than fixed here, because no bullet in M26.5 asked for a browser
 test rig and adding one would be a second milestone riding on a layout one.
+
+---
+
+## 2026-07-31 — M26.6, what actually costs nine seconds
+
+Corrects [m26.6.md](phase-details/m26.6.md)'s *What the tree says now* table,
+which was written from arithmetic rather than from measurement, and vindicates
+the attribution F2 made in the first place. The milestone's first bullet
+anticipated this — the table was labelled a hypothesis and the correction was
+required to be recorded — so this entry is the discharge of that bullet and not
+a departure from it. The table in the milestone file is left as written; only
+the orchestrator amends a bullet.
+
+### The measurement
+
+Probes against `test/integration`'s `redisProxy`, under `-race`, on 2026-07-31.
+The subject is a server that accepts the connection and then never answers,
+which is the shape F2 was measured against; the last two rows repeat it against
+a connection that was established and then stopped carrying bytes mid-command.
+
+| Client | Caller's deadline | Elapsed |
+| --- | --- | --- |
+| `ReadTimeout` 50ms, `DialTimeout` 1s | 50ms | 51ms |
+| `ReadTimeout` 400ms, `DialTimeout` 1s | 50ms | **401ms** |
+| `ReadTimeout` 3s — go-redis's default | 50ms | **3003ms** |
+| `ReadTimeout` 50ms, `DialTimeout` **8s** | 50ms | 51ms |
+| `ReadTimeout` 400ms, `MaxRetries` disabled | none | 401ms |
+| `ReadTimeout` 400ms, `MaxRetries` default | none | 419ms |
+| mid-command stall, `ReadTimeout` 50ms | 50ms | 51ms |
+| mid-command stall, `ReadTimeout` 400ms | 50ms | 401ms |
+
+One command against a stalled server costs the client's `ReadTimeout`, and the
+context it was handed does not cut that short — it is *reported* (the error is
+`context deadline exceeded`) but it is not what ends the wait. `MaxRetries` adds
+about 18ms rather than a factor, because a read that timed out is retried
+against a connection that fails immediately. `DialTimeout` does not appear at
+all, because a server that accepts is a server whose dial succeeded. None of it
+depends on the connection being new, either: one established while the proxy was
+healthy and then left to go quiet mid-command measures the same.
+
+So the arithmetic is not 3 × 3 × 1s. It is **3 × `ReadTimeout`**: the outer loop
+in `deleteFromRedis`, three attempts, each paying the client's read budget in
+full. Running that loop over a client left at go-redis's 3s default reproduces
+the finding to two decimal places — 9069ms against F2's 9.07s — and running it
+over a client built the way `internal/platform/redis.Open` builds one costs
+214ms. Holding the read timeout at 50ms and raising `DialTimeout` to 8s, or
+disabling `MaxRetries` entirely, leaves that 214ms unmoved.
+
+### Which means F2's nine seconds were never a deployment's
+
+`redisProxy.client` builds `goredis.NewClient(&goredis.Options{Addr: …})` and
+nothing else, so every timeout is go-redis's default. `Open` sets `ReadTimeout`
+from `REDIS_READ_TIMEOUT`, which ships at 50ms. The measurement was taken
+through a client sixty times more patient than any deployment's, and nothing
+said so, because the helper's name does not mention timeouts and its callers had
+no reason to ask.
+
+That is the more useful finding of the two. A test proxy that reproduces a
+failure faithfully at the socket can still be wrong about what the failure
+costs, and the part that was wrong was the part nobody wrote down. The helper
+now carries the difference in its doc comment and a second constructor builds
+the client a deployment has.
+
+The severity moves accordingly: the shipped worst case was 214ms, not 9s, and
+the edit was never within seconds of `HTTP_REQUEST_TIMEOUT`. F2's row keeps its
+evidence unedited and the closing note carries this.
+
+### There is still a defect, and it is the multiplication
+
+`REDIS_READ_TIMEOUT` is documented, operator-tunable, and multiplied by three on
+a path the operator is waiting on. An operator running Redis across a WAN sets
+400ms and pays 1.26s per edit; one who sets go-redis's own default of 3s pays
+the 9.07s that was measured. Nothing in the documentation said the knob had a
+factor of three attached, and nothing bounded the total.
+
+**D26: one total budget, `REDIS_INVALIDATE_BUDGET`, default 250ms.** The whole
+retry loop lives inside it — every attempt and every pause between them — so
+raising the read timeout no longer multiplies into edit latency.
+
+250ms because it is large enough to change nothing that works today: three
+attempts at the shipped 50ms plus 60ms of backoff is 210ms on paper and measured
+214ms, so a healthy cache, a briefly stalled one, and every retry that was ever
+going to succeed all still fit — the budget only ever truncates an attempt that
+was going to fail. And it is small against the 15s `HTTP_REQUEST_TIMEOUT` it is
+chosen against — 1.7%, so even an edit that invalidates two aliases, or a bulk
+operation invalidating ten, stays far from the request deadline it shares.
+
+### The budget is enforced from outside the call, because it has to be
+
+A deadline pushed into the context go-redis is given does not bind a stalled
+read; that is what the table above measures. So the caller stops waiting
+instead, which is what `internal/ratelimit` already does for the same failure
+(M24) and for the same reason. An attempt still running when the budget is spent
+has its context cancelled — which a stalled read will not notice — and is
+abandoned. If that delete lands a second later it removes a key that should
+already be gone, so the abandoned work is harmless in the one direction it can
+go.
+
+Bounded failure is still failure. The log line saying the previous destination
+may be served until it expires stays, and the test asserts it is emitted, because
+a bound that hid the failure would be worse than the delay it replaced.
+
+### Two stall shapes tested, one not
+
+`TestAnEditIsBoundedWhenRedisStalls` covers a server that never answers and a
+server that answered the handshake and then stopped carrying bytes mid-command —
+the second needed a new proxy mode, since a blackholed listener cannot produce
+it. Both bound at the budget.
+
+Not tested: a dial whose packets are dropped outright, which no in-process proxy
+can arrange. Probed separately against 192.0.2.1, an address reserved for
+documentation and routed nowhere, and it behaves differently enough to be worth
+recording — a hanging dial *does* honour the caller's deadline, measured at 50ms
+for a client with a 2s dial timeout under a 50ms context, so the per-attempt
+deadline bounds it. Left unbounded it is the worst shape of the three:
+go-redis's pool retries a dial five times internally (`DialerRetries`,
+default 5), measured at 1906ms for a single command at a 300ms dial timeout, and
+`MaxRetries` multiplies that by four again — 7764ms.
+
+The test uses a 400ms read timeout rather than the shipped 50ms, deliberately.
+At 50ms the old loop and the new one both finish near 214ms and no assertion
+could tell them apart; at 400ms the old loop takes 1.27s against a 250ms budget.
+A test that cannot see the defect is not evidence, which is the lesson M24.6 and
+M24.5 both cost this project already.
+
+### The redirect path was checked and deliberately not changed
+
+The milestone required an answer either way. The answer is that the compounding
+is **absent**, and that the `redis.go` comment nonetheless **understated the
+cost** — two different findings, and only the first was the one asked about.
+
+Absent, because there is no retry loop on the redirect path: `fromRedis` makes
+one `Get` and treats every failure as a miss. Five consecutive lookups against a
+stalled server cost 51ms each, and 51ms each again down a connection that was
+established and then went quiet. The reason is not the one the milestone
+guessed — it is not that a pooled connection is already established, since the
+established case measures the same — it is simply that nothing there retries.
+The resolver's `RedisTimeout` *is* `REDIS_READ_TIMEOUT` (`cmd/linkctrl/main.go`),
+so the bound survives an operator retuning it, and the dial half is bounded by
+the context, which a dial does honour.
+
+Understated, because a whole *uncached* redirect pays that timeout twice, not
+once. A miss spends it on the failed `Get` and then again on the `Set` that
+repopulates the cache, both synchronous on the request: `Resolve` against a
+stalled Redis with a cold memory tier measured **108ms**, against an uncached
+target of 100ms. "Costs a little latency and then falls through to Postgres" is
+out by a factor of two, and lands the cold case just past a documented budget.
+
+That is not the trigger the bullet named — its condition was compounding
+*retries*, and there are none — so the comment is corrected to state the
+measured cost and the second call is recorded as deferred finding **F9** rather
+than taken as work here. Skipping the repopulating `Set` after a lookup that
+just timed out would be the obvious fix and it is a change to the redirect path,
+which owes the k6 re-run this milestone deliberately does not owe.
+
+`MaxRetries` is therefore left at go-redis's default rather than pinned. It
+multiplies only a dial that never completes, and only for a call carrying no
+deadline; every Redis call site in this tree carries one. Setting it would
+change the client the redirect path uses in exchange for nothing measurable —
+and would oblige the k6 SLO re-run that the inherited *touching the redirect
+path* rule attaches to any such change.
+
+**The redirect path is unchanged, so that measurement is deliberately not
+re-run.** Checkably so, which is the point of saying it here rather than
+asserting it: `Resolve`, `ResolveCached`, `fromRedis`, `fromDatabase` and
+`store` are byte-identical to the previous commit, and every timeout the
+redirect path reads — `REDIS_DIAL_TIMEOUT`, `REDIS_READ_TIMEOUT`,
+`REDIS_POOL_SIZE`, `MaxRetries`, `REDIRECT_TTL` — has the value it had. What
+moved in `internal/redirect` is `deleteFromRedis`, which no redirect calls, and
+a default in `NewResolver` for a field no redirect reads. What moved in
+`internal/platform/redis` is a comment. Recorded so the omission reads as a
+decision, and so a reader who doubts it knows exactly which five functions to
+diff.
+
+---
+
+## 2026-07-31 — M26.6, amending the milestone that diagnosed itself wrong
+
+The orchestrator's amendment to [m26.6.md](phase-details/m26.6.md), made at
+[step 3.4](phase-loop.md#3-land) against the measurement in the entry above.
+Recorded separately from that entry because what moved is the *definition of
+done*, and a decision log that shows only the new reading cannot show that
+anything moved.
+
+A fact, not an assertion — nobody could have decided differently about which
+layer contributes what, because it is measurable — so it was amended and logged
+rather than put to the owner.
+
+### As it stood
+
+> Recorded here because the fix is not the one F2 proposed, and the difference
+> matters. F2 attributed the 9s to go-redis not honouring the per-attempt context.
+> The arithmetic points somewhere else:
+>
+> | Layer | Value | Where |
+> | --- | --- | --- |
+> | Outer retry loop | 3 attempts | `resolver.go`, `deleteFromRedis` |
+> | go-redis internal retry | 3, its default — **`MaxRetries` is never set** | `redis.go`, `Open` |
+> | `REDIS_DIAL_TIMEOUT` | 1s | `config.go` |
+> | `REDIS_READ_TIMEOUT` | 50ms | same |
+>
+> 3 × 3 × 1s = 9s, against 9.07s measured. Two retry layers multiplying, over a
+> dial budget twenty times the read budget beside it.
+
+And, above it:
+
+> A Redis that *accepts* the connection and then never speaks stretched a link
+> edit to **9.07s**, measured during M23 against a blackholing TCP proxy.
+> `HTTP_REQUEST_TIMEOUT` is 15s, so an edit made during a stall comes within a
+> few seconds of failing outright.
+
+### As amended
+
+The table now attributes the cost to three attempts each paying
+`REDIS_READ_TIMEOUT`, names go-redis's internal retry as ~18ms rather than a
+factor of three, and records `REDIS_DIAL_TIMEOUT` as contributing **nothing** to
+a server that accepts and then stalls. The headline number moves with it: the
+9.07s belonged to the M23 test's own client, which sets no read timeout and
+inherited go-redis's 3s default, while a deployment paid **214ms**.
+
+### The tree fact that forced it
+
+The measurements in the entry above, taken against `redisProxy` under `-race`.
+The decisive one is a single line of the table: a client with `read 50ms` and
+`dial 8s` completes a stalled command in **51ms**. A dial budget eight times the
+old table's cannot be a multiplier when it changes nothing, and a read budget is
+the only value the elapsed time tracks.
+
+### Why this is worth a separate entry
+
+Because the milestone's first bullet asked for exactly this and would otherwise
+get no credit for working. It required the mechanism be *measured, not assumed*,
+and said that if the arithmetic was wrong the finding would be corrected and the
+correction recorded. It was wrong. The milestone caught its own diagnosis, and
+the deferred finding it was written to overrule — F2 — turns out to have been
+right the first time.
+
+That is the cheapest possible version of this lesson. The expensive version is
+shipping a total budget tuned to a nine-second failure that no deployment could
+ever have had, and never learning that the number came from a test helper.
