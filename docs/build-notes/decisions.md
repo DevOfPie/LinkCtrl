@@ -68,6 +68,7 @@ file. Append a row when you append an entry.
 | [M26.5, positioning a panel that is not in the header](#2026-07-31--m265-positioning-a-panel-that-is-not-in-the-header) | Why a top-layer panel cannot be anchored to its invoker below the floor D24 set; the one `max()` that replaces a media query; why `popover="auto"` is spelled out; which engines were actually looked at, and which was not |
 | [M26.6, what actually costs nine seconds](#2026-07-31--m266-what-actually-costs-nine-seconds) | Measuring the layer instead of deriving it; why F2's nine seconds were a test client's and not a deployment's; D26 and why 250ms; enforcing a budget go-redis will not honour; the two stall shapes tested and the one that is not; why the redirect path was left alone, and the 108ms an uncached one costs while Redis stalls (F9) |
 | [M26.6, amending the milestone that diagnosed itself wrong](#2026-07-31--m266-amending-the-milestone-that-diagnosed-itself-wrong) | The table before and after, and the one measured line that forced it; why a fact amends and an assertion prompts; the milestone catching its own diagnosis |
+| [M27, the three questions an invite could not be built without](#2026-07-31--m27-the-three-questions-an-invite-could-not-be-built-without) | D27 address-bound invites and the enumeration hazard it creates; D28 the inviter's rank as a ceiling, and why members.write stays delegable; D29 the TTL knob and why a constant was refused |
 
 ---
 
@@ -4633,3 +4634,185 @@ right the first time.
 That is the cheapest possible version of this lesson. The expensive version is
 shipping a total budget tuned to a nine-second failure that no deployment could
 ever have had, and never learning that the number came from a test helper.
+
+---
+
+## 2026-07-31 — M27, the three questions an invite could not be built without
+
+D27, D28 and D29. All three were **asked ahead of the build** by
+`/preview-decisions` and answered by the owner at M27's validation, before any
+code existed — which is the whole point of that file. Each entry said *the loop
+stalls* rather than offering a default, because none of them is a choice an
+actor may take on the owner's behalf: each decides who can join an
+organization, at what rank, and for how long.
+
+Given and used the same day, 2026-07-31. The questions have left
+[upcoming-decisions.md](upcoming-decisions.md), which holds questions and never
+answers.
+
+### D27 — an invite is bound to the address it was issued to
+
+Not a bearer link. Redemption checks that the redeeming account's address is the
+address invited.
+
+The milestone requires a copyable invite link on every path, and on a default
+instance — where the mailer is off (D1) — that copyable link is the *only*
+delivery path. So this decides the normal case, not the fallback. A link that
+can be copied can be forwarded, and a bearer token in a group chat is a
+membership credential with no owner: it admits whoever picks it up, and the
+audit record then says the organization gained a member nobody chose.
+
+The cost is real and was accepted knowingly. Pasting an invite into a team
+channel for "whoever needs this" is now a thing the product refuses, and
+somebody who wants to join under a different address must be re-invited.
+
+It also creates one hazard the milestone must handle: redemption now compares
+addresses, and that comparison is a new place that could answer *does this
+address have an account*. M27's own no-enumeration bullet governs it, and the
+comparison must fail identically whether the address is unknown, already a
+member, or simply not the invited one.
+
+### D28 — an invite may carry any role at or below the inviter's own rank
+
+The four built-in roles are `owner` 10, `admin` 20, `editor` 30, `viewer` 40,
+seeded with `organization_id IS NULL`, so rank comparison is total and no
+per-org custom role can tie. An admin may invite an admin, editor or viewer, and
+may not invite an owner.
+
+The alternative that ships less — a fixed role until [M28](phase-details/m28.md)
+builds the rank table — fails the first thing a real organization does, which is
+invite a co-founder as an owner, and it builds the invite form twice. The
+alternative that ships more — any built-in role, unbounded — is a knowing
+privilege-escalation path: an admin invites an owner and is promoted by them an
+hour later.
+
+This settles a piece of M28's rank semantics one milestone early, which is the
+scope leak the milestone split exists to prevent, and that is the honest cost.
+The mitigation is the workflow's own rule: if M28's rank table lands different
+semantics, **M27 is reopened** rather than corrected by a successor, so the work
+stays under one number.
+
+It also answers M27's D18 obligation. A key holding `members.write` that could
+invite above its own reach would be a key widening its own reach — D18's second
+limb, pointing at non-delegable. Under D28 it cannot: the ceiling is the
+inviter's own rank, which a key inherits from its creator. So `members.write`
+matches **neither limb of D18 and stays delegable**, and M27 records that.
+
+### D29 — `LINKCTRL_INVITE_TTL`, default 168h
+
+A knob, not a constant, expressed the way every other duration in this
+configuration already is — `SESSION_ABSOLUTE_TTL`, `SESSION_IDLE_TTL`,
+`REDIRECT_TTL` — so it documents itself in the file a reader is already reading.
+
+Seven days is the default nearly every instance will get, so it is the number
+that matters and the knob is the smaller half of the decision. A constant was
+rejected for the reason D5 rejected it for audit retention: time is the one
+thing an operator cannot work around without a rebuild, and a constant quietly
+disposing of something nobody configured is the shape this project has already
+refused once. No expiry at all was rejected because single-use bounds an
+invite's blast radius to one account but nothing bounds it in time, and under
+D27 a stale invite is still a live grant to the named address.
+
+One interaction worth stating: mail is delivered asynchronously through M26's
+outbox (D23), so the clock starts when the invite is created rather than when it
+is sent. A slow relay spends the operator's TTL, which is exactly why it is
+tunable.
+
+## 2026-07-31 — Answered ahead of the loop: M28's rank, scope and deletion rules
+
+D30, D31 and D32. Produced by `/preview-decisions`, not by the milestone under
+way — M27 was in build when these were asked and answered, and none of this is
+M27's work. The entries carry no milestone marker for that reason; what prompted
+them is the read-ahead, and the milestone that will use them is
+[M28](phase-details/m28.md), two rows down.
+
+Given 2026-07-31, to be used whenever M28 is built. The three questions have
+left [upcoming-decisions.md](upcoming-decisions.md), which holds questions and
+never answers.
+
+### D30 — a member may manage only ranks strictly below their own; owners are the exception
+
+An admin may re-role or remove editors and viewers, and never another admin.
+Only an owner manages admins. Owners are the single exception to strictly-below:
+an owner may re-role or remove another owner, and the existing refusal to remove
+the last owner is what stops an organization from losing all of them.
+
+Strictly-below is the whole escalation surface below the top, expressed as one
+strict inequality on `roles.rank`, which is a thing a test can cover
+exhaustively. Two admins who disagree cannot delete each other. A compromised
+admin session cannot strip the other admins and leave the organization to an
+owner who is asleep.
+
+The exemption at the top is not an inconsistency, it is where the argument stops
+applying. Strictly-below exists to stop somebody reaching a rank they do not
+hold; an owner already holds everything, so managing a peer grants them nothing
+new. Read uniformly, the rule would make a co-owner who leaves the company
+removable only by SQL against the database, and a self-hosted product that
+answers an ordinary succession question with *open psql* has failed at it.
+
+Two costs, both accepted knowingly:
+
+- **Any owner can remove any other owner.** On a two-owner organization that is
+  a coin flip in a dispute, and it is irreversible without a backup. Nothing in
+  M28 mitigates it beyond the audit record of who did it.
+- **A single-owner instance whose owner is unavailable cannot re-role or remove
+  an admin at all.** That is the *normal* shape of self-hosting, not an edge
+  case: one owner, a handful of admins, and the owner on holiday.
+
+This is the spine of the rank table [M28](phase-details/m28.md) requires be
+written into its own file before any code, and it is the row that file could not
+leave blank.
+
+### D31 — a workspace-scoped membership only ever adds; it never narrows
+
+Permissions are the **union** of every membership matching the workspace, and
+the effective role is the lowest `rank` among them. Holding an org-wide
+membership and a workspace-scoped one in the same organization grants the sum,
+not the intersection, and not the narrower of the two.
+
+This ratifies what the evaluator already computes rather than changing it.
+`GetUserPermissions` selects `DISTINCT p.slug` across every membership matching
+`m.workspace_id IS NULL OR m.workspace_id = w.id`, and `GetUserRoleInWorkspace`
+takes `ORDER BY r.rank LIMIT 1`
+([internal/store/query/auth.sql](../../internal/store/query/auth.sql)). Nobody
+chose that; it is what those queries do once a second row exists, and until M28
+writes a membership with `workspace_id` set, no instance can observe it.
+Deciding it the other way would mean changing how permissions resolve inside the
+milestone that also lands member management, workspace CRUD and org creation —
+the worst place in the phase to move the authorization path.
+
+The cost is that *org admin, but viewer in the finance workspace* is
+unexpressible. That is the natural reading of a per-workspace role, so the
+feature surprises in the direction of granting more than expected, which is the
+worse direction to be surprised in. M28 carries the mitigation: the control that
+issues a workspace-scoped membership says it **adds** access to that workspace,
+and never implies it restricts anything.
+
+Refusing to hold both memberships at once — letting the COALESCE uniqueness
+index settle it — was rejected because it also removes the additive case, editor
+across the organization and admin in one workspace, which is what motivated
+workspace-scoped roles under D15.
+
+### D32 — a workspace holding any link refuses to be deleted
+
+Not archived-only, not confirm-and-cascade: while a workspace holds links at
+all, deleting it is refused, and the links must be deleted first.
+
+`links`, `tags` and `folders` all carry
+`workspace_id ... REFERENCES workspaces(id) ON DELETE CASCADE`
+(`00300_links.sql`), so a workspace delete is a redirect outage for every alias
+in it. Phase 1 decided against a trash/restore UI, which means there is nowhere
+to undo one from; a guard in front is the only kind available. Archiving is
+deliberately **not** an escape hatch — an archived link keeps its alias and its
+click history, so cascading it away with the workspace would be silent data loss
+dressed as tidying up.
+
+The cost the owner named while choosing this, and it is the reason the entry
+says so out loud: **every link has to be deleted individually.** No
+cross-workspace link move exists in Phase 2 and no bulk delete does either, so
+emptying a workspace is a one-at-a-time job — friction landing hardest on the
+throwaway workspace that workspace creation was added for. That is flagged as a
+potential issue to revisit rather than absorbed here: bulk delete, a link move,
+and archive-then-cascade are three different features with three different
+false-positive arguments, and none of them is M28's. It is queued for
+`/process-queue` to classify against the tree.

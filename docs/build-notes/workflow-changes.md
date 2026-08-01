@@ -36,6 +36,7 @@ for a deferred finding — an unapproved row is a suggestion, not scheduled work
 
 | # | Change | Why | Raised | Approved |
 | --- | --- | --- | --- | --- |
+| W8 | `/preview-decisions` puts each question to the owner as a prompt, instead of only writing it to [upcoming-decisions.md](upcoming-decisions.md) | The command's stated product is the file, and answering is left to "conversation, or the owner editing the file directly" — so a read-ahead session ends with every question still open, which is the state it was run to avoid. On 2026-07-31 it wrote six entries and asked nothing; all six were answered minutes later, in the same session, only because the owner asked why no prompts appeared. The file stays the durable artifact either way — this changes when the asking happens, not where the answer lives | 2026-07-31, by the owner, immediately after that run | Not yet — the owner asked for this row, not for the change |
 | W1 | Judge the always-read contract's growth at the phase's documentation pass, and either defend it or trim to pay for it | `make doc-cost` records the number and obliges nobody to act on it. `phase-loop.md` grew from 16725 to 21941 bytes on 2026-07-31 alone, with nothing removed, and its realized read cost fell to 0.39 of the file | 2026-07-31, while regenerating doc-cost | Yes — scheduled into [M45](phase-details/m45.md) as a bullet rather than left here |
 
 ## Made
