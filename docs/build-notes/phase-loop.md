@@ -246,8 +246,10 @@ contradicts on what it *asserts* is still a prompt, and the milestone waits.
    milestone is not finished. Failure → a new worker from step 2; its fix is
    amended into the commit, which has not been pushed. **Do not push.**
 8. `git push` to the phase branch
-9. Reset `.current-task.md` to the next milestone at step 1, then scan
-   `.queue.md` for rows marked `blocking?` — **those only**
+9. Read the note's `Stop:` line before overwriting it — a
+   [deferred stop](#stopping-at-the-checkpoint) ends the run here. Then reset
+   `.current-task.md` to the next milestone at step 1, and scan `.queue.md` for
+   rows marked `blocking?` — **those only**
 
 The queue scan is the one point in the loop that reads it, and it reads it for
 one thing. A `blocking?` row means the owner believes the next milestone would
@@ -280,6 +282,7 @@ continue:
 | The same cause failed a gate twice | Retrying is not progress |
 | The same gap survived two workers | Same |
 | The owner said stop work | [Stop work](#stop-work) |
+| The owner asked to stop at the checkpoint, and 3.9 just finished | [Stopping at the checkpoint](#stopping-at-the-checkpoint) — the `Stop:` line in the note is what carries it |
 
 **That table is exhaustive.** Landing a milestone is not an event; it is one
 iteration. The default after step 3 is step 1 again, and it takes a row above to
@@ -325,7 +328,21 @@ alone.
 
 ## Stop work
 
-Trigger: the owner says **stop work**.
+Two stops, and the owner picks by what they intend to do with the tree.
+
+| Say | Means | Costs |
+| --- | --- | --- |
+| **stop work**, or **stop** | Now. Mid-build, mid-gate, wherever it is. | Whatever the worker had not finished. Uncommitted work stays in the tree. |
+| **stop at the checkpoint**, or **finish this milestone and stop** | At the next checkpoint. The milestone in flight lands first. | One milestone's worth of waiting. |
+
+Immediate is the right one when something is wrong — the loop is building
+against a stale assumption, or the owner has read something they want changed
+before more lands on top of it. Deferred is the right one when nothing is wrong
+and the owner simply wants the run to end without abandoning work that is nearly
+done: a half-built milestone is the one state this repository cannot commit, so
+stopping immediately means throwing it away or leaving it in the tree.
+
+### Stopping now
 
 1. Orchestrator spawns nothing further. A worker in flight is stopped.
 2. Orchestrator rewrites `.current-task.md` against `git status --short` and
@@ -337,6 +354,34 @@ Trigger: the owner says **stop work**.
 A worker stopped mid-tool-call cannot write the note. That is why step 2
 rewrites it the moment a line stops being true, and why the reconciliation above
 reads the tree instead of trusting what was reported.
+
+### Stopping at the checkpoint
+
+The **checkpoint** is the end of [step 3.9](#3-land) for the milestone in
+flight — committed, demo-updated, pushed, note reset. Nothing else is one. Not
+the end of a gate, not the worker's report, not a tidy-looking moment inside
+step 2: a checkpoint is a state the repository can be left in, and that is
+exactly the state 3.9 produces.
+
+1. Orchestrator records the pending stop in `.current-task.md` **immediately**,
+   on its own line, before doing anything else. A deferred stop that lives only
+   in the conversation is lost to a crash or a context limit, and the run then
+   continues past the point the owner asked it to end.
+2. The milestone in flight finishes normally — steps 2 through 3.9, including a
+   rejection and a fresh worker if the work does not pass. Nothing is rushed and
+   no gate is skipped. A stop is not a reason to accept work that would
+   otherwise be rejected.
+3. At 3.9, stop instead of returning to step 1. Report as [§4](#4-repeat-or-stop)
+   would, naming the stop as the reason.
+
+Three things override it, and each simply arrives first:
+
+- A [§4](#4-repeat-or-stop) stop condition — the phase ends, a prompt is raised,
+  a gate fails twice. The run was ending anyway; say which reason won.
+- Nothing in flight. The orchestrator holding step 1 with no worker spawned is
+  already at a checkpoint, so a deferred stop there is an immediate one.
+- The owner saying **stop** afterwards. Immediate always wins, and asking for it
+  after asking for deferred is a change of mind, not a conflict to resolve.
 
 ---
 
@@ -375,6 +420,7 @@ M21 — Audit log · step 2 (build) · worker · branch phase-2
 Done:    writer; actor_label + ip_prefix asserted by test; root-redirect event
 Next:    GET /api/v1/audit — keyset pagination, audit.read gate
 Blocked: none        # or the prompt, verbatim, and that it is unanswered
+Stop:    none        # or: at the checkpoint — owner asked <date>
 
 Cost too much to re-derive:
 - audit.read seed follows the 00800 insert-and-grant pattern
@@ -384,6 +430,11 @@ Cost too much to re-derive:
 The header names the actor holding the milestone. Whichever actor that is
 rewrites the note at every step boundary; the orchestrator reconciles it against
 the tree at each handoff, and step 3.9 resets it.
+
+`Stop:` is the one line step 3.9 reads before resetting the rest, and it is why
+a [deferred stop](#stopping-at-the-checkpoint) survives a crash. It is the
+orchestrator's alone — a worker never writes it, because a worker never learns
+of one.
 
 *Cost too much to re-derive* carries weight it did not before: a worker starts
 with no memory of the last milestone, so what a worker would otherwise
