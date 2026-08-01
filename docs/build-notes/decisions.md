@@ -87,6 +87,7 @@ file. Append a row when you append an entry.
 | [M32.5, the first decision on the hot path](#2026-08-01--m325-the-first-decision-on-the-hot-path) | Why the domain's policy rides inside each link's snapshot, and the two designs that lost; the invalidation bill that follows, and why `SCAN` is the honest way to pay it; why the refusal comes before the outcome switch; three states in text, and the CHECK that makes precedence nine cells; two audit actions and the refusal that is not one; the measurement, taken with blocking on |
 | [M32.5, amending a bullet that contradicted itself](#2026-08-01--m325-amending-a-bullet-that-contradicted-itself) | The bullet before and after; why a self-contradictory bullet amends rather than prompts; the before/after oracle table showing blocking subtracts signal; why an unknown alias still answers 404 |
 | [M32.9, a first pass and an honest account of its depth](#2026-08-01--m329-a-first-pass-and-an-honest-account-of-its-depth) | The five named risks and how each held; F17, F18, F19; the refutation that narrowed F19; why three findings is a signal about the review rather than the code |
+| [Draining the queue, and the four rows that could not be verified](#2026-08-01--draining-the-queue-and-the-four-rows-that-could-not-be-verified) | Seven tasks to workflow-changes; why four defect reports did not become findings rows; the tooling gap blocking their verification; what a closure pointing at 2+ does and does not cover |
 
 ---
 
@@ -6670,3 +6671,92 @@ findings were.
 Recording the shortfall rather than declaring the milestone done is the point.
 A review whose coverage is overstated is worse than no review, because the next
 person builds on a claim of having looked.
+
+---
+
+## 2026-08-01 — Draining the queue, and the four rows that could not be verified
+
+`/process-queue` at a milestone boundary, with [M32.9](phase-details/m32.9.md)
+between passes and nothing in flight. Twelve rows in, five left, and the
+judgement calls are recorded here because routing forces them whether or not
+they feel like decisions at the time.
+
+No row carried `blocking?`, so nothing paused.
+
+### Seven tasks routed, none made
+
+W9 and W10 (a `/stop` command, and `--checkpoint` as a flag on it), W11 (`/work`
+with a work-kind parameter), W12 (documenting the command surface for agents),
+W13 (doc-cost auditing at the `X.9` reviews), W14 (keeping the browser harness),
+W15 (recording how to authenticate to the test instance).
+
+All *Proposed*, none *Made*. Making any of them is process work the owner has
+not approved, and the file's own rule is that an unapproved row is a suggestion
+rather than scheduled work. Two carry findings of their own:
+
+- **W10's note asks whether a checkpoint needs redefining. It does not.**
+  [phase-loop.md](phase-loop.md#stopping-at-the-checkpoint) already defines it as
+  the end of step 3.9 and explicitly nothing else, which is precisely what a
+  `--checkpoint` flag would invoke. Answering that inside the row rather than
+  leaving it open is the point of routing it.
+- **W13 conflicts with a rule and the row says so.** The note asks that a review
+  *trigger a worker* to audit doc-cost; phase-loop.md says `X.9` reviews are
+  never delegated, because their product is a conversation with the owner.
+  Either the audit is the orchestrator's too, or the no-delegation rule gains a
+  stated exception. That is a real choice and it belongs to the owner, so the
+  row names it instead of quietly picking one.
+
+### One row closed as already scheduled
+
+The note that emptying a workspace is a link at a time under D32, with no bulk
+delete or cross-workspace move. It is closed pointing at three places that
+already hold it: D32 itself, which named the cost when it was taken; Plan.md's
+*Known limitations* row *Emptying a workspace is one link at a time*; and
+Plan.md's scope table, which places **bulk operations in 2+**.
+
+One honest gap in that closure: **cross-workspace move is not scheduled
+anywhere.** "Bulk operations, templates, import/export" does not obviously
+contain it. The note's substance — deleting links one at a time — is covered;
+if moving links between workspaces is wanted, that is a separate feature and
+nothing today tracks it.
+
+### Why four defect reports did not become findings rows
+
+The routing rule for an `issue` says evidence means *verified against the tree*,
+and that an unverified note becoming a findings row is the laundering the queue
+exists to prevent. Four rows report dashboard defects — a 500 creating a
+workspace, and three about the workspace switcher not scoping or persisting.
+
+Reading the code refutes none of them and confirms none of them. The
+workspace-create path handles the failure modes it should; links *are*
+workspace-scoped at fifteen call sites; the selection *is* persisted through
+`users.last_workspace_id`. Every one of those makes the reports *more*
+interesting rather than less, because a defect the code does not explain is
+where the surprises live.
+
+They could not be reproduced, and the reason is the fifth row: **nobody can sign
+in to the test instance.** The password is written down nowhere, the value in
+the loop's own note was stale, and writing a replacement hash into `users` is
+refused by the sandbox. The container logs were checked and both apps have been
+recreated since, so that evidence is gone as well.
+
+So the rule held rather than bending: the rows stay in the queue carrying what
+was checked, and W15 — recording a way to authenticate — is now the row worth
+clearing first, because it is holding up four defect reports. A tooling gap that
+blocks verification is more expensive than it looks, and this is what that looks
+like.
+
+### One feature that waits on scope
+
+The demo instance's data has not grown since Phase 1 seeded it. `lctl demo`
+produces links, clicks and a workspace, and ten milestones have shipped since —
+invitations, members, workspaces, organization teardown, disputes, blocked
+destinations, feeds, bot blocking — none of which a person trying the demo can
+see.
+
+Classified a **feature**, not an issue: nothing claims the demo covers the
+feature set, so nothing is false. Absence was established against Plan.md and
+phase-details/ before classifying. It stays in the queue because planning.md
+gives the owner the *whether* and the *where* before any of the five artifacts
+are written, and writing them first would be the scope decision made by whoever
+happened to be routing.
