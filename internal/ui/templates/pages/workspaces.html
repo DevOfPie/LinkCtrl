@@ -33,7 +33,10 @@
       </tr>
     </thead>
     <tbody>
-      {{range .Workspaces}}
+      {{/* OrgWorkspaces, not Workspaces: the shell owns that name for the
+           switcher and a page field would shadow it everywhere, layout
+           included. */}}
+      {{range .OrgWorkspaces}}
       <tr class="border-b border-line">
         <td class="py-3 pr-4">
           {{if and $.CanWrite .Manageable}}

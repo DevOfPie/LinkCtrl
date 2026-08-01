@@ -1481,3 +1481,162 @@ func TestTheDashboardDeletesAnOrganization(t *testing.T) {
 		t.Errorf("after deleting their only organization the owner went to %q", loc)
 	}
 }
+
+// --- M28, reopened: the two pages that are about workspaces -------------------
+//
+// M28 shipped claiming member management and workspace management exist in the
+// UI, and both pages answered 500 on a plain GET as soon as the organization
+// had more than one workspace — which is the state M28 itself exists to create
+// (F20). The cause was a page struct declaring `Workspaces`, shadowing the
+// shell's field of the same name for the whole template, so the layout's
+// switcher tried to read an organization name off a type that has none.
+//
+// TestNoPageDataStructShadowsTheShell, in internal/httpx, is what stops the
+// next field. These two are what stop this one.
+
+// webRequest performs one dashboard request and returns its status and body.
+// A nil form means GET.
+func webRequest(
+	t *testing.T, srv *httptest.Server, client *http.Client,
+	method, path string, form url.Values,
+) (int, string) {
+	t.Helper()
+	var body io.Reader
+	if form != nil {
+		body = strings.NewReader(form.Encode())
+	}
+	req, err := http.NewRequestWithContext(t.Context(), method, srv.URL+path, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if form != nil {
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp.StatusCode, string(raw)
+}
+
+// signIn puts a browser client into somebody's session.
+func signIn(t *testing.T, srv *httptest.Server, client *http.Client, email string) {
+	t.Helper()
+	status, body := webRequest(t, srv, client, http.MethodPost, "/login", url.Values{
+		"email": {email}, "password": {teamPassword},
+	})
+	if status != http.StatusSeeOther {
+		t.Fatalf("%s could not sign in: %d\n%s", email, status, body)
+	}
+}
+
+// The switcher's form, which is the part of the chrome the shadowed field broke.
+const switcherForm = `action="/workspace/switch"`
+
+// Both pages, opened in an organization that has two workspaces.
+//
+// **In one organization** is the whole assertion, and writing it loosely is the
+// trap. `team.Service.Workspaces` filters on `actor.OrgID`
+// (internal/team/workspace.go), so a user holding six workspaces across two
+// organizations is answered 200 while acting in a single-workspace one — an
+// adversarial verifier reproduced exactly that. A regression test that made a
+// second workspace *somewhere* would therefore pass against the broken code and
+// protect nothing. This one makes it in the owner's own organization, which is
+// the only construction that reaches the shadowed field.
+func TestTheTeamPagesOpenWithASecondWorkspaceInTheSameOrganization(t *testing.T) {
+	f := newTeamFixture(t)
+	if _, err := f.team.CreateWorkspace(t.Context(), f.owner, "Marketing"); err != nil {
+		t.Fatalf("create a second workspace in the owner's organization: %v", err)
+	}
+
+	srv, client := f.browser(t)
+	signIn(t, srv, client, "owner@example.com")
+
+	for _, page := range []string{"/workspaces", "/members"} {
+		status, body := webRequest(t, srv, client, http.MethodGet, page, nil)
+		if status != http.StatusOK {
+			t.Errorf("GET %s = %d, want 200\n%s", page, status, body)
+			continue
+		}
+		// The switcher is on the shell, drawn by the layout on every page. It
+		// was not merely broken on these two: the page's own empty list
+		// answered the layout's `gt (len .Workspaces) 1`, so the two pages most
+		// about workspaces were the two you could not switch from.
+		if !strings.Contains(body, switcherForm) {
+			t.Errorf("%s renders no workspace switcher", page)
+		}
+		if !strings.Contains(body, "Marketing") {
+			t.Errorf("%s does not mention the second workspace", page)
+		}
+	}
+
+	// The validation path, which is the half that looks fixed once the page
+	// loads: renderWorkspacesError re-renders this same page, so while it was
+	// broken every form error on it surfaced as a 500 and its message was
+	// unreachable.
+	status, body := webRequest(t, srv, client, http.MethodPost, "/workspaces",
+		url.Values{"name": {"Marketing"}})
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf("a duplicate workspace name answered %d, want 422\n%s", status, body)
+	}
+	if !strings.Contains(body, "already uses that name") {
+		t.Error("the 422 does not carry the message that says what is wrong")
+	}
+	if !strings.Contains(body, switcherForm) {
+		t.Error("the re-rendered page lost the switcher")
+	}
+}
+
+// The other half of the same page: somebody who may read the member list and
+// not change it.
+//
+// `loadMembersPage` returns before it fills the list when the reader holds no
+// `members.write`, so this path never touched the shadowed field and would not
+// have caught F20 — which is precisely why it needs its own test now. What it
+// asserts is that the page opens, that the chrome is whole, and that the
+// controls that change things are absent.
+//
+// No built-in role holds `members.read` without `members.write`, so the
+// composition is made here. That is data rather than a fiction: authorization
+// reads `role_permissions`, an operator can compose exactly this, and the
+// branch exists in the handler either way.
+func TestTheMembersPageOpensForAMemberWhoCannotWrite(t *testing.T) {
+	f := newTeamFixture(t)
+	if _, err := f.team.CreateWorkspace(t.Context(), f.owner, "Marketing"); err != nil {
+		t.Fatalf("create a second workspace: %v", err)
+	}
+	if _, err := f.pool.Exec(t.Context(),
+		`INSERT INTO role_permissions (role_id, permission_id)
+		 SELECT r.id, p.id FROM roles r, permissions p
+		 WHERE r.slug = 'editor' AND p.slug = 'members.read'`); err != nil {
+		t.Fatalf("grant members.read to the editor role: %v", err)
+	}
+
+	reader := f.member(t, "reader@example.com", "editor")
+	if !reader.Can(team.PermMembersRead) || reader.Can(team.PermMembersWrite) {
+		t.Fatalf("the fixture did not produce a read-only member: read=%v write=%v",
+			reader.Can(team.PermMembersRead), reader.Can(team.PermMembersWrite))
+	}
+
+	srv, client := f.browser(t)
+	signIn(t, srv, client, "reader@example.com")
+
+	status, body := webRequest(t, srv, client, http.MethodGet, "/members", nil)
+	if status != http.StatusOK {
+		t.Fatalf("GET /members as a read-only member = %d, want 200\n%s", status, body)
+	}
+	if !strings.Contains(body, switcherForm) {
+		t.Error("/members renders no workspace switcher for a read-only member")
+	}
+	if !strings.Contains(body, "owner@example.com") {
+		t.Error("/members does not list the members it exists to show")
+	}
+	if strings.Contains(body, "Give somebody access to one workspace") {
+		t.Error("/members offers the grant form to somebody who holds no members.write")
+	}
+}

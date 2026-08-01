@@ -32,13 +32,19 @@ type membersPageData struct {
 	// Read from the seeded rows, so a control cannot offer something the service
 	// will then refuse.
 	RoleOptions []team.Role
-	// Workspaces and GrantTargets are the grant form's two selects: where access
-	// can be given, and to whom. Targets are one entry per *person* rather than
-	// per membership, because the form names a user — somebody who already holds
-	// a workspace-scoped role would otherwise appear twice and mean the same
-	// thing both times.
-	Workspaces   []team.Workspace
-	GrantTargets []team.Member
+	// OrgWorkspaces and GrantTargets are the grant form's two selects: where
+	// access can be given, and to whom. Targets are one entry per *person*
+	// rather than per membership, because the form names a user — somebody who
+	// already holds a workspace-scoped role would otherwise appear twice and
+	// mean the same thing both times.
+	//
+	// Named for the organization rather than `Workspaces` because the shell
+	// already carries a field of that name, of a different type, for the
+	// switcher — and a page field shadows it for the whole template, layout
+	// included. TestNoPageDataStructShadowsTheShell is what now stops the next
+	// one.
+	OrgWorkspaces []team.Workspace
+	GrantTargets  []team.Member
 	// CanWrite draws the controls that change something. The service refuses
 	// again on the way in; this is the affordance, not the control.
 	CanWrite    bool
@@ -87,7 +93,7 @@ func (h *Web) loadMembersPage(w http.ResponseWriter, r *http.Request) (membersPa
 		h.webError(w, r, err)
 		return data, false
 	}
-	data.Workspaces = workspaces
+	data.OrgWorkspaces = workspaces
 	return data, true
 }
 
@@ -194,7 +200,17 @@ func (h *Web) renderMembersError(w http.ResponseWriter, r *http.Request, err err
 
 type workspacesPageData struct {
 	shell
-	Workspaces []team.Workspace
+	// OrgWorkspaces is the list this page is about: the workspaces of the
+	// organization being acted in, with the per-row rights to rename and delete
+	// them.
+	//
+	// Not `Workspaces`, which is the shell's — every workspace this person may
+	// act in, across every organization, in the switcher's own type. A page
+	// field of the same name shadows the shell's for the entire template, the
+	// layout's chrome included, which is how this page and /members came to
+	// answer 500 while looking correct in every test (F20), and
+	// TestNoPageDataStructShadowsTheShell is what now stops the next one.
+	OrgWorkspaces []team.Workspace
 	// CanWrite draws the create form and the per-row controls.
 	CanWrite bool
 	// CanCreateOrganization is `orgs.create` (D16). On a default instance that is
@@ -230,7 +246,9 @@ func (h *Web) loadWorkspacesPage(w http.ResponseWriter, r *http.Request) (worksp
 		CanDeleteOrganization: actor.Can(team.PermOrgDelete),
 		OrganizationID:        actor.OrgID,
 	}
-	for _, ws := range data.shell.Workspaces {
+	// The shell's list — every workspace this person may act in, across every
+	// organization — which is why it is the one that knows organization names.
+	for _, ws := range data.Workspaces {
 		if ws.OrganizationID == actor.OrgID {
 			data.OrganizationName = ws.OrganizationName
 			break
@@ -241,7 +259,7 @@ func (h *Web) loadWorkspacesPage(w http.ResponseWriter, r *http.Request) (worksp
 		h.webError(w, r, err)
 		return data, false
 	}
-	data.Workspaces = items
+	data.OrgWorkspaces = items
 	return data, true
 }
 

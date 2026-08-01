@@ -7,7 +7,9 @@
 {{template "flash_ok" .Notice}}
 {{template "flash_error" .Error}}
 
-{{if and .CanWrite .Workspaces}}
+{{/* OrgWorkspaces, not Workspaces: the shell owns that name for the switcher
+     and a page field would shadow it everywhere, layout included. */}}
+{{if and .CanWrite .OrgWorkspaces}}
 <div class="mb-6 rounded-lg border border-line bg-raised p-6">
   <h2 class="text-sm font-medium text-ink">Give somebody access to one workspace</h2>
   {{/* D31's mitigation, written where the person doing it will read it. A
@@ -30,7 +32,7 @@
       <div>
         <label for="workspace_id" class="block text-sm font-medium text-ink">Workspace</label>
         <select id="workspace_id" name="workspace_id" class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm">
-          {{range .Workspaces}}
+          {{range .OrgWorkspaces}}
           <option value="{{.ID}}">{{.Name}}</option>
           {{end}}
         </select>

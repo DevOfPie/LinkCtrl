@@ -331,7 +331,12 @@ func pageData(t *testing.T) map[string]any {
 				{"Slug": "admin", "Name": "Admin", "Description": "Manage links and members.", "Rank": 20},
 				{"Slug": "editor", "Name": "Editor", "Description": "Create and edit links.", "Rank": 30},
 			},
-			"Workspaces": []map[string]any{
+			// The page's own list, in the page's own type. Keyed apart from the
+			// shell's Workspaces on purpose: while both were called Workspaces
+			// the loop below overwrote this entry with the switcher's shape, so
+			// the test rendered a struct production never builds and both team
+			// pages shipped answering 500 (F20).
+			"OrgWorkspaces": []map[string]any{
 				{"ID": "0198c9c5-0000-7000-8000-000000000010", "Name": "Default", "Slug": "default",
 					"Current": true, "Manageable": true},
 			},
@@ -353,7 +358,11 @@ func pageData(t *testing.T) map[string]any {
 			"CanDeleteOrganization": true,
 			"OrganizationID":        "0198c9c5-0000-7000-8000-000000000020",
 			"OrganizationName":      "Owner",
-			"Workspaces": []map[string]any{
+			// Two of them, in the page's own type, alongside the shell's two in
+			// the switcher's — which is exactly the pair the product builds and
+			// the pair this fixture used to collapse into one. See the note on
+			// the members entry above.
+			"OrgWorkspaces": []map[string]any{
 				{"ID": "0198c9c5-0000-7000-8000-000000000010", "Name": "Default", "Slug": "default",
 					"Current": true, "Manageable": true},
 				{"ID": "0198c9c5-0000-7000-8000-000000000011", "Name": "Marketing", "Slug": "marketing",

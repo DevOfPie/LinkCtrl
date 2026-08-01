@@ -90,6 +90,7 @@ file. Append a row when you append an entry.
 | [Draining the queue, and the four rows that could not be verified](#2026-08-01--draining-the-queue-and-the-four-rows-that-could-not-be-verified) | Seven tasks to workflow-changes; why four defect reports did not become findings rows; the tooling gap blocking their verification; what a closure pointing at 2+ does and does not cover |
 | [Five answers, and the port that made a liar of one of them](#2026-08-01--five-answers-and-the-port-that-made-a-liar-of-one-of-them) | W15's diagnosis corrected — it was a misread port, not a stale credential; D41 and why M33.5 is the first legal slot after a review; the demo's coverage test and its tax; cross-workspace move to Phase 3; W13 approved without amending the no-delegation rule |
 | [M28 reopened, and four verdicts sent to be refuted](#2026-08-01--m28-reopened-and-four-verdicts-sent-to-be-refuted) | Two verdicts overturned and why; testing the mechanism instead of the affordance; the trigger correction a regression test would have missed; why the tests were green |
+| [M28, the page field that shadowed the shell](#2026-08-01--m28-the-page-field-that-shadowed-the-shell) | Why the field was renamed rather than retyped; a structural test parsed from source instead of a list of types, and its two stated limits; why the regression tests say *in one organization*; the read-only member's role composition; the fixture that overwrote the page's own list |
 
 ---
 
@@ -6929,3 +6930,85 @@ milestone that shipped the pages is the milestone whose tests passed while they
 were broken, which is why the reopening asks for a structural assertion — no
 page struct may redeclare a field the shell already provides — rather than a
 fix to two lines.
+## 2026-08-01 — M28, the page field that shadowed the shell
+
+The reopening, built. [F20](deferred-findings.md) is closed and the entry above
+holds the diagnosis; this one holds what was decided while fixing it.
+
+### The name was wrong, not the type
+
+The obvious fix is to make the page's list the shell's type. It is the wrong
+one. The two lists answer different questions: the shell's is every workspace
+this person may act in, across every organization, because the switcher spans
+organizations and needs an organization name to label an entry with; the page's
+is the workspaces of the organization being acted in, each carrying whether this
+reader may rename or delete *that one* under D31. Collapsing them would either
+put an organization name on a list that never leaves one organization, or throw
+away the per-row rights the page's controls are drawn from.
+
+So the field was renamed rather than retyped — `OrgWorkspaces` on both
+`membersPageData` and `workspacesPageData` — and the two types stay as they
+were. What was actually wrong is that a page reached for a name the shell had
+already spent, and Go's embedding rules make that a silent replacement rather
+than a conflict.
+
+### A structural test, because a comment asks the next author to remember
+
+The milestone asked for the mechanism rather than a warning, and the mechanism
+had two candidate shapes. A reflective test over a list of page types is the
+cheaper one and it fails the same way the original did: the list is a thing to
+forget, and the page that forgets to register is exactly the page that will
+shadow something.
+
+`TestNoPageDataStructShadowsTheShell` parses package `httpx` instead. It reads
+every non-test file, finds each struct that reaches `shell` by embedding, and
+fails on any field name `shell` already declares. A page added tomorrow is
+covered by having been written. Two limits are stated in the test rather than
+left to be discovered: it reads fields and not methods, and it reads this
+package only — which is sound because `shell` is unexported, so no struct
+elsewhere can embed it.
+
+It also refuses to pass vacuously. If nothing embeds `shell`, or `shell` has no
+fields, it fails rather than reporting green — a refactor that moved or renamed
+the shell would otherwise leave a test that checks nothing.
+
+### The trigger, written into the test rather than into a comment
+
+The regression tests make their second workspace **in the acting
+organization**, because `team.Service.Workspaces` filters on `actor.OrgID` and a
+test that made one anywhere would pass against the broken code. Both were shown
+red against the reintroduced shadowing, and the failure was the same
+`nav.html:30 … can't evaluate field OrganizationName in type team.Workspace`
+the finding recorded — which is the evidence that they test the defect and not
+merely the pages.
+
+The read-only member's test is the one worth keeping honest about. No built-in
+role holds `members.read` without `members.write`, so the composition is made in
+the test by granting the one permission to the editor role in that test's own
+database. That is data rather than fiction — authorization reads
+`role_permissions`, an operator can compose exactly this — and the handler's
+early return exists whether or not a seeded role reaches it. Under sabotage that
+test failed on the *switcher*, not on a 500, which is precisely the asymmetry
+F20 described: the field is never assigned on that path, so the page renders and
+silently loses its chrome instead.
+
+### The fixture, which is the other half of why this shipped
+
+`TestEveryPageRenders` builds page data from flat maps, and one loop fills the
+shell's fields for every page. While the page's list was also called
+`Workspaces`, that loop **overwrote** the members and workspaces entries with
+the switcher's shape — so the test rendered a struct production never builds,
+and rendered it successfully. The rename separates the keys, and the fixture now
+carries both lists in both shapes, which is what the product does. The
+structural test is the guard; this is the fixture no longer actively hiding the
+thing it was supposed to exercise.
+
+### Not fixed here
+
+F21 through F25 were found in the same sweep and are untouched: the dropdown
+that discards a selection, the link-detail switch landing on 404, aliases
+leaking across workspaces, the dashboard's two click counts, and the
+resolve/list `deleted_at` asymmetry. They are open, unreviewed, and not this
+milestone's claim. F21 and F22 are in the same partial as the switcher fix and
+would have been cheap to take, which is exactly why it is worth recording that
+they were not.
