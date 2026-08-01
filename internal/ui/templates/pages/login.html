@@ -22,5 +22,10 @@
       <button type="submit" class="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Sign in</button>
     </form>
   </div>
+  {{/* The preference is per-browser, so it has to be settable with no session.
+       Account settings hold the other copy of this control. */}}
+  <div class="mt-6 flex justify-center">
+    {{template "theme_switch" .}}
+  </div>
 </div>
 {{end}}

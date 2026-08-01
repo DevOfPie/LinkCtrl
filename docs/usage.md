@@ -16,7 +16,7 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 | `/links/{id}` | Everything about one link: edit destination, alias, title, description, expiry and tags; per-window analytics (7/30/90 days) with device, browser, OS, referrer, language and country breakdowns; recent activity; archive, restore and delete. |
 | `/keys` | Mint, list and revoke API keys. |
 | `/notifications` | Things the instance wanted you to know about, and mark-read. |
-| `/account` | Your profile and password. |
+| `/account` | Your profile, password and appearance. |
 
 It works without JavaScript. htmx makes search and filtering swap a fragment
 instead of reloading, and that is the only thing it is used for.
@@ -24,8 +24,9 @@ instead of reloading, and that is the only thing it is used for.
 ### Light and dark
 
 Every page follows your operating system's setting unless you say otherwise.
-The **Appearance** control at the foot of every page — including the sign-in
-page — overrides it with System, Light or Dark.
+The **Appearance** control on `/account` overrides it with System, Light or
+Dark. The sign-in page carries the same control, because the choice is stored
+per browser and has to be settable before you have signed in.
 
 The choice is stored per browser, in a cookie, not on your account. Two browsers
 signed into the same account may disagree, which is deliberate: the person

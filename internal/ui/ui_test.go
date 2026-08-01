@@ -164,10 +164,10 @@ func TestEveryPageRenders(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 	data := pageData(t)
-	// Every page goes through the layout, which now carries the appearance
-	// switcher, so every page renders it. Supplied here rather than in each
-	// entry so a page added later cannot forget it and quietly stop covering
-	// the footer.
+	// Theme is on the layout, so every page needs it; Path is on the appearance
+	// control, which only two pages render. Both are supplied here rather than
+	// in each entry so a page added later cannot forget one and fail for a
+	// reason that has nothing to do with the page.
 	for _, d := range data {
 		if m, ok := d.(map[string]any); ok {
 			m["Theme"] = ""

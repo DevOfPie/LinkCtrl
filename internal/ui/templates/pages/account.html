@@ -55,6 +55,16 @@
 </div>
 {{end}}
 
+<div class="mt-6 max-w-2xl rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-1 text-sm font-medium text-ink">Appearance</h2>
+  <p class="mb-4 text-sm text-muted">
+    Choosing System follows whatever this device is set to. The choice is stored
+    in this browser rather than on your account, so it applies before you sign in
+    and two browsers signed in as you may differ.
+  </p>
+  {{template "theme_switch" .}}
+</div>
+
 <div class="mt-6 max-w-md rounded-lg border border-line bg-raised p-6">
   <h2 class="mb-1 text-sm font-medium text-ink">Change password</h2>
   <p class="mb-4 text-sm text-muted">Every other session is signed out; this browser stays signed in.</p>

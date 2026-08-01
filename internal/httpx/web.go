@@ -46,8 +46,9 @@ type shell struct {
 	// is already in the right theme and there is no correcting script — the
 	// flash of the wrong theme is unrepresentable rather than suppressed.
 	Theme string
-	// Path is where a form in the layout should return to. The theme switcher
-	// is on every page, including the login page.
+	// Path is where the appearance control should return to after its POST. It
+	// is on every shell rather than on the two pages that render the control,
+	// because a third render site should not also need a handler change.
 	Path string
 }
 

@@ -61,6 +61,27 @@
   --color-danger-line: var(--t-danger-line);
 }
 
+/* ---------------------------------------------------------------------------
+ * One cascade context for every token block.
+ *
+ * The three blocks below — light, the system-preference dark, the explicit dark
+ * override — are all unlayered, at the top level of this file. That is not a
+ * style choice; it is the whole reason the theme works.
+ *
+ * Cascade layers outrank specificity. A normal declaration outside every layer
+ * beats a normal declaration inside one no matter what the selectors are, so an
+ * unlayered `:root { --t-surface: #f8fafc }` beats `:root[data-theme="dark"]`
+ * from inside `@layer base` — which is exactly how this milestone first shipped,
+ * with both dark paths dead and no browser applying either. Once every block
+ * sits in the same context the ordinary rules take over again: the dark
+ * selectors are more specific than bare `:root`, and the explicit override is
+ * last, so it wins the tie against the media query.
+ *
+ * TestThemeTokensShareOneCascadeLayer parses the built app.css and fails if
+ * these ever drift apart again. Do not wrap any of them in a layer, and do not
+ * add a token to one block without adding it to the others.
+ * ------------------------------------------------------------------------- */
+
 /* Light.
  *
  * Contrast against the surface a token is actually used on, measured rather
@@ -136,50 +157,10 @@
  * dark tint for its surface and a light shade for its text, rather than
  * reusing the -50 backgrounds.
  */
-@layer base {
-  @media (prefers-color-scheme: dark) {
-    /* :not() so an explicit light override still wins here. The override rules
-     * below repeat at equal specificity and rely on source order. */
-    :root:not([data-theme="light"]) {
-      color-scheme: dark;
-
-      --t-surface: #0f172a;
-      --t-raised: #1e293b;
-      --t-sunken: #0b1220;
-
-      --t-ink: #f1f5f9;
-      --t-muted: #cbd5e1;
-      --t-subtle: #94a3b8;
-      --t-on-accent: #ffffff;
-
-      --t-line: #334155;
-      --t-line-strong: #475569;
-
-      --t-accent: #4f46e5;
-      --t-accent-hover: #6366f1;
-      --t-accent-ink: #a5b4fc;
-      --t-accent-soft: #1e1b4b;
-      --t-accent-line: #3730a3;
-
-      --t-ok-soft: #022c22;
-      --t-ok-ink: #6ee7b7;
-      --t-ok-line: #065f46;
-
-      --t-warn-soft: #451a03;
-      --t-warn-ink: #fcd34d;
-      --t-warn-line: #92400e;
-
-      --t-danger: #e11d48;
-      --t-danger-hover: #f43f5e;
-      --t-danger-soft: #4c0519;
-      --t-danger-ink: #fda4af;
-      --t-danger-line: #9f1239;
-    }
-  }
-
-  /* The explicit override. Last so it wins over the media query at equal
-   * specificity, which is what makes "dark on a light system" work. */
-  :root[data-theme="dark"] {
+@media (prefers-color-scheme: dark) {
+  /* :not() so an explicit light override still wins here. The override rule
+   * below repeats at equal specificity and relies on source order. */
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
 
     --t-surface: #0f172a;
@@ -214,4 +195,42 @@
     --t-danger-ink: #fda4af;
     --t-danger-line: #9f1239;
   }
+}
+
+/* The explicit override. Last so it wins over the media query at equal
+ * specificity, which is what makes "dark on a light system" work. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --t-surface: #0f172a;
+  --t-raised: #1e293b;
+  --t-sunken: #0b1220;
+
+  --t-ink: #f1f5f9;
+  --t-muted: #cbd5e1;
+  --t-subtle: #94a3b8;
+  --t-on-accent: #ffffff;
+
+  --t-line: #334155;
+  --t-line-strong: #475569;
+
+  --t-accent: #4f46e5;
+  --t-accent-hover: #6366f1;
+  --t-accent-ink: #a5b4fc;
+  --t-accent-soft: #1e1b4b;
+  --t-accent-line: #3730a3;
+
+  --t-ok-soft: #022c22;
+  --t-ok-ink: #6ee7b7;
+  --t-ok-line: #065f46;
+
+  --t-warn-soft: #451a03;
+  --t-warn-ink: #fcd34d;
+  --t-warn-line: #92400e;
+
+  --t-danger: #e11d48;
+  --t-danger-hover: #f43f5e;
+  --t-danger-soft: #4c0519;
+  --t-danger-ink: #fda4af;
+  --t-danger-line: #9f1239;
 }

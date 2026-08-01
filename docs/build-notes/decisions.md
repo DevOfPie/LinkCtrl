@@ -52,6 +52,7 @@ file. Append a row when you append an entry.
 | [M24.6, and a test that could not see the defect](#2026-07-31--m246-and-a-test-that-could-not-see-the-defect) | The unlayered-`:root` cascade bug; why the token scan missed it; verifying mechanisms instead of outcomes; why a new milestone rather than reopening M24.5 |
 | [M24.6 withdrawn; M24.5 reopened](#2026-07-31--m246-withdrawn-m245-reopened-and-appends-get-a-number) | Corrects the entry above: a `done` row may not assert something false; reopening as the rule; why every append now carries its milestone number |
 | [Capture, read-ahead, and cost](#2026-07-31--capture-read-ahead-and-measuring-what-the-contract-costs) | `/note` decides nothing; classification against the tree; upcoming-decisions holds questions only; predicted vs realized read cost; sub-milestone work may commit alone |
+| [M24.5 reopened: applied, not declared](#2026-07-31--m245-applying-the-theme-rather-than-declaring-it) | Why the tokens are unlayered rather than all in `@layer base`; a test that had to be shown red against the shipped stylesheet; resolving the cascade live instead of counting attributes; where the control went and why two sites is not two controls |
 
 ---
 
@@ -3310,3 +3311,95 @@ approved findings "collect into the phase's final milestone". A command that
 schedules them anywhere makes that sentence false, and by this repository's own
 precedence rule a conflict between two documents is a bug to fix rather than to
 work around.
+
+---
+
+## 2026-07-31 — M24.5, applying the theme rather than declaring it
+
+The reopened half of M24.5. The entry two above records the defect and the
+lesson; this records what was actually built and the choices inside it.
+
+### Unlayered, not `@layer base`
+
+Two arrangements fix the cascade: put every `--t-*` block inside `@layer base`,
+or take every one of them out of any layer. Both make the dark selectors win,
+because within a single cascade context the ordinary rules resume —
+`:root[data-theme="dark"]` is more specific than `:root`, and the explicit
+override is written last so it beats the `prefers-color-scheme` rule at equal
+specificity.
+
+Unlayered was chosen. These are the values every generated utility reads
+through `var()`, so a stylesheet that later arrives unlayered — a vendored
+widget, anything pasted in — should not be able to redefine a theme token by
+sitting outside a layer. Putting them in `base` would make that possible and
+give no warning when it happened. The cost is that the tokens are now the one
+part of this stylesheet that is deliberately outside Tailwind's layer
+structure, which is why the reason sits in a comment block above them rather
+than only here.
+
+Nothing else moved. Every token value is byte-for-byte what shipped, and the
+contrast figures beside them were **not** re-measured — they were arithmetic
+about values that were correct all along and simply never reached a browser.
+Re-running the numbers would have produced the same table and a false claim of
+fresh measurement.
+
+### The test had to be shown red against the shipped stylesheet
+
+`TestThemeTokensShareOneCascadeLayer` parses the built `app.css`, finds every
+construct that declares a `--t-*` token, and fails unless they all sit in one
+cascade context. It also fails if a token is declared in one block and not the
+others, and if a dark block is emitted before the light one.
+
+It was demonstrated failing twice before it counted: once against the
+stylesheet built from `b289a39`'s `input.css` — the exact bytes that shipped —
+where it reported the light block as unlayered and both dark blocks as inside
+`@layer base`, and once with `--t-warn-line` deleted from the explicit override.
+A test written after a defect is only evidence if it is shown to see that
+defect, and this one was written by whoever also wrote the fix.
+
+The order assertion is not decoration. Equal layer plus higher specificity is
+what makes dark win, and emitting light last would restore the bug in a form
+the layer check alone would pass.
+
+The stylesheet is read through the embed FS and a missing `app.css` is fatal,
+not skipped. The whole failure being corrected here is a green run over a
+stylesheet nothing applied; a skip would be the same shape again.
+
+### The live check resolves the cascade instead of counting attributes
+
+The previous check confirmed `data-theme` was present at all three cookie
+states. That was true, and the page was still light. So the check now fetches
+`/dashboard`, `/account` and `/login` from the composed stack at each cookie
+state, fetches the stylesheet the response actually links to, and resolves
+`--t-*` on `<html>` under layer, then specificity, then source order —
+reporting the winning *value* and which rule won.
+
+Against the served build the four states resolve to two distinct token sets,
+with the explicit override beating the system preference in both directions.
+Run against a stylesheet rebuilt from `b289a39`, every state resolves to
+`#f8fafc` — the light surface — which is precisely the symptom the owner
+reported and the reason this check replaced the old one.
+
+It is a cascade resolver, not a browser: it models layer, specificity, source
+order and `prefers-color-scheme`, and nothing else. It cannot see paint. That
+is a real limit and it is worth naming, because the previous mistake was
+treating one honest step short of the outcome as the outcome.
+
+### Two render sites, one control
+
+The **Appearance** control left the footer for account settings, and the
+sign-in page kept a copy from the same partial (F4). The partial touches no
+identity, which is what lets one definition serve a page behind a session and a
+page reachable without one.
+
+`TestExactlyOneAppearanceControlPerPage` asserts the count on every page, not
+just on the two that have it. "Move" is one edit away from "copy": leaving the
+layout's render site in place would have given the account page two controls
+that can disagree about which option looks selected, and every other page one it
+no longer wants. The test was shown failing that exact way before it counted.
+
+Most pages therefore render no appearance control at all, which is what moving
+it to account settings means. The milestone's phrase "exactly one control
+renders per page" is read here as the count being exact everywhere — one on the
+two sites named, none anywhere else — rather than as a control on every page,
+which is the arrangement the move exists to end.

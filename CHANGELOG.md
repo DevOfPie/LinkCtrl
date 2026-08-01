@@ -42,8 +42,10 @@ migrations run at boot.
   [docs/operations.md](docs/operations.md#audit-log-growth).
 - **The dashboard has a dark theme.** With nothing chosen it follows
   `prefers-color-scheme`, with no cookie, no account and no JavaScript involved.
-  An **Appearance** control at the foot of every page — the sign-in page
-  included — overrides that with System, Light or Dark.
+  An **Appearance** control in account settings overrides that with System,
+  Light or Dark, and the sign-in page carries the same control — the preference
+  is per browser, so it has to be settable before you have an account to sign
+  in to.
 - The choice is stored per browser rather than on the account, so it works
   before you sign in and two browsers on one account may disagree. Deliberate.
 - **There is no flash of the wrong theme.** The server reads the cookie and
@@ -55,16 +57,6 @@ migrations run at boot.
   An accessibility claim that exempted the theme already shipped would not have
   been one; the contrast figures for every token pair, in both themes, are
   recorded beside the definitions in `internal/ui/static/css/input.css`.
-- **Known limitation, unreleased:** the dark theme does not currently apply. Its
-  light tokens are declared unlayered and its dark tokens inside `@layer base`,
-  and unlayered declarations win regardless of specificity, so both the explicit
-  override and the `prefers-color-scheme` path lose to the light values. The
-  server side is correct — the attribute renders — but the page does not change.
-  The milestone has been reopened to fix the cascade and to move the control from
-  the footer to account settings, with the sign-in page keeping its own; the four
-  bullets above describe the intended behaviour and are not yet true of a running
-  build. Tracked as F3 and F4 in
-  [docs/build-notes/deferred-findings.md](docs/build-notes/deferred-findings.md).
 - Not themed, deliberately: `/docs`, whose Swagger UI is vendored and
   checksum-pinned.
 - **Credential and API rate limits are shared across replicas.** They are

@@ -8,27 +8,35 @@
 
 {{/* The appearance switcher.
 
-     A plain form POST, on every page including the login page, because the
-     preference is per-browser rather than per account — there is no session to
-     hang it on and none is wanted. Three radios rather than a toggle: "system"
-     is a real choice and the one a fresh visitor is on, so it has to be
-     reachable again after picking one of the others.
+     A plain form POST, because the preference is per-browser rather than per
+     account — there is no session to hang it on and none is wanted. Three
+     buttons rather than a toggle: "system" is a real choice and the one a fresh
+     visitor is on, so it has to be reachable again after picking one of the
+     others.
 
      No JavaScript. The server reads the cookie and renders the attribute on
      <html>, so the response is already correct and there is nothing to correct
-     on load. */}}
+     on load.
+
+     One partial, two render sites: account settings, where a person looks for a
+     preference, and the sign-in page, which has no session at all. The second is
+     not redundancy — the per-browser design is what makes it necessary, since
+     the preference has to be settable before there is an account to sign in to.
+     Nothing here touches .Identity, which is why it renders on both.
+
+     It is deliberately NOT in the layout any more. A layout render site plus
+     these two would put two controls on the account page, which is what
+     TestExactlyOneAppearanceControlPerPage exists to catch. */}}
 {{define "theme_switch"}}
-<footer class="mx-auto max-w-6xl px-4 pb-8">
-  <form method="post" action="/theme" class="flex items-center gap-2 text-xs text-subtle">
-    <input type="hidden" name="next" value="{{.Path}}">
-    <span id="theme-label">Appearance</span>
-    <div role="group" aria-labelledby="theme-label" class="flex items-center gap-1">
-      {{template "theme_option" (dict "Value" "system" "Label" "System" "Current" .Theme)}}
-      {{template "theme_option" (dict "Value" "light" "Label" "Light" "Current" .Theme)}}
-      {{template "theme_option" (dict "Value" "dark" "Label" "Dark" "Current" .Theme)}}
-    </div>
-  </form>
-</footer>
+<form method="post" action="/theme">
+  <input type="hidden" name="next" value="{{.Path}}">
+  <div role="group" aria-label="Appearance"
+       class="inline-flex items-center gap-1 rounded-lg border border-line bg-sunken p-1">
+    {{template "theme_option" (dict "Value" "system" "Label" "System" "Current" .Theme)}}
+    {{template "theme_option" (dict "Value" "light" "Label" "Light" "Current" .Theme)}}
+    {{template "theme_option" (dict "Value" "dark" "Label" "Dark" "Current" .Theme)}}
+  </div>
+</form>
 {{end}}
 
 {{/* One option. Current is "" for system, so the comparison below treats an
@@ -38,5 +46,5 @@
 {{if and (eq .Value "system") (eq .Current "")}}{{$on = true}}{{end}}
 <button type="submit" name="theme" value="{{.Value}}"
         {{if $on}}aria-current="true"{{end}}
-        class="rounded-md px-2 py-1 {{if $on}}bg-sunken font-medium text-ink{{else}}text-subtle hover:bg-sunken hover:text-ink{{end}}">{{.Label}}</button>
+        class="rounded-md px-3 py-1 text-sm {{if $on}}bg-raised font-medium text-ink shadow-sm{{else}}text-muted hover:text-ink{{end}}">{{.Label}}</button>
 {{end}}

@@ -82,7 +82,7 @@ func (h *Web) ThemeSet(w http.ResponseWriter, r *http.Request) {
 	setTheme(w, h.Config.SecureCookies, r.PostFormValue("theme"))
 
 	// Back to the page the control was on, which is why the form carries it:
-	// the theme switcher lives in the layout, so it is posted from everywhere
-	// including the login page, and Referer is not something to route on.
+	// the control renders on account settings and on the sign-in page, so the
+	// POST arrives from either, and Referer is not something to route on.
 	seeOther(w, r, safeNext(r.PostFormValue("next")))
 }
