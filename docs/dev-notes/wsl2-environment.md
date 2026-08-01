@@ -236,6 +236,95 @@ cannot use it. `jeanp413.open-remote-wsl` is the working substitute. The Claude
 Code extension publishes a `linux-x64` target on Open VSX, so VSCodium installs it
 into the remote automatically on first connect.
 
+#### `claude` in the terminal
+
+The extension is the only Claude Code install on this machine, and it is enough:
+it bundles a self-contained 275 MB `linux-x64` ELF binary that runs standalone
+and needs no Node — which matters, because there is no `node` or `npm` in this
+distro, so the npm install route does not exist here.
+
+```
+~/.vscodium-server/extensions/anthropic.claude-code-<version>-linux-x64/resources/native-binary/claude
+```
+
+It is simply not on `PATH`, and that directory name carries the extension
+version, so a fixed symlink breaks at the next extension update. A wrapper
+resolves it at run time instead. As `natha`:
+
+```sh
+mkdir -p ~/.local/bin
+cat > ~/.local/bin/claude <<'WRAP'
+#!/usr/bin/env bash
+# Execs the Claude Code binary bundled in the editor extension. The extension
+# directory is version-stamped, so this resolves it at run time rather than
+# pointing at one. See docs/dev-notes/wsl2-environment.md.
+set -euo pipefail
+shopt -s nullglob
+
+if [ -n "${CLAUDE_NATIVE_BINARY:-}" ]; then
+  if [ -x "${CLAUDE_NATIVE_BINARY}" ]; then exec "${CLAUDE_NATIVE_BINARY}" "$@"; fi
+  echo "claude: CLAUDE_NATIVE_BINARY is set but not executable: ${CLAUDE_NATIVE_BINARY}" >&2
+  exit 127
+fi
+
+# Remote installs land in *-server; a native Linux editor uses the bare dir.
+roots=("$HOME/.vscodium-server" "$HOME/.vscode-server" "$HOME/.cursor-server" \
+       "$HOME/.vscodium" "$HOME/.vscode")
+best=""; best_version=""
+
+for root in "${roots[@]}"; do
+  for dir in "$root"/extensions/anthropic.claude-code-*; do
+    bin="$dir/resources/native-binary/claude"
+    [ -x "$bin" ] || continue
+    version="${dir##*/anthropic.claude-code-}"; version="${version%%-*}"
+    # sort -V, not string comparison: 2.1.220 sorts below 2.1.99 lexically.
+    if [ -z "$best_version" ] || \
+       [ "$(printf '%s\n%s\n' "$best_version" "$version" | sort -V | tail -1)" = "$version" ]; then
+      best_version="$version"; best="$bin"
+    fi
+  done
+done
+
+if [ -z "$best" ]; then
+  echo "claude: no Claude Code extension binary found under:" >&2
+  printf '         %s\n' "${roots[@]}" >&2
+  echo "Reinstall the extension, or install the standalone CLI, which replaces" >&2
+  echo "this wrapper:  curl -fsSL https://claude.ai/install.sh | bash" >&2
+  exit 127
+fi
+
+exec "$best" "$@"
+WRAP
+chmod +x ~/.local/bin/claude
+
+# ~/.profile already adds ~/.local/bin when it exists, but only for login
+# shells; the editor's integrated terminal is non-login. Guarded, because
+# .bashrc is re-sourced by nested shells and unguarded appends duplicate —
+# which is why $PATH currently carries $HOME/go/bin four times over.
+grep -q '\.local/bin' ~/.bashrc || cat >> ~/.bashrc <<'RC'
+
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
+RC
+```
+
+Verify with `claude --version` in a new terminal, which should report the same
+version as the installed extension directory.
+
+Consequences of taking the binary from the extension rather than installing the
+CLI separately:
+
+- The CLI version tracks the extension and cannot be updated independently.
+- Uninstalling the extension breaks the wrapper, with the message above.
+- `~/.claude/` and `~/.claude.json` are shared with the extension, so the
+  terminal CLI needs no separate sign-in — the one in
+  [Deliberately manual](#deliberately-manual) covers both.
+- Running `curl -fsSL https://claude.ai/install.sh | bash` overwrites
+  `~/.local/bin/claude` with a real standalone install. That is the upgrade
+  path if the version coupling ever stops being acceptable, not a conflict.
+
 ### 8. Docker Desktop integration — manual
 
 Docker Desktop → Settings → Resources → WSL Integration → enable `Ubuntu`. There is
