@@ -56,6 +56,7 @@ file. Append a row when you append an entry.
 | [M25, which workspace a request is in](#2026-07-31--m25-where-a-request-decides-which-workspace-it-is-in) | Three columns for three questions; precedence as one `ORDER BY`; why the switch needs a session; why the switcher draws nothing with one membership |
 | [M26, a mailer that is genuinely optional](#2026-07-31--m26-a-mailer-that-is-genuinely-optional) | Off-by-default as a nil interface rather than a flag; why a relay being down is not a boot failure; inert by construction in the renderer; attempts counted at claim time; plain text as the whole hostile-input answer |
 | [Plan drift is allowed; silent plan drift is not](#2026-07-31--plan-drift-is-allowed-silent-plan-drift-is-not) | Facts a bullet gets wrong versus what a bullet asserts; why one is corrected and the other prompts; the three things an amendment entry carries; why step 3.4 needed the rule as much as step 1 |
+| [M24.5, amendment: eight pages were nine](#2026-07-31--m245-amendment-the-eight-pages-were-nine) | The backfilled record of the edit that rode in on 9bb315f — the bullet before, after, and the tree fact; why it was a fact and not an assertion |
 
 ---
 
@@ -3678,3 +3679,46 @@ All three, because the first is what makes it an amendment. An entry with only
 the new reading is a description of the current file, and a reader cannot tell
 whether the definition of done moved or was always that. The before is the
 evidence; the after is just the file.
+
+---
+
+## 2026-07-31 — M24.5, amendment: the eight pages were nine
+
+Backfilled at the owner's request, after the entry above made the format a rule.
+The edit itself rode in on `9bb315f` mentioned only in the commit message, which
+is the omission that prompted the rule.
+
+**The bullet as it stood**, in `phase-details/m24.5.md`:
+
+> - Exactly one control renders per page, asserted by template test across the
+>   eight pages, signed-in and signed-out.
+
+**The bullet as amended:**
+
+> - Exactly one control renders per page, asserted by template test across all
+>   nine pages, signed-in and signed-out. The count is exact everywhere: one on
+>   the two sites named above, none on the other seven.
+
+**The tree fact that forced it.** `internal/ui/templates/pages/` holds nine
+files, not eight: `account`, `dashboard`, `error`, `keys`, `link_detail`,
+`links`, `login`, `notifications`, `setup`. The count was taken at step 3.4
+while checking the milestone's own test, which sweeps `r.Pages()` and therefore
+covered all nine whatever the file said. `setup.html` predates the milestone —
+nothing added a page; the number was simply written wrong.
+
+### Why this was a fact and not an assertion
+
+Nine is what `ls` returns. Nobody could have decided it differently, and the
+test's behaviour was never in question — it enumerated the templates rather than
+naming eight of them, so the code and the file disagreed only in prose.
+
+The second sentence added to the bullet is the part worth scrutiny, because it
+does state a reading: most pages render *no* control, which is what moving the
+control to account settings means. That reading was already written down in the
+milestone's own decision entry and encoded in
+`TestExactlyOneAppearanceControlPerPage`'s `want` map before this amendment
+touched anything. The amendment made the bullet agree with the test that shipped
+alongside it, rather than deciding anything new.
+
+Had it decided something new — had the count changed which pages must carry a
+control — it would have been a prompt under the rule above, not an edit.
