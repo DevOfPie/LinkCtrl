@@ -103,6 +103,7 @@ answers, not the same ones with a domain name.
 | [CHANGELOG.md](CHANGELOG.md) | What changed, and what each version's limitations are |
 | [docs/SECURITY.md](docs/SECURITY.md) | The security model, what it does not defend, and how to report a vulnerability |
 | [docs/build-notes/development.md](docs/build-notes/development.md) | Working on LinkCtrl itself |
+| [docs/build-notes/README.md](docs/build-notes/README.md) | How this project is built, and why the method looks like that — start here to review the process rather than the product |
 | [docs/build-notes/workflow.md](docs/build-notes/workflow.md) | How work is done here: gates, commit rules, what happens when a defect turns up |
 | [Plan.md](Plan.md) | Scope contract: what is in Phase 1, what is deferred, what is measured |
 | [docs/build-notes/decisions.md](docs/build-notes/decisions.md) | Why it is built this way. Every non-obvious choice, with its trade-off |
