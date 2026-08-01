@@ -479,10 +479,11 @@ reclassified rather than quietly skipped.
 
 ## Phase 2 build plan
 
-28 milestones, M21–M45, continuing Phase 1's numbering. Fractional numbers
+29 milestones, M21–M45, continuing Phase 1's numbering. Fractional numbers
 insert without renumbering the work either side (Phase 1's M0.5 precedent):
 `X.9` is reserved for scheduled reviews, `X.1`–`X.8` for scope added after the
-plan was finalised — so far one, dark mode at M24.5 (2026-07-31). The numbering
+plan was finalised — so far two, dark mode at M24.5 and bot blocking at M32.5,
+both 2026-07-31. The numbering
 rules are in [planning.md](docs/build-notes/planning.md). One milestone per
 commit.
 
@@ -512,7 +513,8 @@ once (M35).
 | [M30](docs/build-notes/phase-details/m30.md) | Destination blocking: tiers and logging | M21 | Malicious destination blocking (tiers, logging) |
 | [M31](docs/build-notes/phase-details/m31.md) | Blocked-attempt disputes and owner review | M30 M22 | Disputes with owner review |
 | [M32](docs/build-notes/phase-details/m32.md) | Opt-in reputation and malware feeds | M30 M31 | Third-party feeds |
-| [M32.9](docs/build-notes/phase-details/m32.9.md) | **Mid-phase adversarial review** | M21–M32 | — |
+| [M32.5](docs/build-notes/phase-details/m32.5.md) | Bot blocking, per domain and per link | — *(before M33, M34)* | — *(owner-added scope, 2026-07-31)* |
+| [M32.9](docs/build-notes/phase-details/m32.9.md) | **Mid-phase adversarial review** | M21–M32.5 | — |
 | [M33](docs/build-notes/phase-details/m33.md) | Deep-link path forwarding | — *(before M34)* | Deep-link path forwarding |
 | [M34](docs/build-notes/phase-details/m34.md) | Routing rules: conditions, first-match evaluation | M23 M30 M33 | Rules row · region/city decision |
 | [M35](docs/build-notes/phase-details/m35.md) | Gated links: password, signed, one-time, max-click | M34 *(ordering)* | Password/one-time/max-click/signed |
@@ -577,6 +579,13 @@ The *why* for each is in decisions.md.
 - Version history, scheduled changes, approval workflows — 3+.
 - Re-checking already-accepted links against new blocklist tiers — a separate job
   and a separate decision.
+- **A human check or dispute path for a blocked bot** — the second half of the
+  request that produced [M32.5](docs/build-notes/phase-details/m32.5.md), parked
+  by the owner on 2026-07-31. A challenge is a rendered, stateful, interactive
+  surface, and the redirect tree is the one place this product keeps free of
+  session lookups and template rendering. It is a milestone of its own, not a
+  bullet on the blocking one. Until it exists, a misclassified human gets a 403
+  with no recourse, which is why blocking defaults to off.
 - Redis Streams as a work queue, for webhooks **or** the analytics recorder.
   Webhook delivery rides Postgres (M42); the recorder comment is trued up in M45.
 - Sharing the 404-probe limiter across replicas — a network round trip on the 20ms

@@ -57,6 +57,7 @@ file. Append a row when you append an entry.
 | [M26, a mailer that is genuinely optional](#2026-07-31--m26-a-mailer-that-is-genuinely-optional) | Off-by-default as a nil interface rather than a flag; why a relay being down is not a boot failure; inert by construction in the renderer; attempts counted at claim time; plain text as the whole hostile-input answer |
 | [Plan drift is allowed; silent plan drift is not](#2026-07-31--plan-drift-is-allowed-silent-plan-drift-is-not) | Facts a bullet gets wrong versus what a bullet asserts; why one is corrected and the other prompts; the three things an amendment entry carries; why step 3.4 needed the rule as much as step 1 |
 | [M24.5, amendment: eight pages were nine](#2026-07-31--m245-amendment-the-eight-pages-were-nine) | The backfilled record of the edit that rode in on 9bb315f — the bullet before, after, and the tree fact; why it was a fact and not an assertion |
+| [M32.5, refusing a client rather than a destination](#2026-07-31--m325-bot-blocking-and-why-it-is-not-in-the-blocking-cluster) | A third threat model, kept away from M30's two; why it lands before M33 and M34; the first decision on the redirect hot path; why the bypass was split off to Phase 3 |
 
 ---
 
@@ -3722,3 +3723,93 @@ alongside it, rather than deciding anything new.
 
 Had it decided something new — had the count changed which pages must carry a
 control — it would have been a prompt under the rule above, not an edit.
+
+---
+
+## 2026-07-31 — M32.5, bot blocking, and why it is not in the blocking cluster
+
+Owner-added scope, requested 2026-07-31 through `/note` and placed by the owner
+into Phase 2 with its second half deferred. Bots have been classified and
+counted since Phase 1 — `is_bot` is on every click event — and there has never
+been a way to refuse one.
+
+### A third threat model
+
+M30 opens by separating two threat models that wear one name: Phase 1's refusals
+protect *this instance* from being an SSRF proxy, and M30 protects *visitors*
+from a destination hostile to them. It insists they never share an override
+switch.
+
+This is a third, and the same argument applies harder. M30, M31 and M32 all
+reason about the **destination** — is this URL somewhere a visitor should be
+sent — and all of them run on the management path, with M30's file stating that
+the redirect tree is untouched and its tripwires pass unmodified. Bot blocking
+reasons about the **client**, and can only run at redirect time, because that is
+the only moment a client exists.
+
+So it is numbered away from that cluster and shares no mechanism with it. Filing
+it as M30.5 would have put a client-side gate inside a run of destination-side
+milestones and invited exactly the conflation M30 spends its opening paragraph
+preventing.
+
+### Why M32.5, and not earlier
+
+There is no hard dependency: user-agent classification is Phase 1, links have
+settings, and domains have carried per-domain settings since 00800. It could
+have gone anywhere.
+
+It goes before M33 and M34 because both build on the redirect path, and the
+ordering rule for this plan is substrates before consumers. A gate that decides
+whether a request proceeds at all should exist before a transformation that
+rewrites where it goes (M33) and before a rules engine that evaluates conditions
+in order (M34). Landing it afterwards means threading a gate through a pipeline
+already written without one — and it makes the question "why is bot blocking not
+just a routing rule?" a refactor instead of a design note.
+
+It is worth answering that question here, since M34 will raise it: a routing
+rule is per-link and chosen by whoever owns the link. Bot blocking has a
+domain-level *enforced* state that overrides every link beneath it, which is
+administrative policy rather than routing. A mechanism where the link owner
+picks cannot express a control the link owner must not be able to switch off.
+
+### The first decision on the hot path
+
+Nothing before this milestone does per-redirect work that can change the
+outcome. That makes the inherited redirect rules the specification rather than
+the background, and two of them bind hard.
+
+**No new I/O.** The decision reads fields already carried by the
+resolved-and-cached link and domain, so blocking costs a struct field and a
+string scan. `analytics.Classify` is reused rather than reimplemented — it is
+already a pure function over the user-agent string, and a second classifier
+would let what gets blocked drift from what gets counted as a bot.
+
+**No template rendering**, which is what shapes the refusal: a static
+pre-rendered body built at init, not a page. A blocked bot gets a 403 naming no
+destination, byte-identical to the response for a link that does not exist,
+because a refusal that distinguished them would turn the shortener into an
+oracle for which short codes are real.
+
+The refusal is counted and not audited. A crawler that hits a blocked link ten
+thousand times would write ten thousand audit rows, and audit-log growth is the
+thing M21 built a warning threshold for. Administrative change is what that log
+is for; a bot being turned away is traffic.
+
+### Why the bypass is Phase 3, and what that costs
+
+The request had two halves: block bots, and give a blocked human a way through
+or a way to complain. The owner took the first and parked the second.
+
+The split is not arbitrary — a challenge is a rendered, stateful, interactive
+surface, on the one tree this product keeps free of session lookups and template
+rendering, so it is a milestone rather than a bullet. But the cost is real and
+belongs in writing rather than in the difference between two documents: until it
+exists, a person whose client looks like a bot gets a 403 and no recourse, and
+nobody tells the link's owner it happened.
+
+That cost is why the default is *inherited*, resolving to off. `Classify`
+matches substrings including `preview`, `monitor` and `checker`, and treats an
+absent user agent as a bot. Those heuristics were built to bucket a statistic,
+and their false-positive rate has never been measured because nothing depended
+on it. Switching blocking on moves that unmeasured risk onto whoever chose it,
+which is the most honest arrangement available before a bypass exists.
