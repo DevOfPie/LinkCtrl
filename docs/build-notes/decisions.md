@@ -92,6 +92,7 @@ file. Append a row when you append an entry.
 | [M28 reopened, and four verdicts sent to be refuted](#2026-08-01--m28-reopened-and-four-verdicts-sent-to-be-refuted) | Two verdicts overturned and why; testing the mechanism instead of the affordance; the trigger correction a regression test would have missed; why the tests were green |
 | [Two rules the last run earned](#2026-08-01--two-rules-the-last-run-earned) | W17, why a review gets its own session and why the condition is not "a review is next"; how it coexists with context-is-not-a-stop-condition; W18 and what is exempt from seeding the demo |
 | [M28, the page field that shadowed the shell](#2026-08-01--m28-the-page-field-that-shadowed-the-shell) | Why the field was renamed rather than retyped; a structural test parsed from source instead of a list of types, and its two stated limits; why the regression tests say *in one organization*; the read-only member's role composition; the fixture that overwrote the page's own list |
+| [M32.9, the second pass, and what refutation cost the findings](#2026-08-01--m329-the-second-pass-and-what-refutation-cost-the-findings) | Amendments A1 and A2 with their tree facts; why independent readers are the mechanism a review requires rather than a hand-off; five findings refuted and two of them near re-litigations of recorded decisions; the trailing dot corrected from SSRF to open redirect; three findings corrected against their finder; what verifiers found that finders did not; the workspace-scoped-membership cluster |
 
 ---
 
@@ -7089,3 +7090,143 @@ review's depth was previously guarded by whoever happened to be running it
 remembering that reviews want room; demo coverage was guarded by nobody at all.
 Neither survived contact with a long unattended run, which is the only real test
 a process rule gets.
+---
+
+## 2026-08-01 — M32.9, the second pass, and what refutation cost the findings
+
+The [first pass](#2026-08-01--m329-a-first-pass-and-an-honest-account-of-its-depth)
+recorded that it had not done what the milestone asks: re-read **each** of
+M21–M32.5 against its own definition of done, in independent passes per
+dimension. This is that pass, and this entry is the output m32.9.md requires —
+what was checked, what was found, what was refuted, so a later reader can tell
+coverage from luck.
+
+Headline: **68 raw candidates → 26 adversarial verifications → 5 refuted
+outright, 19 narrowed or downgraded, the rest confirmed.** Three findings a
+single reader would have shipped as major are not major, and two are not
+findings at all.
+
+### Two amendments, both facts
+
+Per [phase-loop.md](phase-loop.md#amending-a-bullet), each carries the bullet as
+it stood, as amended, and the tree fact that forced it.
+
+**A1.** Stood: *"Every milestone from M21 to M32 is re-read **against its own
+claims**"*. Amended: *"Every milestone from M21 to M32.5 …"*. Tree fact: the same
+file's header reads `**Depends on:** M21–M32.5`, and its preamble argues the
+range in full — *"The second is the reason the range above reads `M32.5` rather
+than `M32` — an insertion this review covers but does not name would leave its
+coverage claim quietly short."* The file had already decided; the bullet was the
+one place that lagged. A fact, not an assertion: nobody could have decided
+differently without contradicting two other sentences in the same file.
+
+**A2.** Stood: *"Two already have: M24.5's dark mode and M32.5's bot blocking."*
+Amended to five, naming M26.5, M26.6 and M28.5. Tree fact:
+[phase-details/README.md](phase-details/README.md) lists five `X.1`–`X.8`
+insertions between M21 and M32.9. Arithmetic, and it does not move the range —
+all five were already numerically inside it.
+
+### The mechanism, because it is a departure
+
+phase-loop.md says a review is not delegated. That governs **ownership**:
+triage, the prompt to the owner, the docs and the commit were the
+orchestrator's and stayed there. But m32.9.md separately *requires*
+independence — *"covers multiple dimensions independently"*, and in bold,
+*"Every finding is put to an adversarial verifier that tries to refute it"* — so
+independent readers are the mechanism the milestone demands rather than a
+hand-off. The record supports it: the first pass was one orchestrator read and
+returned three findings, and the refutation round after it overturned two of
+four verdicts, *"neither catchable by re-reading"*.
+
+This pass is the same argument at scale. Seven readers audited milestones
+against their own bullets; five swept dimensions across the whole range —
+tenancy isolation, security, privacy, documentation truth, and correctness at
+the seams between milestones. Then every candidate went to a verifier told to
+assume it was wrong and to default to refuted where it could not reproduce.
+
+### What refutation was worth
+
+This is the part worth keeping, because it is the argument for doing it at all.
+
+**Refuted outright.** `lctl seed` writing `primary_url` by `COPY` was reported
+as a destination-writing surface M30 missed — but m30.md defines its own set in
+the same sentence, *"all three `ValidateDestination` call sites"*, and there were
+exactly three before M30; the seeder was never a fourth, and its URL is a
+compile-time literal. An `allowed` dispute suppressing the reputation feed for
+any reason code was reported as an undocumented widening — but
+`01700_feed_reputation.sql:22-27` states the generic behaviour *and* argues why
+it is safe for every reason code, the index is deliberately reason-code-free,
+and decisions.md records M31's narrower comment being *"rewritten rather than
+left standing"*. A deleted organization's audit trail being unreadable was
+reported as falsifying m28.5.md — it is a documented limitation in five places
+including Plan.md's Known limitations and an M28.5 decisions entry naming the
+alternative and why it was not built. The account page's default-workspace
+control at one membership was reported as breaking M25's byte-identical claim —
+D22 settles it in writing, in the entry that added the control. And M32.5's new
+`JOIN` was reported as an unmeasured cost on the uncached path — measured at
+`+0.024ms` against a target with a 52× margin.
+
+Two of those five were the review nearly re-litigating decisions the owner
+already has on record. That is the specific failure a second pass invites, and
+it is why refutation reads the trackers and not only the code.
+
+**Corrected in the finder's favour.** The trailing-dot bypass was filed as
+critical SSRF. It is not SSRF: LinkCtrl never makes a server-side request to a
+destination — the only two `http.Client`s in the tree are the opt-in feed and
+the container healthcheck — so it is a stored open redirect and the attacker
+cannot read the response. High, not critical. The same verifier widened the
+affected spellings from two to nine and validated a one-line fix that closes all
+three tiers with every existing test green, including the one requiring
+`https://example.com./` to stay accepted.
+
+**Corrected against the finder.** The stalled-subscriber finding claimed the
+block is unbounded; measured keepalive settings off a real socket give 7m15s
+when a middlebox reaps the flow. It is genuinely unbounded only for an
+application-level stall, where the peer's kernel keeps ACKing — which the
+verifier proved rather than asserted. The redeem-lockout finding claimed the
+login limiter does not cover redemption; twenty wrong passwords against the live
+instance returned 429, because `router.go:204` shares the *same* bucket with
+`/auth/login` on purpose. The bot-blocking enumeration oracle claimed to create
+a signal; the 404-probe limiter already exposed archived-vs-unknown as 404-vs-429
+to a plain browser. Each of those would have sent a fix at the wrong thing.
+
+**Found by the verifier, not the finder.** Attacking the audit-scope finding
+turned up the `Grant` escalation beside it. Attacking the workspace-scoped
+`owner` finding turned up that `refuseLastOwner` fires only on demotion, so the
+escalated actor can promote their own org-wide row and then remove the real
+owner. Attacking the tenancy-minor findings turned up that an orphaned API key
+reaches `POST /api/v1/organizations`, because `CreateOrganization` bypasses its
+permission when the actor holds zero memberships and carries no
+`requireSessionActor`.
+
+### The shape of what was found
+
+One cluster dominates and it is worth naming as a cluster rather than as seven
+rows: **M28's workspace-scoped memberships confer organization-wide authority.**
+Permissions resolve per acting workspace, and every write they gate scopes by
+`actor.OrgID` alone. `internal/team/workspace.go` already does the right thing
+for `workspace.write` via `canInWorkspace`, with a comment naming this exact
+attacker; no member operation calls it. Reproduced end to end against the real
+services: a workspace-scoped admin renames a workspace she was refused minutes
+earlier, and — with no `Grant` at all — re-roles her own organization-wide row
+to admin, because `mayManage` compares her identity's rank against her own
+membership's and self is strictly below self.
+
+The second cluster is documentation that stopped tracking the tree: the README
+still sells 0.1.0 while listing Phase 2 features, three documents describe rate
+limits M24 changed, and two migration comments promise a database leak hands
+over no redeemable invitations while `mail_outbox.body` stores the token in
+clear.
+
+Nothing here is scheduled. Every row is in
+[deferred-findings.md](deferred-findings.md) awaiting owner review, and the
+triage is a prompt rather than a decision this loop made.
+
+### What the first pass checked, and still holds
+
+Re-checked, not assumed: the five structural risks m32.9.md names by name all
+held again, and no verifier could falsify one. `closed` still means no new
+account on every path; the unappealable tier is unreachable from configuration,
+a list entry or review *by design* — the trailing dot defeats it by input, not
+by an override, which is why that finding is against `looksNumeric` and not
+against the tier's structure.
