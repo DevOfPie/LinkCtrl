@@ -246,6 +246,82 @@ func TestEveryDestinationSurfaceRunsTheFullTierCheck(t *testing.T) {
 	}
 }
 
+// A trailing dot is the same host, and a refusal it provokes is recorded like
+// any other (F26).
+//
+// The unit tests hold the tiers. What only a database shows is the consequence
+// that made this worth reopening M30 for: the dotted attempt used to be accepted
+// outright, so nothing was refused, and therefore **nothing was written** — the
+// audit log said the instance had never been asked for the metadata endpoint,
+// while a link pointing at it sat in the table waiting to be followed. The row
+// is the evidence an operator would use to notice they are being probed, and its
+// absence is what made the bypass silent as well as effective.
+func TestATrailingDotIsRefusedAndRecorded(t *testing.T) {
+	dotted := map[string]string{
+		"http://169.254.169.254./latest/meta-data/":  "unappealable.private_address",
+		"http://localhost./":                         "unappealable.private_address",
+		"https://metadata.google.internal./compute/": "high_confidence.embedded_host",
+	}
+
+	for raw, wantCode := range dotted {
+		for _, surface := range []string{"link.create", "link.update"} {
+			t.Run(surface+"/"+raw, func(t *testing.T) {
+				f := newBlocking(t)
+
+				var err error
+				if surface == "link.create" {
+					_, err = f.links.Create(f.ctx, f.owner, link.CreateInput{URL: raw})
+				} else {
+					created, cerr := f.links.Create(f.ctx, f.owner,
+						link.CreateInput{URL: "https://good.example/"})
+					if cerr != nil {
+						t.Fatalf("create a link to edit: %v", cerr)
+					}
+					_, err = f.links.Update(f.ctx, f.owner, created.ID, link.UpdateInput{URL: &raw})
+				}
+				if got := codeOf(t, err); got != wantCode {
+					t.Fatalf("refusal code = %q, want %q", got, wantCode)
+				}
+
+				events := f.blockEvents()
+				if len(events) != 1 {
+					t.Fatalf("%d destination.blocked records, want exactly 1: a refusal "+
+						"nobody records is a probe nobody can see", len(events))
+				}
+				e := events[0]
+				if e.Meta["code"] != wantCode {
+					t.Errorf("audit code = %v, want %q", e.Meta["code"], wantCode)
+				}
+				if e.Meta["surface"] != surface {
+					t.Errorf("audit surface = %v, want %q", e.Meta["surface"], surface)
+				}
+				// The dot is in the evidence, because the evidence is what was
+				// typed and not what the validator made of it.
+				if got := e.Meta["url_defanged"]; got != link.Defang(raw) {
+					t.Errorf("evidence = %v, want the defanged attempt %q", got, link.Defang(raw))
+				}
+			})
+		}
+	}
+
+	// The accepted case, end to end, which is the other half of "canonicalized,
+	// not rejected". A dotted host that nothing objects to is stored without its
+	// dot — so the value the redirect hands a visitor verbatim is the same value
+	// every tier judged, rather than a spelling they never saw.
+	f := newBlocking(t)
+	created, err := f.links.Create(f.ctx, f.owner, link.CreateInput{URL: "https://example.com./path"})
+	if err != nil {
+		t.Fatalf("refused https://example.com./path: %v. A trailing dot is a fully "+
+			"qualified name, and this fix canonicalizes it rather than refusing it", err)
+	}
+	if created.URL != "https://example.com/path" {
+		t.Errorf("stored %q, want %q", created.URL, "https://example.com/path")
+	}
+	if events := f.blockEvents(); len(events) != 0 {
+		t.Errorf("%d blocked records for an accepted destination", len(events))
+	}
+}
+
 // A destination nothing objects to is still accepted, and writes no record. The
 // counterpart matters as much as the refusals: a check that refused everything
 // would pass every test above.

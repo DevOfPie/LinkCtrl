@@ -63,7 +63,12 @@ migrations run at boot.
   cloud-metadata addresses are the unappealable tier and have no off switch of
   any kind. A curated list compiled into the binary is the middle tier; changing
   it costs a rebuild, on purpose. Heuristics and a `blocked_destinations` table
-  are the bottom tier, meant to be changed without one.
+  are the bottom tier, meant to be changed without one. The host is canonicalized
+  once, before any tier sees it: lowercased, and a trailing dot folded away, so
+  `169.254.169.254.` and `169.254.169.254` are one address to all three tiers and
+  what gets stored is what they judged. A trailing dot is a fully qualified name
+  and is accepted, not refused — `https://example.com./x` is stored as
+  `https://example.com/x`.
 - **Three low-confidence rules, all of them appealable.** A host spelled to
   imitate another in punycode (`аpple.com` with a Cyrillic а), credentials before
   the host (`https://paypal.com@evil.example/`), and a destination that is itself

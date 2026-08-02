@@ -103,6 +103,8 @@ file. Append a row when you append an entry.
 | [M28.5, amendment: a line number its predecessor moved](#2026-08-02--m285-amendment-a-line-number-its-predecessor-moved) | `members.sql:133` → `:177`; why the drift was M28's doing rather than neglect, and why no assertion changed |
 | [M28.5 reopened: what a teardown owes an alias](#2026-08-02--m285-reopened-what-a-teardown-owes-an-alias) | D45 — reserve rather than refuse, and why refusing recreates the state the guard excludes trashed links to avoid; the third release path; the workspace door that predates the milestone; why the reservation locks the rows it is about |
 | [M28.5, amendment: Phase 1 does have a trash](#2026-08-02--m285-amendment-phase-1-does-have-a-trash-and-the-reopening-depends-on-it) | Why *no soft delete, no restore, no trash* was two-thirds false; the file arguing from a trash window it denied existed; what actually has no way back |
+| [M30 reopened: one character, and the four checks it walked past](#2026-08-02--m30-reopened-one-character-and-the-four-checks-it-walked-past) | Four unshared mechanisms defeated by one keystroke; D46 — canonicalize the dot away rather than refuse it, folded once in the validator; why `TrimRight` and not one `TrimSuffix`; why a reflection walk over struct shape could not see the bypass; the class already asserted for the Postgres tier |
+| [M30, amendment: the citation the fix moved](#2026-08-02--m30-amendment-the-citation-the-fix-moved) | `blocking_test.go:346-350` → `:441-444`; why a milestone editing a file invalidates its own bullet's line citation, and the case for citing test names |
 
 ---
 
@@ -8096,3 +8098,140 @@ No assertion moved. The bullet's point was always about *organizations* — that
 this milestone does not give them a recoverable deletion — and that is intact
 and now unambiguous, because the amended wording says which object it is
 scoping out rather than leaving it to the reader.
+
+## 2026-08-02 — M30 reopened: one character, and the four checks it walked past
+
+M30's central claim was that *no configuration, list entry, or future review
+path can accept a metadata or private address*. A trailing dot on the hostname
+accepted one. `POST /api/v1/links` with `http://169.254.169.254./latest/meta-data/`
+answered 201 on a live instance while the dotless spelling answered 422, and
+`127.0.0.1.`, `10.0.0.1.`, `2130706433.`, `0x7f000001.`, `localhost.`,
+`foo.localhost.` and `metadata.google.internal.` behaved the same way. Found by
+[M32.9](phase-details/m32.9.md) as F26, approved by the owner on its triage, and
+built here because a `done` row asserting something false is the outcome
+reopening exists to avoid.
+
+**What it was worth.** A stored **open redirect**, not SSRF, and the difference
+decides the severity. LinkCtrl never fetches a destination server-side — the
+only two `http.Client`s in the tree are the opt-in feed and the container
+healthcheck — so the victim's own browser makes the request and the attacker
+never sees the response. High, not critical. The finding was raised as SSRF and
+corrected during M32.9's own refutation pass; the corrected reading is what
+`m30.md`'s reopening section carries, and it is why this landed as one milestone
+rather than as an emergency.
+
+**Two tiers, one character, four separate reasons.** That is the part worth
+recording, because it explains why the fix is not four fixes. The Postgres tier
+was never affected — `HostCandidates` trims a trailing dot, and has since M30
+shipped:
+
+- The unappealable tier parses the host with `netip.ParseAddr`, which refuses
+  `169.254.169.254.` — so the address branch was skipped.
+- The numeric-obfuscation branch then asked `looksNumeric`, which took an empty
+  last label as evidence of a fully qualified *name* and answered false. The
+  comment saying so was written deliberately and was wrong in exactly the case
+  it was written for.
+- `localhost` is an equality test, and `"localhost." == "localhost"` is false.
+- The high-confidence tier is an exact-match map, so `embeddedHosts` simply did
+  not contain the dotted key.
+
+Four mechanisms, none of them shared, all defeated by the same keystroke — which
+is the signature of a value that was never canonicalized rather than of four
+bugs.
+
+### D46 — one fold in the validator, and the dot is canonicalized rather than refused
+
+Two questions, and the second is the one that would have been easy to get wrong.
+
+**Canonicalize, do not reject.** A trailing dot is a fully qualified name and an
+ordinary thing to type; `destination_test.go:133` has asserted since M30 shipped
+that `https://example.com./` is accepted, and it is right to. Refusing dotted
+hosts would have closed the bypass, turned that test red, and been read by
+whoever met it next as a test in the way of a security fix. The dot comes off on
+the way in instead, so `https://example.com./path` is stored as
+`https://example.com/path` — the value every tier judged is the value a visitor
+is later handed, which is a property worth more than the one line it costs.
+
+**One fold, in `ValidateDestination`, before the address, numeric and localhost
+checks.** Every tier reads its host off the URL that function returns, so one
+fold covers all four mechanisms above. The alternatives were both worse in the
+same way: normalizing inside each tier is a rule four places have to keep, and
+this defect *is* what happens when two of them keep it — `HostCandidates`
+already trimmed for the Postgres tier and `checkListEntry` already refused a
+dotted entry, so the write side normalized and the read side did not. A third
+hand-written trim would have made the next gap likelier, not less likely.
+
+`strings.TrimRight` rather than a single `strings.TrimSuffix`, which is the
+difference between closing this and closing one spelling of it: `127.0.0.1..`
+also has an empty last label, and trimming one dot leaves exactly the shape that
+`looksNumeric` misread.
+
+`looksNumeric`'s empty-label branch now answers true rather than false. Nothing
+reaches it — the validator folds first and `checkListEntry` refuses a dotted
+entry outright — so this changes no behaviour today. It is a fail-closed
+default, and it removes a helper that would confidently call `2130706433.` a
+hostname if a third caller ever appeared.
+
+### Why the test that guarded this claim did not see it
+
+`TestUnappealableTierHasNoOverrideSwitch` walks `DestinationPolicy` by
+reflection, enumerates its fields, and fails when the struct grows a knob. It
+was written to catch somebody *adding* an override switch back, and it is good
+at that. It never tries a host. A promise about what could be *accepted* was
+guarded by a check on struct shape, so it stayed green while the instance
+accepted the metadata endpoint — and it would have stayed green for any bypass
+that does not take the form of a struct field.
+
+The new `TestATrailingDotDoesNotDefeatAnyTier` feeds hosts, and pairs each
+dotted spelling against its dotless control. The pairing is the load-bearing
+part: asserting only that the dotted form is refused would pass on a fix that
+refuses every dotted host, which is the wrong fix. The integration half asserts
+the consequence that made the bypass silent as well as effective — an accepted
+destination is not a refusal, so **no `destination.blocked` row was written**,
+and the audit log said the instance had never been asked for the metadata
+endpoint while a link pointing at it sat in the table.
+
+### The class was already known here
+
+`TestHostCandidatesRespectLabelBoundaries` has asserted since M30 shipped that
+`HostCandidates("evil.example.")` and `HostCandidates("evil.example")` agree,
+and calls the alternative *"a one-character bypass"* in as many words. The idea
+was not missing. It had been applied to one tier of three, by the person who
+happened to be writing that tier, and nothing carried it across — which is a
+better argument for folding once at the entrance than any amount of care applied
+tier by tier.
+
+[F26](deferred-findings.md) is closed against M30.
+
+## 2026-08-02 — M30, amendment: the citation the fix moved
+
+A **fact** amendment, logged rather than prompted, and the third this session.
+Raised by the worker at step 3.3 — it met the bullet as written, reported the
+drift, and left the amending alone, which is what the split asks of it.
+
+**The bullet as it stood**, last in the reopening's *Done means*:
+
+> `blocking_test.go:346-350` already asserts this exact class for the Postgres
+> tier, calling it *"a one-character bypass"*. The class was known and fixed in
+> one of three places; say so in the commit rather than presenting it as new.
+
+**The bullet as amended:** identical, with `blocking_test.go:346-350` reading
+`blocking_test.go:441-444`.
+
+**The tree fact.** The string *"a one-character bypass"* appears at
+`internal/link/blocking_test.go:443`, inside the `HostCandidates` comparison
+that begins at `:441`. Lines 346-350 are now in an unrelated case. The assertion
+itself is unchanged and still says exactly what the bullet quotes.
+
+**What moved it is this milestone's own fix**, which is the difference from the
+other two amendments this session. `TestATrailingDotDoesNotDefeatAnyTier` was
+inserted above it in the same file, so the citation was accurate when the worker
+started and stale by the time the work was done. That is not avoidable by
+writing the bullet more carefully — a line citation into a file the milestone
+edits is invalidated by the milestone editing it — and it is the strongest
+argument yet for citing test *names* rather than line ranges, which
+[workflow.md](workflow.md) does not currently require and which is left as an
+observation rather than smuggled in as a rule here.
+
+No assertion moved. The class was still known, still asserted for the Postgres
+tier and still fixed in only one of three places, and the commit still says so.

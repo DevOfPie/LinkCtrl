@@ -34,7 +34,7 @@ milestone, is in [workflow.md](../workflow.md).
 | [M28](m28.md) | Team management, workspaces, org creation | M27 | done |
 | [M28.5](m28.5.md) | Organization deletion and tenancy teardown | M28 | done |
 | [M29](m29.md) | Self-serve signup, configured by the operator | M26 M27 | done |
-| [M30](m30.md) | Destination blocking: tiers and logging | M21 | in progress (reopened) |
+| [M30](m30.md) | Destination blocking: tiers and logging | M21 | done |
 | [M31](m31.md) | Blocked-attempt disputes and owner review | M30 M22 | done |
 | [M32](m32.md) | Opt-in reputation and malware feeds | M30 M31 | done |
 | [M32.5](m32.5.md) | Bot blocking, per domain and per link | — (before M33, M34) | done |

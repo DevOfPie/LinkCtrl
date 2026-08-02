@@ -112,22 +112,44 @@ func ValidateDestination(raw string, p DestinationPolicy) (string, error) {
 	}
 	u.Scheme = scheme
 
-	host := u.Hostname()
-	if host == "" {
-		return "", append(errs, domain.FieldError{
-			Field: "url", Code: "no_host", Message: "destination must include a host",
-		})
-	}
-
 	// Lowercase the host so the blocklist and reporting are consistent; leave
 	// the path alone, since paths are case-sensitive.
+	//
+	// The trailing dot goes at the same time, and this is the only place in the
+	// program that takes one off a destination. "169.254.169.254." is the same
+	// address, "localhost." is the same name and "metadata.google.internal." is
+	// the same listed host — a browser and a resolver read them that way — but
+	// netip.ParseAddr refuses the dotted spelling, looksNumeric read an empty
+	// last label as evidence of a name, the localhost test is an equality and
+	// the embedded list is an exact-match map. One character therefore walked
+	// past four unrelated checks and two whole tiers at once (F26). Only the
+	// Postgres tier was safe, because HostCandidates trims for itself.
+	//
+	// Folded here, before any tier looks, and nowhere else. Every tier reads its
+	// host off the URL this function returns, so one fold covers all of them;
+	// the shape that produced the defect was a normalization each tier did for
+	// itself, which is a rule three places have to keep and only two did.
+	//
+	// Canonicalized, never refused. A trailing dot is a fully qualified name and
+	// an ordinary thing to type, which is why the accepted-destinations test
+	// requires https://example.com./ to keep working — it is now stored without
+	// the dot, so what the tiers judged is what a visitor is sent to.
+	//
+	// TrimRight rather than one TrimSuffix: "127.0.0.1.." also has an empty last
+	// label, and trimming a single dot would leave one behind for looksNumeric
+	// to misread exactly as before.
 	//
 	// Hostname() strips the brackets from an IPv6 authority and Port() returns
 	// "" when there is no ":port" suffix, so the no-port branch has to put the
 	// brackets back itself. Without that, https://[2606:4700:4700::1111]/ is
 	// stored and served as https://2606:4700:4700::1111/, which no client can
 	// follow and which re-parses as a different host entirely.
-	lowerHost := strings.ToLower(host)
+	lowerHost := strings.TrimRight(strings.ToLower(u.Hostname()), ".")
+	if lowerHost == "" {
+		return "", append(errs, domain.FieldError{
+			Field: "url", Code: "no_host", Message: "destination must include a host",
+		})
+	}
 	switch {
 	case u.Port() != "":
 		u.Host = net.JoinHostPort(lowerHost, u.Port())
@@ -184,6 +206,8 @@ func ValidateDestination(raw string, p DestinationPolicy) (string, error) {
 //
 // A real hostname always has a non-numeric TLD, so this cannot reject one: the
 // last label is what decides, and "com", "co.uk" and "example" are all names.
+// It expects a host whose trailing dot has already been folded away, which is
+// what makes that true — see the empty-label branch.
 func looksNumeric(host string) bool {
 	if host == "" {
 		return false
@@ -196,7 +220,16 @@ func looksNumeric(host string) bool {
 		last = host[i+1:]
 	}
 	if last == "" {
-		return false // trailing dot: a fully-qualified name, not a number
+		// A trailing dot. This used to answer false — "a fully-qualified name,
+		// not a number" — and that sentence is where 2130706433. got in: the
+		// empty label made an obfuscated address look like a hostname, and the
+		// numeric check waved it through. Callers now hand this function a host
+		// with the dot already folded away (ValidateDestination) or refuse a
+		// dotted entry outright (checkListEntry), so nothing reaches here; the
+		// answer is true so that a third caller, if one ever appears, fails
+		// closed on a shape no legitimate destination has by the time it is
+		// judged.
+		return true
 	}
 	if strings.HasPrefix(last, "0x") {
 		return true

@@ -72,6 +72,100 @@ func TestUnappealableTierHasNoOverrideSwitch(t *testing.T) {
 	}
 }
 
+// The same claim, asked the way it was actually broken (F26).
+//
+// TestUnappealableTierHasNoOverrideSwitch above walks DestinationPolicy by
+// reflection looking for a *field*, and never tries a *host*. That is why it
+// stayed green while `http://169.254.169.254./` was answered 201 on a live
+// instance: a promise about what could be accepted was guarded by a check on
+// struct shape, and one character that no field controls walked past it. This
+// test feeds hosts.
+//
+// The class was already known here. TestHostCandidatesRespectLabelBoundaries
+// calls a trailing dot "a one-character bypass" and has asserted the Postgres
+// tier against it since M30 shipped; the write side normalized and the read side
+// did not.
+func TestATrailingDotDoesNotDefeatAnyTier(t *testing.T) {
+	p := DefaultDestinationPolicy()
+
+	// Each dotted spelling against its dotless control. Asserting only that the
+	// dotted form is refused would pass just as happily on a fix that refuses
+	// every dotted host — which destination_test.go says is wrong, because a
+	// trailing dot is a fully qualified name and not a malformed one.
+	for _, tc := range []struct{ dotted, plain string }{
+		{"http://169.254.169.254./latest/meta-data/", "http://169.254.169.254/latest/meta-data/"},
+		{"http://127.0.0.1.:8080/", "http://127.0.0.1:8080/"},
+		{"http://10.0.0.1./admin", "http://10.0.0.1/admin"},
+		// The obfuscated forms, where the empty last label was read as evidence
+		// that the host was a name rather than a number.
+		{"http://2130706433./", "http://2130706433/"},
+		{"http://0x7f000001./", "http://0x7f000001/"},
+		// Two dots, because trimming exactly one leaves the same empty label.
+		{"http://127.0.0.1../", "http://127.0.0.1/"},
+		// Not an address at all, and refused by an equality test that a dot
+		// defeats without any parser being involved.
+		{"http://localhost./", "http://localhost/"},
+		{"http://app.localhost./", "http://app.localhost/"},
+	} {
+		t.Run(tc.dotted, func(t *testing.T) {
+			_, err := ValidateDestination(tc.dotted, p)
+			if err == nil {
+				t.Fatalf("accepted %q; %q is refused, and they are the same host",
+					tc.dotted, tc.plain)
+			}
+			_, plainErr := ValidateDestination(tc.plain, p)
+			if plainErr == nil {
+				t.Fatalf("the control %q was accepted; this test proves nothing", tc.plain)
+			}
+			if got, want := codesOf(t, err), codesOf(t, plainErr); got != want {
+				t.Errorf("refused %q with code %q and %q with %q; the same host must "+
+					"reach the same tier however it is spelled", tc.dotted, got, tc.plain, want)
+			}
+		})
+	}
+
+	// The high-confidence tier, which is an exact-match map and was defeated
+	// identically. It is reached the way Judge reaches it — off the URL the
+	// validator returned — because folding the host is the validator's job and a
+	// tier that normalized for itself is the shape this finding is about.
+	const listed = "metadata.google.internal"
+	if _, ok := embeddedHosts[listed]; !ok {
+		t.Skipf("%s is not on the list; nothing to assert about matching it", listed)
+	}
+	_, host := parseForTest(t, "https://"+listed+"./computeMetadata/v1/")
+	if host != listed {
+		t.Fatalf("the validator produced host %q, want %q: every tier below reads "+
+			"this value, so a dot surviving here is a dot surviving all of them",
+			host, listed)
+	}
+	if highConfidence(host) == nil {
+		t.Errorf("%q was accepted by the embedded tier; that host is on the list, "+
+			"and the list is meant to cost a rebuild to overrule, not one keystroke",
+			listed+".")
+	}
+	// And the runtime list, which trims for itself, is asked about the same
+	// candidates it would have been asked for the dotless spelling.
+	if !reflect.DeepEqual(HostCandidates(host), HostCandidates(listed)) {
+		t.Errorf("candidates for %q differ from %q", host, listed)
+	}
+
+	// Canonicalized, never refused: the accepted case, and what it is stored as.
+	// The stored form is the point — it is what a visitor's browser is sent to
+	// and what every tier judged, so the dot has to be gone from it and not
+	// merely ignored while checking.
+	got, err := ValidateDestination("https://example.com./", p)
+	if err != nil {
+		t.Fatalf("rejected https://example.com./: %v. A trailing dot is a fully "+
+			"qualified name; refusing it would break a passing test for the wrong "+
+			"reason", err)
+	}
+	if got != "https://example.com/" {
+		t.Errorf("normalized to %q, want %q: the dot is folded away on the way in, "+
+			"so what is stored and served is what the tiers were shown", got,
+			"https://example.com/")
+	}
+}
+
 // The other half of the same claim: the two appealable tiers can only ever add
 // refusals. Neither the embedded list nor the heuristics has a return value that
 // means "allowed", so no entry anybody adds to either — and no row M31's review
