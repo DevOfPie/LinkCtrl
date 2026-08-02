@@ -54,6 +54,7 @@ without knowing what to grep for.
 
 | # | Change | Commit | Entry |
 | --- | --- | --- | --- |
+| W21 | The carry-a-volume-over warning names `LINKCTRL_API_KEY_PEPPER` beside `POSTGRES_PASSWORD`, in both [wsl2-environment.md](../dev-notes/wsl2-environment.md) and [instances.md](../dev-notes/instances.md) | *(this commit)* | — (the warning carries its own reasoning) |
 | W19 | *Verify, do not assume* now says a cached result is not a measurement, and names `GOFLAGS=-count=1` | *(this commit)* | [Two gate rules that lived only in an untracked file](decisions.md#2026-08-02--two-gate-rules-that-lived-only-in-an-untracked-file) |
 | W20 | [dev-notes/instances.md](../dev-notes/instances.md) records how to run a single integration test — `make -n test-integration` prints the command with its DSNs filled in | *(this commit)* | [Two gate rules that lived only in an untracked file](decisions.md#2026-08-02--two-gate-rules-that-lived-only-in-an-untracked-file) |
 | W17 | The loop stops rather than entering an `X.9` review it did not start the session with, and asks for a fresh one | *(this commit)* | [Two rules the last run earned](decisions.md#2026-08-01--two-rules-the-last-run-earned) |

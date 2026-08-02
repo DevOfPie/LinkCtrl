@@ -137,7 +137,11 @@ These files hold secrets and are **not** committed: `.gitignore` excludes
 
 `POSTGRES_PASSWORD` is baked into the Postgres volume the first time it starts.
 Regenerating an env file therefore means recreating the volume too, or every
-later connection fails authentication with no other symptom:
+later connection fails authentication with no other symptom.
+`LINKCTRL_API_KEY_PEPPER` is bound to retained data the same way — it keys the
+HMAC over stored API keys, so a new one silently invalidates every key already
+issued. Recreating the volume discards those rows anyway, which is why the two
+stay consistent as long as you do both together:
 
 ```sh
 make down INSTANCE=test          # removes the volume

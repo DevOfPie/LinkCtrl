@@ -356,9 +356,19 @@ make env INSTANCE=demo
 `make up` does it too when the file is missing, so this step is only worth
 running deliberately. See [instances.md](instances.md).
 
-Carrying a volume over from another tree instead of generating one means
-`POSTGRES_PASSWORD` must match what that volume was initialised with, or
-authentication fails against the retained data with no other symptom.
+Carrying a volume over from another tree instead of generating one means **two**
+values must come with it, not one. `POSTGRES_PASSWORD` must match what that
+volume was initialised with, or authentication fails against the retained data
+with no other symptom. `LINKCTRL_API_KEY_PEPPER` must match too: it keys the
+HMAC over every stored API key, so a freshly generated one leaves the rows in
+place and every key that was ever issued failing to authenticate.
+`internal/config/config.go:633` says so at the point of validation — *"Changing
+this invalidates every existing API key"* — and nothing at startup compares the
+pepper against the data, so the only symptom is a key that used to work and
+does not.
+
+Carry both, or carry neither and recreate the volume. Half of each is the case
+that looks like it worked.
 
 ### 10. The idle-stop timer
 
