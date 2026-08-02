@@ -167,3 +167,48 @@ func TestBotPolicySurvivesTheWire(t *testing.T) {
 			"not happening", old.BotPolicy, old.DomainBotPolicy)
 	}
 }
+
+// TestForwardPathSurvivesTheWire is M33's version of the same claim, and the
+// second half is again the one that matters.
+//
+// A payload written by the previous build has no `fp`, and it must decode as
+// "do not forward". That is what makes the omitted CacheKeyVersion bump safe
+// here — not an argument that nobody could have set the column yet, which a
+// rolling restart falsifies. The zero value is the behaviour this alias had
+// before the milestone existed, so a stale entry costs a visitor a 404 for at
+// most REDIRECT_TTL and never sends them somewhere unconfigured.
+//
+// The claim holds only while the key is v1 on both sides of an upgrade. M34
+// bumps it, which is why M33 lands first.
+func TestForwardPathSurvivesTheWire(t *testing.T) {
+	in := &Snapshot{URL: "https://example.com/x", Status: "active", ForwardPath: true}
+	b, err := in.encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := decodeSnapshot(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.ForwardPath {
+		t.Error("ForwardPath did not survive the round trip")
+	}
+
+	// Exactly what the previous build wrote for an active forwarding-capable
+	// link: every field M32.5 knew about, and nothing M33 added.
+	old, err := decodeSnapshot([]byte(`{"i":"00000000-0000-0000-0000-000000000000",` +
+		`"w":"00000000-0000-0000-0000-000000000000","u":"https://example.com/x",` +
+		`"s":"active","q":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if old.ForwardPath {
+		t.Error("a snapshot written before path forwarding existed decoded as forwarding; " +
+			"the cache key version was left alone on the strength of the absent field " +
+			"meaning 'do not forward'")
+	}
+	if !old.ForwardQuery {
+		t.Error("decoding the older payload lost a field it did carry, so the " +
+			"zero-decode above proves nothing")
+	}
+}

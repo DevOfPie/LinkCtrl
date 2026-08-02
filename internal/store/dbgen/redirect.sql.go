@@ -58,6 +58,7 @@ SELECT
     l.max_clicks,
     l.one_time,
     l.forward_query,
+    l.forward_path,
     l.bot_blocking,
     d.block_bots,
     d.block_bots_enforced
@@ -85,6 +86,7 @@ type ResolveAliasForRedirectRow struct {
 	MaxClicks         *int64
 	OneTime           bool
 	ForwardQuery      bool
+	ForwardPath       bool
 	BotBlocking       string
 	BlockBots         bool
 	BlockBotsEnforced bool
@@ -136,6 +138,7 @@ func (q *Queries) ResolveAliasForRedirect(ctx context.Context, arg ResolveAliasF
 		&i.MaxClicks,
 		&i.OneTime,
 		&i.ForwardQuery,
+		&i.ForwardPath,
 		&i.BotBlocking,
 		&i.BlockBots,
 		&i.BlockBotsEnforced,

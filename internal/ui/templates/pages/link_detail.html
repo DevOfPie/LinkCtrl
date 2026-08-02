@@ -119,6 +119,21 @@
       </label>
     </div>
     <div class="sm:col-span-2">
+      {{/* The second half of the same idea, and deliberately the same shape as
+           the checkbox above: one control, off by default, no modes. What it
+           costs is stated rather than implied — with it on the alias stops
+           being one URL. */}}
+      <label class="flex items-start gap-2 text-sm text-ink">
+        <input type="checkbox" name="forward_path" value="1" class="mt-0.5 rounded border-line-strong"
+               {{if .Form.ForwardPath}}checked{{end}}>
+        <span>Forward extra path segments
+          <span class="block text-xs text-subtle">
+            <code>/{{.Link.Alias}}/pricing</code> reaches the destination's own <code>/pricing</code>. With this off, anything after the alias is a 404 &mdash; so switching it on makes this link answer every path beneath itself, not just its own.
+          </span>
+        </span>
+      </label>
+    </div>
+    <div class="sm:col-span-2">
       <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Save changes</button>
     </div>
   </form>

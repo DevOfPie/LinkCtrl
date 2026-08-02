@@ -105,6 +105,7 @@ file. Append a row when you append an entry.
 | [M28.5, amendment: Phase 1 does have a trash](#2026-08-02--m285-amendment-phase-1-does-have-a-trash-and-the-reopening-depends-on-it) | Why *no soft delete, no restore, no trash* was two-thirds false; the file arguing from a trash window it denied existed; what actually has no way back |
 | [M30 reopened: one character, and the four checks it walked past](#2026-08-02--m30-reopened-one-character-and-the-four-checks-it-walked-past) | Four unshared mechanisms defeated by one keystroke; D46 — canonicalize the dot away rather than refuse it, folded once in the validator; why `TrimRight` and not one `TrimSuffix`; why a reflection walk over struct shape could not see the bypass; the class already asserted for the Postgres tier |
 | [M30, amendment: the citation the fix moved](#2026-08-02--m30-amendment-the-citation-the-fix-moved) | `blocking_test.go:346-350` → `:441-444`; why a milestone editing a file invalidates its own bullet's line citation, and the case for citing test names |
+| [M33, one alias, and every URL underneath it](#2026-08-02--m33-one-alias-and-every-url-underneath-it) | D47 — a deep link the alias cannot forward gets the ordinary miss, charged; why falling back to the bare destination hands every link the opt-in property; why the probe charge is what stops the refusal being an existence oracle; why the snapshot field's justification is fail-safety and not M32.5's disproved one; reading the remainder from `EscapedPath` rather than `PathValue`; `SUFFIX` and the two-run measurement |
 
 ---
 
@@ -8235,3 +8236,188 @@ observation rather than smuggled in as a rule here.
 
 No assertion moved. The class was still known, still asserted for the Postgres
 tier and still fixed in only one of three places, and the commit still says so.
+
+---
+
+## 2026-08-02 — M33, one alias, and every URL underneath it
+
+Deep-link path forwarding is a small column and a large change in what an alias
+*is*. Before it, an alias is one URL. With it on, an alias is a namespace: every
+path beneath it resolves, forever, to wherever the destination's own tree
+happens to lead. Most of the work in this milestone is about keeping that
+enlargement opt-in and bounded, and the decisions below are all versions of the
+same question — what happens at the edge of the namespace.
+
+### D47 — what a deep link the alias cannot forward gets
+
+**The ordinary miss.** The custom 404 page, charged to the 404-probe allowance.
+Never the bare destination, and never a redirect with the awkward part removed.
+
+Three situations collapse into that one answer, and collapsing them is the
+point rather than a convenience:
+
+- the link does not forward paths, which is every link that existed before this
+  milestone and every link created since without asking;
+- the remainder holds a dot segment, in any of the spellings the URL standard
+  resolves — `..`, `%2e%2e`, `.%2e`, `%2e.`, and the uppercase forms;
+- the destination cannot be rebuilt losslessly.
+
+**Falling back to the bare destination is the tempting answer and the worse
+one.** It reads as generous: somebody typed `/launch/pricing`, we know where
+`/launch` goes, send them there. What it actually does is hand every link on the
+instance the exact property this milestone makes opt-in — one alias answering an
+unbounded set of URLs — to every link at once, including every link that existed
+before anybody had the chance to decide. An owner who pointed a link at a
+campaign page did not agree that `/launch/anything-a-stranger-appends` should
+also reach it.
+
+**Sanitizing the dots is the other tempting answer.** Resolve `..` the way a
+browser would, or drop the offending segment, and forward what is left. Both
+send the visitor somewhere other than where they asked to go, while returning a
+302 that says it worked. A 404 is the honest answer to a request that cannot be
+served, and it is the one a person can act on.
+
+Refusing rather than resolving also keeps a promise that is easier to state than
+to enforce piecemeal: **a forwarded path cannot leave the subtree the owner
+pointed at.** The origin is protected structurally — nothing in the joiner
+touches the destination's scheme or host, and the remainder is never resolved as
+a URL reference, which is where `//evil.example` would have become a different
+site. The subtree is protected by the dot refusal. The two together are what
+`TestAppendPathNeverMovesTheOriginOrRewritesTheDestination` asserts over
+generated remainders, and it was verified by sabotage: rebuilding the joiner on
+`url.ResolveReference` moves the origin to `http://evil.example` on generated
+case 28.
+
+**Charging the probe allowance is part of the decision, not a detail.** Two
+reasons, and the second is the one that decided it.
+
+Appending a slash would otherwise be a way round the 404 limit: `/x/1`, `/x/2`,
+`/x/3` are unbounded, each costs a lookup, and none of them would have been
+charged. And a refusal that cost nothing would be an existence oracle. An alias
+that exists with forwarding off, and an alias that never existed, now answer
+identically *and* cost identically — the same page, the same headers, the same
+token. If only one of them were charged, a scanner could tell them apart by
+watching when it got throttled, which is exactly the information the 404 page's
+uniformity exists to withhold.
+
+The price is that a trailing-slash typo on a real link spends one token. That is
+the same price the limiter already charges for mistyping the alias itself, and
+the allowance is a per-minute budget rather than a lockout.
+
+### What was not decided here, and stayed as it was
+
+`/{alias}/` — a trailing slash and nothing after it — has answered 404 since the
+redirect tree existed, and `TestRedirectMatrix` says so in a case named *trailing
+slash is not an alias*. It would have been easy to change while the route was
+being rewritten underneath it, on the reasoning that people type trailing slashes
+and a 302 is friendlier. It was not changed: the milestone did not ask, and a
+shipped assertion is not a thing to revise in passing.
+
+What it does now, with forwarding **on**, is join an empty remainder — so
+`/{alias}/` reaches the destination's own root rather than being a special case.
+That is new behaviour on a link that has opted in, which is the only place this
+milestone is allowed to create any.
+
+### The snapshot field, and why its justification is not M32.5's
+
+`Snapshot.ForwardPath` is additive and `CacheKeyVersion` stays `"v1"`, which is
+the same move [M32.5](phase-details/m32.5.md) made for the bot-policy fields.
+The justification is deliberately **not** the same, and the difference is worth
+recording because copying the older one would have planted a second false claim
+in the same file.
+
+M32.5's comment argues that on any instance holding a pre-change entry *"the
+columns did not exist a moment ago, so nobody can have switched blocking on
+yet."* [F41](deferred-findings.md) shows that is false: `docs/releasing.md:102`
+runs migrations at boot before the listener opens, so a rolling restart has old
+and new containers serving concurrently, and an old binary goes on writing
+entries without the new fields while the feature is already on. F41 is out of
+spec for this milestone and was left alone — it does not make M33's claim false,
+and reopening M32.5 is scheduling, which is the owner's.
+
+What makes the omitted bump safe **here** is which way the zero value falls. An
+absent `fp` decodes as false, false means *do not forward*, and that is exactly
+what the alias did before this milestone existed. A visitor whose deep link
+lands on a stale entry written by an older binary gets the 404 they would have
+got yesterday, for at most `REDIRECT_TTL`, and the next fetch after the entry
+expires fixes it. The failure mode is a feature not yet working, not a control
+not being applied. A field whose *absence* meant "forward" would have needed the
+bump, because then a stale entry would send somebody somewhere the owner never
+configured.
+
+`TestForwardPathSurvivesTheWire` pins that, and asserts the older payload's `q`
+still decodes too — otherwise "the new field read as false" would be
+indistinguishable from the whole payload failing to decode. Sabotage confirmed
+it: giving `ForwardPath` the JSON key `q`, already in use, fails the test on the
+pre-change payload.
+
+The claim holds only while the cache key is `v1` on both sides of an upgrade.
+[M34](phase-details/m34.md) bumps it to v2, which is why M33 lands first — the
+ordering is part of the claim rather than incidental scheduling, and M33's own
+milestone file says so.
+
+### Where the visitor's path is read from, which is not where it looks
+
+`ServeMux` unescapes a wildcard before storing it, so `r.PathValue("rest")`
+turns `/a/x%2Fy` into `x/y`, `/a/a%3Fb` into `a?b` and `/a/%2e%2e/x` into
+`../x`. Every one of those is a defect if it reaches the joiner: the first
+splits one segment into two, the second injects a query the destination never
+had, and the third is the traversal the dot check exists to refuse — arriving in
+a spelling the check would no longer recognise.
+
+So the remainder is sliced out of `r.URL.EscapedPath()` instead, which is the
+bytes as they arrived. `net/url` guarantees that string carries no raw `?`, `#`
+or space — anything that cannot be a path byte is escaped before `EscapedPath`
+returns — which is what makes concatenating it safe. Slicing also means the
+alias segment's own spelling does not have to agree with the router's: `/a%62c/x`
+and `/abc/x` produce the same remainder.
+
+The same rule governs the output. `Path` and `RawPath` are set together, so
+`url.URL.String` emits what arrived rather than a re-encoding of it. This is
+`appendRaw`'s rule for the query half, applied to the path half: a destination
+the parser cannot round-trip must not be rewritten on its way past. `%C3%A9`
+stays `%C3%A9`.
+
+Verified by sabotage rather than by reading: unescaping the remainder before
+joining turns `a%2Fb` into two segments and fails the encoding cases, and it
+also fails the property test — which is the more interesting half, because it
+means the invariant catches the mistake without anybody having thought to write
+a case for it.
+
+### The route, and what it could have shadowed
+
+`/{alias}/{rest...}` is the most general pattern in the tree, which sounds like
+the dangerous property and is in fact the safe one. It does not overlap
+`/{alias}` at all — one matches exactly one segment, the other requires a
+separator — and `ServeMux` would reject an ambiguous pair, so the fact that both
+register is itself the proof. Every route with a fixed prefix is a strict subset
+of it and still wins on specificity; only a route that was *also* an arbitrary
+two-segment wildcard could be shadowed, and there is none.
+
+Confirmed by probe before the route was written, and then by test:
+`TestRoutesAreNotShadowedByTheCatchAll` now checks `/api/v1/links/whatever` as
+well as `/api/v1/me`, and unregistering the API subtree makes both fall through
+to the redirect handler and answer 404 instead of 401.
+
+One thing the probe found that is worth writing down: `ServeMux` cleans the
+**escaped** path and redirects before dispatching, so a literal `..` or `//`
+never reaches the handler at all — `/abc/../evil` is answered with a redirect to
+`/evil`. Only the percent-encoded spellings arrive, which is why the dot check
+decodes each segment rather than comparing strings.
+
+### The measurement
+
+The inherited rule is to re-run the SLO whenever the redirect path is touched,
+and this is the first milestone whose work is *string surgery* on that path
+rather than a decision taken over fields already in hand. Two cached runs on the
+same image, differing only in whether the request carried extra path segments,
+with `forward_path` on for all 100,000 seeded links in both: 100% under 20ms
+either way, generator p99 150µs bare and 163µs deep, 100% memory hits and zero
+pool waits in both. The full figures and their caveats are in
+[../slo.md](../slo.md).
+
+Making that repeatable needed one addition to the generator — a `SUFFIX`
+environment variable, empty by default, so every earlier measurement's request
+shape is unchanged. Without it the load test can only ask for bare aliases, and
+a section headed *re-measured for M33* would have been measuring the path M33
+did not change.

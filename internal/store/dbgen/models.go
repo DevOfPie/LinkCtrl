@@ -206,6 +206,7 @@ type Link struct {
 	SearchVector         interface{}
 	CampaignID           *uuid.UUID
 	BotBlocking          string
+	ForwardPath          bool
 }
 
 type LinkClickDaily struct {

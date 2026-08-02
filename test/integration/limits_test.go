@@ -283,6 +283,60 @@ func TestNotFoundProbeLimit(t *testing.T) {
 	}
 }
 
+// A deep-link miss is a miss (M33). Registering "/{alias}/{rest...}" opened a
+// second, unbounded way to ask for something that is not there — one alias and
+// any suffix — and if that path were not charged, the probe limit would be
+// bypassable by appending a slash to everything.
+//
+// The limit is also what keeps the refusal from being an existence oracle: an
+// alias that exists but does not forward and an alias that never existed both
+// answer 404 and both spend an allowance, so the two cannot be told apart by
+// probing either.
+func TestDeepLinkMissesAreChargedAsProbes(t *testing.T) {
+	f := newLimited(t, func(c *config.Config) { c.Redirect.NotFoundLimit = 5 })
+	f.setupOwner()
+
+	// A real link with path forwarding off. Everything beneath it is a miss.
+	working := f.createLink(map[string]any{"url": "https://example.com/target"})
+
+	for i := range 5 {
+		r := f.get("/" + working + "/deep" + strconv.Itoa(i))
+		if r.StatusCode != http.StatusNotFound {
+			t.Fatalf("deep miss %d: status = %d, want 404", i+1, r.StatusCode)
+		}
+		_ = r.Body.Close()
+	}
+
+	// The allowance is now spent, and an ordinary single-segment miss proves it:
+	// nothing else in this test asked for an alias that does not exist.
+	r := f.get("/neverexisted")
+	if r.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429; deep-link misses that cost a lookup must "+
+			"spend the allowance, or appending a slash defeats the limit", r.StatusCode)
+	}
+	_ = r.Body.Close()
+
+	// The bare alias still works while throttled, exactly as it does for the
+	// single-segment limit: only a miss is charged, and a hit is answered from
+	// the in-process cache.
+	r = f.get("/" + working)
+	if r.StatusCode != http.StatusFound {
+		t.Errorf("throttled request for the live alias: status = %d, want 302", r.StatusCode)
+	}
+	_ = r.Body.Close()
+
+	// And a deep miss on that same cached alias is answered 404 rather than 429,
+	// which is not an inconsistency: the throttle exists to stop a scanner
+	// turning probes into database queries, and this one was answered from the
+	// in-process map. The refusal is reserved for the requests that would have
+	// cost a lookup.
+	r = f.get("/" + working + "/deep-again")
+	if r.StatusCode != http.StatusNotFound {
+		t.Errorf("throttled deep miss on a cached alias: status = %d, want 404", r.StatusCode)
+	}
+	_ = r.Body.Close()
+}
+
 // Junk that cannot be an alias is refused on shape, so it costs no lookup — and
 // therefore is not charged. Every browser requests favicon.ico, and it lands
 // here; spending a visitor's allowance on it would throttle real people.

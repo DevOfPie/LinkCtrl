@@ -3,8 +3,9 @@
 -- name: CreateLink :one
 INSERT INTO links (
     id, workspace_id, domain_id, alias, primary_url,
-    title, description, status, expires_at, created_by, forward_query
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    title, description, status, expires_at, created_by, forward_query,
+    forward_path
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 RETURNING *;
 
 -- name: CreateDestination :one
@@ -37,6 +38,7 @@ UPDATE links
                             ELSE COALESCE(sqlc.narg(expires_at), expires_at) END,
        alias         = COALESCE(sqlc.narg(alias), alias),
        forward_query = COALESCE(sqlc.narg(forward_query), forward_query),
+       forward_path  = COALESCE(sqlc.narg(forward_path), forward_path),
        bot_blocking  = COALESCE(sqlc.narg(bot_blocking), bot_blocking),
        updated_at    = now()
  WHERE id = sqlc.arg(id) AND workspace_id = sqlc.arg(workspace_id) AND deleted_at IS NULL

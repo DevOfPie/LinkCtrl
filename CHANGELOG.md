@@ -22,6 +22,26 @@ migrations run at boot.
 
 ### Added
 
+- **A link can forward the path a visitor arrived with, not just the query
+  string.** `forward_path` is per link and off by default, in the API and as a
+  checkbox on the link's edit page. With it on, `/{alias}/api/quickstart`
+  reaches the destination's own `/api/quickstart`, so one short link can stand
+  in for a whole documentation tree. Both halves may be on at once: the path is
+  joined first, then the query is merged onto the result.
+- **With path forwarding off, anything after the alias is a `404`.** Not a
+  redirect to the bare destination — that would make every link on the instance
+  answer every URL beneath itself. It is the custom 404 page, and it spends the
+  same 404-probe allowance an unknown alias does, so the refusal cannot be used
+  to find out which aliases exist.
+- **Forwarding cannot move the destination's origin.** The visitor's segments
+  are appended to the destination's path and nothing touches its scheme, host,
+  query or fragment; an encoded `?` or `#` stays a path byte rather than
+  becoming a separator; and `..` segments are refused rather than resolved, in
+  every spelling the URL standard treats as one. A property test asserts those
+  invariants over generated input. Measured on the built image with forwarding
+  on for all 100,000 seeded links and every request carrying extra path
+  segments: 100% of 240,002 requests under 20ms at 2,000 rps, generator p99
+  163µs, in [docs/slo.md](docs/slo.md).
 - **Automated clients can be refused, per link or for the whole link domain.**
   A link's setting is *inherit*, *block* or *allow*; *inherit* is the default and
   takes the domain's answer, which on a fresh instance is allow — so nothing

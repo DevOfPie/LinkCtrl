@@ -327,11 +327,18 @@ func TestRoutesAreNotShadowedByTheCatchAll(t *testing.T) {
 		})
 	}
 
-	// The API subtree must reach the application tree, not the catch-all.
-	resp := f.get("/api/v1/me")
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("/api/v1/me returned %d, want 401 from the API tree", resp.StatusCode)
+	// The API subtree must reach the application tree, not the catch-all. This
+	// is also the check that M33's "/{alias}/{rest...}" did not swallow it: the
+	// multi-segment pattern is the most general thing registered, so every
+	// route with a fixed prefix has to keep winning on specificity.
+	for _, path := range []string{"/api/v1/me", "/api/v1/links/whatever"} {
+		t.Run(path, func(t *testing.T) {
+			resp := f.get(path)
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != http.StatusUnauthorized {
+				t.Errorf("%s returned %d, want 401 from the API tree", path, resp.StatusCode)
+			}
+		})
 	}
 }
 

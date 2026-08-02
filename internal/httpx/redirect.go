@@ -199,6 +199,31 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	outcome := res.Snapshot.Decide(start)
+
+	// Deep-link path forwarding (M33), and the decision has to happen here
+	// rather than beside the Location line below, because the metric is
+	// recorded in between: converting the outcome after observing it would put
+	// a 404 in the "redirect" series.
+	//
+	// A multi-segment request the link cannot forward is a miss, not a redirect
+	// to the bare destination. Answering the destination anyway would mean
+	// /{alias}/anything-at-all resolved for every link on the instance, which
+	// turns one alias into an unbounded set of URLs that all go somewhere the
+	// owner did not point them.
+	//
+	// forwardable also refuses a remainder it cannot join safely — see
+	// appendPath — and refusing lands here rather than silently dropping the
+	// path, for the same reason: a visitor who asked for /{alias}/a/../b must
+	// not be sent somewhere else without being told.
+	var target string
+	if outcome == redirect.OutcomeRedirect {
+		joined, ok := forwardable(res.Snapshot, r)
+		if !ok {
+			outcome = redirect.OutcomeNotFound
+		}
+		target = joined
+	}
+
 	// Observed here, before the response is written, so the measurement covers
 	// resolution and decision rather than however long a client takes to read
 	// the body. Writing an empty 302 is a syscall on an already-open socket.
@@ -221,7 +246,6 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// being treated as "redirect anyway".
 	}
 
-	target := res.Snapshot.URL
 	if res.Snapshot.ForwardQuery && r.URL.RawQuery != "" {
 		target = appendQuery(target, r.URL.RawQuery)
 	}
@@ -428,6 +452,117 @@ func latencyUS(d time.Duration) int32 {
 		return math.MaxInt32
 	}
 	return int32(us)
+}
+
+// forwardable produces the destination for this request, and reports whether
+// there is one at all (M33).
+//
+// Three answers, and the middle one is the milestone:
+//
+//   - A bare /{alias}. The destination is the destination, exactly as before
+//     this existed.
+//   - Anything after the alias, forwarding off. Nothing to serve: reported
+//     false, and the caller turns it into the ordinary miss. That includes a
+//     bare trailing slash, which has answered 404 for as long as the redirect
+//     tree has existed — TestRedirectMatrix names the case — and which this
+//     milestone was not asked to change.
+//   - Anything after the alias, forwarding on. Joined onto the destination, or
+//     refused if it cannot be joined safely. An empty remainder joins to the
+//     destination's own root — /{alias}/ is the top of the forwarded subtree
+//     rather than a separate case.
+//
+// The remainder is taken from EscapedPath and never from PathValue("rest").
+// ServeMux unescapes a wildcard before storing it, so PathValue turns
+// /a/x%2Fy into "x/y" and /a/a%3Fb into "a?b" — feed that to the joiner and a
+// visitor can split a segment in two, or inject a query the destination never
+// had. EscapedPath is the bytes as they arrived, and net/url guarantees it
+// carries no raw '?', '#' or space, which is what makes appending it safe.
+func forwardable(snap *redirect.Snapshot, r *http.Request) (string, bool) {
+	if snap == nil {
+		return "", false
+	}
+	rest, deep := pathRemainder(r.URL.EscapedPath())
+	if !deep {
+		return snap.URL, true
+	}
+	if !snap.ForwardPath {
+		return "", false
+	}
+	return appendPath(snap.URL, rest)
+}
+
+// pathRemainder returns whatever follows the alias segment, still escaped, and
+// whether there was a separator at all.
+//
+// The two are not the same question: "/abc" and "/abc/" both have an empty
+// remainder, and only the second one is a request for something beneath the
+// alias.
+//
+// Sliced out of the escaped path rather than read back from the router,
+// because the alias segment may itself be percent-encoded and the two
+// spellings must not have to agree.
+func pathRemainder(escaped string) (string, bool) {
+	trimmed := strings.TrimPrefix(escaped, "/")
+	i := strings.IndexByte(trimmed, '/')
+	if i < 0 {
+		return "", false
+	}
+	return trimmed[i+1:], true
+}
+
+// appendPath joins a visitor's extra path segments onto the destination.
+//
+// The escaped remainder is concatenated verbatim and the result's Path and
+// RawPath are set together, so url.URL.String emits the bytes that arrived
+// instead of re-encoding them. This is the same rule appendRaw follows for the
+// query half: a destination the parser cannot round-trip must not be rewritten
+// on its way past.
+//
+// The origin cannot move, and that is structural rather than checked. Nothing
+// here touches u.Scheme or u.Host, the joined path always begins with a single
+// '/', and the remainder is never resolved as a reference — url.ResolveReference
+// would turn a remainder of "//evil.example" into a different host, which is
+// precisely the shape the property test refutes.
+func appendPath(target, rest string) (string, bool) {
+	if !joinable(rest) {
+		return "", false
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		return "", false
+	}
+	joined := strings.TrimSuffix(u.EscapedPath(), "/") + "/" + rest
+	unescaped, err := url.PathUnescape(joined)
+	if err != nil {
+		return "", false
+	}
+	u.Path, u.RawPath = unescaped, joined
+	return u.String(), true
+}
+
+// joinable reports whether a remainder may be appended at all.
+//
+// Dot segments are refused rather than resolved. A browser normalizes them
+// before it asks for anything — and the URL standard counts "%2e" and "%2E" as
+// dots too, which is how one reaches us at all: ServeMux cleans the escaped
+// path and redirects, so the literal spellings never arrive and only the
+// encoded ones do.
+//
+// Refusing is the whole point. Resolving would let /{alias}/../../secret walk
+// out of the subtree the owner pointed at, and silently dropping the segments
+// would send the visitor somewhere they did not ask for while looking like it
+// worked. A 404 says what happened.
+func joinable(rest string) bool {
+	for seg := range strings.SplitSeq(rest, "/") {
+		decoded, err := url.PathUnescape(seg)
+		if err != nil {
+			return false
+		}
+		if decoded == "." || decoded == ".." {
+			return false
+		}
+	}
+	return true
 }
 
 // appendQuery merges the incoming query string into the destination.

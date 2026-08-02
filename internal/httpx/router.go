@@ -508,9 +508,25 @@ func NewRouter(d Deps) http.Handler {
 	// true on a split-host deployment, where the collision is impossible: an
 	// instance can be merged back onto one host, and an alias created as
 	// "login" during the split would break the dashboard on the day it is.
+	//
+	// Two patterns, not one, and they do not overlap: "/{alias}" matches a path
+	// of exactly one segment, "/{alias}/{rest...}" matches everything with a
+	// separator after the alias. ServeMux would reject an ambiguous pair, so the
+	// fact that both register is itself the proof they are disjoint.
+	//
+	// The multi-segment pattern is the most general thing in the tree, which is
+	// what makes it safe: every registered route is a strict subset of it —
+	// "/api/v1/", "/static/", "/links/", "/invite/" — so each of them still wins
+	// on ServeMux's specificity rule. Only a route that is *also* an arbitrary
+	// two-segment wildcard could be shadowed, and there is no such route.
+	//
+	// It carries the same methodFilter for the same reason: written with a
+	// method it would be ambiguous against the specific ops routes, and
+	// method-less it is unambiguously the more general pattern.
 	registerRedirect := func(root *http.ServeMux) {
 		if d.Redirect != nil {
 			root.Handle("/{alias}", methodFilter(d.Redirect, http.MethodGet, http.MethodHead))
+			root.Handle("/{alias}/{rest...}", methodFilter(d.Redirect, http.MethodGet, http.MethodHead))
 		}
 	}
 

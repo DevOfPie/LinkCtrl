@@ -88,6 +88,7 @@ func (h *Web) Dashboard(w http.ResponseWriter, r *http.Request) {
 type linkFormData struct {
 	URL, Alias, Title, Description, ExpiresAt, Tags string
 	ForwardQuery                                    bool
+	ForwardPath                                     bool
 	// BotBlocking is the link's own setting as the select renders it: inherit,
 	// on or off.
 	BotBlocking string
@@ -333,6 +334,7 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 		Title:        l.Title,
 		Description:  l.Description,
 		ForwardQuery: l.ForwardQuery,
+		ForwardPath:  l.ForwardPath,
 		BotBlocking:  string(l.BotBlocking),
 	}
 	if l.ExpiresAt != nil {
@@ -411,10 +413,11 @@ func (h *Web) LinkUpdate(w http.ResponseWriter, r *http.Request) {
 	// and since this form posts every field, absence really does mean "off"
 	// rather than "leave alone".
 	forward := r.PostFormValue("forward_query") != ""
+	forwardPath := r.PostFormValue("forward_path") != ""
 
 	in := link.UpdateInput{
 		URL: &urlv, Alias: &alias, Title: &title, Description: &desc, Tags: &tags,
-		ForwardQuery: &forward,
+		ForwardQuery: &forward, ForwardPath: &forwardPath,
 	}
 
 	// The one field this form may legitimately omit. A disabled select posts
@@ -442,6 +445,7 @@ func (h *Web) LinkUpdate(w http.ResponseWriter, r *http.Request) {
 			ExpiresAt:    r.PostFormValue("expires_at"),
 			Tags:         r.PostFormValue("tags"),
 			ForwardQuery: forward,
+			ForwardPath:  forwardPath,
 			BotBlocking:  r.PostFormValue("bot_blocking"),
 		}
 		data.FieldErrors = fields

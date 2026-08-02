@@ -143,6 +143,67 @@ its own invalidation — would both have shown up here.
 by counting what reaches Postgres: one query for an uncached redirect, zero for
 a cached one.
 
+### Re-measured for M33 (2026-08-02)
+
+[M33](build-notes/phase-details/m33.md) is the first milestone to do string
+surgery on the path a visitor is redirected to. M32.5 added a decision; this
+adds work — a slice out of the escaped path, a scan of its segments, a
+concatenation, and a URL that has to be re-emitted without being re-encoded.
+
+Two cached runs, on the same image, differing **only in the shape of the
+request**, because that is the comparison that isolates what this milestone
+added. `forward_path` was set to `true` for all 100,000 seeded links for both,
+so the difference is not the setting but whether there is a path to join. Both
+cache tiers were emptied and the container restarted before each.
+
+| | Target | Bare alias (`/ld42`) | Deep link (`/ld42/deep/segments`) |
+| --- | --- | --- | --- |
+| Cached redirect, server-side | p99 < 20ms | **100% of 239,999 under 20ms**; 239,998 of them under 0.5ms | **100% of 240,002 under 20ms**; 240,001 of them under 0.5ms |
+| Cached redirect, generator-side | — | p99 **149.76µs**, median 85.97µs, p(95) 116.12µs | p99 **162.54µs**, median 90.37µs, p(95) 122.27µs |
+| Sustained rate | 2,000 rps for 2m | 2,000.0 rps, zero failures | 2,000.0 rps, zero failures |
+| Cache mix | hits only | 239,999 memory, 0 redis, 0 database | 240,002 memory, 0 redis, 0 database |
+| Redirect pool | — | 0 acquire waits | 0 acquire waits |
+
+**Thirteen microseconds of difference is not a finding.** The gap between the two
+columns at p99 is comfortably inside the run-to-run spread this document has
+already recorded between identical configurations — an earlier pair of runs on a
+previous build of the same code read 144µs and 155µs, so the difference moved by
+more between builds than it does between request shapes. It is quoted only to say
+that the joiner did not cost something visible.
+
+What the pair does establish is that the work stayed off the parts of the path
+that could have been expensive: the cache mix is 100% memory in both, so no
+request in either run touched Redis or Postgres, and the pool waited zero times.
+Joining a path reads the request and the snapshot the resolver had already
+produced, and asks nothing.
+
+The uncached path, run with the same deep-link request shape:
+
+| | Target | Measured |
+| --- | --- | --- |
+| Uncached redirect, generator-side | p99 < 100ms | p99 **421.47µs**, at 500 rps for 1m, zero failures |
+| Cache mix | mostly misses | 24,528 database, 3,867 redis, 1,606 memory |
+| Redirect pool | — | 5 acquire waits, 0.021s total |
+
+Verified live on the same image before the measured runs, so the branch really
+was the one being timed: `/ld1` answered `302` to `https://example.com/seed/1`,
+`/ld1/deep/segments` answered `302` to `https://example.com/seed/1/deep/segments`,
+and `/ld1/%2e%2e/%2e%2e/admin` answered **404** — the traversal refusal, on the
+running server rather than only in a unit test.
+
+Taken on image `sha256:99dcdebbdf08722ec…` (`linkctrl:test`, built 2026-08-02
+from the M33 working tree at `v0.1.0-65-g6f95079-dirty`) on the same
+Windows 11 / Docker Desktop / WSL2 host as every figure above. The image was
+rebuilt and every figure retaken after a late refactor of the handler, because a
+number measured on a binary that is not the one being committed is not a
+measurement of it. Eight cached runs now read 100%, 100%, 100%, 99.991%, 100%,
+100%, 100% and 100% under 20ms.
+
+The `SUFFIX` environment variable in the reproduction recipe below is what makes
+this repeatable. Without it the generator can only ask for bare aliases, and a
+"re-measured for M33" section would have been measuring the path this milestone
+did not change.
+
 ## Reproducing it
 
 ```sh
@@ -151,6 +212,26 @@ make seed-slo                    # 100k links, 5M click events, ~90s
 make load                        # cached, 2,000 rps, 2 minutes
 make load-uncached               # spread across the whole dataset
 ```
+
+`make seed-slo` needs a workspace to seed into, so the instance has to be
+claimed first — `POST /api/v1/auth/setup` — which a fresh `make rebuild` undoes.
+
+`SUFFIX` appends path segments to every measured request, for exercising
+deep-link forwarding (M33). It is empty by default, so every measurement above
+that predates it was taken with the request shape it describes:
+
+```sh
+docker compose exec postgres psql -U linkctrl -d linkctrl \
+  -c "UPDATE links SET forward_path = true WHERE alias LIKE 'ld%'"
+docker compose exec redis redis-cli FLUSHALL
+docker compose restart app       # the in-process tier is not flushed by FLUSHALL
+SUFFIX=/deep/segments make load
+```
+
+The update and the restart are not optional decoration. Without the column set
+every request answers 404, and k6's `is 302` check fails the run rather than
+quietly measuring the miss path; without the flush and the restart the warm-up
+would populate the tiers from snapshots written before the column changed.
 
 `scripts/load-test.sh` reports both halves of the measurement. The server's
 histogram is cumulative since boot, so it is sampled before and after and

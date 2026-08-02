@@ -156,6 +156,11 @@ type CreateInput struct {
 	// ForwardQuery merges the visitor's query string into the destination.
 	// Off by default; the destination's own parameters always win on conflict.
 	ForwardQuery bool
+	// ForwardPath appends the visitor's extra path segments to the destination.
+	// Off by default: with it on the alias answers every path beneath itself,
+	// and that is a decision about the link's whole namespace rather than about
+	// one URL.
+	ForwardPath bool
 
 	// Phase 2 fields. Accepted by the parser so the API can reject them with a
 	// specific message rather than ignoring them silently, which would look
@@ -274,6 +279,7 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 		ExpiresAt:    in.ExpiresAt,
 		CreatedBy:    &actor.UserID,
 		ForwardQuery: in.ForwardQuery,
+		ForwardPath:  in.ForwardPath,
 	})
 	if err != nil {
 		// The unique index is the real guarantee; the pre-check only makes
@@ -333,6 +339,7 @@ type UpdateInput struct {
 	ClearExpiry  bool
 	Tags         *[]string
 	ForwardQuery *bool
+	ForwardPath  *bool
 	// BotBlocking is the link's own answer to "refuse automated clients":
 	// inherit, on, or off. Nil leaves it alone, which is what the dashboard form
 	// sends when the domain enforces and the control is disabled.
@@ -448,6 +455,7 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 		ClearExpiry:  in.ClearExpiry,
 		Alias:        newAlias,
 		ForwardQuery: in.ForwardQuery,
+		ForwardPath:  in.ForwardPath,
 		BotBlocking:  newPolicy,
 	})
 	if err != nil {
@@ -664,6 +672,7 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 			Status:       r.Status,
 			ExpiresAt:    r.ExpiresAt,
 			ForwardQuery: r.ForwardQuery,
+			ForwardPath:  r.ForwardPath,
 			BotBlocking:  r.BotBlocking,
 			ClickCount:   r.ClickCount,
 			LastClickAt:  r.LastClickAt,
@@ -861,6 +870,7 @@ func (s *Service) toDomain(l dbgen.Link, tags []domain.Tag) *domain.Link {
 			domain.LinkStatus(l.Status), l.ExpiresAt, time.Now()),
 		Tags:         tags,
 		ForwardQuery: l.ForwardQuery,
+		ForwardPath:  l.ForwardPath,
 		BotBlocking:  domain.BotPolicy(l.BotBlocking),
 		ExpiresAt:    l.ExpiresAt,
 		ClickCount:   l.ClickCount,

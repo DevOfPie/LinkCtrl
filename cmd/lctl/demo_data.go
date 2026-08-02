@@ -87,6 +87,7 @@ func demoCreateLinks(ctx context.Context, pool *pgxpool.Pool, svc *link.Service,
 		in := link.CreateInput{
 			URL: d.url, Alias: d.alias, Title: d.title,
 			Description: d.desc, Tags: d.tags, ForwardQuery: d.forwardQuery,
+			ForwardPath: d.forwardPath,
 		}
 		// The webinar expires while the demo is still current, which is the
 		// state the form describes; the sale expires in the past, which no API

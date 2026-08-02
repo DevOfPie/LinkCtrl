@@ -2186,7 +2186,7 @@ components:
       additionalProperties: false
       required:
         [id, workspace_id, alias, short_url, url, status, tags, forward_query,
-         bot_blocking, click_count, created_at, updated_at]
+         forward_path, bot_blocking, click_count, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         workspace_id: { type: string, format: uuid }
@@ -2209,6 +2209,15 @@ components:
         forward_query:
           type: boolean
           description: When true, a visitor's query string is merged into the destination on redirect. The destination's own parameters win on conflict.
+        forward_path:
+          type: boolean
+          description: >
+            When true, path segments after the alias are appended to the
+            destination, so `/{alias}/pricing` reaches the destination's own
+            `/pricing`. When false, anything after the alias is a 404 — the same
+            answer an unknown alias gets, so it reveals nothing about which
+            aliases exist. Dot segments are refused rather than resolved, and
+            forwarding never changes the destination's scheme or host.
         bot_blocking:
           $ref: "#/components/schemas/BotBlocking"
         expires_at: { type: string, format: date-time }
@@ -2351,6 +2360,9 @@ components:
         forward_query:
           type: boolean
           description: Off by default. Merges the visitor's query string into the destination on redirect; the destination's own parameters win.
+        forward_path:
+          type: boolean
+          description: Off by default. Appends the visitor's extra path segments to the destination; with it on the alias answers every path beneath itself.
         password:
           type: string
           description: Phase 2. Present in the schema, rejected with 422.
@@ -2383,6 +2395,9 @@ components:
         forward_query:
           type: boolean
           description: Toggles query forwarding for the link.
+        forward_path:
+          type: boolean
+          description: Toggles deep-link path forwarding for the link.
         bot_blocking:
           $ref: "#/components/schemas/BotBlocking"
 

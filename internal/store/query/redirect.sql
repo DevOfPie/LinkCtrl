@@ -43,6 +43,7 @@ SELECT
     l.max_clicks,
     l.one_time,
     l.forward_query,
+    l.forward_path,
     l.bot_blocking,
     d.block_bots,
     d.block_bots_enforced

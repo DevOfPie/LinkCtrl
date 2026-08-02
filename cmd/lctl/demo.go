@@ -41,6 +41,7 @@ type demoLink struct {
 	alias, url, title, desc string
 	tags                    []string
 	forwardQuery            bool
+	forwardPath             bool
 	// weight is relative daily traffic. 0 means the link exists and is never
 	// clicked, which is a state worth showing.
 	weight int
@@ -61,8 +62,8 @@ func demoCatalogue() []demoLink {
 			title: "Introducing LinkCtrl 0.1", desc: "Launch announcement, shared everywhere at once.",
 			tags: []string{"marketing", "blog"}, weight: 50, from: 29, spikeDay: 14, spikeMult: 7, age: 32},
 		{alias: "handbook", url: "https://example.com/docs", title: "Documentation home",
-			desc: "The link that goes in every support reply.",
-			tags: []string{"docs"}, weight: 42, from: 29, age: 44},
+			desc: "Path forwarding on: /handbook/api/quickstart reaches the destination's own /api/quickstart.",
+			tags: []string{"docs"}, forwardPath: true, weight: 42, from: 29, age: 44},
 		{alias: "quickstart", url: "https://example.com/docs/quickstart", title: "API quickstart",
 			tags: []string{"docs", "dev"}, weight: 24, from: 29, age: 40},
 		{alias: "pricing-2026", url: "https://example.com/pricing", title: "Pricing",

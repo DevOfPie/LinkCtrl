@@ -93,6 +93,7 @@ k6() {
     -e "PHASE=${phase}" \
     -e "MODE=${MODE}" -e "RATE=${RATE}" -e "DURATION=${DURATION}" \
     -e "PREFIX=${PREFIX}" -e "TOTAL=${links}" \
+    -e "SUFFIX=${SUFFIX:-}" \
     grafana/k6 run "$@" /scripts/redirect.js
 }
 

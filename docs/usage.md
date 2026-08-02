@@ -391,14 +391,38 @@ SSRF the address refusals exist to prevent.
 | Active link | `302` with `Location`, `Cache-Control: private, no-store` |
 | Expired | `410 Gone` — distinct from 404 so crawlers and link checkers stop retrying |
 | Unknown, archived or disabled | `404` |
+| Anything after the alias, on a link that does not forward paths | `404` — the same answer, so it cannot be used to find out which aliases exist |
 | Too many misses from one address | `429` with `Retry-After` — see [configuration.md](configuration.md#rate-limits). Links already in the cache keep resolving, and paths that could never be an alias are not counted. |
 | The server could not resolve it | `503` with `Retry-After: 1`. Deliberately not a `404`: that would claim the link does not exist, and a crawler or link checker believing it drops a live link. |
 
 Query forwarding is per-link and off by default: set `forward_query` (a checkbox
 on the link's edit form, a boolean in the API) and the visitor's query string is
 merged into the destination, with the destination's own parameters winning on
-conflict. Deep-link path forwarding is Phase 2. `HEAD` works and does not record
-a click.
+conflict.
+
+**Deep-link path forwarding** is the other half, and the same shape:
+`forward_path`, per link, off by default. With it on, path segments after the
+alias are appended to the destination's own path — `/{alias}/api/quickstart`
+reaches `https://docs.example/product/api/quickstart` for a link pointing at
+`https://docs.example/product`. Both may be on at once; the path is joined
+first, then the query is merged onto the result.
+
+Three things about it are worth knowing before switching it on:
+
+- **The alias stops being one URL.** With forwarding on, that alias answers
+  every path beneath itself. That is the feature, and it is also why it is off
+  by default and per link rather than per instance.
+- **With it off, anything after the alias is a `404`** — the custom page, and it
+  spends the same 404-probe allowance an unknown alias does. There is no
+  fallback to the bare destination, because that would make every link on the
+  instance answer every URL under itself.
+- **Nothing about the destination changes except its path.** Its scheme, host,
+  query and fragment are untouched, encoded characters are passed through
+  rather than re-encoded, and `..` segments are refused rather than resolved —
+  a request for `/{alias}/%2e%2e/admin` is a `404`, not a redirect one directory
+  up.
+
+`HEAD` works and does not record a click.
 
 ## Roles
 

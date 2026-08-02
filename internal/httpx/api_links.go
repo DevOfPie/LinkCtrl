@@ -37,6 +37,7 @@ type createLinkRequest struct {
 	Tags         []string `json:"tags"`
 	ExpiresAt    *string  `json:"expires_at"`
 	ForwardQuery bool     `json:"forward_query"`
+	ForwardPath  bool     `json:"forward_path"`
 
 	// Phase 2. Present so the service can reject them by name.
 	Password  string `json:"password"`
@@ -54,8 +55,8 @@ func (a *LinkAPI) Create(w http.ResponseWriter, r *http.Request) {
 	in := link.CreateInput{
 		URL: req.URL, Alias: req.Alias, Title: req.Title,
 		Description: req.Description, Tags: req.Tags,
-		ForwardQuery: req.ForwardQuery,
-		Password:     req.Password, MaxClicks: req.MaxClicks, OneTime: req.OneTime,
+		ForwardQuery: req.ForwardQuery, ForwardPath: req.ForwardPath,
+		Password: req.Password, MaxClicks: req.MaxClicks, OneTime: req.OneTime,
 	}
 	if req.ExpiresAt != nil && *req.ExpiresAt != "" {
 		at, err := time.Parse(time.RFC3339, *req.ExpiresAt)
@@ -139,6 +140,7 @@ type updateLinkRequest struct {
 	ExpiresAt    *string   `json:"expires_at"`
 	Tags         *[]string `json:"tags"`
 	ForwardQuery *bool     `json:"forward_query"`
+	ForwardPath  *bool     `json:"forward_path"`
 	// BotBlocking is "inherit", "on" or "off". A pointer, like every other
 	// field here, so omitting it means "leave it alone" rather than "reset it to
 	// the default" — which for this setting would silently hand the decision
@@ -162,7 +164,7 @@ func (a *LinkAPI) Update(w http.ResponseWriter, r *http.Request) {
 	in := link.UpdateInput{
 		URL: req.URL, Alias: req.Alias, Title: req.Title,
 		Description: req.Description, Tags: req.Tags,
-		ForwardQuery: req.ForwardQuery,
+		ForwardQuery: req.ForwardQuery, ForwardPath: req.ForwardPath,
 	}
 	if req.BotBlocking != nil {
 		policy, ok := domain.ParseBotPolicy(*req.BotBlocking)

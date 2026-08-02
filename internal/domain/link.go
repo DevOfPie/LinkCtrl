@@ -119,6 +119,12 @@ type Link struct {
 	// most callers do not expect ?utm_source to reach them.
 	ForwardQuery bool `json:"forward_query"`
 
+	// ForwardPath appends the visitor's extra path segments to the destination,
+	// so /{alias}/reviews reaches the destination's own /reviews. Off by
+	// default, and for a sharper reason than ForwardQuery: with it on, one
+	// alias answers an unbounded set of URLs rather than one.
+	ForwardPath bool `json:"forward_path"`
+
 	// BotBlocking is this link's own setting, not the answer. What is actually
 	// in effect depends on the domain above it, and only domain.BlocksBots
 	// decides that — reporting the resolved boolean here instead would be a

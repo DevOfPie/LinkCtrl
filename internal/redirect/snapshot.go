@@ -36,6 +36,30 @@ type Snapshot struct {
 	MaxClicks    *int64 `json:"m,omitempty"` // PHASE 2
 	OneTime      bool   `json:"o,omitempty"` // PHASE 2
 
+	// Deep-link path forwarding (M33). Added without bumping CacheKeyVersion,
+	// and the reason is narrower than the one written below for bot blocking.
+	//
+	// It is not that nobody could have set the column yet. A rolling restart
+	// runs migrations at boot and then serves from old and new containers at
+	// once, so an old binary goes on writing entries without this field while
+	// the feature is already switched on somewhere — that is F41, recorded
+	// against the paragraph below, and it is a real sequence rather than a
+	// hypothetical one.
+	//
+	// What makes the omitted bump safe here is which way the zero value falls.
+	// An absent `fp` decodes as false, false means *do not forward*, and that is
+	// exactly what this alias did before the milestone existed. A visitor whose
+	// deep link lands on a stale entry gets the 404 they would have got
+	// yesterday, for at most REDIRECT_TTL, and the next fetch fixes it. The
+	// failure is a feature not yet working, not a control not being applied —
+	// so there is nothing here a cold cache would buy. A field whose absence
+	// meant "forward" would have needed the bump, because then the stale
+	// reading would send somebody somewhere the owner never configured.
+	//
+	// This holds only while the cache key is v1 for this build and the previous
+	// one. M34 bumps it to v2; that ordering is the claim, not a coincidence.
+	ForwardPath bool `json:"fp,omitempty"`
+
 	// Bot blocking (M32.5). Both halves of the precedence rule travel together,
 	// because the whole point is that a cache hit answers the question without
 	// asking anything: a link's setting alone cannot decide, and fetching the
