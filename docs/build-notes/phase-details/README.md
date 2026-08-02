@@ -23,22 +23,22 @@ milestone, is in [workflow.md](../workflow.md).
 | --- | --- | --- | --- |
 | [M21](m21.md) | Audit log: behavior, retention, growth alerting | — | done |
 | [M22](m22.md) | Notifications: in-app behavior | — | done |
-| [M23](m23.md) | Cross-replica cache invalidation (pub/sub) | — | done |
+| [M23](m23.md) | Cross-replica cache invalidation (pub/sub) | — | in progress (reopened) |
 | [M24](m24.md) | Shared rate limits (credentials and API) | — | done |
 | [M24.5](m24.5.md) | Dark mode: theme tokens, system default, override | — (before M25) | done |
 | [M25](m25.md) | Workspace and organization switcher | — | done |
 | [M26](m26.md) | Mailer: optional SMTP delivery | — | done |
 | [M26.5](m26.5.md) | Dashboard header: identity menu and notification bell | — (before M27) | done |
 | [M26.6](m26.6.md) | Bounded Redis failure, when the server never answers | — (before M32.5, M34, M40) | done |
-| [M27](m27.md) | Organizations: invitations and joining | M21 M22 M25 M26 | done |
-| [M28](m28.md) | Team management, workspaces, org creation | M27 | done |
-| [M28.5](m28.5.md) | Organization deletion and tenancy teardown | M28 | done |
+| [M27](m27.md) | Organizations: invitations and joining | M21 M22 M25 M26 | in progress (reopened) |
+| [M28](m28.md) | Team management, workspaces, org creation | M27 | in progress (reopened) |
+| [M28.5](m28.5.md) | Organization deletion and tenancy teardown | M28 | in progress (reopened) |
 | [M29](m29.md) | Self-serve signup, configured by the operator | M26 M27 | done |
-| [M30](m30.md) | Destination blocking: tiers and logging | M21 | done |
+| [M30](m30.md) | Destination blocking: tiers and logging | M21 | in progress (reopened) |
 | [M31](m31.md) | Blocked-attempt disputes and owner review | M30 M22 | done |
 | [M32](m32.md) | Opt-in reputation and malware feeds | M30 M31 | done |
 | [M32.5](m32.5.md) | Bot blocking, per domain and per link | — (before M33, M34) | done |
-| [M32.9](m32.9.md) | **Mid-phase adversarial review** | M21–M32.5 | in progress |
+| [M32.9](m32.9.md) | **Mid-phase adversarial review** | M21–M32.5 | done |
 | [M33](m33.md) | Deep-link path forwarding | — (before M34) | not started |
 | [M33.5](m33.5.md) | A demo that shows the phase, not just its links | M32.9 | not started |
 | [M34](m34.md) | Routing rules: conditions, first-match evaluation | M23 M30 M33 | not started |

@@ -93,6 +93,7 @@ file. Append a row when you append an entry.
 | [Two rules the last run earned](#2026-08-01--two-rules-the-last-run-earned) | W17, why a review gets its own session and why the condition is not "a review is next"; how it coexists with context-is-not-a-stop-condition; W18 and what is exempt from seeding the demo |
 | [M28, the page field that shadowed the shell](#2026-08-01--m28-the-page-field-that-shadowed-the-shell) | Why the field was renamed rather than retyped; a structural test parsed from source instead of a list of types, and its two stated limits; why the regression tests say *in one organization*; the read-only member's role composition; the fixture that overwrote the page's own list |
 | [M32.9, the second pass, and what refutation cost the findings](#2026-08-01--m329-the-second-pass-and-what-refutation-cost-the-findings) | Amendments A1 and A2 with their tree facts; why independent readers are the mechanism a review requires rather than a hand-off; five findings refuted and two of them near re-litigations of recorded decisions; the trailing dot corrected from SSRF to open redirect; three findings corrected against their finder; what verifiers found that finders did not; the workspace-scoped-membership cluster |
+| [M32.9's triage, and five milestones reopened](#2026-08-01--m329s-triage-and-five-milestones-reopened) | Which five rows became work and which milestone each reopens; why the owner took the wider option against the recommendation; the trap each reopening must not fall into; why M32.9 lands `done` while its findings stay open |
 
 ---
 
@@ -7230,3 +7231,84 @@ account on every path; the unappealable tier is unreachable from configuration,
 a list entry or review *by design* — the trailing dot defeats it by input, not
 by an override, which is why that finding is against `looksNumeric` and not
 against the tier's structure.
+
+---
+
+## 2026-08-01 — M32.9's triage, and five milestones reopened
+
+The [second pass](#2026-08-01--m329-the-second-pass-and-what-refutation-cost-the-findings)
+put 34 rows in front of the owner. This is what came back, written down before
+it is acted on because an answer given in prose evaporates and gets re-derived
+differently.
+
+### What was approved
+
+Five rows become work now, each **reopening the milestone whose claim it
+falsifies** rather than arriving as a successor — the rule in
+[workflow.md](workflow.md), and the reason it beats a successor is that a `done`
+row asserting something untrue is the one outcome worth spending a reopening to
+avoid.
+
+| Row | Reopens | Because the claim it falsifies is |
+| --- | --- | --- |
+| [F26](deferred-findings.md) trailing dot | [M30](phase-details/m30.md) | *"no configuration, list entry, or future review path can accept a metadata or private address"* |
+| F27 workspace-scoped authority | [M28](phase-details/m28.md) | *"An admin cannot demote themselves — self is not strictly below self"* |
+| F28 alias reservation on cascade | [M28.5](phase-details/m28.5.md) | *"There is no alias left to reserve"* |
+| F29 API key to interactive account | [M27](phase-details/m27.md) | `docs/SECURITY.md:45`, *"which is why `members.write` is safe to delegate to an API key"* |
+| F30 stalled subscriber | [M23](phase-details/m23.md) | *"never to silence mistaken for freshness. Tested"* |
+
+The other 29 rows stay in deferred-findings.md, unreviewed and unscheduled.
+Agreeing that a row is deferred is not approving it as work.
+
+### Why these five and not the three cheapest
+
+The recommendation put to the owner was narrower — reopen M30 alone, on the
+grounds that F26 is the one live hole with a validated one-line fix and the rest
+are design work. The owner took the wider option, and the reasoning is worth
+recording because it inverts the recommendation's own cost argument: **F27 is
+reachable through the shipped UI by anyone granted a workspace-scoped admin
+role, which is the feature M28 exists to provide.** A fix set chosen for
+cheapness would have left the expensive one live precisely where it is easiest
+to reach. The cost is accepted: four of the five are design work rather than
+corrections, and the phase does not resume its plan until they land.
+
+### What each reopening is not allowed to do
+
+Recorded here because each is a trap a reasonable first attempt falls into, and
+each was established by the verifier rather than the finder.
+
+- **M30** must *canonicalise* the trailing dot, never reject it.
+  `destination_test.go:133` asserts `https://example.com./` is accepted, and it
+  is right to: a trailing dot is a fully qualified name, not a malformed one.
+- **M28** cannot be fixed at `Grant`. The self-promotion route uses no `Grant`
+  at all — `mayManage` compares the identity's rank, which is the minimum across
+  the actor's memberships, against the target membership's rank, so an actor
+  holding both an org-wide viewer row and a workspace-scoped admin row is
+  strictly below themselves. `canInWorkspace` already exists and is the shape to
+  reuse.
+- **M28.5** must also cover `DeleteWorkspace`, not only `DeleteOrganization`.
+  The workspace half predates M28.5; what M28.5 added was a second door and a
+  paragraph asserting the door was safe.
+- **M27** is a decision before it is a fix. D28 reasons on the rank axis and
+  `NonDelegableScopes` governs the credential-type axis, so closing F29 means
+  either moving `members.write` into that map — which breaks a shipped,
+  deliberately-tested capability — or bounding what a key-issued invitation may
+  carry. Both are owner-facing; neither is a correction.
+- **M23** must not reach for go-redis's `Channel()` API. It advertises a health
+  check and implements it with the same write-only `Ping` that fails here. The
+  fix is a bounded *read* — `ReceiveTimeout` with a non-zero duration — treated
+  as a re-establish trigger.
+
+### M32.9 lands here
+
+The milestone's bullets are all discharged: every milestone in range re-read
+against its own claims, dimensions covered independently, every finding put to
+an adversarial verifier, findings triaged by the standing rule, and the review's
+own output recorded. Its product was a conversation with the owner and the
+conversation has happened.
+
+The row reads `done` while 29 findings it produced are still open, and that is
+correct rather than awkward: the review is what was built, and the findings are
+what it built. Conflating the two would leave a milestone whose product is
+findings sitting `in progress` for as long as the repairs take, and every later
+status read would have to explain why.
