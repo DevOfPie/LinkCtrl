@@ -261,6 +261,15 @@ migrations run at boot.
   the same cost: no bulk delete, so emptying a large organization is a link at a
   time. The second is the same reasoning that refuses the last owner and the last
   workspace.
+- **A deletion still reserves the aliases of trashed links that had traffic.**
+  Neither refusal counts links already in the trash — one you have deleted is one
+  you cannot delete again, so counting them would make a workspace undeletable
+  until the 30-day window ran out, with nothing you could do about it. Those
+  links are destroyed with the workspace or organization, and any alias among
+  them that ever received a click is reserved permanently, exactly as the purge
+  job and a rename already reserve one. An alias that never received a click is
+  released and can be registered again. Without this, tidying up inside the trash
+  window handed a live audience's alias back to the whole instance.
 - **Belonging to no organization is now a state the product handles.** Deleting
   an organization is *not* refused because somebody would be left with no other
   one. Their account survives untouched, they can still sign in, and they are

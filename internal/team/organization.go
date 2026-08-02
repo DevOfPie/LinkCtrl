@@ -215,13 +215,18 @@ func (s *Service) CreateOrganization(
 // the `organization.deleted` record emitted below — whose metadata carries the
 // name and slug precisely because the row that held them is gone.
 //
-// Nothing else is preserved, and the reason is that the link guard already
-// decided it. There is no alias left to reserve: an organization that reaches
-// this line holds no links, so every alias it ever had was released by the link
-// deletions that had to happen first, and the ones that had received traffic are
-// already in `reserved_aliases` where the purge job put them. Holding anything
-// else back would be preserving rows nobody can reach on behalf of an
-// organization nobody can enter.
+// The aliases of trashed links that received traffic, in `reserved_aliases`.
+// The link guard does not decide this, which is what an earlier version of this
+// comment got wrong (F28): it counts live links, and excludes soft-deleted ones
+// on purpose, so an organization can reach this line still holding trashed links
+// for the rest of their trash window. The cascade hard-deletes them, and the
+// purge job — the only other writer of `reserved_aliases` — never sees them. So
+// the reservation is made here, in this transaction, at PurgeExpiredLinks'
+// threshold; an alias that never received a click is released, because nothing
+// in the wild points at it.
+//
+// Nothing else is preserved. Holding anything else back would be keeping rows
+// nobody can reach on behalf of an organization nobody can enter.
 func (s *Service) DeleteOrganization(ctx context.Context, actor *auth.Identity, id uuid.UUID) error {
 	if !actor.Can(PermOrgDelete) {
 		return fmt.Errorf("%w: deleting an organization requires %s",
@@ -292,6 +297,13 @@ func (s *Service) DeleteOrganization(ctx context.Context, actor *auth.Identity, 
 			"%w: %s still holds %d link(s) across its workspaces, archived ones "+
 				"included; delete them first",
 			domain.ErrConflict, org.Name, links)
+	}
+
+	// The same reservation DeleteWorkspace makes, for the same reason and at the
+	// same threshold, one level up: the link guard counts live links only, so the
+	// cascade may still take trashed ones and their aliases with them (F28).
+	if err := q.ReserveOrganizationTraffickedAliases(ctx, org.ID); err != nil {
+		return fmt.Errorf("reserve trafficked aliases: %w", err)
 	}
 
 	n, err := q.DeleteOrganization(ctx, org.ID)

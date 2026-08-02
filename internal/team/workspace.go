@@ -190,6 +190,12 @@ func (s *Service) RenameWorkspace(
 // organization unable to authenticate. Guarded for the same reason the last
 // owner is: the state is unreachable by any other route and unrecoverable
 // without SQL.
+//
+// **What survives it.** The aliases of trashed links that received traffic. The
+// link refusal is about live links and says nothing about trashed ones, so this
+// delete is a third path by which an alias leaves its row — beside the purge job
+// and the rename — and it is the one that used to release the alias for free
+// (F28). All three now reserve at the same threshold.
 func (s *Service) DeleteWorkspace(ctx context.Context, actor *auth.Identity, id uuid.UUID) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -225,6 +231,17 @@ func (s *Service) DeleteWorkspace(ctx context.Context, actor *auth.Identity, id 
 			"%w: this is the organization's only workspace, and everybody in it has to "+
 				"have one to work in; create another first",
 			domain.ErrConflict)
+	}
+
+	// The guard above counted live links and found none. Trashed ones it
+	// deliberately does not count, so the cascade below may still be about to
+	// hard-delete links — and every alias among them that received traffic is on
+	// printed material and in somebody's bookmarks. Reserved here, in the
+	// transaction that deletes them, because a delete that committed without its
+	// reservations would release those aliases to the whole instance with no
+	// second chance to notice (F28).
+	if err := q.ReserveWorkspaceTraffickedAliases(ctx, ws.ID); err != nil {
+		return fmt.Errorf("reserve trafficked aliases: %w", err)
 	}
 
 	n, err := q.DeleteWorkspace(ctx, dbgen.DeleteWorkspaceParams{

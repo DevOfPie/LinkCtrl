@@ -32,7 +32,7 @@ milestone, is in [workflow.md](../workflow.md).
 | [M26.6](m26.6.md) | Bounded Redis failure, when the server never answers | — (before M32.5, M34, M40) | done |
 | [M27](m27.md) | Organizations: invitations and joining | M21 M22 M25 M26 | done |
 | [M28](m28.md) | Team management, workspaces, org creation | M27 | done |
-| [M28.5](m28.5.md) | Organization deletion and tenancy teardown | M28 | in progress (reopened) |
+| [M28.5](m28.5.md) | Organization deletion and tenancy teardown | M28 | done |
 | [M29](m29.md) | Self-serve signup, configured by the operator | M26 M27 | done |
 | [M30](m30.md) | Destination blocking: tiers and logging | M21 | in progress (reopened) |
 | [M31](m31.md) | Blocked-attempt disputes and owner review | M30 M22 | done |

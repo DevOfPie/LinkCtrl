@@ -93,6 +93,44 @@ UPDATE workspaces
  WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL
 RETURNING *;
 
+-- name: ReserveWorkspaceTraffickedAliases :exec
+-- Run immediately before DeleteWorkspace, in the same transaction, because the
+-- cascade below is the third way a link lets go of its alias and it was the one
+-- that let go for free (F28).
+--
+-- CountWorkspaceLinks excludes soft-deleted links deliberately — counting them
+-- would leave a workspace undeletable until the purge job ran — so a workspace
+-- reaching the delete may still hold trashed links, for up to the trash window.
+-- The cascade hard-deletes them without the purge job ever seeing them, and
+-- `IsAliasTaken` then stops finding the row: an alias that was on printed
+-- material yesterday is claimable by anyone on the instance today.
+--
+-- `click_count > 0` is PurgeExpiredLinks' threshold, and the rename path's, and
+-- it is the same threshold on purpose: three paths that release an alias must
+-- not hold three opinions about what "in the wild" means. Aliases that never
+-- received a click are released, per the reserved_aliases rationale.
+--
+-- No deleted_at predicate, and FOR UPDATE, for one reason between them. The
+-- guard above has already established there are no live links, so this selects
+-- exactly the trashed ones — unless a row stopped being trashed after the count
+-- ran, which today takes a hand-written UPDATE because nothing in the product
+-- un-trashes a link (`RestoreLink` restores an *archived* one and requires
+-- `deleted_at IS NULL`). The statement follows what the cascade will take
+-- rather than what the guard counted, so such a row is reserved rather than
+-- skipped, and the lock makes it wait rather than slip between the two.
+WITH doomed AS (
+    SELECT domain_id, alias
+      FROM links
+     WHERE workspace_id = $1
+       AND click_count > 0
+     ORDER BY id
+       FOR UPDATE
+)
+INSERT INTO reserved_aliases (domain_id, alias, reason)
+SELECT domain_id, alias, 'workspace deleted with traffic'
+  FROM doomed
+ON CONFLICT DO NOTHING;
+
 -- name: DeleteWorkspace :execrows
 -- A real delete, not a soft one, and that is the decision D32 guards.
 --

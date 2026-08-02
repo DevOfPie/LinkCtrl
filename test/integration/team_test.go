@@ -24,6 +24,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
+	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 	"github.com/DevOfPie/LinkCtrl/internal/team"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
 )
@@ -1481,6 +1482,165 @@ func TestDeletingAnOrganizationTakesItsTenancyAndNothingElse(t *testing.T) {
 	}
 	if _, err := f.auth.IdentityForEmail(t.Context(), "elsewhere@example.com"); err != nil {
 		t.Errorf("the other organization's owner stopped resolving: %v", err)
+	}
+}
+
+// ─── what the cascade must not release (F28) ────────────────────────────────
+
+// defaultDomain is the instance domain every link in these fixtures is minted
+// against, and the one reserved_aliases rows are keyed to.
+func (f *teamFixture) defaultDomain(t *testing.T) uuid.UUID {
+	t.Helper()
+	var id uuid.UUID
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT id FROM domains WHERE is_default AND deleted_at IS NULL`).Scan(&id); err != nil {
+		t.Fatalf("read the default domain: %v", err)
+	}
+	return id
+}
+
+// aliasTaken asks the question every create path asks before minting an alias.
+func (f *teamFixture) aliasTaken(t *testing.T, domainID uuid.UUID, alias string) bool {
+	t.Helper()
+	taken, err := dbgen.New(f.pool).IsAliasTaken(t.Context(), dbgen.IsAliasTakenParams{
+		DomainID: domainID, Alias: alias,
+	})
+	if err != nil {
+		t.Fatalf("IsAliasTaken(%s): %v", alias, err)
+	}
+	return taken
+}
+
+// trash creates a link in the given identity's workspace, gives it the traffic
+// asked for, and puts it in the trash — the state both emptiness guards
+// deliberately do not count.
+func (f *teamFixture) trash(t *testing.T, actor *auth.Identity, alias string, clicks int) {
+	t.Helper()
+	created, err := f.links.Create(t.Context(), actor, link.CreateInput{
+		URL: "https://example.com/" + alias, Alias: alias,
+	})
+	if err != nil {
+		t.Fatalf("create %s: %v", alias, err)
+	}
+	if clicks > 0 {
+		// Recorded the way the ingester records it.
+		if _, err := f.pool.Exec(t.Context(),
+			`UPDATE links SET click_count = $2 WHERE id = $1`, created.ID, clicks); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := f.links.Delete(t.Context(), actor, created.ID); err != nil {
+		t.Fatalf("trash %s: %v", alias, err)
+	}
+}
+
+// Deleting a workspace hard-deletes the links still in its trash, and until F28
+// it did so without reserving their aliases — so an alias that had been serving
+// real traffic yesterday was claimable by anybody on the instance today.
+//
+// The assertion is meaningful before the delete as well as after it, because
+// IsAliasTaken deliberately carries no deleted_at filter: a trashed link holds
+// its alias for the whole recovery window. So `true` → `true` is the property,
+// and what used to happen was `true` → `false`.
+func TestDeletingAWorkspaceReservesItsTraffickedTrashedAliases(t *testing.T) {
+	f := newTeamFixture(t)
+	domainID := f.defaultDomain(t)
+
+	ws, err := f.team.CreateWorkspace(t.Context(), f.owner, "Doomed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inWorkspace := f.identityIn(t, "owner@example.com", ws.ID)
+	f.trash(t, inWorkspace, "wshadclicks", 4242)
+	f.trash(t, inWorkspace, "wsnoclicks", 0)
+
+	for _, alias := range []string{"wshadclicks", "wsnoclicks"} {
+		if !f.aliasTaken(t, domainID, alias) {
+			t.Fatalf("%s reads as free while its link is still in the trash; the test "+
+				"would prove nothing about the delete", alias)
+		}
+	}
+
+	// The guard counts none of them, which is the whole reason the delete
+	// proceeds — and the reason it had to do something about them itself.
+	if n := f.count(t, `SELECT count(*) FROM links WHERE workspace_id = $1 AND deleted_at IS NULL`,
+		ws.ID); n != 0 {
+		t.Fatalf("the emptiness guard counts %d links; it is supposed to exclude trashed ones", n)
+	}
+	if err := f.team.DeleteWorkspace(t.Context(), inWorkspace, ws.ID); err != nil {
+		t.Fatalf("a workspace holding only trashed links refused deletion: %v", err)
+	}
+	if n := f.count(t, `SELECT count(*) FROM links WHERE workspace_id = $1`, ws.ID); n != 0 {
+		t.Fatal("the cascade left link rows behind; the rest of this test assumes it did not")
+	}
+
+	// The trafficked alias survives its link, at PurgeExpiredLinks' threshold.
+	// The one that never received a click is released, because nothing in the
+	// wild points at it and permanent reservation would only bleed the namespace.
+	if !f.aliasTaken(t, domainID, "wshadclicks") {
+		t.Error("deleting a workspace released a trafficked alias: it is on printed " +
+			"material and in bookmarks, and the next person to register it inherits that audience")
+	}
+	if n := f.count(t, `SELECT count(*) FROM reserved_aliases WHERE alias = 'wshadclicks'`); n != 1 {
+		t.Errorf("reserved_aliases holds %d rows for the trafficked alias, want 1", n)
+	}
+	if f.aliasTaken(t, domainID, "wsnoclicks") {
+		t.Error("an alias that never received a click stayed reserved; the namespace bleeds")
+	}
+
+	// The consequence, through the path a person would take: re-registering it
+	// from another workspace of the same instance is refused.
+	if _, err := f.links.Create(t.Context(), f.owner, link.CreateInput{
+		URL: "https://example.com/hijack", Alias: "wshadclicks",
+	}); !errors.Is(err, domain.ErrConflict) {
+		t.Errorf("re-registering the released alias answered %v, want a conflict", err)
+	}
+	if _, err := f.links.Create(t.Context(), f.owner, link.CreateInput{
+		URL: "https://example.com/fresh", Alias: "wsnoclicks",
+	}); err != nil {
+		t.Errorf("re-registering the untrafficked alias was refused: %v", err)
+	}
+}
+
+// The organization half of the same defect. It is asserted separately rather
+// than assumed from the workspace one because it is a different statement in a
+// different transaction: the workspace path predates M28.5, and a fix aimed at
+// only one of them leaves the other door open.
+func TestDeletingAnOrganizationReservesItsTraffickedTrashedAliases(t *testing.T) {
+	f := newTeamFixture(t)
+	f.otherOrganization(t)
+	domainID := f.defaultDomain(t)
+
+	f.trash(t, f.owner, "orghadclicks", 99)
+	f.trash(t, f.owner, "orgnoclicks", 0)
+	if !f.aliasTaken(t, domainID, "orghadclicks") {
+		t.Fatal("the trashed alias reads as free before the delete; the test would prove nothing")
+	}
+
+	if err := f.team.DeleteOrganization(t.Context(), f.owner, f.owner.OrgID); err != nil {
+		t.Fatalf("an organization holding only trashed links refused deletion: %v", err)
+	}
+	if n := f.count(t, `SELECT count(*) FROM links WHERE alias = 'orghadclicks'`); n != 0 {
+		t.Fatal("the cascade left the link row behind; the rest of this test assumes it did not")
+	}
+
+	if !f.aliasTaken(t, domainID, "orghadclicks") {
+		t.Error("deleting an organization released a trafficked alias, which is D32's rule " +
+			"bypassed by deleting one level up")
+	}
+	if n := f.count(t, `SELECT count(*) FROM reserved_aliases WHERE alias = 'orghadclicks'`); n != 1 {
+		t.Errorf("reserved_aliases holds %d rows for the trafficked alias, want 1", n)
+	}
+	if f.aliasTaken(t, domainID, "orgnoclicks") {
+		t.Error("an alias that never received a click stayed reserved; the namespace bleeds")
+	}
+
+	// The reservation is keyed to the instance default domain, which belongs to
+	// no organization — so it outlives the tenancy it came from, which is the
+	// point of making it.
+	if n := f.count(t, `SELECT count(*) FROM reserved_aliases WHERE domain_id = $1`, domainID); n != 1 {
+		t.Errorf("%d reservations are keyed to the default domain, want the one that "+
+			"survived the organization", n)
 	}
 }
 

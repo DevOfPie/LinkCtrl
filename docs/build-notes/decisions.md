@@ -100,6 +100,9 @@ file. Append a row when you append an entry.
 | [Two gate rules that lived only in an untracked file](#2026-08-02--two-gate-rules-that-lived-only-in-an-untracked-file) | What a moving development environment exposed about `.current-task.md`; why a cached test result is a gate failure and not a convenience; W19 and W20 |
 | [The Taskfile mirror catches up](#2026-08-02--the-taskfile-mirror-catches-up-and-what-verified-means-for-a-mirror) | Why nine unported recipes were committed as a task rather than stashed; why the sync is claimed as read-verified and not run-verified; W22 |
 | [M28, a role that owned one workspace](#2026-08-02--m28-a-role-that-owned-one-workspace-and-reached-the-whole-organization) | D44: a write is authorized by the membership whose scope covers its target, not by the identity's union; why D31 is untouched; why the fix could not stop at `Grant`; the promotion arm named as defence in depth; F39 closed under step 1's exception |
+| [M28.5, amendment: a line number its predecessor moved](#2026-08-02--m285-amendment-a-line-number-its-predecessor-moved) | `members.sql:133` → `:177`; why the drift was M28's doing rather than neglect, and why no assertion changed |
+| [M28.5 reopened: what a teardown owes an alias](#2026-08-02--m285-reopened-what-a-teardown-owes-an-alias) | D45 — reserve rather than refuse, and why refusing recreates the state the guard excludes trashed links to avoid; the third release path; the workspace door that predates the milestone; why the reservation locks the rows it is about |
+| [M28.5, amendment: Phase 1 does have a trash](#2026-08-02--m285-amendment-phase-1-does-have-a-trash-and-the-reopening-depends-on-it) | Why *no soft delete, no restore, no trash* was two-thirds false; the file arguing from a trash window it denied existed; what actually has no way back |
 
 ---
 
@@ -7904,3 +7907,192 @@ owner's. `CreateWorkspace` gates on the identity's `workspace.write` and so lets
 a workspace-scoped admin add workspaces to the organization; it is a membership
 neither, is named by neither F27 nor m28.md's reopening, and went to
 deferred-findings as [F63](deferred-findings.md) rather than riding along.
+
+## 2026-08-02 — M28.5, amendment: a line number its predecessor moved
+
+An amendment of a **fact**, logged rather than prompted, per
+[phase-loop.md](phase-loop.md#amending-a-bullet). It is worth recording despite
+being arithmetic, because of what moved the number.
+
+**The bullet as it stood**, in the reopening's *Done means*:
+
+> **The `deleted_at`-excluding guards stay as they are.** `members.sql:133` and
+> `organizations.sql:60` exclude soft-deleted links deliberately — *"counting it
+> would leave the workspace undeletable until the purge job ran"* — and that
+> reasoning is still right.
+
+**The bullet as amended:** identical, with `members.sql:133` reading
+`members.sql:177`.
+
+**The tree fact.** `CountWorkspaceLinks` is declared at
+`internal/store/query/members.sql:174`, and the comment the bullet quotes —
+*"Soft-deleted links are excluded on purpose"* — sits at `:177`. Line 133 is now
+inside `ChangeMembershipRole`, which has nothing to do with the guard. The
+quoted reasoning is otherwise present verbatim and unchanged, so only the
+address was wrong.
+
+**What moved it was the milestone immediately before this one.** `git show
+a820974~1:internal/store/query/members.sql` has the comment at exactly `:133`,
+so the bullet was accurate when it was written and stopped being accurate when
+[M28](phase-details/m28.md)'s reopening added `ListMembershipAuthority` to the
+same file. Nothing drifted through neglect; a landed milestone invalidated a
+sibling's citation, which is the ordinary cost of citing a line rather than a
+symbol and is the reason validation re-reads these against the tree instead of
+trusting them.
+
+No assertion changed. The guards are still to stay as they are, still for the
+reason quoted, and the defect is still what the delete does next rather than
+what the guard counts.
+
+## 2026-08-02 — M28.5 reopened: what a teardown owes an alias
+
+[F28](deferred-findings.md), approved by the owner on
+[M32.9](phase-details/m32.9.md)'s triage, which reopened
+[M28.5](phase-details/m28.5.md) rather than scheduling a successor: the
+milestone's *What it leaves behind* section asserted that there was no alias left
+to reserve, and that assertion was false.
+
+**What was actually wrong.** Not the guards. `CountWorkspaceLinks` and
+`CountOrganizationLinks` exclude soft-deleted links deliberately, because a link
+already in the trash is one its owner cannot delete again — counting it would
+leave the workspace undeletable until the purge job ran, with nothing the person
+could do about it. That reasoning is still right. The defect is what happens
+*after* the guard passes: `workspaces` and `organizations` cascade to `links`,
+the cascade hard-deletes the trashed rows, and `PurgeExpiredLinks` — the only
+writer of `reserved_aliases` on that path — never sees them. `IsAliasTaken` has
+no `deleted_at` filter, on purpose, so the alias was genuinely still held while
+the row existed; the cascade is what released it. Trash a link that had traffic,
+tidy up the workspace inside thirty days, and an alias that is on printed
+material becomes claimable by anyone on the instance.
+
+### D45 — reserve in the transaction, rather than refuse the delete
+
+m28.5.md's reopening delegated this: *"Trafficked trashed aliases are reserved in
+the same transaction as the delete, or the delete refuses while they exist.
+Either is acceptable; the reasoning for the choice goes in decisions.md."*
+
+**Reserving was chosen**, and the deciding argument is that refusing has no exit.
+There is no operator action anywhere in this product that empties the trash —
+`purge_after` is a timestamp the housekeeping job reads, not a button — so a
+refusal would stand for up to `TrashRetentionDays`, thirty days, with the person
+holding no lever at all. That is precisely the outcome `CountWorkspaceLinks`
+excludes trashed links *in order to avoid*, and choosing it here would have moved
+that failure one level up while quoting the guard's own comment as the reason it
+was fine.
+
+Two further reasons, neither sufficient alone:
+
+- **It is the third path, not a new rule.** An alias leaves its row by purge, by
+  rename, and now by cascade. The first two already reserve, at `click_count >
+  0`, and `link/service.go` says why in as many words: *"the threshold here is
+  deliberately the same one PurgeExpiredLinks uses, so the two paths cannot
+  disagree about what 'in the wild' means."* A third path that refused instead
+  would be a third opinion.
+- **Refusing changes a shipped operation.** An organization that deletes today
+  would start failing tomorrow, and the refusal set is part of what M28.5
+  shipped and asserted. Reserving changes only what teardown leaves behind, which
+  is the sentence that was wrong.
+
+The cost of reserving, stated rather than hidden: a teardown now permanently
+consumes namespace on the shared default domain for aliases nobody will ever see
+again, and nothing releases them. That is the same cost the purge job already
+pays, for the same reason — the alias is in the wild whether or not the workspace
+that minted it still exists.
+
+### Both doors, and the one that predates the milestone
+
+`DeleteWorkspace` is the shorter path and it is reachable by any workspace
+writer, where `DeleteOrganization` needs `org.delete` from an organization-wide
+membership (D44). Fixing only the organization half would have left the cheaper
+door open and made the milestone file true about the operation it names while
+staying false about the product. So `ReserveWorkspaceTraffickedAliases` and
+`ReserveOrganizationTraffickedAliases` are separate statements in separate
+transactions, and each is asserted by its own test.
+
+The organization statement joins `workspaces` **without** `deleted_at IS NULL`,
+unlike `CountOrganizationLinks` beside it. The two are answering different
+questions: the guard counts what should block the delete, the reservation follows
+what the cascade will actually take, and the cascade takes every workspace row
+the organization owns.
+
+### Why the reservation locks the rows it is about
+
+`WITH doomed AS (SELECT … FOR UPDATE)`, the shape `PurgeExpiredLinks` uses, and
+with no `deleted_at` predicate. Both follow from the same principle: the
+statement follows **what the cascade will take**, not what the guard counted.
+Traffic is therefore the only predicate, and a row that stopped being trashed
+after the count ran is reserved rather than skipped, with the lock making the
+writer wait rather than slip between the reservation and the delete.
+
+That window is not reachable through the product today — nothing un-trashes a
+link (`RestoreLink` restores an *archived* one and requires `deleted_at IS
+NULL`), so recovery inside the trash window is a database operation, as
+CHANGELOG.md has said since 0.1.0. It is written this way anyway because the
+weaker version would be correct only for as long as that stays true, and a trash
+view is an obvious future feature. Reserving too much costs an alias nobody will
+mint again; reserving too little costs somebody else's audience.
+
+### What was rewritten, not merely fixed
+
+The reopening's last bullet required it: *"The paragraph is rewritten to say what
+actually survives … leaving it while fixing the code would make the file right
+for the wrong reason."* Three places asserted the false thing and all three now
+say what survives — m28.5.md's *What it leaves behind* bullet,
+`DeleteOrganization`'s *What survives* section, and `DeleteWorkspace`, which said
+nothing about aliases at all and now does. m28.5.md keeps the old wording quoted
+inside the reopening section, marked as what it used to read, because the record
+of a milestone shipping a false claim is the thing that section exists to hold.
+
+## 2026-08-02 — M28.5, amendment: Phase 1 does have a trash, and the reopening depends on it
+
+A second **fact** amendment on this file, logged rather than prompted. Raised by
+the worker at step 3.3, which is the right thing for a worker to do with one —
+it met the bullet as written, said so, and left the amending to the
+orchestrator. Verified against the tree before being applied.
+
+**The bullet as it stood**, under *Deliberately not in this milestone*:
+
+> **No soft delete, no restore, no trash.** Phase 1 has none for links and this
+> is not the milestone that introduces the concept; deletion here is
+> irreversible and says so in the confirmation surface.
+
+**The bullet as amended:**
+
+> **No soft delete, no restore, no trash — for organizations.** Links have all
+> but one of those already: Plan.md ships *soft delete (30-day recovery)* in
+> Phase 1, and that window is `TrashRetentionDays`, which is the very thing the
+> reopening above turns on. What links lack is the way *back* — nothing in the
+> product clears `deleted_at`, so the trash is a waiting room rather than a
+> restore path. An organization gets none of the three, this is not the
+> milestone that introduces them, and deletion here is irreversible and says so
+> in the confirmation surface.
+
+**The tree facts**, three of them, because the original clause was wrong in one
+direction and right in another:
+
+- `Plan.md:71` lists *Soft delete (30-day recovery)* against phase **1**. It
+  shipped.
+- `internal/link/service.go:41` declares `TrashRetentionDays = 30`, and
+  `Delete` at `:736` soft-deletes a link for that window rather than removing
+  it.
+- Nothing in `internal/store/query/*.sql` ever clears `deleted_at` — there is no
+  `SET deleted_at = NULL` in the tree. `RestoreLink` restores an *archived*
+  link and requires `deleted_at IS NULL`, so it is not a way out of the trash.
+
+So *no restore* was true, *no soft delete* and *no trash* were false, and the
+three had been collapsed into one clause that read as though all three were
+absent.
+
+**Why this is worth more than the arithmetic of the other amendment.** The
+false half was not idle: the trash window it denied is the entire premise of the
+reopening two sections above it, where a workspace reaching the delete still
+holds trashed links for up to thirty days and the cascade takes their aliases
+with them. The file simultaneously argued from the trash and denied the trash
+existed. Nobody reading only the *Deliberately not* section would have caught
+F28's shape, and somebody reading both would have had to decide which half of
+the file to believe.
+
+No assertion moved. The bullet's point was always about *organizations* — that
+this milestone does not give them a recoverable deletion — and that is intact
+and now unambiguous, because the amended wording says which object it is
+scoping out rather than leaving it to the reader.

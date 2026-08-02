@@ -189,3 +189,35 @@ func (q *Queries) LockOrganizations(ctx context.Context) ([]uuid.UUID, error) {
 	}
 	return items, nil
 }
+
+const reserveOrganizationTraffickedAliases = `-- name: ReserveOrganizationTraffickedAliases :exec
+WITH doomed AS (
+    SELECT l.domain_id, l.alias
+      FROM links l
+      JOIN workspaces w ON w.id = l.workspace_id
+     WHERE w.organization_id = $1
+       AND l.click_count > 0
+     ORDER BY l.id
+       FOR UPDATE OF l
+)
+INSERT INTO reserved_aliases (domain_id, alias, reason)
+SELECT domain_id, alias, 'organization deleted with traffic'
+  FROM doomed
+ON CONFLICT DO NOTHING
+`
+
+// The organization-level half of the same reservation, and it exists for the
+// same reason the link guard exists one level up: an organization-level cascade
+// that behaved differently from a workspace-level one would make the rule
+// bypassable by deleting one level up.
+//
+// The rationale is written out in full beside
+// ReserveWorkspaceTraffickedAliases; only the reach differs. Note what is
+// deliberately *not* filtered here: workspaces are joined without
+// `deleted_at IS NULL`, unlike CountOrganizationLinks, because this statement
+// follows what the cascade takes rather than what the guard counted, and the
+// cascade takes every workspace of the organization.
+func (q *Queries) ReserveOrganizationTraffickedAliases(ctx context.Context, organizationID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, reserveOrganizationTraffickedAliases, organizationID)
+	return err
+}
