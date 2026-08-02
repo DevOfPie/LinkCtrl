@@ -211,7 +211,11 @@ present tense that is not built.
 
 **Verify, do not assume.** Never report a measurement taken on a dirty tree, or
 before the code under test was actually built and deployed. If a check passed for
-a reason you cannot name, it did not pass.
+a reason you cannot name, it did not pass. **A cached result is not a
+measurement**: Go caches a test result against the package's inputs, and the
+instance's database state is not one of them, so `make test-integration` is
+forced with `GOFLAGS=-count=1` once anything the tests run against has been
+touched.
 
 **Report failures plainly.** Tests that fail, steps skipped, things not verified —
 say so, with the output. A green summary over a red run is the worst possible

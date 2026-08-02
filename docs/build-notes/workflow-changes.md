@@ -54,6 +54,8 @@ without knowing what to grep for.
 
 | # | Change | Commit | Entry |
 | --- | --- | --- | --- |
+| W19 | *Verify, do not assume* now says a cached result is not a measurement, and names `GOFLAGS=-count=1` | *(this commit)* | [Two gate rules that lived only in an untracked file](decisions.md#2026-08-02--two-gate-rules-that-lived-only-in-an-untracked-file) |
+| W20 | [dev-notes/instances.md](../dev-notes/instances.md) records how to run a single integration test — `make -n test-integration` prints the command with its DSNs filled in | *(this commit)* | [Two gate rules that lived only in an untracked file](decisions.md#2026-08-02--two-gate-rules-that-lived-only-in-an-untracked-file) |
 | W17 | The loop stops rather than entering an `X.9` review it did not start the session with, and asks for a fresh one | *(this commit)* | [Two rules the last run earned](decisions.md#2026-08-01--two-rules-the-last-run-earned) |
 | W18 | A milestone that adds a visible feature extends the demo seeder — an inherited rule, and a row in the commit gate | *(this commit)* | [Two rules the last run earned](decisions.md#2026-08-01--two-rules-the-last-run-earned) |
 | W15 | [dev-notes/instances.md](../dev-notes/instances.md) now records how to claim a freshly migrated instance through `/setup`, the test instance's current credential, and a warning that signing in against the wrong port fails as *the email or password is incorrect* | *(this commit)* | [Draining the queue](decisions.md#2026-08-01--draining-the-queue-and-the-four-rows-that-could-not-be-verified) and its correction |

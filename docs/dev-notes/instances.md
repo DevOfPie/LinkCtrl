@@ -56,6 +56,22 @@ make seed INSTANCE=test
 make migrate-status INSTANCE=demo
 ```
 
+### Running one integration test
+
+`make test-integration` takes no `-run`. Rather than reconstructing the DSNs by
+hand, print the command the target would run and edit that:
+
+```sh
+make -n test-integration          # prints it with the real DSNs filled in
+```
+
+Then add `-run 'TestName'` and, if the tree changed since the last run,
+`-count=1`. The `-count=1` is not optional in that situation: Go caches a test
+result against the package's inputs, and the instance's *database state* is not
+one of them, so a suite that passed before a schema or seed change will report
+`(cached)` and pass again without executing. See the standing rule in
+[workflow.md](../build-notes/workflow.md#standing-rules).
+
 ## Ports
 
 The demo keeps the numbers the single stack used, because it is the one opened in

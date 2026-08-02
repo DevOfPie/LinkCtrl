@@ -97,6 +97,7 @@ file. Append a row when you append an entry.
 | [M23, silence is not an answer](#2026-08-01--m23-silence-is-not-an-answer) | Why a bounded read alone would have emptied every quiet replica's cache; the probe that requires a reply; D42 and why the hot path's read timeout cannot be reused; the flush moving from the recovery to the failure; the two claims corrected in place; the bullet amended at 3.4 and why it was the owner's to answer |
 | [M27, the rank axis and the credential axis](#2026-08-02--m27-the-rank-axis-and-the-credential-axis) | Why D28's ceiling was never the control; the milestone's own candidate checked against the seed and found not to close the finding; D43 capping a key-issued invitation at editor; the inherited Permissions rule amended to name a second mechanism |
 | [Draining one queue row into a finding that already existed](#2026-08-02--draining-one-queue-row-into-a-finding-that-already-existed) | Why the switcher row became F21 rather than a second row; the constraint F21 cited and the tree fact that disproves it; why the owner's direction went to the finding and the leftover question to upcoming-decisions |
+| [Two gate rules that lived only in an untracked file](#2026-08-02--two-gate-rules-that-lived-only-in-an-untracked-file) | What a moving development environment exposed about `.current-task.md`; why a cached test result is a gate failure and not a convenience; W19 and W20 |
 
 ---
 
@@ -7637,3 +7638,51 @@ with the button gone, a browser with scripting off cannot switch workspaces at
 all. The directive does not answer that, and whoever builds F21 would otherwise
 answer it silently by writing the simplest template. Nothing forces it while
 F21 is unapproved, which is exactly the section it is filed under.
+
+## 2026-08-02 — Two gate rules that lived only in an untracked file
+
+No milestone produced this either. It was prompted by the owner moving the
+development environment, which is a good reason to ask what in this repository
+exists only on one machine.
+
+`.current-task.md` carries a *Cost too much to re-derive* section, and
+[phase-loop.md](phase-loop.md#the-current-task-note) is explicit that a line
+which would still matter after the milestone lands is in the wrong file. Reading
+that section against its own rule found two lines that had been quietly wrong
+about their own home for several milestones — not working state at all, but
+rules, sitting in a file that survives no clone.
+
+### A cached test result is not a measurement
+
+The line read: *a cached `make test-integration` is not evidence once the test
+instance has been touched; force with `GOFLAGS=-count=1`*.
+
+That is not a tip. Go caches a test result against the package's inputs, and a
+running instance's **database state is not one of them** — so a schema change,
+a re-seed or a migration leaves the cache valid by Go's reckoning and stale by
+this project's. The suite then reports `(cached)` and passes without executing a
+single test, which is precisely the shape [workflow.md](workflow.md)'s standing
+rule already forbids: *if a check passed for a reason you cannot name, it did
+not pass.* A run that never ran is the strongest possible version of that.
+
+So it belongs in that rule rather than beside it, and it is now a sentence
+there (W19) instead of a line in a file that dies with the machine. It cost the
+always-read contract about forty words, which W1 will judge at the documentation
+pass along with everything else.
+
+### How to run one integration test
+
+The second line recorded that `make test-integration` takes no `-run`, and that
+`make -n test-integration` prints the command with the DSNs filled in. That is
+an instance fact, so it went to
+[dev-notes/instances.md](../dev-notes/instances.md) (W20), where somebody
+looking for how to talk to a development instance already is.
+
+### The general point, which is the reason this entry exists
+
+Both lines had been re-derived at least once, by an actor reading them in a note
+it did not write. Neither had ever been true only for the milestone in flight.
+The note's *Cost too much to re-derive* section is where a rule goes to be
+forgotten slowly, because it is genuinely useful there and nothing ever prompts
+a reread against the rule that governs it — until an environment moves and the
+question becomes unavoidable.
