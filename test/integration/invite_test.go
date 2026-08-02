@@ -853,11 +853,77 @@ func TestMembersWriteIsDelegableToAnAPIKey(t *testing.T) {
 		t.Fatalf("an API key holding members.write could not invite: %d\n%s", status, body)
 	}
 
-	// The ceiling still applies to it, and it is the *creator's* rank that
-	// bounds it — which is exactly why the permission is delegable at all.
+	// The capability itself, unchanged: a key may still bring collaborators in.
+	// What bounds it is not the D28 ceiling — that ceiling is the *creator's*
+	// rank and it turned out to bound nothing worth bounding (F29) — but D43's
+	// absolute cap, which the test below walks the whole chain to hold.
 	if n := f.scalar(t,
 		`SELECT count(*) FROM invitations WHERE email = 'by-key@example.com'`); n != 1 {
 		t.Error("the invitation was not written")
+	}
+}
+
+// F29's chain, walked end to end: a key holding one delegable scope must not be
+// able to manufacture an interactive principal holding scopes no key may hold.
+// D43 caps a key-issued invitation at editor, absolutely rather than relative to
+// whoever created the key.
+//
+// Every link is attempted at every built-in role — mint the key, invite, read
+// the raw link out of the 201 the key itself received, redeem it, resolve the
+// account that produced — and the assertion is on what the chain *produces*
+// rather than on where it stops. So this cannot pass because a refusal's
+// wording or status changed, and it stays red against a bound one rank lower:
+// admin holds apikeys.write, audit.read and members.write.
+func TestAKeyIssuedInvitationCannotReachANonDelegableScope(t *testing.T) {
+	f := newInviteFixture(t, inviteOptions{NewAccounts: true})
+	srv := f.serve(t, config.SignupInvite)
+
+	key, err := f.keys.Create(t.Context(), f.owner, auth.CreateAPIKeyInput{
+		Name: "inviter", Scopes: []string{invite.PermWrite},
+	})
+	if err != nil {
+		t.Fatalf("mint a key with members.write: %v", err)
+	}
+
+	issued := 0
+	for _, role := range []string{"owner", "admin", "editor", "viewer"} {
+		email := "chain-" + role + "@example.com"
+		status, body := postJSONAs(t, srv, "/api/v1/invitations", key.Key, map[string]string{
+			"email": email, "role": role,
+		})
+		if status != http.StatusCreated {
+			// The chain is closed at its first link for this role, so there is
+			// no link to redeem and nothing was created to check.
+			continue
+		}
+		issued++
+
+		var created invite.Created
+		if err := json.Unmarshal([]byte(body), &created); err != nil {
+			t.Fatalf("read the invitation out of its own 201: %v\n%s", err, body)
+		}
+		if _, err := f.redeem(t, tokenOf(t, &created), email, invitePassword); err != nil {
+			t.Fatalf("a key-issued %s invitation was not redeemable: %v", role, err)
+		}
+		joined, err := f.auth.IdentityForEmail(t.Context(), email)
+		if err != nil {
+			t.Fatalf("identity for the account the key produced: %v", err)
+		}
+		if joined.IsAPIKey() {
+			t.Fatal("the redeemed principal is a key, so the escalation under test does not exist here")
+		}
+		for scope := range auth.NonDelegableScopes {
+			if joined.Can(scope) {
+				t.Errorf("a key scoped to %s alone invited at %s, and the account it minted holds %s — "+
+					"a scope no key may hold, reachable now with no key at all", invite.PermWrite, role, scope)
+			}
+		}
+	}
+
+	// The capability D28 was right to want, kept. A fix that refused every
+	// key-issued invitation would satisfy the loop above and take it away.
+	if issued == 0 {
+		t.Error("the key issued no invitation at any role; under D43 members.write stays delegable")
 	}
 }
 

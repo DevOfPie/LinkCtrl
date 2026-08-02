@@ -182,9 +182,11 @@ interactive sign-in, the audit log ties a network prefix to a named person, and 
 key that could allow a blocked destination could then point links at it.
 
 Everything else is grantable, and each one has a reason it is safe to be.
-`members.write` gates invitations and member management, and a key holding it
-cannot reach past its owner: every role it can hand out is capped at its
-creator's own rank, and it can only manage members below that rank.
+`members.write` gates invitations and member management, and an invitation
+issued with a key may carry **`editor` or `viewer` and nothing above**, whatever
+rank created the key. Redeeming one produces an interactive account, not another
+key — nothing revokes it along with the key — so what a key may hand out is
+bounded separately from what it may hold.
 `orgs.create` gates organization creation, and a key holding it gains nothing —
 scopes are intersected with the owner's role on every request, so an
 organization made through a key leaves that key holding exactly what it was
@@ -467,6 +469,10 @@ curl -sS -X DELETE .../api/v1/invitations/$ID -H "Authorization: Bearer $KEY"
 curl -sS -X POST .../api/v1/invitations/redeem -H 'Content-Type: application/json' \
   -d '{"token":"…","email":"colleague@example.com","password":"…"}'
 ```
+
+Issued with a key, `role` may be `editor` or `viewer` only; `admin` and `owner`
+answer `403` however the key was minted. Issued from the dashboard it is your
+own rank that bounds it.
 
 Every way redemption can fail answers the same `404` with the same body: a
 token that was never issued, one that expired, one already used, the wrong

@@ -30,7 +30,7 @@ milestone, is in [workflow.md](../workflow.md).
 | [M26](m26.md) | Mailer: optional SMTP delivery | — | done |
 | [M26.5](m26.5.md) | Dashboard header: identity menu and notification bell | — (before M27) | done |
 | [M26.6](m26.6.md) | Bounded Redis failure, when the server never answers | — (before M32.5, M34, M40) | done |
-| [M27](m27.md) | Organizations: invitations and joining | M21 M22 M25 M26 | in progress (reopened) |
+| [M27](m27.md) | Organizations: invitations and joining | M21 M22 M25 M26 | done |
 | [M28](m28.md) | Team management, workspaces, org creation | M27 | in progress (reopened) |
 | [M28.5](m28.5.md) | Organization deletion and tenancy teardown | M28 | in progress (reopened) |
 | [M29](m29.md) | Self-serve signup, configured by the operator | M26 M27 | done |
@@ -72,7 +72,7 @@ Not repeated in the files below. These hold for all of Phase 2.
 | Dormant structure is jsonb | Until the feature that uses it arrives. |
 | Partitioning | `PARTITION OF` never appears in sqlc-visible SQL; partitions are created by application code. |
 | DDL is additive | Within a minor version. |
-| Permissions | A new permission needs a seed migration that inserts *and* grants it (the 00800 pattern). Delegability follows decision D18 — non-delegable when reading it exposes an actor's identity tied to network data, or when holding it lets a key widen its own reach; delegable otherwise. The milestone records which limb it matched, or that it matched neither. `NonDelegableScopes` is the only mechanism; nothing branches on whether the caller holds a session. |
+| Permissions | A new permission needs a seed migration that inserts *and* grants it (the 00800 pattern). Delegability follows decision D18 — non-delegable when reading it exposes an actor's identity tied to network data, or when holding it lets a key widen its own reach; delegable otherwise. The milestone records which limb it matched, or that it matched neither. `NonDelegableScopes` is the only mechanism for **whether a key may hold a permission at all**. A second and narrower mechanism exists for what a key may **produce** with one it legitimately holds: D43 caps the role a key-issued invitation may carry, because a key that manufactures an interactive principal has stepped around the map rather than through it. Anything branching on credential type outside those two is still a defect. *(Amended 2026-08-02, owner-answered, on [M27](m27.md)'s reopening — it read "`NonDelegableScopes` is the only mechanism; nothing branches on whether the caller holds a session". See decisions.md.)* |
 | `ui` stays stdlib-only | No Node, no CDN, CSP unchanged, no `unsafe-` waivers. |
 | Both themes, from [M24.5](m24.5.md) on | New UI colors use the theme tokens; M24.5's template scan fails raw palette utilities. |
 | Touching the redirect path | Re-run the [docs/slo.md](../../slo.md) k6 measurement on the built image; cached p99 stays under 20ms. |

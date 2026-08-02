@@ -12,10 +12,12 @@ import (
 // reach the same four service calls, so a client can issue, list, revoke and
 // redeem exactly as a person can.
 //
-// Three of the four need `members.write`, which is delegable (D28): a key
-// holding it cannot invite above its creator's own rank, so it cannot widen its
-// own reach and neither limb of D18 applies. Redemption needs no credential at
-// all — it is how somebody who has none acquires one.
+// Three of the four need `members.write`, which is delegable (D28) under a cap
+// on what a key may issue at (D43, invite.KeyIssuableRoles). The cap and not the
+// rank ceiling is what keeps D18's second limb from applying, because redemption
+// needs no credential at all — it is how somebody who has none acquires one, and
+// that is precisely why an unbounded key-issued invitation was a way for a key
+// to widen its reach into scopes no key may hold.
 type InvitationAPI struct {
 	Invites *invite.Service
 }

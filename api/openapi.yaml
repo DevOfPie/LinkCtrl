@@ -1032,13 +1032,18 @@ paths:
         `403`. Omitting `role` invites at `viewer`, so a caller that did not
         think about it admits the least.
 
+        **Issued with an API key, it is capped at `editor`** — `admin` and
+        `owner` answer `403` whatever rank created the key. Redeeming produces
+        an interactive account rather than a credential, and revoking the key
+        does not revoke it.
+
         `emailed` is `false` on an instance with no SMTP relay configured. That
         is the default and not a failure — the link in this response is then the
         whole delivery mechanism.
 
-        Requires `members.write`, which **is** delegable to an API key: the
-        ceiling is the inviter's own rank, which a key inherits from its
-        creator, so a key holding it cannot widen its own reach.
+        Requires `members.write`, which **is** delegable to an API key: a key
+        may bring collaborators in, and the `editor` cap above is what keeps it
+        from handing out more than a key may itself hold.
       requestBody:
         required: true
         content:
@@ -2606,8 +2611,9 @@ components:
           type: string
           enum: [owner, admin, editor, viewer]
           description: |
-            At or below your own rank; above it answers `403`. Omitted means
-            `viewer`.
+            At or below your own rank; above it answers `403`. Authenticated
+            with an API key, `editor` and `viewer` are the only values accepted.
+            Omitted means `viewer`.
 
     RedeemInvitationRequest:
       type: object

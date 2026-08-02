@@ -10,10 +10,13 @@
 // refusal in Redeem is the same refusal, spends the same argon2 work, and says
 // nothing about which check failed. The reason is logged, never returned.
 //
-// **It may carry any role at or below the inviter's own rank** (D28). The
-// ceiling is the inviter's rank, which an API key inherits from its creator, so
-// a key holding members.write cannot invite above its own reach and the
-// permission stays delegable under D18.
+// **It may carry any role at or below the inviter's own rank** (D28), and no
+// more than editor when an API key issued it (D43). Those are two axes, not one
+// ceiling twice: the first bounds the invitation against whoever sent it, the
+// second against the *kind of credential* that sent it. D28 read the first as
+// sufficient and it is not, because redemption turns an invitation into an
+// interactive account — one that requireSessionActor no longer refuses, that
+// holds whatever its role holds, and that revoking the key does not revoke.
 //
 // **It expires** (D29), from creation rather than from delivery: mail leaves
 // through the outbox on the scheduler's tick (D23), so there is no send moment
@@ -48,11 +51,28 @@ import (
 // enforcement; the permission itself has been seeded since Phase 1.
 //
 // Delegable to an API key, and that is a recorded conclusion rather than an
-// omission (D28, applying D18). A key holding it cannot widen its own reach,
-// because the role an invite may carry is capped at the inviter's own rank and
-// a key's identity is its creator's. Neither limb of D18 matches, so it is not
-// in auth.NonDelegableScopes.
+// omission (D28, applying D18): a key may bring collaborators in. What makes it
+// safe is not D28's rank ceiling — that argument was wrong, and F29 is what it
+// cost — but KeyIssuableRoles below, which bounds what a key-issued invitation
+// can produce. auth.NonDelegableScopes governs what a key may *hold*; D43
+// governs what it may *make*, and this permission needs both.
 const PermWrite = "members.write"
+
+// KeyIssuableRoles are the roles an invitation issued with an API key may
+// carry (D43). Absolute, not relative to whoever created the key.
+//
+// Named rather than ranked, deliberately. A relative ceiling — one rank below
+// the issuer — is the fix this looks like and it closes nothing: admin holds
+// every permission except org.delete (00700_seed.sql), so a key an owner
+// created could still mint apikeys.write, audit.read and members.write. The
+// boundary is between admin and editor because of what those two roles *hold*,
+// which is not a property of where a rank sorts, so a role added later is
+// refused here until somebody decides otherwise rather than admitted by
+// arithmetic.
+var KeyIssuableRoles = map[string]struct{}{
+	"editor": {},
+	"viewer": {},
+}
 
 // TokenBytes is the entropy in an invitation token, matching a session token.
 // Well beyond guessing range, and short enough that the resulting link fits in
@@ -257,6 +277,25 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 	if role.Rank < actor.RoleRank {
 		return nil, fmt.Errorf(
 			"%w: an invitation cannot carry a role above your own (%s)", domain.ErrForbidden, actor.Role)
+	}
+
+	// The D43 cap, and the reason it sits next to the ceiling above rather than
+	// replacing it: they bound different things. The ceiling asks what the
+	// issuer outranks; this asks what the issuer *is*. A key that may invite is
+	// a key that may create an interactive principal, and a principal is not a
+	// credential — nothing revokes it with the key, and requireSessionActor
+	// cannot tell it from an account somebody registered (F29).
+	//
+	// Refused here rather than at redemption because the row stores role_id: a
+	// bound applied at creation is a bound the stored invitation already
+	// carries, so nothing has to be remembered about the credential that issued
+	// it and no column exists to forget.
+	if actor.IsAPIKey() {
+		if _, ok := KeyIssuableRoles[role.Slug]; !ok {
+			return nil, fmt.Errorf(
+				"%w: an invitation issued with an API key may carry editor or viewer, not %s",
+				domain.ErrForbidden, role.Slug)
+		}
 	}
 
 	// Asked before issuing, and safe to answer: the actor holds members.write

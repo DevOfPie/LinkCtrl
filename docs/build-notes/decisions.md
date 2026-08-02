@@ -95,6 +95,7 @@ file. Append a row when you append an entry.
 | [M32.9, the second pass, and what refutation cost the findings](#2026-08-01--m329-the-second-pass-and-what-refutation-cost-the-findings) | Amendments A1 and A2 with their tree facts; why independent readers are the mechanism a review requires rather than a hand-off; five findings refuted and two of them near re-litigations of recorded decisions; the trailing dot corrected from SSRF to open redirect; three findings corrected against their finder; what verifiers found that finders did not; the workspace-scoped-membership cluster |
 | [M32.9's triage, and five milestones reopened](#2026-08-01--m329s-triage-and-five-milestones-reopened) | Which five rows became work and which milestone each reopens; why the owner took the wider option against the recommendation; the trap each reopening must not fall into; why M32.9 lands `done` while its findings stay open |
 | [M23, silence is not an answer](#2026-08-01--m23-silence-is-not-an-answer) | Why a bounded read alone would have emptied every quiet replica's cache; the probe that requires a reply; D42 and why the hot path's read timeout cannot be reused; the flush moving from the recovery to the failure; the two claims corrected in place; the bullet amended at 3.4 and why it was the owner's to answer |
+| [M27, the rank axis and the credential axis](#2026-08-02--m27-the-rank-axis-and-the-credential-axis) | Why D28's ceiling was never the control; the milestone's own candidate checked against the seed and found not to close the finding; D43 capping a key-issued invitation at editor; the inherited Permissions rule amended to name a second mechanism |
 
 ---
 
@@ -7482,3 +7483,105 @@ instance and so points the dangerous way; and flushing only at reconnect, which
 is the shipped behaviour the finding is about. The recommendation carried its
 own cost — amending the bullet was the cheapest answer available to the actor
 proposing it, which is exactly why the choice was not that actor's to make.
+
+## 2026-08-02 — M27, the rank axis and the credential axis
+
+F29 is not a bug in an implementation of D28. It is D28 answering a question it
+was not asked. The owner answered both halves on 2026-08-02, after validation
+put the candidates and their costs up with the recommendation marked.
+
+### Why the ceiling was never the control
+
+D28 reasoned that because an invitation is capped at its issuer's own rank, and
+a key inherits its creator's rank, `members.write` matches neither limb of D18
+and stays delegable. Every step of that is true and the conclusion still does
+not follow, because the rank axis and the credential axis are different axes.
+The ceiling bounds *what role the new principal gets*. It says nothing about
+*what kind of credential* created it, and the whole point of
+`NonDelegableScopes` is that some things a session may do, a key may not — so
+a key that can manufacture a session-shaped principal has stepped around the
+map rather than through it. Revoking the key does not revoke the account it
+made.
+
+### The candidate this milestone proposed, and why it does not work
+
+`m27.md`'s reopening offered "a rank ceiling below the issuer" as one of the
+two bounding candidates. Validation checked it against the seed rather than
+accepting it, and it does not close the finding. `00700_seed.sql:56-61` grants
+**admin every permission except `org.delete`**. One rank below owner is admin,
+so a key created by an owner could still mint an admin, and an admin holds
+`apikeys.read`, `apikeys.write` and `audit.read` — three of the five scopes the
+map exists to withhold — plus `members.write`, which is delegable and is what
+lets the minted account repeat the whole trick. The candidate would have looked
+like a fix, passed a test written to its own wording, and left the chain open.
+
+The count is three and not four, and it was corrected at step 3.4 by the
+sabotage run rather than by re-reading the seed. `destinations.review` is
+**owner-only**: `01600_destination_disputes.sql:101-115` grants it to the owner
+role alone and says in its own comment that admin is *"deliberately
+excluded"*, because it decides what every organization on the instance may link
+to. The draft of this entry had inherited "everything except `org.delete`" from
+`00700` and not checked what the migrations after it granted. Disabling the cap
+and running the chain test printed the answer: at `owner` the minted account
+held all five, at `admin` exactly three. It does not move the conclusion — an
+admin still reaches `apikeys.*` and `audit.read`, and holds `members.write` to
+do it again — and it is recorded because a decision that overstates its own
+evidence is the kind that gets re-litigated later by somebody who checks.
+
+`00700_seed.sql:62-74` is what makes the answer a specific rank rather than a
+relative one: editor holds links, tags, analytics and `workspace.read`, and
+viewer holds four read permissions. Neither can mint a key, invite anybody, or
+read the audit log. The boundary that matters sits between admin and editor,
+and it does not move when the issuer's rank moves.
+
+### D43, and what it corrects
+
+**A key-issued invitation may carry `editor` or `viewer`, never `owner` or
+`admin`.** The bound is absolute rather than relative to the issuer, for the
+reason above. `members.write` **stays delegable**: a key may still invite
+collaborators, which is the capability D28 was right to want and
+`TestMembersWriteIsDelegableToAnAPIKey` was right to assert.
+
+This corrects D28's final sentence. D28 is not withdrawn — its ceiling holds
+and still governs session-issued invitations — but its conclusion that
+`members.write` needs no further bound is wrong, and `docs/SECURITY.md:45`'s
+"which is why `members.write` is safe to delegate to an API key" goes with it.
+That sentence is the one a reader trusts when deciding what to put on a key.
+
+The cost accepted: automation that today issues admin invitations through a key
+breaks, and it breaks loudly at creation rather than silently at redemption.
+Weighed against a key holding one scope reaching four it may never hold, that
+is the trade the owner took.
+
+### The inherited rule this amends
+
+Phase 2's inherited Permissions rule reserved one mechanism, and D43 adds a
+second, so the rule is amended rather than quietly outgrown.
+
+As it stood:
+
+> `NonDelegableScopes` is the only mechanism; nothing branches on whether the
+> caller holds a session.
+
+As amended:
+
+> `NonDelegableScopes` is the only mechanism for *whether a key may hold a
+> permission at all*. A second and narrower mechanism exists for what a key may
+> *produce* with one it legitimately holds: D43 caps the role a key-issued
+> invitation may carry. Anything branching on credential type outside those two
+> is still a defect.
+
+The tree fact that forced it: `internal/invite/invite.go:226` receives
+`actor *auth.Identity` and `auth.Identity.IsAPIKey()` already exists at
+`internal/auth/apikey.go:558`, so the branch is one condition in the service and
+needs no plumbing and no migration — the stored `role_id` already carries the
+bound, which is why this option and not the account-creation one avoids a schema
+change. The rule was written when the only question anyone asked about a key was
+which permissions it held. F29 is the first case of a key using a permission it
+legitimately holds to manufacture a principal that holds more, and one map of
+scope names cannot express that, because the escalation is in what the operation
+*creates* rather than in what the caller *is*.
+
+Recorded before the fix was written, which is what `m27.md`'s reopening demands
+and the reason it demands it: had the code come first, the rank ceiling is the
+bound anyone would reach for, and it is the one that does not work.

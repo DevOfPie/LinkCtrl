@@ -280,8 +280,14 @@ migrations run at boot.
   refuses, and joining under a different address needs a new invitation.
 - **The role an invitation carries is capped at the issuer's own.** An owner can
   invite an owner; an admin can invite an admin, editor or viewer, and never an
-  owner. Because the ceiling is the issuer's own rank, `members.write` is safe to
-  grant to an API key, and it is grantable.
+  owner. `members.write` is grantable to an API key, so automation can bring
+  collaborators in — but **an invitation issued with a key carries `editor` or
+  `viewer` and nothing above**, whatever rank created the key. Redeeming one
+  produces an interactive account that revoking the key does not revoke, so
+  without that second bound a key holding one delegable scope could mint an
+  account holding the scopes no key may hold. Automation that issues `admin`
+  invitations through a key now gets a `403` when it asks, rather than an
+  account with more authority than the key that made it.
 - `LINKCTRL_INVITE_TTL`, defaulting to `168h`. The clock starts when the
   invitation is created rather than when the mail leaves, because delivery is
   asynchronous through the outbox — so a slow relay spends the window, which is
