@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
+	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
@@ -128,15 +129,28 @@ func demoCmd(args []string) error {
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: lctl demo [flags]
 
-Fills an empty instance with a workspace worth looking at: around twenty links
-with titles, tags and destinations, and a month of click history with weekday
-seasonality, a launch spike, bots, and every status the dashboard can render —
-including an archived link, an expired campaign and one in the trash.
+Fills an empty instance with an installation worth looking at.
 
-Links are created through the same service call the REST API uses, so the data
-cannot describe a state the product could not reach. Click history is written
-directly, because the redirect path can only produce traffic for right now; every
-column matches what the ingester would have written.
+Two workspaces: the first with around twenty links, their titles, tags and
+destinations, and a month of click history with weekday seasonality, a launch
+spike, bots, and every status the dashboard can render — an archived link, an
+expired campaign, one in the trash; the second with a handful of its own, so the
+workspace switcher has something to switch between.
+
+Around that, what Phase 2 added: two more accounts and their memberships, an
+outstanding invitation and two redeemed ones, an inbox with unread items, an
+audit trail spanning several actions, a blocked destination, a dispute in each
+of its three states, and bot blocking switched on for exactly one link.
+
+Everything is created through the same service calls the dashboard and the REST
+API make, so the data cannot describe a state the product could not reach. Click
+history is written directly, because the redirect path can only produce traffic
+for right now; every column matches what the ingester would have written.
+
+No mailer is needed and none is used: the invitation it leaves outstanding is
+reachable by the link printed below. No reputation feed is enabled, so no
+destination leaves this instance. LINKCTRL_SIGNUP_MODE is not read and not
+changed.
 
 For load testing rather than looking at, use `+"`lctl seed`"+` instead.
 
@@ -207,10 +221,16 @@ func demoSeed(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, opt de
 	catalogue := demoCatalogue()
 
 	if opt.reset {
-		if err := demoReset(ctx, pool, actor.WorkspaceID.String(), catalogue); err != nil {
+		if err := demoReset(ctx, pool, actor, catalogue); err != nil {
 			return err
 		}
 		fmt.Fprintln(os.Stderr, "reset: previous demo data removed")
+		// The reset deleted the second workspace, and with it whatever the last
+		// run pinned as this account's last-used one. Re-resolving keeps the
+		// identity below pointing at a workspace that still exists.
+		if actor, err = authSvc.IdentityForEmail(ctx, email); err != nil {
+			return fmt.Errorf("resolve user %s: %w", email, err)
+		}
 	}
 
 	// The backfill reaches into last month, and an insert with no matching
@@ -226,10 +246,8 @@ func demoSeed(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, opt de
 		fmt.Fprintf(os.Stderr, "created %d partitions covering the demo range\n", created)
 	}
 
-	linkSvc := link.NewService(pool, link.Config{
-		Policy:  link.DefaultDestinationPolicy(),
-		BaseURL: cfg.LinkOrigin(),
-	})
+	auditSvc := audit.NewService(pool)
+	linkSvc := link.NewService(pool, demoLinkConfig(cfg, auditSvc))
 
 	ids, err := demoCreateLinks(ctx, pool, linkSvc, actor, catalogue, now)
 	if err != nil {
@@ -242,6 +260,17 @@ func demoSeed(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, opt de
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "clicks: %d\n", clicks)
+
+	// Everything Phase 2 added. Before the rollup below, because the second
+	// workspace writes click events of its own and a rollup that ran first would
+	// leave its analytics pages empty.
+	seeder, err := newDemoSeeder(pool, cfg, authSvc, linkSvc, actor, opt, now)
+	if err != nil {
+		return err
+	}
+	if err := seeder.run(ctx, catalogue, ids); err != nil {
+		return err
+	}
 
 	// Roll the whole window up. The application's job only ever recomputes
 	// yesterday and today, because that is all live traffic can change;

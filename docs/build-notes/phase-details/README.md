@@ -40,7 +40,7 @@ milestone, is in [workflow.md](../workflow.md).
 | [M32.5](m32.5.md) | Bot blocking, per domain and per link | — (before M33, M34) | done |
 | [M32.9](m32.9.md) | **Mid-phase adversarial review** | M21–M32.5 | done |
 | [M33](m33.md) | Deep-link path forwarding | — (before M34) | done |
-| [M33.5](m33.5.md) | A demo that shows the phase, not just its links | M32.9 | not started |
+| [M33.5](m33.5.md) | A demo that shows the phase, not just its links | M32.9 | done |
 | [M34](m34.md) | Routing rules: conditions, first-match evaluation | M23 M30 M33 | not started |
 | [M35](m35.md) | Gated links: password, signed, one-time, max-click | M34 (ordering) | not started |
 | [M36](m36.md) | Split testing: weighted, sequential, fallback, flags | M34 M35 M30 | not started |
@@ -77,7 +77,7 @@ Not repeated in the files below. These hold for all of Phase 2.
 | Both themes, from [M24.5](m24.5.md) on | New UI colors use the theme tokens; M24.5's template scan fails raw palette utilities. |
 | Touching the redirect path | Re-run the [docs/slo.md](../../slo.md) k6 measurement on the built image; cached p99 stays under 20ms. |
 | A test that passes first try | Sabotage it, confirm it fails, restore by counter-edit. |
-| A new feature somebody can *see* | Extend the demo seeder (`cmd/lctl/demo.go`) so the demo instance shows it. A feature only reachable by building the state yourself is one nobody evaluating this product will find. Does not apply to work with nothing to look at — a timeout bound, an invalidation path, a permission nobody exercises directly. [M33.5](m33.5.md) makes it enforceable; until it lands, it is a rule you keep by reading it. |
+| A new feature somebody can *see* | Extend the demo seeder (`cmd/lctl/demo.go`, and `demo_phase2.go` beside it) so the demo instance shows it. A feature only reachable by building the state yourself is one nobody evaluating this product will find. Does not apply to work with nothing to look at — a timeout bound, an invalidation path, a permission nobody exercises directly. **Enforced since [M33.5](m33.5.md)**: `demoCoverage()` in `cmd/lctl/demo_coverage_test.go` enumerates what the demo must show and fails when a listed feature has no seeded rows, so a milestone that seeds nothing adds a row there or breaks the build. Its four trailing rows assert *zero* for milestones not yet built — turn one into a real row when its milestone lands rather than deleting it. If the obligation ever proves too heavy, narrow the list deliberately and in writing; never delete the test. |
 
 ## Decisions already taken
 

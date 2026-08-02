@@ -144,7 +144,11 @@ tasks:
         msg: "POSTGRES_PASSWORD is empty. Run: task env INSTANCE={{.INSTANCE}}"
     cmds:
       - CONFIRM={{.CONFIRM}} bash scripts/instance.sh guard {{.INSTANCE}} test-integration
-      - go test -race -tags=integration ./test/integration/...
+      # cmd/lctl carries one integration test of its own: the demo coverage list
+      # (M33.5), which has to seed a database to know whether the demo shows
+      # anything. It cannot live in test/integration, because that package cannot
+      # import package main.
+      - go test -race -tags=integration ./test/integration/... ./cmd/lctl/...
     env:
       TEST_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
       LINKCTRL_REDIS_URL: "{{.DEV_REDIS_URL}}"

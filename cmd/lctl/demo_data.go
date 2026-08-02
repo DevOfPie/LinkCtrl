@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
@@ -21,13 +22,24 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
+// pgxExecutor is the one method the reset statements need, so a helper can be
+// handed the transaction rather than the pool and cannot commit it.
+type pgxExecutor interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
 // demoReset removes the previous demo dataset.
 //
-// Scoped to this workspace and to the catalogue's own aliases, so it cannot
-// delete links somebody added by hand. Click events are truncated wholesale
-// because they carry no marker distinguishing demo rows from real ones — which
-// is why the command refuses to run against production without --force.
-func demoReset(ctx context.Context, pool *pgxpool.Pool, workspaceID string, cat []demoLink) error {
+// Scoped to this workspace, to the catalogue's own aliases and to the demo
+// organization, so it cannot delete links somebody added by hand. Click events
+// are truncated wholesale because they carry no marker distinguishing demo rows
+// from real ones — which is why the command refuses to run against production
+// without --force.
+//
+// Every row the Phase 2 seeding writes is removed here too, in demoResetPhase2.
+// That is what makes `make demo-update` idempotent: run twice, the same demo.
+func demoReset(ctx context.Context, pool *pgxpool.Pool, actor *auth.Identity, cat []demoLink) error {
+	workspaceID := actor.WorkspaceID.String()
 	aliases := make([]string, 0, len(cat))
 	for _, d := range cat {
 		if d.alias != "" {
@@ -68,10 +80,17 @@ func demoReset(ctx context.Context, pool *pgxpool.Pool, workspaceID string, cat 
 	if _, err := tx.Exec(ctx, `TRUNCATE click_events`); err != nil {
 		return fmt.Errorf("reset clicks: %w", err)
 	}
+	// Scoped to the organization rather than to one workspace, because the demo
+	// now has two and the rollup tables carry no foreign key that would take the
+	// second one's rows with it.
 	for _, t := range []string{"link_click_daily", "link_dimension_daily", "workspace_click_daily"} {
-		if _, err := tx.Exec(ctx, `DELETE FROM `+t+` WHERE workspace_id = $1`, workspaceID); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM `+t+` WHERE workspace_id IN (
+				SELECT id FROM workspaces WHERE organization_id = $1)`, actor.OrgID); err != nil {
 			return fmt.Errorf("reset %s: %w", t, err)
 		}
+	}
+	if err := demoResetPhase2(ctx, tx, actor.OrgID, actor.UserID); err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }

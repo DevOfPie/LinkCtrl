@@ -106,6 +106,8 @@ file. Append a row when you append an entry.
 | [M30 reopened: one character, and the four checks it walked past](#2026-08-02--m30-reopened-one-character-and-the-four-checks-it-walked-past) | Four unshared mechanisms defeated by one keystroke; D46 — canonicalize the dot away rather than refuse it, folded once in the validator; why `TrimRight` and not one `TrimSuffix`; why a reflection walk over struct shape could not see the bypass; the class already asserted for the Postgres tier |
 | [M30, amendment: the citation the fix moved](#2026-08-02--m30-amendment-the-citation-the-fix-moved) | `blocking_test.go:346-350` → `:441-444`; why a milestone editing a file invalidates its own bullet's line citation, and the case for citing test names |
 | [M33, one alias, and every URL underneath it](#2026-08-02--m33-one-alias-and-every-url-underneath-it) | D47 — a deep link the alias cannot forward gets the ordinary miss, charged; why falling back to the bare destination hands every link the opt-in property; why the probe charge is what stops the refusal being an existence oracle; why the snapshot field's justification is fail-safety and not M32.5's disproved one; reading the remainder from `EscapedPath` rather than `PathValue`; `SUFFIX` and the two-run measurement |
+| [M33.5, a demo that fails the build when it stops showing the phase](#2026-08-02--m335-a-demo-that-fails-the-build-when-it-stops-showing-the-phase) | Why the coverage list is the milestone and the rows are not; the four boundary rows that assert zero; where the test had to live and the target that changed; seeding through the service layer, the three writes that are not, and the identity resolved before its membership existed; each prohibition asserted as configuration and as source; the reset that deleted the demo organization; 1.4s measured, and the audit page that is an API |
+| [M33.5, amendment: the audit page that was never built](#2026-08-02--m335-amendment-the-audit-page-that-was-never-built) | Why *the audit page* named a surface M21 never promised; why it is an amendment and not a finding about the feature; the second file this session to describe an expected tree |
 
 ---
 
@@ -8421,3 +8423,238 @@ environment variable, empty by default, so every earlier measurement's request
 shape is unchanged. Without it the load test can only ask for bare aliases, and
 a section headed *re-measured for M33* would have been measuring the path M33
 did not change.
+
+## 2026-08-02 — M33.5, a demo that fails the build when it stops showing the phase
+
+`lctl demo` was written in Phase 1, when a workspace, twenty links and a month of
+clicks were the whole product. Nine Phase 2 milestones later it still seeded a
+workspace, twenty links and a month of clicks, and somebody opening the demo saw
+none of the invitations, members, workspaces, notifications, audit trail,
+destination blocking, disputes or bot blocking that had shipped in between.
+
+Nobody decided that. It happened because nothing failed when it did.
+
+No new `D` number. [D41](../../Plan.md#phase-2-decisions-taken-after-the-plan-was-finalised)
+already carries the decisions this milestone was planned around — a coverage test
+that fails when a listed feature has no seeded rows, no reputation feed, no
+change to `LINKCTRL_SIGNUP_MODE` — and nothing below reverses or extends it.
+
+### The list is the milestone; the seeding is what makes the list pass
+
+The obvious reading of this milestone is "seed more rows". That is the smaller
+half. The seeded rows are worth one afternoon and rot on the same schedule the
+last ones did; what does not rot is `demoCoverage()` in
+`cmd/lctl/demo_coverage_test.go`, which enumerates every feature the demo must
+show and fails the build when one of them has no rows.
+
+The rule it enforces already existed — a milestone that ships something visible
+extends the seeder, inherited from
+[phase-details/README.md](phase-details/README.md#what-every-milestone-inherits)
+and checked by workflow.md's `Demo` gate since 2026-08-01. It had existed, in
+spirit, for the whole phase. The gate's arrival is what made the obligation
+writable down; this is what makes it enforced.
+
+**The tax is the point.** Every later milestone with a demo-visible feature now
+owes two edits instead of one, and the build fails until it pays. M33.5's own
+file states the escape hatch and closes the wrong one: if the tax proves too
+heavy, narrow what the list covers, deliberately and in writing — never delete
+the test.
+
+The list ends with four rows that assert **zero**: routing rules, QR codes,
+webhooks and automation rules, none of which are built. They are not padding.
+Without them the boundary between "the demo does not show this because the
+feature does not exist" and "the demo does not show this because somebody
+forgot" is a judgement call made by whoever is reading, months later. With them,
+M34 cannot seed a routing rule without the build telling it to say so in the
+list.
+
+### Where the test had to live, and what that cost
+
+`test/integration` cannot import `package main`, and the seeder is in
+`cmd/lctl`. Three options: move the seeder into an importable package, drive the
+CLI as a subprocess from the integration suite, or put the test beside the
+seeder and teach the target to run it.
+
+Moving lost on a small thing that is not small: `cmd/lctl/demo.go` is named
+verbatim by the inherited rule and by workflow.md's `Demo` gate, and a milestone
+whose product is an enforcement mechanism should not begin by making two
+statements of the rule it enforces false. Driving `go run` as a subprocess lost
+because the failure mode is a compile error and an environment mismatch reported
+as a test failure, and because it would have to assemble the whole configuration
+surface to say what a struct literal says in six lines.
+
+So `make test-integration` and its Taskfile mirror now run
+`./test/integration/... ./cmd/lctl/...`. The cost is one line in each and a
+database bootstrap the new test owns: it creates and migrates a database of its
+own rather than cloning the suite's template, because the suite drops and
+recreates that template in its `TestMain` and two package binaries running
+concurrently would race for it.
+
+### Seeding through the service layer, and the three places it does not
+
+Everything the demo shows is produced by the call the dashboard or the API
+makes: `auth.Register` for the accounts, `invite.Create` and `invite.Redeem` for
+both halves of the invitation lifecycle, `team.CreateWorkspace` and `team.Grant`
+for the second workspace and the membership into it, `link.Create` for the
+refusals — which is what writes the `destination.blocked` record with the URL
+defanged in the column — `dispute.File`, `dispute.Allow` and `dispute.Uphold`
+for the queue, `link.Update` for the bot-blocking switch, and `notify.MarkRead`
+for the read half of the inbox.
+
+That is not aesthetics. A dispute written by `INSERT` has never been through the
+form that files one, and the demo is the instance this project points people at:
+a state it shows that the product cannot produce is a lie told to somebody
+evaluating it. It also caught things. Filing the disputes as the seeded admin
+rather than as the owner is what put a second actor in the audit log; and the
+first version resolved that admin's identity *before* the redemption that gave
+them a membership, so every refusal, every dispute and every audit row landed in
+the personal organization registration had given them, invisible to the demo
+organization the coverage queries read. The test failed on `destination.blocked`
+returning zero. A raw insert would have put the rows exactly where the seeder
+meant them and the demo would have shown a queue no request could have filled.
+
+Three writes are deliberately not through a service, and each is a state no
+surface can reach:
+
+- **The expired campaign's past `expires_at`**, which predates this milestone.
+  Reached by the clock, never by a request.
+- **The demo's own entry on the low-confidence blocklist.** Nothing in the
+  product inserts into `blocked_destinations`: boot reconciles
+  `LINKCTRL_DESTINATION_BLOCKLIST` into it as `source = 'env'`, migration 01500
+  seeded the shortener hosts once, and M31's review queue only ever *removes* a
+  row. Neither writer can be borrowed — an `env` row is deleted by the next
+  boot, and `dispute.Allow` refuses to lift one for exactly that reason, so a
+  demo built on one would show an allow button that cannot be clicked. The row
+  goes in as `source = 'review'`, which is the column default and the state an
+  operator's own entry is in.
+- **Which workspace a seeded person is currently in.** `SwitchWorkspace` requires
+  a session by design (M25): a credential without a browser must not move
+  somebody's browser. The CLI has none, so the seeder runs the write that call
+  makes — the last-used one — and then resolves the identity through
+  `auth.IdentityForEmail`, the same path every other `lctl` subcommand uses.
+
+The two disputes about shortener hosts are left open and upheld, never allowed,
+and that is a constraint rather than a preference. An allow deletes the matched
+row, and migration 01500 never re-asserts its rows — deliberately, so that an
+owner who deletes one has deleted it. A demo run that allowed one would retire a
+shortener from the instance's blocklist permanently, and `--reset` could not
+restore it without overruling a decision somebody may have made on purpose. Only
+the seeder's own host is ever allowed.
+
+### The prohibitions are asserted twice each
+
+Three things the seeder must never do, and each is checked both as configuration
+and as source.
+
+- **No reputation feed, ever.** A feed sends every destination it judges to a
+  third party (M32), and a demo instance quietly doing that would violate the
+  promise that feature exists to qualify.
+- **No mailer.** On a default instance the mailer is off (D1) and the copyable
+  invitation link is the whole delivery mechanism (D27). A demo that needed a
+  relay would not run for most people — and on an instance that has one, it would
+  email whoever owns the seeded addresses.
+- **`LINKCTRL_SIGNUP_MODE` untouched, and `NewAccounts` false unconditionally.**
+  D7 says `closed` admits nobody by any path. The accounts are written first, by
+  the seeder; redemption only ever adds a membership to one that already exists,
+  so the mode is never read and never needs relaxing.
+
+The first assertion of each reads the configuration the seeder actually builds,
+which is the truth about this run. The second parses `cmd/lctl`'s own source for
+the import or the struct field that doing the forbidden thing would require,
+which is the truth about the next person to edit it — somebody seeding a new
+feature reaches for the service it needs, finds it wants a mailer or a feed
+client, and wires one in without ever opening this file. An explicit `nil` is
+allowed, because writing the field down as nil is how the seeder states the
+prohibition at the place it applies.
+
+All four tests were shown red before being trusted. The three prohibitions were
+each sabotaged into passing a real client, a real mailer and a mode-derived
+`NewAccounts`, and every assertion fired. The coverage test was run with the
+bot-blocking step removed (M32.5 rows go to zero) and with two different reset
+steps deleted — one made the second run fail outright on an invitation that was
+still outstanding, the other left it running and doubled the notification
+counts, which is the comparison the idempotency half exists to make.
+
+### Idempotency, and the delete that removed the demo
+
+`make demo-update` runs at every milestone boundary and reruns `--reset` over an
+instance that already holds the last run's data, so "running it twice produces
+the same demo" is a property the loop depends on rather than a nicety. The
+coverage test seeds twice and compares every count.
+
+It caught the one genuinely dangerous line in this milestone. The reset has to
+remove the personal organizations `auth.Register` gives the seeded accounts,
+since no foreign key takes them with the user — and the first spelling was
+"personal organizations the seeded people belong to". The demo's own
+organization is *personal*: every account registration provisions one that way,
+including the owner's. The seeded people are members of it. The second run
+deleted the demo — workspace, links, the owner's membership — and failed on the
+next link create with `forbidden: creating links requires links.create`.
+
+Two guards now, and the second is the one that would have caught it without
+knowing to look: the demo organization is excluded by id, and an organization is
+only removed when *every* remaining member of it is one of the seeded accounts.
+
+### The measurement, and the audit page that is an API
+
+A full run takes **1.4 seconds** against a local Postgres, first run and second
+alike — 30,073 click events across two workspaces, five argon2 hashes at the
+configured cost, and the rollup over the whole window. Measured inside the
+coverage test, logged rather than asserted: a threshold here would be a
+measurement of whichever machine ran the tests, and the property that matters is
+one a person judges from the number. End to end through `make demo` against a
+running test instance, including `go run`'s compile: 2.4 to 3.0 seconds.
+
+One thing the milestone file assumes that the tree does not have: it says the
+audit rows make "the audit page" show a trail, and there is no audit page. The
+audit log is `GET /api/v1/audit` and nothing else renders it. The seeding
+satisfies what the bullet asserts — eight distinct actions by two distinct
+actors, where the demo previously had one root-redirect change — and the word
+"page" is the part that has no referent. Reported rather than amended, because a
+worker meets a bullet as written.
+
+## 2026-08-02 — M33.5, amendment: the audit page that was never built
+
+A **fact** amendment, logged rather than prompted, and the fourth this session.
+Raised by the worker at step 3.3 and verified against the tree before being
+applied.
+
+**The bullets as they stood**, in *What the seeder produces*:
+
+> Each of these is a row a person can actually see in the dashboard, not a
+> fixture:
+
+> - **Audit rows spanning several actions** ([M21](phase-details/m21.md)), so the
+>   audit page shows a trail rather than one root-redirect change.
+
+**As amended:** the preamble now says *a row a person evaluating this instance
+can actually reach through the product*, and names the one exception — the audit
+log has no page and is read at `GET /api/v1/audit`. The bullet names that
+endpoint instead of "the audit page".
+
+**The tree facts.** `internal/httpx/router.go:187` registers
+`GET /api/v1/audit` and nothing else; there is no audit template in
+`internal/ui/templates/pages/`; and `README.md:88` describes the log as
+*"readable at `GET /api/v1/audit` behind a non-delegable permission"*. So the
+phrase named a surface that has never existed.
+
+**Why this is an amendment and not a finding.** The obvious reading is that the
+demo cannot show a shipped feature, and m33.5.md has a rule for exactly that —
+*if the demo cannot show a feature, that is a finding about the feature, not a
+licence to build a surface here*. It does not apply, because nothing was ever
+promised: [M21](phase-details/m21.md) specifies a writer and a reader and never
+undertakes a page, and the README documents the API-only shape deliberately
+rather than apologetically. There is no false claim anywhere to file against.
+What there was is one word in M33.5's own file asserting a surface its
+dependencies never built.
+
+The assertion is untouched and still met. The seeder produces eight distinct
+audit actions by two actors where the demo previously had a single root-redirect
+change, which is a trail by any reading, and it is reachable by whoever is
+evaluating the instance. Only the route to it was misnamed.
+
+Worth one line on the pattern: this is the second amendment this session where a
+milestone file described the tree it *expected* rather than the tree that
+exists — [M28.5](phase-details/m28.5.md)'s trash window was the first. Both were
+written before the code, which is the point of writing them then, and both cost
+one validation to catch. That is the trade working, not failing.

@@ -15,7 +15,7 @@ and nothing done to one can reach the other.
 | Env file | `.env.demo` | `.env.test` |
 | Image | `linkctrl:demo`, rebuilt by `make demo-update` | `linkctrl:test`, rebuilt whenever |
 | Lifetime | Survives everything except `make demo-update` | Disposable; `make rebuild` is routine |
-| Data | The `lctl demo` workspace, re-anchored to today at each milestone | Whatever the current test needs |
+| Data | The `lctl demo` installation — two workspaces, three accounts, a review queue — re-anchored to today at each milestone | Whatever the current test needs |
 
 `test` is the default. Every target acts on it unless `INSTANCE=demo` is passed,
 because the alternative — a default that follows whichever stack is running — is
@@ -174,9 +174,12 @@ which rebuilds `linkctrl:demo` from the current commit, recreates the container
 (migrations run at boot), and regenerates the demo workspace with `lctl demo
 --reset`.
 
-**A refresh replaces the data.** `lctl demo --reset` deletes the demo links and
-truncates `click_events`, so anything you created while using the instance is
-gone at the next milestone. That is the deliberate trade: the demo's value is a
+**A refresh replaces the data.** `lctl demo --reset` deletes everything it
+seeded — the links, the second workspace, the seeded accounts, the invitations,
+the notifications, the audit records and the disputes — and truncates
+`click_events`, so anything you created while using the instance is gone at the
+next milestone. That completeness is the point: two runs produce the same demo,
+which is what makes running this at every milestone safe. That is the deliberate trade: the demo's value is a
 month of *recent* plausible history — the dataset is generated relative to the
 day it runs, so charts always end today rather than trailing off weeks ago — and
 keeping accumulated hand-made data would mean the history slowly aging into

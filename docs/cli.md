@@ -189,46 +189,89 @@ seed-slo` is the SLO dataset. See [slo.md](slo.md).
 
 ### `demo`
 
-Fills an instance with a workspace worth looking at. `seed` is for load tests;
-this is for seeing the product.
+Fills an instance with an installation worth looking at. `seed` is for load
+tests; this is for seeing the product.
 
 ```sh
 $ lctl demo --reset
 reset: previous demo data removed
 links: 21
-clicks: 31008
+clicks: 30073
+accounts: morgan@example.com, sam@example.com
+invitations: 2 redeemed, 1 outstanding for riley@example.com
+  outstanding link: http://localhost:8080/invite/1nfeP5sf3YmV5WWrrSuOcoX40-Phb5Q…
+workspace "Campaigns": 5 links, 3870 clicks
+bot blocking: on for /intro-video, inherited by every other link
+disputes: one open, one allowed, one upheld
+notifications: 5 for you@example.com, 2 unread
 rollups computed
 
 demo data ready for you@example.com
 links are at http://localhost:8080/<alias>, dashboard at http://localhost:8080
 ```
 
-Around twenty links with titles, tags, descriptions and destinations, and a month
-of click history with weekday seasonality, a launch spike, bots, and a spread of
-devices, browsers, countries, languages and referrers. Every status the dashboard
-can render is present: an archived link, an expired campaign that answers `410`,
-one in the trash, one with query forwarding on, and two with generated aliases.
+The first workspace holds around twenty links with titles, tags, descriptions and
+destinations, and a month of click history with weekday seasonality, a launch
+spike, bots, and a spread of devices, browsers, countries, languages and
+referrers. Every status the dashboard can render is present: an archived link, an
+expired campaign that answers `410`, one in the trash, one with query forwarding
+on, one with path forwarding on, and two with generated aliases.
+
+Around that sits what the rest of the product does. A second workspace with links
+of its own, so the switcher has somewhere to switch to and scoping is visible.
+Two more accounts and their memberships, one of them an organization-wide viewer
+who is an editor in the second workspace. Three invitations, two redeemed and one
+still outstanding. An inbox with unread items in it. An audit trail spanning
+eight actions and two people. Three refused destinations, and a dispute about
+each — one open, one allowed, one upheld. Bot blocking switched on for exactly
+one link, so its precedence against the links that inherit can be read off the
+page.
 
 It needs a user to own the data, so claim the instance first — through the setup
 form or `POST /api/v1/auth/setup`. `--user` picks one; the default is the
-earliest.
+earliest. The seeded accounts all sign in with `demo-account-password`, which is
+published because a demo instance exists to be signed into — and is the reason
+this command refuses `APP_ENV=production` without `--force`. Anywhere reachable
+that is not a demo, treat a run of this as three live accounts with a known
+password and remove them.
 
-Two properties are worth stating because they are what make it trustworthy.
-Links are created **through the same service call the REST API uses**, so alias
-policy, destination validation and tag creation all run: the dataset cannot
-describe a state the product could not reach. Click history is written directly —
-the redirect path can only make traffic for right now — but every column matches
-what the ingester would have written, including no address anywhere, referrers
-already reduced to a host, and device and browser strings from the vocabulary
-`Classify` emits.
+Three properties are worth stating because they are what make it trustworthy.
 
-The one field written directly that a client could not set is the expired
-campaign's past `expires_at`. That state is reached by the clock, never by a
-request.
+**It goes through the service layer.** Links, invitations, redemptions,
+memberships, the second workspace, the refusals and the disputes are all produced
+by the same service calls the dashboard and the REST API make, so the dataset
+cannot describe a state the product could not reach. Click history is written
+directly — the redirect path can only make traffic for right now — but every
+column matches what the ingester would have written, including no address
+anywhere, referrers already reduced to a host, and device and browser strings
+from the vocabulary `Classify` emits.
 
-`--reset` deletes the demo links in the owning workspace and truncates
-`click_events` — **all of them**, since a click row carries no marker saying it
-was seeded. Like `seed`, it refuses to run when `APP_ENV=production` without
+**It needs no mailer and enables no reputation feed.** The outstanding
+invitation is delivered by the copyable link printed above, which is how a
+default instance delivers one; nothing is queued for a relay. No destination is
+sent anywhere off the box. Both are asserted by test, in `cmd/lctl`.
+
+**It does not touch `LINKCTRL_SIGNUP_MODE`.** The extra accounts are written by
+the seeder; redemption only ever adds a membership to an account that already
+exists, so a `closed` instance stays closed throughout.
+
+Three things are written directly rather than through a service, and each is a
+state no surface can produce: the expired campaign's past `expires_at`, which is
+reached by the clock; the demo's own entry on the low-confidence blocklist, which
+only the environment variable and one migration ever write; and the seeded
+people's current workspace, because switching one requires a browser session and
+the CLI has none.
+
+`--reset` puts the instance back the way it found it — the demo links, the second
+workspace, the seeded accounts and their organizations, the invitations, the
+notifications, the audit records, the disputes and the blocklist entry, all
+scoped to the demo organization — and truncates `click_events`, **all of them**,
+since a click row carries no marker saying it was seeded. Running it twice
+therefore produces the same demo, which is what makes `make demo-update` safe at
+every milestone. Like `seed`, it refuses to run when `APP_ENV=production` without
 `--force`. `--seed N` fixes the PRNG so two runs produce the same dataset, and
 `--days`, `--volume` change how much history there is. `make demo` runs it with
 `--reset` against the development database.
+
+A full run takes a little under two seconds against a local Postgres, most of it
+the click history and five argon2 hashes.

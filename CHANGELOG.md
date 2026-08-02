@@ -22,6 +22,25 @@ migrations run at boot.
 
 ### Added
 
+- **`lctl demo` fills an instance with the whole product, not just its links.**
+  It was written when a workspace and twenty links were all there was, and it
+  had not grown since. It now seeds a second workspace with links of its own, two
+  more accounts and their memberships, an outstanding invitation and two
+  redeemed ones, an inbox with unread items, an audit trail spanning eight
+  actions and two people, three refused destinations with a dispute about each —
+  one open, one allowed, one upheld — and bot blocking switched on for exactly
+  one link. Everything is created through the same service calls the dashboard
+  and the API make, so nothing in it describes a state the product could not
+  reach.
+- **The demo seeder needs no mailer, enables no reputation feed, and does not
+  touch `LINKCTRL_SIGNUP_MODE`.** The outstanding invitation is delivered by the
+  copyable link, which is how a default instance delivers one; no destination
+  leaves the box; and the extra accounts are written directly, so a `closed`
+  instance stays closed while it runs. All three are asserted by test rather than
+  documented and hoped for.
+- **`lctl demo --reset` puts an instance back the way it found it**, seeded
+  accounts and organizations included, so running it twice produces the same
+  demo. A full run takes a little under two seconds against a local Postgres.
 - **A link can forward the path a visitor arrived with, not just the query
   string.** `forward_path` is per link and off by default, in the API and as a
   checkbox on the link's edit page. With it on, `/{alias}/api/quickstart`

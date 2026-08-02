@@ -136,10 +136,15 @@ test: ## Unit tests with the race detector
 # LINKCTRL_REDIS_URL matters as much as the DSN: without it the Redis tier tests
 # fall back to localhost:6379, find nothing there and *skip*. The suite stays
 # green while three tests that never ran claim to cover the cache.
+#
+# cmd/lctl carries one integration test of its own: the demo coverage list
+# (M33.5), which has to seed a database to know whether the demo shows anything.
+# It cannot live in test/integration, because that package cannot import package
+# main.
 .PHONY: test-integration
 test-integration: require-db-password guard-test-integration require-stack ## Integration tests (needs Postgres and Redis)
 	@TEST_DATABASE_URL="$(DEV_DATABASE_URL)" LINKCTRL_REDIS_URL="$(DEV_REDIS_URL)" \
-		go test -race -tags=integration ./test/integration/...
+		go test -race -tags=integration ./test/integration/... ./cmd/lctl/...
 
 .PHONY: cover
 cover: test ## Open the coverage report
