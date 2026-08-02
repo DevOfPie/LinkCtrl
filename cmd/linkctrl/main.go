@@ -543,8 +543,14 @@ func run(cfg config.Config, _ io.Writer) error {
 	// Handing the wrapper to the subscriber would make every received root
 	// invalidation publish another one, and every replica would answer every
 	// other replica's message forever.
+	//
+	// ReadTimeout is what stops silence being mistaken for freshness: the read
+	// is bounded so that a Redis holding the connection open and answering
+	// nothing gets noticed, rather than blocking here for the rest of the
+	// entry TTL (F30).
 	subscriber := &redirect.Subscriber{
 		Redis: rdb, Resolver: resolver, Root: rootRedirect, Log: log,
+		ReadTimeout: cfg.Redis.SubscriberReadTimeout,
 	}
 	subCtx, stopSubscriber := context.WithCancel(context.WithoutCancel(ctx))
 	defer stopSubscriber()

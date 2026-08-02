@@ -402,9 +402,12 @@ What to know before running several:
   it down, redirects resolve from Postgres and edits still apply — but it is what
   carries invalidations between replicas. Without it, each replica serves its own
   cached copy until `REDIRECT_TTL` expires, which is the 0.1.0 behaviour.
-- **A replica that loses the subscription flushes its caches when it reconnects.**
-  Pub/sub does not replay, so it cannot know what it missed. Expect a brief cold
-  cache after a Redis restart, on every replica at once.
+- **A replica that loses the subscription flushes its caches, then flushes again
+  when it reconnects.** Pub/sub does not replay, so it cannot know what it
+  missed. Expect a brief cold cache after a Redis restart, on every replica at
+  once. This covers a Redis that stalls as well as one that goes away: the
+  subscriber bounds its read with `REDIS_SUBSCRIBER_READ_TIMEOUT` and makes
+  Redis answer a probe before it accepts silence as *nothing has changed*.
 - **Rate limits are still per instance.** N replicas allow roughly N times the
   configured limit, and the 404-probe limiter stays that way permanently.
 - Vertical growth first: Postgres `shared_buffers` and the two pool sizes

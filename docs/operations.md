@@ -284,7 +284,7 @@ path while it waits.
 | Symptom | Likely cause and fix |
 | --- | --- |
 | Redirects 404 for a link that exists | Cached negative entry, or the link is archived/expired. Check the link's status; negative caching is bounded by `REDIRECT_NEGATIVE_TTL` (60s). |
-| An edit did not take effect | Invalidation is broadcast over Redis pub/sub, so check Redis first: with it down, each replica falls back to `REDIRECT_TTL` staleness. The subscriber logs `lost its connection` and `reconnected` — a replica showing the first without the second is not hearing invalidations. |
+| An edit did not take effect | Invalidation is broadcast over Redis pub/sub, so check Redis first: with it down, each replica falls back to `REDIRECT_TTL` staleness. The subscriber logs `lost its connection` or `went silent and redis did not answer a probe`, then `reconnected` — a replica showing either of the first two without the third is not hearing invalidations. |
 | Analytics stopped updating | The `rollup` job. Check `linkctrl_job_last_success_timestamp_seconds{job="rollup"}` and the logs for `job failed`. |
 | Clicks missing entirely | `linkctrl_analytics_events_dropped_total` climbing, or an unclean shutdown lost a batch. `click_count` on a link is approximate for the same reason. |
 | Everything looks like one visitor | `TRUSTED_PROXIES` wrong, so every request appears to come from the proxy. Visitor hashing includes the address. |
@@ -332,24 +332,36 @@ What is lost is the broadcast, so other replicas serve their cached copy until
 it expires — the behaviour every deployment had before this existed. Nothing
 errors, and nothing is served incorrectly for longer than `REDIRECT_TTL`.
 
-The interesting case is a subscriber that reconnects. Redis pub/sub does not
-replay, so invalidations published while a replica was disconnected are gone,
-and that replica cannot know which keys they named. **On every reconnect it
-flushes both in-process tiers**, which ends the stale window at the reconnect
-instead of at each entry's TTL. The cost is a cold cache for a moment after a
-Redis blip — latency on an optional dependency, rather than serving a
-destination the owner already changed.
+The interesting case is a subscriber that stops hearing. Redis pub/sub does not
+replay, so invalidations published while a replica was not listening are gone,
+and that replica cannot know which keys they named. **It flushes both in-process
+tiers the moment it stops trusting the subscription, and again when it
+reconnects**, which ends the stale window at the failure instead of at each
+entry's TTL. The cost is a cold cache for a moment after a Redis blip — latency
+on an optional dependency, rather than serving a destination the owner already
+changed.
 
-Two log lines matter:
+A connection that *dies* announces itself: the read fails, and the subscriber
+handles it. A connection that stalls — held open by a wedged Redis, a proxy or a
+sidecar, with bytes going nowhere — announces nothing, and silence is also what
+a channel nobody has published on looks like. So the subscriber bounds its read
+with `REDIS_SUBSCRIBER_READ_TIMEOUT` (30s) and, when one expires, pings and
+waits for the *reply* rather than assuming either answer. A stalled connection
+cannot produce the reply, which is what separates the two. At most two of those
+intervals pass before a stalled replica stops serving what it can no longer
+vouch for.
+
+Three log lines matter:
 
 | Line | Means |
 | --- | --- |
 | `cache invalidation subscriber lost its connection` | This replica is not hearing invalidations. Expect `REDIRECT_TTL` staleness until it recovers. |
+| `cache invalidation subscriber went silent and redis did not answer a probe` | The same, for a Redis that is holding the connection open and not answering. The in-process caches have been dropped rather than served as current. |
 | `cache invalidation subscriber reconnected; in-process caches flushed` | Recovered, and it distrusted everything it held. Normal after a Redis restart. |
 | `rate limiting fell back to per-instance buckets` | The credential or API limit is no longer shared across replicas. Logged once when it starts, not per request. |
 
-A replica logging the first without the second is the one to look at: it is
-serving from a cache nothing is invalidating, and a subscriber stuck that way
-looks exactly like one with nothing to report.
+A replica logging either of the first two without the third is the one to look
+at: it is serving from a cache nothing is invalidating, from Postgres rather
+than from memory, until Redis answers again.
 
 Full list: [Plan.md](../Plan.md#phase-1-scope-not-yet-built).

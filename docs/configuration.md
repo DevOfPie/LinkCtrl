@@ -137,21 +137,33 @@ vanish at any moment. Losing it makes redirects slower, never wrong.
 | `LINKCTRL_REDIS_DIAL_TIMEOUT` | `1s` | |
 | `LINKCTRL_REDIS_READ_TIMEOUT` | `50ms` | Deliberately short. A slow cache must not become slow redirects; the resolver falls through to Postgres. It is also a redirect's whole patience per Redis call, and a stalled cache makes a redirect pay it rather than wait indefinitely. |
 | `LINKCTRL_REDIS_INVALIDATE_BUDGET` | `250ms` | The most an edit will wait for the cache to be told a link changed — the total across all three attempts, not each. Raising `REDIS_READ_TIMEOUT` therefore no longer multiplies into edit latency. Spending the budget is not an error: the edit is already committed, the failure is logged, and the stale entry expires with `REDIRECT_TTL`. |
+| `LINKCTRL_REDIS_SUBSCRIBER_READ_TIMEOUT` | `30s` | How long the cache-invalidation subscriber accepts silence before it makes Redis prove the subscription still delivers. Not `REDIS_READ_TIMEOUT`, and it must not be set anywhere near it: on the hot path a timeout means the cache failed, while here it usually means nobody has edited a link. It bounds the *staleness* a stalled Redis can cause — at most twice this value passes before the replica drops what it can no longer vouch for — and it costs one `PING` round trip per interval on an instance quiet enough to reach it. |
 | `LINKCTRL_REDIS_POOL_SIZE` | `50` | |
 
 Redis being unavailable at startup is a warning, not a failure.
 
 A Redis that *accepts* a connection and then never answers is the failure worth
-knowing about, because it is the one that can hold a caller: go-redis bounds a
-stalled read by `REDIS_READ_TIMEOUT` and not by the deadline the caller passes.
-Measured, against a proxy that accepts and stays silent: an edit costs at most
-`REDIS_INVALIDATE_BUDGET` and then commits anyway, and a redirect costs one read
-timeout per Redis call and then falls through to Postgres. A redirect already
-answered from memory costs nothing; a cold one measured 108ms, because it spends
-the timeout twice — once on the lookup that never answers and once on the write
-that would have repopulated the cache. Both figures hold for a connection that
-was established and then went quiet mid-command. Neither depends on Redis
-answering.
+knowing about, because it is the one that can hold a caller. On the request and
+edit paths go-redis bounds a stalled read by `REDIS_READ_TIMEOUT` and not by the
+deadline the caller passes. Measured, against a proxy that accepts and stays
+silent: an edit costs at most `REDIS_INVALIDATE_BUDGET` and then commits anyway,
+and a redirect costs one read timeout per Redis call and then falls through to
+Postgres. A redirect already answered from memory costs nothing; a cold one
+measured 108ms, because it spends the timeout twice — once on the lookup that
+never answers and once on the write that would have repopulated the cache. Both
+figures hold for a connection that was established and then went quiet
+mid-command. Neither depends on Redis answering.
+
+The invalidation subscriber is the exception, and it needs its own variable
+because of it. `REDIS_READ_TIMEOUT` does not reach the pub/sub receive path at
+all: go-redis reads it with a zero timeout and no context deadline, which is an
+infinite wait, so a stalled Redis left the subscriber blocked with no error, no
+log line and no reconnection. It now reads with
+`REDIS_SUBSCRIBER_READ_TIMEOUT`, and because a quiet channel and a dead one look
+identical from there, an expired read is not a failure by itself — the
+subscriber pings and waits for the *reply*, which is the part a stalled
+connection cannot produce. Unanswered, it logs, drops both in-process caches
+rather than serving them as current, and reconnects.
 
 ## Redirects
 

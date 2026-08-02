@@ -434,6 +434,114 @@ func TestReconnectingSubscriberFlushesWhatItCouldNotHear(t *testing.T) {
 	}
 }
 
+// The shape F30 found, and the one the shipped subscriber could not see.
+//
+// A cut connection fails a read, so it is observable exactly once and then
+// handled. A *stalled* one — both sockets open, bytes going nowhere — is
+// silence, and silence is also what an idle channel looks like. The shipped
+// loop read with no deadline at all and so never had to tell them apart:
+// `ReceiveMessage` blocked indefinitely, `establish` was never reached,
+// `flush` never ran, and the replica served pre-edit destinations for the rest
+// of the entry's TTL with no error, no log line and no metric.
+//
+// Both halves below matter, and the first is the one a careless fix breaks.
+// Silence on a healthy connection has to cost nothing: a subscriber that
+// flushed every time a quiet period elapsed would answer this finding by
+// throwing the in-process tier away on every quiet instance, which is most of
+// them. Silence on a stalled connection has to end with the replica no longer
+// serving what it can no longer vouch for.
+//
+// m23.md allows either outcome for that second half — reconnect inside the
+// bound, or stop serving the stale entry. While the stall is held no
+// reconnection is possible, because the proxy stalls the replacement connection
+// too, so the flush is the only observable that can satisfy it. The two are the
+// same assertion anyway: reconnecting flushes (D20).
+func TestAStalledSubscriberStopsTrustingWhatItCannotHear(t *testing.T) {
+	f := newAPI(t)
+	f.setupOwner()
+	ctx := t.Context()
+
+	dom, err := dbgen.New(f.pool).ResolveDefaultDomain(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alias := createLink(t, f, "stall001", "https://example.com/before")
+
+	proxy := newRedisProxy(t)
+	viaProxy := proxy.client(t)
+
+	// Milliseconds where the shipped default is 30s, and that is the only
+	// reason: detection costs at most two of these, so the whole test runs in
+	// about a second rather than a minute.
+	const bound = 250 * time.Millisecond
+
+	// An hour of TTL, so an entry missing at the end of this is missing because
+	// something dropped it rather than because it expired.
+	replica := redirect.NewResolver(f.pool, viaProxy, redirect.Options{
+		TTL: time.Hour, NegativeTTL: time.Minute, RedisTimeout: 50 * time.Millisecond,
+	})
+	root := &countingRoot{}
+	logs := &syncBuffer{}
+	sub := &redirect.Subscriber{
+		Redis: viaProxy, Resolver: replica, Root: root,
+		ReconnectBackoff: 10 * time.Millisecond,
+		ReadTimeout:      bound,
+		Log:              slog.New(slog.NewTextHandler(logs, nil)),
+	}
+	subCtx, stop := context.WithCancel(context.Background())
+	defer stop()
+	go sub.Run(subCtx)
+
+	waitFor(t, 5*time.Second, "the subscriber to establish", func() bool {
+		return root.count() >= 1
+	})
+	established := root.count()
+
+	// Warm the in-process tier while Redis is still answering.
+	if _, err := replica.Resolve(ctx, dom.ID, alias); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := replica.ResolveCached(dom.ID, alias); !ok {
+		t.Fatal("the replica did not cache the alias in process")
+	}
+
+	// Several bounds of a quiet but healthy connection. Nothing is published,
+	// so every read times out, and the subscriber must conclude nothing from
+	// that.
+	time.Sleep(4 * bound)
+	if grew := root.count() - established; grew > 0 {
+		t.Fatalf("the subscriber flushed %d times over %s of a quiet but healthy "+
+			"connection. An idle channel is not a broken one, and a fix that "+
+			"cannot tell them apart trades this finding for an in-process tier "+
+			"that empties itself on every instance nobody is editing links on",
+			grew, 4*bound)
+	}
+	if _, ok := replica.ResolveCached(dom.ID, alias); !ok {
+		t.Fatal("the cached alias was dropped while Redis was answering normally")
+	}
+
+	// The stall. Both sockets stay open and stop carrying bytes, so from the
+	// subscriber's side this is byte-for-byte the same as the quiet above —
+	// which is the finding, stated as a test.
+	proxy.stalled(true)
+
+	waitFor(t, 10*time.Second,
+		"the stalled replica to stop serving an entry it can no longer vouch for",
+		func() bool {
+			_, ok := replica.ResolveCached(dom.ID, alias)
+			return !ok
+		})
+
+	// A silent recovery is still silence. The operator has to be able to find
+	// out that this replica spent time unable to hear invalidations, which is
+	// the half a cut connection already had and a stall did not.
+	if !strings.Contains(logs.String(), "did not answer") {
+		t.Errorf("nothing was logged when the subscription stopped being "+
+			"delivered; a stall that is handled invisibly is still a replica "+
+			"nobody can tell was stale. Log was:\n%s", logs.String())
+	}
+}
+
 // A subscriber that cannot reach Redis must degrade to TTL staleness and keep
 // the redirect path working — never fail a redirect, and never sit silently in
 // a state that looks the same as "nothing has changed".

@@ -94,6 +94,7 @@ file. Append a row when you append an entry.
 | [M28, the page field that shadowed the shell](#2026-08-01--m28-the-page-field-that-shadowed-the-shell) | Why the field was renamed rather than retyped; a structural test parsed from source instead of a list of types, and its two stated limits; why the regression tests say *in one organization*; the read-only member's role composition; the fixture that overwrote the page's own list |
 | [M32.9, the second pass, and what refutation cost the findings](#2026-08-01--m329-the-second-pass-and-what-refutation-cost-the-findings) | Amendments A1 and A2 with their tree facts; why independent readers are the mechanism a review requires rather than a hand-off; five findings refuted and two of them near re-litigations of recorded decisions; the trailing dot corrected from SSRF to open redirect; three findings corrected against their finder; what verifiers found that finders did not; the workspace-scoped-membership cluster |
 | [M32.9's triage, and five milestones reopened](#2026-08-01--m329s-triage-and-five-milestones-reopened) | Which five rows became work and which milestone each reopens; why the owner took the wider option against the recommendation; the trap each reopening must not fall into; why M32.9 lands `done` while its findings stay open |
+| [M23, silence is not an answer](#2026-08-01--m23-silence-is-not-an-answer) | Why a bounded read alone would have emptied every quiet replica's cache; the probe that requires a reply; D42 and why the hot path's read timeout cannot be reused; the flush moving from the recovery to the failure; the two claims corrected in place; the bullet amended at 3.4 and why it was the owner's to answer |
 
 ---
 
@@ -7312,3 +7313,172 @@ correct rather than awkward: the review is what was built, and the findings are
 what it built. Conflating the two would leave a milestone whose product is
 findings sitting `in progress` for as long as the repairs take, and every later
 status read would have to explain why.
+
+## 2026-08-01 — M23, silence is not an answer
+
+The reopening, and the four things it turned on. F30's diagnosis was correct and
+is not restated here; what follows is what could not be read off it.
+
+### The library facts the fix is built around
+
+Both re-verified at the pinned go-redis v9.21.0 rather than taken from the
+finding, because the whole design rests on them.
+
+`ReceiveMessage` is a bare loop over `Receive` → `ReceiveTimeout(ctx, 0)`, and
+`internal/pool.Conn.deadline` resolves a zero timeout under a deadline-less
+context to `noDeadline`. `REDIS_READ_TIMEOUT` therefore never applied to the
+pub/sub receive path at all — not "applied loosely", never. The subscriber was
+reading with no deadline, which is why a stalled Redis held it for as long as
+anyone cared to watch.
+
+`PubSub.Ping` writes the command and returns. It never reads the reply. A `nil`
+return proves that bytes entered the socket buffer and nothing else, which is
+exactly the evidence a stalled connection can still produce — measured at 0ms
+against the stall.
+
+### Why the timeout alone is not the fix
+
+m23.md asks for `ReceiveTimeout` with a non-zero duration and a timeout treated
+as a re-establish trigger. Taken literally — every expired read tears the
+subscription down and flushes — that is a subscriber which empties both
+in-process tiers on any instance quieter than the timeout, which is most
+instances most of the time. The finding would be closed by disabling the cache
+the finding is about.
+
+The reason the naive reading fails is the reopening's own title: an idle channel
+and a dead one are the same silence. So an expired read is not evidence of
+anything. It is a prompt to go and get some, and the evidence has to be a
+**reply**, because a reply is the one thing a stalled connection cannot fake:
+
+1. Read with a bound. Nothing arriving is not a conclusion.
+2. On expiry, `Ping` and then read for the pong. Anything the server sends
+   counts — a published invalidation answers the question as well as a pong
+   does, and is applied rather than discarded, so the health check cannot eat a
+   message.
+3. Answered → the silence was real, keep the connection, carry on. Unanswered →
+   the subscription is not delivering.
+
+Step 3's first branch is what makes the cost acceptable: a healthy quiet replica
+spends one `PING` round trip per interval and keeps its cache. The integration
+test asserts that half explicitly, for the same reason this paragraph exists —
+it is the half a fix aimed only at the finding would trade away, and nothing
+would have caught it.
+
+The connection is closed rather than reused when the probe fails, and that is
+not tidiness. `ReceiveTimeout` with a non-zero timeout passes `allowTimeout` to
+`isBadConn`, so go-redis deliberately *keeps* a connection whose read merely
+expired — correct, since an idle channel is not a broken one. Nothing underneath
+will discard the stalled socket. Only `Close` does.
+
+### Not `Channel()`
+
+Recorded because it is the obvious move and it is wrong. `initHealthCheck` pings
+on an interval with the **same write-only `Ping`**, and `initMsgChan` reads with
+`context.TODO()`. Switching to the higher-level API would look like adopting a
+maintained health check and would change nothing measurable.
+
+### D42 — a second Redis timeout, and why it cannot be the first one
+
+`LINKCTRL_REDIS_SUBSCRIBER_READ_TIMEOUT`, default `30s`.
+
+Reusing `REDIS_READ_TIMEOUT` was the cheaper option and is wrong on the meaning,
+not just the number. On the hot path a read timeout means *the cache failed*,
+and 50ms is chosen to make a redirect fall through to Postgres fast. On this
+path an expired read usually means *nobody edited a link*, which is the ordinary
+state of a healthy instance. One variable cannot carry both without an operator
+tuning redirect latency and silently changing how often every replica
+interrogates Redis — at 50ms, twenty round trips a second per replica to learn
+nothing.
+
+30s is picked from both ends. Detection costs at most two intervals, so the
+staleness a stall can cause drops from `REDIRECT_TTL` — 24h by default — to
+about a minute. A spurious failure costs a flush, so the interval has to be far
+above any round trip a healthy Redis could have; at 30s, failing the probe means
+Redis is gone, not busy. The idle cost at that setting is one `PING` per replica
+per 30s.
+
+Precedent for adding a knob rather than prompting is D26, which added
+`REDIS_INVALIDATE_BUDGET` on the same reasoning: a bound that an operator can
+see is worth more than one compiled in, and the alternative was overloading a
+timeout that already means something else.
+
+### The flush moved to the failure, from the recovery
+
+The shipped code flushed on reconnect only. Under a stall that never ends, that
+is a flush that never happens, and the milestone's second acceptance option —
+*stops serving the stale entry* — could not be satisfied by any amount of
+detection. So the tiers are dropped when the subscriber stops trusting the
+subscription, and dropped again when it re-establishes.
+
+This changes the dropped-connection path too, which was in spec to leave alone
+and is not left alone deliberately: the two are the same epistemic state, and
+one code path serves both. A replica that cannot hear invalidations is holding
+entries it cannot vouch for whether the socket died or went quiet. What it costs
+is a cold in-process tier from the moment Redis goes away rather than from the
+moment it comes back, on a dependency that is already unreachable — and it is
+one flush per outage, not one per retry, because `establish` loops internally
+until it succeeds.
+
+### Two claims corrected, both in place
+
+`invalidation.go:238-240` said a successful ping meant the subscription was
+"genuinely live rather than merely not-yet-failed". It is the sentence that let
+the gap survive review, and it is now the doc comment on `probe` explaining why
+the ping is only half of a health check.
+
+`docs/configuration.md` said go-redis bounds a stalled read by
+`REDIS_READ_TIMEOUT` and not by the caller's deadline. True for ordinary
+commands and false for the pub/sub receive path, where nothing bounded it. The
+sentence is now scoped to the request and edit paths, and the paragraph beneath
+it names the exception.
+
+### The SLO bullet still holds, by construction
+
+`Resolve`, `ResolveCached`, `fromRedis` and the whole `memCache` are untouched:
+the diff in `internal/redirect/` is `Run`, the new `probe`, `establish` and one
+struct field. The subscriber still runs in its own goroutine and still only
+deletes from the in-process tiers, so no k6 re-run could show a difference it
+did not have the opportunity to cause. The tripwire tests pass unmodified.
+
+### The bullet this amended, and why it was a prompt
+
+Amended at step 3.4, answered by the owner on 2026-08-01 rather than decided by
+the loop.
+
+As it stood:
+
+> **Single-replica deployments stay unaffected**, and the fix does not put the
+> subscriber on the request path — M23's SLO re-verification bullet still holds.
+
+As amended:
+
+> **Single-replica deployments stay unaffected in normal operation**, and the
+> fix does not put the subscriber on the request path — M23's SLO
+> re-verification bullet still holds. Amended 2026-08-01, owner-answered: a
+> single replica whose Redis *stalls* also drops its in-process tier once,
+> because a process cannot know it is the only replica. It loses nothing by
+> it — every invalidation path deletes locally before touching Redis, so a
+> single replica was never stale — and pays one cold-cache period on a
+> dependency that is already broken. See decisions.md.
+
+The tree fact that forced it: moving the flush from the recovery to the failure
+is what makes the reopening's second acceptance condition reachable at all, and
+that flush cannot be conditioned on replica count, because no process can know
+it is the only one. So a single replica whose Redis stalls now drops a cache it
+did not need to drop. What it does *not* lose is correctness, and that was
+checked in the tree rather than assumed: `resolver.go:302` (`InvalidateAlias`),
+`:345` (`InvalidateDomain`) and `BroadcastRootInvalidator.InvalidateRoot` each
+delete from the in-process tier **before** touching Redis, so a single replica
+never depended on pub/sub to hear about its own edits and was never stale either
+way. Under a healthy Redis it is affected not at all, which
+`TestAStalledSubscriberStopsTrustingWhatItCannotHear` asserts directly by
+failing if anything flushes across four bounds of quiet.
+
+It was put to the owner rather than amended silently because the bullet is an
+assertion and not a fact. The two alternatives were real: a knob letting an
+operator declare the deployment single-replica, refused because its *wrong*
+setting silently restores F30's up-to-24h stale window on a multi-replica
+instance and so points the dangerous way; and flushing only at reconnect, which
+is the shipped behaviour the finding is about. The recommendation carried its
+own cost — amending the bullet was the cheapest answer available to the actor
+proposing it, which is exactly why the choice was not that actor's to make.

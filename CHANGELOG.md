@@ -385,10 +385,19 @@ migrations run at boot.
 - With Redis down this degrades rather than breaks: redirects still resolve from
   Postgres, edits still apply and still clear the replica that made them, and
   the other replicas fall back to the TTL staleness they had before. A
-  subscriber that loses its connection **flushes its in-process caches when it
-  reconnects**, because Redis pub/sub does not replay and a replica cannot know
-  which invalidations it missed. The cost is a cold cache after a Redis blip;
-  the alternative is serving a destination the owner already changed.
+  subscriber that stops hearing invalidations **flushes its in-process caches
+  then, and again when it reconnects**, because Redis pub/sub does not replay
+  and a replica cannot know which invalidations it missed. The cost is a cold
+  cache after a Redis blip; the alternative is serving a destination the owner
+  already changed.
+- **A Redis that stalls counts as one that stopped hearing.** A connection held
+  open with nothing coming down it looks exactly like a channel nobody has
+  published on, so `LINKCTRL_REDIS_SUBSCRIBER_READ_TIMEOUT` (30s) bounds how
+  long a replica accepts silence before it pings and waits for the reply — the
+  part a stalled connection cannot produce. Unanswered, it says so in the log
+  and drops what it can no longer vouch for. Without this a wedged Redis, proxy
+  or sidecar left a replica serving pre-edit destinations for the whole
+  `REDIRECT_TTL` with nothing reporting a problem.
 - **Notifications, in the dashboard.** An unread count in the header, a
   notifications page and `GET /api/v1/notifications` with mark-read and
   mark-all-read. (The count began as a nav link and is now the bell described

@@ -128,6 +128,14 @@ type RedisConfig struct {
 	// one number that bounds it. D26.
 	InvalidateBudget time.Duration `env:"REDIS_INVALIDATE_BUDGET" envDefault:"250ms"`
 
+	// SubscriberReadTimeout is how long the cache-invalidation subscriber will
+	// sit in one read before it makes Redis prove the subscription is still
+	// delivering. It is not ReadTimeout and cannot be: on the hot path a
+	// timeout means the cache failed, while here it usually means nobody has
+	// edited a link, which is the ordinary state of a healthy instance. F30,
+	// D42.
+	SubscriberReadTimeout time.Duration `env:"REDIS_SUBSCRIBER_READ_TIMEOUT" envDefault:"30s"`
+
 	PoolSize     int  `env:"REDIS_POOL_SIZE" envDefault:"50"`
 	CacheEnabled bool `env:"CACHE_ENABLED" envDefault:"true"`
 }

@@ -166,7 +166,10 @@ Known limitations and deferred work, so nobody discovers them in production:
   to converge. A Redis that accepts connections and then stops answering is
   bounded rather than waited on: an edit spends at most
   `REDIS_INVALIDATE_BUDGET` on the cache, then commits anyway and logs that the
-  previous destination may be served until the entry expires.
+  previous destination may be served until the entry expires, and a replica
+  whose subscription stops delivering notices within
+  `REDIS_SUBSCRIBER_READ_TIMEOUT` and drops what it can no longer vouch for
+  rather than serving it as current.
 - **The analytics dimension rollup gets expensive with traffic.** It recomputes
   whole days every 60 seconds, which measured 16–21 seconds at 5.7M click events
   and will eventually exceed its own interval. Redirects are unaffected — that is

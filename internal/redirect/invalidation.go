@@ -3,7 +3,9 @@ package redirect
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
+	"net"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -154,9 +156,17 @@ type Subscriber struct {
 	// ReconnectBackoff bounds how fast a subscriber retries a dead connection.
 	// Zero uses defaultReconnectBackoff.
 	ReconnectBackoff time.Duration
+
+	// ReadTimeout bounds how long the subscriber will sit in one read before it
+	// makes Redis prove the subscription is still delivering. Zero uses
+	// defaultReadTimeout. Set from REDIS_SUBSCRIBER_READ_TIMEOUT.
+	ReadTimeout time.Duration
 }
 
-const defaultReconnectBackoff = 500 * time.Millisecond
+const (
+	defaultReconnectBackoff = 500 * time.Millisecond
+	defaultReadTimeout      = 30 * time.Second
+)
 
 func (s *Subscriber) logger() *slog.Logger {
 	if s.Log != nil {
@@ -172,73 +182,175 @@ func (s *Subscriber) backoff() time.Duration {
 	return defaultReconnectBackoff
 }
 
+func (s *Subscriber) readTimeout() time.Duration {
+	if s.ReadTimeout > 0 {
+		return s.ReadTimeout
+	}
+	return defaultReadTimeout
+}
+
 // Run subscribes and applies invalidations until the context is cancelled.
 //
-// The shape of this loop is the milestone's whole risk. go-redis returns the
-// read error to the caller and re-establishes the connection underneath, which
-// means a dropped subscriber is *observable exactly once* — on the failing
-// read — and is silent afterwards. A loop that simply retried would resubscribe
-// successfully and carry on serving entries whose invalidations were published
-// into the gap, with nothing anywhere reporting a problem. That is stale data
-// mistaken for fresh data, which is the failure this design exists to prevent.
+// The shape of this loop is the milestone's whole risk, and it has two failure
+// modes rather than one. go-redis returns a read *error* to the caller and
+// re-establishes the connection underneath, which means a dropped subscriber is
+// observable exactly once — on the failing read — and silent afterwards. A loop
+// that simply retried would resubscribe successfully and carry on serving
+// entries whose invalidations were published into the gap, with nothing
+// reporting a problem.
 //
-// So every re-establishment, including the first, is followed by a flush of
-// both in-process tiers (decision D20). Redis pub/sub does not replay and the
-// process cannot know which keys it missed, so the only sound answer is to
-// trust none of them.
+// The other mode has no error at all. A Redis that holds the connection open
+// and stops answering produces silence, and silence is also what a channel
+// nobody has published on looks like. Reading with no deadline never has to
+// separate them, and never does: F30 measured `ReceiveMessage` blocked for 40s
+// while Redis reported delivering an invalidation to this subscriber. So the
+// read is bounded, and a read that expires is not treated as either outcome
+// until the connection has been asked a question it must answer — see probe.
+//
+// Every establishment, including the first, flushes both in-process tiers
+// (decision D20). Redis pub/sub does not replay and the process cannot know
+// which keys it missed, so the only sound answer is to trust none of them.
 func (s *Subscriber) Run(ctx context.Context) {
 	if s.Redis == nil {
 		return
 	}
 	log := s.logger()
 
-	ps := s.Redis.Subscribe(ctx, InvalidationChannel)
-	defer func() { _ = ps.Close() }()
-
 	// The first establishment flushes too. A subscriber that starts while Redis
 	// is down, or that comes up after the process has already served traffic
 	// from Postgres, is in exactly the position a reconnecting one is: holding
 	// entries whose invalidations it was not there to hear.
-	if !s.establish(ctx, ps, log, true) {
+	ps := s.establish(ctx, nil, log, true)
+	if ps == nil {
 		return
 	}
+	// ps is reassigned on every re-establishment, so this closes whichever
+	// subscription is current rather than the one opened above.
+	defer func() { _ = ps.Close() }()
 
 	for {
-		msg, err := ps.ReceiveMessage(ctx)
-		if err != nil {
-			if ctx.Err() != nil {
-				// Shutdown, not a failure.
-				return
-			}
-			log.Error("cache invalidation subscriber lost its connection; this "+
-				"replica may serve edited links from cache until it reconnects",
-				slog.Any("error", err))
-			if !s.establish(ctx, ps, log, false) {
-				return
+		reply, err := ps.ReceiveTimeout(ctx, s.readTimeout())
+		if err == nil {
+			// Subscription confirmations and pongs arrive on this connection
+			// too and mean nothing here, which is the one service
+			// ReceiveMessage performed that this loop has to perform itself.
+			if msg, ok := reply.(*goredis.Message); ok {
+				s.apply(msg.Payload, log)
 			}
 			continue
 		}
-		s.apply(msg.Payload, log)
+		if ctx.Err() != nil {
+			// Shutdown, not a failure.
+			return
+		}
+
+		if isTimeout(err) {
+			perr := s.probe(ctx, ps, log)
+			if perr == nil {
+				// The silence was real: nothing has been published, and the
+				// subscription is still there to hear it when something is.
+				continue
+			}
+			log.Error("cache invalidation subscriber went silent and redis "+
+				"did not answer a probe on the subscription; this replica "+
+				"cannot hear invalidations and its in-process caches are being "+
+				"dropped rather than served as fresh",
+				slog.Duration("silent_for", s.readTimeout()),
+				slog.Any("error", perr))
+		} else {
+			log.Error("cache invalidation subscriber lost its connection; this "+
+				"replica may serve edited links from cache until it reconnects",
+				slog.Any("error", err))
+		}
+
+		next := s.establish(ctx, ps, log, false)
+		if next == nil {
+			return
+		}
+		ps = next
 	}
 }
 
-// establish blocks until the subscription is live, then flushes both tiers.
+// probe asks the connection a question that cannot be answered by silence.
 //
-// It pings rather than waiting for the next published message. Waiting would
+// `PubSub.Ping` is write-only: it writes the command and never reads a reply,
+// so a nil return proves only that bytes entered the socket buffer. Against the
+// stall F30 reproduced it returned nil in 0ms on a connection that had already
+// stopped delivering. The reply is the evidence, and reading it here is the
+// whole difference between "nothing has changed" and "nothing is arriving".
+//
+// Anything the server sends counts, not only the pong. A subscription
+// confirmation is not an answer to this question, but an invalidation is — and
+// it is also a message, so it is applied rather than dropped on the floor by a
+// health check.
+//
+// Reports nil when the subscription answered. The error is carried back rather
+// than reduced to a bool because it is the only account anyone gets of why a
+// replica stopped hearing: a refused dial and a connection that went quiet both
+// end here and read very differently in a log.
+func (s *Subscriber) probe(ctx context.Context, ps *goredis.PubSub, log *slog.Logger) error {
+	if err := ps.Ping(ctx); err != nil {
+		return err
+	}
+	deadline := time.Now().Add(s.readTimeout())
+	for {
+		left := time.Until(deadline)
+		if left <= 0 {
+			return errSubscriptionSilent
+		}
+		reply, err := ps.ReceiveTimeout(ctx, left)
+		if err != nil {
+			return err
+		}
+		switch msg := reply.(type) {
+		case *goredis.Message:
+			s.apply(msg.Payload, log)
+			return nil
+		case *goredis.Pong:
+			return nil
+		}
+		// A subscription confirmation. Keep waiting for the answer.
+	}
+}
+
+// errSubscriptionSilent is a ping that was written and never came back. It is
+// its own error because it is not a network failure — the socket is fine, and
+// that is precisely the problem.
+var errSubscriptionSilent = errors.New(
+	"redis accepted a ping on the subscription and did not answer it")
+
+// establish replaces the subscription with one that has answered, then flushes.
+//
+// It probes rather than waiting for the next published message. Waiting would
 // leave the stale window open until some unrelated edit happened to arrive,
 // which on a quiet instance is indefinitely — and "no messages" is precisely
 // what a broken subscriber also looks like.
 //
-// Reports false only when the context ended, which is shutdown.
-func (s *Subscriber) establish(ctx context.Context, ps *goredis.PubSub, log *slog.Logger, first bool) bool {
+// The old subscription is closed rather than reused, and that is not tidiness.
+// go-redis keeps a connection whose read merely timed out — correctly, since an
+// idle channel is not a broken one — so nothing underneath this will discard
+// the socket that stopped answering. Only Close does.
+//
+// Reports nil only when the context ended, which is shutdown.
+func (s *Subscriber) establish(ctx context.Context, old *goredis.PubSub, log *slog.Logger, first bool) *goredis.PubSub {
+	if old != nil {
+		_ = old.Close()
+		// Distrust what is held now, rather than at reconnect. The subscriber
+		// has already stopped hearing invalidations, so every entry it holds is
+		// one it cannot vouch for, and against a Redis that never comes back
+		// "flush when we reconnect" is a flush that never happens. That is the
+		// stale window F30 measured at up to REDIRECT_TTL. Flushing here bounds
+		// it to the time it took to notice instead.
+		s.flush()
+	}
+
 	for attempt := 0; ; attempt++ {
 		if ctx.Err() != nil {
-			return false
+			return nil
 		}
-		// Ping forces the reconnect-and-resubscribe that go-redis otherwise
-		// performs lazily on the next read, so success here means the
-		// subscription is genuinely live rather than merely not-yet-failed.
-		if err := ps.Ping(ctx); err == nil {
+		ps := s.Redis.Subscribe(ctx, InvalidationChannel)
+		err := s.probe(ctx, ps, log)
+		if err == nil {
 			s.flush()
 			if first {
 				log.Info("cache invalidation subscriber ready",
@@ -248,8 +360,10 @@ func (s *Subscriber) establish(ctx context.Context, ps *goredis.PubSub, log *slo
 					"caches flushed because invalidations published while it was " +
 					"disconnected cannot be replayed")
 			}
-			return true
-		} else if attempt == 0 {
+			return ps
+		}
+		_ = ps.Close()
+		if attempt == 0 {
 			log.Warn("cache invalidation subscriber cannot reach redis; this "+
 				"replica is serving cached entries with TTL staleness only",
 				slog.Any("error", err))
@@ -260,9 +374,19 @@ func (s *Subscriber) establish(ctx context.Context, ps *goredis.PubSub, log *slo
 		case <-timer.C:
 		case <-ctx.Done():
 			timer.Stop()
-			return false
+			return nil
 		}
 	}
+}
+
+// isTimeout separates an expired read from a connection that failed.
+//
+// They are the same `error` to a caller and opposite facts: one is a deadline
+// this code chose, the other is the connection going away. go-redis draws the
+// same line the same way when it decides whether to discard a connection.
+func isTimeout(err error) bool {
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 // flush drops every in-process cached entry this process holds.

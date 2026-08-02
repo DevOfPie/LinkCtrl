@@ -23,7 +23,7 @@ milestone, is in [workflow.md](../workflow.md).
 | --- | --- | --- | --- |
 | [M21](m21.md) | Audit log: behavior, retention, growth alerting | — | done |
 | [M22](m22.md) | Notifications: in-app behavior | — | done |
-| [M23](m23.md) | Cross-replica cache invalidation (pub/sub) | — | in progress (reopened) |
+| [M23](m23.md) | Cross-replica cache invalidation (pub/sub) | — | done |
 | [M24](m24.md) | Shared rate limits (credentials and API) | — | done |
 | [M24.5](m24.5.md) | Dark mode: theme tokens, system default, override | — (before M25) | done |
 | [M25](m25.md) | Workspace and organization switcher | — | done |
