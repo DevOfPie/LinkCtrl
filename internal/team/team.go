@@ -25,6 +25,19 @@
 // evaluator is not touched by this milestone, and the control that issues one
 // says so.
 //
+// **A membership's authority is bounded by the membership that carried it**
+// (D44). D31's union answers what somebody may do in the workspace they are
+// acting in; it does not say whose membership the authority came from, and every
+// member write here scoped by organization alone. So an organization-wide
+// viewer who was granted admin in one workspace resolved, in that workspace, as
+// an admin — and re-roled their own organization-wide membership with it (F27).
+// Each write below therefore asks auth.MembershipAuthority for the authority
+// that reaches the *target's* scope, where an organization-wide object is
+// reached only by an organization-wide membership, and both bounds — who may be
+// acted on, and what may be handed out — are evaluated against that rank rather
+// than against the identity's. The evaluator is untouched; what changed is which
+// membership a write is authorized by.
+//
 // **A workspace holding any link refuses to be deleted** (D32). links, tags and
 // folders all cascade from workspaces, Phase 1 has no trash to restore from, and
 // archiving is deliberately not an escape hatch: an archived link keeps its
@@ -168,8 +181,15 @@ func mayManage(actorRank, targetRank, ownerRank int32) bool {
 // A role above the actor's own rank is refused rather than clamped, because
 // silently granting less than was asked for is how somebody ends up believing
 // they promoted a colleague who was not promoted.
+//
+// "Their own rank" is the rank of the membership carrying members.write **into
+// the scope being written**, not the rank the identity resolved to (D44). Those
+// differ exactly when a workspace-scoped membership is the stronger of the two,
+// which is the case F27 escalated through: the identity's rank is borrowed from
+// a membership that does not reach the object being changed, so a bound read
+// from it is a bound on the wrong authority.
 func (s *Service) resolveRole(
-	ctx context.Context, q *dbgen.Queries, actor *auth.Identity, slug string,
+	ctx context.Context, q *dbgen.Queries, here auth.Authority, slug string,
 ) (dbgen.GetBuiltinRoleBySlugRow, error) {
 	var role dbgen.GetBuiltinRoleBySlugRow
 	slug = strings.TrimSpace(slug)
@@ -188,11 +208,23 @@ func (s *Service) resolveRole(
 		}
 		return role, fmt.Errorf("look up role %q: %w", slug, err)
 	}
-	if role.Rank < actor.RoleRank {
+	if role.Rank < here.Rank {
 		return role, fmt.Errorf(
-			"%w: you cannot grant a role above your own (%s)", domain.ErrForbidden, actor.Role)
+			"%w: you cannot grant a role above your own (%s)", domain.ErrForbidden, here.Role)
 	}
 	return role, nil
+}
+
+// scopeWord names the reach of a membership, for a refusal a person reads.
+//
+// A word rather than an id, for the reason scopeLabel is a word in the audit
+// record: somebody who has just been refused is asking "over what", and "the
+// organization" against "that workspace" is the whole answer.
+func scopeWord(workspaceID *uuid.UUID) string {
+	if workspaceID == nil {
+		return "the organization"
+	}
+	return "that workspace"
 }
 
 // Role is one choice in a role control.

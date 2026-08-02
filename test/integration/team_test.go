@@ -441,6 +441,271 @@ func TestGrantRefusesNonMembersAndForeignWorkspaces(t *testing.T) {
 	}
 }
 
+// ─── M28, reopened: authority is bounded by the membership that carried it ──
+//
+// M28 shipped asserting, in its own rank table, that "an admin cannot demote
+// themselves — self is not strictly below self". Here self *was* strictly below
+// self. An actor holding an organization-wide `viewer` row and a
+// workspace-scoped `admin` row resolves, inside that workspace, as an admin at
+// rank 20 — GetUserRoleInWorkspace takes the minimum across the union (D31) —
+// while every member write scoped by `actor.OrgID` alone. `mayManage(20, 40,
+// 10)` was therefore true against their **own organization-wide membership**,
+// which came back `IsSelf: true` and `Manageable: true` at once, and one
+// dropdown on /members made them an organization-wide admin (F27).
+//
+// D44 is the answer: every write below resolves the authority reaching the
+// *target's* scope, where an organization-wide object is reached only by an
+// organization-wide membership.
+
+// scopedMembershipOf finds somebody's membership in one workspace, which is the
+// row the organization-wide helper above deliberately skips.
+func (f *teamFixture) scopedMembershipOf(
+	t *testing.T, actor *auth.Identity, email string, workspaceID uuid.UUID,
+) uuid.UUID {
+	t.Helper()
+	members, err := f.team.Members(t.Context(), actor)
+	if err != nil {
+		t.Fatalf("list members: %v", err)
+	}
+	for _, m := range members {
+		if m.Email == email && m.WorkspaceID != nil && *m.WorkspaceID == workspaceID {
+			return m.ID
+		}
+	}
+	t.Fatalf("%s has no membership scoped to workspace %s", email, workspaceID)
+	return uuid.Nil
+}
+
+// escalation builds F27's actor and the organization around her.
+//
+// Every part of it is a supported path: an owner invites a viewer, an owner
+// creates workspaces, and an owner grants a workspace-scoped admin role that
+// the role control offers. Nothing here is a forged request or a hand-built
+// identity, which is the point — the escalation was reachable by an owner doing
+// exactly what the product invites them to do.
+type escalation struct {
+	*teamFixture
+	alice     *auth.Identity
+	marketing uuid.UUID
+	support   uuid.UUID
+}
+
+func newEscalation(t *testing.T) *escalation {
+	t.Helper()
+	f := newTeamFixture(t)
+	f.member(t, "alice@example.com", "viewer")
+	f.member(t, "bob@example.com", "viewer")
+
+	marketing, err := f.team.CreateWorkspace(t.Context(), f.owner, "Marketing")
+	if err != nil {
+		t.Fatalf("create Marketing: %v", err)
+	}
+	support, err := f.team.CreateWorkspace(t.Context(), f.owner, "Support")
+	if err != nil {
+		t.Fatalf("create Support: %v", err)
+	}
+	for _, who := range []string{"alice@example.com", "bob@example.com"} {
+		id := f.identity(t, who)
+		role := "admin"
+		if who == "bob@example.com" {
+			role = "editor"
+		}
+		if _, err := f.team.Grant(t.Context(), f.owner, team.GrantInput{
+			UserID: id.UserID, WorkspaceID: marketing.ID, Role: role,
+		}); err != nil {
+			t.Fatalf("grant %s %s in Marketing: %v", who, role, err)
+		}
+	}
+
+	alice := f.identityIn(t, "alice@example.com", marketing.ID)
+	// The premise, asserted rather than assumed: the union really does resolve
+	// her as an admin here, so everything refused below is refused on scope and
+	// not because she turned out to hold nothing.
+	if alice.Role != "admin" || alice.RoleRank != 20 || !alice.Can(team.PermMembersWrite) {
+		t.Fatalf("the workspace-scoped grant did not resolve: %s at rank %d, members.write=%v",
+			alice.Role, alice.RoleRank, alice.Can(team.PermMembersWrite))
+	}
+	return &escalation{teamFixture: f, alice: alice, marketing: marketing.ID, support: support.ID}
+}
+
+// The one-dropdown route, and the trap m28.md named: closing `Grant` does not
+// close it, because it calls no `Grant` at all.
+func TestAWorkspaceScopedRoleCannotReRoleTheOrganization(t *testing.T) {
+	e := newEscalation(t)
+	ownRow := e.membershipOf(t, e.owner, "alice@example.com")
+	ownerRow := e.membershipOf(t, e.owner, "owner@example.com")
+
+	// Her own organization-wide membership: the row F27 turned from viewer to
+	// admin with one pick. Refused now on scope — a workspace-scoped membership
+	// does not reach an organization-wide one however strongly it resolves.
+	if err := e.team.ChangeRole(t.Context(), e.alice, ownRow, "admin"); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("a workspace-scoped admin re-roled her own organization-wide membership: %v", err)
+	}
+	// Promotion, which is the half `refuseLastOwner` did not cover: it fired
+	// only on demotion, so an escalated actor could make themselves an owner and
+	// then remove the real one.
+	if err := e.team.ChangeRole(t.Context(), e.alice, ownRow, "owner"); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("a workspace-scoped admin promoted herself to owner: %v", err)
+	}
+	// The other people in the organization, which is the same authority applied
+	// to somebody else's row.
+	if err := e.team.ChangeRole(t.Context(), e.alice, ownerRow, "viewer"); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("a workspace-scoped admin demoted the owner: %v", err)
+	}
+	if err := e.team.Remove(t.Context(), e.alice, ownerRow); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("a workspace-scoped admin removed the owner: %v", err)
+	}
+	if err := e.team.Remove(t.Context(), e.alice, e.membershipOf(t, e.owner, "bob@example.com")); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("a workspace-scoped admin removed an organization-wide member: %v", err)
+	}
+
+	// The rows are what is checked, not the returned errors: a refusal that
+	// reports forbidden and writes anyway passes every assertion above.
+	if n := e.count(t, `
+		SELECT count(*) FROM memberships m JOIN roles r ON r.id = m.role_id
+		 WHERE m.organization_id = $1 AND m.workspace_id IS NULL AND r.slug = 'owner'`,
+		e.owner.OrgID); n != 1 {
+		t.Fatalf("the organization has %d organization-wide owners, want the 1 it started with", n)
+	}
+	if id := e.identityIn(t, "alice@example.com", e.owner.WorkspaceID); id.Role != "viewer" {
+		t.Errorf("alice is %q outside Marketing, want viewer — her organization-wide row moved", id.Role)
+	}
+
+	// And the guard is not a blanket refusal. Inside Marketing she is genuinely
+	// an admin and manages the ranks below her there, which is the authority the
+	// grant was meant to give her.
+	bobThere := e.scopedMembershipOf(t, e.owner, "bob@example.com", e.marketing)
+	if err := e.team.ChangeRole(t.Context(), e.alice, bobThere, "viewer"); err != nil {
+		t.Errorf("a workspace-scoped admin could not re-role a membership in her own workspace: %v", err)
+	}
+	if err := e.team.Remove(t.Context(), e.alice, bobThere); err != nil {
+		t.Errorf("a workspace-scoped admin could not remove a membership in her own workspace: %v", err)
+	}
+}
+
+// The `Grant` route, which is the half a fix aimed only at the dropdown leaves
+// open — and the reason F27's reproduction could rename a workspace three calls
+// after being refused by `writableWorkspace`.
+func TestAWorkspaceScopedRoleCannotGrantItselfIntoAnotherWorkspace(t *testing.T) {
+	e := newEscalation(t)
+
+	// The control, first, exactly as the finding recorded it: before any grant,
+	// Support refuses her.
+	if _, err := e.team.RenameWorkspace(t.Context(), e.alice, e.support, "Hers"); !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("workspace.write in Support was not refused to begin with: %v", err)
+	}
+
+	if _, err := e.team.Grant(t.Context(), e.alice, team.GrantInput{
+		UserID: e.alice.UserID, WorkspaceID: e.support, Role: "admin",
+	}); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("a workspace-scoped admin granted herself into another workspace: %v", err)
+	}
+	if _, err := e.team.Grant(t.Context(), e.alice, team.GrantInput{
+		UserID: e.identity(t, "bob@example.com").UserID, WorkspaceID: e.support, Role: "admin",
+	}); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("a workspace-scoped admin granted somebody else into another workspace: %v", err)
+	}
+	if n := e.count(t, `SELECT count(*) FROM memberships WHERE workspace_id = $1`, e.support); n != 0 {
+		t.Fatalf("%d memberships were written into Support by a refused grant", n)
+	}
+	// So the guard that refused her at the start still refuses her.
+	if _, err := e.team.RenameWorkspace(t.Context(), e.alice, e.support, "Hers"); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("Support became writable after the grants were refused: %v", err)
+	}
+
+	// Her own workspace is untouched: granting a role in Marketing is what the
+	// authority she was given is for, and a scope check that refused this too
+	// would have taken the feature away rather than bounded it.
+	if _, err := e.team.Grant(t.Context(), e.alice, team.GrantInput{
+		UserID: e.identity(t, "owner@example.com").UserID, WorkspaceID: e.marketing, Role: "editor",
+	}); err != nil {
+		t.Errorf("granting into her own workspace was refused as a side effect: %v", err)
+	}
+	// But not above her own rank there, which is the ceiling read from the same
+	// authority: rank 20 in Marketing cannot hand out owner in Marketing.
+	if _, err := e.team.Grant(t.Context(), e.alice, team.GrantInput{
+		UserID: e.identity(t, "bob@example.com").UserID, WorkspaceID: e.marketing, Role: "owner",
+	}); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("a workspace-scoped admin granted owner in her own workspace: %v", err)
+	}
+}
+
+// An invitation admits somebody to the whole organization, so issuing one is an
+// organization-wide act whatever the issuer resolves to in their own workspace.
+func TestAWorkspaceScopedRoleCannotInviteIntoTheOrganization(t *testing.T) {
+	e := newEscalation(t)
+
+	if _, err := e.invites.Create(t.Context(), e.alice, invite.CreateInput{
+		Email: "outsider@example.com", Role: "admin",
+	}); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("a workspace-scoped admin issued an organization-wide invitation: %v", err)
+	}
+	if n := e.count(t, `SELECT count(*) FROM invitations WHERE email_lower = 'outsider@example.com'`); n != 0 {
+		t.Errorf("%d invitations were written by a refused issue", n)
+	}
+	// The owner still can, so this is a bound on where the authority came from
+	// rather than on the operation.
+	if _, err := e.invites.Create(t.Context(), e.owner, invite.CreateInput{
+		Email: "outsider@example.com", Role: "editor",
+	}); err != nil {
+		t.Errorf("the owner could not invite: %v", err)
+	}
+}
+
+// A workspace-scoped **owner** is the strongest form of the same defect: the
+// owner role holds every permission there is, `org.delete` included, and
+// `resolveRole` refuses only a rank *above* the actor's — so an owner granting
+// owner scoped to one workspace is a supported path and the role control offers
+// it.
+func TestAWorkspaceScopedOwnerDoesNotOwnTheOrganization(t *testing.T) {
+	f := newTeamFixture(t)
+	// So the last-organization refusal is not what answers below.
+	f.otherOrganization(t)
+	carol := f.member(t, "carol@example.com", "viewer")
+
+	marketing, err := f.team.CreateWorkspace(t.Context(), f.owner, "Marketing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.team.Grant(t.Context(), f.owner, team.GrantInput{
+		UserID: carol.UserID, WorkspaceID: marketing.ID, Role: "owner",
+	}); err != nil {
+		t.Fatalf("an owner could not grant owner scoped to one workspace: %v", err)
+	}
+
+	inMarketing := f.identityIn(t, "carol@example.com", marketing.ID)
+	if inMarketing.Role != "owner" || !inMarketing.Can(team.PermOrgDelete) {
+		t.Fatalf("the premise did not hold: carol is %q holding org.delete=%v",
+			inMarketing.Role, inMarketing.Can(team.PermOrgDelete))
+	}
+
+	if err := f.team.DeleteOrganization(t.Context(), inMarketing, f.owner.OrgID); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("a workspace-scoped owner deleted the organization: %v", err)
+	}
+	if n := f.count(t, `SELECT count(*) FROM organizations WHERE id = $1`, f.owner.OrgID); n != 1 {
+		t.Fatal("the organization is gone; a workspace-scoped owner deleted it")
+	}
+	if err := f.team.ChangeRole(t.Context(), inMarketing,
+		f.membershipOf(t, f.owner, "owner@example.com"), "viewer"); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("a workspace-scoped owner demoted the real owner: %v", err)
+	}
+	if err := f.team.ChangeRole(t.Context(), inMarketing,
+		f.membershipOf(t, f.owner, "carol@example.com"), "owner"); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("a workspace-scoped owner promoted her own organization-wide row: %v", err)
+	}
+	if _, err := f.invites.Create(t.Context(), inMarketing, invite.CreateInput{
+		Email: "outsider@example.com", Role: "owner",
+	}); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("a workspace-scoped owner invited an organization-wide owner: %v", err)
+	}
+	if n := f.count(t, `
+		SELECT count(*) FROM memberships m JOIN roles r ON r.id = m.role_id
+		 WHERE m.organization_id = $1 AND m.workspace_id IS NULL AND r.slug = 'owner'`,
+		f.owner.OrgID); n != 1 {
+		t.Errorf("the organization has %d organization-wide owners, want 1", n)
+	}
+}
+
 // ─── workspaces (D15, D32) ──────────────────────────────────────────────────
 
 // Create, rename and delete, and the permission that gates all three.
@@ -1639,4 +1904,87 @@ func TestTheMembersPageOpensForAMemberWhoCannotWrite(t *testing.T) {
 	if strings.Contains(body, "Give somebody access to one workspace") {
 		t.Error("/members offers the grant form to somebody who holds no members.write")
 	}
+}
+
+// The affordance half of the reopening: the page stops offering what the server
+// refuses.
+//
+// F27 was reachable in three dropdown picks and no forged request, because
+// /members drew a role control on every row `mayManage` accepted — the actor's
+// own organization-wide row included — and offered every workspace in the
+// organization in the grant form's select. Both are computed from the same
+// authority the service enforces with now, so the controls and the refusals
+// cannot disagree.
+func TestTheMembersPageOffersOnlyWhatTheServerWillDo(t *testing.T) {
+	e := newEscalation(t)
+	ownRow := e.membershipOf(t, e.owner, "alice@example.com")
+	bobThere := e.scopedMembershipOf(t, e.owner, "bob@example.com", e.marketing)
+
+	srv, client := e.browser(t)
+	signIn(t, srv, client, "alice@example.com")
+
+	status, body := webRequest(t, srv, client, http.MethodGet, "/members", nil)
+	if status != http.StatusOK {
+		t.Fatalf("GET /members as a workspace-scoped admin = %d, want 200\n%s", status, body)
+	}
+	// The grant form is drawn, because she may genuinely grant in Marketing.
+	if !strings.Contains(body, "Give somebody access to one workspace") {
+		t.Fatal("/members offers no grant form to somebody who holds members.write somewhere")
+	}
+	// Read out of the grant form's own select rather than off the page, and
+	// anchored on its `id` because the switcher in the chrome posts a
+	// `workspace_id` too. An organization-wide viewer may *act* in every
+	// workspace, so that switcher lists Support either way and a whole-page
+	// search would pass against the unfiltered list — as this assertion did,
+	// before the marker was made specific.
+	options := between(t, body, `<select id="workspace_id"`, `</select>`)
+	if !strings.Contains(options, `value="`+e.marketing.String()+`"`) {
+		t.Error("the workspace select omits the workspace she may actually grant in")
+	}
+	// But not Support, which she holds nothing in. This is the pick F27 used.
+	if strings.Contains(options, `value="`+e.support.String()+`"`) {
+		t.Error("the workspace select offers a workspace she holds no members.write in")
+	}
+	// And no role control on her own organization-wide row, which is the pick
+	// that made her an organization-wide admin.
+	if strings.Contains(body, "/members/"+ownRow.String()+"/role") {
+		t.Error("/members offers a role control on the actor's own organization-wide membership")
+	}
+	if strings.Contains(body, "/members/"+ownRow.String()+"/remove") {
+		t.Error("/members offers a remove control on the actor's own organization-wide membership")
+	}
+	// The control: a row she may manage still carries its controls, so this is
+	// not a page that has simply stopped drawing them.
+	if !strings.Contains(body, "/members/"+bobThere.String()+"/role") {
+		t.Error("/members draws no role control on a membership in her own workspace")
+	}
+
+	// And posting it anyway is refused, because the affordance is not the
+	// boundary — the service is. 403 rather than a 422 back on the page:
+	// renderMembersError re-renders only for a validation or conflict message,
+	// and this is neither.
+	status, body = webRequest(t, srv, client, http.MethodPost,
+		"/members/"+ownRow.String()+"/role", url.Values{"role": {"admin"}})
+	if status != http.StatusForbidden {
+		t.Fatalf("posting the refused role change answered %d, want 403\n%s", status, body)
+	}
+	if id := e.identityIn(t, "alice@example.com", e.owner.WorkspaceID); id.Role != "viewer" {
+		t.Errorf("alice is %q outside Marketing after the refused post, want viewer", id.Role)
+	}
+}
+
+// between returns what lies between two markers, failing when either is absent.
+// Used where a whole-page search would pass for the wrong reason.
+func between(t *testing.T, body, start, end string) string {
+	t.Helper()
+	i := strings.Index(body, start)
+	if i < 0 {
+		t.Fatalf("the page has no %q", start)
+	}
+	rest := body[i+len(start):]
+	j := strings.Index(rest, end)
+	if j < 0 {
+		t.Fatalf("the page has no %q after %q", end, start)
+	}
+	return rest[:j]
 }

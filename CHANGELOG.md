@@ -212,6 +212,14 @@ migrations run at boot.
   finance" is not expressible — so the feature can only ever grant more than you
   expected, never less. `POST /api/v1/members` issues one; removing it is the
   same call that removes any membership.
+- **A role given in one workspace reaches that workspace only.** Somebody who is
+  an admin in one workspace manages the memberships scoped to it, and cannot
+  re-role or remove an organization-wide membership, grant themselves into a
+  second workspace, issue an invitation, or delete the organization — each of
+  those is authorized against a membership that covers the whole organization.
+  So owning one workspace is not owning the organization, however completely you
+  own the workspace. The member list draws only the controls that will work, and
+  the workspace picker on it offers only the workspaces you may grant in.
 - **Workspaces can be created, renamed and deleted.** *Workspaces*, in the same
   menu, and `POST /api/v1/workspaces`, `PATCH` and `DELETE
   /api/v1/workspaces/{id}`. Until now registration provisioned one and there was

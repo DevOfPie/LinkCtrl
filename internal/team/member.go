@@ -70,9 +70,22 @@ func (s *Service) Members(ctx context.Context, actor *auth.Identity) ([]Member, 
 		return nil, err
 	}
 
-	writes := actor.Can(PermMembersWrite)
+	// Manageable is answered per row against the authority that reaches that
+	// row's scope (D44), not once for the page against the identity's rank. The
+	// two differ for exactly the actor F27 described, and the page is where they
+	// saw the control that should not have been there: their own
+	// organization-wide membership, offered with a role dropdown.
+	var authority *auth.MembershipAuthority
+	if actor.Can(PermMembersWrite) {
+		authority, err = auth.LoadMembershipAuthority(ctx, s.q, actor.UserID, actor.OrgID, PermMembersWrite)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	out := make([]Member, 0, len(rows))
 	for _, r := range rows {
+		here := authority.In(r.WorkspaceID)
 		m := Member{
 			ID:          r.ID,
 			UserID:      r.UserID,
@@ -83,7 +96,7 @@ func (s *Service) Members(ctx context.Context, actor *auth.Identity) ([]Member, 
 			WorkspaceID: r.WorkspaceID,
 			IsSelf:      r.UserID == actor.UserID,
 			CreatedAt:   r.CreatedAt,
-			Manageable:  writes && mayManage(actor.RoleRank, r.RoleRank, ownerRank),
+			Manageable:  here.Granted && mayManage(here.Rank, r.RoleRank, ownerRank),
 		}
 		if r.WorkspaceName != nil {
 			m.WorkspaceName = *r.WorkspaceName
@@ -105,6 +118,11 @@ func (s *Service) Members(ctx context.Context, actor *auth.Identity) ([]Member, 
 // manage them. That is not an oversight: the ceiling is about what authority may
 // be handed out, and strictly-below is about who may be acted on, and an admin
 // who mints a peer has done something an invitation already let them do.
+//
+// Both bounds are read from the authority that reaches the *membership being
+// changed* (D44), which is why the membership is loaded before the role is
+// resolved: until the target's scope is known, there is no way to say which of
+// the actor's memberships is doing the granting.
 func (s *Service) ChangeRole(
 	ctx context.Context, actor *auth.Identity, membershipID uuid.UUID, roleSlug string,
 ) error {
@@ -119,12 +137,12 @@ func (s *Service) ChangeRole(
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.q.WithTx(tx)
 
-	role, err := s.resolveRole(ctx, q, actor, roleSlug)
+	member, here, err := s.manageable(ctx, q, actor, membershipID)
 	if err != nil {
 		return err
 	}
 
-	member, err := s.manageable(ctx, q, actor, membershipID)
+	role, err := s.resolveRole(ctx, q, here, roleSlug)
 	if err != nil {
 		return err
 	}
@@ -134,12 +152,25 @@ func (s *Service) ChangeRole(
 		return nil
 	}
 
-	// The last-owner refusal, on the demotion path. Reading the count inside
-	// this transaction, after the owner rows are locked, is what makes it a rule
+	// The owner-set guard, in both directions. Reading the count inside this
+	// transaction, after the owner rows are locked, is what makes it a rule
 	// rather than a race: two administrators demoting the two remaining owners
 	// at once would otherwise each see two.
-	if member.RoleSlug == "owner" && role.Slug != "owner" {
-		if err := s.refuseLastOwner(ctx, q, actor.OrgID, membershipID, "demoted"); err != nil {
+	//
+	// The promotion arm is why this is not only a demotion guard. F27's chain
+	// was *promote your own row to owner, then remove the real one* — the
+	// removal passes the last-owner count precisely because the promotion
+	// inflated the set it counts, so leaving the join unguarded leaves the rule
+	// bypassable by adding rather than by removing. Every change to an
+	// organization's owner set now takes the same lock, so the two directions
+	// cannot interleave either.
+	switch {
+	case member.RoleSlug == "owner" && role.Slug != "owner":
+		if err := s.guardOwnerSet(ctx, q, here, actor.OrgID, membershipID, ownerDemoted); err != nil {
+			return err
+		}
+	case role.Slug == "owner" && member.WorkspaceID == nil:
+		if err := s.guardOwnerSet(ctx, q, here, actor.OrgID, membershipID, ownerJoins); err != nil {
 			return err
 		}
 	}
@@ -195,12 +226,12 @@ func (s *Service) Remove(ctx context.Context, actor *auth.Identity, membershipID
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.q.WithTx(tx)
 
-	member, err := s.manageable(ctx, q, actor, membershipID)
+	member, here, err := s.manageable(ctx, q, actor, membershipID)
 	if err != nil {
 		return err
 	}
 	if member.RoleSlug == "owner" && member.WorkspaceID == nil {
-		if err := s.refuseLastOwner(ctx, q, actor.OrgID, membershipID, "removed"); err != nil {
+		if err := s.guardOwnerSet(ctx, q, here, actor.OrgID, membershipID, ownerRemoved); err != nil {
 			return err
 		}
 	}
@@ -258,6 +289,14 @@ type GrantInput struct {
 // rather than granted, because a grant is not a way into an organization and
 // making it one would be a second admission path beside the one D27 bound to an
 // address.
+//
+// **The workspace being granted into is the scope this is authorized in** (D44).
+// Holding members.write somewhere in the organization is not holding it
+// everywhere, and F27's first move was a workspace-scoped admin granting
+// themselves a role in a workspace they had no membership in at all — after
+// which writableWorkspace let them rename it, having correctly refused three
+// calls earlier. This is the same question canInWorkspace asks for
+// workspace.write, asked at last by a member operation.
 func (s *Service) Grant(ctx context.Context, actor *auth.Identity, in GrantInput) (*Member, error) {
 	if !actor.Can(PermMembersWrite) {
 		return nil, fmt.Errorf("%w: granting workspace access requires %s",
@@ -271,14 +310,11 @@ func (s *Service) Grant(ctx context.Context, actor *auth.Identity, in GrantInput
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.q.WithTx(tx)
 
-	role, err := s.resolveRole(ctx, q, actor, in.Role)
-	if err != nil {
-		return nil, err
-	}
-
 	// The workspace must be one in this organization. Scoped by organization
 	// rather than checked afterwards, so an id from another tenant is
-	// indistinguishable from one that does not exist.
+	// indistinguishable from one that does not exist. Resolved before the role,
+	// because the role ceiling is read from the authority reaching *this*
+	// workspace and there is no such authority until the workspace is known.
 	ws, err := q.GetWorkspaceInOrganization(ctx, dbgen.GetWorkspaceInOrganizationParams{
 		ID: in.WorkspaceID, OrganizationID: actor.OrgID,
 	})
@@ -290,6 +326,22 @@ func (s *Service) Grant(ctx context.Context, actor *auth.Identity, in GrantInput
 			}}
 		}
 		return nil, fmt.Errorf("look up workspace: %w", err)
+	}
+
+	authority, err := auth.LoadMembershipAuthority(ctx, q, actor.UserID, actor.OrgID, PermMembersWrite)
+	if err != nil {
+		return nil, err
+	}
+	wsID := ws.ID
+	here := authority.In(&wsID)
+	if !here.Granted {
+		return nil, fmt.Errorf("%w: granting access to %s requires %s in it",
+			domain.ErrForbidden, ws.Name, PermMembersWrite)
+	}
+
+	role, err := s.resolveRole(ctx, q, here, in.Role)
+	if err != nil {
+		return nil, err
 	}
 
 	existing, err := q.GetOrganizationMember(ctx, dbgen.GetOrganizationMemberParams{
@@ -305,7 +357,6 @@ func (s *Service) Grant(ctx context.Context, actor *auth.Identity, in GrantInput
 		return nil, fmt.Errorf("look up member: %w", err)
 	}
 
-	wsID := ws.ID
 	row, err := q.CreateMembership(ctx, dbgen.CreateMembershipParams{
 		ID:             uuid.Must(uuid.NewV7()),
 		UserID:         in.UserID,
@@ -339,6 +390,15 @@ func (s *Service) Grant(ctx context.Context, actor *auth.Identity, in GrantInput
 		},
 	})
 
+	// Manageable is computed rather than asserted. An admin who grants admin has
+	// just made a row they cannot re-role — strictly below is not satisfied by a
+	// peer — and a control drawn from a hardcoded true would offer them the
+	// change the next request refuses.
+	ownerRank, err := s.ownerRank(ctx, s.q)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Member{
 		ID:            row.ID,
 		UserID:        in.UserID,
@@ -348,61 +408,110 @@ func (s *Service) Grant(ctx context.Context, actor *auth.Identity, in GrantInput
 		RoleRank:      role.Rank,
 		WorkspaceID:   &wsID,
 		WorkspaceName: ws.Name,
-		Manageable:    true,
+		Manageable:    mayManage(here.Rank, role.Rank, ownerRank),
 		IsSelf:        in.UserID == actor.UserID,
 		CreatedAt:     row.CreatedAt,
 	}, nil
 }
 
-// manageable loads a membership and applies D30 to it, or refuses.
+// manageable loads a membership, resolves the authority that reaches it, and
+// applies D30 to that — or refuses. The authority is returned, because the role
+// ceiling the caller applies next is read from the same place.
 //
 // The load takes a row lock, so the rank the decision is made on is the rank the
 // write acts on. Not-found for an id in another organization, the same answer as
 // one that never existed, so ids cannot be probed.
+//
+// Two refusals, in order, and the first is the one M28's reopening added. The
+// actor must hold members.write **in the target membership's own scope** (D44):
+// an organization-wide membership is reached only by another organization-wide
+// membership, so a workspace-scoped admin holds nothing over one however
+// strongly they resolve inside their workspace. Only then is rank compared, and
+// against the rank of the membership that carried the permission there rather
+// than against the identity's — which is what makes "self is not strictly below
+// self" true again for an actor whose identity borrowed its rank from elsewhere.
 func (s *Service) manageable(
 	ctx context.Context, q *dbgen.Queries, actor *auth.Identity, membershipID uuid.UUID,
-) (dbgen.GetMembershipRow, error) {
+) (dbgen.GetMembershipRow, auth.Authority, error) {
+	var here auth.Authority
 	member, err := q.GetMembership(ctx, dbgen.GetMembershipParams{
 		ID: membershipID, OrganizationID: actor.OrgID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return member, domain.ErrNotFound
+			return member, here, domain.ErrNotFound
 		}
-		return member, fmt.Errorf("look up membership: %w", err)
+		return member, here, fmt.Errorf("look up membership: %w", err)
+	}
+
+	authority, err := auth.LoadMembershipAuthority(ctx, q, actor.UserID, actor.OrgID, PermMembersWrite)
+	if err != nil {
+		return member, here, err
+	}
+	here = authority.In(member.WorkspaceID)
+	if !here.Granted {
+		return member, here, fmt.Errorf(
+			"%w: changing a membership that reaches %s requires %s over %s, and yours does not reach it",
+			domain.ErrForbidden, scopeWord(member.WorkspaceID),
+			PermMembersWrite, scopeWord(member.WorkspaceID))
 	}
 
 	ownerRank, err := s.ownerRank(ctx, q)
 	if err != nil {
-		return member, err
+		return member, here, err
 	}
-	if !mayManage(actor.RoleRank, member.RoleRank, ownerRank) {
+	if !mayManage(here.Rank, member.RoleRank, ownerRank) {
 		// The message names the rule rather than the person, because the caller
 		// is authenticated and telling them why is more use than a bare refusal.
 		// It says "at or above" because that is what the rank comparison found;
 		// an actor's own membership lands here too, which is the answer to "why
 		// can I not demote myself".
-		return member, fmt.Errorf(
+		return member, here, fmt.Errorf(
 			"%w: you can only change members below your own role (%s), and %s is not",
-			domain.ErrForbidden, actor.Role, member.RoleSlug)
+			domain.ErrForbidden, here.Role, member.RoleSlug)
 	}
-	return member, nil
+	return member, here, nil
 }
 
-// refuseLastOwner blocks the change that would leave an organization with none.
+// guardOwnerSet blocks the changes that would empty an organization's owner set,
+// or grow it from outside itself.
 //
 // The owner rows are locked before they are counted, so this is a rule rather
 // than a check-then-act: a second administrator demoting the other owner blocks
-// here until this transaction ends, then reads the count it left behind.
+// here until this transaction ends, then reads the count it left behind. Since
+// M28's reopening the lock is taken on every change to the set, joins included,
+// so a promotion and a removal cannot interleave into a state neither would have
+// allowed alone.
 //
 // Organization-wide owners only. A workspace-scoped owner membership is
 // ownership of one workspace, and counting it would let the real last owner go.
-func (s *Service) refuseLastOwner(
-	ctx context.Context, q *dbgen.Queries, orgID, membershipID uuid.UUID, verb string,
+//
+// The second refusal is deliberate depth rather than the load-bearing guard: an
+// actor reaching a promotion to organization-wide owner has already passed
+// resolveRole's ceiling read from `here`, which for an organization-wide target
+// can only be satisfied by an organization-wide owner. It is written anyway
+// because F27's chain needed just one of those two to be missing, and a rule
+// stated in one place is a rule that leaves with the next refactor of that
+// place.
+func (s *Service) guardOwnerSet(
+	ctx context.Context, q *dbgen.Queries, here auth.Authority,
+	orgID, membershipID uuid.UUID, change ownerSetChange,
 ) error {
 	owners, err := q.LockOrganizationOwners(ctx, orgID)
 	if err != nil {
 		return fmt.Errorf("count owners: %w", err)
+	}
+	if change == ownerJoins {
+		ownerRank, rerr := s.ownerRank(ctx, q)
+		if rerr != nil {
+			return rerr
+		}
+		if here.Rank > ownerRank {
+			return fmt.Errorf(
+				"%w: only an owner of this organization can make somebody else one",
+				domain.ErrForbidden)
+		}
+		return nil
 	}
 	others := 0
 	for _, id := range owners {
@@ -413,10 +522,22 @@ func (s *Service) refuseLastOwner(
 	if others == 0 {
 		return fmt.Errorf(
 			"%w: the last owner of an organization cannot be %s; make somebody else an owner first",
-			domain.ErrConflict, verb)
+			domain.ErrConflict, change)
 	}
 	return nil
 }
+
+// ownerSetChange is which way an organization's owner set is moving. A named
+// type rather than a verb string because the guard branches on it, and a branch
+// on a string that is also a message is a branch somebody breaks by improving
+// the wording.
+type ownerSetChange string
+
+const (
+	ownerDemoted ownerSetChange = "demoted"
+	ownerRemoved ownerSetChange = "removed"
+	ownerJoins   ownerSetChange = "promoted to"
+)
 
 // scopeLabel is what an audit record calls a membership's reach. A word rather
 // than a nullable id, because the record is read by a person asking "did this

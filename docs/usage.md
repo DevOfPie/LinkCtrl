@@ -519,6 +519,16 @@ There is no way round this: *organization admin, viewer in the finance
 workspace* is not expressible. If you need somebody to see less, give them less
 everywhere and add workspaces back.
 
+**What it grants stops at that workspace.** The role somebody holds there lets
+them administer that workspace's memberships and nothing wider: they cannot
+re-role or remove an organization-wide membership — their own included — grant
+themselves a role in a second workspace, send an invitation, or delete the
+organization. Each of those is authorized against a membership covering the
+whole organization, so somebody made an `owner` of one workspace owns that
+workspace and not the organization. The member list draws only the controls that
+will work, and the workspace picker on it offers only the workspaces you may
+actually grant in.
+
 Withdrawing the grant is the same *Remove* control — it removes that membership
 row and leaves the organization-wide one alone.
 

@@ -1206,6 +1206,13 @@ paths:
         are an owner, because the rule is "strictly below your own rank" and
         nobody is strictly below themselves.
 
+        It is answered per row against the membership of yours whose scope
+        covers that row, not against the role you resolve to where you are
+        standing. A membership with no `workspace_id` is reachable only from a
+        membership of your own with no `workspace_id`, so holding `admin` in one
+        workspace lets you manage that workspace's memberships and none of the
+        organization-wide ones — including your own.
+
         Not paginated: an organization's membership is a handful of rows by
         construction. Requires `members.read`, which owners and admins hold.
       responses:
@@ -1238,6 +1245,12 @@ paths:
         `admin` here is an admin in that workspace and an editor everywhere
         else. There is no operation that restricts somebody to a workspace, and
         this is not it.
+
+        `members.write` is required **in the workspace named by
+        `workspace_id`**, not merely somewhere in the organization — the same
+        question renaming or deleting a workspace asks for `workspace.write`.
+        So a workspace-scoped admin grants access in their own workspace and
+        nowhere else, and cannot grant themselves into a second one.
 
         The person must already hold an organization-wide membership. Somebody
         whose only place here is one workspace was deliberately scoped to it,

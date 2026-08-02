@@ -8,7 +8,12 @@
 {{template "flash_error" .Error}}
 
 {{/* OrgWorkspaces, not Workspaces: the shell owns that name for the switcher
-     and a page field would shadow it everywhere, layout included. */}}
+     and a page field would shadow it everywhere, layout included.
+
+     On this page it is the workspaces the reader may grant access in, already
+     filtered by loadMembersPage. Offering the rest is what made F27's
+     self-grant a dropdown pick, and an empty list removes the form rather than
+     drawing an empty select. */}}
 {{if and .CanWrite .OrgWorkspaces}}
 <div class="mb-6 rounded-lg border border-line bg-raised p-6">
   <h2 class="text-sm font-medium text-ink">Give somebody access to one workspace</h2>

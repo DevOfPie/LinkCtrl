@@ -90,7 +90,7 @@ answers, not the same ones with a domain name.
 | **Mail** | Optional SMTP, off unless `SMTP_HOST` is set. Queued in an outbox and delivered by the scheduler, so a message survives a restart; plain text only, and every consumer works unchanged with no mailer at all. |
 | **Invitations** | Bring somebody into your organization with a single-use, revocable, expiring link. It is tied to the address you send it to, so forwarding it cannot add a stranger, and the role it carries is capped at your own — at `editor` when an API key issued it, because redeeming one produces an account that outlives the key. Emailed when a mailer is configured, copyable either way. While sign-ups are `closed` an invitation may only add an account that already exists. |
 | **Sign-ups** | A public `/signup` form and `POST /api/v1/auth/register`, admitting people according to `LINKCTRL_SIGNUP_MODE` — closed, invitation-only or open. The operator sets it and nothing in the running instance changes it; the shipped default is `closed`. Open registration confirms the address by email before the account exists, so it needs a mailer — with none the instance stays invitation-only and says so at boot. A self-registered account gets an organization and workspace of its own; an invited one gets membership and nothing else. |
-| **Members** | A member list with role changes and removal, behind `members.read` and `members.write`. You manage only roles below your own — an admin manages editors and viewers, an owner manages everyone including other owners — and the last owner of an organization cannot be removed or demoted. Giving somebody a role in one workspace *adds* it there and takes nothing away anywhere. |
+| **Members** | A member list with role changes and removal, behind `members.read` and `members.write`. You manage only roles below your own — an admin manages editors and viewers, an owner manages everyone including other owners — and the last owner of an organization cannot be removed or demoted. Giving somebody a role in one workspace *adds* it there and takes nothing away anywhere — and reaches that workspace only: organization-wide memberships, invitations and the organization itself need a membership that covers the organization. |
 | **Workspaces** | Every request resolves to exactly one, and a switcher moves the browser you are in without moving the others. Which workspace a new session starts in follows the one you used last, or a pin you set. Create, rename and delete them within an organization; deleting one is refused while it still holds any link, archived ones included, because everything in it cascades and there is no trash. |
 | **Organizations** | Create one of your own, provisioned with a workspace and an owner membership in a single transaction, behind a new `orgs.create` permission held by the owner role. On a default instance that means the account from the setup form and nobody else, until an owner grants it. Delete one behind `org.delete`, which owners alone hold and no API key may: it removes every workspace, membership, invitation and key in one transaction, is refused while any link remains or while it is the instance's last, and leaves the audit trail behind. Somebody left belonging to nothing keeps their account and is offered an organization of their own. |
 | **Dashboard** | Server-rendered HTML with htmx. Works without JavaScript; no build step at runtime — the header's menus are popovers, so the browser opens them, closes them on Escape and needs no script to do it. Needs a browser from mid-2023 (Chrome 114, Safari 17, Firefox 125) for that. Light and dark, following the operating system unless overridden per browser — the server renders the theme into the page, so there is no flash of the wrong one. |
@@ -212,10 +212,15 @@ Known limitations and deferred work, so nobody discovers them in production:
   including each other, bounded by the refusal to remove or demote the last
   owner. The practical consequence on a small instance: one owner, a few admins,
   and the owner unavailable means the admins cannot be changed at all.
-- **A workspace-scoped role only ever adds.** Giving somebody a role in one
-  workspace grants it there on top of what they already hold; there is no way to
-  *restrict* somebody to a workspace. "Org admin, viewer in finance" is not
-  expressible.
+- **A workspace-scoped role only ever adds, and only where it was given.**
+  Giving somebody a role in one workspace grants it there on top of what they
+  already hold; there is no way to *restrict* somebody to a workspace. "Org
+  admin, viewer in finance" is not expressible. The authority it adds stops at
+  that workspace: somebody who is an admin in one workspace manages that
+  workspace's memberships, and cannot change organization-wide memberships,
+  issue invitations, or delete the organization — those need a membership that
+  covers the organization. So an owner of one workspace is not an owner of the
+  organization, however completely they own that workspace.
 - **Emptying a workspace is one link at a time.** A workspace holding any link —
   archived ones included — refuses to be deleted, because links, tags and folders
   cascade from it and there is no trash to restore them from. There is no bulk

@@ -99,6 +99,7 @@ file. Append a row when you append an entry.
 | [Draining one queue row into a finding that already existed](#2026-08-02--draining-one-queue-row-into-a-finding-that-already-existed) | Why the switcher row became F21 rather than a second row; the constraint F21 cited and the tree fact that disproves it; why the owner's direction went to the finding and the leftover question to upcoming-decisions |
 | [Two gate rules that lived only in an untracked file](#2026-08-02--two-gate-rules-that-lived-only-in-an-untracked-file) | What a moving development environment exposed about `.current-task.md`; why a cached test result is a gate failure and not a convenience; W19 and W20 |
 | [The Taskfile mirror catches up](#2026-08-02--the-taskfile-mirror-catches-up-and-what-verified-means-for-a-mirror) | Why nine unported recipes were committed as a task rather than stashed; why the sync is claimed as read-verified and not run-verified; W22 |
+| [M28, a role that owned one workspace](#2026-08-02--m28-a-role-that-owned-one-workspace-and-reached-the-whole-organization) | D44: a write is authorized by the membership whose scope covers its target, not by the identity's union; why D31 is untouched; why the fix could not stop at `Grant`; the promotion arm named as defence in depth; F39 closed under step 1's exception |
 
 ---
 
@@ -7741,3 +7742,165 @@ on the record: a stash is invisible to every tracker this project keeps and
 survives no clone, which is the precise failure [workflow-changes.md](workflow-changes.md)
 was created to end. Committing it with a W-row costs one commit and leaves the
 port findable by somebody who does not know to grep for it.
+
+## 2026-08-02 — M28, a role that owned one workspace and reached the whole organization
+
+M28's second reopening, from [M32.9](phase-details/m32.9.md)'s triage, recorded
+as [F27](deferred-findings.md) and approved by the owner. It is the same
+milestone number the first reopening carried, because reopening keeps the trail
+in one place.
+
+### What was false
+
+M28 wrote its rank table into
+[phase-details/m28.md](phase-details/m28.md) before any code, and the table's
+own commentary said: *an admin cannot demote themselves — self is not strictly
+below self*. Here self was strictly below self.
+
+An actor holding an organization-wide `viewer` membership (rank 40) and a
+workspace-scoped `admin` membership (rank 20) resolves, inside that workspace,
+as an admin at rank 20: `GetUserRoleInWorkspace` takes the minimum across the
+union, which is D31 working exactly as specified. Every member write then scoped
+its *target* by `actor.OrgID` alone. So `mayManage(20, 40, 10)` was asked about
+their own organization-wide membership and answered yes, and the same row came
+back from `Members` carrying `IsSelf: true` and `Manageable: true` at once. One
+dropdown pick on `/members` turned a workspace-scoped admin into an
+organization-wide one.
+
+The same shape reached further than that one control. The actor could `Grant`
+themselves a role in any workspace in the organization — after which
+`writableWorkspace`, which had correctly refused them three calls earlier,
+passed — `ChangeRole` and `Remove` organization-wide members, and issue an
+invitation whose redeemed membership is organization-wide. A workspace-scoped
+**owner** additionally held `org.delete` over the organization, and that is a
+supported path rather than a contrived one: `resolveRole` refuses only a rank
+*above* the actor's, so `10 < 10` is false, an owner may grant `owner` scoped to
+one workspace, and the role control offers it.
+
+### The decision (D44)
+
+**A write is authorized by the membership whose scope covers the object being
+written**, not by the identity's union.
+
+D31 is not corrected and not narrowed. Permissions still resolve as the union of
+every membership matching the workspace being acted in, the effective role is
+still the lowest rank among them, and a workspace-scoped role still only ever
+adds. The evaluator is untouched. What changed is which membership a *write* is
+authorized by:
+
+- An organization-wide object — a membership with no `workspace_id`, an
+  invitation, the organization itself — is reached only by an organization-wide
+  membership.
+- A workspace-scoped object is reached by an organization-wide membership or by
+  one scoped to that workspace, which is the same rule `GetUserPermissions`
+  applies.
+- Both rank bounds — who may be acted on (D30), and what may be handed out (the
+  D28 ceiling) — are evaluated against the rank of the membership that carried
+  the permission *there*, rather than against `Identity.RoleRank`.
+
+This is the authorization side of a sentence the tree already contained.
+`internal/store/query/members.sql` says, above `LockOrganizationOwners`, that *a
+workspace-scoped owner membership grants ownership of one workspace, not of the
+organization*, and filters `m.workspace_id IS NULL` for exactly that reason. The
+counting side believed it; the authorizing side did not.
+
+The mechanism is `auth.MembershipAuthority` (`internal/auth/authority.go`) over a
+new query, `ListMembershipAuthority`, which returns one row per membership with
+the rank it carries and whether its role grants a named permission. `In(nil)` is
+the organization-wide scope; `In(&workspaceID)` is that workspace. It sits beside
+`Identity.Can` rather than inside it, and that is the cost worth naming: a reader
+now has to know which of two authorization questions they are asking. `Can`
+answers *what may this person do where they are standing*, and is right for an
+object that lives in a workspace. `MembershipAuthority` answers *whose membership
+is this write coming from*, and is right for an object that spans the
+organization. Folding the second into the first would have meant making the
+evaluator scope-aware, which is D31 rewritten, and D31 is not what was wrong.
+
+Loading it costs one query per authorizing call site. `Members` loads it once and
+folds it per row rather than per membership, because an organization's membership
+list is a handful of rows by construction — the same reason `ListMembers` is not
+paginated.
+
+### Why the fix could not stop at `Grant`
+
+m28.md named this as the trap and it is worth keeping. The self-promotion route
+calls no `Grant` at all: the actor already has the organization-wide membership
+they are escalating, and the dropdown on `/members` posts a `ChangeRole`. A fix
+confined to the grant path would have closed the slower half of F27 and left the
+one-pick half open, while looking like a fix. Both `manageable` — the loader
+`ChangeRole` and `Remove` share — and `Grant` are bounded, and the tests drive
+each of them separately with a workspace-scoped actor as the *actor* of the
+write. That last point is why the shipped suite was green through all of this:
+every `Grant`, `ChangeRole` and `Remove` in `team_test.go` passed `f.owner`, and
+the one workspace-scoped identity the suite built was only ever read from.
+
+### The promotion arm, and an honest note about it
+
+m28.md also asked that `refuseLastOwner` cover promotion and not only demotion,
+because F27's chain was *promote your own row to owner, then remove the real
+one* — the removal passes the last-owner count precisely because the promotion
+inflated the set being counted. The guard is now `guardOwnerSet`, called in both
+directions, so every change to an organization's owner set takes the same lock
+and the two directions cannot interleave.
+
+Its promotion refusal is **defence in depth rather than the load-bearing
+guard**, and saying so is more useful than implying otherwise. With D44 in place,
+reaching a promotion to organization-wide owner means passing `resolveRole`'s
+ceiling read from the organization-wide authority, which only an
+organization-wide owner satisfies — so the second refusal is structurally
+unreachable through the service today. It is written anyway because F27's chain
+needed only one of the two to be missing, and a rule stated in exactly one place
+leaves with the next refactor of that place. The regression test asserts the
+*behaviour* the bullet is about — an escalated actor cannot promote their own
+row to owner, and the organization still has exactly one — rather than the branch
+that would answer second.
+
+### What the pages stopped offering
+
+`members.html` ranged over every workspace in the organization with no filter, so
+the self-grant was three dropdown picks and no forged request. The workspaces the
+grant form offers are now filtered where the page is loaded rather than in the
+template, so an empty list removes the form instead of leaving an empty select,
+and `Manageable` on the member list is computed per row against the same
+authority the service enforces with. The affordance is not the boundary — posting
+the refused change anyway still answers 403 — but a control that only ever
+produced a refusal was the thing that made the escalation discoverable.
+
+`Manageable` on a workspace is `workspace.write` in it, and the grant form needs
+`members.write`; the two coincide under the built-in roles, since `00700_seed.sql`
+grants both to `owner` and `admin` and neither to `editor` or `viewer`. Where an
+operator composes a role that separates them the page may offer a workspace the
+service then refuses, which is a wrong affordance and not a wrong authorization.
+
+### F39, closed under step 1's exception
+
+`TestNoPageDataStructShadowsTheShell` is the mechanism M28's *first* reopening
+demanded — *a test that fails if any page data struct in `internal/httpx`
+redeclares a field the shell already provides*. It never inspected **embedded**
+fields, and under Go's spec an embedded field is a field declaration:
+`struct{ shell; *auth.Identity }` declares `Identity` at depth 0 and shadows the
+shell's exactly as a named field would. So the test did not do the thing the
+bullet asked for, which makes it an open row that falsifies *this* milestone's
+claim — [phase-loop.md](phase-loop.md)'s *deferred overlap* check, the one path
+by which an unapproved finding becomes work. Recorded as
+[F39](deferred-findings.md), closed here, and named in the commit message so the
+exception stays visible.
+
+`readStruct` now records every embedded field under the name Go gives it, and the
+clash check additionally walks the fields promoted from anything embedded that is
+*not* on the path to `shell` — a shared mixin declaring `Path` alongside the
+shell does not shadow the shell's field, it makes the selector ambiguous, and a
+template resolving an ambiguous selector fails at render the way F20 did. The
+test was passing before the change, so it was shown red first against all three
+shapes F39 reproduced, then restored.
+
+### What was left alone
+
+[F31](deferred-findings.md) — a workspace-scoped admin reads the whole
+organization's audit log — shares this root and was deliberately not touched. It
+falsifies [M21](phase-details/m21.md)'s claim about `audit.read`'s scope, not
+M28's, and it is a read scope where this is a write scope; scheduling it is the
+owner's. `CreateWorkspace` gates on the identity's `workspace.write` and so lets
+a workspace-scoped admin add workspaces to the organization; it is a membership
+neither, is named by neither F27 nor m28.md's reopening, and went to
+deferred-findings as [F63](deferred-findings.md) rather than riding along.

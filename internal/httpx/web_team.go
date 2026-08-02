@@ -38,6 +38,14 @@ type membersPageData struct {
 	// already holds a workspace-scoped role would otherwise appear twice and
 	// mean the same thing both times.
 	//
+	// OrgWorkspaces on *this* page is the workspaces the reader may grant in,
+	// not every workspace they can see. The unfiltered list offered a
+	// workspace-scoped admin every workspace in the organization, which is how
+	// F27's first move — granting themselves into a workspace they held nothing
+	// in — was three dropdown picks rather than a forged request. Filtered where
+	// it is loaded rather than in the template, so that an empty list also
+	// removes the form instead of leaving an empty select behind.
+	//
 	// Named for the organization rather than `Workspaces` because the shell
 	// already carries a field of that name, of a different type, for the
 	// switcher — and a page field shadows it for the whole template, layout
@@ -93,7 +101,17 @@ func (h *Web) loadMembersPage(w http.ResponseWriter, r *http.Request) (membersPa
 		h.webError(w, r, err)
 		return data, false
 	}
-	data.OrgWorkspaces = workspaces
+	// Manageable is workspace.write in that workspace, answered per row by
+	// team.Service.Workspaces through canInWorkspace. Both built-in roles that
+	// hold members.write hold workspace.write too (00700_seed.sql), so it is the
+	// same set — and where an operator has composed a role that separates them,
+	// the service refuses on members.write regardless. This is the affordance,
+	// and Grant is the control.
+	for _, ws := range workspaces {
+		if ws.Manageable {
+			data.OrgWorkspaces = append(data.OrgWorkspaces, ws)
+		}
+	}
 	return data, true
 }
 

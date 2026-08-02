@@ -82,6 +82,50 @@ WHERE m.organization_id = $1
   AND r.organization_id IS NULL
 FOR UPDATE OF m;
 
+-- name: ListMembershipAuthority :many
+-- Every membership one user holds in an organization, with the rank it carries
+-- and whether the role behind it grants a named permission.
+--
+-- This is the authorization side of the sentence LockOrganizationOwners states
+-- just above: **a workspace-scoped membership grants authority over its own
+-- workspace, not over the organization.** The evaluator answers a different
+-- question — what may this person do in the workspace they are *acting in* —
+-- by taking the union of every matching membership and the lowest rank among
+-- them (D31), which is right for an object that lives in a workspace and wrong
+-- for one that spans the organization. A workspace-scoped admin resolved into
+-- their own workspace otherwise carries rank 20 against an organization-wide
+-- membership their membership does not reach at all, and F27 walked exactly
+-- that: one dropdown on /members turned them into an organization-wide admin.
+--
+-- So the rows come back unfolded, one per membership, and the caller keeps the
+-- ones that reach the scope of the object being written. A membership scoped to
+-- a deleted workspace reaches nothing, matching GetUserPermissions.
+--
+-- The permission is a parameter rather than a join in Go because the answer is
+-- per role, not per membership: two memberships at the same role give the same
+-- answer, and asking the database means the grant is read from
+-- role_permissions — the same table the evaluator reads — rather than from a
+-- second list of which roles hold what.
+SELECT
+    m.id,
+    m.workspace_id,
+    r.slug AS role_slug,
+    r.rank AS role_rank,
+    EXISTS (
+        SELECT 1
+        FROM role_permissions rp
+        JOIN permissions p ON p.id = rp.permission_id
+        WHERE rp.role_id = m.role_id
+          AND p.slug = @permission
+    ) AS grants_permission
+FROM memberships m
+JOIN roles r ON r.id = m.role_id
+LEFT JOIN workspaces w ON w.id = m.workspace_id
+WHERE m.user_id = @user_id
+  AND m.organization_id = @organization_id
+  AND (m.workspace_id IS NULL OR w.deleted_at IS NULL)
+ORDER BY r.rank, m.workspace_id NULLS FIRST;
+
 -- name: UpdateMembershipRole :execrows
 -- Scoped by organization as well as id, so the authorization decision the
 -- service made cannot be applied to a row in another tenant.

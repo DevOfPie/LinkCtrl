@@ -238,7 +238,26 @@ func (s *Service) DeleteOrganization(ctx context.Context, actor *auth.Identity, 
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.q.WithTx(tx)
 
-	// First, and in a fixed order, because the target is inside this set: after
+	// The permission has to come from an organization-wide membership (D44).
+	// `resolveRole` lets an owner grant **owner** scoped to a single workspace —
+	// a supported path, and one the role control offers — and that membership
+	// resolves inside its workspace holding every permission the owner role has,
+	// org.delete included. Deleting the organization with it would be the
+	// clearest possible violation of the sentence `members.sql` already states:
+	// a workspace-scoped owner membership grants ownership of one workspace, not
+	// of the organization (F27).
+	authority, err := auth.LoadMembershipAuthority(ctx, q, actor.UserID, actor.OrgID, PermOrgDelete)
+	if err != nil {
+		return err
+	}
+	if !authority.In(nil).Granted {
+		return fmt.Errorf(
+			"%w: deleting an organization requires %s from an organization-wide membership; "+
+				"owning one workspace is not owning the organization",
+			domain.ErrForbidden, PermOrgDelete)
+	}
+
+	// Then, and in a fixed order, because the target is inside this set: after
 	// this line the organization being deleted is locked, and so is every other
 	// one the count is about.
 	organizations, err := q.LockOrganizations(ctx)

@@ -243,9 +243,29 @@ type CreateInput struct {
 
 // Create issues an invitation and returns the link, which is the only time the
 // token exists.
+//
+// Issuing one is an organization-wide act, because what redemption writes is an
+// organization-wide membership — Redeem sets no workspace_id, deliberately, so
+// somebody who accepts is in the organization rather than in one corner of it.
+// The authority to do that therefore has to come from an organization-wide
+// membership too (D44, M28's reopening): a workspace-scoped admin resolves
+// inside their own workspace holding members.write, and admitting a new
+// organization-wide member with it would hand out reach they do not have
+// (F27).
 func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInput) (*Created, error) {
 	if !actor.Can(PermWrite) {
 		return nil, fmt.Errorf("%w: inviting a member requires %s", domain.ErrForbidden, PermWrite)
+	}
+	authority, err := auth.LoadMembershipAuthority(ctx, s.q, actor.UserID, actor.OrgID, PermWrite)
+	if err != nil {
+		return nil, err
+	}
+	orgWide := authority.In(nil)
+	if !orgWide.Granted {
+		return nil, fmt.Errorf(
+			"%w: an invitation admits somebody to the whole organization, so issuing one "+
+				"requires %s from an organization-wide membership; yours reaches one workspace",
+			domain.ErrForbidden, PermWrite)
 	}
 
 	email := auth.NormalizeEmail(in.Email)
@@ -271,12 +291,17 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 	}
 
 	// The D28 ceiling. Rank counts downward in authority, so "at or below the
-	// inviter's own rank" is a rank no smaller than theirs. An identity whose
-	// role did not resolve carries auth.NoRoleRank and fails every comparison,
-	// which is the direction this must fail in.
-	if role.Rank < actor.RoleRank {
+	// inviter's own rank" is a rank no smaller than theirs. An authority that
+	// granted nothing carries auth.NoRoleRank and fails every comparison, which
+	// is the direction this must fail in.
+	//
+	// Read from the organization-wide authority rather than from the identity,
+	// for the reason the gate above is: the identity's rank can be the rank of a
+	// workspace-scoped membership, and an invitation is not scoped to a
+	// workspace.
+	if role.Rank < orgWide.Rank {
 		return nil, fmt.Errorf(
-			"%w: an invitation cannot carry a role above your own (%s)", domain.ErrForbidden, actor.Role)
+			"%w: an invitation cannot carry a role above your own (%s)", domain.ErrForbidden, orgWide.Role)
 	}
 
 	// The D43 cap, and the reason it sits next to the ceiling above rather than
