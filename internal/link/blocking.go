@@ -491,6 +491,13 @@ const (
 	surfaceLinkCreate   destinationSurface = "link.create"
 	surfaceLinkUpdate   destinationSurface = "link.update"
 	surfaceRootRedirect destinationSurface = "domain.root_redirect"
+	// surfaceRoutingRule is M34's, and it is the fourth — which is the moment
+	// the test above was written for. A routing rule's target is a destination
+	// like any other: it is where a visitor's browser ends up, it is chosen by
+	// somebody who is not that visitor, and the tiers exist for exactly that
+	// asymmetry. Nothing about it being reached only by British mobile traffic
+	// on a Tuesday makes an SSRF against 169.254.169.254 less of one.
+	surfaceRoutingRule destinationSurface = "link.routing_rule"
 )
 
 // field is the form input a refusal on this surface belongs against, so the

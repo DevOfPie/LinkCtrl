@@ -77,6 +77,11 @@ type Querier interface {
 	// inbox becomes something people stop reading — which would cost exactly the
 	// warning D5 depends on.
 	CountRecentNotificationsOfKind(ctx context.Context, arg CountRecentNotificationsOfKindParams) (int64, error)
+	// Read before an insert, to enforce the per-link ceiling. Counts every kind,
+	// not only 'match': the ceiling exists because the whole list travels inside
+	// the cached snapshot and is walked in order on the redirect path, and M36's
+	// rows will be in that list too.
+	CountRoutingRules(ctx context.Context, linkID uuid.UUID) (int64, error)
 	//
 	// Served by notifications_user_unread_idx, the partial index the table already
 	// ships with: the WHERE clause here has to match the index's predicate exactly
@@ -123,6 +128,23 @@ type Querier interface {
 	// (M29). The mode itself is `LINKCTRL_SIGNUP_MODE` and is never read from the
 	// database (D38), so nothing here answers what the instance admits.
 	CreatePendingRegistration(ctx context.Context, arg CreatePendingRegistrationParams) (PendingRegistration, error)
+	// Routing rules (M34).
+	//
+	// Every query here filters on kind = 'match'. That is not defensive coding: the
+	// column's CHECK also permits weighted, sequential and fallback, which are
+	// M36's, and a query that read every kind would start behaving differently the
+	// day those rows first exist — silently, on the redirect path. The filter means
+	// M36 has to write its own reads, which is the correct amount of work for a
+	// milestone that adds a new evaluation model.
+	//
+	// Rule *targets* are ordinary `destinations` rows. A rule therefore costs two
+	// writes and the destination is what carries the URL, its host, and the M30
+	// tier check the service applied before either row existed.
+	CreateRoutingRule(ctx context.Context, arg CreateRoutingRuleParams) (RoutingRule, error)
+	// A rule's target. Position is above zero so it can never be mistaken for the
+	// link's own destination, which Phase 1 put at position 0 and which
+	// `links.primary_destination_id` points at.
+	CreateRuleDestination(ctx context.Context, arg CreateRuleDestinationParams) (Destination, error)
 	// ON CONFLICT DO NOTHING returns no row when another replica inserted first,
 	// which the caller detects and re-reads. Two replicas using different salts
 	// for the same day would split every visitor in two.
@@ -182,6 +204,18 @@ type Querier interface {
 	// Reaper. Kept long enough to be visible in the key list after revocation, and
 	// long enough for the audit question above to be answerable.
 	DeleteRevokedAPIKeys(ctx context.Context) (int64, error)
+	// Returns the destination so the caller can remove it in the same transaction.
+	// A rule target left behind would be an orphan row nothing reads and nothing
+	// can reach, accumulating one per deleted rule for the life of the link.
+	DeleteRoutingRule(ctx context.Context, arg DeleteRoutingRuleParams) (*uuid.UUID, error)
+	// A hard delete, not the soft delete `deleted_at` exists for. Nothing reports
+	// on a rule target and nothing can restore a deleted rule, so a tombstone here
+	// would be a row that only ever grows the table.
+	// The NOT EXISTS is a guard rather than a branch anything takes: only rule
+	// targets reach this query. It is here because the one row this must never
+	// delete is the link's own destination, and the cost of being wrong about that
+	// is a link that redirects nowhere.
+	DeleteRuleDestination(ctx context.Context, arg DeleteRuleDestinationParams) error
 	// Retires environment entries the operator has since removed.
 	//
 	// Scoped to source = 'env' and nothing else. A restart must never delete what an
@@ -294,6 +328,7 @@ type Querier interface {
 	// The live-activity feed. Bounded and index-backed on (link_id, occurred_at).
 	GetRecentClicks(ctx context.Context, arg GetRecentClicksParams) ([]GetRecentClicksRow, error)
 	GetRoleBySlug(ctx context.Context, slug string) (Role, error)
+	GetRoutingRule(ctx context.Context, arg GetRoutingRuleParams) (GetRoutingRuleRow, error)
 	// Analytics: salts, rollups and reads.
 	GetSalt(ctx context.Context, validOn time.Time) ([]byte, error)
 	// Joined with the user so validating a session is one round trip on a path
@@ -489,6 +524,19 @@ type Querier interface {
 	// The scope vocabulary. Scopes are validated against the permissions table
 	// rather than a list in Go, so RBAC and API keys cannot drift apart.
 	ListPermissionSlugs(ctx context.Context) ([]string, error)
+	// The management list: every rule on a link, enabled or not, in the order the
+	// redirect path would evaluate them.
+	//
+	// Ordered by (priority, created_at) rather than by priority alone. Priority is
+	// not unique, and two rules that tie have to be evaluated in a defined order or
+	// the same request resolves differently on two replicas. Creation order is the
+	// tiebreak because it is the only one a person can predict from the list they
+	// are looking at.
+	//
+	// Workspace-scoped in the WHERE like every other management read, so a rule
+	// belonging to another tenant returns no rows rather than a row the caller has
+	// to remember to reject.
+	ListRoutingRules(ctx context.Context, arg ListRoutingRulesParams) ([]ListRoutingRulesRow, error)
 	// Counts l.id, not lt.link_id. The join onto links is what excludes trashed
 	// links, but counting the link_tags column ignored it: a LEFT JOIN keeps the
 	// link_tags row when its link is soft-deleted, so the count included trashed
@@ -649,6 +697,9 @@ type Querier interface {
 	// both listed by the operator and a known shortener is one refusal, and the
 	// more specific entry is the longer one, which this already returns.
 	MatchBlockedDestination(ctx context.Context, candidates []string) (MatchBlockedDestinationRow, error)
+	// The next free position above the primary. COALESCE so the first rule on a
+	// link lands at 1 rather than at NULL.
+	NextRuleDestinationPosition(ctx context.Context, linkID uuid.UUID) (int32, error)
 	// The same lookup without the lock, for rendering the redemption page.
 	//
 	// A GET must not take a row lock: the page is served to anybody holding the
@@ -779,6 +830,23 @@ type Querier interface {
 	// joins, which is exactly the behaviour this query had before the join existed;
 	// adding the filter would silently turn every link on such a domain into a 404,
 	// which is a change nobody asked this milestone to make.
+	//
+	// The lateral is M34's, and it obeys the same rule the domain join does: the
+	// routing rules a link carries have to be in the snapshot, and the alternatives
+	// are a second query on every cache miss or a second cache with its own
+	// invalidation. This is neither. It is an index probe on
+	// `routing_rules_link_idx` — partial on `enabled`, keyed on (link_id,
+	// priority) — which finds nothing at all for the overwhelming majority of
+	// links, because a link with no rules is the default and always will be.
+	// Nothing about it runs on a cache *hit*: by then the rules are already inside
+	// the snapshot.
+	//
+	// The rules come back as one jsonb array, already in evaluation order, because
+	// ordering them here is free and ordering them in Go would mean the sort that
+	// decides which destination a visitor gets lived somewhere other than the query
+	// that reads them. The keys are spelled out rather than short: this is the
+	// database's own vocabulary, and the compact spelling the cached snapshot uses
+	// is the Go type's business.
 	ResolveAliasForRedirect(ctx context.Context, arg ResolveAliasForRedirectParams) (ResolveAliasForRedirectRow, error)
 	// Read once at boot and cached. The default domain is matched on the flag
 	// rather than on a hostname string, so it never has to agree with
@@ -909,6 +977,19 @@ type Querier interface {
 	TouchSession(ctx context.Context, id uuid.UUID) error
 	// The trigger on destinations mirrors this into links.primary_url, so the hot
 	// path never joins.
+	//
+	// Narrowed to the *primary* destination by M34, and the narrowing is the point
+	// rather than tidying. Until routing rules existed a link had exactly one
+	// destination row, so matching on link_id alone matched it; a rule target is a
+	// second row on the same link, and this query would have rewritten every one of
+	// them to the link's own URL the next time somebody edited the link. Every rule
+	// on the link would silently start pointing at the same place, which is
+	// indistinguishable from the rules having stopped working.
+	//
+	// Matched through links.primary_destination_id rather than through `position =
+	// 0`, because that column is what the sync trigger keys on and what the rest of
+	// the schema treats as the authority. Two definitions of "the primary" is how
+	// they come to disagree.
 	UpdateDestinationURL(ctx context.Context, arg UpdateDestinationURLParams) error
 	// COALESCE with sqlc.narg gives partial update: a NULL argument leaves the
 	// column alone, so PATCH semantics need no dynamic SQL.
@@ -916,6 +997,15 @@ type Querier interface {
 	// Scoped by organization as well as id, so the authorization decision the
 	// service made cannot be applied to a row in another tenant.
 	UpdateMembershipRole(ctx context.Context, arg UpdateMembershipRoleParams) (int64, error)
+	// Partial update, same COALESCE-with-narg shape as UpdateLink. The destination
+	// is not here: changing where a rule points is a write to its `destinations`
+	// row, so that the URL, its host and the tier check that accepted it stay in
+	// one place.
+	UpdateRoutingRule(ctx context.Context, arg UpdateRoutingRuleParams) (RoutingRule, error)
+	// Scoped to one destination id, unlike UpdateDestinationURL. A rule target and
+	// the link's own destination are two rows on the same link now, and the wrong
+	// one of these two queries would move both.
+	UpdateRuleDestinationURL(ctx context.Context, arg UpdateRuleDestinationURLParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	// Writes one entry from LINKCTRL_DESTINATION_BLOCKLIST at boot.
 	//

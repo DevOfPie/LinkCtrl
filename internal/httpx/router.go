@@ -145,10 +145,17 @@ func NewRouter(d Deps) http.Handler {
 			"DELETE " + APIPrefix + "/links/{id}":       api.Delete,
 			"POST " + APIPrefix + "/links/{id}/archive": api.Archive,
 			"POST " + APIPrefix + "/links/{id}/restore": api.Restore,
-			"GET " + APIPrefix + "/tags":                api.ListTags,
-			"DELETE " + APIPrefix + "/tags/{id}":        api.DeleteTag,
-			"GET " + APIPrefix + "/domain":              api.GetDomain,
-			"PATCH " + APIPrefix + "/domain":            api.UpdateDomain,
+			// Routing rules (M34), nested under the link they belong to. No
+			// permission of their own: a rule is where a link points, and that is
+			// links.read and links.update — see internal/link/routing.go.
+			"GET " + APIPrefix + "/links/{id}/rules":             api.ListRules,
+			"POST " + APIPrefix + "/links/{id}/rules":            api.CreateRule,
+			"PATCH " + APIPrefix + "/links/{id}/rules/{ruleID}":  api.UpdateRule,
+			"DELETE " + APIPrefix + "/links/{id}/rules/{ruleID}": api.DeleteRule,
+			"GET " + APIPrefix + "/tags":                         api.ListTags,
+			"DELETE " + APIPrefix + "/tags/{id}":                 api.DeleteTag,
+			"GET " + APIPrefix + "/domain":                       api.GetDomain,
+			"PATCH " + APIPrefix + "/domain":                     api.UpdateDomain,
 			// The reputation-feed disclosure (M32). Read-only, and there is no
 			// second operation here by design: the page it mirrors accepts no
 			// POST (D40), and an API that could write would be the settings
@@ -332,21 +339,28 @@ func NewRouter(d Deps) http.Handler {
 		// Everything else redirects anonymous visitors to the login form,
 		// where the API would return a problem document.
 		for pattern, fn := range map[string]http.HandlerFunc{
-			"GET /dashboard":                web.Dashboard,
-			"GET /links":                    web.LinksPage,
-			"POST /links":                   web.LinkCreate,
-			"GET /links/{id}":               web.LinkDetail,
-			"POST /links/{id}":              web.LinkUpdate,
-			"POST /links/{id}/archive":      web.LinkArchive,
-			"POST /links/{id}/restore":      web.LinkRestore,
-			"POST /links/{id}/delete":       web.LinkDelete,
-			"GET /keys":                     web.KeysPage,
-			"GET /notifications":            web.NotificationsPage,
-			"POST /notifications/read":      web.NotificationReadAll,
-			"POST /notifications/{id}/read": web.NotificationRead,
-			"POST /keys":                    web.KeyCreate,
-			"POST /keys/{id}/revoke":        web.KeyRevoke,
-			"GET /account":                  web.AccountPage,
+			"GET /dashboard":   web.Dashboard,
+			"GET /links":       web.LinksPage,
+			"POST /links":      web.LinkCreate,
+			"GET /links/{id}":  web.LinkDetail,
+			"POST /links/{id}": web.LinkUpdate,
+			// Routing rules (M34). Three actions rather than one form: adding a
+			// rule and switching one off are different enough operations that
+			// making the second go through the first would mean opening an editor
+			// to pause a campaign.
+			"POST /links/{id}/rules":                 web.RuleCreate,
+			"POST /links/{id}/rules/{ruleID}/toggle": web.RuleToggle,
+			"POST /links/{id}/rules/{ruleID}/delete": web.RuleDelete,
+			"POST /links/{id}/archive":               web.LinkArchive,
+			"POST /links/{id}/restore":               web.LinkRestore,
+			"POST /links/{id}/delete":                web.LinkDelete,
+			"GET /keys":                              web.KeysPage,
+			"GET /notifications":                     web.NotificationsPage,
+			"POST /notifications/read":               web.NotificationReadAll,
+			"POST /notifications/{id}/read":          web.NotificationRead,
+			"POST /keys":                             web.KeyCreate,
+			"POST /keys/{id}/revoke":                 web.KeyRevoke,
+			"GET /account":                           web.AccountPage,
 			// Read-only, and registered GET-only on purpose: a POST to /feeds
 			// must be refused by the mux rather than by a handler somebody
 			// could add one to. D40, and TestTheDisclosurePageAcceptsNoWrite.

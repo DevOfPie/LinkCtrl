@@ -495,7 +495,7 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 		// links.primary_url. Editing the destination without changing the
 		// alias is the core promise of the product, so this path matters.
 		if err := q.UpdateDestinationURL(ctx, dbgen.UpdateDestinationURLParams{
-			LinkID: id, WorkspaceID: actor.WorkspaceID,
+			ID: id, WorkspaceID: actor.WorkspaceID,
 			Url: normalizedURL, UrlHost: HostOf(normalizedURL),
 		}); err != nil {
 			return nil, fmt.Errorf("update destination: %w", err)

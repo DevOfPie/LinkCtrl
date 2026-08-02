@@ -31,6 +31,23 @@
 -- joins, which is exactly the behaviour this query had before the join existed;
 -- adding the filter would silently turn every link on such a domain into a 404,
 -- which is a change nobody asked this milestone to make.
+--
+-- The lateral is M34's, and it obeys the same rule the domain join does: the
+-- routing rules a link carries have to be in the snapshot, and the alternatives
+-- are a second query on every cache miss or a second cache with its own
+-- invalidation. This is neither. It is an index probe on
+-- `routing_rules_link_idx` — partial on `enabled`, keyed on (link_id,
+-- priority) — which finds nothing at all for the overwhelming majority of
+-- links, because a link with no rules is the default and always will be.
+-- Nothing about it runs on a cache *hit*: by then the rules are already inside
+-- the snapshot.
+--
+-- The rules come back as one jsonb array, already in evaluation order, because
+-- ordering them here is free and ordering them in Go would mean the sort that
+-- decides which destination a visitor gets lived somewhere other than the query
+-- that reads them. The keys are spelled out rather than short: this is the
+-- database's own vocabulary, and the compact spelling the cached snapshot uses
+-- is the Go type's business.
 SELECT
     l.id,
     l.workspace_id,
@@ -46,9 +63,21 @@ SELECT
     l.forward_path,
     l.bot_blocking,
     d.block_bots,
-    d.block_bots_enforced
+    d.block_bots_enforced,
+    COALESCE(r.rules, '[]'::jsonb)::jsonb AS rules
 FROM links l
 JOIN domains d ON d.id = l.domain_id
+LEFT JOIN LATERAL (
+    SELECT jsonb_agg(
+               jsonb_build_object('url', dest.url, 'conditions', rr.conditions)
+               ORDER BY rr.priority, rr.created_at
+           ) AS rules
+    FROM routing_rules rr
+    JOIN destinations dest ON dest.id = rr.destination_id AND dest.deleted_at IS NULL
+    WHERE rr.link_id = l.id
+      AND rr.enabled
+      AND rr.kind = 'match'
+) r ON true
 WHERE l.domain_id = $1
   AND l.alias = $2
   AND l.deleted_at IS NULL;

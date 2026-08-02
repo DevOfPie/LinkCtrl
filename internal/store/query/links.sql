@@ -47,9 +47,26 @@ RETURNING *;
 -- name: UpdateDestinationURL :exec
 -- The trigger on destinations mirrors this into links.primary_url, so the hot
 -- path never joins.
-UPDATE destinations
+--
+-- Narrowed to the *primary* destination by M34, and the narrowing is the point
+-- rather than tidying. Until routing rules existed a link had exactly one
+-- destination row, so matching on link_id alone matched it; a rule target is a
+-- second row on the same link, and this query would have rewritten every one of
+-- them to the link's own URL the next time somebody edited the link. Every rule
+-- on the link would silently start pointing at the same place, which is
+-- indistinguishable from the rules having stopped working.
+--
+-- Matched through links.primary_destination_id rather than through `position =
+-- 0`, because that column is what the sync trigger keys on and what the rest of
+-- the schema treats as the authority. Two definitions of "the primary" is how
+-- they come to disagree.
+UPDATE destinations d
    SET url = $3, url_host = $4, updated_at = now()
- WHERE link_id = $1 AND workspace_id = $2 AND deleted_at IS NULL;
+  FROM links l
+ WHERE l.id = $1
+   AND l.workspace_id = $2
+   AND d.id = l.primary_destination_id
+   AND d.deleted_at IS NULL;
 
 -- name: ArchiveLink :one
 UPDATE links

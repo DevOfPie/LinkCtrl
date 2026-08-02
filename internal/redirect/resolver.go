@@ -2,6 +2,7 @@ package redirect
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -21,7 +22,25 @@ import (
 // incompatibly. Including it in the key means an upgrade cannot read a stale
 // payload written by the previous version, which would otherwise deserialize
 // into a plausible-looking wrong answer rather than failing.
-const CacheKeyVersion = "v1"
+//
+// **v2 is M34's, and it is the phase's one deliberate bump.** Routing rules are
+// the first snapshot field whose *absence* means something different from its
+// zero value in a way a visitor can observe: an entry written by the previous
+// build carries no rules, and a link whose owner has since routed British
+// traffic somewhere else would go on sending it to the link's own destination
+// for up to REDIRECT_TTL. Every earlier Phase 2 field could argue its way out of
+// a bump because the stale reading was the behaviour the link already had —
+// bot blocking off, path forwarding off. This one cannot: the stale reading is
+// a rule not being applied, which is the control the owner configured being
+// silently absent, and that is precisely what a cold cache is for.
+//
+// The consequence is stated in the CHANGELOG rather than only here: upgrading
+// to this version abandons every cached snapshot at once, so the first request
+// for each alias after the upgrade reads Postgres. That is one query per live
+// alias, spread over however long it takes traffic to arrive, and the
+// singleflight in Resolve is what keeps a popular alias from turning into a
+// stampede while it happens.
+const CacheKeyVersion = "v2"
 
 // Result is a resolved alias plus how it was resolved. The source drives the
 // cache-hit-ratio metric, which is the leading indicator for the latency SLO:
@@ -267,8 +286,71 @@ func (r *Resolver) fromDatabase(ctx context.Context, domainID uuid.UUID, alias, 
 		BotPolicy:       domain.BotPolicy(row.BotBlocking),
 		DomainBotPolicy: domain.DomainBots(row.BlockBots, row.BlockBotsEnforced),
 	}
+	r.attachRules(snap, row.Rules, alias)
 	r.store(ctx, k, snap, now)
 	return snap, nil
+}
+
+// queryRule is a rule as the SQL lateral spells it.
+//
+// A separate type from SnapshotRule on purpose. The query's vocabulary is the
+// database's — `url`, `conditions`, the same words the columns use — and the
+// snapshot's is a single letter per key because it is serialized on every cache
+// write. Letting one drive the other would mean a column rename reaching into
+// the cache payload, or the payload's compression reaching into a query
+// somebody has to read.
+type queryRule struct {
+	URL        string                `json:"url"`
+	Conditions domain.RuleConditions `json:"conditions"`
+}
+
+// attachRules fills in the snapshot's rules and destination list.
+//
+// Failure here is deliberately not an error return. A link whose rules cannot
+// be decoded still has a destination, and refusing to redirect over it would
+// turn a malformed condition — something an operator could produce with one
+// hand-written UPDATE — into an outage for that alias. The rules are dropped,
+// the link behaves as though it had none, and the log says so once per resolve
+// rather than once per request, because this runs on the miss path only.
+func (r *Resolver) attachRules(snap *Snapshot, raw []byte, alias string) {
+	if len(raw) == 0 {
+		return
+	}
+	var rows []queryRule
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		r.log.Error("a link's routing rules could not be read and are being ignored; "+
+			"it will redirect to its own destination",
+			slog.String("alias", alias), slog.Any("error", err))
+		return
+	}
+	if len(rows) == 0 {
+		return
+	}
+
+	// Deduplicated, because two rules pointing at the same destination is the
+	// ordinary case — "everyone outside the EU goes here" written as several
+	// country rules — and the string would otherwise be in the payload once per
+	// rule.
+	index := make(map[string]int, len(rows))
+	snap.Destinations = make([]string, 0, len(rows))
+	snap.Rules = make([]SnapshotRule, 0, len(rows))
+	for _, row := range rows {
+		if row.URL == "" {
+			continue
+		}
+		at, ok := index[row.URL]
+		if !ok {
+			at = len(snap.Destinations)
+			snap.Destinations = append(snap.Destinations, row.URL)
+			index[row.URL] = at
+		}
+		snap.Rules = append(snap.Rules, SnapshotRule{Dest: at, Cond: row.Conditions})
+	}
+	if len(snap.Rules) == 0 {
+		// Everything was dropped. Leave the fields nil rather than empty, so the
+		// encoded payload is byte-identical to a link that never had rules.
+		snap.Destinations, snap.Rules = nil, nil
+	}
 }
 
 func (r *Resolver) store(ctx context.Context, k string, snap *Snapshot, now time.Time) {

@@ -20,8 +20,88 @@ migrations run at boot.
 
 ## [Unreleased]
 
+### Changed
+
+- **Upgrading to this version empties the redirect cache.** The cached value a
+  short link resolves through now carries its routing rules, and an entry
+  written by the previous version does not — so the cache key moved from `v1` to
+  `v2` and every old entry is abandoned rather than read. The first request for
+  each live alias after the upgrade reads the database; concurrent requests for
+  the same one are collapsed into a single query, so a popular link does not
+  become a stampede. Nothing needs to be done about this, and nothing is lost;
+  expect a brief rise in database reads while traffic warms the cache again.
+  This is the only cache-key change planned for the 0.2.0 series, and it is why
+  the earlier additions to that value deliberately avoided one.
+
+  **On a multi-replica rolling upgrade there is one more consequence, and it is
+  deliberate.** Cache invalidations are broadcast on a channel versioned with the
+  cache key, so while old and new replicas are both running they do not hear each
+  other's invalidations. Each still invalidates its own caches correctly; what
+  they lose is the cross-replica broadcast, so an edit can take up to
+  `REDIRECT_TTL` to reach a replica on the other version. That is the same
+  degradation a Redis outage produces, it lasts only as long as the rollout, and
+  it is preferred to one version applying another version's messages under
+  different rules.
+
 ### Added
 
+- **A link can send different visitors to different destinations.** A link now
+  carries an ordered list of routing rules: each one has a condition set and a
+  destination, they are checked from the lowest priority number upwards, and
+  **the first rule that matches wins** — the rest are not consulted. A visitor
+  matching none goes to the link's own destination, which is what every link
+  does today and will keep doing. Rules are managed on the link's own page and
+  over the API at `/api/v1/links/{id}/rules`, and a rule can be switched off
+  without being deleted.
+- **Twelve conditions, and any combination of them.** Country, region, city,
+  language, browser, operating system, device, date and time, referrer host,
+  query parameters, UTM parameters, and whether the visitor has been seen
+  earlier today. Every condition set on a rule must hold and any listed value
+  matches, so a rule narrows as you add to it. Comparison is
+  case-insensitive, and a condition tested against something the request does
+  not have — no referrer, no GeoIP database — does not match, so an
+  unresolvable request falls through rather than being routed on a blank.
+- **Date and time conditions are evaluated when the visitor arrives**, never
+  when the link was cached, so a window opens and closes on time even on a hot
+  link. A window is a set of weekdays, a `HH:MM`–`HH:MM` span, or both, in an
+  IANA timezone — `Europe/London`, not an offset, because an offset is wrong for
+  half the year. A span whose end is earlier than its start runs overnight. The
+  timezone database is compiled into the binary, so a rule evaluates identically
+  whatever base image the server was built on.
+- **Region and city can be routed on, and are still never stored.**
+  `LINKCTRL_GEOIP_MMDB_PATH` pointed at a MaxMind **City** database makes region
+  and city conditions work; the country database that was enough for analytics
+  carries neither. The values are resolved for the length of one redirect and
+  discarded — `click_events.region` and `click_events.city` stay null, asserted
+  by test, and no page shows them. A geographic condition on an instance with no
+  database simply never matches.
+- **"Returning visitor" means seen earlier today, and the day ends at midnight
+  UTC.** A visitor from yesterday is new again. That is the whole feature rather
+  than an approximation of a longer-lived one: a durable answer needs a cookie or
+  a per-person identifier kept across days, and this product keeps neither. It is
+  computed from the same daily-salted, address-free visitor hash the analytics
+  already use, held in Redis, maintained by the click pipeline rather than on the
+  redirect path, and expiring with the day. **With no Redis configured, every
+  visitor reads as new.**
+- **A rule's destination goes through the same checks as a link's.** Private and
+  loopback addresses, the cloud metadata endpoint, obfuscated numeric hosts,
+  schemes outside `http`/`https`, the operator's blocklist and any enabled
+  reputation feed all apply, and a refusal is recorded in the audit log naming
+  the routing-rule surface. A rule reached only by mobile visitors in one country
+  is still somewhere a browser is sent.
+- **There is no cookies condition, and that is a decision rather than an
+  omission.** The redirect path sets no cookie and reads none; adding one would
+  mean storing a per-visitor identifier the rest of the product deliberately does
+  not keep. Sending one to the API is refused with the code
+  `cookies_not_supported`, and the rule-list endpoint advertises the refusal
+  beside the twelve conditions that are supported.
+- **A link without rules costs exactly what it did before.** Its cached value is
+  byte-for-byte what it was, rule evaluation never begins, and no geographic or
+  Redis lookup happens. For a link *with* rules, evaluation reads only the
+  request and that cached value — no database query per request, and the one
+  network call the returning-visitor condition needs is reached only by a
+  request that has already satisfied everything else on the rule. Re-measured on
+  the built image; see [docs/slo.md](docs/slo.md).
 - **`lctl demo` fills an instance with the whole product, not just its links.**
   It was written when a workspace and twenty links were all there was, and it
   had not grown since. It now seeds a second workspace with links of its own, two

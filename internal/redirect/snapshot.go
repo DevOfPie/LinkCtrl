@@ -36,6 +36,27 @@ type Snapshot struct {
 	MaxClicks    *int64 `json:"m,omitempty"` // PHASE 2
 	OneTime      bool   `json:"o,omitempty"` // PHASE 2
 
+	// Routing rules (M34), and the milestone that bumped CacheKeyVersion to v2.
+	//
+	// Two fields, because the same destination is routinely the target of more
+	// than one rule and because "the destination list" is a thing in its own
+	// right — M36 will weight it. Destinations holds the rule targets,
+	// deduplicated; the link's own destination is URL above and is where a
+	// request that matches no rule goes. Rules index into it.
+	//
+	// **The slice order is the priority order.** Nothing here carries a priority
+	// number, because the query that built this list already applied it: rules
+	// come back ordered by (priority, created_at), disabled ones filtered out,
+	// and first match short-circuits. Storing the priority as well would be a
+	// second copy of the ordering that a re-sort could disagree with — and the
+	// only correct thing to do with it here would be to sort by it again.
+	//
+	// Both are omitempty, so a link with no rules — the default, and the
+	// overwhelming majority — carries exactly the payload it carried before this
+	// milestone existed.
+	Destinations []string       `json:"d,omitempty"`
+	Rules        []SnapshotRule `json:"r,omitempty"`
+
 	// Deep-link path forwarding (M33). Added without bumping CacheKeyVersion,
 	// and the reason is narrower than the one written below for bot blocking.
 	//
@@ -56,8 +77,10 @@ type Snapshot struct {
 	// meant "forward" would have needed the bump, because then the stale
 	// reading would send somebody somewhere the owner never configured.
 	//
-	// This holds only while the cache key is v1 for this build and the previous
-	// one. M34 bumps it to v2; that ordering is the claim, not a coincidence.
+	// This held only while the cache key was v1 for this build and the previous
+	// one. M34 has now bumped it to v2, which is what that ordering claimed
+	// would happen; the reasoning above is what carried the field safely across
+	// the one release where it was not yet true.
 	ForwardPath bool `json:"fp,omitempty"`
 
 	// Bot blocking (M32.5). Both halves of the precedence rule travel together,
@@ -80,6 +103,64 @@ type Snapshot struct {
 	// receives, mostly from scanners, and without this every one of them is a
 	// database query.
 	NotFound bool `json:"n,omitempty"`
+}
+
+// SnapshotRule is one match rule as the redirect path evaluates it.
+//
+// Dest is an index into Snapshot.Destinations rather than a URL, so two rules
+// pointing at the same place cost one copy of the string. Out-of-range is
+// treated as "no destination" by Route rather than as a panic: the hot path
+// must survive a payload it did not write, and a rule that cannot be honoured
+// falling through to the link's own destination is a survivable answer where a
+// panic on a redirect is not.
+type SnapshotRule struct {
+	Dest int                   `json:"d"`
+	Cond domain.RuleConditions `json:"c"`
+}
+
+// Route returns the destination this request should be sent to, and reports
+// whether a rule decided it.
+//
+// The whole of first-match evaluation, and it is four lines because everything
+// that makes it correct happened earlier: the query ordered the rules and
+// dropped the disabled ones, the resolver put them in the snapshot, and
+// domain.Match decides one rule against one request without reading anything.
+//
+// A snapshot with no rules — the default state of every link on a default
+// instance — returns on the length check without touching the subject, which is
+// what makes "links without rules resolve through the unchanged fast path"
+// structural rather than a promise.
+func (s *Snapshot) Route(subject domain.RuleSubject) (string, bool) {
+	if s == nil || len(s.Rules) == 0 {
+		return "", false
+	}
+	for _, r := range s.Rules {
+		if !domain.Match(r.Cond, subject) {
+			continue
+		}
+		if r.Dest < 0 || r.Dest >= len(s.Destinations) {
+			// A rule whose target is not in the list this payload carries. The
+			// only way to write one is a corrupt or hand-edited cache entry, and
+			// the answer is to behave as though the rule had not matched rather
+			// than to send somebody to an empty Location header.
+			continue
+		}
+		return s.Destinations[r.Dest], true
+	}
+	return "", false
+}
+
+// RuleNeeds summarizes which lookups this link's rules can ask for, so the
+// caller resolves a city only for a link that mentions one.
+func (s *Snapshot) RuleNeeds() domain.RuleNeeds {
+	if s == nil || len(s.Rules) == 0 {
+		return domain.RuleNeeds{}
+	}
+	conds := make([]domain.RuleConditions, 0, len(s.Rules))
+	for _, r := range s.Rules {
+		conds = append(conds, r.Cond)
+	}
+	return domain.NeedsOf(conds)
 }
 
 // Short JSON keys are not premature micro-optimisation: this value is

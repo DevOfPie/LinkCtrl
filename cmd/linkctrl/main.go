@@ -23,6 +23,20 @@ import (
 	"syscall"
 	"time"
 
+	// The IANA timezone database, embedded in the binary (M34).
+	//
+	// A routing rule's time window carries an IANA name — "Europe/London" —
+	// rather than an offset, because an offset is wrong twice a year. Resolving
+	// that name needs zoneinfo, and the runtime looks for it on the filesystem:
+	// present in this project's distroless base, absent from `scratch`, and
+	// absent from a great many images an operator might rebuild on. A rule that
+	// silently fell back to UTC because of the base image somebody chose would
+	// fire an hour late for half the year with nothing anywhere saying why.
+	//
+	// The cost is about 450KB of binary. That is a fair price for a rule
+	// evaluating the same way wherever it runs.
+	_ "time/tzdata"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/alias"
@@ -600,6 +614,28 @@ func run(cfg config.Config, _ io.Writer) error {
 	if geo.Enabled() {
 		ingestCfg.Geo = geo
 	}
+
+	// The within-day returning-visitor set (M34). Nil without Redis, and then
+	// every visitor reads as new — the documented degradation, not a silent one.
+	returning := analytics.NewReturningSet(rdb, salts, cfg.Redis.ReadTimeout, log)
+	ingestCfg.Returning = returning
+
+	// Today's salt, loaded before the listener opens.
+	//
+	// The returning-visitor check on the redirect path reads the salt cache
+	// without being allowed to fall through to Postgres, because M34 claims rule
+	// evaluation adds no database query per request. Warming it here is what
+	// makes that claim cost nothing: without it, a process that had just started
+	// would answer "not returning" to everybody until its first click batch
+	// flushed. Failure is logged and not fatal — a missing salt degrades one
+	// condition, and refusing to boot over it would be worse than the
+	// degradation.
+	if _, err := salts.For(ctx, time.Now()); err != nil {
+		log.Warn("could not warm today's analytics salt; returning-visitor rules "+
+			"will treat every visitor as new until the first click batch flushes",
+			slog.Any("error", err))
+	}
+
 	ingester := analytics.NewIngester(pools.App, salts, ingestCfg)
 	ingester.Start()
 	metrics.Register(observability.NewIngestCollector(ingester))
@@ -619,6 +655,15 @@ func run(cfg config.Config, _ io.Writer) error {
 		Recorder:        clickRecorder{ingester: ingester},
 		Metrics:         metrics,
 		NotFoundLimiter: limits.NotFound,
+		// Routing rules (M34). Assigned only when there is a database, for the
+		// same reason ingestCfg.Geo is: a nil *geoip.Resolver in an interface is
+		// not a nil interface, and the handler's "is geography available" check
+		// would then rest on the resolver's nil-tolerance rather than saying what
+		// it means.
+		Returning: returning,
+	}
+	if geo.Enabled() {
+		redirectHandler.Geo = geo
 	}
 
 	if needsSetup, err := authSvc.NeedsSetup(ctx); err == nil && needsSetup {

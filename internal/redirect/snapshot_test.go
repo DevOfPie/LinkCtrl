@@ -1,6 +1,8 @@
 package redirect
 
 import (
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -94,11 +96,27 @@ func TestCacheTTLClampsToExpiry(t *testing.T) {
 func TestSnapshotRoundTrips(t *testing.T) {
 	at := testNow.Add(time.Hour)
 	max := int64(5)
+	returning := true
 	in := &Snapshot{
 		LinkID: [16]byte{1}, WorkspaceID: [16]byte{2},
 		URL: "https://example.com/x", Status: "active",
 		ExpiresAt: &at, ForwardQuery: true, HasPassword: true,
 		MaxClicks: &max, OneTime: true,
+		// M34's fields are in the round trip because they are the reason the
+		// cache key moved to v2. A rule that survives encoding but loses its
+		// conditions would route every visitor to the rule's destination, which
+		// is the worst possible failure of this payload.
+		Destinations: []string{"https://example.com/gb", "https://example.com/de"},
+		Rules: []SnapshotRule{
+			{Dest: 0, Cond: domain.RuleConditions{
+				Country:   []string{"GB"},
+				Device:    []string{"mobile"},
+				Time:      &domain.RuleTime{Days: []string{"mon"}, From: "09:00", To: "17:00", TZ: "Europe/London"},
+				Returning: &returning,
+				UTM:       map[string][]string{"source": {"newsletter"}},
+			}},
+			{Dest: 1, Cond: domain.RuleConditions{Country: []string{"DE"}}},
+		},
 	}
 	b, err := in.encode()
 	if err != nil {
@@ -116,7 +134,10 @@ func TestSnapshotRoundTrips(t *testing.T) {
 		t.Errorf("MaxClicks did not survive")
 	}
 	out.MaxClicks, in.MaxClicks = nil, nil
-	if *out != *in {
+	// DeepEqual rather than ==: the snapshot stopped being a comparable struct
+	// when it grew the destination list, and that is the field most worth
+	// comparing.
+	if !reflect.DeepEqual(out, in) {
 		t.Errorf("round trip changed the snapshot: %+v != %+v", out, in)
 	}
 
@@ -210,5 +231,177 @@ func TestForwardPathSurvivesTheWire(t *testing.T) {
 	if !old.ForwardQuery {
 		t.Error("decoding the older payload lost a field it did carry, so the " +
 			"zero-decode above proves nothing")
+	}
+}
+
+// --- routing rules (M34) -----------------------------------------------------
+
+// staticSubject answers every question the same way. The rules being evaluated
+// are what varies in these tests, not the request.
+type staticSubject struct {
+	country, device string
+	now             time.Time
+	returning       bool
+}
+
+func (s staticSubject) Country() string            { return s.country }
+func (s staticSubject) Region() string             { return "" }
+func (s staticSubject) City() string               { return "" }
+func (s staticSubject) Language() string           { return "en" }
+func (s staticSubject) Browser() string            { return "Chrome" }
+func (s staticSubject) OS() string                 { return "Windows" }
+func (s staticSubject) Device() string             { return s.device }
+func (s staticSubject) ReferrerHost() string       { return "" }
+func (s staticSubject) QueryParam(string) []string { return nil }
+func (s staticSubject) Returning() bool            { return s.returning }
+func (s staticSubject) Now() time.Time             { return s.now }
+
+// countingSubject fails the test if it is consulted at all.
+//
+// It is how "a link with no rules resolves through the unchanged fast path" is
+// asserted rather than described: Route must return before it touches anything.
+type countingSubject struct {
+	staticSubject
+	t *testing.T
+}
+
+func (s countingSubject) Country() string {
+	s.t.Error("Route consulted the request for a link with no rules")
+	return ""
+}
+
+// TestRouteTakesTheFirstMatch is the whole of first-match evaluation.
+//
+// The snapshot's slice order *is* the priority order — the query applied
+// priority and creation order before the list was built — so this is also the
+// test that nothing re-sorts it on the way through.
+func TestRouteTakesTheFirstMatch(t *testing.T) {
+	snap := &Snapshot{
+		URL:          "https://example.com/default",
+		Destinations: []string{"https://example.com/gb", "https://example.com/mobile"},
+		Rules: []SnapshotRule{
+			{Dest: 0, Cond: domain.RuleConditions{Country: []string{"GB"}}},
+			{Dest: 1, Cond: domain.RuleConditions{Device: []string{"mobile"}}},
+		},
+	}
+
+	// Both rules match. The first one wins and the second is never reached.
+	got, ok := snap.Route(staticSubject{country: "GB", device: "mobile", now: testNow})
+	if !ok || got != "https://example.com/gb" {
+		t.Errorf("first match = (%q, %v), want the GB destination", got, ok)
+	}
+
+	// Only the second matches.
+	got, ok = snap.Route(staticSubject{country: "DE", device: "mobile", now: testNow})
+	if !ok || got != "https://example.com/mobile" {
+		t.Errorf("second match = (%q, %v), want the mobile destination", got, ok)
+	}
+
+	// Neither. The caller falls back to the link's own destination, which is why
+	// Route reports *whether* a rule decided rather than returning a URL.
+	if got, ok = snap.Route(staticSubject{country: "DE", device: "desktop", now: testNow}); ok {
+		t.Errorf("no rule matches, but Route returned %q", got)
+	}
+}
+
+// Two rules pointing at the same place cost one copy of the string. That is the
+// reason Dest is an index rather than a URL, so it is worth asserting that the
+// indirection resolves.
+func TestRouteResolvesSharedDestinations(t *testing.T) {
+	snap := &Snapshot{
+		Destinations: []string{"https://example.com/eu"},
+		Rules: []SnapshotRule{
+			{Dest: 0, Cond: domain.RuleConditions{Country: []string{"FR"}}},
+			{Dest: 0, Cond: domain.RuleConditions{Country: []string{"DE"}}},
+		},
+	}
+	for _, country := range []string{"FR", "DE"} {
+		got, ok := snap.Route(staticSubject{country: country, now: testNow})
+		if !ok || got != "https://example.com/eu" {
+			t.Errorf("%s routed to (%q, %v)", country, got, ok)
+		}
+	}
+}
+
+// A rule whose destination index is not in the list this payload carries. The
+// only way to write one is a corrupt or hand-edited cache entry, and the hot
+// path must survive it — a panic on a redirect is not a survivable answer, and
+// an empty Location header is not one either.
+func TestRouteSurvivesADanglingDestinationIndex(t *testing.T) {
+	snap := &Snapshot{
+		URL:          "https://example.com/default",
+		Destinations: []string{"https://example.com/gb"},
+		Rules: []SnapshotRule{
+			{Dest: 7, Cond: domain.RuleConditions{Country: []string{"GB"}}},
+			{Dest: 0, Cond: domain.RuleConditions{Country: []string{"GB"}}},
+		},
+	}
+	got, ok := snap.Route(staticSubject{country: "GB", now: testNow})
+	if !ok || got != "https://example.com/gb" {
+		t.Errorf("a dangling index should be skipped, not honoured: (%q, %v)", got, ok)
+	}
+
+	only := &Snapshot{Destinations: nil, Rules: []SnapshotRule{{Dest: 0}}}
+	if got, ok := only.Route(staticSubject{now: testNow}); ok {
+		t.Errorf("a rule with no destination at all returned %q", got)
+	}
+}
+
+// The fast path, asserted structurally: a link with no rules must not consult
+// the request at all.
+func TestRouteDoesNothingForALinkWithNoRules(t *testing.T) {
+	snap := &Snapshot{URL: "https://example.com/x"}
+	if _, ok := snap.Route(countingSubject{t: t}); ok {
+		t.Error("a link with no rules reported a routed destination")
+	}
+	var nilSnap *Snapshot
+	if _, ok := nilSnap.Route(countingSubject{t: t}); ok {
+		t.Error("a nil snapshot reported a routed destination")
+	}
+}
+
+// RuleNeeds is what the click recorder reads to decide whether the
+// returning-visitor set must be maintained for this link.
+func TestSnapshotRuleNeeds(t *testing.T) {
+	none := (&Snapshot{URL: "https://example.com/x"}).RuleNeeds()
+	if none.Returning || none.Geo() || none.UserAgent {
+		t.Errorf("a link with no rules needs nothing, got %+v", none)
+	}
+
+	snap := &Snapshot{
+		Destinations: []string{"https://example.com/a"},
+		Rules: []SnapshotRule{
+			{Dest: 0, Cond: domain.RuleConditions{City: []string{"Fictionbury"}}},
+			{Dest: 0, Cond: domain.RuleConditions{Returning: func() *bool { b := true; return &b }()}},
+		},
+	}
+	needs := snap.RuleNeeds()
+	if !needs.City || !needs.Returning {
+		t.Errorf("RuleNeeds missed a lookup the rules ask for: %+v", needs)
+	}
+	if needs.Country || needs.UserAgent {
+		t.Errorf("RuleNeeds claimed a lookup no rule asks for: %+v", needs)
+	}
+}
+
+// TestARuleFreeLinkEncodesExactlyAsItDidBeforeM34 is the SLO's half of the
+// snapshot change.
+//
+// The overwhelming majority of links have no rules, and their cached payload
+// must not have grown by so much as a pair of empty arrays — this value is
+// serialized on every cache write and parsed on every miss.
+func TestARuleFreeLinkEncodesExactlyAsItDidBeforeM34(t *testing.T) {
+	snap := &Snapshot{
+		LinkID: [16]byte{1}, WorkspaceID: [16]byte{2},
+		URL: "https://example.com/x", Status: "active",
+	}
+	b, err := snap.encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{`"d"`, `"r"`} {
+		if strings.Contains(string(b), key) {
+			t.Errorf("a link with no rules carries %s in its cached payload: %s", key, b)
+		}
 	}
 }

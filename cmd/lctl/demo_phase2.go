@@ -268,6 +268,9 @@ func (s *demoSeeder) run(ctx context.Context, primary []demoLink, ids map[int]uu
 	if err := s.seedBotBlocking(ctx, primary, ids); err != nil {
 		return err
 	}
+	if err := s.seedRoutingRules(ctx, primary, ids); err != nil {
+		return err
+	}
 	if err := s.seedBlockingAndDisputes(ctx, people); err != nil {
 		return err
 	}
@@ -489,6 +492,80 @@ func (s *demoSeeder) seedBotBlocking(ctx context.Context, cat []demoLink, ids ma
 	return nil
 }
 
+// demoRuleLink is the link the routing rules hang off.
+//
+// One link with several rules rather than several links with one each, because
+// what M34 actually built is *ordered* evaluation — priority, first match,
+// short-circuit — and a single rule anywhere demonstrates none of it. The
+// summer sale is the right link for it: a seasonal campaign routed by where
+// somebody is and what they are holding is the reason this feature exists.
+const demoRuleLink = "summer-sale"
+
+// seedRoutingRules gives one link a rule list somebody can read top to bottom.
+//
+// Four rules, chosen so that the list teaches the model rather than showing one
+// example four times:
+//
+//   - **A disabled rule at priority 10.** First in the list, and it changes
+//     nothing. That is the whole of what `enabled` means and it is invisible if
+//     every seeded rule is on.
+//   - **Two enabled rules that both match a British mobile visitor**, at 20 and
+//     30. Only the first fires. First-match short-circuiting is the one part of
+//     this feature people get wrong when they reason about it, and two
+//     overlapping rules is the smallest arrangement that shows it.
+//   - **A rule with no geography at all**, matching on a campaign parameter, so
+//     the list does not read as though routing means countries.
+//
+// Seeded through link.Service.CreateRule, like everything else in this file: the
+// destinations go through the full M30 tier check on the way in, exactly as a
+// rule typed into the dashboard does.
+func (s *demoSeeder) seedRoutingRules(ctx context.Context, cat []demoLink, ids map[int]uuid.UUID) error {
+	id, ok := demoLinkID(cat, ids, demoRuleLink)
+	if !ok {
+		return fmt.Errorf("demo catalogue has no %q link to hang routing rules off", demoRuleLink)
+	}
+
+	rules := []link.CreateRuleInput{
+		{
+			// Off. Kept in the list because a rule somebody switched off is a
+			// state the page has to be able to show.
+			URL: "https://shop.example.com/summer/clearance", Priority: 10, Enabled: false,
+			Conditions: domain.RuleConditions{
+				Time: &domain.RuleTime{Days: []string{"sat", "sun"}},
+			},
+		},
+		{
+			// Wins for a British visitor on a phone, because it is checked first.
+			URL: "https://shop.example.com/uk/summer-mobile", Priority: 20, Enabled: true,
+			Conditions: domain.RuleConditions{
+				Country: []string{"GB"}, Device: []string{"mobile"},
+			},
+		},
+		{
+			// Would also match that visitor, and never gets the chance.
+			URL: "https://shop.example.com/uk/summer", Priority: 30, Enabled: true,
+			Conditions: domain.RuleConditions{Country: []string{"GB"}},
+		},
+		{
+			// Nothing geographic: whoever arrives from the newsletter, wherever
+			// they are, lands on the page the newsletter promised.
+			URL: "https://shop.example.com/summer/newsletter", Priority: 40, Enabled: true,
+			Conditions: domain.RuleConditions{
+				UTM: map[string][]string{"source": {"newsletter"}},
+			},
+		},
+	}
+
+	for _, in := range rules {
+		if _, err := s.link.CreateRule(ctx, s.owner, id, in); err != nil {
+			return fmt.Errorf("create routing rule for /%s: %w", demoRuleLink, err)
+		}
+	}
+	fmt.Fprintf(os.Stderr, "routing rules: %d on /%s, one of them disabled\n",
+		len(rules), demoRuleLink)
+	return nil
+}
+
 // demoLinkID finds a created link by its catalogue alias.
 func demoLinkID(cat []demoLink, ids map[int]uuid.UUID, alias string) (uuid.UUID, bool) {
 	for i, d := range cat {
@@ -639,6 +716,11 @@ func (s *demoSeeder) readSomeNotifications(ctx context.Context) error {
 func demoResetPhase2(ctx context.Context, tx pgxExecutor, orgID, userID uuid.UUID) error {
 	emails := []string{demoAdminEmail, demoViewerEmail, demoPendingEmail}
 
+	// Routing rules (M34) have no step of their own, and that is a cascade
+	// rather than an omission. Their rows hang off `destinations`, which
+	// demoReset deletes for every catalogue alias before it deletes the links —
+	// and `routing_rules.destination_id` is ON DELETE CASCADE, so the rules go
+	// with them. A step here would delete rows that no longer exist.
 	steps := []struct {
 		what string
 		sql  string

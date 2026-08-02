@@ -66,6 +66,10 @@ tags:
     description: Short links and their lifecycle
   - name: tags
     description: Workspace tags
+  - name: rules
+    description: >
+      Routing rules: which visitors a link sends where, evaluated in priority
+      order with the first match winning
   - name: domain
     description: Settings for the hostname short links are served on
   - name: analytics
@@ -473,6 +477,116 @@ paths:
                 $ref: "#/components/schemas/Link"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /links/{id}/rules:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+    get:
+      tags: [rules]
+      operationId: listRoutingRules
+      summary: List a link's routing rules
+      description: |
+        Returned in the order the redirect path evaluates them: ascending
+        priority, ties broken by creation order, disabled rules included.
+
+        The response also names the conditions this version supports and the
+        one it refuses. Cookies are refused deliberately rather than missing:
+        the redirect path sets no cookie and reads none, and a cookie condition
+        would mean storing a per-visitor identifier the rest of the product
+        does not keep. Twelve conditions ship; the thirteenth has a reason code.
+      responses:
+        "200":
+          description: The link's rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingRuleList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [rules]
+      operationId: createRoutingRule
+      summary: Add a routing rule to a link
+      description: |
+        The rule's `url` is judged by every destination tier before the rule
+        exists, exactly as the link's own destination is — a rule reached only
+        by mobile visitors in one country is still somewhere a browser is sent.
+
+        A rule with no conditions is refused: it would match every visitor and
+        short-circuit every rule beneath it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRoutingRuleRequest"
+      responses:
+        "201":
+          description: The created rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingRule"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /links/{id}/rules/{ruleID}:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+      - $ref: "#/components/parameters/RoutingRuleID"
+    patch:
+      tags: [rules]
+      operationId: updateRoutingRule
+      summary: Edit a routing rule
+      description: |
+        Partial update: absent fields are untouched. `conditions` is replaced
+        wholesale when present rather than merged, because merging would make
+        removing a condition impossible.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRoutingRuleRequest"
+      responses:
+        "200":
+          description: The updated rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingRule"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+    delete:
+      tags: [rules]
+      operationId: deleteRoutingRule
+      summary: Remove a routing rule
+      description: Removes the rule and the destination it pointed at.
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -1845,6 +1959,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    RoutingRuleID:
+      name: ruleID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     DisputeID:
       name: id
       in: path
@@ -2180,6 +2299,193 @@ components:
         name: { type: string }
         color: { type: string }
         link_count: { type: integer, format: int64 }
+
+    RoutingRule:
+      type: object
+      additionalProperties: false
+      required: [id, link_id, priority, url, conditions, enabled, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        link_id: { type: string, format: uuid }
+        priority:
+          type: integer
+          format: int32
+          description: >
+            Lower wins, and the first matching rule short-circuits. Ties break
+            on creation order, so two rules at the same priority still evaluate
+            the same way on every replica.
+        url:
+          type: string
+          format: uri
+          description: >
+            Where a matching visitor is sent. Judged by every destination tier
+            before the rule is stored, exactly as the link's own destination is.
+        conditions:
+          $ref: "#/components/schemas/RuleConditions"
+        enabled:
+          type: boolean
+          description: A disabled rule is kept and listed but never evaluated.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    RoutingRuleList:
+      type: object
+      additionalProperties: false
+      required: [items, conditions, refused]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingRule"
+        conditions:
+          type: array
+          items: { type: string }
+          description: The condition names this version supports.
+        refused:
+          type: array
+          description: >
+            Conditions refused by decision rather than missing by omission, with
+            the reason code a validation error would carry.
+          items:
+            type: object
+            additionalProperties: false
+            required: [condition, code, reason]
+            properties:
+              condition: { type: string }
+              code: { type: string }
+              reason: { type: string }
+
+    RuleConditions:
+      type: object
+      additionalProperties: false
+      description: |
+        Every condition present must hold, and within one condition any listed
+        value matches — AND across the keys, OR inside them. An empty object is
+        refused: it would match every visitor and short-circuit every rule
+        beneath it.
+
+        Values are compared case-insensitively. A condition tested against a
+        value the request does not have — no GeoIP database, no referrer, an
+        address in nobody's range — does not match, so an unresolvable request
+        falls through to the link's own destination rather than being routed on
+        the strength of a blank.
+
+        There is no `cookies` condition and its absence is deliberate; sending
+        one is refused with the code `cookies_not_supported`.
+      properties:
+        country:
+          type: array
+          items: { type: string, minLength: 2, maxLength: 2 }
+          description: ISO 3166-1 alpha-2. Needs a GeoIP database; without one, never matches.
+        region:
+          type: array
+          items: { type: string }
+          description: >
+            ISO 3166-2 subdivision code. Needs a GeoIP *City* database. Resolved
+            transiently on the redirect path and never stored against a click.
+        city:
+          type: array
+          items: { type: string }
+          description: >
+            English city name. Needs a GeoIP City database. Resolved transiently
+            and never stored, for the same reason region is not.
+        language:
+          type: array
+          items: { type: string, maxLength: 8 }
+          description: The first subtag of Accept-Language, e.g. `en` for `en-GB`.
+        browser:
+          type: array
+          items: { type: string }
+          description: As the click classifier buckets it — Chrome, Firefox, Safari, Edge, Other.
+        os:
+          type: array
+          items: { type: string }
+        device:
+          type: array
+          items:
+            type: string
+            enum: [desktop, mobile, tablet, bot, unknown]
+        referrer:
+          type: array
+          items: { type: string }
+          description: The referrer's host only. The rest of a referrer is discarded at the edge and is never available here.
+        query:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+          description: >
+            Query parameters the visitor arrived with. An empty value list means
+            "the parameter is present at all".
+        utm:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+          description: The same test against `utm_`-prefixed parameters, with the prefix left off the key.
+        time:
+          $ref: "#/components/schemas/RuleTime"
+        returning:
+          type: boolean
+          description: |
+            Within-day returning visitor: true requires somebody seen on this
+            link earlier today, false requires somebody who was not.
+
+            **Today ends at midnight UTC, and a visitor from yesterday is new
+            again.** That is the whole meaning, not an approximation of a
+            longer-lived one — a durable answer would need a cookie or a
+            per-person identifier kept across days, and this product keeps
+            neither. With no Redis configured every visitor reads as new.
+
+    RuleTime:
+      type: object
+      additionalProperties: false
+      description: >
+        Evaluated against the clock at request time, never against the moment
+        the link was cached. Needs days, a window, or both.
+      properties:
+        days:
+          type: array
+          items:
+            type: string
+            enum: [mon, tue, wed, thu, fri, sat, sun]
+        from:
+          type: string
+          description: "`HH:MM` in `tz`. A window whose `to` is earlier than its `from` wraps past midnight."
+        to:
+          type: string
+        tz:
+          type: string
+          description: >
+            IANA name, e.g. `Europe/London`. Empty is UTC. A name rather than an
+            offset, because an offset is wrong for half the year.
+
+    CreateRoutingRuleRequest:
+      type: object
+      additionalProperties: false
+      required: [url, conditions]
+      properties:
+        url: { type: string, format: uri }
+        priority:
+          type: integer
+          format: int32
+          description: Defaults to 100 when omitted or zero.
+        conditions:
+          $ref: "#/components/schemas/RuleConditions"
+        enabled:
+          type: boolean
+          description: Defaults to true.
+
+    UpdateRoutingRuleRequest:
+      type: object
+      additionalProperties: false
+      description: Absent fields are untouched. `conditions` replaces the whole set when present.
+      properties:
+        url: { type: string, format: uri }
+        priority: { type: integer, format: int32 }
+        conditions:
+          $ref: "#/components/schemas/RuleConditions"
+        enabled: { type: boolean }
 
     Link:
       type: object

@@ -289,6 +289,22 @@ type linkDetailPageData struct {
 	// not be read, in which case the control renders with no extra prose rather
 	// than with a sentence about nothing.
 	BotHost string
+
+	// Routing rules (M34), in the order the redirect path evaluates them.
+	Rules []ruleView
+	// RuleWeekdays and RuleHelp are the form's own vocabulary, passed in rather
+	// than written into the template so that the day names the form offers and
+	// the ones the validator accepts cannot drift apart.
+	RuleWeekdays []string
+	RuleHelp     string
+	// GeoAvailable says whether this instance has a MaxMind database at all. A
+	// country, region or city rule on an instance without one never matches, and
+	// the page says so beside the boxes rather than letting somebody discover it
+	// from traffic that did not move.
+	GeoAvailable bool
+	// ReturningAvailable is the same honesty for the returning-visitor
+	// condition, which needs Redis.
+	ReturningAvailable bool
 }
 
 func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetailPageData, bool) {
@@ -369,7 +385,20 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 		data.BotHost = settings.Hostname
 	}
 
+	// The link's routing rules. A read failure leaves the section empty rather
+	// than replacing the page: the rest of this page is analytics somebody asked
+	// for, and losing it over a rule list would be the wrong trade.
+	if rules, rerr := h.Links.ListRules(r.Context(), actor, id); rerr == nil {
+		data.Rules = ruleViews(rules)
+	}
+	data.RuleWeekdays = domain.RuleWeekdays
+	data.RuleHelp = ruleConditionHelp
+	data.GeoAvailable = h.Config.Analytics.GeoIPPath != ""
+	data.ReturningAvailable = h.Config.Redis.URL != ""
+
 	switch {
+	case r.URL.Query().Get("rule") != "":
+		data.Notice = ruleNotice(r.URL.Query().Get("rule"))
 	case r.URL.Query().Get("created") == "1":
 		data.Notice = "Link created: " + l.ShortURL
 	case r.URL.Query().Get("saved") == "1":

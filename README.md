@@ -80,6 +80,7 @@ answers, not the same ones with a domain name.
 | --- | --- |
 | **Links** | Create, edit, archive, soft-delete with a 30-day window. Custom or generated aliases, tags, titles, expiry (410 past it). Full-text and substring search, cursor pagination. |
 | **Redirects** | In-process cache → Redis → Postgres, with negative caching for the unknown aliases a public shortener is mostly asked for. Redis is optional: lose it and redirects get slower, not wrong. Per link and off by default, a visitor's query string and the path segments after the alias can be forwarded onto the destination — so one short link can stand in for a whole documentation tree. With path forwarding off, anything under an alias is the same `404` an unknown alias gets. |
+| **Routing rules** | Send different visitors to different destinations from one link. Rules are checked lowest priority number first and **the first match wins**; anyone matching none goes to the link's own destination. Twelve conditions — country, region, city, language, browser, OS, device, date and time, referrer host, query parameters, UTM parameters, and whether somebody was seen on that link earlier today — combined with AND, any listed value matching. Time windows are evaluated when the visitor arrives, in a real IANA timezone, so a window opens and closes on time even on a hot link. Every rule destination goes through the same tier checks a link's own does. Region and city are resolved for the redirect and never stored. There is no cookies condition, deliberately, and asking for one is refused by name. |
 | **Analytics** | Clicks, estimated unique visitors, bots, device, browser, OS, language, referrer host, and country with an optional GeoIP database. Daily rollups, server-rendered charts, a bounded recent-activity feed, retention enforced by dropping whole months. |
 | **Auth** | Email/password with argon2id, server-side sessions in `__Host-` cookies, per-account lockout and per-address rate limiting, real RBAC with four built-in roles and a working permission evaluator. |
 | **Abuse limits** | Per-address limits on credential endpoints, the API, and 404 probing. The last charges misses only, so a working link is never throttled by anyone's scanning. |
@@ -175,11 +176,29 @@ Known limitations and deferred work, so nobody discovers them in production:
   and will eventually exceed its own interval. Redirects are unaffected — that is
   what the dedicated pool is for — but dashboards go stale.
 - **Region and city are never stored.** With a GeoIP database configured, a
-  country is resolved at ingest; region and city are available from the same file
-  and deliberately left null. Nothing shows them, and city plus a timestamp is
-  close to a location history.
+  country is resolved at ingest. Region and city are resolved too — for the
+  length of one redirect, when a link's routing rules ask about them — and then
+  discarded: both columns stay null, asserted by test, and nothing displays
+  them. City plus a timestamp is close to a location history, and a value that
+  exists for microseconds is not the same as a value in a row.
+- **Routing rules degrade quietly when the instance cannot answer them.** A
+  country, region or city condition needs `LINKCTRL_GEOIP_MMDB_PATH`, and region
+  and city need a *City* database rather than the Country one. A
+  returning-visitor condition needs Redis. Without them the condition simply
+  never matches and the visitor goes to the link's own destination — no error,
+  and nothing at request time saying why. The rule form says so where a rule is
+  written.
+- **"Returning visitor" means earlier today and nothing longer.** The day ends
+  at midnight UTC and yesterday's visitor is new again, because a durable answer
+  needs a cookie or a per-person identifier kept across days and this product
+  keeps neither.
 - **No folders, no custom domains, no QR codes, and no password/one-time
   links.** The tables exist; the features are Phase 2.
+- **Routing rules do one thing: match, in order.** Weighted splits, sequential
+  rotation and fallback destinations share the same table and are not built —
+  every query filters on the match kind so that adding them cannot change what a
+  match rule does. There is no cookies condition and there will not be one; the
+  refusal has a reason code rather than being an absence.
 - **Hostile destinations are refused in tiers, and only one tier is absolute.**
   Non-`http(s)` schemes and private, loopback, link-local, carrier-NAT and
   cloud-metadata addresses are refused with no way to switch it off. Above that

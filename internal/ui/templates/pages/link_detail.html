@@ -140,6 +140,233 @@
 </div>
 {{end}}
 
+{{if and .Identity (.Identity.Can "links.read")}}
+{{/* Routing rules (M34). Read for anybody who can see the link, written by
+     anybody who can edit it — a rule is where a link points, so it is guarded
+     by the link's own permissions and by no new one. */}}
+<div class="mt-6 rounded-lg border border-line bg-raised p-6">
+  <div class="mb-1 flex items-center justify-between">
+    <h2 class="text-sm font-medium text-ink">Routing rules</h2>
+    <span class="text-xs text-subtle">{{len .Rules}} of 20</span>
+  </div>
+  <p class="mb-4 text-sm text-muted">
+    Checked in order, lowest priority number first. <strong>The first rule that matches wins</strong> and the rest are not consulted; a visitor matching none goes to the link's own destination above.
+  </p>
+
+  {{if .Rules}}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-line text-left text-xs uppercase tracking-wide text-subtle">
+          <th class="py-2 pr-4 font-medium">#</th>
+          <th class="py-2 pr-4 font-medium">Matches</th>
+          <th class="py-2 pr-4 font-medium">Sends to</th>
+          <th class="py-2 font-medium">State</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Rules}}
+        <tr class="border-b border-line{{if not .Rule.Enabled}} text-muted{{end}}">
+          <td class="py-2 pr-4 tabular-nums">{{.Rule.Priority}}</td>
+          <td class="py-2 pr-4">{{.Summary}}</td>
+          <td class="py-2 pr-4 break-all">{{.Rule.URL}}</td>
+          <td class="py-2">
+            {{if and $.Identity ($.Identity.Can "links.update")}}
+            <div class="flex items-center gap-2">
+              <form method="post" action="/links/{{$.Link.ID}}/rules/{{.Rule.ID}}/toggle">
+                <input type="hidden" name="enabled" value="{{if .Rule.Enabled}}0{{else}}1{{end}}">
+                <button type="submit" class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-surface">{{if .Rule.Enabled}}Disable{{else}}Enable{{end}}</button>
+              </form>
+              <form method="post" action="/links/{{$.Link.ID}}/rules/{{.Rule.ID}}/delete"
+                    hx-post="/links/{{$.Link.ID}}/rules/{{.Rule.ID}}/delete"
+                    hx-confirm="Delete this rule? Visitors it was catching will go to the link's own destination.">
+                <button type="submit" class="rounded-md px-2 py-1 text-xs font-medium text-danger-ink hover:bg-sunken">Delete</button>
+              </form>
+            </div>
+            {{else}}
+            {{if .Rule.Enabled}}Enabled{{else}}Disabled{{end}}
+            {{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="text-sm text-subtle">No rules. Every visitor goes to the destination above.</p>
+  {{end}}
+
+  {{if and .Identity (.Identity.Can "links.update")}}
+  <form method="post" action="/links/{{.Link.ID}}/rules" class="mt-6 border-t border-line pt-6">
+    <h3 class="mb-1 text-sm font-medium text-ink">Add a rule</h3>
+    <p class="mb-4 text-xs text-subtle">{{.RuleHelp}} Leave a box empty to ignore that condition; lists are comma-separated and matched case-insensitively.</p>
+
+    <div class="grid gap-4 sm:grid-cols-3">
+      <div class="sm:col-span-2">
+        <label for="rule_url" class="block text-sm font-medium text-ink">Send matching visitors to</label>
+        <input id="rule_url" name="rule_url" type="url" required placeholder="https://example.com/uk"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      </div>
+      <div>
+        <label for="rule_priority" class="block text-sm font-medium text-ink">Priority</label>
+        <input id="rule_priority" name="rule_priority" type="number" min="0" max="100000" value="100"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        <p class="mt-1 text-xs text-subtle">Lower is checked first.</p>
+      </div>
+    </div>
+
+    <fieldset class="mt-4">
+      <legend class="text-xs font-medium uppercase tracking-wide text-subtle">Where they are</legend>
+      {{if not .GeoAvailable}}
+      <p class="mt-1 text-xs text-warn-ink">No GeoIP database is configured on this instance, so a country, region or city rule will never match. Set <code>LINKCTRL_GEOIP_MMDB_PATH</code> to change that; region and city additionally need a City database.</p>
+      {{end}}
+      <div class="mt-2 grid gap-3 sm:grid-cols-3">
+        <div>
+          <label for="cond_country" class="block text-sm text-ink">Country</label>
+          <input id="cond_country" name="cond_country" type="text" placeholder="GB, IE"
+                 class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+          <p class="mt-1 text-xs text-subtle">Two-letter codes.</p>
+        </div>
+        <div>
+          <label for="cond_region" class="block text-sm text-ink">Region</label>
+          <input id="cond_region" name="cond_region" type="text" placeholder="ENG, SCT"
+                 class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        </div>
+        <div>
+          <label for="cond_city" class="block text-sm text-ink">City</label>
+          <input id="cond_city" name="cond_city" type="text" placeholder="London"
+                 class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        </div>
+      </div>
+      <p class="mt-1 text-xs text-subtle">Region and city are looked up for the request and never stored against a click — no analytics page shows them.</p>
+    </fieldset>
+
+    <fieldset class="mt-4">
+      <legend class="text-xs font-medium uppercase tracking-wide text-subtle">What they are using</legend>
+      <div class="mt-2 grid gap-3 sm:grid-cols-4">
+        <div>
+          <label for="cond_device" class="block text-sm text-ink">Device</label>
+          <input id="cond_device" name="cond_device" type="text" placeholder="mobile, tablet"
+                 class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        </div>
+        <div>
+          <label for="cond_browser" class="block text-sm text-ink">Browser</label>
+          <input id="cond_browser" name="cond_browser" type="text" placeholder="Safari"
+                 class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        </div>
+        <div>
+          <label for="cond_os" class="block text-sm text-ink">Operating system</label>
+          <input id="cond_os" name="cond_os" type="text" placeholder="iOS, Android"
+                 class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        </div>
+        <div>
+          <label for="cond_language" class="block text-sm text-ink">Language</label>
+          <input id="cond_language" name="cond_language" type="text" placeholder="de, fr"
+                 class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        </div>
+      </div>
+      <p class="mt-1 text-xs text-subtle">Device, browser and OS come from the same user-agent heuristic the analytics use, so a rule matches exactly the clicks the charts count.</p>
+    </fieldset>
+
+    <fieldset class="mt-4">
+      <legend class="text-xs font-medium uppercase tracking-wide text-subtle">Where they came from</legend>
+      <div class="mt-2 grid gap-3 sm:grid-cols-4">
+        <div>
+          <label for="cond_referrer" class="block text-sm text-ink">Referrer host</label>
+          <input id="cond_referrer" name="cond_referrer" type="text" placeholder="news.example.com"
+                 class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        </div>
+        <div>
+          <label for="cond_utm_source" class="block text-sm text-ink">utm_source</label>
+          <input id="cond_utm_source" name="cond_utm_source" type="text" placeholder="newsletter"
+                 class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        </div>
+        <div>
+          <label for="cond_utm_medium" class="block text-sm text-ink">utm_medium</label>
+          <input id="cond_utm_medium" name="cond_utm_medium" type="text"
+                 class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        </div>
+        <div>
+          <label for="cond_utm_campaign" class="block text-sm text-ink">utm_campaign</label>
+          <input id="cond_utm_campaign" name="cond_utm_campaign" type="text"
+                 class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        </div>
+      </div>
+      <div class="mt-3 grid gap-3 sm:grid-cols-2">
+        <div>
+          <label for="cond_query_name" class="block text-sm text-ink">Any other query parameter</label>
+          <input id="cond_query_name" name="cond_query_name" type="text" placeholder="plan"
+                 class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        </div>
+        <div>
+          <label for="cond_query_values" class="block text-sm text-ink">…with one of these values</label>
+          <input id="cond_query_values" name="cond_query_values" type="text" placeholder="pro, team"
+                 class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+          <p class="mt-1 text-xs text-subtle">Leave empty to match whenever the parameter is present at all.</p>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="mt-4">
+      <legend class="text-xs font-medium uppercase tracking-wide text-subtle">When</legend>
+      <div class="mt-2 flex flex-wrap gap-3">
+        {{range .RuleWeekdays}}
+        <label class="flex items-center gap-1.5 text-sm text-ink">
+          <input type="checkbox" name="cond_time_days" value="{{.}}" class="rounded border-line-strong">
+          <span>{{.}}</span>
+        </label>
+        {{end}}
+      </div>
+      <div class="mt-3 grid gap-3 sm:grid-cols-3">
+        <div>
+          <label for="cond_time_from" class="block text-sm text-ink">From</label>
+          <input id="cond_time_from" name="cond_time_from" type="time"
+                 class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        </div>
+        <div>
+          <label for="cond_time_to" class="block text-sm text-ink">To</label>
+          <input id="cond_time_to" name="cond_time_to" type="time"
+                 class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        </div>
+        <div>
+          <label for="cond_time_tz" class="block text-sm text-ink">Timezone</label>
+          <input id="cond_time_tz" name="cond_time_tz" type="text" placeholder="Europe/London"
+                 class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+          <p class="mt-1 text-xs text-subtle">IANA name; empty is UTC.</p>
+        </div>
+      </div>
+      <p class="mt-1 text-xs text-subtle">Read from the clock when the visitor arrives, not from when the link was cached — so a window opens and closes on time. A window ending earlier than it starts runs overnight.</p>
+    </fieldset>
+
+    <fieldset class="mt-4">
+      <legend class="text-xs font-medium uppercase tracking-wide text-subtle">Who they are</legend>
+      <div class="mt-2 sm:w-1/2">
+        <label for="cond_returning" class="block text-sm text-ink">Returning visitor</label>
+        <select id="cond_returning" name="cond_returning"
+                class="mt-1 block w-full rounded-md border border-line-strong bg-raised px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none">
+          <option value="">Anyone</option>
+          <option value="yes">Seen earlier today</option>
+          <option value="no">Not seen earlier today</option>
+        </select>
+        <p class="mt-1 text-xs text-subtle">
+          <strong>Today means today.</strong> The day ends at midnight UTC and a visitor from yesterday is new again — this instance keeps no cookie and no identifier that would survive the night.
+          {{if not .ReturningAvailable}} Redis is not configured here, so everybody reads as new.{{end}}
+        </p>
+      </div>
+    </fieldset>
+
+    <div class="mt-4 flex items-center gap-4">
+      <label class="flex items-center gap-2 text-sm text-ink">
+        <input type="checkbox" name="rule_enabled" value="1" checked class="rounded border-line-strong">
+        <span>Enabled</span>
+      </label>
+      <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Add rule</button>
+    </div>
+  </form>
+  {{end}}
+</div>
+{{end}}
+
 {{if and .Identity (.Identity.Can "links.delete")}}
 <div class="mt-6 rounded-lg border border-danger-line bg-raised p-6">
   <h2 class="mb-1 text-sm font-medium text-danger-ink">Danger zone</h2>

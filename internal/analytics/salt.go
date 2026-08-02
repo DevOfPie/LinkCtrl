@@ -98,6 +98,21 @@ func (c *SaltCache) For(ctx context.Context, day time.Time) ([]byte, error) {
 	return salt, nil
 }
 
+// Cached returns a day's salt only if it is already in memory.
+//
+// The redirect path's caller, and the reason it exists: For creates or fetches
+// the salt, which is a database query, and M34 claims that evaluating a routing
+// rule adds none. A miss here is answered by the caller as "this visitor is
+// new" rather than by going to Postgres — see ReturningSet.Seen for why that is
+// true rather than merely cheap.
+func (c *SaltCache) Cached(day time.Time) ([]byte, bool) {
+	day = SaltDay(day)
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	s, ok := c.salts[day]
+	return s, ok
+}
+
 func (c *SaltCache) load(ctx context.Context, day time.Time) ([]byte, error) {
 	existing, err := c.q.GetSalt(ctx, day)
 	if err == nil {

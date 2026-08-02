@@ -214,6 +214,56 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.do("POST", p+"/links/"+linkID+"/archive", nil, http.StatusOK)
 	c.do("POST", p+"/links/"+linkID+"/restore", nil, http.StatusOK)
 
+	// --- routing rules (M34) ------------------------------------------------
+	//
+	// Every response here is validated against the spec's schemas by c.do, which
+	// is what makes the RuleConditions schema more than documentation: a
+	// condition the server emits under a name the document does not carry fails
+	// the request rather than the reader.
+	rule := c.do("POST", p+"/links/"+linkID+"/rules", map[string]any{
+		"url":      "https://example.com/contract-gb",
+		"priority": 50,
+		"conditions": map[string]any{
+			"country": []string{"GB"},
+			"device":  []string{"mobile"},
+			"utm":     map[string][]string{"source": {"newsletter"}},
+			"time": map[string]any{
+				"days": []string{"mon", "tue"}, "from": "09:00", "to": "17:00",
+				"tz": "Europe/London",
+			},
+			"returning": true,
+		},
+	}, http.StatusCreated)
+	ruleID := field(t, rule, "id")
+
+	// The refusal that is a product decision rather than a typo, at the surface
+	// a client actually meets it.
+	//
+	// doBadRequest, because the *request* is deliberately outside the schema —
+	// RuleConditions declares `additionalProperties: false` and lists twelve
+	// names, so a cookies condition is refused by the document as well as by the
+	// server. That double refusal is the point rather than an obstacle: the spec
+	// says these are the conditions, and the server says why this one is not
+	// among them.
+	c.doBadRequest("POST", p+"/links/"+linkID+"/rules", map[string]any{
+		"url":        "https://example.com/x",
+		"conditions": map[string]any{"cookies": []string{"session"}},
+	}, http.StatusUnprocessableEntity)
+	// A rule matching everybody would short-circuit every rule beneath it.
+	c.do("POST", p+"/links/"+linkID+"/rules", map[string]any{
+		"url": "https://example.com/x", "conditions": map[string]any{},
+	}, http.StatusUnprocessableEntity)
+
+	c.do("GET", p+"/links/"+linkID+"/rules", nil, http.StatusOK)
+	c.do("PATCH", p+"/links/"+linkID+"/rules/"+ruleID, map[string]any{
+		"enabled": false, "priority": 10,
+	}, http.StatusOK)
+	c.do("PATCH", p+"/links/"+linkID+"/rules/"+uuid.NewString(), map[string]any{
+		"enabled": false,
+	}, http.StatusNotFound)
+	c.do("DELETE", p+"/links/"+linkID+"/rules/"+ruleID, nil, http.StatusNoContent)
+	c.do("DELETE", p+"/links/"+linkID+"/rules/"+ruleID, nil, http.StatusNotFound)
+
 	// --- analytics ----------------------------------------------------------
 	c.do("GET", p+"/links/"+linkID+"/stats", nil, http.StatusOK)
 	c.do("GET", p+"/links/"+linkID+"/stats?from=2026-07-01&to=2026-07-30", nil, http.StatusOK)

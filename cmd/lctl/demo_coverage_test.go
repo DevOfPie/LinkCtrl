@@ -220,17 +220,38 @@ func demoCoverage() []demoFeature {
 			Shows: "precedence, which is invisible when every link says the same thing",
 		},
 
+		{
+			Milestone: "M34", Feature: "A routing-rule list somebody can read in order",
+			Query: `SELECT count(*) FROM routing_rules
+			         WHERE workspace_id IN (` + demoWorkspaces + `)`,
+			Min: 4,
+			Shows: "priority ordering and first-match evaluation, which one rule " +
+				"on one link cannot demonstrate",
+		},
+		{
+			Milestone: "M34", Feature: "A routing rule that is switched off",
+			Query: `SELECT count(*) FROM routing_rules
+			         WHERE workspace_id IN (` + demoWorkspaces + `) AND NOT enabled`,
+			Min: 1, Max: 1,
+			Shows: "that a rule has two states; a list where everything is on " +
+				"never shows the control that turns one off",
+		},
+		{
+			Milestone: "M34", Feature: "Rule targets as their own destinations",
+			Query: `SELECT count(*) FROM destinations d
+			         JOIN links l ON l.id = d.link_id
+			         WHERE d.workspace_id IN (` + demoWorkspaces + `)
+			           AND d.id <> l.primary_destination_id`,
+			Min: 4,
+			Shows: "that a rule's target is a destination row like any other, " +
+				"which is what puts it through the same tier check",
+		},
+
 		// The boundary. Everything below is a milestone that has not been built,
 		// so the demo showing nothing is correct — and these rows are what make
 		// the next person add a feature row above instead of quietly seeding
 		// something the list does not mention. Turn a row into a real one when its
 		// milestone lands; do not delete it.
-		{
-			Milestone: "M34", Feature: "Routing rules (not built yet)",
-			Query:     `SELECT count(*) FROM routing_rules`,
-			MaxIsZero: true,
-			Shows:     "nothing: M34 is unbuilt, and seeding it would be inventing a surface",
-		},
 		{
 			Milestone: "M41", Feature: "QR codes and campaigns (not built yet)",
 			Query:     `SELECT count(*) FROM qr_codes`,

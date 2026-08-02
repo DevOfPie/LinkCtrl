@@ -367,11 +367,50 @@ starts, not per request.
 | `LINKCTRL_INGEST_BATCH_SIZE` | `500` | Must not exceed the queue size. |
 | `LINKCTRL_INGEST_FLUSH_INTERVAL` | `250ms` | |
 | `LINKCTRL_ANALYTICS_RETENTION_DAYS` | `395` | 13 months. Enforced hourly by dropping monthly partitions of `click_events` and `visitors`, and only once a partition's newest possible row is outside the window — so raw data survives up to a month longer than the number says. Rollups are separate tables and are never dropped, so charts outlive the events. `audit_logs` has its own window and is not covered by this one. `0` keeps everything. |
-| `LINKCTRL_GEOIP_MMDB_PATH` | *(empty)* | A MaxMind DB file. Resolves a country at ingest, from the address, before it is discarded — nothing is stored to resolve later. Empty disables geographic reporting and the dashboard says so. See [deployment.md](deployment.md#optional-geographic-analytics). |
+| `LINKCTRL_GEOIP_MMDB_PATH` | *(empty)* | A MaxMind DB file. Resolves a country at ingest, from the address, before it is discarded — nothing is stored to resolve later. Also resolves a region and a city on the redirect path, transiently, for links whose routing rules ask; those two need a **City** database. Empty disables geographic reporting and geographic routing alike, and the dashboard says so. See [deployment.md](deployment.md#optional-geographic-analytics). |
 
-Country is the only geographic field stored. Region and city are in the same
-database and in the schema, and are deliberately left null: nothing in the product
-shows them, and city plus timestamp is close to a location history.
+**Country is the only geographic field stored, and that has not changed.**
+Region and city are in the same database and in the schema, and are deliberately
+left null: nothing in the product displays them, and city plus timestamp is
+close to a location history. `click_events.region` and `click_events.city`
+staying null is asserted by test rather than promised here.
+
+What changed with routing rules is that region and city are now *resolvable* as
+well as unstored. A rule may match on either, in which case the value is looked
+up for the length of one redirect and discarded. The distinction is the whole of
+the position: a value that exists for the microseconds it takes to decide where
+to send somebody is not the same thing as a value in a row, because a row is
+what gets reported on, exported and joined against.
+
+Two consequences for an operator:
+
+- **Which database file matters now.** GeoLite2-Country carries no subdivisions
+  and no city names, so on one of those a region or city condition simply never
+  matches — the same answer an address in nobody's range gets. Analytics is
+  unaffected either way. GeoLite2-City works for all three.
+- **A geographic condition on an instance with no database never matches.** It is
+  not an error and nothing refuses the rule; the visitor falls through to the
+  link's own destination. The rule form on the link's page says so where somebody
+  is writing one.
+
+### Returning-visitor routing needs Redis
+
+A routing rule can ask whether a visitor has been seen on that link **earlier
+today**, where the day ends at midnight UTC. A visitor from yesterday is new
+again, and that is the whole of the semantics rather than an approximation of a
+longer-lived one — a durable answer would need a cookie or a per-person
+identifier kept across days, and this product keeps neither.
+
+It is computed from the same daily-salted visitor hash the analytics use, so it
+carries no address and becomes unlinkable when the salt is purged. The set lives
+in Redis under `lc:rv:`, is written by the click pipeline rather than on the
+redirect path, is maintained only for links that actually carry such a rule, and
+expires with the day it describes.
+
+**With `LINKCTRL_REDIS_URL` unset or Redis unreachable, every visitor reads as
+new**: a rule looking for a returning visitor never fires, and one looking for a
+new visitor fires for everybody. That is the same "cache is optional" degradation
+the rest of the redirect path takes, and it is stated in the rule form too.
 
 ## Audit log
 

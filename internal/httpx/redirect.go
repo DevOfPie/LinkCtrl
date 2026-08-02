@@ -65,6 +65,21 @@ type RedirectHandler struct {
 	// number the target names is the time to resolve and answer.
 	Metrics *observability.Metrics
 
+	// Geo resolves a country, region or city for routing rules (M34).
+	//
+	// Optional, and nil on every instance that has not supplied a MaxMind
+	// database — which is the default. A geographic rule on such an instance
+	// never matches, which is the same answer an address in nobody's range gets,
+	// and is documented rather than silently treated as "matches everybody".
+	//
+	// Never consulted for a link with no rules, and never for a rule that does
+	// not ask: see redirect_rules.go.
+	Geo GeoResolver
+
+	// Returning is the within-day returning-visitor set (M34). Optional; nil
+	// means every visitor reads as new.
+	Returning *analytics.ReturningSet
+
 	// NotFoundLimiter throttles addresses that keep asking for aliases which do
 	// not exist. Optional; nil disables it and costs nothing.
 	//
@@ -109,6 +124,10 @@ type ClickEvent struct {
 	Referrer    string
 	Language    string
 	LatencyUS   int32
+
+	// TrackReturning asks the click pipeline to remember this visitor in the
+	// within-day returning-visitor set (M34).
+	TrackReturning bool
 }
 
 func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -215,9 +234,27 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// appendPath — and refusing lands here rather than silently dropping the
 	// path, for the same reason: a visitor who asked for /{alias}/a/../b must
 	// not be sent somewhere else without being told.
+	// Routing rules (M34), and they run here — after Decide, before the path is
+	// joined — because both neighbours depend on it.
+	//
+	// After Decide, because a rule must not resurrect a link that is expired,
+	// archived or disabled. The rule chooses *where* an active link sends
+	// somebody; whether it sends anybody at all is the link's own state, and a
+	// rule that could override that would be a way to keep serving a link its
+	// owner had switched off.
+	//
+	// Before the join, because deep-link forwarding appends the visitor's extra
+	// segments to whichever destination is actually being used. Joining onto the
+	// link's own URL and then swapping the destination underneath would send
+	// /{alias}/pricing to the rule's destination *without* the /pricing, which
+	// is a URL nobody asked for.
 	var target string
 	if outcome == redirect.OutcomeRedirect {
-		joined, ok := forwardable(res.Snapshot, r)
+		destination := res.Snapshot.URL
+		if routed, ok := h.route(r, res.Snapshot, start); ok {
+			destination = routed
+		}
+		joined, ok := forwardable(res.Snapshot, destination, r)
 		if !ok {
 			outcome = redirect.OutcomeNotFound
 		}
@@ -313,6 +350,11 @@ func (h *RedirectHandler) record(r *http.Request, snap *redirect.Snapshot, start
 		Referrer:    r.Referer(),
 		Language:    r.Header.Get("Accept-Language"),
 		LatencyUS:   latencyUS(time.Since(start)),
+		// The within-day returning-visitor set is maintained by the ingester, for
+		// the links that need it, and this flag is how it finds out which (M34).
+		// Deciding it here rather than in the pipeline is what keeps the pipeline
+		// from having to ask the database which links carry such a rule.
+		TrackReturning: tracksReturning(snap),
 	})
 }
 
@@ -477,18 +519,22 @@ func latencyUS(d time.Duration) int32 {
 // visitor can split a segment in two, or inject a query the destination never
 // had. EscapedPath is the bytes as they arrived, and net/url guarantees it
 // carries no raw '?', '#' or space, which is what makes appending it safe.
-func forwardable(snap *redirect.Snapshot, r *http.Request) (string, bool) {
+// The destination is passed in rather than read off the snapshot, because M34
+// made "the destination" a question with more than one answer: a routing rule
+// may have chosen one, and the visitor's extra segments belong on whichever one
+// is actually being served.
+func forwardable(snap *redirect.Snapshot, destination string, r *http.Request) (string, bool) {
 	if snap == nil {
 		return "", false
 	}
 	rest, deep := pathRemainder(r.URL.EscapedPath())
 	if !deep {
-		return snap.URL, true
+		return destination, true
 	}
 	if !snap.ForwardPath {
 		return "", false
 	}
-	return appendPath(snap.URL, rest)
+	return appendPath(destination, rest)
 }
 
 // pathRemainder returns whatever follows the alias segment, still escaped, and

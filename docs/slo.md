@@ -204,6 +204,125 @@ this repeatable. Without it the generator can only ask for bare aliases, and a
 "re-measured for M33" section would have been measuring the path this milestone
 did not change.
 
+### Re-measured for M34 (2026-08-02)
+
+[M34](build-notes/phase-details/m34.md) is the phase's largest redirect-path
+change. Everything before it added a decision (M32.5) or string surgery (M33);
+this adds an ordered walk of a rule list, user-agent classification, clock
+evaluation against a real timezone, an optional MaxMind lookup, and — for the
+returning-visitor condition — **one Redis round trip on the request path**. That
+last one is the first optional dependency this path has ever consulted per
+request, and it is the reason this section reports a difference where the
+previous four reported none.
+
+Two cached runs on the same image, differing **only in whether the links carry
+rules**, because that is the comparison that isolates what this milestone added.
+Both cache tiers were emptied and the container restarted before each.
+
+**The ruled configuration is deliberately the expensive one.** All 5,000 hot
+aliases were given three rules apiece, arranged so that no request
+short-circuits early:
+
+| Priority | Conditions | What it costs, per request |
+| --- | --- | --- |
+| 5 | `device: [mobile]` | a `Classify` pass over the user agent, then a miss |
+| 10 | `device: [unknown]`, `browser: [Other]`, `os: [Other]`, a seven-day 00:00–23:59 window in `Europe/London`, `city: [Nowhere]` | passes all four cheap tests, evaluates the window against the request's own clock, reaches the geographic test and misses |
+| 20 | `returning: true` | **a Redis `SISMEMBER`** — and it *matches*, so the request is routed to the rule's destination rather than the link's |
+
+That the third rule matched is not incidental: it means every one of the 240,000
+measured requests performed the Redis lookup and got `true`, which is the worst
+case rather than a sampled one. Verified on the running server before the runs —
+`/ld0` answered `https://example.com/seed/0` on a first visit and
+`https://example.com/seed/ld0/returning` on the next, once the click pipeline
+had written the visitor into the day's set. Afterwards, Redis held 5,000
+`lc:rv:` sets, each with a TTL of about six and a half hours, which is the end of
+the UTC day plus an hour.
+
+| | Target | **Links with three rules** | **The same links, rules removed** |
+| --- | --- | --- | --- |
+| Cached redirect, server-side | p99 < 20ms | **100% of 240,002 under 20ms**; 99.934% under 0.5ms | **100% of 240,000 under 20ms**; **100% under 0.5ms** |
+| Cached redirect, generator-side | — | p99 **299.92µs**, median 132.56µs, p(95) 174.57µs | p99 **136.94µs**, median 82.24µs, p(95) 111.84µs |
+| Sustained rate | 2,000 rps for 2m | 2,000.0 rps, zero failures | 2,000.0 rps, zero failures |
+| Dataset | 100k links, 5M events | 100,000 links, 5,000,000 events | same |
+| Cache mix | hits only | 240,002 memory, 0 redis, 0 database | 240,000 memory, 0 redis, 0 database |
+| Redirect pool | — | 0 acquire waits | 0 acquire waits |
+
+**The difference is real this time, and it is the round trip.** About 163µs at
+p99 and about 50µs at the median, against a 20ms budget — two orders of
+magnitude of margin, and the first time a Phase 2 milestone's added work has been
+visible in this document at all. It is reported rather than smoothed over
+because the shape is what matters: the ruled column's tail is where a Redis that
+slows down would show up first, and a later regression should be compared
+against a number that was actually observed.
+
+The right way to read the two columns is that **they describe two different
+links, not two different builds**. A link with no rules is the second column: its
+cached payload is byte-for-byte what it was before this milestone, rule
+evaluation never begins, and neither Redis nor the MaxMind reader is consulted.
+That is the *unchanged fast path* m34.md asks to be proved, and the second column
+is the proof — 100% of its requests under half a millisecond, which is the
+tightest cached figure in this document. An earlier run of the same
+configuration read 99.919% under 0.5ms with p(95) at 181.76µs, so the spread
+between identical ruled runs is a few tens of microseconds.
+
+A first cached run of the ruled configuration, before the p99 line was captured,
+read 100% of 240,003 requests under 20ms with p(95) 181.76µs — quoted so the
+ruled column is two runs rather than one.
+
+The uncached path, with the rules back in place, so the new `LEFT JOIN LATERAL`
+that fetches them is exercised on every resolve:
+
+| | Target | Measured |
+| --- | --- | --- |
+| Uncached redirect, generator-side | p99 < 100ms | p99 **481.48µs**, median 286.97µs, at 500 rps for 1m, zero failures |
+| Cache mix | mostly misses | 25,948 database, 2,648 redis, 1,405 memory |
+| Redirect pool | — | 4 acquire waits, 0.020s total |
+
+The lateral is not visible there either, which is the claim it was designed
+around: rules arrive inside the query the resolver was already issuing, through
+the partial index on `(link_id, priority) WHERE enabled` that has existed since
+the table was created dormant. `TestALinkWithoutRulesTakesTheUnchangedFastPath`
+asserts the same thing structurally, by counting what reaches Postgres — one
+query for an uncached redirect whether or not the link has rules, and zero for a
+cached one.
+
+Taken on image `sha256:9f55c12dc58e99…` (`linkctrl:test`, built 2026-08-02 from
+the M34 working tree at `v0.1.0-67-g3ffebb0-dirty`) on the same Windows 11 /
+Docker Desktop / WSL2 host as every figure above. Eleven cached runs now read
+100%, 100%, 100%, 99.991%, 100%, 100%, 100%, 100%, 100%, 100% and 100% under
+20ms.
+
+#### What this run did **not** measure, and the number that covers it
+
+**No MaxMind database was mounted.** The priority-10 rule's `city` condition
+therefore resolved to "no answer" without a lookup, so the figures above include
+rule evaluation, the user-agent classifier, the clock and the Redis round trip —
+and **not** the cost of an mmap walk. That cost is measured separately, and this
+is where D48 lands.
+
+`TestCityLookupCostFitsTheRedirectBudget` in `internal/geoip` times `City()` and
+`Region()` against **`internal/geoip/testdata/city-test.mmdb`**, which is
+**synthetic**: 33,000 networks scattered across reserved IPv4 space
+(`240.0.0.0/4` at /32 depth, `100.64.0.0/10` at /24), unique-local IPv6
+(`fc00::/7` at /48) and the documentation ranges, plus a handful of named
+entries. **469,455 nodes, 2,847,886 bytes.** Every network in it is
+documentation, reserved or private space and every place name is invented, so
+nothing in it is a claim about a real location.
+
+Measured on this host: **City() 80ns per lookup, Region() 82ns**, over 20,000
+lookups spread across all three address families after warming the mapping.
+
+Against a 20ms budget, and against the ~146µs a whole cached redirect took
+above, an 80ns lookup is not a cost this path can feel. **But the database it
+was measured against is not the one an operator will deploy.** GeoLite2-City is
+roughly twenty times this file and does not fit in a CPU cache, so its tree walk
+will fault more often. The honest statement of *measured, not assumed* here is
+**measured against a stated database**, and the residue — the cost against a real
+GeoLite2-City — remains unmeasured and is recorded as such in
+[Plan.md](../Plan.md#known-limitations) rather than reported as a number. D48 is
+the decision that chose this over the alternatives; there is no GeoLite2-City on
+this project's machines and one cannot be committed.
+
 ## Reproducing it
 
 ```sh
@@ -232,6 +351,15 @@ The update and the restart are not optional decoration. Without the column set
 every request answers 404, and k6's `is 302` check fails the run rather than
 quietly measuring the miss path; without the flush and the restart the warm-up
 would populate the tiers from snapshots written before the column changed.
+
+Routing rules (M34) are seeded with SQL rather than with a flag, because what
+the measurement needs is a *specific arrangement* of rules — one that no request
+short-circuits early — rather than "some rules". The three used above are listed
+in that section's table; they are inserted for `ld0`–`ld4999`, each with a
+`destinations` row of its own at `position = 1`, and the same flush and restart
+apply for the same reason. The comparison run is the identical aliases with
+`DELETE FROM routing_rules` and the rule destinations removed, so the only thing
+that changes between the two columns is whether the links carry rules.
 
 `scripts/load-test.sh` reports both halves of the measurement. The server's
 histogram is cumulative since boot, so it is sampled before and after and
