@@ -95,6 +95,42 @@ and verified on 2026-08-01 by reproduction, not by reading — and that no
 milestone between here and M45 introduces a cross-workspace view for its own
 reasons.
 
+### F21 — once the workspace switcher's button is gone, what does a browser without JavaScript get?
+
+**Needed by:** nothing yet. [F21](deferred-findings.md) is unapproved, so no
+milestone is waiting. It becomes forced the moment F21 is scheduled.
+
+The owner directed the fix on 2026-08-02, via `/note`: *"The workspace drop down
+should perform the switch action when changed, a separate button to switch can't
+stay."* That settles the affordance and is not re-asked here. It leaves one
+thing open, and it is the kind that gets picked silently by whoever builds it.
+
+Switching on change needs a change handler, and the only one available is htmx —
+already served, already loaded on every page, already doing this exact thing at
+`internal/ui/templates/pages/links.html:56`. The current **Switch** button is
+also the only reason the control works with scripting off. Delete it and the
+switcher stops working entirely for that reader; keep it and the directive is
+not carried out.
+
+| Option | Buys | Costs |
+| --- | --- | --- |
+| **A `<noscript>` fallback — htmx on change, the button only when scripting is off** *(recommended)* | Carries the directive literally for every reader who has JavaScript, which is all of them in practice, and keeps the control usable for the one who does not. `<noscript>` is markup, so it costs no script, no CSP change and no new convention | It is more template than either alternative, and the fallback path is the one nobody will look at again. The recommendation is also the one that avoids making a call — if the project does not actually support scripting-off, this spends markup defending a reader it does not have |
+| Delete the button outright | Exactly what the directive says, and the simplest template in the tree. Matches `links.html`, whose filters already only work with htmx | A no-JS browser can see it has several workspaces and cannot reach any but one. Nothing else in the dashboard fails that way today |
+| Keep the button, add the change handler | Both paths work with no conditional markup | Directly refused by the directive, and the redundant control is the affordance problem F21 is about |
+
+**Default if unanswered:** nothing is built — F21 is unapproved, so the two-step
+switcher stays as it is. This question does not stall anything until F21 is
+scheduled.
+
+**Assumes:** that htmx stays loaded on every page from `layout.html:9` and stays
+under `script-src 'self'` — both true and read from the tree on 2026-08-02 — and
+that no explicit no-JavaScript support promise exists anywhere. That last one is
+the weak assumption: `nav.html`'s own comment (*"A plain form: a select and a
+button, no JavaScript"*) reads like a stance, but it is stated as a consequence
+of the CSP belief this finding disproves, and no tracked document promises the
+dashboard works with scripting off. If the owner holds that stance, say so and
+option A stops being a judgement call.
+
 ### M26 — keep or strike the outbox's thirty-day purge?
 
 Finished `mail_outbox` rows are deleted after thirty days by the existing

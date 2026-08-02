@@ -96,6 +96,7 @@ file. Append a row when you append an entry.
 | [M32.9's triage, and five milestones reopened](#2026-08-01--m329s-triage-and-five-milestones-reopened) | Which five rows became work and which milestone each reopens; why the owner took the wider option against the recommendation; the trap each reopening must not fall into; why M32.9 lands `done` while its findings stay open |
 | [M23, silence is not an answer](#2026-08-01--m23-silence-is-not-an-answer) | Why a bounded read alone would have emptied every quiet replica's cache; the probe that requires a reply; D42 and why the hot path's read timeout cannot be reused; the flush moving from the recovery to the failure; the two claims corrected in place; the bullet amended at 3.4 and why it was the owner's to answer |
 | [M27, the rank axis and the credential axis](#2026-08-02--m27-the-rank-axis-and-the-credential-axis) | Why D28's ceiling was never the control; the milestone's own candidate checked against the seed and found not to close the finding; D43 capping a key-issued invitation at editor; the inherited Permissions rule amended to name a second mechanism |
+| [Draining one queue row into a finding that already existed](#2026-08-02--draining-one-queue-row-into-a-finding-that-already-existed) | Why the switcher row became F21 rather than a second row; the constraint F21 cited and the tree fact that disproves it; why the owner's direction went to the finding and the leftover question to upcoming-decisions |
 
 ---
 
@@ -7585,3 +7586,54 @@ scope names cannot express that, because the escalation is in what the operation
 Recorded before the fix was written, which is what `m27.md`'s reopening demands
 and the reason it demands it: had the code come first, the rank ceiling is the
 bound anyone would reach for, and it is the one that does not work.
+
+## 2026-08-02 — Draining one queue row into a finding that already existed
+
+No milestone produced this. It is `/process-queue`, run at the boundary after
+M27 landed, because the owner is moving the development environment and
+`.queue.md` survives no clone — a row left in it would simply have been lost.
+
+One row, owner-classified as an issue: *"The workspace drop down should perform
+the switch action when changed, a separate button to switch can't stay."*
+
+### It is F21, and a second row would have been the wrong shape
+
+[F21](deferred-findings.md) already records the defect, found on M25 by
+adversarial verification of two owner reports. Filing a second row would have
+split one problem across two numbers and let each be triaged without the other.
+So the row was routed *into* F21 rather than beside it, which is the case the
+queue's no-silent-removal rule is about: the row left the queue, and the file it
+went to names what arrived.
+
+### The constraint F21 cited is not real, and that is the part worth keeping
+
+F21's evidence repeated the explanation `nav.html`'s own comment gives — an
+auto-submitting select needs a change handler, the CSP forbids inline script,
+therefore the two-step is deliberate. Verifying it before acting on the owner's
+direction is what showed it is false.
+
+The CSP does forbid inline script, and always has. But htmx has been served from
+`internal/ui/static/js/htmx.min.js` since M11 (`13fb0f6`), is loaded by
+`layout.html:9` on every page, and runs under `script-src 'self'` — which
+`internal/httpx/middleware.go:266-270` states outright. `links.html:56` already
+ships the exact control F21 describes as impossible:
+`<select name="status" hx-get="/links" hx-trigger="change">`, with no inline
+script and no waiver.
+
+So the switcher's two-step was never forced by a security boundary. It was a
+change handler nobody wired, wearing a justification that reads like a
+constraint. That is a worse finding than the one F21 filed, because the comment
+is what would stop the next reader from fixing it — and it is why this entry
+exists rather than a silent correction to the row.
+
+### Where the owner's direction went, and what it left open
+
+The direction is not a decision this loop gets to record for itself, so it sits
+in F21's approval column as what the owner said, dated. It is not an approval:
+scheduling the work is still theirs and has not been given.
+
+What it leaves open went to [upcoming-decisions.md](upcoming-decisions.md) —
+with the button gone, a browser with scripting off cannot switch workspaces at
+all. The directive does not answer that, and whoever builds F21 would otherwise
+answer it silently by writing the simplest template. Nothing forces it while
+F21 is unapproved, which is exactly the section it is filed under.
