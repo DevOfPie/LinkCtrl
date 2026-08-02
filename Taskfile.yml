@@ -66,6 +66,12 @@ vars:
   # would otherwise land on the default project.
   COMPOSE: docker compose -p {{.PROJECT}} --env-file {{.ENV_FILE}}
 
+  # The platforms a release publishes. linux/amd64 and linux/arm64 are the
+  # deployment targets; the darwin and windows builds exist so an operator can
+  # run lctl against a remote database from their own machine.
+  RELEASE_PLATFORMS: linux/amd64 linux/arm64 darwin/arm64 darwin/amd64 windows/amd64
+  DIST: dist
+
 env:
   COMPOSE_PROJECT_NAME: linkctrl-{{.INSTANCE | default "test"}}
   COMPOSE_ENV_FILES: .env.{{.INSTANCE | default "test"}}
@@ -115,6 +121,11 @@ tasks:
       LINKCTRL_REDIS_URL: "{{.DEV_REDIS_URL}}"
       LINKCTRL_HTTP_ADDR: ":{{.HTTP_PORT}}"
 
+  clean:
+    desc: Remove build output
+    cmds:
+      - rm -rf {{.BIN}} {{.DIST}} cover.out coverage.html
+
   test:
     desc: Unit tests with the race detector
     cmds:
@@ -138,6 +149,12 @@ tasks:
       TEST_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
       LINKCTRL_REDIS_URL: "{{.DEV_REDIS_URL}}"
 
+  cover:
+    desc: Open the coverage report
+    deps: [test]
+    cmds:
+      - go tool cover -html=cover.out -o coverage.html
+
   lint:
     desc: Run golangci-lint
     cmds:
@@ -152,6 +169,21 @@ tasks:
     desc: Lint every shell script
     cmds:
       - shellcheck scripts/*.sh
+
+  # Not a gate. The operating contract is documentation and documentation is read
+  # into a context window on every task, so its size is a cost that recurs and
+  # compounds; this measures it before it is large enough to hurt. Regenerating on
+  # an unchanged tree produces no diff, so every diff in the report is real growth.
+  doc-cost:
+    desc: What the always-read docs cost — predicted vs realized
+    cmds:
+      - bash scripts/doc-cost.sh > docs/build-notes/doc-cost.md
+      - echo "wrote docs/build-notes/doc-cost.md"
+
+  vuln:
+    desc: Check for known vulnerabilities
+    cmds:
+      - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   tidy:
     desc: Tidy and verify modules
@@ -345,6 +377,12 @@ tasks:
     cmds:
       - "{{.BIN}}/tailwindcss -i internal/ui/static/css/input.css -o internal/ui/static/css/app.css --minify"
 
+  css-watch:
+    desc: Rebuild the stylesheet on change
+    deps: [tailwind]
+    cmds:
+      - "{{.BIN}}/tailwindcss -i internal/ui/static/css/input.css -o internal/ui/static/css/app.css --watch"
+
   htmx:
     desc: Verify (or restore) the vendored htmx against its pinned checksum
     cmds:
@@ -354,6 +392,18 @@ tasks:
     desc: Verify (or restore) the vendored Swagger UI against its pinned checksums
     cmds:
       - sh scripts/get-swagger.sh "{{.SWAGGER_UI_VERSION}}" "{{.SWAGGER_CSS_SHA256}}" "{{.SWAGGER_JS_SHA256}}" internal/ui/static/vendor
+
+  # What CI runs instead of `task htmx swagger-ui`. Those tasks repair a stale
+  # copy, which is right for a developer and wrong for a gate: a gate that fixes
+  # what it finds reports success on a tampered blob. VERIFY_ONLY makes the
+  # mismatch fatal instead.
+  verify-assets:
+    desc: Fail if a vendored asset does not match its pinned checksum
+    cmds:
+      - sh scripts/get-htmx.sh "{{.HTMX_VERSION}}" "{{.HTMX_SHA256}}" internal/ui/static/js/htmx.min.js
+      - sh scripts/get-swagger.sh "{{.SWAGGER_UI_VERSION}}" "{{.SWAGGER_CSS_SHA256}}" "{{.SWAGGER_JS_SHA256}}" internal/ui/static/vendor
+    env:
+      VERIFY_ONLY: "1"
 
   openapi:
     desc: Validate the OpenAPI document against the implementation
@@ -430,3 +480,48 @@ tasks:
       - docker compose -p linkctrl-demo --env-file .env.demo up -d --build --force-recreate --wait
       - task: demo
         vars: {INSTANCE: demo, CONFIRM: demo}
+
+  docker-build:
+    desc: Build the production image
+    cmds:
+      - docker build -t linkctrl:{{.VERSION}} -t linkctrl:dev
+        --build-arg VERSION={{.VERSION}}
+        --build-arg COMMIT={{.COMMIT}}
+        --build-arg DATE={{.DATE}} .
+
+  # One archive format for every platform, tar.gz included for Windows. Windows
+  # 10 and later ship tar, so the format costs a Windows user nothing — while
+  # shipping .zip would mean either a zip tool on every build host or an artifact
+  # whose format depends on where it was built, and neither is worth it.
+  #
+  # A plain shell loop rather than Task's `for:`, so this stays a line-for-line
+  # reading of the Makefile recipe it mirrors — including the explicit
+  # `|| exit 1` per step, since `set -e` would abort on the ext assignment for
+  # every platform that is not windows.
+  dist:
+    desc: Cross-compile release binaries with checksums into dist/
+    deps: [assets]
+    cmds:
+      - |
+        rm -rf {{.DIST}} && mkdir -p {{.DIST}} || exit 1
+        for platform in {{.RELEASE_PLATFORMS}}; do
+          os=${platform%/*}; arch=${platform#*/}; ext=""
+          [ "$os" = windows ] && ext=".exe"
+          echo "  $os/$arch"
+          name="linkctrl_{{.VERSION}}_${os}_${arch}"
+          mkdir -p "{{.DIST}}/$name" || exit 1
+          for cmd in linkctrl lctl; do
+            CGO_ENABLED=0 GOOS=$os GOARCH=$arch \
+              go build -trimpath -ldflags "{{.LDFLAGS}}" \
+              -o "{{.DIST}}/$name/$cmd$ext" ./cmd/$cmd || exit 1
+          done
+          cp LICENSE README.md CHANGELOG.md .env.example "{{.DIST}}/$name/" || exit 1
+          ( cd {{.DIST}} && tar czf "$name.tar.gz" "$name" ) || exit 1
+          rm -rf "{{.DIST}}/$name"
+        done
+        cd {{.DIST}} && sha256sum *.tar.gz > SHA256SUMS && cat SHA256SUMS
+
+  release-check:
+    desc: Everything that must hold before tagging a release
+    cmds:
+      - bash scripts/release-check.sh

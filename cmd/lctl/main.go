@@ -2,7 +2,7 @@
 //
 // It shares the server's configuration loading and database layer, so anything
 // it reports is what the server would see. Subcommands arrive with the
-// milestones that need them: user in M4, apikey in M10, seed in M8.
+// milestones that need them: seed in M8, apikey in M10.
 package main
 
 import (

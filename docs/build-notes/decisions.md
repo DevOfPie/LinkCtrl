@@ -98,6 +98,7 @@ file. Append a row when you append an entry.
 | [M27, the rank axis and the credential axis](#2026-08-02--m27-the-rank-axis-and-the-credential-axis) | Why D28's ceiling was never the control; the milestone's own candidate checked against the seed and found not to close the finding; D43 capping a key-issued invitation at editor; the inherited Permissions rule amended to name a second mechanism |
 | [Draining one queue row into a finding that already existed](#2026-08-02--draining-one-queue-row-into-a-finding-that-already-existed) | Why the switcher row became F21 rather than a second row; the constraint F21 cited and the tree fact that disproves it; why the owner's direction went to the finding and the leftover question to upcoming-decisions |
 | [Two gate rules that lived only in an untracked file](#2026-08-02--two-gate-rules-that-lived-only-in-an-untracked-file) | What a moving development environment exposed about `.current-task.md`; why a cached test result is a gate failure and not a convenience; W19 and W20 |
+| [The Taskfile mirror catches up](#2026-08-02--the-taskfile-mirror-catches-up-and-what-verified-means-for-a-mirror) | Why nine unported recipes were committed as a task rather than stashed; why the sync is claimed as read-verified and not run-verified; W22 |
 
 ---
 
@@ -7686,3 +7687,57 @@ The note's *Cost too much to re-derive* section is where a rule goes to be
 forgotten slowly, because it is genuinely useful there and nothing ever prompts
 a reread against the rule that governs it — until an environment moves and the
 question becomes unavoidable.
+
+## 2026-08-02 — The Taskfile mirror catches up, and what "verified" means for a mirror
+
+Prompted by the phase loop's step 0, not by a milestone. A run opened on
+`/work-on-phase` and found `.current-task.md` absent — which the loop reads as
+*start fresh* — over a tree that was not clean. `Taskfile.yml` and
+`cmd/lctl/main.go` carried uncommitted work belonging to no milestone, no
+`.queue.md` row and no [workflow-changes.md](workflow-changes.md) proposal.
+
+### Why this could not simply be built around
+
+The loop cannot step over a dirty tree. [Step 3.7](phase-loop.md#3-land) runs
+`make demo-update`, which refuses on one, and the refusal is defined to mean the
+milestone is not finished — so unrelated work in the tree does not merely look
+untidy, it makes the *next* milestone unlandable. The scope gate closes the other
+exit: no more than one milestone per commit, and this was not part of one.
+
+That leaves the question of what the work *is*. It ports nine Makefile recipes
+into the Taskfile — `clean`, `cover`, `doc-cost`, `vuln`, `verify-assets`,
+`css-watch`, `docker-build`, `dist`, `release-check` — plus a one-line correction
+to `cmd/lctl`'s package comment, which had promised a `user` subcommand that M4
+never shipped and the binary does not have. By [workflow.md](workflow.md)'s
+vocabulary that is a **task**: a change to how the project is built, not to the
+product. Tasks commit on their own, as soon as they are complete.
+
+### The part worth recording: what was actually verified
+
+[dev-notes/wsl2-environment.md](../dev-notes/wsl2-environment.md) says the
+Taskfile "cannot be kept in sync unverified", and it is worth being exact about
+which sense of verified this commit earns.
+
+Each new task was read against the Makefile recipe it mirrors, line for line, and
+they agree — including the deliberate divergences the port already documents:
+`deps:` where the Makefile used prerequisites, and a plain shell loop in `dist`
+rather than Task's `for:`, so the recipe stays a line-for-line reading of the
+Makefile's, `|| exit 1` per step included. `task --list` parses the file and
+reports all forty-six tasks.
+
+What was **not** done is running `task dist`, `task release-check` or
+`task docker-build` and comparing their output to their `make` counterparts. So
+the claim this commit makes is that the Taskfile *says* the same thing as the
+Makefile, not that it *does* the same thing. For a mirror whose stated purpose is
+contributors without `make`, and which the environment notes already exclude from
+every gate on the grounds that it runs none, reading is the proportionate
+standard — but it is a weaker claim than the sentence in wsl2-environment.md
+invites, and the difference is the reason this paragraph exists rather than a
+tick in a table.
+
+The owner chose this over running the three tasks first, and over stashing the
+work to get on with the milestone. Stashing was the option worth arguing against
+on the record: a stash is invisible to every tracker this project keeps and
+survives no clone, which is the precise failure [workflow-changes.md](workflow-changes.md)
+was created to end. Committing it with a W-row costs one commit and leaves the
+port findable by somebody who does not know to grep for it.

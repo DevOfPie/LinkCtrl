@@ -54,6 +54,7 @@ without knowing what to grep for.
 
 | # | Change | Commit | Entry |
 | --- | --- | --- | --- |
+| W22 | The Taskfile mirror gained the nine Makefile recipes it lacked — `clean`, `cover`, `doc-cost`, `vuln`, `verify-assets`, `css-watch`, `docker-build`, `dist`, `release-check` — so a contributor without `make` can build, check and release. Sync is **read-verified**: each recipe was compared to its Makefile counterpart line for line, and `task --list` parses; the tasks were not run | *(this commit)* | [The Taskfile mirror catches up](decisions.md#2026-08-02--the-taskfile-mirror-catches-up-and-what-verified-means-for-a-mirror) |
 | W21 | The carry-a-volume-over warning names `LINKCTRL_API_KEY_PEPPER` beside `POSTGRES_PASSWORD`, in both [wsl2-environment.md](../dev-notes/wsl2-environment.md) and [instances.md](../dev-notes/instances.md) | *(this commit)* | — (the warning carries its own reasoning) |
 | W19 | *Verify, do not assume* now says a cached result is not a measurement, and names `GOFLAGS=-count=1` | *(this commit)* | [Two gate rules that lived only in an untracked file](decisions.md#2026-08-02--two-gate-rules-that-lived-only-in-an-untracked-file) |
 | W20 | [dev-notes/instances.md](../dev-notes/instances.md) records how to run a single integration test — `make -n test-integration` prints the command with its DSNs filled in | *(this commit)* | [Two gate rules that lived only in an untracked file](decisions.md#2026-08-02--two-gate-rules-that-lived-only-in-an-untracked-file) |
