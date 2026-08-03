@@ -633,6 +633,78 @@ func demoCoverage() []demoFeature {
 				"every rule is armed at creation, so the backlog it was created " +
 				"beside is behind its watermark and invisible to it",
 		},
+
+		{
+			// M44 asserted this count was *zero* until M44 was built, which is the
+			// boundary-row move M34, M36, M39, M40, M41, M42 and M43 each made
+			// before it.
+			//
+			// Four rows for three credentials, and the arithmetic is the feature:
+			// the seeder mints three and rotates one, and a rotation is a fourth
+			// row rather than an edit to the third.
+			//
+			// Bounded above as well as below, and the ceiling is the load-bearing
+			// half. Every row here is a live credential on a public instance —
+			// unusable, because the token is discarded and only an HMAC is stored,
+			// but a seeder that quietly grew this number would be minting keys
+			// nobody asked for on every demo-update.
+			Milestone: "M44", Feature: "Four key rows: three minted, one of them a successor",
+			Query: `SELECT count(*) FROM api_keys WHERE organization_id = $1`,
+			Min:   4, Max: 4,
+			Shows: "the key page as a list rather than as an empty panel, with a " +
+				"rotated pair, an organization-wide key and an ordinary one on it",
+		},
+		{
+			// The rotation itself, which is the whole of what M44 added and the one
+			// thing on the page nobody can produce by clicking: rotation refuses any
+			// actor that is not a key, so a visitor holding a session cannot make
+			// this state exist.
+			//
+			// Exactly one, because the claim is that a rotation is visible, not that
+			// the demo is a graveyard of superseded credentials.
+			Milestone: "M44", Feature: "A key that has rotated itself",
+			Query: `SELECT count(*) FROM api_keys
+			         WHERE organization_id = $1 AND successor_id IS NOT NULL`,
+			Min: 1, Max: 1,
+			Shows: "a predecessor counting down beside the successor that replaced " +
+				"it — the state the rotation milestone exists to show, and one a " +
+				"session cannot create",
+		},
+		{
+			// The scope choice, as two values rather than as a column of one word.
+			// `workspace_id IS NULL` is the choice itself, so counting its distinct
+			// values counts the states the *Reach* column can be in.
+			Milestone: "M44", Feature: "Keys of both reaches",
+			Query: `SELECT count(DISTINCT (workspace_id IS NULL)) FROM api_keys
+			         WHERE organization_id = $1`,
+			Min: 2, Max: 2,
+			Shows: "that a key's reach is a choice: one bound to the workspace it " +
+				"was made in, one valid across the organization",
+		},
+		{
+			// Not a display claim — a safety claim, and the same shape D81 and D86
+			// made about webhooks and automation.
+			//
+			// The demo is public and these are credentials. The seeder must leave
+			// none of them in a state where the window is still open on a key whose
+			// successor has also lapsed, and more importantly none of them may be
+			// **already dead on arrival**: a predecessor seeded past its own grace
+			// would show as revoked the moment the instance came up, which is the
+			// one state that makes the rotation invisible again.
+			//
+			// Asserted rather than trusted, because "the seeder uses the maximum
+			// grace" is exactly the kind of claim that survives the change that
+			// makes it false.
+			Milestone: "M44", Feature: "The rotated key's window is still open",
+			Query: `SELECT count(*) FROM api_keys
+			         WHERE organization_id = $1
+			           AND grace_expires_at IS NOT NULL
+			           AND grace_expires_at <= now()`,
+			MaxIsZero: true,
+			Shows: "that the demo's rotated key is mid-rotation rather than already " +
+				"dead, so the page shows a window closing instead of a revocation " +
+				"that happened before anybody arrived",
+		},
 	}
 }
 
@@ -852,6 +924,11 @@ func demoTestConfig() config.Config {
 	cfg.Auth.Argon2Iterations = auth.DefaultParams.Iterations
 	cfg.Auth.Argon2Parallelism = auth.DefaultParams.Parallelism
 	cfg.Auth.InviteTTL = 168 * time.Hour
+	// The seeder mints API keys (M44), and the key service refuses a pepper below
+	// the configuration floor — deliberately, so a service built directly in a
+	// test cannot be weaker than a deployed one. Any 32 bytes will do here: the
+	// tokens are discarded and nothing verifies one afterwards.
+	cfg.APIKeyPepper = config.Secret("a-demo-seeder-pepper-of-32-plus-bytes")
 	return cfg
 }
 

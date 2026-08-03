@@ -11,10 +11,15 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 )
 
-// keyRow is APIKeyInfo plus the one derived flag the template needs.
+// keyRow is APIKeyInfo plus the derived flags the template needs.
 type keyRow struct {
 	auth.APIKeyInfo
 	Expired bool
+	// Superseded is a key mid-grace: rotated, still verifying, on a deadline.
+	// A separate flag from Expired because the state reads differently — this
+	// one is a key somebody is in the middle of replacing, and the row says
+	// when it stops.
+	Superseded bool
 }
 
 type keysPageData struct {
@@ -22,10 +27,17 @@ type keysPageData struct {
 	Keys         []keyRow
 	ScopeOptions []string
 	Created      *auth.CreatedAPIKey
-	Form         struct{ Name string }
-	FieldErrors  map[string]string
-	Notice       string
-	Error        string
+	// CanCreateOrgWide decides whether the workspace choice is offered at all.
+	// Somebody whose role reaches one workspace never sees the control, rather
+	// than seeing it and being refused.
+	CanCreateOrgWide bool
+	Form             struct {
+		Name    string
+		OrgWide bool
+	}
+	FieldErrors map[string]string
+	Notice      string
+	Error       string
 }
 
 func (h *Web) loadKeysPage(w http.ResponseWriter, r *http.Request) (keysPageData, bool) {
@@ -45,7 +57,14 @@ func (h *Web) loadKeysPage(w http.ResponseWriter, r *http.Request) (keysPageData
 		data.Keys = append(data.Keys, keyRow{
 			APIKeyInfo: k,
 			Expired:    k.ExpiresAt != nil && !k.ExpiresAt.After(now),
+			Superseded: k.RevokedAt == nil && k.GraceExpiresAt != nil && k.GraceExpiresAt.After(now),
 		})
+	}
+
+	// An error here is not a reason to replace the page: the answer is a
+	// capability, and failing closed means the choice is not offered.
+	if may, err := h.Keys.MayCreateOrgWide(r.Context(), actor); err == nil {
+		data.CanCreateOrgWide = may
 	}
 
 	// The scope choices are the actor's own permissions minus what a key may
@@ -87,8 +106,9 @@ func (h *Web) KeyCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	in := auth.CreateAPIKeyInput{
-		Name:   r.PostFormValue("name"),
-		Scopes: r.PostForm["scopes"],
+		Name:    r.PostFormValue("name"),
+		Scopes:  r.PostForm["scopes"],
+		OrgWide: r.PostFormValue("scope_reach") == "organization",
 	}
 	if raw := r.PostFormValue("expires_in"); raw != "" {
 		var days int
@@ -118,6 +138,7 @@ func (h *Web) KeyCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data.Form.Name = r.PostFormValue("name")
+		data.Form.OrgWide = in.OrgWide
 		data.FieldErrors = fields
 		data.Error = general
 		h.render(w, r, http.StatusUnprocessableEntity, "keys", data)

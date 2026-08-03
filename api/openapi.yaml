@@ -2067,6 +2067,10 @@ paths:
         a leaked one would be meaningless. Scopes must be permissions you
         yourself hold; key management and organization deletion are never
         grantable. The response is the only time the token is shown.
+
+        The key is bound to the workspace you are acting in unless you ask for
+        `org_wide`, which reaches every workspace in the organization and needs
+        an organization-wide membership to grant.
       requestBody:
         required: true
         content:
@@ -2084,6 +2088,62 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /api-keys/rotate:
+    post:
+      tags: [api-keys]
+      operationId: rotateAPIKey
+      summary: Replace the key that made this request
+      description: |
+        **Send this with an API key, not a session.** Rotation is a key
+        replacing itself, which is the one key operation that needs no human:
+        the credential in the `Authorization` header is the one being rotated,
+        and there is no id to name. A session gets `403` — a session that wants
+        another key mints one.
+
+        The successor is *identical or narrower*: scopes are this key's, or a
+        subset you name; the workspace binding is copied verbatim and cannot be
+        changed; nothing widens. `apikeys.write` is still not a scope any key
+        may hold, and that is what makes handing rotation to a credential safe.
+
+        This key keeps working for `grace_seconds` and then stops, on every
+        replica, whether or not the housekeeping job that writes its revocation
+        has run. **A key rotates once**: asking again returns `409`.
+
+        The accepted trade is stated rather than buried. Whoever holds a leaked
+        secret can rotate it, so a leaked key can persist across rotations under
+        a prefix its owner never issued. Every generation appears in the owner's
+        key list and in the audit log, and each predecessor's window is bounded,
+        which is what keeps that finite rather than permanent.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RotateAPIKeyRequest"
+      responses:
+        "201":
+          description: The successor, its token, and when this key stops working
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RotatedAPIKey"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: A session tried to rotate. Only a key rotates, and only itself.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: This key already has a successor. A key rotates once.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "422":
           $ref: "#/components/responses/Validation"
 
@@ -5001,7 +5061,9 @@ components:
     APIKey:
       type: object
       additionalProperties: false
-      required: [id, name, prefix, scopes, last_used_at, expires_at, revoked_at, created_at]
+      required:
+        [id, name, prefix, scopes, org_wide, last_used_at, expires_at,
+         revoked_at, rotated_at, grace_expires_at, successor_id, created_at]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
@@ -5011,11 +5073,23 @@ components:
         scopes:
           type: array
           items: { type: string }
+        org_wide:
+          type: boolean
+          description: |
+            The workspace choice made when the key was created. `false` is a key
+            bound to one workspace — the behaviour every key had before 0.2.0.
+            `true` is a key valid in every workspace of the organization, which
+            only somebody with an organization-wide membership can issue.
         last_used_at:
           type: string
           format: date-time
           nullable: true
-          description: Written asynchronously on a coarse cadence; answers "is this key still in use".
+          description: |
+            Written asynchronously on a coarse cadence — 30 seconds — so it
+            answers "is this key still in use" and not "was it used in the last
+            few seconds". That tolerance is why the rotation grace window has a
+            floor: a predecessor reading as idle may have been used up to
+            30 seconds ago.
         expires_at:
           type: string
           format: date-time
@@ -5024,6 +5098,24 @@ components:
           type: string
           format: date-time
           nullable: true
+        rotated_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When this key was replaced by a successor. Set on the predecessor only.
+        grace_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            When a rotated predecessor stops authenticating. Enforced on every
+            request from this value, so it holds whether or not housekeeping has
+            written the matching `revoked_at`.
+        successor_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: The key this one was rotated into. A key rotates once, so there is at most one.
         created_at: { type: string, format: date-time }
 
     CreatedAPIKey:
@@ -5033,7 +5125,9 @@ components:
         An APIKey plus the token. Spelled out rather than composed with allOf,
         because `additionalProperties: false` on the base would reject the very
         field this schema adds.
-      required: [id, name, prefix, scopes, last_used_at, expires_at, revoked_at, created_at, key]
+      required:
+        [id, name, prefix, scopes, org_wide, last_used_at, expires_at,
+         revoked_at, rotated_at, grace_expires_at, successor_id, created_at, key]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
@@ -5041,13 +5135,69 @@ components:
         scopes:
           type: array
           items: { type: string }
+        org_wide: { type: boolean }
         last_used_at: { type: string, format: date-time, nullable: true }
         expires_at: { type: string, format: date-time, nullable: true }
         revoked_at: { type: string, format: date-time, nullable: true }
+        rotated_at: { type: string, format: date-time, nullable: true }
+        grace_expires_at: { type: string, format: date-time, nullable: true }
+        successor_id: { type: string, format: uuid, nullable: true }
         created_at: { type: string, format: date-time }
         key:
           type: string
           description: The full token. This response is the only place it ever appears.
+
+    RotatedAPIKey:
+      type: object
+      additionalProperties: false
+      description: |
+        The successor, plus the fate of the key it replaced. Spelled out for the
+        reason CreatedAPIKey is.
+      required:
+        [id, name, prefix, scopes, org_wide, last_used_at, expires_at,
+         revoked_at, rotated_at, grace_expires_at, successor_id, created_at,
+         key, predecessor]
+      properties:
+        id: { type: string, format: uuid }
+        name:
+          type: string
+          description: The predecessor's name, carried over. A rotation is the same credential's next generation.
+        prefix: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+        org_wide: { type: boolean }
+        last_used_at: { type: string, format: date-time, nullable: true }
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            The predecessor's **lifetime**, measured from now — not its
+            deadline, which would produce a successor expiring at the same
+            instant as the key it replaced. A key created to live 30 days
+            rotates into another that lives 30 days; a key with no expiry
+            rotates into one with no expiry. This is the one dimension a
+            rotation deliberately refreshes.
+        revoked_at: { type: string, format: date-time, nullable: true }
+        rotated_at: { type: string, format: date-time, nullable: true }
+        grace_expires_at: { type: string, format: date-time, nullable: true }
+        successor_id: { type: string, format: uuid, nullable: true }
+        created_at: { type: string, format: date-time }
+        key:
+          type: string
+          description: The successor's full token. This response is the only place it ever appears.
+        predecessor:
+          type: object
+          additionalProperties: false
+          required: [id, prefix, stops_working_at]
+          properties:
+            id: { type: string, format: uuid }
+            prefix: { type: string }
+            stops_working_at:
+              type: string
+              format: date-time
+              description: The far edge of the grace window. After it the predecessor authenticates nothing.
 
     CreateAPIKeyRequest:
       type: object
@@ -5071,6 +5221,41 @@ components:
           type: string
           format: date-time
           description: Optional; must be in the future. Absent means the key never expires.
+        org_wide:
+          type: boolean
+          default: false
+          description: |
+            Ask for a key valid in every workspace of the organization instead of
+            only the one you are acting in. Defaults to `false`, and refused with
+            a `422` on the `org_wide` field unless you hold `apikeys.write`
+            through an **organization-wide** membership — a role held in one
+            workspace issues keys for that workspace.
+
+    RotateAPIKeyRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        Every field is optional and so is the body itself: `POST` with nothing
+        rotates into an identical successor with the default grace window.
+      properties:
+        scopes:
+          type: array
+          minItems: 1
+          items: { type: string }
+          description: |
+            Narrows the successor. Omit for scopes identical to this key's. A
+            scope this key does not already hold is refused rather than trimmed —
+            a successor is identical or narrower, never wider.
+        grace_seconds:
+          type: integer
+          minimum: 300
+          maximum: 86400
+          default: 3600
+          description: |
+            How long both secrets verify. Bounded on both sides. The floor is ten
+            times the `last_used_at` flush cadence, so "has anything still used
+            the old key" is answerable before the window closes; the ceiling is
+            what keeps a rotated-away credential's life finite.
 
     InvitationStatus:
       type: string

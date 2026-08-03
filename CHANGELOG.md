@@ -72,6 +72,59 @@ migrations run at boot.
 
 ### Added
 
+- **An API key can now replace itself, unattended.** `POST /api/v1/api-keys/rotate`,
+  sent with the key's own token, returns a successor and the only copy of its
+  secret that will ever exist. There is no id in the URL because there is no other
+  key it could rotate: the credential in the `Authorization` header is the one
+  being replaced. A signed-in session gets a `403` — a session that wants another
+  key mints one, as it always could.
+
+  **The successor is identical or narrower.** Its scopes are this key's, or a
+  subset you name; a scope the key does not already hold is refused rather than
+  quietly dropped. The workspace binding is copied unchanged. Nothing widens, and
+  `apikeys.read`/`apikeys.write` remain permissions no key can ever hold — which
+  is what makes it safe to leave rotation in a credential's hands at all. The
+  successor inherits the predecessor's *lifetime*: a key created to live 30 days
+  rotates into another that lives 30 days, and a key with no expiry rotates into
+  one with none.
+
+  **The old key keeps working for a bounded window and then stops.** An hour by
+  default, adjustable per rotation between five minutes and a day via
+  `grace_seconds`, so a rolling deployment can hold both. When the window closes
+  the old key is refused on every replica immediately — the check is part of
+  authenticating, not a scheduled job — and housekeeping then marks it revoked so
+  the key list agrees. **A key rotates once**; asking again returns `409` rather
+  than minting a second successor. Every rotation is an audit event naming the
+  prefix it came from and the prefix it became.
+
+  **What this costs, stated plainly: a leaked key can survive a rotation.**
+  Whoever holds the secret can rotate it, so revoking the key you know about may
+  leave somebody holding a successor you never issued. Every generation shows up
+  in your key list with its own prefix, every rotation is in the audit log, and
+  each old key's window is capped — that bounds it; it does not remove it. If you
+  believe a key has leaked, check the list for keys you did not create before you
+  revoke, and rotate nothing.
+
+  One more thing worth knowing when you use rotation: `last_used_at` is written on
+  a 30-second cadence, so a key that reads as idle may have been used up to 30
+  seconds ago. That is why the grace window cannot be set below five minutes.
+
+  Nothing needs to be done on upgrade. Existing keys are unaffected until
+  something rotates one.
+
+- **API keys can now be issued for a whole organization instead of one
+  workspace.** The *Reach* choice on the key form, `"org_wide": true` on
+  `POST /api/v1/api-keys`, or `--org-wide` on `lctl apikey create`. A key issued
+  this way follows its owner into every workspace of the organization instead of
+  acting only where it was created.
+
+  **The default has not changed**, and every key you already have is still bound
+  to one workspace. The wider option needs `apikeys.write` through an
+  *organization-wide* membership: a role you hold in a single workspace issues
+  keys for that workspace, which is the same rule that already governs re-roling
+  members. The key list, `lctl apikey list` and the API all report which of the
+  two a key is.
+
 - **Automation rules: standing instructions the scheduler carries out.** Write a
   rule at `/automation` or through `/api/v1/automation` — *when this happens in
   this workspace, do these things*. Three triggers: a link reaching its expiry, a

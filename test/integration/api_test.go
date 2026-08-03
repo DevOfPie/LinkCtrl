@@ -74,7 +74,13 @@ func newAPI(t *testing.T) *apiFixture {
 	// Not started: the usage tracker's ticker is not wanted in tests, and the
 	// tests that care about last_used_at call FlushUsage directly rather than
 	// sleeping through an interval.
-	keySvc, err := auth.NewAPIKeyService(pool, authSvc, auth.APIKeyConfig{Pepper: testPepper})
+	// The auditor is wired as main.go wires it (M44): rotation is the one key
+	// operation no human is present for, so it is the one that writes a record,
+	// and a fixture without a recorder would let the test that reads that record
+	// pass by never producing one.
+	keySvc, err := auth.NewAPIKeyService(pool, authSvc, auth.APIKeyConfig{
+		Pepper: testPepper, Auditor: audit.NewService(pool),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

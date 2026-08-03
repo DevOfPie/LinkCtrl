@@ -98,12 +98,19 @@ func apikeyCreate(args []string) error {
 		name   = fs.String("name", "", "human-readable name, e.g. \"ci-deploy\"")
 		scopes = fs.String("scopes", "", "comma-separated permission slugs, e.g. links.read,links.create")
 		expiry = fs.Duration("expires-in", 0, "lifetime, e.g. 720h; omit for a key that never expires")
+		// Off by default here for the reason it is off by default everywhere:
+		// reaching every workspace is a choice somebody makes, not one they get
+		// by leaving a flag alone. The service refuses it unless the named user's
+		// own membership is organization-wide, so this flag asks rather than
+		// grants — which is the point of the CLI acting as a named user at all.
+		orgWide = fs.Bool("org-wide", false,
+			"valid in every workspace of the organization, instead of only the user's current one")
 	)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	in := auth.CreateAPIKeyInput{Name: *name, Scopes: splitScopes(*scopes)}
+	in := auth.CreateAPIKeyInput{Name: *name, Scopes: splitScopes(*scopes), OrgWide: *orgWide}
 	if *expiry > 0 {
 		at := time.Now().Add(*expiry)
 		in.ExpiresAt = &at
@@ -119,8 +126,9 @@ func apikeyCreate(args []string) error {
 			// The token goes to stdout on its own line and everything else to
 			// stderr, so `lctl apikey create ... > key.txt` captures the key and
 			// nothing else.
-			fmt.Fprintf(os.Stderr, "created %s (%s) for %s\nscopes: %s\n",
-				created.Name, created.Prefix, actor.Email, strings.Join(created.Scopes, ", "))
+			fmt.Fprintf(os.Stderr, "created %s (%s) for %s\nreach: %s\nscopes: %s\n",
+				created.Name, created.Prefix, actor.Email, keyReach(created.APIKeyInfo),
+				strings.Join(created.Scopes, ", "))
 			fmt.Fprintln(os.Stderr, "this is the only time the key is shown:")
 			fmt.Println(created.Key)
 			return nil
@@ -148,10 +156,10 @@ func apikeyList(args []string) error {
 			// The id is shown because revoke takes it; the prefix is shown
 			// because that is what appears in a caller's configuration.
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tPREFIX\tNAME\tSTATE\tLAST USED\tSCOPES")
+			fmt.Fprintln(w, "ID\tPREFIX\tNAME\tREACH\tSTATE\tLAST USED\tSCOPES")
 			for _, k := range list {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-					k.ID, k.Prefix, k.Name, keyState(k), stamp(k.LastUsedAt),
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+					k.ID, k.Prefix, k.Name, keyReach(k), keyState(k), stamp(k.LastUsedAt),
 					strings.Join(k.Scopes, ","))
 			}
 			return w.Flush()
@@ -189,9 +197,25 @@ func keyState(k auth.APIKeyInfo) string {
 		return "revoked"
 	case k.ExpiresAt != nil && !k.ExpiresAt.After(time.Now()):
 		return "expired"
+	// A rotated predecessor still authenticates until its window closes, so it
+	// is neither "active" nor "revoked" and calling it either would be a lie an
+	// operator acts on. The deadline is in the word.
+	case k.GraceExpiresAt != nil && k.GraceExpiresAt.After(time.Now()):
+		return "rotated, until " + stamp(k.GraceExpiresAt)
 	default:
 		return "active"
 	}
+}
+
+// keyReach names the workspace choice made at creation. Spelled out rather than
+// left to a blank column, because "bound to one workspace" and "valid across the
+// organization" are different credentials and the difference is invisible
+// otherwise.
+func keyReach(k auth.APIKeyInfo) string {
+	if k.OrgWide {
+		return "organization"
+	}
+	return "workspace"
 }
 
 func stamp(t *time.Time) string {

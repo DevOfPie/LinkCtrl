@@ -632,6 +632,8 @@ LEFT JOIN sessions s ON s.id = $1::uuid
                     AND s.revoked_at IS NULL
 WHERE m.user_id = $2
   AND w.deleted_at IS NULL
+  AND ($3::uuid IS NULL
+       OR w.organization_id = $3::uuid)
   -- A NULL memberships.workspace_id covers every workspace in the organization;
   -- a set one covers exactly that workspace. Same rule GetUserPermissions
   -- applies, so a user can never resolve into a workspace they hold no
@@ -646,8 +648,9 @@ LIMIT 1
 `
 
 type ResolveWorkspaceForUserParams struct {
-	SessionID *uuid.UUID
-	UserID    uuid.UUID
+	SessionID      *uuid.UUID
+	UserID         uuid.UUID
+	OrganizationID *uuid.UUID
 }
 
 // The workspace a request acts in, and the only place that question is
@@ -673,8 +676,19 @@ type ResolveWorkspaceForUserParams struct {
 // which is right for a login (the session does not exist yet), the CLI, and an
 // API key. The join also requires the session to belong to this user, so a
 // borrowed id resolves nothing.
+//
+// organization_id is optional too, and it is a *bound* rather than a rung: it
+// narrows which workspaces are candidates without touching the precedence. Only
+// one caller passes it, and the reason is M44. An organization-wide API key is a
+// row with a NULL workspace_id, which means "every workspace in **the
+// organization** the key belongs to" — and without this clause the precedence
+// would happily rank a workspace in some *other* organization the owner also
+// belongs to, because membership is the only filter and a person's pinned
+// default is a property of the person rather than of the tenancy. The key would
+// then act in a tenant it was never issued for. Every other caller passes NULL
+// and resolves exactly as it always did.
 func (q *Queries) ResolveWorkspaceForUser(ctx context.Context, arg ResolveWorkspaceForUserParams) (Workspace, error) {
-	row := q.db.QueryRow(ctx, resolveWorkspaceForUser, arg.SessionID, arg.UserID)
+	row := q.db.QueryRow(ctx, resolveWorkspaceForUser, arg.SessionID, arg.UserID, arg.OrganizationID)
 	var i Workspace
 	err := row.Scan(
 		&i.ID,

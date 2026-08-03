@@ -32,6 +32,9 @@ type contract struct {
 	doc    *openapi3.T
 	router routers.Router
 	hit    map[string]bool
+	// bearer, while set, sends the call as an API key instead of as the signed-in
+	// session. Set only by doAsKey, and restored after it.
+	bearer string
 }
 
 func newContract(t *testing.T) *contract {
@@ -78,10 +81,21 @@ func (c *contract) call(method, path string, body any, wantStatus int, checkRequ
 		if body != nil {
 			req.Header.Set("Content-Type", "application/json")
 		}
+		if c.bearer != "" {
+			req.Header.Set("Authorization", "Bearer "+c.bearer)
+		}
 		return req
 	}
 
-	resp, err := c.f.client.Do(newReq())
+	// A bearer token replaces the session, on a client with no cookie jar, so a
+	// call made as an API key is provably made as one. Only rotation needs it —
+	// it is the one operation a session cannot reach at all.
+	client := c.f.client
+	if c.bearer != "" {
+		client = &http.Client{}
+	}
+
+	resp, err := client.Do(newReq())
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -130,6 +144,14 @@ func (c *contract) call(method, path string, body any, wantStatus int, checkRequ
 
 func (c *contract) do(method, path string, body any, wantStatus int) []byte {
 	c.t.Helper()
+	return c.call(method, path, body, wantStatus, true)
+}
+
+// doAsKey replays an operation as an API key rather than as the session.
+func (c *contract) doAsKey(token, method, path string, body any, wantStatus int) []byte {
+	c.t.Helper()
+	c.bearer = token
+	defer func() { c.bearer = "" }()
 	return c.call(method, path, body, wantStatus, true)
 }
 
@@ -632,6 +654,18 @@ func TestAPIMatchesItsContract(t *testing.T) {
 		"name": "escalation", "scopes": []string{"apikeys.write"},
 	}, http.StatusUnprocessableEntity)
 	c.do("GET", p+"/api-keys", nil, http.StatusOK)
+
+	// Rotation, which is the one operation in the document a session cannot
+	// reach: it replaces the credential that made the request, so it is replayed
+	// with the key's own token. The session is refused first, because "403 for a
+	// session" is part of what the document promises.
+	c.do("POST", p+"/api-keys/rotate", map[string]any{}, http.StatusForbidden)
+	rotatable := c.do("POST", p+"/api-keys", map[string]any{
+		"name": "rotatable", "scopes": []string{"links.read"},
+	}, http.StatusCreated)
+	c.doAsKey(field(t, rotatable, "key"), "POST", p+"/api-keys/rotate",
+		map[string]any{"grace_seconds": 300}, http.StatusCreated)
+
 	c.do("DELETE", p+"/api-keys/"+keyID, nil, http.StatusNoContent)
 
 	// --- audit --------------------------------------------------------------

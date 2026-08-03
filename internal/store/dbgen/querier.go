@@ -496,7 +496,19 @@ type Querier interface {
 	// authentication is one round trip. Revoked and expired keys are returned
 	// rather than filtered out: the caller distinguishes them so the response can
 	// say which it was, and a deleted user's key resolves to no row at all.
+	//
+	// grace_expires_at comes back for the same reason revoked_at does: a rotated
+	// predecessor stops verifying when its window closes, and that refusal is
+	// decided here rather than by the housekeeping job that later writes revoked_at.
 	GetAPIKeyByPrefix(ctx context.Context, prefix string) (GetAPIKeyByPrefixRow, error)
+	// The predecessor, locked, so two rotations of one key serialize instead of
+	// racing.
+	//
+	// FOR UPDATE rather than an optimistic conditional write: the loser of a race
+	// should be told "this key has already been rotated" by the check that follows,
+	// which is a sentence somebody can act on, not have its transaction rolled back
+	// by a unique-index violation on a column it never named.
+	GetAPIKeyForRotation(ctx context.Context, id uuid.UUID) (GetAPIKeyForRotationRow, error)
 	GetAutomationRule(ctx context.Context, arg GetAutomationRuleParams) (AutomationRule, error)
 	GetBuiltinRoleBySlug(ctx context.Context, slug string) (GetBuiltinRoleBySlugRow, error)
 	// Workspace-scoped like GetLink and GetFolder, and for the same reason: the
@@ -759,6 +771,10 @@ type Querier interface {
 	// Revoked keys are included. "Which keys existed and when were they revoked"
 	// is the question asked after an incident, so they are listed until the reaper
 	// removes them.
+	//
+	// workspace_id is selected because NULL is a state the owner chose (M44): a key
+	// bound to one workspace and a key valid across the organization look identical
+	// without it.
 	ListAPIKeysForUser(ctx context.Context, arg ListAPIKeysForUserParams) ([]ListAPIKeysForUserRow, error)
 	//
 	// Newest first, keyed on (occurred_at, id) so the cursor is a position rather
@@ -1095,6 +1111,13 @@ type Querier interface {
 	// the target is inside this set, so it is already locked by the time anything
 	// else touches it.
 	LockOrganizations(ctx context.Context) ([]uuid.UUID, error)
+	// Closes the predecessor: names its successor and sets the far edge of the
+	// grace window.
+	//
+	// `successor_id IS NULL` in the WHERE clause is belt to the FOR UPDATE braces.
+	// The lock is what serializes; this is what makes the second writer a no-op
+	// rather than a silent overwrite if the lock is ever dropped from the read.
+	MarkAPIKeyRotated(ctx context.Context, arg MarkAPIKeyRotatedParams) (int64, error)
 	MarkAllNotificationsRead(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Caddy asked whether to obtain a certificate for this hostname and was told
 	// yes. Guarded on 'pending' so it is one write per verification rather than one
@@ -1472,6 +1495,17 @@ type Querier interface {
 	// which is right for a login (the session does not exist yet), the CLI, and an
 	// API key. The join also requires the session to belong to this user, so a
 	// borrowed id resolves nothing.
+	//
+	// organization_id is optional too, and it is a *bound* rather than a rung: it
+	// narrows which workspaces are candidates without touching the precedence. Only
+	// one caller passes it, and the reason is M44. An organization-wide API key is a
+	// row with a NULL workspace_id, which means "every workspace in **the
+	// organization** the key belongs to" — and without this clause the precedence
+	// would happily rank a workspace in some *other* organization the owner also
+	// belongs to, because membership is the only filter and a person's pinned
+	// default is a property of the person rather than of the tenancy. The key would
+	// then act in a tenant it was never issued for. Every other caller passes NULL
+	// and resolves exactly as it always did.
 	ResolveWorkspaceForUser(ctx context.Context, arg ResolveWorkspaceForUserParams) (Workspace, error)
 	RestoreLink(ctx context.Context, arg RestoreLinkParams) (Link, error)
 	// Idempotent: revoking an already-revoked key keeps the original timestamp and
@@ -1491,6 +1525,13 @@ type Querier interface {
 	// redeemed invite has produced a member, and reporting "revoked" for it would
 	// claim something the tree does not support.
 	RevokeInvitation(ctx context.Context, arg RevokeInvitationParams) (int64, error)
+	// Auto-revocation, from housekeeping.
+	//
+	// revoked_at is set to the moment the window closed rather than to now(), so
+	// the list says when the key stopped working instead of when the job noticed.
+	// Nothing depends on this running: authentication already refuses a key past
+	// grace_expires_at. What this buys is a key list that agrees with the behaviour.
+	RevokeLapsedAPIKeyGraces(ctx context.Context) (int64, error)
 	// Clears an expired invite out of the outstanding slot so a replacement can be
 	// issued.
 	//

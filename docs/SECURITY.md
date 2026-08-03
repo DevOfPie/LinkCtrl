@@ -48,7 +48,7 @@ Stated as claims, because each one is testable and several have tests naming the
 | Workspace-scoped roles | A membership naming a workspace **adds** permissions there and removes none anywhere: the evaluator takes the union of every matching membership and the lowest rank among them. There is no operation that restricts somebody to a workspace, so the feature can only ever surprise in the direction of granting more than expected. **What it adds reaches that workspace and no further.** Every write is authorized against the membership whose scope covers the object being changed, so an organization-wide membership, an invitation, or the organization itself is reachable only from an organization-wide membership — a workspace-scoped admin manages memberships in their own workspace, and a workspace-scoped **owner** owns one workspace rather than the organization, which is what `org.delete` and the last-owner count both read. Before that bound existed, somebody holding an organization-wide `viewer` row and a workspace-scoped `admin` row resolved as an admin inside that workspace and could re-role their **own** organization-wide membership with it. Deleting a workspace is refused while it holds any link at all, and while it is an organization's last one. |
 | Organization creation | Behind a new `orgs.create` permission granted to the **owner role only**, which on a default instance means the account from the setup form and nobody else until an owner grants somebody that role. Expressed as a role grant rather than as a check on how an account was created, so there is exactly one authorization axis. The single exemption is an account holding **no membership at all**, which can create its first organization — a check on present state, at one call site, whose entire effect is to give that account the owner membership `orgs.create` then decides from. |
 | Organization deletion | Behind `org.delete`, seeded since the first release, held by the **owner role only** and **never delegable to an API key**: an irreversible action belongs behind an interactive sign-in. The id in the path must be the organization the caller is acting in, so an id cannot be probed and a mistyped one deletes nothing. Refused while any workspace still holds a link — the workspace-level rule one level up, so deleting above it is not a way around it — and while it is the instance's only organization. Both guards lock the rows they count before counting them, so two administrators acting at once cannot each pass a check the other invalidates. The whole teardown is one transaction; a partially deleted organization would leave members resolving into workspaces that no longer exist. |
-| API keys | Only an HMAC is stored; the token is shown once. Scopes are intersected with the holder's current role on every request, so demoting a user weakens their keys immediately. `apikeys.*`, `org.delete` and `audit.read` are **not delegable** — the first two because a key that can mint keys or delete the organization makes revoking a leaked one meaningless, the third because the audit log ties a network prefix to a named person. Reading it requires a signed-in session. |
+| API keys | Only an HMAC is stored; the token is shown once. Scopes are intersected with the holder's current role on every request, so demoting a user weakens their keys immediately. `apikeys.*`, `org.delete` and `audit.read` are **not delegable** — the first two because a key that can mint keys or delete the organization makes revoking a leaked one meaningless, the third because the audit log ties a network prefix to a named person. Reading it requires a signed-in session. A key issued for a single workspace acts only there; the organization-wide alternative is opt-in and needs `apikeys.write` held through an organization-wide membership, so a role scoped to one workspace cannot issue a credential reaching the rest. An organization-wide key reaches its **own** organization's workspaces and no others, even when its owner belongs to several and has pinned a default elsewhere. **Self-rotation is the one exception to *a key cannot manage keys*, and it is deliberately not an exception to the rule behind it** — see *A key can replace itself, and what that costs* below. |
 | Audit log | An event that *is* recorded carries the actor snapshotted at write time, so it stays readable after the account is deleted, and a network prefix rather than an address. Reading needs `audit.read`, held by owners and admins, and not delegable to an API key. Retention is its own setting and defaults to keeping everything, so history is never deleted by an upgrade nobody configured. **Coverage is eighteen events so far** — root-redirect changes, an invitation issued, revoked or accepted, a member added, removed or re-roled, a workspace created, renamed or deleted, an organization created or deleted, a destination refused, bot blocking changed on a link or on the domain, and a domain registered, renamed or removed — see *What is not defended*. (The count read twelve until M32.5 and had omitted `destination.blocked`; the sentence was being edited anyway and a number known to be wrong is not worth preserving.) What is **not** recorded is a bot actually being refused: that is traffic, counted as a bot click, and a crawler would otherwise write thousands of rows a day into this table. An organization's records carry no foreign key to it, so deleting one leaves its trail, deletion record included, intact in the table; the read API is scoped to the caller's organization, so afterwards that trail is reachable only with database access. |
 | Secrets | Configuration secrets are a type that refuses to print itself through `fmt`, `slog` or `json`. A config dump or a formatted panic cannot leak the database password, the API-key pepper or the SMTP password. |
 | Outbound mail | Plain text only — no HTML part, so no remote image that reports when a message was opened and no anchor text that disagrees with its link. Every interpolated value has its control and bidirectional-formatting characters removed before it reaches a template, so nothing a person typed can inject a header, forge a second message, or make an address render as one it is not. A relay that will not take STARTTLS is refused rather than downgraded to plaintext. |
@@ -326,6 +326,40 @@ signed URL can still follow the link during that window.
 is compared against the link's current limit, so moving a ceiling from five to
 six makes a link that was answering 410 redirect again. There is no way to grant
 "five more from here".
+
+**A key can replace itself, and what that costs: a leaked key can survive being
+revoked.** `POST /api/v1/api-keys/rotate`, sent with a key's own token, mints that
+key's successor. The design keeps the rule that makes revocation meaningful — a
+key still cannot mint an unrelated key, cannot grant itself a scope it does not
+hold, cannot move to another workspace, and cannot rotate twice — and it still
+cannot hold `apikeys.read` or `apikeys.write`, which is the whole reason handing
+rotation to a credential is defensible. What it cannot prevent is the obvious
+consequence: **whoever holds a stolen secret can rotate it too.** They end up
+holding a successor under a prefix you never issued, and revoking the key you know
+about does not touch it.
+
+Three things bound that, and none of them removes it:
+
+- **Every generation is in your key list**, with its own prefix, its reach and its
+  state. A rotation appears as a new row, not as an edit to an old one.
+- **Every rotation writes an `apikey.rotated` audit record** naming the prefix it
+  came from and the prefix it became, so a chain is walkable from any generation
+  by anybody with `audit.read`.
+- **Each predecessor's grace window is capped at a day.** The old secret verifies
+  for that window and then stops, on every replica, as part of authenticating
+  rather than by a scheduled job.
+
+So: **if you believe a key has leaked, read the key list before you revoke
+anything, and look for keys you did not create.** Revoking the one you recognise
+and stopping there is the mistake this design makes possible. Rotating it is
+worse — it hands the same holder a fresh secret. If you cannot account for every
+key on the list, revoke all of them.
+
+One operational note that is easy to get wrong: `last_used_at` is written on a
+30-second cadence, so a key that reads as unused may have been used within the
+last half minute. Do not treat an idle-looking predecessor as proof that a
+rotation has finished propagating. The grace window cannot be set below five
+minutes for exactly this reason.
 
 ## Operator responsibilities
 

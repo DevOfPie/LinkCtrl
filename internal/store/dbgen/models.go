@@ -30,6 +30,9 @@ type ApiKey struct {
 	ExpiresAt      *time.Time
 	RevokedAt      *time.Time
 	CreatedAt      time.Time
+	RotatedAt      *time.Time
+	GraceExpiresAt *time.Time
+	SuccessorID    *uuid.UUID
 }
 
 type AuditLog struct {

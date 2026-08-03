@@ -195,6 +195,24 @@ const (
 	// true, because a trigger that read the log's automation rows would be the
 	// cycle M43 exists to make impossible.
 	ActionAutomationFired = "automation.fired"
+
+	// API key rotation (M44). The one action in this log a key takes on itself,
+	// and the reason it is recorded is that it is the only administrative change
+	// no human is present for.
+	//
+	// A key rotating itself is not escalation — the successor is identical or
+	// narrower, bound to the same workspace — but it is how a credential
+	// survives, and D9 accepts openly that a leaked key can rotate itself across
+	// generations. That trade is only bearable if the chain is *visible*, which
+	// means every link in it appears here with the prefix it came from and the
+	// prefix it became. Somebody reading "which credential has been alive in this
+	// organization since March" reconstructs it from these records.
+	//
+	// Minting and revoking are not here, and their absence is not an oversight:
+	// both require an interactive session, so the person is the record, and M21
+	// scoped this log to what an operator needs after an incident rather than to
+	// everything that happens.
+	ActionAPIKeyRotated = "apikey.rotated"
 )
 
 // Event is one thing that happened.
@@ -338,6 +356,42 @@ func (s *Service) Record(ctx context.Context, actor *auth.Identity, e Event) err
 		return fmt.Errorf("audit: write %s: %w", e.Action, err)
 	}
 	return nil
+}
+
+// RecordAPIKeyRotation satisfies auth.APIKeyAuditor.
+//
+// It lives here rather than being a plain Record call from the key service
+// because the dependency runs one way: this package imports internal/auth, to
+// resolve an actor into the label it stores, so internal/auth cannot import
+// this one. auth declares the narrow interface it needs and this is the
+// implementation on the other side of that seam.
+//
+// Only prefixes go into the metadata. The prefix is the public half of a token
+// by construction — it is stored, indexed and shown in the key list — and the
+// secret is not in the row this is written from, so there is nothing here for
+// the "never put a secret in metadata" rule to catch.
+func (s *Service) RecordAPIKeyRotation(
+	ctx context.Context, actor *auth.Identity, ev auth.APIKeyRotation,
+) error {
+	predecessor := ev.PredecessorID
+	return s.Record(ctx, actor, Event{
+		Action:     ActionAPIKeyRotated,
+		TargetType: "api_key",
+		// The **predecessor** is the target. Rotation is something that happened
+		// to the key being replaced: it acquired a deadline. The successor is
+		// named in the metadata, which is what lets a reader walk the chain
+		// forwards from any generation.
+		TargetID: &predecessor,
+		Metadata: map[string]any{
+			"prefix":           ev.PredecessorPrefix,
+			"successor_id":     ev.SuccessorID.String(),
+			"successor_prefix": ev.SuccessorPrefix,
+			"grace_expires_at": ev.GraceExpiresAt.UTC().Format(time.RFC3339),
+			"scopes":           ev.Scopes,
+			"scopes_narrowed":  ev.ScopesNarrowed,
+			"org_wide":         ev.OrgWide,
+		},
+	})
 }
 
 // actorLabel is the snapshot stored beside the actor's id.

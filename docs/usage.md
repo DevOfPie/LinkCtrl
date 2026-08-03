@@ -14,7 +14,7 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 | `/dashboard` | 30-day totals, clicks-per-day chart, your five newest links. |
 | `/links` | Create a link; search, filter by status, sort; page through with a cursor. The search box filters as you type and updates the address bar, so a reload or a shared URL shows the same view. |
 | `/links/{id}` | Everything about one link: edit destination, alias, title, description, expiry and tags; per-window analytics (7/30/90 days) with device, browser, OS, referrer, language and country breakdowns, each with a share ring, plus a world choropleth over the country figures; recent activity; archive, restore and delete. |
-| `/keys` | Mint, list and revoke API keys. |
+| `/keys` | Mint, list and revoke API keys, and choose whether a new one reaches one workspace or the organization. Rotation is not here: it replaces the credential that made the request, and a browser session is not one. |
 | `/notifications` | Things the instance wanted you to know about, and mark-read. |
 | `/disputes` | The review queue: destinations somebody was refused and has asked you to look at. Needs `destinations.review`. |
 | `/feeds` | Whether this instance sends the destinations you type to a third party, and to whom. Read-only, and readable by everybody — what it describes is what happens to your own data. |
@@ -345,11 +345,27 @@ Two operations deliberately refuse an API key and require a session: **minting o
 revoking keys**, and **changing a password**. A key that can mint keys makes
 revocation meaningless, and a leaked key must not be able to lock its owner out.
 
+There is exactly one thing a key may do to a key, and it is
+[rotating itself](#rotating-a-key).
+
 ### Getting a key
 
 Mint one in the dashboard at `/keys`, or on a headless host with
 [`lctl`](cli.md#apikey). The token appears exactly once — only its HMAC is
 stored, so it cannot be recovered afterwards. Lose it, revoke it, mint another.
+
+**Reach.** A key is bound to the workspace you created it in and acts only there.
+The alternative — valid in every workspace of the organization — is the *Reach*
+control on the form, `"org_wide": true` on the API, or `--org-wide` on the CLI. It
+needs `apikeys.write` held through an **organization-wide** membership: a role you
+hold in one workspace issues keys for that workspace, which is the same rule that
+stops a workspace-scoped admin re-roling an organization-wide member. The key
+list, `lctl apikey list` and the API all say which of the two a key is.
+
+An organization-wide key follows you into that organization's workspaces and no
+further. If you belong to more than one organization, the key stays in the one it
+was issued in whatever workspace you last used or pinned elsewhere — the pin is
+about you, and the key is about a tenancy.
 
 Scopes are permission slugs you already hold, checked again on every request
 against your current role. Demote the owner and their keys weaken immediately.
@@ -377,6 +393,59 @@ bounded separately from what it may hold.
 scopes are intersected with the owner's role on every request, so an
 organization made through a key leaves that key holding exactly what it was
 minted with.
+
+### Rotating a key
+
+A key replaces itself. Nobody has to be signed in, which is the point: a
+deployment can retire an old credential at 3am without a human.
+
+```sh
+curl -sS -X POST https://links.example.com/api/v1/api-keys/rotate \
+  -H "Authorization: Bearer $LINKCTRL_KEY"
+```
+
+`201` with the successor and the only copy of its token, plus a `predecessor`
+block saying when the key you just used stops working.
+
+There is no id in that URL, and that is deliberate: the key being rotated is the
+one in the `Authorization` header, and there is no other it could reach. A
+signed-in session gets `403` — a session that wants another key mints one.
+
+The successor is **identical or narrower**. Same workspace, same reach, same name;
+scopes are this key's unless you name a subset, and a scope this key does not hold
+is refused rather than dropped. Its expiry is the predecessor's *lifetime* from
+now, so a 30-day key rotates into another 30-day key and a key that never expires
+rotates into one that never expires.
+
+Both secrets verify for a grace window — an hour by default, five minutes to a day
+via `grace_seconds` — so a rolling deployment can hold either. When it closes the
+old key is refused immediately, on every replica; a background sweep then marks it
+revoked so the key list agrees with what already happened.
+
+```sh
+# Narrower, and cut the old one off in ten minutes.
+curl -sS -X POST https://links.example.com/api/v1/api-keys/rotate \
+  -H "Authorization: Bearer $LINKCTRL_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"scopes":["links.read"],"grace_seconds":600}'
+```
+
+**A key rotates once.** Asking again answers `409`: the successor already exists,
+and if its token was lost the way out is to revoke this key from a session and
+mint a new one. Every rotation is an audit event naming the prefix it came from
+and the prefix it became.
+
+Two things to know before you rely on it:
+
+- **`last_used_at` is written on a 30-second cadence.** Checking whether anything
+  still uses the predecessor is the obvious way to confirm a rotation has landed,
+  and the answer is up to half a minute stale. That is why the grace window has a
+  five-minute floor.
+- **A leaked key can rotate itself too.** Whoever holds a stolen secret can
+  perform the call above, and they end up with a successor you never issued.
+  Revoking the key you know about does not touch it. If you suspect a leak, read
+  the key list first and look for prefixes you do not recognise —
+  [SECURITY.md](SECURITY.md) says what to do about it.
 
 ### Worked examples
 

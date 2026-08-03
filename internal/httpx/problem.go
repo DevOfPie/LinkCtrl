@@ -116,6 +116,20 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 			Detail: "The API key is unknown, revoked, expired, or malformed.",
 		})
 
+	case errors.Is(err, auth.ErrAPIKeyAlreadyRotated):
+		// Deliberately *not* folded into the invalid-key answer above. The
+		// caller holding this key just authenticated with it, so it is neither
+		// unknown nor leaked-and-probing; it has simply already been replaced
+		// and whoever asked has lost the successor. Answering 401 would send an
+		// automated rotation into a retry loop against a credential that is
+		// working perfectly well.
+		WriteProblem(w, r, Problem{
+			Type: problemBase + "api-key-already-rotated", Title: "Already rotated",
+			Status: http.StatusConflict,
+			Detail: "This key has already been rotated into a successor. A key rotates once; " +
+				"if the successor's token was lost, revoke this key and mint a new one from a session.",
+		})
+
 	case errors.Is(err, auth.ErrInvalidCredentials):
 		WriteProblem(w, r, Problem{
 			Type: problemBase + "invalid-credentials", Title: "Invalid credentials",

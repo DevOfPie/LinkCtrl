@@ -140,6 +140,10 @@ file. Append a row when you append an entry.
 | [M43, what bounds one evaluation run, and where the numbers live](#2026-08-03--m43-what-bounds-one-evaluation-run-and-where-the-numbers-live) | D84 — four constants in `internal/domain` and the arithmetic beside them, 2,900 statements worst case against a one-minute clock; both caps logged rather than implicit; the bounds advertised on the API; `MaxAutomationMinCount` defined *as* the match cap; three indexes and no new column |
 | [M43, automation mints two permissions, and one is not delegable](#2026-08-03--m43-automation-mints-two-permissions-and-one-is-not-delegable) | D85 — where D80's reasoning goes one turn further: a webhook is an instruction to *report*, a rule is an instruction to *act*; D18's durability limb again; why `automation.read` stays delegable; and why the archive takes no actor rather than a synthetic identity holding `links.delete` |
 | [M43, what the demo shows, and why it changes nobody's links](#2026-08-03--m43-what-the-demo-shows-and-why-it-changes-nobodys-links) | D86 — one rule per trigger and one paused; **no seeded rule archives a link**, asserted rather than trusted, because the demo is public and that is the one action another visitor feels; the webhook action seeded precisely because `.example` dials nobody; the seeder fires nothing because arming outruns it |
+| [M44, a key that replaces itself, and the leak it can carry](#2026-08-03--m44-a-key-that-replaces-itself-and-the-leak-it-can-carry) | D87 — rotation as a key replacing **itself**: no id in the route, identical-or-narrower scopes against the row's ceiling, the workspace binding copied verbatim, once only with a unique index holding the chain; the grace window floored at ten `last_used_at` flush intervals and capped so D9's trade stays finite; the deadline as the one thing that refreshes; and the accepted trade — a leaked key can persist across rotations — stated with the three things that bound it |
+| [M44, how wide a key reaches, and why no permission was minted for it](#2026-08-03--m44-how-wide-a-key-reaches-and-why-no-permission-was-minted-for-it) | D88 — the workspace choice 00500's column and `apikey.go`'s comment both promised: opt-in, defaulting to the shipped single-workspace behaviour, gated on `MembershipAuthority.In(nil)` rather than `Can` because F27's shape is exactly a workspace-scoped role issuing organization-wide reach; why an `apikeys.org_scope` permission would have looked like a gate and enforced nothing |
+| [M44, what the key demo shows, and why no secret is on it](#2026-08-03--m44-what-the-key-demo-shows-and-why-no-secret-is-on-it) | D89 — three keys and four rows, because a rotation is a row rather than an edit; every token discarded, since a demo that kept one would publish a live credential; the rotation performed through the real path because `Rotate` refuses anything that is not a key; the maximum grace as a fact about `demo-update`'s cadence, asserted rather than trusted; the reset removing visitors' keys too |
+| [M44, the tenancy bound an organization-wide key needed](#2026-08-03--m44-the-tenancy-bound-an-organization-wide-key-needed) | D90 — the defect M44 created by making a NULL `workspace_id` issuable at all: the resolver filters on membership, so an owner belonging to two organizations would have their organization-wide key resolve into the *other* tenant, with `Authenticate` taking that organization's id as the key's own. Fixed in-spec, as a **bound** on the candidate set rather than a rung in the precedence, so a key still follows its owner's pinned default inside its own organization and every other caller resolves unchanged |
 
 ---
 
@@ -11133,3 +11137,246 @@ wrote around it and the first evaluation on a freshly seeded demo matches nothin
 A demo whose first scheduler tick archived twenty links and sent three
 notifications would be a demo that had done something to itself before anybody
 looked at it.
+
+## 2026-08-03 — M44, a key that replaces itself, and the leak it can carry
+
+**D87.**
+
+Plan.md carried a known limitation from Phase 1 — *API keys cannot manage API
+keys* — and a scheduled resolution, D9. The tension is real and worth restating
+before the resolution, because the resolution only makes sense against it.
+`apikeys.read` and `apikeys.write` are non-delegable so that a leaked credential
+cannot mint its own replacement: revocation has to mean something, and it means
+nothing if whoever holds the leaked key issued a second one before the first was
+cut off. But a credential that can only ever be replaced by a human signing in is
+a credential that cannot be replaced at 3am by the deployment that noticed it was
+old, which is the case rotation exists for.
+
+**Rotation is not a key minting a key. It is a key replacing itself**, and every
+part of the shape follows from making that literally true rather than
+approximately true.
+
+*Only its own row.* The route is `POST /api-keys/rotate` with no id in it. An id
+would read as "name the key to rotate", every caller who tried would get a 403 for
+asking a question the URL had invited, and the service would be enforcing
+something the interface denied. The key being rotated is the key in the
+`Authorization` header, and there is no other way to say which.
+
+*Identical or narrower.* Scopes default to the predecessor's stored set and may
+only be narrowed; a scope the key does not hold is refused rather than trimmed,
+because trimming would let a caller believe it had been granted. The ceiling is
+the **row's** scopes, not the actor's current permissions — those two differ
+whenever the owner has been demoted since the key was minted, and intersecting
+here would make a rotation quietly shrink a key by an amount that would come back
+if the owner were re-promoted. Identical means identical.
+
+*The same workspace binding, copied verbatim.* A rotation cannot move a key
+between workspaces and cannot turn a workspace-bound key into an organization-wide
+one. That choice belongs to whoever creates the key (D88) and it is made once.
+
+*Once.* A key that already has a successor refuses with 409, and a unique index on
+`successor_id` holds the same rule in the database — so the lineage is a chain and
+not a tree. The application check bounds fan-out and the index bounds fan-in;
+either alone leaves a race, and D9's accepted trade is only tolerable while the
+persistence is a line somebody can walk.
+
+*The one thing that does refresh is the deadline.* A successor inherits the
+predecessor's **lifetime** measured from now, not its expiry. Inheriting the
+expiry would produce a successor dying at the same instant as the key it replaced,
+which makes rotating an expiring key pointless; a key created to live 30 days
+rotates into one that lives 30 days, and a key with no expiry rotates into one
+with none. This is the only dimension a rotation moves, and it moves because
+moving it is what rotation is for.
+
+**The grace window, and the number it is tied to.** Both secrets verify for a
+bounded period, defaulting to an hour, floored at five minutes and capped at
+twenty-four. The floor is not arbitrary. `last_used_at` is buffered and flushed on
+a 30-second cadence — the Phase 1 trade that keeps authentication free of a write —
+so a predecessor that reads as idle may have been used up to 30 seconds ago, and
+the obvious way to check a rotation landed is to watch exactly that column. A
+window measured in seconds would close before the answer existed. Five minutes is
+ten flush intervals, and a unit test asserts the relationship rather than either
+number, so moving one without the other fails.
+
+The ceiling is what keeps D9's accepted trade finite. Without it an operator could
+set a window that outlives any incident the rotation was performed for, and "the
+predecessor stops working" would become a promise about the far future.
+
+**The refusal is enforced on the request path, not by a job.** Authentication
+reads `grace_expires_at` from the row it already fetched, exactly as it reads
+`revoked_at` — so a lapsed predecessor stops working on every replica at the
+instant it was told it would, with no cache to invalidate and no scheduler to
+depend on. Housekeeping then writes `revoked_at = grace_expires_at`, and that is
+bookkeeping rather than enforcement: what it buys is a key list that agrees with
+the behaviour, because an owner who sees a key reading *active* that authenticates
+nothing will believe the list over the truth.
+
+**The accepted trade, in the open: a leaked key can persist across rotations.**
+Whoever holds the secret can rotate it, so revoking the key the owner knows about
+does not necessarily end the intruder's access — they hold a successor under a
+prefix the owner never issued. Three things bound it rather than remove it. Every
+generation appears in the owner's key list with its own prefix and state; every
+rotation writes an `apikey.rotated` audit record naming the prefix it came from
+and the prefix it became, so the chain is walkable from any generation; and each
+predecessor's window is capped. The alternative considered and rejected was
+session-only rotation, which is what the product already had under a different
+name — mint a new key by hand — and which would have left the limitation
+unsolved while appearing to close it.
+
+**`apikeys.*` is still not a scope any key may hold.** Nothing about rotation
+touches `NonDelegableScopes`, and
+`TestNonDelegableScopesCoverKeyManagement` passes unmodified. That is not
+incidental: it is the reason handing rotation to a credential is safe at all, and
+a rotation that had needed the test edited would have been the wrong design rather
+than a test in the way.
+
+## 2026-08-03 — M44, how wide a key reaches, and why no permission was minted for it
+
+**D88.**
+
+`api_keys.workspace_id` has been nullable since migration 00500, with a comment
+saying NULL means "valid across the organization's workspaces", and nothing has
+ever written one. `apikey.go` carried the matching promise — *Phase 2 widens this
+to a choice; leaving workspace_id NULL would mean "every workspace in the
+organization", which is not something to grant by default*. M44 is where the
+column starts being used rather than described, and the comment had already
+decided two of the three questions.
+
+**It is opt-in, and the default is exactly what every key had before.** A key
+created without asking is bound to the workspace its creator was acting in. That
+is not caution for its own sake: the shipped behaviour is the one every existing
+integration was written against, and a default that changed reach on upgrade would
+widen credentials nobody touched.
+
+**The gate is not `Can(apikeys.write)`, and that is the whole of the decision.**
+`Identity.Can` answers from the union of every membership matching the workspace
+being acted in (D31), so an actor holding `apikeys.write` through a membership
+scoped to *one* workspace answers yes to it. Issuing an organization-wide key on
+the strength of a workspace-scoped role is precisely the shape F27 had, and M28's
+reopening built the machinery for not repeating it: D44 authorizes a write against
+the membership whose scope covers its target, and `MembershipAuthority.In(nil)` is
+that question asked about the organization. Only an organization-wide membership
+reaches it. So the check is `In(nil)`, and a workspace-scoped admin can still
+issue keys — for their workspace.
+
+**No new permission was minted, deliberately.** An `apikeys.org_scope` was the
+obvious shape and it would have been worse than nothing. A permission is held per
+*role*, and roles are granted per membership, so a workspace-scoped admin would
+have held the new slug exactly as they already hold `apikeys.write` — the gate
+would have looked like a gate and enforced nothing that the wrong check was not
+already failing to enforce. This milestone therefore matches neither limb of D18:
+it adds no permission for D18 to classify, and the mechanism it uses is the one
+D44 already established.
+
+**The reach is reported, not inferred.** `org_wide` appears on every key in the
+API and as a *Reach* column in the dashboard and the CLI, because a workspace key
+and an organization-wide key are different credentials and nothing else in a list
+distinguishes them.
+
+## 2026-08-03 — M44, what the key demo shows, and why no secret is on it
+
+**D89.**
+
+The demo seeder had never written an API key, so the key page on the demo instance
+said *No API keys yet* — and M44 adds two things to that page, a *Reach* column
+and a rotated state, neither of which is visible without keys that have them.
+`demoCoverage()` exists for exactly this, so the question was not whether to seed
+but what.
+
+**The first question is whether a demo should hold credentials at all, and the
+answer is that it already can — what it must never do is display one.** The
+product stores an HMAC and shows the token once, in the response that mints it.
+The seeder discards every token it is handed, so what the page shows is what the
+key list has always shown: a prefix, a reach, a set of scopes, a state. A demo
+that kept a token would be publishing a live credential on an instance anybody can
+open, and that would have been a reason not to seed rather than a detail to be
+careful about.
+
+**Three keys, four rows.** `ci-deploy` is rotated, so the list holds a predecessor
+counting down beside the successor that replaced it — a rotation is a fourth row
+rather than an edit to the third, and the arithmetic is itself the feature.
+`reporting` is organization-wide, which is the other half of the *Reach* column: a
+column where every row says the same thing shows nothing. `link-checker` is the
+ordinary case, so the other two read as choices rather than as how keys are. The
+count is bounded above as well as below, because every row is a credential on a
+public instance and a seeder that quietly grew the number would be minting keys
+nobody asked for on every `demo-update`.
+
+**The rotation goes through the real path.** `Rotate` refuses any actor that is
+not a key, so the seeder authenticates with the token it was just handed and acts
+as the credential — which is the point of doing it that way rather than writing
+`successor_id` with SQL. A seeder that wrote the column directly would be showing
+a state the product might no longer produce, which is the failure the coverage
+test was built to catch and would itself have caused.
+
+**The seeded window is the maximum, and that is a fact about the demo rather than
+advice about the product.** `make demo-update` runs once per milestone; with the
+default hour the predecessor would read *rotated* for an hour and *revoked* for
+however long followed, so the state the milestone exists to show would be missing
+from the page most of the time somebody looked at it. A coverage row asserts the
+window has not already closed, because "the seeder uses the maximum grace" is the
+kind of claim that survives the change that makes it false.
+
+**The reset deletes every key in the demo organization**, including any a visitor
+minted for themselves. That is the intent rather than collateral: the demo is
+reset to what the seeder writes, and a credential somebody created on a public
+instance is exactly the sort of thing that should not survive one.
+
+## 2026-08-03 — M44, the tenancy bound an organization-wide key needed
+
+**D90.**
+
+Found while building the scope choice, fixed inside M44 because it makes M44's own
+claim false rather than somebody else's.
+
+`ResolveWorkspaceForUser` is the single statement of "which workspace is this
+request acting in", and its filter is **membership**: every workspace the user
+belongs to is a candidate, ranked by the session's current workspace, then the
+user's pinned default, then the one they used last, then the oldest. That is
+correct for a session and for a login, because a person acting interactively is
+acting as themselves.
+
+It is wrong for an organization-wide API key, and only M44 could make it wrong.
+Such a key is a row with a NULL `workspace_id`, which the 00500 comment defines as
+"valid across the organization's workspaces" — *the* organization, the one the key
+was issued in and whose id the row carries. But the resolver never saw that id.
+An owner who also belongs to a second organization and pinned a workspace there
+would have their key resolve into that second tenant, carrying its scopes with it
+and reporting the other organization's id as its own. `Authenticate` takes both
+the workspace and the organization from the resolved row, so the key would have
+acted wholly inside a tenant nobody issued it for.
+
+Nothing could reach this before M44. `Create` wrote `&actor.WorkspaceID`
+unconditionally, so no key in any released version has a NULL workspace, and the
+branch that resolves one existed only because the column permitted a value nothing
+produced. M44 is what starts producing it — which is what makes the fix in-spec
+under workflow.md's rule that a defect falsifying the current milestone's claim is
+in spec, whatever it looks like.
+
+**The fix is a bound, not a rung.** `ResolveWorkspaceForUser` takes an optional
+`organization_id` that narrows the candidate set and leaves the precedence
+untouched, so a key still follows the person it acts as — pinned default included —
+within its own organization. Every other caller passes NULL and resolves exactly
+as it always did. The alternative, checking the resolved organization afterwards
+and refusing on a mismatch, would have turned "your default is elsewhere today"
+into an authentication failure for a key that is perfectly valid.
+
+Worth naming what the check could not have been: the *permission* union already
+scopes correctly, so this was never a case of a key holding rights it should not.
+It was a key acting in the wrong tenancy with rights it legitimately held, which
+is the failure mode that reads as working software.
+
+**One shipped test asserted the defect, and it had to be corrected rather than
+deleted.** `TestAPIKeysFollowTheirOwnerButCannotSwitch` (M25) gave its user a
+second *organization* with `addOrgWithWorkspace`, hand-nulled a key's
+`workspace_id` with SQL, pinned a workspace in that other organization, and
+asserted the key followed the pin into it. Its intent — a loose key follows its
+owner's preference rather than freezing where it was made — is still true and is
+still asserted; its setup crossed a tenancy boundary that nothing in the product
+could produce, because `Create` always wrote a workspace id and the NULL was
+written by the test itself. The fix gives the same test a second workspace in the
+*same* organization, which is the state M44 makes real, and adds the
+cross-organization case beside it as an assertion of the bound. Correcting the
+setup of a test whose premise the product never had is not the same as editing a
+test to make a change pass, and the difference is that the original claim survives
+in the file rather than being quietly dropped.

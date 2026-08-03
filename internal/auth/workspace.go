@@ -64,10 +64,21 @@ var ErrNoWorkspace = errors.New("auth: account belongs to no organization")
 // memberships. Everything about the precedence lives in the query.
 //
 // sessionID is nil for the three callers that have no session.
-func (s *Service) resolveWorkspace(ctx context.Context, userID uuid.UUID, sessionID *uuid.UUID) (dbgen.Workspace, error) {
+//
+// orgID is nil for everything except an organization-wide API key (M44), and it
+// bounds the answer rather than ordering it. Such a key means "every workspace in
+// **the organization it belongs to**", and a person's pinned default is a
+// property of the person: without the bound, a key issued in one organization
+// would resolve into another one its owner also belongs to. Passing nil here is
+// the behaviour every other caller has always had, which is what keeps this one
+// function the only statement of the precedence.
+func (s *Service) resolveWorkspace(
+	ctx context.Context, userID uuid.UUID, sessionID *uuid.UUID, orgID *uuid.UUID,
+) (dbgen.Workspace, error) {
 	ws, err := s.q.ResolveWorkspaceForUser(ctx, dbgen.ResolveWorkspaceForUserParams{
-		UserID:    userID,
-		SessionID: sessionID,
+		UserID:         userID,
+		SessionID:      sessionID,
+		OrganizationID: orgID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

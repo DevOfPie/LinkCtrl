@@ -300,6 +300,7 @@ func NewRouter(d Deps) http.Handler {
 		for pattern, h := range map[string]http.HandlerFunc{
 			"POST " + APIPrefix + "/api-keys":        keys.Create,
 			"GET " + APIPrefix + "/api-keys":         keys.List,
+			"POST " + APIPrefix + "/api-keys/rotate": keys.Rotate,
 			"DELETE " + APIPrefix + "/api-keys/{id}": keys.Revoke,
 		} {
 			app.Handle(pattern, RequireAuth(h))

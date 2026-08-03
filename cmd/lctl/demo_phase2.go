@@ -261,6 +261,10 @@ type demoSeeder struct {
 	// gates spends part of the click-limited link's budget through the same
 	// statement the redirect path uses (M35).
 	gates *gate.Service
+	// keys mints and rotates the demo's API keys (M44). Its own service rather
+	// than one borrowed from elsewhere, because it is the only thing here that
+	// needs the HMAC pepper.
+	keys *auth.APIKeyService
 
 	// owner is whoever claimed the instance, acting in their first workspace.
 	owner *auth.Identity
@@ -290,6 +294,17 @@ func newDemoSeeder(
 		return nil, fmt.Errorf("demo disputes: %w", err)
 	}
 
+	// Not started: the usage tracker's ticker has nothing to do in a one-shot
+	// seeder, and seedAPIKeys flushes by hand instead.
+	keySvc, err := auth.NewAPIKeyService(pool, authSvc, auth.APIKeyConfig{
+		Pepper:  []byte(cfg.APIKeyPepper.Reveal()),
+		Auditor: auditSvc,
+		Logger:  discardLogger(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("demo api keys: %w", err)
+	}
+
 	return &demoSeeder{
 		pool: pool, q: dbgen.New(pool), cfg: cfg, now: now, opt: opt,
 		auth:    authSvc,
@@ -300,6 +315,7 @@ func newDemoSeeder(
 		link:    linkSvc,
 		dispute: disputeSvc,
 		gates:   gateSvc,
+		keys:    keySvc,
 		owner:   owner,
 	}, nil
 }
@@ -343,6 +359,9 @@ func (s *demoSeeder) run(ctx context.Context, primary []demoLink, ids map[int]uu
 		return err
 	}
 	if err := s.seedAutomation(ctx); err != nil {
+		return err
+	}
+	if err := s.seedAPIKeys(ctx); err != nil {
 		return err
 	}
 	if err := s.seedBlockingAndDisputes(ctx, people); err != nil {
@@ -1271,6 +1290,92 @@ func (s *demoSeeder) seedAutomation(ctx context.Context) error {
 	return nil
 }
 
+// demoAPIKeys are the credentials the demo shows (M44).
+//
+// Three, and each earns its place by being the only thing on the page that shows
+// one state. `ci-deploy` is rotated, so the list holds a predecessor counting
+// down beside the successor that replaced it — the state the whole milestone is
+// about, and one nobody sees without a key that has actually been rotated.
+// `reporting` is organization-wide, which is the other half of the *Reach*
+// column: a column where every row says the same thing shows nothing.
+// `link-checker` is the ordinary case, unrotated and workspace-bound, so the
+// other two read as choices rather than as how keys are.
+//
+// **No secret survives this.** Every token these calls return is discarded here,
+// which is not tidiness — it is the only correct thing to do with one. The
+// product stores an HMAC and shows the token once, so a demo that kept one would
+// be publishing a live credential on an instance anybody can open. What the
+// visitor sees is what the key list has always shown: a prefix, a reach, a set of
+// scopes and a state.
+func demoAPIKeys() []struct {
+	name    string
+	scopes  []string
+	orgWide bool
+	rotate  bool
+} {
+	return []struct {
+		name    string
+		scopes  []string
+		orgWide bool
+		rotate  bool
+	}{
+		{name: "ci-deploy", scopes: []string{"links.read", "links.create"}, rotate: true},
+		{name: "reporting", scopes: []string{"links.read"}, orgWide: true},
+		{name: "link-checker", scopes: []string{"links.read"}},
+	}
+}
+
+// seedAPIKeys mints the demo's keys and rotates one of them.
+//
+// The rotation goes through the real path rather than through SQL, and that is
+// the point of doing it at all: `Rotate` refuses any actor that is not a key, so
+// the seeder has to authenticate with the token it was just handed and act as the
+// credential. A seeder that wrote `successor_id` directly would be showing a
+// state the product might no longer produce.
+//
+// The grace window is the maximum the service allows, and the reason is the demo
+// rather than the product. `make demo-update` runs once per milestone, and with
+// the default hour the predecessor would show *rotated* for an hour and *revoked*
+// for however long followed — so the state the milestone exists to show would be
+// missing from the page most of the time somebody looked at it.
+func (s *demoSeeder) seedAPIKeys(ctx context.Context) error {
+	rotated := 0
+	for _, spec := range demoAPIKeys() {
+		created, err := s.keys.Create(ctx, s.owner, auth.CreateAPIKeyInput{
+			Name: spec.name, Scopes: spec.scopes, OrgWide: spec.orgWide,
+		})
+		if err != nil {
+			return fmt.Errorf("create api key %q: %w", spec.name, err)
+		}
+		if !spec.rotate {
+			continue
+		}
+
+		// Acting as the key, because only a key rotates and only itself.
+		actor, err := s.keys.Authenticate(ctx, created.Key)
+		if err != nil {
+			return fmt.Errorf("authenticate as %q to rotate it: %w", spec.name, err)
+		}
+		if _, err := s.keys.Rotate(ctx, actor, auth.RotateAPIKeyInput{
+			Grace: auth.MaxRotationGrace,
+		}); err != nil {
+			return fmt.Errorf("rotate api key %q: %w", spec.name, err)
+		}
+		rotated++
+	}
+
+	// Authenticate buffers a last_used_at write, and the demo's key service is
+	// never started, so nothing would ever flush it. Flushed here so the list
+	// shows the rotated key as used rather than as never touched — which is the
+	// truth, since it made the rotation request itself.
+	if err := s.keys.FlushUsage(ctx); err != nil {
+		return fmt.Errorf("flush api key usage: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "api keys: %d (%d rotated)\n", len(demoAPIKeys()), rotated)
+	return nil
+}
+
 // demoDomains are the hostnames the demo registers, one per workspace.
 //
 // **Two, and in different workspaces, because one would show nothing.** A single
@@ -1642,6 +1747,18 @@ func demoResetPhase2(ctx context.Context, tx pgxExecutor, orgID, userID uuid.UUI
 			DELETE FROM automation_rules
 			 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
 			[]any{orgID}},
+
+		// The API keys (M44), predecessors and successors together. A step of its
+		// own because nothing else reaches them — they hang off the organization
+		// and the user, not off a link — and `api_keys.successor_id` is ON DELETE
+		// SET NULL rather than CASCADE, so deleting a successor would otherwise
+		// leave its predecessor behind with a dangling rotation.
+		//
+		// Scoped to the organization, which means it also removes any key a demo
+		// visitor minted for themselves. That is the intent: the demo is reset to
+		// what the seeder writes, and a credential somebody created on a public
+		// instance is exactly the sort of thing that should not survive it.
+		{"api keys", `DELETE FROM api_keys WHERE organization_id = $1`, []any{orgID}},
 
 		{"invitations", `DELETE FROM invitations WHERE organization_id = $1`, []any{orgID}},
 		{"notifications", `DELETE FROM notifications WHERE user_id = $1`, []any{userID}},

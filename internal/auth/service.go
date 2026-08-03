@@ -350,7 +350,7 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 	// sessions.workspace_id is nullable and is SET NULL when a workspace is
 	// deleted, so a signed-in browser was always going to reach this state; what
 	// changes here is that signing in can start in it.
-	ws, err := s.resolveWorkspace(ctx, user.ID, nil)
+	ws, err := s.resolveWorkspace(ctx, user.ID, nil, nil)
 	if err != nil && !errors.Is(err, ErrNoWorkspace) {
 		return nil, err
 	}
@@ -427,7 +427,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*Identity, er
 	// would turn one owner's tenancy teardown into an authentication outage for
 	// the person it orphaned — they would be unable to sign in and therefore
 	// unable to create the organization the product wants to offer them.
-	ws, err := s.resolveWorkspace(ctx, row.UserID, &row.ID)
+	ws, err := s.resolveWorkspace(ctx, row.UserID, &row.ID, nil)
 	if err != nil && !errors.Is(err, ErrNoWorkspace) {
 		return nil, err
 	}
@@ -468,7 +468,7 @@ func (s *Service) IdentityForEmail(ctx context.Context, email string) (*Identity
 	}
 	// No session, so the account's own preference decides: the CLI acts where
 	// the person would land if they signed in — including, since D36, nowhere.
-	ws, err := s.resolveWorkspace(ctx, user.ID, nil)
+	ws, err := s.resolveWorkspace(ctx, user.ID, nil, nil)
 	if errors.Is(err, ErrNoWorkspace) {
 		return identityWithoutOrganization(user.ID, user.Email, user.Name), nil
 	}

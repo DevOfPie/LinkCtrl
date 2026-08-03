@@ -284,9 +284,17 @@ func run(cfg config.Config, _ io.Writer) error {
 		},
 	})
 
+	// Built here rather than at the other services' construction point below
+	// because the key service needs it and the key service is built first — the
+	// dashboard and every API handler resolve their identity through it.
+	auditSvc := audit.NewService(pools.App)
+
 	keySvc, err := auth.NewAPIKeyService(pools.App, authSvc, auth.APIKeyConfig{
 		Pepper: []byte(cfg.APIKeyPepper.Reveal()),
-		Logger: log,
+		// Rotation is the one key operation no human is present for, so it is the
+		// one that has to leave a record (M44).
+		Auditor: auditSvc,
+		Logger:  log,
 	})
 	if err != nil {
 		return err
@@ -321,11 +329,9 @@ func run(cfg config.Config, _ io.Writer) error {
 	// the one query that fills it filters on `verified_at`.
 	hostCache := redirect.NewHostCache(pools.App, log)
 
-	// The audit log. Constructed before the services that emit into it, which
-	// is the ordering the whole milestone is about: emission is a dependency
-	// the emitting features are built against, not something added to them
-	// afterwards.
-	auditSvc := audit.NewService(pools.App)
+	// The audit log is constructed above, beside the key service — emission is a
+	// dependency the emitting features are built against, not something added to
+	// them afterwards, and key rotation is one of the emitters.
 
 	// The inbox. Its first consumer is the audit-growth warning in the job
 	// runner below, which is why it is built here rather than beside the API.

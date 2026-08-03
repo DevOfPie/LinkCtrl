@@ -44,7 +44,8 @@ migrate up         Apply pending migrations, then ensure partitions exist
 migrate down       Roll back the most recent migration
 migrate status     Show applied and pending migrations
 partitions ensure  Create partitions for the current and next two months
-apikey create      Issue an API key   --user --name --scopes [--expires-in]
+apikey create      Issue an API key   --user --name --scopes
+                                      [--expires-in] [--org-wide]
 apikey list        List a user's API keys                          --user
 apikey revoke      Revoke an API key                         --user --id
 seed               Generate a load-testing dataset  --links --clicks [--reset]
@@ -109,6 +110,7 @@ one through the API needs a browser session.
 $ lctl apikey create --user you@example.com --name ci-deploy \
     --scopes links.read,links.create --expires-in 720h
 created ci-deploy (lk_live_iszzewpi) for you@example.com
+reach: workspace
 scopes: links.read, links.create
 this is the only time the key is shown:
 lk_live_iszzewpi_4oppgem7xFr9ZhKfKTEG4tgy3dXksX2C2X9uxuzhWss
@@ -126,14 +128,26 @@ expires. Scopes must be permissions that user's role grants —
 `--scopes apikeys.write` is refused, because a key that can mint keys makes
 revoking a leaked one meaningless.
 
+`--org-wide` issues a key valid in every workspace of the organization instead of
+only the one that user is acting in. It is refused unless that user holds
+`apikeys.write` through an **organization-wide** membership — the flag asks, it
+does not grant, which is the point of the CLI acting as a named user.
+
 ```sh
 $ lctl apikey list --user you@example.com
-ID                                    PREFIX            NAME      STATE   LAST USED  SCOPES
-019fb19b-6fa9-7932-9de0-81810c2db7b2  lk_live_iszzewpi  ci-smoke  active  never      links.read,links.create
+ID                                    PREFIX            NAME      REACH      STATE   LAST USED  SCOPES
+019fb19b-6fa9-7932-9de0-81810c2db7b2  lk_live_iszzewpi  ci-smoke  workspace  active  never      links.read,links.create
 ```
 
-`STATE` is `active`, `expired` or `revoked`. `LAST USED` is written asynchronously
-on a coarse cadence — it answers "is this key still in use", not "when exactly".
+`REACH` is `workspace` or `organization`. `STATE` is `active`, `expired`,
+`revoked`, or `rotated, until <timestamp>` for a key that has replaced itself and
+is serving out its grace window. `LAST USED` is written asynchronously on a coarse
+cadence — it answers "is this key still in use", not "when exactly".
+
+There is no `apikey rotate`, and there cannot be. Rotation replaces the credential
+that made the request, and `lctl` acts as a *person*: it has no key of its own to
+replace. Rotation is `POST /api/v1/api-keys/rotate`, sent with the key's own
+token — see [usage.md](usage.md#rotating-a-key).
 
 ```sh
 $ lctl apikey revoke --user you@example.com --id 019fb19b-6fa9-7932-9de0-81810c2db7b2

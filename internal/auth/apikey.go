@@ -196,14 +196,27 @@ var NonDelegableScopes = map[string]struct{}{
 // APIKeyInfo is a key as its owner sees it. The secret is absent by
 // construction: it is never stored, so it cannot be listed.
 type APIKeyInfo struct {
-	ID         uuid.UUID  `json:"id"`
-	Name       string     `json:"name"`
-	Prefix     string     `json:"prefix"`
-	Scopes     []string   `json:"scopes"`
+	ID     uuid.UUID `json:"id"`
+	Name   string    `json:"name"`
+	Prefix string    `json:"prefix"`
+	Scopes []string  `json:"scopes"`
+	// OrgWide is the workspace choice made when the key was created: false for
+	// a key bound to one workspace, true for one valid across every workspace in
+	// the organization (a NULL workspace_id). Reported rather than left implicit,
+	// because the two are otherwise indistinguishable in a list and they are not
+	// the same credential.
+	OrgWide    bool       `json:"org_wide"`
 	LastUsedAt *time.Time `json:"last_used_at"`
 	ExpiresAt  *time.Time `json:"expires_at"`
 	RevokedAt  *time.Time `json:"revoked_at"`
-	CreatedAt  time.Time  `json:"created_at"`
+	// RotatedAt, GraceExpiresAt and SuccessorID describe a key that has been
+	// replaced. All three are set together, on the predecessor, and all three
+	// are nil on a key that has not been rotated. GraceExpiresAt is the moment
+	// it stops authenticating anything.
+	RotatedAt      *time.Time `json:"rotated_at"`
+	GraceExpiresAt *time.Time `json:"grace_expires_at"`
+	SuccessorID    *uuid.UUID `json:"successor_id"`
+	CreatedAt      time.Time  `json:"created_at"`
 }
 
 // CreatedAPIKey is the response to creating a key: the record, plus the only
@@ -218,6 +231,14 @@ type CreateAPIKeyInput struct {
 	Name      string
 	Scopes    []string
 	ExpiresAt *time.Time
+	// OrgWide asks for a key valid in every workspace of the organization
+	// instead of only the one its creator was acting in.
+	//
+	// Opt-in, and false is the behaviour every key had before M44. Reaching
+	// every workspace is not something to grant because somebody left a field
+	// blank, and the check behind it is not the ordinary permission check —
+	// see MayCreateOrgWide.
+	OrgWide bool
 }
 
 // APIKeyConfig configures the key service.
@@ -228,8 +249,17 @@ type APIKeyConfig struct {
 	// UsageFlushInterval is how often buffered last_used_at values are
 	// written. Coarse on purpose: the value answers "is this key still in
 	// use", which does not need second resolution.
+	//
+	// It is also the tolerance on that answer, and rotation depends on the
+	// number: a predecessor that reads as idle may have been used up to this
+	// long ago, which is why MinRotationGrace sits an order of magnitude above
+	// it.
 	UsageFlushInterval time.Duration
-	Logger             *slog.Logger
+	// Auditor records rotations. Optional — a nil one means the rotation still
+	// happens and is logged as unrecorded, which is the same trade every other
+	// service makes with its audit writer.
+	Auditor APIKeyAuditor
+	Logger  *slog.Logger
 }
 
 // APIKeyService issues, lists, revokes and authenticates API keys.
@@ -240,12 +270,13 @@ type APIKeyConfig struct {
 // configuration. Both resolve to the same Identity, so nothing downstream can
 // tell which credential a request arrived with unless it asks.
 type APIKeyService struct {
-	pool   *pgxpool.Pool
-	q      *dbgen.Queries
-	auth   *Service
-	pepper []byte
-	usage  *keyUsageTracker
-	log    *slog.Logger
+	pool    *pgxpool.Pool
+	q       *dbgen.Queries
+	auth    *Service
+	pepper  []byte
+	usage   *keyUsageTracker
+	auditor APIKeyAuditor
+	log     *slog.Logger
 }
 
 // MinPepperLength mirrors the config validation floor, so a service built
@@ -265,12 +296,13 @@ func NewAPIKeyService(pool *pgxpool.Pool, authSvc *Service, cfg APIKeyConfig) (*
 	}
 
 	return &APIKeyService{
-		pool:   pool,
-		q:      dbgen.New(pool),
-		auth:   authSvc,
-		pepper: cfg.Pepper,
-		log:    cfg.Logger,
-		usage:  newKeyUsageTracker(pool, cfg.UsageFlushInterval, cfg.Logger),
+		pool:    pool,
+		q:       dbgen.New(pool),
+		auth:    authSvc,
+		pepper:  cfg.Pepper,
+		auditor: cfg.Auditor,
+		log:     cfg.Logger,
+		usage:   newKeyUsageTracker(pool, cfg.UsageFlushInterval, cfg.Logger),
 	}, nil
 }
 
@@ -323,15 +355,32 @@ func (s *APIKeyService) Create(ctx context.Context, actor *Identity, in CreateAP
 	}
 	errs = append(errs, scopeErrs...)
 
+	// The workspace choice (M44). By default a key is scoped to the workspace
+	// its creator was acting in, which is what every key issued before M44 got
+	// and what the 00500 column comment always allowed for. Leaving workspace_id
+	// NULL means "every workspace in the organization", so it is asked for
+	// explicitly and granted only to somebody whose own reach is that wide.
+	var workspaceID *uuid.UUID
+	if in.OrgWide {
+		may, err := s.MayCreateOrgWide(ctx, actor)
+		if err != nil {
+			return nil, err
+		}
+		if !may {
+			errs = append(errs, domain.FieldError{
+				Field: "org_wide", Code: "not_permitted",
+				Message: "an organization-wide key needs an organization-wide membership that grants " +
+					PermAPIKeysWrite + "; a role held in one workspace can issue a key for that workspace",
+			})
+		}
+	} else {
+		ws := actor.WorkspaceID
+		workspaceID = &ws
+	}
+
 	if len(errs) > 0 {
 		return nil, errs
 	}
-
-	// The key is scoped to the workspace its creator was acting in. Phase 2
-	// widens this to a choice; leaving workspace_id NULL would mean "every
-	// workspace in the organization", which is not something to grant by
-	// default.
-	workspaceID := actor.WorkspaceID
 
 	for attempt := range 3 {
 		token, prefix, secret, err := newAPIKeyToken()
@@ -343,7 +392,7 @@ func (s *APIKeyService) Create(ctx context.Context, actor *Identity, in CreateAP
 			ID:             uuid.Must(uuid.NewV7()),
 			UserID:         actor.UserID,
 			OrganizationID: actor.OrgID,
-			WorkspaceID:    &workspaceID,
+			WorkspaceID:    workspaceID,
 			Name:           name,
 			Prefix:         prefix,
 			KeyHash:        APIKeyHash(s.pepper, prefix, secret),
@@ -363,6 +412,38 @@ func (s *APIKeyService) Create(ctx context.Context, actor *Identity, in CreateAP
 		return &CreatedAPIKey{APIKeyInfo: keyInfo(row), Key: token}, nil
 	}
 	return nil, errors.New("auth: could not allocate an unused api key prefix")
+}
+
+// MayCreateOrgWide reports whether this actor may issue a key that reaches
+// every workspace in the organization.
+//
+// The check is **not** `actor.Can(PermAPIKeysWrite)`, and the difference is the
+// whole point. `Can` answers from the union of every membership matching the
+// workspace being acted in (D31), so an actor holding `apikeys.write` through a
+// membership scoped to one workspace answers yes to it — and issuing an
+// organization-wide key on the strength of a workspace-scoped role is precisely
+// the shape F27 had. D44's rule is that a write is authorized against the
+// membership whose scope covers its target, and an organization-wide key's
+// target is the organization: `In(nil)` is that question, and only an
+// organization-wide membership reaches it.
+//
+// No new permission was minted for this, deliberately. A permission is held per
+// *role*, and roles are granted per membership, so an `apikeys.org_scope` would
+// have been held by a workspace-scoped admin exactly as `apikeys.write` already
+// is — the new slug would have looked like a gate and enforced nothing the wrong
+// check was already failing to enforce.
+//
+// Also gated on being a session, because Create is: a key cannot mint a key at
+// all, so it certainly cannot mint a wider one.
+func (s *APIKeyService) MayCreateOrgWide(ctx context.Context, actor *Identity) (bool, error) {
+	if actor == nil || actor.IsAPIKey() || !actor.Can(PermAPIKeysWrite) {
+		return false, nil
+	}
+	authority, err := LoadMembershipAuthority(ctx, s.q, actor.UserID, actor.OrgID, PermAPIKeysWrite)
+	if err != nil {
+		return false, err
+	}
+	return authority.In(nil).Granted, nil
 }
 
 // List returns the actor's own keys.
@@ -390,8 +471,11 @@ func (s *APIKeyService) List(ctx context.Context, actor *Identity) ([]APIKeyInfo
 	for _, r := range rows {
 		out = append(out, APIKeyInfo{
 			ID: r.ID, Name: r.Name, Prefix: r.Prefix, Scopes: r.Scopes,
+			OrgWide:    r.WorkspaceID == nil,
 			LastUsedAt: r.LastUsedAt, ExpiresAt: r.ExpiresAt,
-			RevokedAt: r.RevokedAt, CreatedAt: r.CreatedAt,
+			RevokedAt: r.RevokedAt, RotatedAt: r.RotatedAt,
+			GraceExpiresAt: r.GraceExpiresAt, SuccessorID: r.SuccessorID,
+			CreatedAt: r.CreatedAt,
 		})
 	}
 	return out, nil
@@ -448,8 +532,15 @@ func (s *APIKeyService) Authenticate(ctx context.Context, token string) (*Identi
 		return nil, ErrAPIKeyInvalid
 	}
 	now := time.Now()
+	// The grace check is here, in the request path, and not in the housekeeping
+	// job that later writes revoked_at. A rotated predecessor stops verifying at
+	// the instant its window closes whether or not any background job is running,
+	// on every replica, with no cache to invalidate — which is the same property
+	// revocation already had and the reason both are read from the row rather
+	// than kept anywhere else.
 	if row.RevokedAt != nil ||
 		(row.ExpiresAt != nil && !row.ExpiresAt.After(now)) ||
+		(row.GraceExpiresAt != nil && !row.GraceExpiresAt.After(now)) ||
 		row.Status != "active" {
 		return nil, ErrAPIKeyInvalid
 	}
@@ -458,13 +549,23 @@ func (s *APIKeyService) Authenticate(ctx context.Context, token string) (*Identi
 	if row.WorkspaceID != nil {
 		wsID, orgID = *row.WorkspaceID, row.OrganizationID
 	} else {
-		// A NULL workspace means "any workspace in the organization", which
-		// Phase 1 never issues but the column permits. Resolve it the same way
-		// a login does rather than failing — including the owner's pinned
-		// default, since a key with no workspace of its own should follow the
-		// person it acts as. No session id: a key is not a browser, and a
-		// switch made in one must not move a key's requests.
-		ws, err := s.auth.resolveWorkspace(ctx, row.UserID, nil)
+		// A NULL workspace means "every workspace in the organization the key
+		// belongs to" — a choice its creator made (M44) and one the column has
+		// permitted since 00500. Resolved the same way a login is, so the key
+		// follows the person it acts as, including their pinned default.
+		//
+		// No session id: a key is not a browser, and a switch made in one must
+		// not move a key's requests.
+		//
+		// **Bounded to the key's own organization**, and that bound is
+		// load-bearing rather than tidy. The precedence filters on membership
+		// alone, and a person's pinned default is a property of the person: an
+		// owner who belongs to two organizations and last used the other one
+		// would otherwise have their organization-wide key resolve into a tenant
+		// it was never issued for, carrying its scopes with it. Unreachable
+		// before M44, because nothing had ever written a NULL here.
+		keyOrg := row.OrganizationID
+		ws, err := s.auth.resolveWorkspace(ctx, row.UserID, nil, &keyOrg)
 		if errors.Is(err, ErrNoWorkspace) {
 			// The one caller that does *not* get D36's empty identity. Belonging
 			// to nothing is a state a person is walked through — sign in, be
@@ -596,8 +697,11 @@ func requireSessionActor(actor *Identity, action string) error {
 func keyInfo(row dbgen.ApiKey) APIKeyInfo {
 	return APIKeyInfo{
 		ID: row.ID, Name: row.Name, Prefix: row.Prefix, Scopes: row.Scopes,
+		OrgWide:    row.WorkspaceID == nil,
 		LastUsedAt: row.LastUsedAt, ExpiresAt: row.ExpiresAt,
-		RevokedAt: row.RevokedAt, CreatedAt: row.CreatedAt,
+		RevokedAt: row.RevokedAt, RotatedAt: row.RotatedAt,
+		GraceExpiresAt: row.GraceExpiresAt, SuccessorID: row.SuccessorID,
+		CreatedAt: row.CreatedAt,
 	}
 }
 

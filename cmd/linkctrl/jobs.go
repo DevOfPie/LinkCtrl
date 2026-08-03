@@ -591,6 +591,25 @@ func (j *jobRunner) housekeeping(ctx context.Context) error {
 		j.log.Debug("expired sessions deleted", slog.Int64("count", n))
 	}
 
+	// Rotated predecessors whose grace window has closed (M44).
+	//
+	// This is bookkeeping, not enforcement, and the distinction is worth holding
+	// on to: authentication already refuses a key past its grace window by
+	// reading the column, so a lapsed predecessor stops working whether or not
+	// this job has ever run. What the sweep buys is a key list that agrees with
+	// that behaviour — without it the owner sees a key reading "active" that
+	// authenticates nothing, which is the sort of disagreement somebody
+	// debugging an outage will believe over the truth.
+	//
+	// Info rather than Debug: a key becoming permanently unusable is a thing an
+	// operator may need to find afterwards, and the count here is its only log.
+	if n, err := q.RevokeLapsedAPIKeyGraces(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("revoke lapsed api key graces: %w", err))
+	} else if n > 0 {
+		j.log.Info("rotated api keys revoked at the end of their grace window",
+			slog.Int64("count", n))
+	}
+
 	if n, err := q.DeleteRevokedAPIKeys(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("delete revoked api keys: %w", err))
 	} else if n > 0 {

@@ -412,6 +412,26 @@ func TestAWorkspaceScopedMembershipDoesNotReachItsSiblings(t *testing.T) {
 	}
 }
 
+// addWorkspace gives an organization a second workspace, without giving the user
+// a second organization.
+//
+// addOrgWithWorkspace is the other shape and they are not interchangeable, which
+// M44 is what made true. An organization-wide key reaches its own organization's
+// workspaces, so a test about *where a loose key lands* needs a second workspace
+// the key legitimately covers; a test about the tenancy bound needs a second
+// organization. Before M44 nothing could tell them apart, because nothing issued
+// a key with no workspace of its own.
+func addWorkspace(t *testing.T, pool *pgxpool.Pool, orgID uuid.UUID, name string) uuid.UUID {
+	t.Helper()
+	wsID := uuid.Must(uuid.NewV7())
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO workspaces (id, organization_id, name, slug) VALUES ($1, $2, $3, $4)`,
+		wsID, orgID, name, strings.ToLower(name)+"-"+wsID.String()[:8]); err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	return wsID
+}
+
 // TestAPIKeysFollowTheirOwnerButCannotSwitch covers the fourth call site and
 // the one restriction on it.
 func TestAPIKeysFollowTheirOwnerButCannotSwitch(t *testing.T) {
@@ -428,12 +448,25 @@ func TestAPIKeysFollowTheirOwnerButCannotSwitch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	second := addOrgWithWorkspace(t, pool, id.UserID, "Acme", "Marketing")
 
 	res, err := svc.Login(ctx, auth.LoginInput{Email: "keyed@example.com", Password: wsPassword})
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// A second workspace **in the same organization**, which is where a key with
+	// no workspace of its own may land. The membership registration created is
+	// organization-wide, so it covers this one too.
+	//
+	// This read `addOrgWithWorkspace(…, "Acme", "Marketing")` until M44, and the
+	// difference is not cosmetic: that gave the owner a second *organization* and
+	// then asserted the key followed a pin into it. Nothing could produce such a
+	// key at the time — `Create` always wrote a workspace id, and the NULL below
+	// is written by hand — so the assertion was about a state the product did not
+	// have. M44 makes it producible, and D90 bounds it to the key's own
+	// organization; the cross-organization case is asserted a few lines down,
+	// where it belongs.
+	second := addWorkspace(t, pool, res.Identity.OrgID, "Marketing")
 
 	bound, err := keys.Create(ctx, res.Identity, auth.CreateAPIKeyInput{
 		Name: "bound", Scopes: []string{"links.read"},
@@ -464,6 +497,30 @@ func TestAPIKeysFollowTheirOwnerButCannotSwitch(t *testing.T) {
 	if looseIdentity.WorkspaceID != second {
 		t.Errorf("a key with no workspace of its own resolved to %s, want the owner's "+
 			"pinned %s", looseIdentity.WorkspaceID, second)
+	}
+
+	// And the bound the pin does not cross (D90). The owner joins a second
+	// organization and pins a workspace there; the key stays where it was issued,
+	// because organization-wide means every workspace in *its* organization and a
+	// pin is a property of the person rather than of the tenancy.
+	elsewhere := addOrgWithWorkspace(t, pool, id.UserID, "Acme", "Their Space")
+	if _, err := pool.Exec(ctx,
+		`UPDATE users SET default_workspace_id = $1, last_workspace_id = $1 WHERE id = $2`,
+		elsewhere, id.UserID); err != nil {
+		t.Fatal(err)
+	}
+	crossed, err := keys.Authenticate(ctx, loose.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if crossed.WorkspaceID == elsewhere {
+		t.Errorf("a key issued in one organization resolved into workspace %s, which "+
+			"belongs to another one its owner joined; it would then act wholly in a "+
+			"tenant nobody issued it for", crossed.WorkspaceID)
+	}
+	if crossed.OrgID != res.Identity.OrgID {
+		t.Errorf("the key reported organization %s, want the one it was issued in (%s)",
+			crossed.OrgID, res.Identity.OrgID)
 	}
 
 	boundIdentity, err := keys.Authenticate(ctx, bound.Key)

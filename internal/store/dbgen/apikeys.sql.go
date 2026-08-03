@@ -18,7 +18,7 @@ INSERT INTO api_keys (
     id, user_id, organization_id, workspace_id,
     name, prefix, key_hash, scopes, expires_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, user_id, organization_id, workspace_id, name, prefix, key_hash, scopes, last_used_at, expires_at, revoked_at, created_at
+RETURNING id, user_id, organization_id, workspace_id, name, prefix, key_hash, scopes, last_used_at, expires_at, revoked_at, created_at, rotated_at, grace_expires_at, successor_id
 `
 
 type CreateAPIKeyParams struct {
@@ -60,6 +60,9 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.CreatedAt,
+		&i.RotatedAt,
+		&i.GraceExpiresAt,
+		&i.SuccessorID,
 	)
 	return i, err
 }
@@ -83,7 +86,7 @@ func (q *Queries) DeleteRevokedAPIKeys(ctx context.Context) (int64, error) {
 const getAPIKeyByPrefix = `-- name: GetAPIKeyByPrefix :one
 SELECT
     k.id, k.user_id, k.organization_id, k.workspace_id,
-    k.key_hash, k.scopes, k.expires_at, k.revoked_at,
+    k.key_hash, k.scopes, k.expires_at, k.revoked_at, k.grace_expires_at,
     u.email, u.name AS user_name, u.status
 FROM api_keys k
 JOIN users u ON u.id = k.user_id
@@ -100,6 +103,7 @@ type GetAPIKeyByPrefixRow struct {
 	Scopes         []string
 	ExpiresAt      *time.Time
 	RevokedAt      *time.Time
+	GraceExpiresAt *time.Time
 	Email          string
 	UserName       string
 	Status         string
@@ -109,6 +113,10 @@ type GetAPIKeyByPrefixRow struct {
 // authentication is one round trip. Revoked and expired keys are returned
 // rather than filtered out: the caller distinguishes them so the response can
 // say which it was, and a deleted user's key resolves to no row at all.
+//
+// grace_expires_at comes back for the same reason revoked_at does: a rotated
+// predecessor stops verifying when its window closes, and that refusal is
+// decided here rather than by the housekeeping job that later writes revoked_at.
 func (q *Queries) GetAPIKeyByPrefix(ctx context.Context, prefix string) (GetAPIKeyByPrefixRow, error) {
 	row := q.db.QueryRow(ctx, getAPIKeyByPrefix, prefix)
 	var i GetAPIKeyByPrefixRow
@@ -121,6 +129,7 @@ func (q *Queries) GetAPIKeyByPrefix(ctx context.Context, prefix string) (GetAPIK
 		&i.Scopes,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.GraceExpiresAt,
 		&i.Email,
 		&i.UserName,
 		&i.Status,
@@ -128,8 +137,62 @@ func (q *Queries) GetAPIKeyByPrefix(ctx context.Context, prefix string) (GetAPIK
 	return i, err
 }
 
+const getAPIKeyForRotation = `-- name: GetAPIKeyForRotation :one
+SELECT id, user_id, organization_id, workspace_id, name, prefix, scopes,
+       expires_at, revoked_at, rotated_at, grace_expires_at, successor_id,
+       created_at
+FROM api_keys
+WHERE id = $1
+FOR UPDATE
+`
+
+type GetAPIKeyForRotationRow struct {
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	OrganizationID uuid.UUID
+	WorkspaceID    *uuid.UUID
+	Name           string
+	Prefix         string
+	Scopes         []string
+	ExpiresAt      *time.Time
+	RevokedAt      *time.Time
+	RotatedAt      *time.Time
+	GraceExpiresAt *time.Time
+	SuccessorID    *uuid.UUID
+	CreatedAt      time.Time
+}
+
+// The predecessor, locked, so two rotations of one key serialize instead of
+// racing.
+//
+// FOR UPDATE rather than an optimistic conditional write: the loser of a race
+// should be told "this key has already been rotated" by the check that follows,
+// which is a sentence somebody can act on, not have its transaction rolled back
+// by a unique-index violation on a column it never named.
+func (q *Queries) GetAPIKeyForRotation(ctx context.Context, id uuid.UUID) (GetAPIKeyForRotationRow, error) {
+	row := q.db.QueryRow(ctx, getAPIKeyForRotation, id)
+	var i GetAPIKeyForRotationRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.OrganizationID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Prefix,
+		&i.Scopes,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.RotatedAt,
+		&i.GraceExpiresAt,
+		&i.SuccessorID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listAPIKeysForUser = `-- name: ListAPIKeysForUser :many
-SELECT id, name, prefix, scopes, last_used_at, expires_at, revoked_at, created_at
+SELECT id, name, prefix, scopes, workspace_id, last_used_at, expires_at,
+       revoked_at, rotated_at, grace_expires_at, successor_id, created_at
 FROM api_keys
 WHERE user_id = $1
   AND organization_id = $2
@@ -142,19 +205,27 @@ type ListAPIKeysForUserParams struct {
 }
 
 type ListAPIKeysForUserRow struct {
-	ID         uuid.UUID
-	Name       string
-	Prefix     string
-	Scopes     []string
-	LastUsedAt *time.Time
-	ExpiresAt  *time.Time
-	RevokedAt  *time.Time
-	CreatedAt  time.Time
+	ID             uuid.UUID
+	Name           string
+	Prefix         string
+	Scopes         []string
+	WorkspaceID    *uuid.UUID
+	LastUsedAt     *time.Time
+	ExpiresAt      *time.Time
+	RevokedAt      *time.Time
+	RotatedAt      *time.Time
+	GraceExpiresAt *time.Time
+	SuccessorID    *uuid.UUID
+	CreatedAt      time.Time
 }
 
 // Revoked keys are included. "Which keys existed and when were they revoked"
 // is the question asked after an incident, so they are listed until the reaper
 // removes them.
+//
+// workspace_id is selected because NULL is a state the owner chose (M44): a key
+// bound to one workspace and a key valid across the organization look identical
+// without it.
 func (q *Queries) ListAPIKeysForUser(ctx context.Context, arg ListAPIKeysForUserParams) ([]ListAPIKeysForUserRow, error) {
 	rows, err := q.db.Query(ctx, listAPIKeysForUser, arg.UserID, arg.OrganizationID)
 	if err != nil {
@@ -169,9 +240,13 @@ func (q *Queries) ListAPIKeysForUser(ctx context.Context, arg ListAPIKeysForUser
 			&i.Name,
 			&i.Prefix,
 			&i.Scopes,
+			&i.WorkspaceID,
 			&i.LastUsedAt,
 			&i.ExpiresAt,
 			&i.RevokedAt,
+			&i.RotatedAt,
+			&i.GraceExpiresAt,
+			&i.SuccessorID,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -210,6 +285,35 @@ func (q *Queries) ListPermissionSlugs(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const markAPIKeyRotated = `-- name: MarkAPIKeyRotated :execrows
+UPDATE api_keys
+   SET rotated_at = now(),
+       grace_expires_at = $2,
+       successor_id = $3
+ WHERE id = $1
+   AND successor_id IS NULL
+`
+
+type MarkAPIKeyRotatedParams struct {
+	ID             uuid.UUID
+	GraceExpiresAt *time.Time
+	SuccessorID    *uuid.UUID
+}
+
+// Closes the predecessor: names its successor and sets the far edge of the
+// grace window.
+//
+// `successor_id IS NULL` in the WHERE clause is belt to the FOR UPDATE braces.
+// The lock is what serializes; this is what makes the second writer a no-op
+// rather than a silent overwrite if the lock is ever dropped from the read.
+func (q *Queries) MarkAPIKeyRotated(ctx context.Context, arg MarkAPIKeyRotatedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markAPIKeyRotated, arg.ID, arg.GraceExpiresAt, arg.SuccessorID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const revokeAPIKey = `-- name: RevokeAPIKey :execrows
 UPDATE api_keys
    SET revoked_at = COALESCE(revoked_at, now())
@@ -227,6 +331,28 @@ type RevokeAPIKeyParams struct {
 // while a genuinely unknown id is still distinguishable.
 func (q *Queries) RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (int64, error) {
 	result, err := q.db.Exec(ctx, revokeAPIKey, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const revokeLapsedAPIKeyGraces = `-- name: RevokeLapsedAPIKeyGraces :execrows
+UPDATE api_keys
+   SET revoked_at = grace_expires_at
+ WHERE revoked_at IS NULL
+   AND grace_expires_at IS NOT NULL
+   AND grace_expires_at <= now()
+`
+
+// Auto-revocation, from housekeeping.
+//
+// revoked_at is set to the moment the window closed rather than to now(), so
+// the list says when the key stopped working instead of when the job noticed.
+// Nothing depends on this running: authentication already refuses a key past
+// grace_expires_at. What this buys is a key list that agrees with the behaviour.
+func (q *Queries) RevokeLapsedAPIKeyGraces(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeLapsedAPIKeyGraces)
 	if err != nil {
 		return 0, err
 	}
