@@ -104,6 +104,11 @@ WHERE l.workspace_id = $1
        OR EXISTS (SELECT 1 FROM link_tags lt
                    WHERE lt.link_id = l.id
                      AND lt.tag_id = ANY($4::uuid[])))
+  -- Must mirror ListLinks exactly, for the reason the tag filter above says in
+  -- full: a folder-filtered page whose total counted the whole workspace would
+  -- read "3 of 40 links" under a list of every link in one folder.
+  AND (NOT $5::boolean OR l.folder_id IS NULL)
+  AND ($6::uuid IS NULL OR l.folder_id = $6::uuid)
 `
 
 type CountLinksParams struct {
@@ -111,6 +116,8 @@ type CountLinksParams struct {
 	Status      *string
 	Search      *string
 	TagIds      []uuid.UUID
+	Unfiled     bool
+	FolderID    *uuid.UUID
 }
 
 // Only issued when the caller explicitly asks for a total, because counting
@@ -121,6 +128,8 @@ func (q *Queries) CountLinks(ctx context.Context, arg CountLinksParams) (int64, 
 		arg.Status,
 		arg.Search,
 		arg.TagIds,
+		arg.Unfiled,
+		arg.FolderID,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -171,8 +180,9 @@ const createLink = `-- name: CreateLink :one
 INSERT INTO links (
     id, workspace_id, domain_id, alias, primary_url,
     title, description, status, expires_at, created_by, forward_query,
-    forward_path, password_hash, max_clicks, one_time, require_signature
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+    forward_path, password_hash, max_clicks, one_time, require_signature,
+    folder_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path, require_signature
 `
 
@@ -193,6 +203,7 @@ type CreateLinkParams struct {
 	MaxClicks        *int64
 	OneTime          bool
 	RequireSignature bool
+	FolderID         *uuid.UUID
 }
 
 // Links, destinations and tags.
@@ -214,6 +225,7 @@ func (q *Queries) CreateLink(ctx context.Context, arg CreateLinkParams) (Link, e
 		arg.MaxClicks,
 		arg.OneTime,
 		arg.RequireSignature,
+		arg.FolderID,
 	)
 	var i Link
 	err := row.Scan(
@@ -573,6 +585,17 @@ WHERE l.workspace_id = $1
        OR EXISTS (SELECT 1 FROM link_tags lt
                    WHERE lt.link_id = l.id
                      AND lt.tag_id = ANY($4::uuid[])))
+  -- The folder filter (M38), in two halves because "no filter" and "the links
+  -- that are in no folder" are different questions and a nullable id can only
+  -- ask one of them. ` + "`" + `unfiled` + "`" + ` is the second; without it there is no way to find
+  -- the links that were never filed, which is the state every link starts in.
+  --
+  -- One folder, not its subtree. The number this filter returns has to be the
+  -- number shown beside the folder on the tree page, and a parent that reported
+  -- its descendants' links would disagree with it — and would put a recursive
+  -- walk inside the dashboard's hottest query to do so.
+  AND (NOT $5::boolean OR l.folder_id IS NULL)
+  AND ($6::uuid IS NULL OR l.folder_id = $6::uuid)
   -- Keyset pagination only works if the predicate compares the same tuple the
   -- ORDER BY sorts on. It did not: every sort filtered on (created_at, id)
   -- while 'clicks' ordered by click_count, so page 2 dropped rows that belonged
@@ -580,23 +603,23 @@ WHERE l.workspace_id = $1
   -- correspondingly-named ORDER BY key, and the id tiebreaker matches its
   -- direction — 'oldest' ascends, so its tiebreaker ascends too.
   AND (
-        $5::uuid IS NULL
-        OR ($6::text = 'oldest'
-              AND (l.created_at, l.id) > ($7::timestamptz, $5::uuid))
-        OR ($6::text = 'clicks'
-              AND (l.click_count, l.id) < ($8::bigint, $5::uuid))
-        OR ($6::text NOT IN ('oldest','clicks')
-              AND (l.created_at, l.id) < ($7::timestamptz, $5::uuid))
+        $7::uuid IS NULL
+        OR ($8::text = 'oldest'
+              AND (l.created_at, l.id) > ($9::timestamptz, $7::uuid))
+        OR ($8::text = 'clicks'
+              AND (l.click_count, l.id) < ($10::bigint, $7::uuid))
+        OR ($8::text NOT IN ('oldest','clicks')
+              AND (l.created_at, l.id) < ($9::timestamptz, $7::uuid))
       )
 ORDER BY
-    CASE WHEN $6::text = 'oldest' THEN l.created_at END ASC,
-    CASE WHEN $6::text = 'clicks' THEN l.click_count END DESC,
-    CASE WHEN $6::text NOT IN ('oldest','clicks') THEN l.created_at END DESC,
+    CASE WHEN $8::text = 'oldest' THEN l.created_at END ASC,
+    CASE WHEN $8::text = 'clicks' THEN l.click_count END DESC,
+    CASE WHEN $8::text NOT IN ('oldest','clicks') THEN l.created_at END DESC,
     -- Ascending tiebreaker for the ascending sort. For the others this key is
     -- NULL on every row, so it ties and the DESC key below decides.
-    CASE WHEN $6::text = 'oldest' THEN l.id END ASC,
+    CASE WHEN $8::text = 'oldest' THEN l.id END ASC,
     l.id DESC
-LIMIT $9
+LIMIT $11
 `
 
 type ListLinksParams struct {
@@ -604,6 +627,8 @@ type ListLinksParams struct {
 	Status        *string
 	Search        *string
 	TagIds        []uuid.UUID
+	Unfiled       bool
+	FolderID      *uuid.UUID
 	CursorID      *uuid.UUID
 	Sort          string
 	CursorCreated *time.Time
@@ -666,6 +691,8 @@ func (q *Queries) ListLinks(ctx context.Context, arg ListLinksParams) ([]ListLin
 		arg.Status,
 		arg.Search,
 		arg.TagIds,
+		arg.Unfiled,
+		arg.FolderID,
 		arg.CursorID,
 		arg.Sort,
 		arg.CursorCreated,
@@ -1084,8 +1111,16 @@ UPDATE links
                             ELSE COALESCE($12, max_clicks) END,
        one_time      = COALESCE($13, one_time),
        require_signature = COALESCE($14, require_signature),
+       -- Which folder the link is filed in (M38). Three-valued for the reason
+       -- the gates above are: "leave it where it is" and "take it out of every
+       -- folder" are different requests, and a nullable column cannot express
+       -- both through one nullable parameter. The service has already checked
+       -- that the folder belongs to this workspace — the foreign key does not,
+       -- because it points at folders(id) and says nothing about tenancy.
+       folder_id     = CASE WHEN $15::boolean THEN NULL
+                            ELSE COALESCE($16, folder_id) END,
        updated_at    = now()
- WHERE id = $15 AND workspace_id = $16 AND deleted_at IS NULL
+ WHERE id = $17 AND workspace_id = $18 AND deleted_at IS NULL
 RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path, require_signature
 `
 
@@ -1104,6 +1139,8 @@ type UpdateLinkParams struct {
 	MaxClicks        *int64
 	OneTime          *bool
 	RequireSignature *bool
+	ClearFolder      bool
+	FolderID         *uuid.UUID
 	ID               uuid.UUID
 	WorkspaceID      uuid.UUID
 }
@@ -1126,6 +1163,8 @@ func (q *Queries) UpdateLink(ctx context.Context, arg UpdateLinkParams) (Link, e
 		arg.MaxClicks,
 		arg.OneTime,
 		arg.RequireSignature,
+		arg.ClearFolder,
+		arg.FolderID,
 		arg.ID,
 		arg.WorkspaceID,
 	)

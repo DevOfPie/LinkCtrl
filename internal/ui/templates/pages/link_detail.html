@@ -91,6 +91,25 @@
       <input id="tags" name="tags" type="text" value="{{.Form.Tags}}" placeholder="marketing, launch"
              class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
     </div>
+    {{/* Where the link is filed (M38). Drawn only when the workspace has
+         folders, so a workspace that has never made one carries no control with
+         a single meaningless option. "No folder" is the first entry rather than
+         a checkbox beside the select: this form posts every field, so an empty
+         value is how a link is taken out of a folder. */}}
+    {{if .FolderOptions}}
+    <div>
+      <label for="folder_id" class="block text-sm font-medium text-ink">Folder</label>
+      <select id="folder_id" name="folder_id"
+              class="mt-1 block w-full rounded-md border border-line-strong bg-raised px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none">
+        <option value=""{{if eq .Form.FolderID ""}} selected{{end}}>No folder</option>
+        {{range .FolderOptions}}
+        <option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
+        {{end}}
+      </select>
+      {{template "field_error" (index .FieldErrors "folder_id")}}
+      <p class="mt-1 text-xs text-subtle">Filing changes nothing about where the link sends anybody. <a href="/folders" class="text-accent-ink hover:underline">Manage folders</a>.</p>
+    </div>
+    {{end}}
     <div>
       <label for="bot_blocking" class="block text-sm font-medium text-ink">Automated clients</label>
       {{/* Disabled, not hidden, when the domain enforces. A control that

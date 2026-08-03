@@ -301,6 +301,55 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.do("DELETE", p+"/links/"+linkID+"/split/"+armID, nil, http.StatusNoContent)
 	c.do("DELETE", p+"/links/"+linkID+"/split/"+armID, nil, http.StatusNotFound)
 
+	// --- folders (M38) ------------------------------------------------------
+	//
+	// The tree, the two refusals the document names by code, and the filing of a
+	// link into a folder in both directions. The cycle refusal is replayed here
+	// rather than only in folders_test.go because the *document* claims it: an
+	// implementation that quietly allowed it would leave openapi.yaml describing
+	// a rule nothing enforces.
+	parentFolder := c.do("POST", p+"/folders", map[string]any{
+		"name": "Campaigns",
+	}, http.StatusCreated)
+	parentFolderID := field(t, parentFolder, "id")
+	childFolder := c.do("POST", p+"/folders", map[string]any{
+		"name": "Summer", "parent_id": parentFolderID,
+	}, http.StatusCreated)
+	childFolderID := field(t, childFolder, "id")
+	// Siblings may not share a name, case-insensitively.
+	c.do("POST", p+"/folders", map[string]any{
+		"name": "campaigns",
+	}, http.StatusUnprocessableEntity)
+
+	c.do("GET", p+"/folders", nil, http.StatusOK)
+	c.do("PATCH", p+"/folders/"+childFolderID, map[string]any{
+		"name": "Summer sale",
+	}, http.StatusOK)
+	c.do("PATCH", p+"/folders/"+uuid.NewString(), map[string]any{
+		"name": "Nowhere",
+	}, http.StatusNotFound)
+
+	// A folder can never become its own descendant.
+	c.do("POST", p+"/folders/"+parentFolderID+"/move", map[string]any{
+		"parent_id": childFolderID,
+	}, http.StatusUnprocessableEntity)
+	// Moving out to the top level: the one destination `parent_id: null` names.
+	c.do("POST", p+"/folders/"+childFolderID+"/move", map[string]any{
+		"parent_id": nil,
+	}, http.StatusOK)
+
+	// Filing a link, and taking it out again with the empty-string sentinel.
+	c.do("PATCH", p+"/links/"+linkID, map[string]any{
+		"folder_id": parentFolderID,
+	}, http.StatusOK)
+	c.do("GET", p+"/links?folder="+parentFolderID, nil, http.StatusOK)
+	c.do("GET", p+"/links?folder=none", nil, http.StatusOK)
+	c.do("PATCH", p+"/links/"+linkID, map[string]any{"folder_id": ""}, http.StatusOK)
+
+	c.do("DELETE", p+"/folders/"+childFolderID, nil, http.StatusNoContent)
+	c.do("DELETE", p+"/folders/"+childFolderID, nil, http.StatusNotFound)
+	c.do("DELETE", p+"/folders/"+parentFolderID, nil, http.StatusNoContent)
+
 	// --- analytics ----------------------------------------------------------
 	c.do("GET", p+"/links/"+linkID+"/stats", nil, http.StatusOK)
 	c.do("GET", p+"/links/"+linkID+"/stats?from=2026-07-01&to=2026-07-30", nil, http.StatusOK)

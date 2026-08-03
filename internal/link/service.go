@@ -188,6 +188,10 @@ type CreateInput struct {
 	// one URL.
 	ForwardPath bool
 
+	// FolderID files the new link (M38). Nil leaves it unfiled, which is where
+	// every link created before folders existed still is.
+	FolderID *uuid.UUID
+
 	// The gates (M35). Each is off unless asked for, so a link created without
 	// them is byte-for-byte the link this service created before they existed.
 	//
@@ -244,6 +248,7 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 			Message: "expiry must be in the future",
 		})
 	}
+	errs = append(errs, s.resolveFolder(ctx, actor.WorkspaceID, in.FolderID)...)
 
 	if len(errs) > 0 {
 		return nil, errs
@@ -320,6 +325,7 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 		MaxClicks:        in.MaxClicks,
 		OneTime:          in.OneTime,
 		RequireSignature: in.RequireSignature,
+		FolderID:         in.FolderID,
 	})
 	if err != nil {
 		// The unique index is the real guarantee; the pre-check only makes
@@ -384,6 +390,14 @@ type UpdateInput struct {
 	// inherit, on, or off. Nil leaves it alone, which is what the dashboard form
 	// sends when the domain enforces and the control is disabled.
 	BotBlocking *domain.BotPolicy
+
+	// Which folder the link is filed in (M38). Three states, exactly as the
+	// expiry and the password have: nil leaves it where it is, an id files it
+	// there, and ClearFolder takes it out of every folder. A form's "no folder"
+	// option is the third, and without it a link could be filed and never
+	// unfiled.
+	FolderID    *uuid.UUID
+	ClearFolder bool
 
 	// The gates (M35). Two of them need three states rather than two, because
 	// "leave the password alone" and "remove the password" are different
@@ -478,6 +492,9 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 		}
 	}
 	errs = append(errs, validateClickLimit(in.MaxClicks)...)
+	if !in.ClearFolder {
+		errs = append(errs, s.resolveFolder(ctx, actor.WorkspaceID, in.FolderID)...)
+	}
 
 	// The bot-blocking setting, and the one refusal it carries.
 	//
@@ -536,6 +553,8 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 		ClearMaxClicks:   in.ClearMaxClicks,
 		OneTime:          in.OneTime,
 		RequireSignature: in.RequireSignature,
+		FolderID:         in.FolderID,
+		ClearFolder:      in.ClearFolder,
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -695,6 +714,14 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 	if len(f.TagIDs) > 0 {
 		params.TagIds = f.TagIDs
 	}
+	// Unfiled wins over a named folder, because a request asking for both has
+	// contradicted itself and "the links in this folder that are in no folder"
+	// has exactly one honest answer.
+	if f.Unfiled {
+		params.Unfiled = true
+	} else {
+		params.FolderID = f.FolderID
+	}
 	if f.Cursor != "" {
 		cur, err := decodeCursor(f.Cursor)
 		if err != nil {
@@ -746,6 +773,7 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 			ID:           r.ID,
 			WorkspaceID:  r.WorkspaceID,
 			DomainID:     r.DomainID,
+			FolderID:     r.FolderID,
 			Alias:        r.Alias,
 			PrimaryUrl:   r.PrimaryUrl,
 			Title:        r.Title,
@@ -780,7 +808,9 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 			Search:      params.Search,
 			// The same filter the page itself used, or the total describes a
 			// different set of links than the items beside it.
-			TagIds: params.TagIds,
+			TagIds:   params.TagIds,
+			Unfiled:  params.Unfiled,
+			FolderID: params.FolderID,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("count links: %w", err)
@@ -956,6 +986,7 @@ func (s *Service) toDomain(l dbgen.Link, tags []domain.Tag) *domain.Link {
 		Status: domain.EffectiveStatus(
 			domain.LinkStatus(l.Status), l.ExpiresAt, time.Now()),
 		Tags:         tags,
+		FolderID:     l.FolderID,
 		ForwardQuery: l.ForwardQuery,
 		ForwardPath:  l.ForwardPath,
 		BotBlocking:  domain.BotPolicy(l.BotBlocking),

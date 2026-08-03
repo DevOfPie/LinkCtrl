@@ -114,6 +114,17 @@ type Link struct {
 	Status      LinkStatus `json:"status"`
 	Tags        []Tag      `json:"tags"`
 
+	// FolderID is where the link is filed (M38), or nil for a link in no folder
+	// — which every link starts as and most stay.
+	//
+	// The id and not the name. A name here would be right on the day it was
+	// written and stale the moment somebody renamed the folder, and the only
+	// callers that want one — the dashboard's list and detail pages — have
+	// already loaded the tree to draw their folder controls, so they resolve it
+	// from that. An API client that wants names asks GET /folders once rather
+	// than being sent a copy on every row of every page.
+	FolderID *uuid.UUID `json:"folder_id,omitempty"`
+
 	// ForwardQuery merges the incoming query string into the destination on
 	// redirect. Off by default: destinations were configured deliberately, and
 	// most callers do not expect ?utm_source to reach them.
@@ -198,9 +209,16 @@ const (
 
 // LinkFilter describes a link query.
 type LinkFilter struct {
-	WorkspaceID  uuid.UUID
-	Search       string
-	TagIDs       []uuid.UUID
+	WorkspaceID uuid.UUID
+	Search      string
+	TagIDs      []uuid.UUID
+	// FolderID narrows to one folder (M38). Unfiled narrows to the links that
+	// are in none, which is a different question from "no filter" and cannot be
+	// asked with a nil id. Setting both is Unfiled winning, because a request
+	// naming a folder *and* asking for the unfiled ones has contradicted itself
+	// and the empty answer is the honest one.
+	FolderID     *uuid.UUID
+	Unfiled      bool
 	Status       LinkStatus
 	Sort         LinkSort
 	Cursor       string

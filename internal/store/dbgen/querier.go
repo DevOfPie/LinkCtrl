@@ -63,6 +63,7 @@ type Querier interface {
 	// transaction back.
 	ConsumePendingRegistration(ctx context.Context, id uuid.UUID) (int64, error)
 	CountClickEvents(ctx context.Context, workspaceID uuid.UUID) (int64, error)
+	CountFolders(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	// Only issued when the caller explicitly asks for a total, because counting
 	// costs a scan the common page load should not pay for.
 	CountLinks(ctx context.Context, arg CountLinksParams) (int64, error)
@@ -142,6 +143,32 @@ type Querier interface {
 	// API keys and the permission vocabulary their scopes are drawn from.
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error)
 	CreateDestination(ctx context.Context, arg CreateDestinationParams) (Destination, error)
+	// Folders (M38).
+	//
+	// **There is no recursive SQL here, and that is a decision rather than an
+	// omission.** A folder tree is naturally a WITH RECURSIVE walk, and the walk was
+	// written first; it was replaced by ListFolders, which reads the workspace's
+	// folders flat and lets internal/link assemble the tree in Go. Three reasons,
+	// in the order they matter:
+	//
+	//   - The interesting rules are not "who are my children". They are "may this
+	//     move happen" — a folder may never become its own descendant — and "how
+	//     deep would the result be". Both are walks over the same set, and running
+	//     them as three more recursive CTEs would put the milestone's two named
+	//     failure modes in three places where only integration tests can reach them.
+	//     In Go they are one function with a unit test that does not need Postgres.
+	//   - The set is small by construction. The depth cap is
+	//     domain.MaxFolderDepth, the sibling-name rule stops a tree fanning out by
+	//     accident, and this is a structure a person curates by hand.
+	//   - A recursive CTE over a table with no cycle constraint runs forever if the
+	//     data ever holds one. The Go walk carries a visited set and stops.
+	//
+	// Deleting a folder is a real DELETE (see migration 02400): `parent_id ON DELETE
+	// CASCADE` takes the subtree and `links.folder_id ON DELETE SET NULL` unfiles
+	// every link in any part of it. Every statement below still filters on
+	// `deleted_at IS NULL`, so the partial indexes serve them and a later decision
+	// to soft-delete does not silently resurrect rows.
+	CreateFolder(ctx context.Context, arg CreateFolderParams) (Folder, error)
 	// Invitations: issuing, listing, revoking and redeeming (M27).
 	CreateInvitation(ctx context.Context, arg CreateInvitationParams) (Invitation, error)
 	// Links, destinations and tags.
@@ -225,6 +252,11 @@ type Querier interface {
 	// Reaper. Revoked rows are kept briefly so "sign out everywhere" is visible in
 	// the session list before it disappears.
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
+	// A real DELETE. The two foreign keys 00300 wrote are what make it safe:
+	// descendants cascade, and every link in the subtree has its folder_id set to
+	// NULL. Nothing here touches `links`, and nothing here may: the moment this
+	// statement grows a link delete, deleting a container starts deleting content.
+	DeleteFolder(ctx context.Context, arg DeleteFolderParams) (int64, error)
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (int64, error)
 	// A real delete, not a soft one, and everything in 00200/00300/00500/01200 that
 	// references it cascades: workspaces and everything under them, memberships,
@@ -311,6 +343,12 @@ type Querier interface {
 	// runs this — it gets the same two columns from ResolveAliasForRedirect's join,
 	// which is the whole reason that join exists.
 	GetDomainBotSettings(ctx context.Context, id uuid.UUID) (GetDomainBotSettingsRow, error)
+	// Workspace-scoped like GetLink, and for the same reason: the wrong workspace
+	// returns no rows rather than a row the caller must remember to reject. This is
+	// also the only check that a link is being filed into a folder of its own
+	// workspace — `links.folder_id` has a foreign key to `folders(id)` and nothing
+	// in it mentions tenancy.
+	GetFolder(ctx context.Context, arg GetFolderParams) (Folder, error)
 	// Redemption's only lookup, and the row it locks.
 	//
 	// FOR UPDATE OF i serializes two redemptions of the same token: the second
@@ -536,6 +574,19 @@ type Querier interface {
 	// @open_only lets the page show the work and the archive from one query, which
 	// is the same shape ListNotifications' unread filter has.
 	ListDestinationDisputes(ctx context.Context, arg ListDestinationDisputesParams) ([]DestinationDispute, error)
+	// Every folder in the workspace, with how many links are filed directly in it.
+	//
+	// Flat and unordered by structure: the caller builds the tree. Sorted by name so
+	// that the assembled tree's sibling order is stable, and by id after it so two
+	// names that fold to the same string under a collation cannot swap between page
+	// loads.
+	//
+	// The count is a grouped scan of links_folder_idx rather than a correlated
+	// subquery per folder, so a workspace with many folders costs one pass instead
+	// of one index probe each. It counts links filed *directly* here — a parent does
+	// not report its children's links, because the number beside a folder has to
+	// mean the same thing as the number of rows the list shows when you click it.
+	ListFolders(ctx context.Context, workspaceID uuid.UUID) ([]ListFoldersRow, error)
 	// The administrator's list, newest first.
 	//
 	// No pagination and no cursor. An organization's outstanding invitations are a
@@ -810,6 +861,10 @@ type Querier interface {
 	// both listed by the operator and a known shortener is one refusal, and the
 	// more specific entry is the longer one, which this already returns.
 	MatchBlockedDestination(ctx context.Context, candidates []string) (MatchBlockedDestinationRow, error)
+	// The parent is set outright rather than COALESCEd, because NULL is a
+	// destination here: it means the root. A partial-update idiom would make
+	// "move to the top level" unexpressible.
+	MoveFolder(ctx context.Context, arg MoveFolderParams) (Folder, error)
 	// The next free position above the primary. COALESCE so the first rule on a
 	// link lands at 1 rather than at NULL.
 	NextRuleDestinationPosition(ctx context.Context, linkID uuid.UUID) (int32, error)
@@ -890,6 +945,7 @@ type Querier interface {
 	// staleness gauge measures against.
 	RecordJobFailure(ctx context.Context, arg RecordJobFailureParams) error
 	RecordSuccessfulLogin(ctx context.Context, id uuid.UUID) error
+	RenameFolder(ctx context.Context, arg RenameFolderParams) (Folder, error)
 	// Name and slug move together. The slug is derived from the name by the caller
 	// rather than kept as a separate field somebody can edit into disagreement with
 	// it, and the partial unique index on (organization_id, lower(slug)) is what

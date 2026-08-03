@@ -137,6 +137,41 @@ func pageData(t *testing.T) map[string]any {
 			"DisputeURL": "https://bit.ly/xyz",
 			"Notice":     "Created.", "Error": "",
 		},
+		// The folder tree (M38), rendered mid-move so both states of every row
+		// are exercised in one pass: the folder being moved, a destination the
+		// service would accept, and one it would refuse (which offers no button
+		// at all). Nested two levels deep, because the recursion in
+		// `folder_rows` is the part of this template that can break silently.
+		"folders": map[string]any{
+			"Title": "Folders", "Nav": "links", "Identity": owner(),
+			"Count": 3, "UnfiledURL": "/links?folder=none",
+			"MaxDepth": 8, "MaxFolders": 500,
+			"Nodes": []map[string]any{
+				{
+					"ID": "0198c9c5-0000-7000-8000-000000000040", "Name": "Campaigns",
+					"LinkCount": int64(4), "Moving": false, "CanReceive": false,
+					"Children": []map[string]any{{
+						"ID": "0198c9c5-0000-7000-8000-000000000041", "Name": "Summer",
+						"LinkCount": int64(2), "Moving": true, "CanReceive": false,
+						"Children": []map[string]any{},
+					}},
+				},
+				{
+					"ID": "0198c9c5-0000-7000-8000-000000000042", "Name": "Docs",
+					"LinkCount": int64(0), "Moving": false, "CanReceive": true,
+					"Children": []map[string]any{},
+				},
+			},
+			"ParentOptions": []map[string]any{
+				{"ID": "0198c9c5-0000-7000-8000-000000000040", "Label": "Campaigns", "Selected": false},
+				{"ID": "0198c9c5-0000-7000-8000-000000000042", "Label": "‒ Docs", "Selected": true},
+			},
+			"FormName": "", "FormParent": "", "FieldErrors": map[string]string{},
+			"MovingID":   "0198c9c5-0000-7000-8000-000000000041",
+			"MovingName": "Summer", "CanMoveToRoot": true,
+			"CanCreate": true, "CanUpdate": true, "CanDelete": true,
+			"Notice": "Folder created.", "Error": "",
+		},
 		// The review queue, with every state it can draw in one render: an open
 		// dispute that can be allowed, an open one that cannot (a heuristic has
 		// no blocklist row to remove), and both decided outcomes.

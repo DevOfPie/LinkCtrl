@@ -66,6 +66,11 @@ tags:
     description: Short links and their lifecycle
   - name: tags
     description: Workspace tags
+  - name: folders
+    description: >
+      A workspace's folder tree: where links are filed. Guarded by the link
+      permissions rather than by folder permissions of their own — a folder is
+      where a link lives, in the sense a routing rule is where a link points.
   - name: rules
     description: >
       Routing rules: which visitors a link sends where, evaluated in priority
@@ -335,6 +340,15 @@ paths:
           style: form
           explode: true
           description: Repeatable; links matching any given tag id.
+        - name: folder
+          in: query
+          schema: { type: string }
+          description: >
+            A folder id, or the word `none` for the links that are in no folder.
+            One folder, not its subtree: the number returned has to match the
+            `link_count` beside that folder in `GET /folders`. An unparseable
+            value is ignored rather than matching nothing, so a bookmark to a
+            deleted folder shows the links instead of suggesting they are gone.
       responses:
         "200":
           description: One page of links
@@ -941,6 +955,163 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /folders:
+    get:
+      tags: [folders]
+      operationId: listFolders
+      summary: The workspace's folder tree
+      description: |
+        One flat, ordered list rather than nested objects. Depth-first — a
+        folder is immediately followed by its descendants — with `depth` on each
+        entry, which is what both consumers want: a client drawing the tree
+        loops, and a client rebuilding the nesting has `parent_id`. Nested JSON
+        would make the common case a recursive walk and would make the response
+        shape depend on how deep somebody's folders happen to be.
+
+        `link_count` is the links filed **directly** in the folder, never its
+        descendants'. It has to mean the same thing as the number of links
+        `GET /links?folder={id}` returns.
+      responses:
+        "200":
+          description: Every folder in the workspace, and the depth cap
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FolderList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [folders]
+      operationId: createFolder
+      summary: Create a folder
+      description: |
+        Two folders in the same place may not share a name, case-insensitively,
+        and the tree may not go deeper than `max_depth`. Both are refused with
+        422 rather than silently adjusted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFolderRequest"
+      responses:
+        "201":
+          description: The created folder
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Folder"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /folders/{folderID}:
+    parameters:
+      - $ref: "#/components/parameters/FolderID"
+    patch:
+      tags: [folders]
+      operationId: updateFolder
+      summary: Rename a folder
+      description: |
+        Renames only. Moving is `POST /folders/{folderID}/move`, and the split is
+        deliberate: a move is the one folder operation that can make the tree
+        stop being a tree, and `parent_id` is the one field whose null is a
+        value — "the top level" — rather than "leave it alone", which is what a
+        null means everywhere else on this API.
+
+        The links in the folder do not move and are not touched.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFolderRequest"
+      responses:
+        "200":
+          description: The renamed folder
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Folder"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+    delete:
+      tags: [folders]
+      operationId: deleteFolder
+      summary: Delete a folder and the folders inside it
+      description: |
+        **The links survive.** Every link filed anywhere in the deleted branch
+        becomes unfiled — `folder_id` goes to null — and nothing is removed from
+        the link list. Losing links because a container was deleted is the
+        failure this behaviour exists to prevent, and it is enforced by the
+        schema rather than by this handler.
+
+        The folders *inside* the one being deleted go with it. There is no
+        undo: a folder holds no data of its own, so what is lost is a name and a
+        shape.
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /folders/{folderID}/move:
+    parameters:
+      - $ref: "#/components/parameters/FolderID"
+    post:
+      tags: [folders]
+      operationId: moveFolder
+      summary: Move a folder, and everything inside it
+      description: |
+        `parent_id` is required and explicitly nullable: null is the top level,
+        and is the only way to get a folder back out of another one.
+
+        **A folder can never become its own descendant.** Moving one into itself
+        or into any folder inside it is refused with `parent_id`/`cycle` — the
+        branch would stop being reachable from the top level, taking every link
+        in it out of the tree.
+
+        Two further refusals: the move may not push any part of the moved branch
+        past `max_depth` (`parent_id`/`too_deep`), and the destination may not
+        already hold a folder of the same name (`parent_id`/`conflict`). Moving a
+        folder to where it already is succeeds and changes nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MoveFolderRequest"
+      responses:
+        "200":
+          description: The moved folder
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Folder"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/Validation"
 
@@ -2171,6 +2342,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    FolderID:
+      name: folderID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     DisputeID:
       name: id
       in: path
@@ -2492,6 +2668,85 @@ components:
           type: string
           minLength: 1
           maxLength: 80
+
+    Folder:
+      type: object
+      additionalProperties: false
+      required: [id, workspace_id, name, depth, link_count, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        workspace_id: { type: string, format: uuid }
+        parent_id:
+          type: string
+          format: uuid
+          description: Absent for a folder at the top level.
+        name: { type: string, maxLength: 64 }
+        depth:
+          type: integer
+          description: 1 for a folder with no parent. Computed, never stored.
+        link_count:
+          type: integer
+          format: int64
+          description: >
+            The links filed directly in this folder, never its descendants' —
+            the same number `GET /links?folder={id}` returns.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    FolderList:
+      type: object
+      additionalProperties: false
+      required: [folders, max_depth]
+      properties:
+        folders:
+          type: array
+          items:
+            $ref: "#/components/schemas/Folder"
+          description: Depth-first; a folder is immediately followed by its descendants.
+        max_depth:
+          type: integer
+          description: >
+            How many levels the tree may have. Carried in the response so a
+            client building a folder picker learns the limit rather than
+            hard-coding it.
+
+    CreateFolderRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 64
+          description: >
+            Trimmed. Control characters are refused rather than escaped. Unique
+            among the folders in the same place, case-insensitively.
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Absent or null puts the folder at the top level.
+
+    UpdateFolderRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 64 }
+
+    MoveFolderRequest:
+      type: object
+      additionalProperties: false
+      required: [parent_id]
+      properties:
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            Where the folder goes. **Null is the top level**, and is the only way
+            to take a folder back out of another one — which is why this field is
+            required rather than optional.
 
     LinkStatus:
       type: string
@@ -2846,6 +3101,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Tag"
+        folder_id:
+          type: string
+          format: uuid
+          description: >
+            Where the link is filed. Absent for a link in no folder, which every
+            link starts as. The id and not the name: a name here would be stale
+            the moment somebody renamed the folder, and `GET /folders` answers
+            names once rather than on every row of every page.
         forward_query:
           type: boolean
           description: When true, a visitor's query string is merged into the destination on redirect. The destination's own parameters win on conflict.
@@ -3057,6 +3320,13 @@ components:
           description: |
             Refuses any request without a valid, unexpired signature. See
             `POST /links/{id}/sign` for the format.
+        folder_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            Files the new link. Absent or null leaves it unfiled. A folder in
+            another workspace is refused with `folder_id`/`not_found`.
 
     UpdateLinkRequest:
       type: object
@@ -3105,6 +3375,14 @@ components:
         require_signature:
           type: boolean
           description: Toggles the signed-URL requirement.
+        folder_id:
+          type: string
+          description: |
+            Files the link, or takes it out of every folder. **An empty string
+            unfiles it**; an absent key leaves it where it is. Spelled the way
+            `expires_at` above spells its removal rather than inventing a second
+            idiom on one type — and without an explicit removal a filed link
+            could never be unfiled.
 
     DayPoint:
       type: object

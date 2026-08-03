@@ -38,6 +38,8 @@ type createLinkRequest struct {
 	ExpiresAt    *string  `json:"expires_at"`
 	ForwardQuery bool     `json:"forward_query"`
 	ForwardPath  bool     `json:"forward_path"`
+	// FolderID files the new link (M38). Absent or null leaves it unfiled.
+	FolderID *uuid.UUID `json:"folder_id"`
 
 	// The gates (M35). Write-only in the case of Password: it is hashed on
 	// arrival and no response anywhere returns it or its hash.
@@ -59,7 +61,7 @@ func (a *LinkAPI) Create(w http.ResponseWriter, r *http.Request) {
 		Description: req.Description, Tags: req.Tags,
 		ForwardQuery: req.ForwardQuery, ForwardPath: req.ForwardPath,
 		Password: req.Password, MaxClicks: req.MaxClicks, OneTime: req.OneTime,
-		RequireSignature: req.RequireSignature,
+		RequireSignature: req.RequireSignature, FolderID: req.FolderID,
 	}
 	if req.ExpiresAt != nil && *req.ExpiresAt != "" {
 		at, err := time.Parse(time.RFC3339, *req.ExpiresAt)
@@ -107,6 +109,14 @@ func (a *LinkAPI) List(w http.ResponseWriter, r *http.Request) {
 			f.TagIDs = append(f.TagIDs, id)
 		}
 	}
+	// The folder filter (M38). `?folder=none` is the links that are in no
+	// folder, which is a question a uuid cannot ask; anything unparseable is
+	// dropped so a stale bookmark shows the whole list rather than nothing.
+	if raw := q.Get("folder"); raw == folderFilterNone {
+		f.Unfiled = true
+	} else if id, err := uuid.Parse(raw); err == nil {
+		f.FolderID = &id
+	}
 
 	// A "tag:foo" prefix in the search box is a convenience that has to be
 	// stripped: passing it through to full-text search matches nothing and
@@ -149,6 +159,13 @@ type updateLinkRequest struct {
 	// the default" — which for this setting would silently hand the decision
 	// back to the domain.
 	BotBlocking *string `json:"bot_blocking"`
+	// FolderID is where the link is filed (M38), and it spells its third state
+	// the way `expires_at` below does rather than inventing a second idiom on
+	// one type: absent leaves the link where it is, an empty string takes it out
+	// of every folder, and an id files it there. The empty string is
+	// unambiguous — no folder has an empty id — and without it a filed link
+	// could never be unfiled.
+	FolderID *string `json:"folder_id"`
 
 	// The gates (M35). Two of them need three states, and both spell the third
 	// the way `expires_at` already does on this same type: an absent key leaves
@@ -198,6 +215,22 @@ func (a *LinkAPI) Update(w http.ResponseWriter, r *http.Request) {
 		in.ClearMaxClicks = true
 	} else {
 		in.MaxClicks = req.MaxClicks
+	}
+	if req.FolderID != nil {
+		if *req.FolderID == "" {
+			in.ClearFolder = true
+		} else {
+			folderID, perr := uuid.Parse(*req.FolderID)
+			if perr != nil {
+				WriteError(w, r, domain.ValidationErrors{{
+					Field: "folder_id", Code: "invalid",
+					Message: "folder_id must be a folder's id, or empty to take the " +
+						"link out of every folder",
+				}})
+				return
+			}
+			in.FolderID = &folderID
+		}
 	}
 	if req.BotBlocking != nil {
 		policy, ok := domain.ParseBotPolicy(*req.BotBlocking)

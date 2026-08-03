@@ -4,8 +4,9 @@
 INSERT INTO links (
     id, workspace_id, domain_id, alias, primary_url,
     title, description, status, expires_at, created_by, forward_query,
-    forward_path, password_hash, max_clicks, one_time, require_signature
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+    forward_path, password_hash, max_clicks, one_time, require_signature,
+    folder_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 RETURNING *;
 
 -- name: CreateDestination :one
@@ -51,6 +52,14 @@ UPDATE links
                             ELSE COALESCE(sqlc.narg(max_clicks), max_clicks) END,
        one_time      = COALESCE(sqlc.narg(one_time), one_time),
        require_signature = COALESCE(sqlc.narg(require_signature), require_signature),
+       -- Which folder the link is filed in (M38). Three-valued for the reason
+       -- the gates above are: "leave it where it is" and "take it out of every
+       -- folder" are different requests, and a nullable column cannot express
+       -- both through one nullable parameter. The service has already checked
+       -- that the folder belongs to this workspace — the foreign key does not,
+       -- because it points at folders(id) and says nothing about tenancy.
+       folder_id     = CASE WHEN sqlc.arg(clear_folder)::boolean THEN NULL
+                            ELSE COALESCE(sqlc.narg(folder_id), folder_id) END,
        updated_at    = now()
  WHERE id = sqlc.arg(id) AND workspace_id = sqlc.arg(workspace_id) AND deleted_at IS NULL
 RETURNING *;
@@ -155,6 +164,17 @@ WHERE l.workspace_id = sqlc.arg(workspace_id)
        OR EXISTS (SELECT 1 FROM link_tags lt
                    WHERE lt.link_id = l.id
                      AND lt.tag_id = ANY(sqlc.narg(tag_ids)::uuid[])))
+  -- The folder filter (M38), in two halves because "no filter" and "the links
+  -- that are in no folder" are different questions and a nullable id can only
+  -- ask one of them. `unfiled` is the second; without it there is no way to find
+  -- the links that were never filed, which is the state every link starts in.
+  --
+  -- One folder, not its subtree. The number this filter returns has to be the
+  -- number shown beside the folder on the tree page, and a parent that reported
+  -- its descendants' links would disagree with it — and would put a recursive
+  -- walk inside the dashboard's hottest query to do so.
+  AND (NOT sqlc.arg(unfiled)::boolean OR l.folder_id IS NULL)
+  AND (sqlc.narg(folder_id)::uuid IS NULL OR l.folder_id = sqlc.narg(folder_id)::uuid)
   -- Keyset pagination only works if the predicate compares the same tuple the
   -- ORDER BY sorts on. It did not: every sort filtered on (created_at, id)
   -- while 'clicks' ordered by click_count, so page 2 dropped rows that belonged
@@ -208,7 +228,12 @@ WHERE l.workspace_id = sqlc.arg(workspace_id)
   AND (sqlc.narg(tag_ids)::uuid[] IS NULL
        OR EXISTS (SELECT 1 FROM link_tags lt
                    WHERE lt.link_id = l.id
-                     AND lt.tag_id = ANY(sqlc.narg(tag_ids)::uuid[])));
+                     AND lt.tag_id = ANY(sqlc.narg(tag_ids)::uuid[])))
+  -- Must mirror ListLinks exactly, for the reason the tag filter above says in
+  -- full: a folder-filtered page whose total counted the whole workspace would
+  -- read "3 of 40 links" under a list of every link in one folder.
+  AND (NOT sqlc.arg(unfiled)::boolean OR l.folder_id IS NULL)
+  AND (sqlc.narg(folder_id)::uuid IS NULL OR l.folder_id = sqlc.narg(folder_id)::uuid);
 
 -- name: GetLinkTags :many
 SELECT t.id, t.name, t.color

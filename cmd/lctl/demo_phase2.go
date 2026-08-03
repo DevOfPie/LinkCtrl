@@ -293,6 +293,9 @@ func (s *demoSeeder) run(ctx context.Context, primary []demoLink, ids map[int]uu
 	if err := s.seedGatedLinks(ctx); err != nil {
 		return err
 	}
+	if err := s.seedFolders(ctx, primary, ids); err != nil {
+		return err
+	}
 	if err := s.seedBlockingAndDisputes(ctx, people); err != nil {
 		return err
 	}
@@ -837,6 +840,89 @@ func demoGatedAliases() []string {
 	return []string{demoPasswordAlias, demoOneTimeAlias, demoMaxClickAlias, demoSignedAlias}
 }
 
+// demoFolders is the tree the demo shows, and the catalogue links filed in each.
+//
+// Three shapes in one tree, because a flat list of folders would demonstrate
+// nothing M38 built:
+//
+//   - **A folder with folders inside it.** "Campaigns" holds two, so the page
+//     renders nesting, the move control has somewhere to move things to, and the
+//     depth cap is visible as a rule rather than as a number in help text.
+//   - **A folder at the top level beside it.** "Product" is what makes moving a
+//     folder between branches something a reader can try.
+//   - **Links left in no folder.** Most of the catalogue stays unfiled, so the
+//     links list's "No folder" filter is a filter over something and not an
+//     empty page — and so the folder counts are visibly a subset.
+//
+// Written as a tree of names rather than as ids because the folders are created
+// here; the aliases are the primary catalogue's, and a missing one fails the
+// seed loudly rather than filing nothing.
+func demoFolders() []demoFolder {
+	return []demoFolder{
+		{name: "Campaigns", links: []string{"summer-sale", "webinar"}, children: []demoFolder{
+			// Not the trashed or archived aliases: a soft-deleted link is
+			// unreachable through the service, so filing one would fail the seed
+			// rather than showing anything.
+			{name: "Summer 2026", links: []string{"launch"}},
+			{name: "Evergreen", links: []string{"newsletter", "demo-call"}},
+		}},
+		{name: "Product", links: []string{"roadmap-2026", "whats-new"}, children: []demoFolder{
+			{name: "Docs", links: []string{"handbook", "quickstart"}},
+		}},
+	}
+}
+
+// demoFolder is one node of the seeded tree.
+type demoFolder struct {
+	name     string
+	links    []string
+	children []demoFolder
+}
+
+// seedFolders builds the tree and files the links into it.
+//
+// Through link.Service.CreateFolder and link.Service.Update, like everything
+// else in this file: the sibling-name rule, the depth cap and the workspace
+// check all apply to the demo's own data, so a tree the seeder can build is a
+// tree the product would have accepted.
+func (s *demoSeeder) seedFolders(ctx context.Context, cat []demoLink, ids map[int]uuid.UUID) error {
+	var filed, made int
+	var walk func(nodes []demoFolder, parent *uuid.UUID) error
+	walk = func(nodes []demoFolder, parent *uuid.UUID) error {
+		for _, node := range nodes {
+			folder, err := s.link.CreateFolder(ctx, s.owner, link.CreateFolderInput{
+				Name: node.name, ParentID: parent,
+			})
+			if err != nil {
+				return fmt.Errorf("create folder %q: %w", node.name, err)
+			}
+			made++
+			for _, alias := range node.links {
+				id, ok := demoLinkID(cat, ids, alias)
+				if !ok {
+					return fmt.Errorf("demo catalogue has no %q link to file in %q",
+						alias, node.name)
+				}
+				if _, err := s.link.Update(ctx, s.owner, id, link.UpdateInput{
+					FolderID: &folder.ID,
+				}); err != nil {
+					return fmt.Errorf("file /%s in %q: %w", alias, node.name, err)
+				}
+				filed++
+			}
+			if err := walk(node.children, &folder.ID); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := walk(demoFolders(), nil); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "folders: %d, holding %d of %d links\n", made, filed, len(ids))
+	return nil
+}
+
 // demoLinkID finds a created link by its catalogue alias.
 func demoLinkID(cat []demoLink, ids map[int]uuid.UUID, alias string) (uuid.UUID, bool) {
 	for i, d := range cat {
@@ -1021,6 +1107,16 @@ func demoResetPhase2(ctx context.Context, tx pgxExecutor, orgID, userID uuid.UUI
 			 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)
 			   AND alias = ANY($2::text[])`,
 			[]any{orgID, demoGatedAliases()}},
+
+		// The folder tree (M38). Deleting a folder unfiles its links rather than
+		// deleting them — that is the whole of what `links.folder_id ON DELETE
+		// SET NULL` is for — so this runs before the link deletes below and could
+		// equally run after them. Scoped to the organization's workspaces, like
+		// every other statement here.
+		{"folders", `
+			DELETE FROM folders
+			 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
+			[]any{orgID}},
 
 		{"invitations", `DELETE FROM invitations WHERE organization_id = $1`, []any{orgID}},
 		{"notifications", `DELETE FROM notifications WHERE user_id = $1`, []any{userID}},

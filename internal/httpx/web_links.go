@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
@@ -95,6 +97,9 @@ type linkFormData struct {
 	// BotBlocking is the link's own setting as the select renders it: inherit,
 	// on or off.
 	BotBlocking string
+	// FolderID is the folder select's current value: a folder id, or empty for
+	// "no folder", which is the option that unfiles a link (M38).
+	FolderID string
 
 	// The gates (M35).
 	//
@@ -112,16 +117,22 @@ type linkFormData struct {
 
 type linksPageData struct {
 	shell
-	Links       []domain.Link
-	HasMore     bool
-	NextURL     string
-	Total       *int64
-	Search      string
-	Status      string
-	Sort        string
-	Filtered    bool
-	Form        linkFormData
-	FieldErrors map[string]string
+	Links   []domain.Link
+	HasMore bool
+	NextURL string
+	Total   *int64
+	Search  string
+	Status  string
+	Sort    string
+	// Folder is the folder filter as the query string spells it: a folder id,
+	// the word `none` for the links in no folder, or empty for no filter.
+	// FolderOptions is the select that sets it, loaded from the same tree the
+	// folders page renders.
+	Folder        string
+	FolderOptions []folderOption
+	Filtered      bool
+	Form          linkFormData
+	FieldErrors   map[string]string
 	// DisputeURL is the destination an appeal may be filed about, or "" when
 	// there is nothing to appeal. Set only after a low-confidence refusal, which
 	// is the one tier M31 gives a dispute path — the other two protect a party
@@ -159,6 +170,7 @@ func (h *Web) loadLinksPage(w http.ResponseWriter, r *http.Request) (linksPageDa
 		Search:      strings.TrimSpace(q.Get("search")),
 		Status:      q.Get("status"),
 		Sort:        q.Get("sort"),
+		Folder:      q.Get("folder"),
 		FieldErrors: map[string]string{},
 	}
 	if data.Sort == "" {
@@ -194,6 +206,27 @@ func (h *Web) loadLinksPage(w http.ResponseWriter, r *http.Request) (linksPageDa
 	if data.Status != "" {
 		f.Status = domain.LinkStatus(data.Status)
 	}
+	// The folder filter, spelled exactly as the API spells it so a URL copied
+	// from one surface works on the other. An id that no longer parses drops the
+	// filter rather than emptying the list: a bookmark to a deleted folder should
+	// show the links, not suggest they are gone too.
+	if data.Folder == folderFilterNone {
+		f.Unfiled = true
+	} else if id, perr := uuid.Parse(data.Folder); perr == nil {
+		f.FolderID = &id
+	} else {
+		data.Folder = ""
+	}
+
+	// The folder select. Failing to read the tree leaves the control off the
+	// page rather than replacing the page: this is a filter beside a list
+	// somebody asked for, and the same trade the shell makes for its switcher.
+	if tree, ferr := h.Links.Folders(r.Context(), actor); ferr == nil {
+		data.FolderOptions = folderOptions(tree, 0)
+		for i := range data.FolderOptions {
+			data.FolderOptions[i].Selected = data.FolderOptions[i].ID == data.Folder
+		}
+	}
 
 	page, err := h.Links.List(r.Context(), actor, f)
 	if err != nil {
@@ -204,7 +237,7 @@ func (h *Web) loadLinksPage(w http.ResponseWriter, r *http.Request) (linksPageDa
 	data.Links = page.Items
 	data.HasMore = page.HasMore
 	data.Total = page.Total
-	data.Filtered = data.Search != "" || data.Status != "" || f.Cursor != ""
+	data.Filtered = data.Search != "" || data.Status != "" || data.Folder != "" || f.Cursor != ""
 	if page.HasMore {
 		next := url.Values{}
 		if data.Search != "" {
@@ -212,6 +245,9 @@ func (h *Web) loadLinksPage(w http.ResponseWriter, r *http.Request) (linksPageDa
 		}
 		if data.Status != "" {
 			next.Set("status", data.Status)
+		}
+		if data.Folder != "" {
+			next.Set("folder", data.Folder)
 		}
 		if data.Sort != "newest" {
 			next.Set("sort", data.Sort)
@@ -372,6 +408,12 @@ type linkDetailPageData struct {
 	// MaxWeight bounds the weight box, so the form refuses what the service
 	// would refuse rather than posting it to find out.
 	MaxWeight int
+
+	// FolderOptions is every folder this link may be filed in (M38), from the
+	// same tree the folders page renders. Empty when there are none, which is
+	// what keeps a workspace that has never made one from carrying a select with
+	// a single meaningless entry.
+	FolderOptions []folderOption
 }
 
 func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetailPageData, bool) {
@@ -426,6 +468,9 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 	if l.MaxClicks != nil {
 		form.MaxClicks = strconv.FormatInt(*l.MaxClicks, 10)
 	}
+	if l.FolderID != nil {
+		form.FolderID = l.FolderID.String()
+	}
 	if l.ExpiresAt != nil {
 		form.ExpiresAt = l.ExpiresAt.UTC().Format("2006-01-02T15:04")
 	}
@@ -469,6 +514,15 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 	// a list of arms would be the wrong trade.
 	if split, serr := h.Links.GetSplit(r.Context(), actor, id); serr == nil {
 		data.Split = split
+	}
+	// The folders this link could be filed in. Read and failed the same way the
+	// rules and the split are: this page is analytics somebody asked for, and
+	// losing it over a select would be the wrong trade.
+	if tree, ferr := h.Links.Folders(r.Context(), actor); ferr == nil {
+		data.FolderOptions = folderOptions(tree, 0)
+		for i := range data.FolderOptions {
+			data.FolderOptions[i].Selected = data.FolderOptions[i].ID == form.FolderID
+		}
 	}
 	data.RuleWeekdays = domain.RuleWeekdays
 	data.RuleHelp = ruleConditionHelp
@@ -635,6 +689,21 @@ func (h *Web) LinkUpdate(w http.ResponseWriter, r *http.Request) {
 		in.MaxClicks = &n
 	}
 
+	// Where the link is filed (M38). This form posts every field, so an empty
+	// select really is "take it out of every folder" rather than "leave it
+	// alone" — the same rule the checkboxes above follow, and the reason
+	// UpdateInput carries an explicit ClearFolder.
+	if raw := strings.TrimSpace(r.PostFormValue("folder_id")); raw == "" {
+		in.ClearFolder = true
+	} else {
+		folderID, ferr := uuid.Parse(raw)
+		if ferr != nil {
+			h.errorPage(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
+			return
+		}
+		in.FolderID = &folderID
+	}
+
 	// The one field this form may legitimately omit. A disabled select posts
 	// nothing, which is exactly how the enforced case has to reach the service:
 	// as "leave it alone", not as a value the service would then have to refuse
@@ -662,6 +731,7 @@ func (h *Web) LinkUpdate(w http.ResponseWriter, r *http.Request) {
 			ForwardQuery: forward,
 			ForwardPath:  forwardPath,
 			BotBlocking:  r.PostFormValue("bot_blocking"),
+			FolderID:     r.PostFormValue("folder_id"),
 			// Re-rendered from what was posted, except the password: the box
 			// comes back empty because there is nothing safe to put in it and
 			// nothing the form is entitled to remember.

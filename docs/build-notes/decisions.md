@@ -119,6 +119,7 @@ file. Append a row when you append an entry.
 | [M37, the first data file this product vendors](#2026-08-03--m37-the-first-data-file-this-product-vendors) | D63 — Natural Earth via world-atlas TopoJSON, public domain under ISC packaging; why the fetched file and the generated paths follow different rules the repo already has; what a ready-made SVG would have cost; the projection that must be named |
 | [M37, giving the expensive half of the rollup its own clock](#2026-08-03--m37-giving-the-expensive-half-of-the-rollup-its-own-clock) | D64 — why fifteen minutes and not five or sixty; why staleness needed a new column rather than the metric that already existed; why each half keeps its own watermark |
 | [M37, what a map is allowed to claim](#2026-08-03--m37-what-a-map-is-allowed-to-claim) | D65 — the banding, the five steps, no-data outside the ramp, the map that refuses to draw itself, and the empty state that turned out to have been unreachable since it was written |
+| [M38, a container that cannot lose what it holds](#2026-08-03--m38-a-container-that-cannot-lose-what-it-holds) | D66 — deleting a folder is a real DELETE, so `SET NULL` and `CASCADE` actually fire; why `folders.deleted_at` stays unwritten; sibling names case-insensitive with a COALESCE index the roots need; the depth cap of eight and where the number comes from; the cycle rule stated once and read by both the writer and the page; why the filter is one folder and not a subtree. D67 — the permission that was not minted, and which limb of D18 that matched |
 
 ---
 
@@ -9841,3 +9842,203 @@ the same ramp so colour encodes rank rather than identity. Five slices and an
 answers the question a column of numbers is worst at — *is this link's traffic
 one browser or five* — and it is added beside the ranked list rather than
 replacing it, which is the rule the whole milestone runs on.
+
+---
+
+## 2026-08-03 — M38, a container that cannot lose what it holds
+
+The `folders` table has existed since [00300](../../internal/store/migrations/00300_links.sql)
+with a comment saying *"table only in Phase 1. No API, no UI."* — a container
+nothing could create and nothing could put a link into. M38 turns it on, and the
+milestone's own framing is unusually specific about what it is afraid of:
+*losing links because a container was deleted*.
+
+That fear settles the first decision, and the first decision settles most of the
+rest. **D66** is the shape of a folder; **D67** is the permission that was not
+minted.
+
+### D66 — deleting a folder is a real DELETE, and that is what makes the links safe
+
+Phase 1 wrote two foreign keys and then stopped:
+
+```sql
+folders.parent_id  uuid REFERENCES folders(id) ON DELETE CASCADE
+links.folder_id    uuid REFERENCES folders(id) ON DELETE SET NULL
+```
+
+Read together they already say what deleting a folder means: the branch goes,
+and every link anywhere in that branch becomes unfiled rather than deleted. The
+milestone asks for that behaviour *"via the existing `SET NULL` semantics,
+tested"* — so the work is to prove it, not to build it.
+
+Except that **neither clause fires on an UPDATE**, and `folders.deleted_at`
+exists, and every other soft-deletable thing in this schema is soft-deleted. A
+folder soft-deleted the way a link is would leave its links pointing at a row the
+tree no longer walks: intact in the table, absent from every page, which is the
+same outcome as losing them for anybody actually using the product. The schema
+would have been correct and the feature would still have lost links.
+
+So folder deletion is a hard `DELETE`, and `folders.deleted_at` stays unwritten.
+Every folder query still filters on it, for two reasons that are both cheap:
+`folders_workspace_idx` is partial on it, and a later decision to soft-delete
+then changes one method rather than seven queries. What is lost by not soft
+deleting is a name and a shape — a folder holds no data of its own — against a
+recovery story for links that the FK gives for free.
+
+The test is `TestDeletingAFolderKeepsItsLinks`, and it deletes a *parent*
+rather than a leaf: the cascade removing the children is what makes each child's
+own `SET NULL` fire, and a test on a leaf folder would pass against an
+implementation that deleted the links in every folder below the one being
+removed. It was confirmed to fail against a build whose `DeleteFolder` removed
+the links first.
+
+### The three rules the service holds, and why they are not in SQL
+
+A folder tree is naturally a `WITH RECURSIVE` walk, and the walk was written
+first. It was replaced by one flat query and a tree assembled in Go, because the
+interesting questions are not *who are my children*:
+
+- **A folder may never become its own descendant.** Stated as *is the proposed
+  parent inside the branch being moved* — the chain upward from any folder is at
+  most `MaxFolderDepth` long whatever the tree's shape, so the walk is bounded by
+  the cap rather than by the fan-out.
+- **The depth cap applies to the subtree, not to the folder.** Moving a
+  two-level branch under a folder one short of the cap puts its child one past
+  it. A check on the folder alone accepts that, and leaves a tree deeper than
+  anything the create path would let anybody build by hand. This is the case the
+  unit test isolates, and it is the sabotage that had to fail before either test
+  was trusted.
+- **Siblings may not share a name**, case-insensitively.
+
+All three are walks over the same small set. As three more recursive CTEs they
+would live where only integration tests can reach them; in Go they are one file
+with a unit test that needs no database. The set is small by construction — the
+depth cap, the sibling rule, and a structure a person curates by hand — and a
+recursive CTE over a table with no cycle constraint runs forever if the data ever
+holds one, where the Go walk carries a visited set and stops.
+
+`NewFolderTree` shows anything unreachable from a root **at the top level**
+rather than dropping it. A missing parent or a cycle that somehow reached the
+table would otherwise make those folders, and every link in them, vanish from the
+page whose entire job is to say where things are — which is the same failure as
+the one above, arriving through a different door.
+
+### Eight levels, and where the number comes from
+
+`MaxFolderDepth = 8`. It is a product limit, not a technical one: nothing breaks
+at forty. It comes from the two surfaces that have to render it — the tree page
+indents each level and the deepest row must still leave room for a name and its
+controls, and the move control spells depth into an `<option>` label with a run
+of dashes, where an option that is mostly indentation is one nobody can read.
+Both are fine at eight and unusable well before twenty. A link filed nine levels
+down is a link nobody finds again, and a cap somebody hits is better than a tree
+they get lost in.
+
+`MaxFoldersPerWorkspace = 500` bounds the whole tree, because the page and every
+folder `<select>` load all of them and this is the number that keeps that a
+single small query rather than something needing pagination.
+
+### The unique index the roots would otherwise miss
+
+Sibling-name uniqueness is enforced in the service — that is what m38.md asks
+for, and it is what produces a 422 somebody can read. It is *also* an index,
+because two requests naming the same new folder interleave between the check and
+the insert, and without one of them failing the tree grows two entries a reader
+cannot tell apart. Same relationship `links_domain_alias_key` has to the alias
+availability check.
+
+```sql
+CREATE UNIQUE INDEX folders_sibling_name_key
+    ON folders (workspace_id,
+                COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid),
+                lower(name))
+    WHERE deleted_at IS NULL;
+```
+
+`COALESCE`, because the roots are the level a naive index misses: `parent_id IS
+NULL` for every top-level folder and NULL is never equal to NULL, so
+`(workspace_id, parent_id, lower(name))` would constrain every level of the tree
+except the one everybody starts on. The sentinel is the nil UUID, which no folder
+can hold — ids are uuid v7, and v7 has neither an all-zero timestamp nor version
+0.
+
+### One refusal function, read by the writer and by the page
+
+`domain.FolderTree.MoveRefusal` returns the specific refusal or nil.
+`link.Service.MoveFolder` returns whatever it produces; the dashboard's tree
+calls it to decide which rows get a **Move here** button. Written twice, the page
+would eventually offer a destination the service refuses — and a button that
+fails is worse than no button. It is a rendering hint and never an
+authorization: the service re-judges on arrival, exactly as it would for a
+hand-made POST.
+
+Moving a folder to where it already is is deliberately *not* a refusal. It is a
+no-op the service performs happily; the page declines to offer it separately,
+because a button that changes nothing is noise rather than an error.
+
+### Click-to-move, and the drag-and-drop that is deliberately absent
+
+m38.md says progressive-enhancement htmx, click-to-move via POST forms, no custom
+drag-and-drop JavaScript, works without JS. So moving is two clicks: **Move** on
+the folder, which is a link that puts the page into move mode, then **Move here**
+on the destination, which is a form. Both are ordinary hypertext — keyboard
+reachable, announced by a screen reader as a button that says where it goes, and
+working with scripting off. A drag target is none of those, and building one
+needs JavaScript that `ui` has no build step for and the CSP does not allow.
+
+htmx is the enhancement rather than the mechanism: entering and leaving move mode
+swaps the panel in place, and each write posts to the URL its own `action` names.
+The difference between having it and not is one full page paint.
+`TestTheFolderTreeWorksWithoutJavaScript` sends no `HX-Request` header anywhere
+and asserts the absence of `draggable`, `ondragstart`, `ondrop` and `dragover`,
+so this stays a fact about the tree rather than a paragraph in this file.
+
+The tree lives at `/folders`, reached from the links page, **not** from the top
+level nav: that holds exactly three destinations by F6 and F7, and
+`TestTopLevelNavHoldsThreeDestinations` is what holds it there.
+
+### The filter is one folder, not a subtree
+
+`GET /links?folder={id}` returns the links filed *directly* in that folder, and
+`link_count` beside it on the tree page is the same number. A parent reporting
+its descendants' links would disagree with the list it filters, and would put a
+recursive walk inside the dashboard's hottest query to do it.
+
+`?folder=none` is the second half, and it is a word rather than an empty value
+because an empty query parameter is indistinguishable from a control nobody
+touched — and those mean opposite things here. Without it there is no way to find
+the links that were never filed, which is the state every link starts in and most
+stay in.
+
+An unparseable folder id drops the filter rather than matching nothing: a
+bookmark to a deleted folder should show the links, not suggest they went with
+it.
+
+### D67 — no `folders.*` permission, and which limb of D18 that matched
+
+**Neither limb.** Reading a folder tree exposes no actor identity tied to network
+data, and holding folder access widens nobody's reach — a folder decides nothing
+about where a link points, who may follow it, or what anybody may create. So D18
+does not reach this, and the question is only whether the vocabulary is worth two
+or four more entries.
+
+It is not. Folders reuse the link permissions: reading the tree is `links.read`,
+creating a folder is `links.create`, renaming and moving one is `links.update`,
+deleting one is `links.delete`. That is the same call M34 made for routing rules
+and M36 made for split arms, and the reason is the same — *a folder is where a
+link lives, in the sense a rule is where a link points*. A `folders.*` set would
+need a seed migration, four grants, and a delegability call, and every one of
+those grants would land on exactly the roles that already hold the link
+permissions. Two more entries in the vocabulary and a product no different.
+
+The role behaviour that falls out is the one anybody would have chosen: a viewer
+holds `links.read`, so a viewer sees the tree and can filter by it; an editor
+holds the other three, so an editor organises. No migration, no
+`NonDelegableScopes` entry, and an API key holding `links.update` can move a
+folder — which is what "organising links" means for a machine as much as for a
+person.
+
+What would change this: a folder that could carry a *setting* — a default
+destination policy, a per-folder bot rule, a grant scoped to a branch. Then a
+folder would decide something, holding it would widen reach, and D18's second
+limb would reach it. None of those exists, and none is planned in Phase 2.

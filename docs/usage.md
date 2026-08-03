@@ -104,6 +104,52 @@ else's browser probe their own network.
 There is no trash view in Phase 1: recovery inside the 30 days is a database
 operation, not a button.
 
+### Folders
+
+A folder is a place to put a link and nothing else. It carries no settings, gives
+nobody access to anything, and changes nothing about where a link sends somebody.
+
+**Folders** at the top of the links list opens the tree. From there you can
+create a folder — at the top level or inside another, up to eight levels deep —
+rename one, move one, or delete one. Two folders in the same place cannot share a
+name, and the comparison ignores case, so `Campaigns` and `campaigns` are one
+name.
+
+**Moving is two clicks, not a drag.** Press **Move** on a folder and the page
+asks where it goes; every destination that would actually be accepted grows a
+**Move here** button, and **Move to the top level** sits in the banner. Cancel
+leaves it alone. A folder can never be moved into itself or into any folder
+inside it, and a branch cannot be moved somewhere that would push part of it past
+eight levels — those destinations simply offer no button. The whole thing works
+with JavaScript switched off and is operable from a keyboard; there is no
+drag-and-drop.
+
+**Deleting a folder never deletes a link.** It removes the folder and the folders
+inside it, and every link filed anywhere in that branch stays exactly where it
+was — it simply stops being in a folder, and the **No folder** filter on the
+links list finds it. There is no undo for the folder itself.
+
+To file a link, use the **Folder** select on the link's own page; the first
+option, *No folder*, is how a link comes back out again. Over the API it is
+`folder_id` on create and update, where an empty string unfiles:
+
+```sh
+curl -sS -X PATCH "$BASE/api/v1/links/$LINK_ID" \
+  -H "Authorization: Bearer $LINKCTRL_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"folder_id": "'"$FOLDER_ID"'"}'
+```
+
+The links list filters by folder with `?folder=<id>`, and `?folder=none` returns
+everything in no folder. **It is one folder, not its subtree**: a parent does not
+gather up its children's links, so the number returned is the same number shown
+beside that folder on the tree page.
+
+Folders need no permission of their own. Seeing the tree and filtering by it is
+`links.read`; creating is `links.create`, renaming and moving is `links.update`,
+deleting is `links.delete`. A viewer can therefore read the tree, and an editor
+can organise it.
+
 ### Reading the analytics
 
 Numbers come from daily rollups, not from raw events, which is what keeps them

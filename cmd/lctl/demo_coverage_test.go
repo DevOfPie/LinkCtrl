@@ -387,6 +387,30 @@ func demoCoverage() []demoFeature {
 				"world and a long \"counted but not drawn\" line",
 		},
 
+		{
+			Milestone: "M38", Feature: "A folder tree, not a flat list",
+			Query: `SELECT count(*) FROM folders
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND deleted_at IS NULL AND parent_id IS NOT NULL`,
+			Min: 3,
+			Shows: "that folders nest — with none inside another, the tree page is " +
+				"a list, the move control has nowhere to move anything to, and the " +
+				"depth cap is a number in help text rather than a rule",
+		},
+		{
+			Milestone: "M38", Feature: "Links filed in folders, and links in none",
+			Query: `SELECT count(*) FROM links
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND deleted_at IS NULL AND folder_id IS NOT NULL`,
+			Min: 6,
+			// Bounded above as well, and the ceiling is the point: filing every
+			// link would empty the "No folder" filter, and the folder counts
+			// would stop being visibly a subset of the catalogue.
+			Max: 15,
+			Shows: "the links list filtered by folder, and the \"No folder\" filter " +
+				"beside it — one of them is empty if every link is filed or none is",
+		},
+
 		// The boundary. Everything below is a milestone that has not been built,
 		// so the demo showing nothing is correct — and these rows are what make
 		// the next person add a feature row above instead of quietly seeding

@@ -163,10 +163,25 @@ func NewRouter(d Deps) http.Handler {
 			"POST " + APIPrefix + "/links/{id}/split":               api.CreateVariant,
 			"PATCH " + APIPrefix + "/links/{id}/split/{variantID}":  api.UpdateVariant,
 			"DELETE " + APIPrefix + "/links/{id}/split/{variantID}": api.DeleteVariant,
-			"GET " + APIPrefix + "/tags":                            api.ListTags,
-			"DELETE " + APIPrefix + "/tags/{id}":                    api.DeleteTag,
-			"GET " + APIPrefix + "/domain":                          api.GetDomain,
-			"PATCH " + APIPrefix + "/domain":                        api.UpdateDomain,
+			// Folders (M38). A sibling collection rather than a subresource of a
+			// link: a folder exists whether or not anything is in it, and which
+			// links it holds is a question the links list answers with
+			// `?folder=`. No permission of their own either — a folder is where a
+			// link lives, and that is links.read, links.create, links.update and
+			// links.delete; see internal/link/folder.go and decisions.md, D67.
+			//
+			// The move is its own POST rather than a field on the PATCH, because
+			// `parent_id: null` has to mean "the top level" and a PATCH field's
+			// null means "unchanged" everywhere else on this API.
+			"GET " + APIPrefix + "/folders":                  api.ListFolders,
+			"POST " + APIPrefix + "/folders":                 api.CreateFolder,
+			"PATCH " + APIPrefix + "/folders/{folderID}":     api.UpdateFolder,
+			"DELETE " + APIPrefix + "/folders/{folderID}":    api.DeleteFolder,
+			"POST " + APIPrefix + "/folders/{folderID}/move": api.MoveFolder,
+			"GET " + APIPrefix + "/tags":                     api.ListTags,
+			"DELETE " + APIPrefix + "/tags/{id}":             api.DeleteTag,
+			"GET " + APIPrefix + "/domain":                   api.GetDomain,
+			"PATCH " + APIPrefix + "/domain":                 api.UpdateDomain,
 			// The reputation-feed disclosure (M32). Read-only, and there is no
 			// second operation here by design: the page it mirrors accepts no
 			// POST (D40), and an API that could write would be the settings
@@ -355,6 +370,17 @@ func NewRouter(d Deps) http.Handler {
 			"POST /links":      web.LinkCreate,
 			"GET /links/{id}":  web.LinkDetail,
 			"POST /links/{id}": web.LinkUpdate,
+			// Folders (M38). Four POSTs and no JavaScript: creating, renaming,
+			// moving and deleting are each a form that submits on its own, so the
+			// page works with scripting off. htmx swaps the tree in place when it
+			// is on, which is the enhancement rather than the mechanism — and
+			// dragging is deliberately absent, because a drag target is
+			// unreachable by keyboard and unreachable without script.
+			"GET /folders":                    web.FoldersPage,
+			"POST /folders":                   web.FolderCreate,
+			"POST /folders/{folderID}":        web.FolderRename,
+			"POST /folders/{folderID}/move":   web.FolderMove,
+			"POST /folders/{folderID}/delete": web.FolderDelete,
 			// Routing rules (M34). Three actions rather than one form: adding a
 			// rule and switching one off are different enough operations that
 			// making the second go through the first would mean opening an editor
@@ -677,7 +703,7 @@ func (h hostRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // alias that shadows it; TestReservedListCoversRegisteredRoutes enforces that.
 var dashboardPatterns = []string{
 	"/{$}", "/login", "/logout", "/setup", "/dashboard", "/docs",
-	"/links", "/links/", "/keys", "/keys/", "/account", "/account/",
+	"/links", "/links/", "/folders", "/folders/", "/keys", "/keys/", "/account", "/account/",
 	"/notifications", "/notifications/", "/theme", "/workspace/", "/feeds",
 	"/invites", "/invites/", "/invite/", "/disputes", "/disputes/",
 	"/members", "/members/", "/workspaces", "/workspaces/",

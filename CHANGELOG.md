@@ -72,6 +72,31 @@ migrations run at boot.
 
 ### Added
 
+- **Folders.** Links can be filed into a tree of folders, up to eight levels
+  deep, with a page at **Folders** — linked from the top of the links list — that
+  creates, renames, moves and deletes them. The links list gains a folder filter,
+  including a **No folder** option for everything that was never filed, and a
+  link's own page gains a folder select. Everything the page does is also on the
+  API: `GET/POST /api/v1/folders`, `PATCH` and `DELETE /api/v1/folders/{id}`,
+  `POST /api/v1/folders/{id}/move`, `folder_id` on a link, and `?folder=` on the
+  link list.
+
+  **Deleting a folder never deletes a link.** It removes the folder and the
+  folders inside it; every link anywhere in that branch stays exactly where it
+  was and becomes unfiled, which the **No folder** filter then finds. There is no
+  undo for the folder itself — what is lost is a name and a shape.
+
+  Moving is two clicks rather than a drag: **Move** on a folder, then **Move
+  here** on the destination. Only destinations that would actually be accepted
+  offer the button, and a folder can never be moved into itself or into anything
+  inside it. The page works with JavaScript switched off and is operable from a
+  keyboard; there is no drag-and-drop, deliberately.
+
+  Two folders in the same place may not share a name, and the comparison ignores
+  case. Nothing needs to be done on upgrade — the `folders` table has existed
+  since 0.1.0 with nothing able to write to it, so every existing link starts
+  unfiled and behaves exactly as it did.
+
 - **A world map on a link's page, and rings on the breakdowns beside it.** The
   country breakdown is now also a choropleth: countries shaded by their share of
   the link's clicks, five bands, every shape carrying its exact figure. A toggle
