@@ -165,6 +165,17 @@
     {{if .Identity.Can "destinations.review"}}
     <a href="/disputes" class="block px-3 py-2 text-sm {{if eq .Nav "disputes"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">Blocked destinations</a>
     {{end}}
+    {{/* Webhooks (M42). The menu again, for the reason every entry above gives
+         (D35): a webhook is registered once and then not thought about, right up
+         until it stops working — and the delivery log the page carries is what
+         somebody comes back for on that day.
+
+         Gated on webhooks.read, which is owner and admin. An editor sees no
+         entry, because every action on the page needs webhooks.write and a menu
+         item leading to a list somebody cannot act on is worse than no item. */}}
+    {{if .Identity.Can "webhooks.read"}}
+    <a href="/webhooks" class="block px-3 py-2 text-sm {{if eq .Nav "webhooks"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">Webhooks</a>
+    {{end}}
     {{/* Account goes with the rest: it is a page, and a page needs an
          organization to render in (D36). Sign out never does — an account that
          belongs to nothing must still be able to leave, and it is the one thing

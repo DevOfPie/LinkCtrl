@@ -129,6 +129,12 @@ file. Append a row when you append an entry.
 | [M41, a QR code does not follow the theme](#2026-08-03--m41-a-qr-code-does-not-follow-the-theme) | D74 — the picture paints its own background across the quiet zone; why an inverted or transparent code is a code that stops scanning rather than a styling regression; what the theme still owns, and which two style failures are refused rather than left to judgement |
 | [M41, QR codes and campaigns mint no permission](#2026-08-03--m41-qr-codes-and-campaigns-mint-no-permission) | D75 — reuse `links.*`, matched neither limb of D18; the same call M34, M36 and M38 made; why `campaigns.settings` staying empty is what keeps this decision inheritable |
 | [M41, how a scan tells the analytics what it is](#2026-08-03--m41-how-a-scan-tells-the-analytics-what-it-is) | D76 — `?src=qr` rides inside the picture because a camera sends no referrer; the value lands in the existing referrer dimension beside `direct`; why the vocabulary is closed (the dimension rollup keys on the value); why it is forwarded where a signature is stripped |
+| [M42, amendment: outbound HTTP was not new](#2026-08-03--m42-amendment-outbound-http-was-not-new) | Why *first deliberate outbound HTTP* was wrong twice; the operator-named feed against the user-named webhook, and why that is the sharper distinction; the feed's no-redirect posture as prior art |
+| [M42, the queue is Postgres, and how a delivery is claimed](#2026-08-03--m42-the-queue-is-postgres-and-how-a-delivery-is-claimed) | D77 — `FOR UPDATE SKIP LOCKED` **under** the existing leader lock, not instead of it; why an advisory lock alone still duplicates and skip-locked alone still fans out; what "Redis stays cache-only" disposes of, and why the Streams path is left unexercised rather than adopted |
+| [M42, the rebinding posture for a fetch the server makes itself](#2026-08-03--m42-the-rebinding-posture-for-a-fetch-the-server-makes-itself) | D78 — the address is checked, not the name, in the dialer's `Control` hook after DNS and before `connect(2)`; why the redirect path's accepted gap is not inherited; why no redirect is followed **at all** rather than none to a private address; why the feed's dialer is not shared, and what the check cannot see behind an egress proxy |
+| [M42, the part of a webhook that is a published interface](#2026-08-03--m42-the-part-of-a-webhook-that-is-a-published-interface) | D79 — six events and why the vocabulary is closed; an explicit payload map rather than a marshalled struct; the HMAC key is the secret *as displayed*; seven attempts across 61 minutes, and why the attempt count is a constant while the timeout and retention are settings |
+| [M42, webhooks mint two permissions, and one of them is not delegable](#2026-08-03--m42-webhooks-mint-two-permissions-and-one-of-them-is-not-delegable) | D80 — where D75's reasoning stops; matched D18's **second** limb, and the limb is *durability* of reach rather than escalation; why `webhooks.read` stays delegable, and the one-line reversal |
+| [M42, what the demo shows, and why it dials nobody](#2026-08-03--m42-what-the-demo-shows-and-why-it-dials-nobody) | D81 — one enabled and one paused so the pause control is visible; `.example` hostnames that cannot resolve for anyone; the seeder queues nothing, asserted as a coverage row rather than trusted |
 
 ---
 
@@ -10570,3 +10576,318 @@ milestone inherits a rule about. One `strings.Contains` over the raw query
 string, which is already in hand, and which is false for every request that is
 not a scan. `url.ParseQuery` runs only when the substring is present. That is the
 shape `gate.StripSignature` already uses, and for the same reason.
+
+## 2026-08-03 — M42, amendment: outbound HTTP was not new
+
+A **fact** amendment, logged rather than prompted, found at [M42](phase-details/m42.md)'s validation.
+
+**The line as it stood**, in the file's opening:
+
+> The first deliberate outbound HTTP in the product. The SSRF policy applies with
+> full force, **at dial time and not only at registration**.
+
+**As amended:** it now says this is the first outbound HTTP *whose target a user
+chooses*, names the two clients that already exist, and keeps the dial-time
+requirement unchanged.
+
+**The tree facts.** There are two `http.Client`s in the tree and both predate
+this milestone. `internal/feed/feed.go:157` is the opt-in reputation feed from
+[M32](phase-details/m32.md), and `cmd/linkctrl/main.go:853` is the container
+healthcheck. So *first deliberate outbound HTTP* was wrong twice over: the feed
+is outbound, and it is deliberate — it is an entire opt-in feature.
+
+**Why the correction is worth more than accuracy.** The distinction the sentence
+was reaching for is real and sharper than the one it made. The feed's target is
+named by an **operator**, once, in configuration — and `feed.go` already refuses
+to follow redirects, with a comment giving precisely the reason M42 is about: *"a
+feed that answers 302 is a feed pointing this process somewhere nobody
+configured."* A webhook target is named by **whoever holds a workspace**, which
+is a different trust boundary and the actual reason dial-time re-validation is
+required here and was not there.
+
+Left as an observation rather than folded into the milestone: the feed client is
+the nearest prior art for what M42 builds, including the no-redirect posture, and
+whether the two should share a dialer is the milestone's to judge.
+
+No assertion moved. Every *Done means* bullet is untouched, and the SSRF policy
+still applies at dial time and not only at registration.
+
+## 2026-08-03 — M42, the queue is Postgres, and how a delivery is claimed
+
+m42.md required this decided and recorded: *"claimed via `FOR UPDATE SKIP LOCKED`
+or a dedicated advisory-lock job (decision recorded)"*. **D77.**
+
+**Both, and the "or" in that sentence is the mistake.** The drain job runs under
+the existing leader lock — `withLeadership` in `cmd/linkctrl/jobs.go`, the same
+`pg_try_advisory_lock` every other job uses — *and* the claim query takes
+`FOR UPDATE SKIP LOCKED`. Either alone has a hole, and they are different holes:
+
+- **Leadership alone still delivers twice.** The advisory lock is released when
+  its holder's session dies, so a leader that is killed mid-drain drops the lock
+  while another replica is one tick away from taking it. Both then hold rows they
+  believe are theirs. For mail that window is a duplicate message; for a webhook
+  it is a duplicate `link.created` at somebody's receiver, which is why the
+  delivery id is also an idempotency key.
+- **Skip-locked alone still fans out.** Every replica would run the drain,
+  claiming disjoint rows, so N replicas make N times the outbound connections on
+  every tick and the batch size stops meaning anything. Skip-locked keeps two
+  drainers off one row; it does not keep three drainers out of the queue.
+
+So leadership decides *whether this process drains at all*, and skip-locked makes
+the overlap it cannot prevent cost nothing. That is what `mail_outbox` already
+does, deliberately, and its query comment says so — a second spelling of the same
+answer would be one more thing to learn for no difference anybody can observe.
+
+**A dedicated advisory lock was the rejected option**, and rejecting it is not
+about cost. A second lock key would let webhook delivery run on a replica that is
+not the job leader, which sounds like parallelism and is actually a second
+scheduler: the purge that trims the same table runs under the *first* lock, so
+the two would be able to run against each other, and "which replica is doing what"
+would stop being one question with one answer.
+
+**The claim spends the attempt before anything is sent.** The `UPDATE` increments
+`attempts` and leases `next_attempt_at` forward in the same statement that selects
+the row, so a process killed between claiming and delivering leaves a row that
+comes back on its own when the lease expires rather than one stuck pending — and a
+crash loop is bounded, because counting the attempt at send time would let a
+process that dies mid-send retry the same delivery forever.
+
+**Redis stays cache-only, and this is where that stops being a slogan.**
+[Plan.md](../../Plan.md#not-in-phase-2) lists Redis Streams as an
+upgrade path *for webhooks or the analytics recorder*. It is not taken, and the
+disposition is **unexercised rather than adopted**: nothing in the tree is written
+against Streams, no consumer group exists, and moving later would be a new
+component rather than a rewrite of one. The reason is the one Plan.md already
+gives for Redis generally — nothing correctness-critical may depend on it — and a
+queue holding somebody's undelivered events is correctness-critical by
+construction. A `FLUSHALL`, an eviction under `maxmemory`, or the documented
+"Redis absent or down degrades behaviour" state would each silently lose events
+that the product has told a workspace it will deliver.
+
+The cost of Postgres, stated: the drain is one indexed range scan on
+`webhook_deliveries_pending_idx` every thirty seconds, which returns nothing on
+an instance where nobody has registered a webhook, and the table grows by a row
+per link write per enabled webhook — which is why `WEBHOOK_RETENTION_DAYS` has no
+"forever" setting and why the purge runs beside the mail outbox's.
+
+## 2026-08-03 — M42, the rebinding posture for a fetch the server makes itself
+
+m42.md required this **stated explicitly rather than inherited**: *"The redirect
+path sends a visitor's browser somewhere; this sends the server, and the two do
+not get the same answer by default."* **D78.**
+
+**The posture: for a fetch this server makes, the checked thing is the address,
+and it is checked at the moment the socket is opened.**
+
+`internal/webhook.guardDial` is a `net.Dialer.Control` hook. It runs after the
+resolver has answered and before `connect(2)`, and it receives the address the
+socket is about to be connected to — so there is no window between what is checked
+and what is dialled for a second DNS answer to arrive in. It runs once per
+connection attempt, so a name answering with one public and one private record
+does not get in on the second try. The predicate is `link.IsRestrictedAddr`, which
+is the unappealable tier's own `isRestricted` exported for this one caller: two
+definitions of "private address" in one program is a drift bug waiting for the day
+somebody adds a range to one of them.
+
+**Why the redirect path's accepted gap is not inherited.** That gap is real and
+stays — `docs/SECURITY.md` records it, and closing it would mean a DNS lookup
+inside a 20ms budget. But it is a statement about sending a *visitor's browser*
+somewhere: the request leaves that person's network, the response never touches
+this instance, and `169.254.169.254` means whatever it means on their machine.
+A webhook sends *this server*: the request leaves the instance's own network, from
+inside whatever that network can reach, and `169.254.169.254` is the cloud
+metadata endpoint holding its credentials. The two are not the same fetch, so
+inheriting the answer would have been inheriting a sentence rather than a
+conclusion. Registration-time validation is kept as well, and is the *first* of
+two checks rather than the only one: it refuses literals, obfuscated literals,
+localhost and the operator's blocklist, and records a `destination.blocked` audit
+row — none of which a dialer hook can do.
+
+**No redirect is followed at all**, which is stronger than the bullet asked for.
+m42.md says *follows no redirect to a private address*; the client returns
+`http.ErrUseLastResponse` for every `3xx`. Following a redirect to a *public*
+address is still this process being pointed at a URL nobody registered — which is
+the sentence `internal/feed` already carries — and refusing all of them means
+there is no second hop whose address needs a second policy. The status code is
+recorded on the delivery, so a receiver that answers `302` can see exactly what
+happened rather than wondering why nothing arrives.
+
+**The feed's dialer is not shared, and that was the judgement m42.md left open.**
+The two clients share a *posture* on redirects and should not share a dialer, in
+either direction. Putting this `Control` hook on the feed would refuse an
+operator's deliberate choice to run a reputation service on their own network — the
+feed's URL is named once, by the operator, in configuration, and an operator
+pointing it at their own metadata endpoint is attacking themselves. Leaving the
+hook off here is the milestone. They also differ in every operational dimension:
+the feed's timeout is two seconds because it is spent inside a form submission
+somebody is watching, and it fails open by design; a webhook's is ten because it
+is spent in a job nobody is watching, and a failure is retried. One client
+configured to be both would be a client whose comments contradict each other.
+
+Two smaller pieces of the same posture, recorded because they are easy to undo by
+accident. The transport sets `Proxy: nil` rather than `http.ProxyFromEnvironment`:
+an `HTTP_PROXY` in the environment would make every delivery's address look like
+the proxy's, defeating the check and sending every workspace's events somewhere
+nobody registered. And `guardDial` refuses any network that is not `tcp*`, and any
+address that will not parse as a literal — the safe answer to a state nobody has
+described is no.
+
+**What the check cannot see, stated because a posture with an unstated cost is a
+claim.** On a deployment behind an egress proxy or a service mesh that resolves
+names itself, every address LinkCtrl dials is the proxy's, and this check then
+says nothing. That is a property of the deployment rather than of the check, and
+it is in `docs/SECURITY.md` under operator responsibilities rather than left for
+somebody to discover.
+
+## 2026-08-03 — M42, the part of a webhook that is a published interface
+
+Most of this milestone is reversible. The parts below are not, because somebody
+else writes code against them, and a change is a change to *their* program.
+**D79.**
+
+**Six events, and the vocabulary is closed.** Five for a link's lifecycle —
+`link.created`, `link.updated`, `link.archived`, `link.restored`, `link.deleted` —
+and `destination.blocked`. `archived` and `restored` are two events rather than
+one with a flag because archiving is reversible and a receiver reconciling state
+needs the direction. `link.deleted` fires on the soft delete a person performs and
+**not** on the purge thirty days later: the scheduler tidying up is not a second
+deletion, and a receiver told twice would double-count. An unknown name in a
+subscription is refused rather than dropped — silently ignoring one leaves somebody
+with a webhook they believe is subscribed to something and a receiver that never
+fires, which is the failure a closed vocabulary exists to prevent rather than to
+cause.
+
+**The payload is an explicit map, not a marshalled `domain.Link`.** This is the
+decision most likely to be undone by somebody being helpful. Marshalling the
+struct would mean every field a later milestone adds to `domain.Link` appears in
+every payload in the world, with nobody having decided it should — the same class
+of accident as a `SELECT *` in an API response. The map is six fields and adding
+one is a deliberate line with a docs line beside it.
+
+**The signature key is the secret string as it was shown**, the 64 lowercase hex
+characters, used as the HMAC key directly rather than hex-decoded first. That is
+weaker-looking and is not weaker: 32 bytes of entropy either way. What it buys is
+that a receiver copies the value out of the dashboard and uses it, with no
+encoding step to get wrong — and "my signature never matches and I cannot tell
+why" is the single most common way a webhook integration fails. The signed message
+is `<timestamp> "." <raw body>`, the timestamp is in the header so a receiver can
+reject replays, and the header carries a `v1=` prefix so the scheme can change
+without anybody having to guess which one they are looking at.
+
+Two supporting choices. The body is signed **as stored**: re-encoding it at send
+time would produce a signature a receiver cannot reproduce from the bytes it
+received. And the delivery id is a header rather than a payload field, because it
+is minted by the fan-out `INSERT ... SELECT` and is not known when the payload is
+rendered — which turns out to be the right shape anyway, since it is the
+idempotency key and belongs beside the event name a receiver routes on.
+
+**Seven attempts spanning 61 minutes**, with a doubling backoff capped at thirty
+minutes: 1m, 2m, 4m, 8m, 16m, 30m. The first draft of this said six attempts and
+an hour, and six is thirty-one minutes; `TestBackoffDoublesAndCaps` holds the
+arithmetic to the sentence the docs make, and it is there because that draft
+shipped as far as a failing test. An hour is long enough to ride out a receiver's
+deploy and short enough that "we were down this morning, did we lose events" has
+the answer *anything older than an hour, yes* rather than a calculation.
+
+**The attempt count is a constant while the timeout and the retention window are
+settings**, and the line between them is who bears the consequence.
+`WEBHOOK_TIMEOUT` and `WEBHOOK_RETENTION_DAYS` decide what the *instance* spends —
+how long one unresponsive receiver holds a delivery slot, and how much table the
+log costs. The attempt count decides what somebody *else's* receiver experiences:
+how late a delivery may arrive, and when events stop coming. That is a contract
+with a party who does not read this instance's environment, so it moves in a
+release note rather than in a variable.
+
+## 2026-08-03 — M42, webhooks mint two permissions, and one of them is not delegable
+
+The *What every milestone inherits* table requires the D18 limb to be recorded, or
+that neither was matched. **D80.**
+
+**Their own permissions — `webhooks.read` and `webhooks.write` — and this is where
+[D75](#2026-08-03--m41-qr-codes-and-campaigns-mint-no-permission)'s reasoning
+stops.** D75 reused `links.*` for QR codes and campaigns because each is a
+*property of a link*: whoever may edit the link may edit them, and every grant a
+`campaigns.*` set needed would land on exactly the roles that already hold the
+link permissions. A webhook is not a property of a link. It is a standing
+instruction to make **this server** open a connection to an address somebody
+chose, on every link write in the workspace, indefinitely — which is the
+distinction the whole milestone turns on, and a capability that different from
+editing a link should not arrive free with `links.update`. The pair mirrors
+`apikeys.read` / `apikeys.write`, the closest thing in the schema: a workspace
+integration with a secret, managed by the people accountable for the workspace
+rather than by everybody who can write a link. Seeded in migration 02800, granted
+explicitly to the owner and admin roles, per the 00800 pattern.
+
+**`webhooks.write` matched D18's second limb — "holding it lets a key widen its
+own reach" — and is in `NonDelegableScopes`.** The limb is worth stating precisely,
+because it is not the shape any existing entry has. A key holding
+`webhooks.write` gains no permission it lacked: everything a webhook carries is
+something that key could already read. What it gains is **durability**. A webhook
+created with a key keeps delivering after that key is revoked — revoking the
+credential does not revoke the channel — so the holder of a leaked key can install
+a standing, credential-free feed of every link change in the workspace and keep
+receiving it after the leak is discovered and closed. That is reach the credential
+retains once it is gone, which is escalation in the only dimension that matters
+after a compromise. `apikeys.write` is here because a key that mints keys makes
+revocation meaningless; this is the same sentence about a different mechanism.
+
+**`webhooks.read` is deliberately delegable.** Reading the list discloses where a
+workspace's events go and what the recent deliveries did — exactly what an
+integrator's tooling needs, and it escalates nothing. So the pair splits where
+`apikeys.*` does not, and the split is the point: a key can watch its own
+integration, and a human has to create one.
+
+The cost, named rather than glossed: setting up an integration takes one signed-in
+visit to `/webhooks`. That is a real product limitation for a feature integrators
+would rather script end to end, and it is in
+[Plan.md](../../Plan.md#known-limitations).
+
+**The reversal is one line.** `auth.NonDelegableScopes` is the only thing
+enforcing this — there is no second check in the handler or the service, and the
+endpoint authorizes on the permission like every other endpoint — so if
+programmatic registration ever outweighs the durability argument, deleting the map
+entry is the whole change. `TestWebhooksWriteIsNotDelegableToAKey` is what would
+go red, deliberately, so the reversal is a decision somebody takes rather than one
+that happens.
+
+## 2026-08-03 — M42, what the demo shows, and why it dials nobody
+
+The demo has been build-enforced since [M33.5](phase-details/m33.5.md), and M42's
+trailing coverage row asserting *zero* had to become a real one. Turning it into a
+real row raised a question no previous milestone's did: **the demo is a public
+instance anybody can drive, and a webhook makes it open outbound connections on a
+stranger's keystroke.** **D81.**
+
+**Two registrations, one enabled and one paused.** A page where everything says
+the same thing shows one state, and a reader cannot see that the pause control
+does anything — the argument M39/M40 made for one verified hostname and one not,
+and M36 for one parked split arm. The enabled one subscribes to the link
+lifecycle; the paused one to `destination.blocked`, which is also how the page
+shows that a subscription is a choice rather than everything-or-nothing.
+
+**Both hostnames are `.example`, and that is the whole safety argument.** RFC 2606
+reserves `.example` as a top-level domain that never resolves, so a delivery from
+the demo gets as far as a failed DNS lookup and no further: it reaches nobody's
+server, and it cannot be made to reach one by somebody registering the name. The
+demo's registered domains already use `.example` for the same reason, and the
+distinction from `example.com` is load-bearing — that one resolves, to a host IANA
+runs, so an enabled webhook pointing at it would have the demo sending strangers'
+link events to a third party.
+
+**Leaving the enabled one enabled is deliberate.** Every link a visitor creates on
+the demo queues a delivery that fails at DNS, retries seven times and is
+abandoned — which is not noise, it is the delivery log doing exactly what it exists
+for, on an instance where a reader can see it. A demo where both webhooks were
+paused would show a page nothing had ever happened on.
+
+**The seeder itself queues nothing, and that is asserted rather than trusted.**
+The seeder's link service is built with no emitter, so seeding a catalogue of
+twenty links writes no delivery row; the two rows it writes directly are both
+terminal — one delivered with a `200`, one abandoned with no response — so the
+scheduler never picks them up. A pending row seeded here would be the demo seeder
+handing the scheduler an outbound connection to make on somebody else's behalf,
+which is a thing that should not be able to happen quietly. `demoCoverage()`
+therefore carries a third M42 row asserting **zero pending deliveries**: not a
+display claim like every other row in that list, but a safety one, and the first
+row there whose failure would mean the demo had started doing something rather
+than stopped showing something.

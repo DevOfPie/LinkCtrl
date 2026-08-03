@@ -387,6 +387,67 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.do("DELETE", p+"/campaigns/"+campaignID, nil, http.StatusNoContent)
 	c.do("DELETE", p+"/campaigns/"+campaignID, nil, http.StatusNotFound)
 
+	// --- webhooks (M42) -----------------------------------------------------
+	//
+	// The whole lifecycle, because every operation on this collection is one the
+	// document makes a claim about: that the secret appears on exactly two
+	// responses, that rotation produces a different one, that an event outside
+	// the vocabulary is refused, and that the delivery log answers even when it
+	// is empty.
+	//
+	// The URL is a `.example` name, which RFC 2606 reserves and which therefore
+	// resolves for nobody — this test registers a webhook and never drains the
+	// queue, but a contract test that left a *resolvable* endpoint behind would
+	// be one whose failure mode is somebody else's server getting traffic.
+	hook := c.do("POST", p+"/webhooks", map[string]any{
+		"url":         "https://hooks.linkctrl.example/contract",
+		"events":      []string{"link.created", "link.updated"},
+		"description": "contract",
+	}, http.StatusCreated)
+	webhookID := field(t, hook, "id")
+	if secret := field(t, hook, "secret"); len(secret) != 64 {
+		t.Errorf("the created webhook carried a %d-character secret; the document "+
+			"says 64 hex characters and says this is the only place it appears",
+			len(secret))
+	}
+
+	// A URL the destination tiers refuse, which is this collection's whole
+	// security claim.
+	//
+	// The other refusal worth replaying — an event outside the vocabulary — is
+	// *not* here, and cannot be: this test validates the request against the
+	// document before sending it, and the document's enum rejects the body
+	// itself. That the server also refuses one is asserted in webhook_test.go,
+	// against the service. Two mechanisms, and the enum is the stronger of them.
+	c.do("POST", p+"/webhooks", map[string]any{
+		"url": "http://169.254.169.254/", "events": []string{"link.created"},
+	}, http.StatusUnprocessableEntity)
+
+	c.do("GET", p+"/webhooks", nil, http.StatusOK)
+	c.do("GET", p+"/webhooks/"+webhookID, nil, http.StatusOK)
+	c.do("GET", p+"/webhooks/"+uuid.NewString(), nil, http.StatusNotFound)
+	c.do("PATCH", p+"/webhooks/"+webhookID, map[string]any{
+		"events": []string{"destination.blocked"}, "enabled": false,
+	}, http.StatusOK)
+	c.do("PATCH", p+"/webhooks/"+uuid.NewString(), map[string]any{
+		"enabled": false,
+	}, http.StatusNotFound)
+
+	rotated := c.do("POST", p+"/webhooks/"+webhookID+"/rotate", nil, http.StatusOK)
+	if field(t, rotated, "secret") == field(t, hook, "secret") {
+		t.Error("rotating returned the same secret; the document says the previous " +
+			"one stops verifying immediately")
+	}
+	c.do("POST", p+"/webhooks/"+uuid.NewString()+"/rotate", nil, http.StatusNotFound)
+
+	// The delivery log, empty here and still a valid document.
+	c.do("GET", p+"/webhooks/"+webhookID+"/deliveries", nil, http.StatusOK)
+	c.do("GET", p+"/webhooks/"+webhookID+"/deliveries?limit=5", nil, http.StatusOK)
+	c.do("GET", p+"/webhooks/"+uuid.NewString()+"/deliveries", nil, http.StatusNotFound)
+
+	c.do("DELETE", p+"/webhooks/"+webhookID, nil, http.StatusNoContent)
+	c.do("DELETE", p+"/webhooks/"+webhookID, nil, http.StatusNotFound)
+
 	// --- QR codes (M41) -----------------------------------------------------
 	//
 	// The JSON half is replayed like everything else. The picture is not: it is

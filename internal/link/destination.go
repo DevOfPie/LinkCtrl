@@ -242,6 +242,22 @@ func looksNumeric(host string) bool {
 	return true
 }
 
+// IsRestrictedAddr is isRestricted, exported for the one caller outside this
+// package that needs the same answer about a *resolved* address.
+//
+// internal/webhook calls it from the dialer's Control hook, after DNS has
+// answered and before connect(2), which is the only place a rebinding check can
+// stand. It is deliberately the same function and not a second list: two
+// definitions of "private address" in one program is a drift bug waiting for the
+// day somebody adds a range to one of them.
+//
+// Nothing else should reach for this. A *destination* — anything a visitor's
+// browser will be sent to — goes through Service.checkDestination, and a caller
+// that took this predicate instead would inherit the SSRF refusals while
+// skipping every tier above them, which is exactly the bypass
+// TestEveryDestinationSurfaceGoesThroughTheCheck exists to catch.
+func IsRestrictedAddr(addr netip.Addr) bool { return isRestricted(addr) }
+
 // isRestricted reports whether an address is in a range a public short link
 // should never point at.
 func isRestricted(addr netip.Addr) bool {

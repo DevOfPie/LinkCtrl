@@ -321,6 +321,29 @@ The page is **read-only and accepts no `POST`**, and that is asserted by test
 rather than left as a convention (decision D40). There is no setting there and
 there will not be one: this file is the only switch.
 
+## Webhooks
+
+Outbound delivery of a workspace's events. **There is no switch here**: a webhook
+is registered by a workspace rather than enabled by you, and these two numbers
+apply the moment somebody registers one. An instance where nobody does never opens
+an outbound connection for this feature.
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `LINKCTRL_WEBHOOK_TIMEOUT` | `10s` | Bounds one delivery attempt end to end — connect, write, read. Deliveries drain in batches of twenty on a thirty-second tick, so validation refuses anything above `1m`: a longer bound lets one batch outlast the next. |
+| `LINKCTRL_WEBHOOK_RETENTION_DAYS` | `30` | How long a delivered or abandoned delivery row is kept. **Must be at least 1.** Zero means "keep forever" elsewhere in this file — `AUDIT_RETENTION_DAYS` — and is refused here, because this table grows by one row per link write per enabled webhook and nobody would choose that on purpose. |
+
+**The attempt count is not configurable.** Seven attempts spanning 61 minutes,
+with a doubling backoff capped at thirty minutes. It is left as a constant
+deliberately: unlike the two above, changing it changes what somebody *else's*
+receiver experiences — how late a delivery may arrive — which is a contract with a
+party who does not read this instance's environment.
+
+The scheme a receiver verifies with, the event vocabulary, and the delivery log
+are all in [usage.md](usage.md#webhooks). What the address checks do and do not
+cover — in particular on a deployment with an egress proxy — is in
+[SECURITY.md](SECURITY.md).
+
 ## Authentication
 
 | Variable | Default | Notes |

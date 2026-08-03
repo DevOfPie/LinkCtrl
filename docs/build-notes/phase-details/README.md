@@ -49,7 +49,7 @@ milestone, is in [workflow.md](../workflow.md).
 | [M39](m39.md) | Per-domain ownership | M21 | done |
 | [M40](m40.md) | Custom domains: verification and serving | M39 M23 | done |
 | [M41](m41.md) | QR codes and campaigns | — | done |
-| [M42](m42.md) | Webhooks | M30 | not started |
+| [M42](m42.md) | Webhooks | M30 | done |
 | [M43](m43.md) | Automation rules | M22 M35 M42 | not started |
 | [M44](m44.md) | API keys: rotation and scope choice | M21 | not started |
 | [M44.9](m44.9.md) | **Pre-release adversarial review** | M21–M44 | not started |

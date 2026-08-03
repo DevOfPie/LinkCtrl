@@ -65,6 +65,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 	"github.com/DevOfPie/LinkCtrl/internal/team"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
+	"github.com/DevOfPie/LinkCtrl/internal/webhook"
 )
 
 func main() {
@@ -498,6 +499,24 @@ func run(cfg config.Config, _ io.Writer) error {
 	// burst of password submissions starve ordinary redirects.
 	gateSvc := gate.NewService(pools.App, gate.Config{Hasher: authSvc.Hasher()})
 
+	// Outbound webhooks (M42). Built before the link service, because the link
+	// service holds it as the thing it hands events to.
+	//
+	// Always built, unlike the mailer and the feed: there is no operator switch,
+	// because a webhook is registered by a workspace rather than enabled by the
+	// operator. What the two numbers here decide is how long one delivery may
+	// take and how long the log of what was attempted is kept.
+	//
+	// Its delivery client dials addresses somebody with a workspace chose, so it
+	// carries a dialer that re-checks the resolved address at connect and
+	// follows no redirect. See internal/webhook/client.go.
+	webhookSvc := webhook.NewService(pools.App, webhook.Config{
+		Timeout:       cfg.Webhooks.Timeout,
+		RetentionDays: cfg.Webhooks.RetentionDays,
+		Logger:        log,
+		Observer:      metrics,
+	})
+
 	linkSvc := link.NewService(pools.App, link.Config{
 		// The unappealable tier is not configured here and cannot be: private
 		// and metadata addresses are refused unconditionally, and the scheme
@@ -551,7 +570,10 @@ func run(cfg config.Config, _ io.Writer) error {
 		},
 		DomainNotify: notifySvc,
 		VerifyGrace:  cfg.Domains.VerifyGrace,
-		Log:          log,
+		// Webhook events (M42). A link write queues one row per subscribed
+		// webhook and returns; nothing dials anything on the request path.
+		Events: webhookSvc,
+		Log:    log,
 	})
 	rootRedirect.Load = linkSvc.LoadRootRedirect
 	// A rename changes the hostname a short URL is built from, and that string is
@@ -692,7 +714,7 @@ func run(cfg config.Config, _ io.Writer) error {
 
 	roller := analytics.NewRoller(pools.App, log)
 	jobs := newJobRunner(pools.App, salts, roller, log, metrics, notifySvc, mailSvc, signupSvc,
-		linkSvc, cfg.Domains,
+		linkSvc, webhookSvc, cfg.Domains,
 		cfg.Analytics.RetentionDays, cfg.Audit.RetentionDays, cfg.Audit.SizeWarnBytes)
 	jobs.start(ctx)
 	defer jobs.stop()

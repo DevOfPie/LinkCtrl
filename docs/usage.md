@@ -1122,3 +1122,164 @@ curl -sS -X PUT .../api/v1/domains/$ID/root-redirect \
 Sending `""` removes it and restores the `404`. It is offered only on a verified
 hostname, and the destination goes through the same refusals a link's does.
 Changing it is audited.
+
+## Webhooks
+
+Where this server sends a workspace's events. Register a URL, choose the events,
+and every one of them arrives as a signed JSON POST.
+
+Needs `webhooks.read` to see and `webhooks.write` to change, which are the owner
+and admin roles. `webhooks.write` cannot be held by an API key: a webhook keeps
+delivering after the credential that created it is revoked, so creating one takes
+a signed-in person. Reading and inspecting deliveries work with a key.
+
+The dashboard page is `/webhooks`; the API is `/api/v1/webhooks`.
+
+```sh
+curl -sS -X POST .../api/v1/webhooks \
+  -H "Cookie: $SESSION" -H 'Content-Type: application/json' \
+  -d '{"url":"https://example.com/hooks/linkctrl",
+       "events":["link.created","link.updated"],
+       "description":"Ops channel"}'
+```
+
+The response is the **only** place the signing secret appears. It is not stored
+anywhere it can be read back; if you lose it, rotate:
+
+```sh
+curl -sS -X POST .../api/v1/webhooks/$ID/rotate -H "Cookie: $SESSION"
+```
+
+There is no overlap window. The previous secret stops verifying immediately,
+because two valid secrets at once means a receiver that has been compromised
+keeps verifying for as long as the window lasts.
+
+### The events
+
+Six, and the vocabulary is closed — an unknown name is refused rather than
+ignored, so a subscription that would never fire is not something you can
+accidentally create.
+
+| Event | When |
+| --- | --- |
+| `link.created` | After a link exists. Fetching its short URL on this event finds it working. |
+| `link.updated` | Any successful edit, the destination included — **and an edit that changed nothing**, because the service does not diff and the dashboard form posts every field on every save. Make your handler idempotent rather than assuming something moved. |
+| `link.archived` | The link was paused. |
+| `link.restored` | It was un-paused. |
+| `link.deleted` | Somebody deleted it, starting the 30-day recovery window. **Not** the purge at the end of that window — you would otherwise be told twice about one link. |
+| `destination.blocked` | Somebody was refused a destination. The payload names the tier, the rule and the surface, and carries the attempted URL **defanged** — `https[:]//evil[.]example` — so nothing that renders it produces a live link to the thing that was refused. |
+
+### The payload
+
+```json
+{
+  "event": "link.created",
+  "occurred_at": "2026-08-03T09:41:22Z",
+  "workspace_id": "0198c9c5-0000-7000-8000-000000000010",
+  "data": {
+    "id": "0198c9c5-0000-7000-8000-000000000001",
+    "alias": "spring",
+    "short_url": "https://lnk.example.com/spring",
+    "url": "https://example.com/spring",
+    "title": "Spring campaign",
+    "status": "active"
+  }
+}
+```
+
+`data` differs by event; the three fields around it do not. A `destination.blocked`
+payload carries `tier`, `rule`, `code`, `surface` and `url_defanged` instead.
+
+Headers on every delivery:
+
+| Header | What it is |
+| --- | --- |
+| `X-LinkCtrl-Event` | The event name, so you can route without parsing the body. |
+| `X-LinkCtrl-Delivery` | A UUID. **This is your idempotency key** — every retry of one event carries the same value, and no two events share one. |
+| `X-LinkCtrl-Timestamp` | Unix seconds, and part of what is signed. Reject a timestamp too far from your own clock if you want replay protection. |
+| `X-LinkCtrl-Signature` | `v1=` followed by a lowercase hex digest. |
+
+### Verifying the signature
+
+```
+signed  = "<X-LinkCtrl-Timestamp>" + "." + <the raw request body>
+digest  = HMAC-SHA256(key = the secret string exactly as it was shown to you,
+                      message = signed)
+header  = "v1=" + lowercase hex of digest
+```
+
+Three things to get right, because each produces a signature that never matches
+and no clue why:
+
+- **The key is the secret string as displayed** — the 64 lowercase hex
+  characters, used as-is. Do not hex-decode it first. LinkCtrl stores 32 random
+  bytes and shows you their hex; making the visible string the key means there is
+  no encoding step to get wrong.
+- **The message is the raw body**, byte for byte as it arrived. Do not parse and
+  re-serialize the JSON before verifying — key order and whitespace will not
+  survive it.
+- **Compare in constant time.** `hmac.compare_digest` in Python, `hash_equals` in
+  PHP, `hmac.Equal` in Go.
+
+```python
+import hmac, hashlib
+
+def verify(secret: str, timestamp: str, body: bytes, header: str) -> bool:
+    version, _, digest = header.partition("=")
+    if version != "v1":
+        return False
+    want = hmac.new(secret.encode(), f"{timestamp}.".encode() + body,
+                    hashlib.sha256).hexdigest()
+    return hmac.compare_digest(digest, want)
+```
+
+### Delivery, retries and the log
+
+Nothing is delivered on the request path. A link write queues one row per
+subscribed webhook and returns; the scheduler drains that queue every thirty
+seconds, under a leader lock, in batches of twenty.
+
+A delivery is a success on **2xx** and a failure on anything else. A redirect is a
+failure too, and is not followed: a receiver answering `302` is pointing this
+server at a URL nobody registered. The `3xx` is recorded so you can see it.
+
+A failed delivery is retried with a doubling backoff — 1m, 2m, 4m, 8m, 16m, 30m —
+for **seven attempts spanning 61 minutes**, then abandoned. Nothing recovers an
+abandoned delivery; if your receiver was down for longer than an hour, anything
+older than that is gone. The attempt count is not configurable, because changing
+it changes what *your* receiver experiences rather than what the instance costs.
+
+Every attempt is recorded: the status, how many attempts it took, what the
+receiver answered, and the error where there was no answer at all.
+
+```sh
+curl -sS .../api/v1/webhooks/$ID/deliveries -H "Authorization: Bearer $KEY"
+```
+
+`response_code` is `null` when nothing answered — a refused connection, a
+timeout, or this instance declining to open the socket. The same log is on the
+`/webhooks` page behind each registration's **Deliveries** button.
+
+Finished deliveries are pruned by age. The window is `WEBHOOK_RETENTION_DAYS`,
+thirty days by default, and there is no "keep forever" setting for it — this table
+grows by one row per link write per enabled webhook.
+
+Pausing a webhook stops it queueing anything. Deliveries already queued still go
+out, and deleting the webhook takes its delivery log with it.
+
+### What your endpoint has to be
+
+**Publicly routable.** A URL naming a private, loopback or link-local address is
+refused when you register it, and the address the name actually resolves to is
+checked again every time this server opens the connection — so a name that later
+points somewhere private is not delivered to either. That is a deliberate
+difference from where a *link* may point, and `docs/SECURITY.md` explains why the
+two are not the same question.
+
+Up to **20** webhooks fit in a workspace. Every enabled one turns each link write
+into another outbound connection, which is what the ceiling is about.
+
+### Redis is not involved
+
+The queue is Postgres. Redis on this instance is a cache and nothing durable
+depends on it, webhook delivery included: flushing the cache loses no event.

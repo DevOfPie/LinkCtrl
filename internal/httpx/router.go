@@ -222,10 +222,31 @@ func NewRouter(d Deps) http.Handler {
 			"GET " + APIPrefix + "/campaigns/{campaignID}":    api.GetCampaign,
 			"PATCH " + APIPrefix + "/campaigns/{campaignID}":  api.UpdateCampaign,
 			"DELETE " + APIPrefix + "/campaigns/{campaignID}": api.DeleteCampaign,
-			"GET " + APIPrefix + "/tags":                      api.ListTags,
-			"DELETE " + APIPrefix + "/tags/{id}":              api.DeleteTag,
-			"GET " + APIPrefix + "/domain":                    api.GetDomain,
-			"PATCH " + APIPrefix + "/domain":                  api.UpdateDomain,
+			// Webhooks (M42). A sibling collection like campaigns and folders,
+			// because a webhook belongs to the workspace and hears about every
+			// link in it — nesting it under one link would misdescribe what it
+			// subscribes to.
+			//
+			// Unlike campaigns and QR codes, these carry permissions of their
+			// own rather than reusing `links.*` (D75's reasoning does not reach
+			// here): a webhook is an instruction to make this server connect
+			// somewhere, which is a different power from editing where a
+			// visitor's browser is sent. See internal/link/webhook.go.
+			//
+			// Rotation is a POST because it mints a credential and returns it in
+			// the response body; a GET that did that would be one a browser
+			// could be made to fetch.
+			"GET " + APIPrefix + "/webhooks":                        api.ListWebhooks,
+			"POST " + APIPrefix + "/webhooks":                       api.CreateWebhook,
+			"GET " + APIPrefix + "/webhooks/{webhookID}":            api.GetWebhook,
+			"PATCH " + APIPrefix + "/webhooks/{webhookID}":          api.UpdateWebhook,
+			"DELETE " + APIPrefix + "/webhooks/{webhookID}":         api.DeleteWebhook,
+			"POST " + APIPrefix + "/webhooks/{webhookID}/rotate":    api.RotateWebhookSecret,
+			"GET " + APIPrefix + "/webhooks/{webhookID}/deliveries": api.ListWebhookDeliveries,
+			"GET " + APIPrefix + "/tags":                            api.ListTags,
+			"DELETE " + APIPrefix + "/tags/{id}":                    api.DeleteTag,
+			"GET " + APIPrefix + "/domain":                          api.GetDomain,
+			"PATCH " + APIPrefix + "/domain":                        api.UpdateDomain,
 			// Registered hostnames (M39). A different resource from the
 			// singular /domain above, which is the instance default's settings
 			// and predates there being more than one domain.
@@ -488,17 +509,28 @@ func NewRouter(d Deps) http.Handler {
 			// Minting a signed URL (M35). A POST because it can create the
 			// workspace's signing secret, and because a capability must not be
 			// something a link somebody clicks can produce.
-			"POST /links/{id}/sign":         web.LinkSign,
-			"POST /links/{id}/archive":      web.LinkArchive,
-			"POST /links/{id}/restore":      web.LinkRestore,
-			"POST /links/{id}/delete":       web.LinkDelete,
-			"GET /keys":                     web.KeysPage,
-			"GET /notifications":            web.NotificationsPage,
-			"POST /notifications/read":      web.NotificationReadAll,
-			"POST /notifications/{id}/read": web.NotificationRead,
-			"POST /keys":                    web.KeyCreate,
-			"POST /keys/{id}/revoke":        web.KeyRevoke,
-			"GET /account":                  web.AccountPage,
+			"POST /links/{id}/sign":    web.LinkSign,
+			"POST /links/{id}/archive": web.LinkArchive,
+			"POST /links/{id}/restore": web.LinkRestore,
+			"POST /links/{id}/delete":  web.LinkDelete,
+			// Webhooks (M42). Five forms and no JavaScript, on the folder page's
+			// shape. The toggle and the rotation are their own actions rather
+			// than fields on the edit form: switching a misbehaving receiver off
+			// is the first thing somebody reaches for, and rotating a leaked
+			// secret is the second, and neither should require opening an editor.
+			"GET /webhooks":                     web.WebhooksPage,
+			"POST /webhooks":                    web.WebhookCreate,
+			"POST /webhooks/{webhookID}":        web.WebhookUpdate,
+			"POST /webhooks/{webhookID}/toggle": web.WebhookToggle,
+			"POST /webhooks/{webhookID}/rotate": web.WebhookRotate,
+			"POST /webhooks/{webhookID}/delete": web.WebhookDelete,
+			"GET /keys":                         web.KeysPage,
+			"GET /notifications":                web.NotificationsPage,
+			"POST /notifications/read":          web.NotificationReadAll,
+			"POST /notifications/{id}/read":     web.NotificationRead,
+			"POST /keys":                        web.KeyCreate,
+			"POST /keys/{id}/revoke":            web.KeyRevoke,
+			"GET /account":                      web.AccountPage,
 			// Read-only, and registered GET-only on purpose: a POST to /feeds
 			// must be refused by the mux rather than by a handler somebody
 			// could add one to. D40, and TestTheDisclosurePageAcceptsNoWrite.

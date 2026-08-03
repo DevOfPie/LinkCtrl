@@ -423,6 +423,8 @@ type Webhook struct {
 	Enabled      bool
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+	Events       []string
+	Description  string
 }
 
 type WebhookDelivery struct {
@@ -436,6 +438,7 @@ type WebhookDelivery struct {
 	NextAttemptAt *time.Time
 	CreatedAt     time.Time
 	CompletedAt   *time.Time
+	LastError     string
 }
 
 type Workspace struct {

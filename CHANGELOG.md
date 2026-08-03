@@ -72,6 +72,54 @@ migrations run at boot.
 
 ### Added
 
+- **Webhooks: a workspace can have this instance POST its events somewhere.**
+  Register a URL at `/webhooks` or through `/api/v1/webhooks`, choose from six
+  events — `link.created`, `link.updated`, `link.archived`, `link.restored`,
+  `link.deleted` and `destination.blocked` — and each one arrives as a signed
+  JSON POST. The vocabulary is closed: an unknown event name is refused rather
+  than ignored, so a subscription that would never fire is not something you can
+  create by typo.
+
+  **Payloads are signed with HMAC-SHA256** using a per-webhook secret that is
+  shown exactly once, on the response that mints it, and is not stored anywhere it
+  can be read back. The scheme is written out for receivers in `docs/usage.md`,
+  worked example included; the short version is that the key is the secret string
+  as displayed and the message is the timestamp, a dot, and the raw body. Rotating
+  a secret has no overlap window — the old one stops verifying immediately, which
+  is what somebody rotating a leaked secret actually wants.
+
+  **Delivery is a Postgres queue, not a call on the request path.** A link write
+  queues one row per subscribed webhook and returns; the scheduler drains it every
+  thirty seconds under the same leader lock the mail outbox uses. A failure is
+  retried with a doubling backoff — 1m, 2m, 4m, 8m, 16m, 30m — for seven attempts
+  spanning 61 minutes, then abandoned. Every attempt is recorded with its status,
+  attempt count and response code, and that log is on the page behind each
+  registration's **Deliveries** button and at
+  `GET /api/v1/webhooks/{id}/deliveries`. Finished rows are pruned by age;
+  `LINKCTRL_WEBHOOK_RETENTION_DAYS` is the window and there is no "keep forever"
+  setting for it, because this table grows by a row per link write per webhook.
+
+  **Your endpoint has to be publicly routable, and this is enforced twice.** The
+  URL goes through the same destination checks a link's does when you register it,
+  and the address the hostname actually resolves to is checked again at the moment
+  the connection is opened — so a name that later points at a private address is
+  not delivered to either. No redirect is followed at all: a receiver answering
+  `302` is pointing this server at a URL nobody registered, and the `3xx` is
+  recorded instead of chased. This is deliberately stricter than where a *link*
+  may point, because a link sends a visitor's browser somewhere and a webhook
+  sends the server; `docs/SECURITY.md` says so at length.
+
+  **Two new permissions**, `webhooks.read` and `webhooks.write`, granted to the
+  owner and admin roles. `webhooks.write` cannot be held by an API key: a webhook
+  keeps delivering after the credential that created it is revoked, so creating
+  one takes a signed-in person. Reading and inspecting deliveries work with a key.
+  Up to twenty webhooks fit in a workspace.
+
+  Nothing needs to be done on upgrade. No webhook exists until somebody registers
+  one, and an instance where nobody does never opens an outbound connection for
+  this feature. `LINKCTRL_WEBHOOK_TIMEOUT` and `LINKCTRL_WEBHOOK_RETENTION_DAYS`
+  both have working defaults.
+
 - **Every link now has a QR code, and scanning one is counted.** `GET
   /api/v1/links/{id}/qr.svg` draws it; `GET /api/v1/links/{id}/qr` says what it
   encodes and how it is drawn; `PUT` the same path stores a style — foreground,

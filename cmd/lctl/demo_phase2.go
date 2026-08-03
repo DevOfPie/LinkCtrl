@@ -339,6 +339,9 @@ func (s *demoSeeder) run(ctx context.Context, primary []demoLink, ids map[int]uu
 	if err := s.seedCampaigns(ctx, primary, ids); err != nil {
 		return err
 	}
+	if err := s.seedWebhooks(ctx); err != nil {
+		return err
+	}
 	if err := s.seedBlockingAndDisputes(ctx, people); err != nil {
 		return err
 	}
@@ -1075,6 +1078,107 @@ func (s *demoSeeder) seedCampaigns(ctx context.Context, cat []demoLink, ids map[
 	return nil
 }
 
+// demoWebhooks are the registrations the demo shows.
+//
+// **Both hostnames are `.example`, and that is the whole safety argument.** The
+// demo is a public instance anybody can drive, and every link a visitor creates
+// there queues a delivery for whichever webhook subscribed to it. RFC 2606
+// reserves `.example` as a top-level domain that never resolves, so a delivery
+// from the demo gets as far as a failed DNS lookup and no further — it reaches
+// nobody's server, and it cannot be made to reach one by somebody registering
+// the name. `example.com` would not do: it resolves, to a host IANA runs.
+//
+// **One is enabled and one is paused**, for the reason every other paired demo
+// row exists: a page where everything says the same thing shows one state, and a
+// reader cannot tell that the pause button does anything. The enabled one is
+// what makes the delivery log fill with real attempts as people use the demo —
+// failing attempts, which is exactly what the log is for.
+func demoWebhooks() []struct {
+	url         string
+	description string
+	events      []string
+	enabled     bool
+} {
+	return []struct {
+		url         string
+		description string
+		events      []string
+		enabled     bool
+	}{
+		{
+			url:         "https://hooks.linkctrl.example/events",
+			description: "Ops channel — every link change",
+			events: []string{
+				domain.EventLinkCreated, domain.EventLinkUpdated,
+				domain.EventLinkArchived, domain.EventLinkDeleted,
+			},
+			enabled: true,
+		},
+		{
+			url:         "https://audit.linkctrl.example/blocked",
+			description: "Security review — refused destinations only",
+			events:      []string{domain.EventDestinationBlocked},
+			enabled:     false,
+		},
+	}
+}
+
+// seedWebhooks registers the demo's webhooks and gives one of them a history.
+//
+// Through link.Service like everything else in this file, so the tier check, the
+// workspace cap and the event-vocabulary check all apply to the demo's own data:
+// a webhook the seeder can register is one the product would have accepted. The
+// signing secrets it mints are discarded here, which is the honest thing — they
+// are shown once and this is not a receiver.
+//
+// **The seeder queues no delivery.** The link service it holds is built with no
+// emitter (demoLinkConfig sets none), so seeding twenty links writes nothing to
+// `webhook_deliveries`; the rows below are written directly, in terminal states,
+// so the delivery log has something in it on a demo instance nobody has used
+// yet. A pending row here would be the seeder handing the scheduler an outbound
+// connection to make on somebody else's behalf, which is a thing a demo should
+// not do quietly — and demoCoverage asserts it does not.
+func (s *demoSeeder) seedWebhooks(ctx context.Context) error {
+	specs := demoWebhooks()
+	var first uuid.UUID
+	for i, spec := range specs {
+		hook, err := s.link.CreateWebhook(ctx, s.owner, link.CreateWebhookInput{
+			URL: spec.url, Events: spec.events,
+			Description: spec.description, Enabled: spec.enabled,
+		})
+		if err != nil {
+			return fmt.Errorf("register webhook %q: %w", spec.description, err)
+		}
+		if i == 0 {
+			first = hook.ID
+		}
+	}
+
+	// A history for the enabled one: one delivery that arrived, and one that was
+	// abandoned without ever getting a response. Two rows rather than one,
+	// because the column somebody debugging reads first is the response code and
+	// "no answer" is the value a single successful row would never show.
+	const history = `
+		INSERT INTO webhook_deliveries
+		    (id, webhook_id, event, payload, status, attempts, response_code,
+		     last_error, next_attempt_at, created_at, completed_at)
+		VALUES
+		    (gen_random_uuid(), $1, 'link.created', $2::jsonb, 'delivered', 1, 200,
+		     '', NULL, now() - interval '3 hours', now() - interval '3 hours'),
+		    (gen_random_uuid(), $1, 'link.updated', $3::jsonb, 'abandoned', 6, NULL,
+		     'dial tcp: lookup hooks.linkctrl.example: no such host', NULL,
+		     now() - interval '2 hours', now() - interval '1 hour')`
+	delivered := `{"event":"link.created","data":{"alias":"launch"}}`
+	abandoned := `{"event":"link.updated","data":{"alias":"launch"}}`
+	if _, err := s.pool.Exec(ctx, history, first, delivered, abandoned); err != nil {
+		return fmt.Errorf("seed webhook delivery history: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "webhooks: %d (%d enabled), with 2 recorded deliveries\n",
+		len(specs), 1)
+	return nil
+}
+
 // demoDomains are the hostnames the demo registers, one per workspace.
 //
 // **Two, and in different workspaces, because one would show nothing.** A single
@@ -1426,6 +1530,16 @@ func demoResetPhase2(ctx context.Context, tx pgxExecutor, orgID, userID uuid.UUI
 			[]any{orgID}},
 		{"campaigns", `
 			DELETE FROM campaigns
+			 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
+			[]any{orgID}},
+
+		// The webhooks (M42), and their delivery log with them —
+		// `webhook_deliveries.webhook_id` is ON DELETE CASCADE, so the seeded
+		// history and anything a demo visitor's link write queued go together.
+		// A step of its own because nothing else reaches these rows: they hang
+		// off the workspace, not off a link.
+		{"webhooks", `
+			DELETE FROM webhooks
 			 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
 			[]any{orgID}},
 

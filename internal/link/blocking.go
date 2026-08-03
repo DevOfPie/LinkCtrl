@@ -504,6 +504,19 @@ const (
 	// the tiers care about — a weighted arm at 5% pointing at a phishing page is
 	// still that page, served by this instance, under this workspace's alias.
 	surfaceSplitVariant destinationSurface = "link.split_variant"
+	// surfaceWebhook is M42's, and it is the surface the tiers were least
+	// obviously written for and most need. Every other entry above is a place a
+	// *visitor's browser* ends up. This one is a place *this process* connects
+	// to, on its own schedule, with no human watching — so a refusal here is not
+	// protecting a visitor from a page, it is protecting the instance from being
+	// made to fetch its own metadata endpoint by whoever holds a workspace.
+	//
+	// The check at this surface is necessary and not sufficient, which is the
+	// difference m42.md turns on: a name that resolves publicly now can resolve
+	// privately at delivery time, so internal/webhook checks the resolved address
+	// again at connect. Registration-time validation alone is the gap the plan
+	// review found in both rival orderings.
+	surfaceWebhook destinationSurface = "webhook.url"
 )
 
 // field is the form input a refusal on this surface belongs against, so the
@@ -638,6 +651,11 @@ func (s *Service) checkDestination(
 	}
 	if v.Block != nil {
 		s.recordBlocked(ctx, actor, raw, surface, v.Block.Tier, v.Block.Rule)
+		// The blocked-attempt webhook (M42), beside the audit record and not
+		// instead of it. The log is what an operator tunes the tiers against;
+		// the event is what lets a workspace hear about a refusal without
+		// polling. Both carry the attempted URL defanged.
+		s.emitBlocked(ctx, actor.WorkspaceID, raw, surface, v.Block.Tier, v.Block.Rule)
 	}
 	return "", ve
 }

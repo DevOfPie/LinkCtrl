@@ -154,12 +154,27 @@ func APIKeyHash(pepper []byte, prefix, secret string) []byte {
 // that host becomes creatable — by the key that removed it, among others. A key
 // that can decide what it is allowed to point at has widened its own reach by an
 // action it took itself (M31, applying D18).
+//
+// webhooks.write is the *durability* of a reach, which is the shape none of the
+// entries above quite has (M42, applying D18's second limb). A webhook is a
+// standing instruction to send every link change in a workspace to an address
+// its creator chose, and it keeps sending after the credential that created it
+// is revoked: revoking the key does not revoke the channel. That is a reach the
+// key retains once it is gone, which is what makes it escalation rather than
+// ordinary use of a permission the holder already has.
+//
+// webhooks.read is deliberately **not** here. Reading the list discloses where a
+// workspace's events go and what the recent deliveries did, which is exactly
+// what an integrator's tooling needs and escalates nothing. The pair therefore
+// splits the way apikeys.* does not, and the split is the point: a key can watch
+// its own integration, and a human has to create one.
 var NonDelegableScopes = map[string]struct{}{
 	PermAPIKeysRead:       {},
 	PermAPIKeysWrite:      {},
 	"org.delete":          {},
 	"audit.read":          {},
 	"destinations.review": {},
+	"webhooks.write":      {},
 }
 
 // APIKeyInfo is a key as its owner sees it. The secret is absent by

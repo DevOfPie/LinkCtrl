@@ -68,6 +68,7 @@ type Config struct {
 	Audit     AuditConfig
 	SMTP      SMTPConfig
 	Feed      FeedConfig
+	Webhooks  WebhooksConfig
 	Shutdown  ShutdownConfig
 
 	APIKeyPepper Secret `env:"API_KEY_PEPPER,required,unset"`
@@ -393,6 +394,39 @@ type FeedConfig struct {
 // Enabled reports whether a feed is configured. The one question every consumer
 // asks, so it is a method rather than a comparison repeated in four places.
 func (f FeedConfig) Enabled() bool { return f.URL != "" }
+
+// WebhooksConfig is outbound webhook delivery (M42).
+//
+// Two numbers, both operator-visible for the reason D70 made the domain
+// verification numbers visible: each has a consequence somebody deploying this
+// has to be able to see and change. The timeout decides how long one unresponsive
+// receiver holds a delivery slot, and the retention window decides how long the
+// delivery log — one row per link write per enabled webhook — is kept before it
+// is pruned.
+//
+// The **attempt count is not here**, and that is deliberate rather than an
+// omission. It is `webhook.MaxAttempts`, six, and it is documented in
+// docs/usage.md: unlike the two below, changing it changes what a *receiver*
+// experiences — how long a delivery can arrive late — which is a contract with
+// somebody who does not read this instance's environment. An operator who wants a
+// different one is asking for a different contract, and should say so in a
+// release rather than in a variable.
+type WebhooksConfig struct {
+	// Timeout bounds one delivery attempt end to end: connect, write, read. Ten
+	// seconds is long enough for a receiver that does real work before answering
+	// and short enough that a batch of twenty slow ones fits well inside the
+	// job's own bound.
+	Timeout time.Duration `env:"WEBHOOK_TIMEOUT" envDefault:"10s"`
+	// RetentionDays is how long a delivered or abandoned delivery row is kept.
+	// Thirty days, matching the mail outbox, because the two are the same kind
+	// of record: what was attempted and what happened, not an archive.
+	//
+	// Never zero. Zero means "keep forever" elsewhere in this file (audit
+	// retention, D5), and a table that grows by one row per link write per
+	// webhook with no window is the growth problem that convention exists to
+	// make visible rather than to permit here. Validate refuses it.
+	RetentionDays int `env:"WEBHOOK_RETENTION_DAYS" envDefault:"30"`
+}
 
 type ShutdownConfig struct {
 	DrainDelay time.Duration `env:"SHUTDOWN_DRAIN_DELAY" envDefault:"5s"`
@@ -914,6 +948,37 @@ func (c Config) Validate() error {
 				"check happens inside a request somebody is waiting on",
 				c.Feed.Timeout, c.HTTP.RequestTimeout)
 		}
+	}
+
+	// Webhook delivery (M42). Not inside an Enabled guard, because there is no
+	// switch: webhooks are a workspace feature rather than an operator one, and
+	// these two numbers apply the moment anybody registers one.
+	//
+	// Bounded on both sides. A timeout of zero would mean one unresponsive
+	// receiver holds a delivery slot until the job's own bound expires, and
+	// anything past a minute would let a batch of twenty outlast the drain
+	// interval and stack runs on top of each other.
+	if c.Webhooks.Timeout <= 0 {
+		add("WEBHOOK_TIMEOUT: must be positive, got %s", c.Webhooks.Timeout)
+	} else if c.Webhooks.Timeout > time.Minute {
+		// The batch size is webhook.DrainBatch. Named in prose rather than
+		// imported: internal/webhook reaches internal/link for the address
+		// predicate, and a config package that imported it would put the whole
+		// service graph behind the thing that parses the environment.
+		add("WEBHOOK_TIMEOUT (%s): must not exceed 1m; deliveries drain in batches "+
+			"of twenty on a 30s tick, and a longer bound lets one batch outlast "+
+			"the next", c.Webhooks.Timeout)
+	}
+	// Zero is refused rather than read as "keep forever". Everywhere else in
+	// this file zero means forever (audit retention, D5) and is a deliberate
+	// operator choice about a table they can measure; this one grows by a row
+	// per link write per enabled webhook, so "forever" here is a decision nobody
+	// would make on purpose.
+	if c.Webhooks.RetentionDays < 1 {
+		add("WEBHOOK_RETENTION_DAYS: must be at least 1, got %d; the delivery log "+
+			"is a record of what was attempted, not an archive, and unlike audit "+
+			"retention there is no 'keep forever' setting for it",
+			c.Webhooks.RetentionDays)
 	}
 
 	if c.Analytics.GeoIPPath != "" {

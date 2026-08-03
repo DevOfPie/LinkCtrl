@@ -78,6 +78,14 @@ tags:
       permissions of their own, for the reason folders are. **No campaign
       analytics** — that stays a later phase; the links list filtered by
       campaign is what this surface answers with.
+  - name: webhooks
+    description: >
+      Where this server sends a workspace's events. **The one surface on this API
+      whose values make the instance itself open outbound connections**, which is
+      why it carries permissions of its own — `webhooks.read` and
+      `webhooks.write`, both owner and admin — rather than reusing the link
+      permissions that guard folders, campaigns and QR codes. `webhooks.write` is
+      not delegable to an API key.
   - name: qr
     description: >
       A link's QR code. SVG only, and the one non-JSON response this API has
@@ -1459,6 +1467,215 @@ paths:
       responses:
         "204":
           description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /webhooks:
+    get:
+      tags: [webhooks]
+      operationId: listWebhooks
+      summary: The workspace's webhooks
+      description: |
+        Unpaginated and bounded instead: a workspace registers at most twenty,
+        because every enabled one turns each link write into another outbound
+        connection.
+
+        **The signing secret is not here.** It is returned exactly twice in this
+        API's whole surface — from `POST /webhooks` and from
+        `POST /webhooks/{webhookID}/rotate` — and is not stored anywhere it can
+        be read back. A client that loses it rotates.
+
+        The response carries the event vocabulary and the signature scheme
+        alongside the list, so a client building a subscription editor or a
+        receiver discovers both from the API rather than from the docs.
+      responses:
+        "200":
+          description: Every webhook in the workspace, the vocabulary, and the signature scheme
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [webhooks]
+      operationId: createWebhook
+      summary: Register a webhook
+      description: |
+        **The URL is judged by every destination tier before the row exists**,
+        exactly as a link's destination is: the scheme allowlist, the private and
+        obfuscated address refusals that cannot be switched off, the instance's
+        blocklist, the heuristics, and the opt-in reputation feed if one is
+        configured. A refusal is recorded as `destination.blocked` in the audit
+        log, like any other.
+
+        That check is necessary and not sufficient, and the difference is the
+        point of this endpoint. A hostname that resolves publicly now can resolve
+        to a private address by the time delivery happens, so **the address is
+        checked again at the moment the connection is opened**, and no redirect
+        is followed at all. See `docs/SECURITY.md`.
+
+        The response is the only place the signing secret ever appears.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWebhookRequest"
+      responses:
+        "201":
+          description: The registered webhook, with its signing secret
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /webhooks/{webhookID}:
+    parameters:
+      - $ref: "#/components/parameters/WebhookID"
+    get:
+      tags: [webhooks]
+      operationId: getWebhook
+      summary: One webhook
+      responses:
+        "200":
+          description: The webhook, without its secret
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [webhooks]
+      operationId: updateWebhook
+      summary: Edit a webhook
+      description: |
+        Partial: an omitted field is unchanged. `events` is the exception worth
+        naming — an empty array is a real request to subscribe to nothing, and it
+        is refused with a message rather than stored, because a webhook
+        subscribed to nothing is a URL this server would never call.
+
+        A changed `url` goes through the full tier check again. A URL that was
+        acceptable when it was registered and has since been blocked does not
+        survive an edit that happened to change something else.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWebhookRequest"
+      responses:
+        "200":
+          description: The webhook
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+    delete:
+      tags: [webhooks]
+      operationId: deleteWebhook
+      summary: Remove a webhook
+      description: |
+        The delivery log goes with it. A registration that has been removed and a
+        log that still names it would be a record of where events *used to* go,
+        which is a different and less useful thing than a record of where they go.
+      responses:
+        "204":
+          description: Removed
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /webhooks/{webhookID}/rotate:
+    parameters:
+      - $ref: "#/components/parameters/WebhookID"
+    post:
+      tags: [webhooks]
+      operationId: rotateWebhookSecret
+      summary: Mint a new signing secret
+      description: |
+        **There is no overlap window.** The previous secret stops verifying
+        immediately, because two valid secrets at once means a receiver that has
+        been compromised keeps verifying for as long as the window lasts — the
+        opposite of what somebody rotating a leaked secret wants. Update the
+        receiver promptly; `webhook.secret_rotated` is in the audit log so the
+        moment verification changed is findable.
+
+        A POST because it mints a credential and returns it in the body. A GET
+        that did that would be one a browser could be made to fetch.
+      responses:
+        "200":
+          description: The webhook, with its new signing secret
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /webhooks/{webhookID}/deliveries:
+    parameters:
+      - $ref: "#/components/parameters/WebhookID"
+      - name: limit
+        in: query
+        required: false
+        schema: { type: integer, minimum: 1, maximum: 50, default: 50 }
+        description: How many attempts to return, newest first.
+    get:
+      tags: [webhooks]
+      operationId: listWebhookDeliveries
+      summary: One webhook's recent delivery attempts
+      description: |
+        A log, not a list: the recent rows are the interesting ones, and the
+        window is bounded by `WEBHOOK_RETENTION_DAYS` on the instance.
+
+        **The payload is not returned.** It is the event body the receiver was
+        already sent, and returning it would make this endpoint a way to read
+        every link change in the workspace through a permission granted for
+        managing integrations.
+
+        `response_code` is null when there was no response at all — a refused
+        connection, a timeout, or this instance declining to open the socket
+        because the name resolved to a private address.
+      responses:
+        "200":
+          description: The recent attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookDeliveryList"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -2860,6 +3077,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    WebhookID:
+      name: webhookID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     DomainID:
       name: domainID
       in: path
@@ -3408,6 +3630,154 @@ components:
         campaigns:
           type: array
           items: { $ref: "#/components/schemas/Campaign" }
+
+    Webhook:
+      type: object
+      additionalProperties: false
+      required: [id, workspace_id, url, events, description, enabled, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        workspace_id: { type: string, format: uuid }
+        url:
+          type: string
+          maxLength: 2048
+          description: >
+            Where events are POSTed. http or https only, and never a private,
+            loopback or link-local address — checked here and again at the
+            address the name resolves to when the connection is opened.
+        events:
+          type: array
+          description: >
+            The subscription, from the closed vocabulary. Stored deduplicated
+            and sorted, so two subscriptions that mean the same thing compare
+            equal.
+          items: { $ref: "#/components/schemas/WebhookEvent" }
+        description: { type: string, maxLength: 200 }
+        enabled:
+          type: boolean
+          description: >
+            A disabled webhook queues nothing. Switching one off stops new
+            deliveries being created rather than creating and discarding them;
+            anything already queued still goes out.
+        secret:
+          type: string
+          description: >
+            The signing key, 64 lowercase hex characters. **Present only on the
+            response to `POST /webhooks` and `POST /webhooks/{id}/rotate`**, and
+            absent everywhere else — it is not stored anywhere it can be read
+            back. Use the string exactly as given as the HMAC key; do not
+            hex-decode it first.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    WebhookEvent:
+      type: string
+      description: >
+        One event name. The vocabulary is closed and deliberately small: five
+        for a link's lifecycle and one for a destination that was refused.
+      enum:
+        - link.created
+        - link.updated
+        - link.archived
+        - link.restored
+        - link.deleted
+        - destination.blocked
+
+    WebhookList:
+      type: object
+      additionalProperties: false
+      required: [webhooks, events, signature]
+      properties:
+        webhooks:
+          type: array
+          items: { $ref: "#/components/schemas/Webhook" }
+        events:
+          type: array
+          description: The whole vocabulary, so a subscription editor needs no hard-coded list.
+          items: { $ref: "#/components/schemas/WebhookEvent" }
+        signature:
+          type: object
+          description: >
+            How to verify a delivery, so a receiver can be written from the API
+            alone. The full worked example is in `docs/usage.md`.
+          additionalProperties: true
+
+    CreateWebhookRequest:
+      type: object
+      additionalProperties: false
+      required: [url, events]
+      properties:
+        url: { type: string, maxLength: 2048 }
+        events:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/WebhookEvent" }
+        description: { type: string, maxLength: 200 }
+        enabled:
+          type: boolean
+          default: true
+          description: Absent means enabled, which is what a webhook somebody just registered should be.
+
+    UpdateWebhookRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        url: { type: string, maxLength: 2048 }
+        events:
+          type: array
+          minItems: 1
+          description: >
+            Replaces the subscription entirely. An empty array is refused rather
+            than stored.
+          items: { $ref: "#/components/schemas/WebhookEvent" }
+        description: { type: string, maxLength: 200 }
+        enabled: { type: boolean }
+
+    WebhookDelivery:
+      type: object
+      additionalProperties: false
+      required: [id, event, status, attempts, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        event: { $ref: "#/components/schemas/WebhookEvent" }
+        status:
+          type: string
+          description: >
+            `failed` is in the column's constraint and nothing writes it — a
+            delivery that has spent its attempts becomes `abandoned`, which says
+            the same thing more precisely. Treat the two alike if one ever
+            appears.
+          enum: [pending, delivered, failed, abandoned]
+        attempts:
+          type: integer
+          format: int32
+          description: >
+            Counted when the delivery is claimed, before anything is sent, so a
+            process that dies mid-delivery spends an attempt rather than
+            retrying forever.
+        response_code:
+          type: integer
+          format: int32
+          nullable: true
+          description: >
+            What the receiver answered, or null when there was no response at
+            all — a refused connection, a timeout, or this instance declining to
+            open the socket because the name resolved somewhere private.
+        last_error:
+          type: string
+          description: The failure in words, bounded. Absent on a delivery that succeeded first time.
+        next_attempt_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time, nullable: true }
+
+    WebhookDeliveryList:
+      type: object
+      additionalProperties: false
+      required: [deliveries]
+      properties:
+        deliveries:
+          type: array
+          items: { $ref: "#/components/schemas/WebhookDelivery" }
 
     CreateCampaignRequest:
       type: object

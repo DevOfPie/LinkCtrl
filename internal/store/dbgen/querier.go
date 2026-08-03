@@ -34,6 +34,26 @@ type Querier interface {
 	//
 	// Ordered oldest first, so a backlog drains in the order it was queued.
 	ClaimDueMail(ctx context.Context, arg ClaimDueMailParams) ([]ClaimDueMailRow, error)
+	//
+	// One batch of due deliveries, claimed rather than merely selected — the exact
+	// shape ClaimDueMail uses, and for the same two reasons:
+	//
+	//   * The UPDATE spends the attempt and leases the row forward before anything
+	//     is sent, so a process killed mid-delivery leaves a row that comes back on
+	//     its own instead of one stuck pending.
+	//   * A crash loop is bounded. Counting the attempt at send time would let a
+	//     process that dies mid-send retry the same delivery forever.
+	//
+	// FOR UPDATE SKIP LOCKED inside the subquery is the claim mechanism this
+	// milestone had to choose (see decisions.md). Leadership already keeps a second
+	// replica out of the job, but leadership is an advisory lock released when its
+	// holder dies, so a moment of overlap is possible; skip-locked makes that moment
+	// cost nothing rather than deliver the same event twice.
+	//
+	// The webhook's URL and secret are joined in here rather than fetched per row:
+	// the drainer needs both for every claimed delivery, and N+1 round trips to
+	// assemble a batch of network calls is the wrong shape.
+	ClaimDueWebhookDeliveries(ctx context.Context, arg ClaimDueWebhookDeliveriesParams) ([]ClaimDueWebhookDeliveriesRow, error)
 	// Spend one click of a one-time or max-click link's durable budget.
 	//
 	// **One statement, and that is the whole of the concurrency argument.** Two
@@ -101,6 +121,7 @@ type Querier interface {
 	// for the same reason the last owner is.
 	CountOrganizationWorkspaces(ctx context.Context, organizationID uuid.UUID) (int64, error)
 	CountPendingMail(ctx context.Context) (int64, error)
+	CountPendingWebhookDeliveries(ctx context.Context) (int64, error)
 	//
 	// The re-notify guard. A threshold that is still crossed is still crossed on
 	// the next run an hour later, and a notification per hour forever is how an
@@ -135,6 +156,7 @@ type Querier interface {
 	// and returning the row would put somebody else's name and hash in a variable
 	// that only ever gets compared against zero.
 	CountUsersByEmail(ctx context.Context, email string) (int64, error)
+	CountWebhooks(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	// What D32 refuses a workspace deletion on.
 	//
 	// Soft-deleted links are excluded on purpose. `links`, `tags` and `folders` all
@@ -272,6 +294,16 @@ type Querier interface {
 	// dashboard shows and nothing obeys. Creation order is what orders a rotation,
 	// which is what ListVariantRules sorts by.
 	CreateVariantRule(ctx context.Context, arg CreateVariantRuleParams) (RoutingRule, error)
+	// Webhooks and their delivery queue (M42).
+	//
+	// Two halves that never meet in one statement. The registration half is
+	// workspace-scoped and reached from the dashboard and the API; the delivery half
+	// is scoped to nothing but time and is reached only by the scheduler. Every
+	// query below belongs to exactly one of them, and the delivery half deliberately
+	// carries no workspace parameter — a drainer that filtered by tenant would
+	// deliver in tenant order, and the queue is fair or it is a queue somebody's
+	// backlog can starve.
+	CreateWebhook(ctx context.Context, arg CreateWebhookParams) (CreateWebhookRow, error)
 	CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error)
 	// Records a decision, and only on a dispute nobody has decided yet.
 	//
@@ -351,6 +383,12 @@ type Querier interface {
 	DeleteStaleEnvBlockedDestinations(ctx context.Context, keep []string) (int64, error)
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
 	DeleteVariantRule(ctx context.Context, arg DeleteVariantRuleParams) (*uuid.UUID, error)
+	//
+	// The deliveries go with it, by the ON DELETE CASCADE 00600 declared. A webhook
+	// that has been removed and a delivery log that still names it would be a record
+	// of where events *used to* go, which is a different and less useful thing than
+	// the record of where they go.
+	DeleteWebhook(ctx context.Context, arg DeleteWebhookParams) (int64, error)
 	// A real delete, not a soft one, and that is the decision D32 guards.
 	//
 	// `links`, `tags` and `folders` cascade from here (00300_links.sql). Soft
@@ -365,6 +403,23 @@ type Querier interface {
 	// The message is stored rendered. Nothing here re-renders from a template, so a
 	// later template change cannot rewrite a mail somebody is already waiting for.
 	EnqueueMail(ctx context.Context, arg EnqueueMailParams) error
+	// --- the queue ---------------------------------------------------------------
+	//
+	// One statement fans one event out to every webhook that asked for it.
+	//
+	// This runs inside a link write, so its cost on a workspace with no webhooks has
+	// to be one indexed lookup that returns nothing — which is what the partial index
+	// `webhooks_workspace_idx ... WHERE enabled` (00600) makes it.
+	//
+	// The payload is rendered by the caller and stored rendered, for the reason the
+	// mail outbox stores its body rendered (D23): a change to what an event looks
+	// like must not rewrite an event that was already queued, and a row has to stay
+	// readable after the code that produced it is gone.
+	//
+	// gen_random_uuid() rather than a v7 generated in Go, because the number of rows
+	// is not known until the SELECT runs. Nothing orders deliveries by id — the queue
+	// orders by next_attempt_at — so the time-sortability v7 buys is not spent here.
+	EnqueueWebhookDeliveries(ctx context.Context, arg EnqueueWebhookDeliveriesParams) (int64, error)
 	// Mint the secret if it is not there, and return whichever one is authoritative.
 	//
 	// COALESCE rather than a read-then-write, so two people asking for a signed URL
@@ -550,6 +605,7 @@ type Querier interface {
 	GetUserPermissions(ctx context.Context, arg GetUserPermissionsParams) ([]string, error)
 	GetUserRoleInWorkspace(ctx context.Context, arg GetUserRoleInWorkspaceParams) (GetUserRoleInWorkspaceRow, error)
 	GetVariantRule(ctx context.Context, arg GetVariantRuleParams) (GetVariantRuleRow, error)
+	GetWebhook(ctx context.Context, arg GetWebhookParams) (GetWebhookRow, error)
 	// The hostname a new link goes on when the caller names none.
 	//
 	// **This is the filter the name promised and the query never had** (M40). It
@@ -876,6 +932,14 @@ type Querier interface {
 	// Hostnames are lowered here rather than at lookup, so the map is keyed the way
 	// config.CanonicalHost spells a Host header.
 	ListVerifiedDomains(ctx context.Context) ([]ListVerifiedDomainsRow, error)
+	//
+	// One webhook's recent attempts, newest first, for the panel and the API. Bounded
+	// by the caller: this is a log, and a page that renders all of it renders a log.
+	ListWebhookDeliveries(ctx context.Context, arg ListWebhookDeliveriesParams) ([]ListWebhookDeliveriesRow, error)
+	//
+	// The secret is not selected. It is written once and read only by the signer, so
+	// nothing that renders a page or answers the API can leak it by accident.
+	ListWebhooks(ctx context.Context, workspaceID uuid.UUID) ([]ListWebhooksRow, error)
 	// The workspace switcher: what a user may act in, and what they have chosen.
 	//
 	// Resolution itself is in auth.sql, because it is identity, not a feature.
@@ -1009,6 +1073,21 @@ type Querier interface {
 	// rather than a fresh timestamp, so "when did you first see this" survives a
 	// double click.
 	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (int64, error)
+	//
+	// Retry exhausted. Terminal, and deliberately not deleted: a row saying what was
+	// attempted, how many times, and what the receiver said is the whole reason this
+	// is a table rather than an in-memory retry loop.
+	MarkWebhookAbandoned(ctx context.Context, arg MarkWebhookAbandonedParams) error
+	//
+	// attempts is not touched: the claim already spent it.
+	MarkWebhookDelivered(ctx context.Context, arg MarkWebhookDeliveredParams) error
+	//
+	// A failure that will be tried again. Replaces the lease the claim set with the
+	// real backoff for this attempt, and does not touch attempts.
+	//
+	// response_code is nullable and stays NULL when there was no response at all,
+	// which is what tells a refused connection apart from a receiver answering 500.
+	MarkWebhookRetry(ctx context.Context, arg MarkWebhookRetryParams) error
 	// The low-confidence destination blocklist (M30).
 	//
 	// Read on the management path only. The redirect tree never touches this table:
@@ -1087,6 +1166,12 @@ type Querier interface {
 	// in the schema that grows forever with no window and no metric, which is the
 	// shape D5 and M21 exist to avoid repeating.
 	PurgeFinishedMail(ctx context.Context, maxAgeDays int32) (int64, error)
+	//
+	// Delivered and abandoned rows past the retention window. The delivery log is a
+	// record of what was attempted, not an archive; without this it is a table that
+	// grows forever with one row per link write per webhook, which is the shape D5
+	// and M21 exist to stop repeating.
+	PurgeFinishedWebhookDeliveries(ctx context.Context, maxAgeDays int32) (int64, error)
 	// The sweep. Removes registrations nobody completed, and consumed rows whose
 	// account has long since been created.
 	//
@@ -1343,6 +1428,7 @@ type Querier interface {
 	// any retry.
 	RollupLinkDaily(ctx context.Context, arg RollupLinkDailyParams) error
 	RollupWorkspaceDaily(ctx context.Context, arg RollupWorkspaceDailyParams) error
+	RotateWebhookSecret(ctx context.Context, arg RotateWebhookSecretParams) error
 	// Both switches at once, because they are one setting with two halves and the
 	// CHECK in 01800 refuses the combination that writing them separately would
 	// pass through on the way.
@@ -1467,6 +1553,11 @@ type Querier interface {
 	// all, since changing one arm's kind would mix two kinds on a link and the
 	// service refuses that outright.
 	UpdateVariantRule(ctx context.Context, arg UpdateVariantRuleParams) (RoutingRule, error)
+	//
+	// Partial: a NULL parameter leaves its column alone. Same shape as every other
+	// update in this schema, so "absent" and "empty" stay different — an empty
+	// events array is a real request to subscribe to nothing.
+	UpdateWebhook(ctx context.Context, arg UpdateWebhookParams) (UpdateWebhookRow, error)
 	// Writes one entry from LINKCTRL_DESTINATION_BLOCKLIST at boot.
 	//
 	// ON CONFLICT DO UPDATE rather than DO NOTHING: an operator who moves a host

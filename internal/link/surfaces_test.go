@@ -23,6 +23,12 @@ import (
 // of the attempt. Nothing fails, no test goes red, and the gap is invisible
 // until somebody looks.
 //
+// All three arrived. The webhook URL (M42) is the one that arrived with a twist
+// the sentence above did not anticipate: it is not a place a *visitor's browser*
+// is sent, it is a place *this process* connects to. Passing this test is
+// therefore necessary and not sufficient there, and M42 says so in its own file
+// and in its own test rather than leaning on this one.
+//
 // The plan review found that ordering in two of three candidate sequences, which
 // is why it is asserted here instead of written down as a rule. A source scan is
 // an unusual test; the alternative is a comment nobody reads at the moment they
@@ -53,22 +59,29 @@ var judgeCallers = map[string]string{
 
 // destinationSurfaces are the functions permitted to call checkDestination.
 //
-// Three as of M30, five as of M34, seven as of M36, eight as of M40 — and every
-// addition after the third is the case this test was written in advance for. Its
-// own comment predicted two of them by name: "a later milestone adds a surface
-// that writes a destination — a routing rule's target (M34), a split-test
-// variant (M36)". Each time the test failed on the first run and the entries
-// below were added deliberately rather than the check being loosened. M34, M36
-// and M40 each assert the full tier check in their own tests —
-// TestRuleDestinationsGoThroughEveryTier,
-// TestVariantDestinationsGoThroughEveryTier and
-// TestDomainRootRedirectGoesThroughEveryTier.
+// Three as of M30, five as of M34, seven as of M36, eight as of M40, ten as of
+// M42 — and every addition after the third is the case this test was written in
+// advance for. Its own comment predicted three of them by name: "a later
+// milestone adds a surface that writes a destination — a routing rule's target
+// (M34), a split-test variant (M36), a webhook URL (M42)". Each time the test
+// failed on the first run and the entries below were added deliberately rather
+// than the check being loosened. M34, M36, M40 and M42 each assert the full tier
+// check in their own tests — TestRuleDestinationsGoThroughEveryTier,
+// TestVariantDestinationsGoThroughEveryTier,
+// TestDomainRootRedirectGoesThroughEveryTier and
+// TestWebhookURLsGoThroughEveryTier.
 //
 // M40's entry is the same surface as SetRootRedirect one row above it, addressed
 // by domain id instead of by `is_default`. It is listed separately rather than
 // folded in because they are two functions, and a list that guessed which
 // functions are "really the same one" would be a list somebody could argue their
 // way past.
+//
+// M42's two are the first entries here that are **not** a place a visitor's
+// browser ends up. A webhook URL is dialled by this process, so it needs
+// everything the tiers refuse *and* a second check against the address the name
+// resolves to at connect time, which internal/webhook makes. Being on this list
+// is the first half; it is not the whole of M42's claim.
 var destinationSurfaces = map[string]string{
 	"Create":                "internal/link/service.go",
 	"Update":                "internal/link/service.go",
@@ -78,6 +91,8 @@ var destinationSurfaces = map[string]string{
 	"UpdateRule":            "internal/link/routing.go",
 	"CreateVariant":         "internal/link/split.go",
 	"UpdateVariant":         "internal/link/split.go",
+	"CreateWebhook":         "internal/link/webhook.go",
+	"UpdateWebhook":         "internal/link/webhook.go",
 }
 
 func TestEveryDestinationSurfaceGoesThroughTheCheck(t *testing.T) {

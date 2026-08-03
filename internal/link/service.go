@@ -105,10 +105,29 @@ type Service struct {
 	// own, and guessing https would print a URL that does not work on a
 	// development instance.
 	linkScheme string
+	// events hands link-lifecycle and blocked-attempt events to the webhook
+	// queue (M42). Nil emits nothing, which is the CLI, most tests, and any
+	// process that is not running the scheduler — and nil is a nil interface
+	// rather than a flag, so there is no false branch anybody could miss.
+	events WebhookEmitter
 	// hostnames caches domain id to hostname for building short URLs off the
 	// default domain. Bounded by the number of domains and dropped on rename.
 	hostnames sync.Map
 	log       *slog.Logger
+}
+
+// WebhookEmitter queues one event for every webhook subscribed to it.
+//
+// Declared here rather than imported so internal/link never depends on
+// internal/webhook — the same one-way shape Invalidator, FeedChecker and
+// DomainNotifier already have. internal/webhook.Service satisfies it.
+//
+// It returns nothing, and that is deliberate. Emitting is a consequence of a
+// change that has already been committed; a link write that failed because a
+// notification could not be queued would be a link write held hostage by an
+// integration.
+type WebhookEmitter interface {
+	Emit(ctx context.Context, workspaceID uuid.UUID, event string, data map[string]any)
 }
 
 // GateReader is what the management surfaces need from internal/gate: the exact
@@ -164,6 +183,8 @@ type Config struct {
 	// VerifyGrace is how long a failing hostname keeps serving (D70). Zero uses
 	// DefaultVerifyGrace.
 	VerifyGrace time.Duration
+	// Events queues webhook deliveries (M42). Nil emits nothing.
+	Events WebhookEmitter
 	// Log receives the warning when an audit write fails. Nil uses the default
 	// logger, so a dropped record is never silent.
 	Log *slog.Logger
@@ -194,6 +215,7 @@ func NewService(pool *pgxpool.Pool, cfg Config) *Service {
 		hosts:             cfg.Hosts,
 		domainNotify:      cfg.DomainNotify,
 		verifyGraceWindow: cfg.VerifyGrace,
+		events:            cfg.Events,
 		linkScheme:        schemeOf(cfg.BaseURL),
 		log:               log,
 	}
@@ -431,7 +453,11 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 		s.cache.InvalidateAlias(ctx, dom.ID, code)
 	}
 
-	return s.toDomain(ctx, row, tags), nil
+	// After the commit and after the cache clear, so a receiver that fetches the
+	// short URL on this event finds it working (M42).
+	created := s.toDomain(ctx, row, tags)
+	s.emitLink(ctx, domain.EventLinkCreated, created)
+	return created, nil
 }
 
 // UpdateInput is a partial update; nil fields are left unchanged.
@@ -720,7 +746,9 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 		}
 	}
 
-	return s.toDomain(ctx, row, tags), nil
+	updated := s.toDomain(ctx, row, tags)
+	s.emitLink(ctx, domain.EventLinkUpdated, updated)
+	return updated, nil
 }
 
 func (s *Service) Get(ctx context.Context, actor *auth.Identity, id uuid.UUID) (*domain.Link, error) {
@@ -942,13 +970,37 @@ func (s *Service) setArchived(ctx context.Context, actor *auth.Identity, id uuid
 	if err != nil {
 		return nil, err
 	}
-	return s.toDomain(ctx, row, tags), nil
+	// Two events rather than one with a flag: archiving is reversible, and a
+	// receiver reconciling state has to know which direction it moved (M42).
+	moved := s.toDomain(ctx, row, tags)
+	event := domain.EventLinkRestored
+	if archive {
+		event = domain.EventLinkArchived
+	}
+	s.emitLink(ctx, event, moved)
+	return moved, nil
 }
 
 // Delete soft-deletes a link, keeping it restorable for TrashRetentionDays.
 func (s *Service) Delete(ctx context.Context, actor *auth.Identity, id uuid.UUID) error {
 	if !actor.Can(PermDelete) {
 		return fmt.Errorf("%w: deleting links requires %s", domain.ErrForbidden, PermDelete)
+	}
+
+	// Read before deleting, and only when something is listening. SoftDeleteLink
+	// returns the alias and the domain — enough to invalidate the cache and
+	// nothing like enough for an event payload, and a `link.deleted` carrying a
+	// different set of fields from every other link event would be a published
+	// interface that changes shape depending on which event it is. One indexed
+	// read on an interactive delete buys that consistency; a process with no
+	// webhook service does not pay it at all.
+	var deleted *domain.Link
+	if s.events != nil {
+		if existing, err := s.q.GetLink(ctx, dbgen.GetLinkParams{
+			ID: id, WorkspaceID: actor.WorkspaceID,
+		}); err == nil {
+			deleted = s.toDomain(ctx, existing, nil)
+		}
 	}
 
 	row, err := s.q.SoftDeleteLink(ctx, dbgen.SoftDeleteLinkParams{
@@ -964,6 +1016,10 @@ func (s *Service) Delete(ctx context.Context, actor *auth.Identity, id uuid.UUID
 	if s.cache != nil {
 		s.cache.InvalidateAlias(ctx, row.DomainID, row.Alias)
 	}
+	// The soft delete a person performed, which starts the recovery window. Not
+	// the purge at the end of it — the scheduler tidying up thirty days later is
+	// not a second deletion, and a receiver told twice would double-count (M42).
+	s.emitLink(ctx, domain.EventLinkDeleted, deleted)
 	return nil
 }
 

@@ -203,6 +203,66 @@ func pageData(t *testing.T) map[string]any {
 			"CanCreate": true, "CanUpdate": true, "CanDelete": true,
 			"Notice": "Campaign created.", "Error": "",
 		},
+		// Webhooks (M42), with every state the page has to draw in one render:
+		// an enabled registration with its editor open, a paused one with its
+		// delivery log expanded, a delivered attempt beside an abandoned one
+		// that never got a response, and the once-only signing secret above
+		// them. A render with only the happy row would not exercise the
+		// "no answer" cell, which is the cell somebody debugging reads first.
+		"webhooks": map[string]any{
+			"Title": "Webhooks", "Nav": "webhooks", "Identity": owner(),
+			"Count": 2, "MaxWebhooks": 20, "MaxAttempts": 7, "Retention": 30,
+			"Events": []map[string]any{
+				{"Name": "link.created", "Checked": true},
+				{"Name": "destination.blocked", "Checked": false},
+			},
+			"Secret":    "9f2c1d0e5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d",
+			"SecretFor": "0198c9c5-0000-7000-8000-000000000060",
+			"Rows": []map[string]any{
+				{
+					"ID":  "0198c9c5-0000-7000-8000-000000000060",
+					"URL": "https://hooks.example.com/linkctrl", "Description": "Ops channel",
+					"Events": []string{"link.created", "link.updated"},
+					"EventChoices": []map[string]any{
+						{"Name": "link.created", "Checked": true},
+						{"Name": "destination.blocked", "Checked": false},
+					},
+					"Enabled": true, "CreatedAt": "2026-08-01",
+					"Editing": true, "ShowLog": false,
+					"Deliveries": []map[string]any{},
+				},
+				{
+					"ID":  "0198c9c5-0000-7000-8000-000000000061",
+					"URL": "https://audit.example.net/events", "Description": "",
+					"Events": []string{"destination.blocked"},
+					"EventChoices": []map[string]any{
+						{"Name": "link.created", "Checked": false},
+						{"Name": "destination.blocked", "Checked": true},
+					},
+					"Enabled": false, "CreatedAt": "2026-07-14",
+					"Editing": false, "ShowLog": true,
+					"Deliveries": []map[string]any{
+						{
+							"Event": "link.created", "Status": "delivered", "Attempts": int32(1),
+							"Code": "200", "Error": "", "When": "2026-08-02 09:41",
+							"Next": "", "OK": true,
+						},
+						{
+							"Event": "destination.blocked", "Status": "abandoned", "Attempts": int32(7),
+							"Code": "no answer", "Error": "dial tcp: i/o timeout",
+							"When": "2026-08-01 22:03", "Next": "", "OK": false,
+						},
+					},
+				},
+			},
+			"FormURL": "", "FormDescription": "",
+			"EditingID": "0198c9c5-0000-7000-8000-000000000060",
+			"OpenLogID": "0198c9c5-0000-7000-8000-000000000061",
+			"CanRead":   true, "CanWrite": true,
+			"Notice": "Webhook registered. Copy the signing secret now — it is shown " +
+				"once and cannot be read back.",
+			"Error": "",
+		},
 		// Registered hostnames (M39), with all three ownership states in one
 		// render: the instance default, which nobody manages from this page; a
 		// hostname this workspace owns and may change; and one owned elsewhere

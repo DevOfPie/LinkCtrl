@@ -514,17 +514,59 @@ func demoCoverage() []demoFeature {
 				"or none is",
 		},
 
+		{
+			// M42 asserted this count was *zero* until M42 was built, which is
+			// the boundary-row move M34, M36, M39, M40 and M41 each made before
+			// it.
+			//
+			// Bounded above as well as below, and the ceiling carries the claim.
+			// Exactly two registrations: one enabled and one paused. A page where
+			// every webhook says the same thing shows one state, and a reader
+			// cannot see that the pause button does anything.
+			Milestone: "M42", Feature: "Two webhooks, one enabled and one paused",
+			Query: `SELECT count(*) FROM webhooks
+			         WHERE workspace_id IN (` + demoWorkspaces + `)`,
+			Min: 2, Max: 2,
+			Shows: "the webhooks page with both states on it — where this " +
+				"workspace's events go, and a registration that is switched off",
+		},
+		{
+			Milestone: "M42", Feature: "A delivery log with a success and a failure",
+			Query: `SELECT count(DISTINCT d.status) FROM webhook_deliveries d
+			          JOIN webhooks w ON w.id = d.webhook_id
+			         WHERE w.workspace_id IN (` + demoWorkspaces + `)`,
+			Min: 2,
+			Shows: "the panel somebody opens when events stopped arriving. One " +
+				"delivered row alone reads as \"it works\"; the abandoned one " +
+				"beside it is what shows the attempt count and the \"no answer\" " +
+				"response, which is the cell that actually gets read",
+		},
+		{
+			// Not a display claim — a safety claim, and the one worth asserting
+			// rather than trusting. The demo is a public instance, and a pending
+			// delivery seeded into it would be the seeder handing the scheduler
+			// an outbound connection to make on somebody else's behalf.
+			//
+			// It stays true because the seeder's link service is built with no
+			// emitter, so seeding a catalogue queues nothing, and because the two
+			// history rows it writes directly are both terminal. Anything that
+			// changed either would show up here.
+			Milestone: "M42", Feature: "The seeder queues no outbound delivery",
+			Query: `SELECT count(*) FROM webhook_deliveries d
+			          JOIN webhooks w ON w.id = d.webhook_id
+			         WHERE w.workspace_id IN (` + demoWorkspaces + `)
+			           AND d.status = 'pending'`,
+			MaxIsZero: true,
+			Shows: "that seeding the demo dials nobody: every seeded delivery is " +
+				"already finished, and the hostnames are .example names that " +
+				"cannot resolve for anyone",
+		},
+
 		// The boundary. Everything below is a milestone that has not been built,
 		// so the demo showing nothing is correct — and these rows are what make
 		// the next person add a feature row above instead of quietly seeding
 		// something the list does not mention. Turn a row into a real one when its
 		// milestone lands; do not delete it.
-		{
-			Milestone: "M42", Feature: "Webhooks (not built yet)",
-			Query:     `SELECT count(*) FROM webhooks`,
-			MaxIsZero: true,
-			Shows:     "nothing: M42 is unbuilt",
-		},
 		{
 			Milestone: "M43", Feature: "Automation rules (not built yet)",
 			Query:     `SELECT count(*) FROM automation_rules`,

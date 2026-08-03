@@ -40,6 +40,8 @@ type Metrics struct {
 	auditBytes prometheus.Gauge
 
 	feedChecks *prometheus.CounterVec
+
+	webhookDeliveries *prometheus.CounterVec
 }
 
 // redirectBuckets straddle the 20ms cached-redirect target, densely below it
@@ -145,6 +147,27 @@ func NewMetrics() *Metrics {
 				"error (the feed did not answer usefully; the check fails open), or " +
 				"skipped (the instance owner has allowed that host).",
 		}, []string{"result"}),
+
+		// Webhook delivery (M42). Two bounded labels and no third, which is what
+		// M13's cardinality rule buys here: `outcome` is one of four words and
+		// `status` is one of five classes, so the whole metric is at most twenty
+		// series however many webhooks exist on the instance.
+		//
+		// A URL label is the obvious thing to want and the thing that must not
+		// be here. Registrations are chosen by users, there is no ceiling on how
+		// many distinct hosts they name across an instance, and a label with
+		// that property is a way for anybody with a workspace to grow the
+		// scrape. Which webhook failed is a question the delivery log answers,
+		// per workspace, where it belongs.
+		//
+		// `status="none"` is the interesting one: no response at all — a refused
+		// connection, a timeout, or this instance declining to open the socket
+		// because the name resolved somewhere private.
+		webhookDeliveries: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "linkctrl_webhook_deliveries_total",
+			Help: "Webhook delivery attempts by outcome (delivered, retry, abandoned) " +
+				"and HTTP status class (2xx, 3xx, 4xx, 5xx, or none when there was no response).",
+		}, []string{"outcome", "status"}),
 	}
 
 	buildInfo := prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -161,6 +184,7 @@ func NewMetrics() *Metrics {
 		m.jobRuns, m.jobLastRun, m.jobStaleness,
 		m.auditBytes,
 		m.feedChecks,
+		m.webhookDeliveries,
 		buildInfo,
 		// Go runtime and process collectors: memory, goroutines, GC, file
 		// descriptors, CPU. Free, standard, and the first thing anyone asks
@@ -435,4 +459,18 @@ func (m *Metrics) ObserveFeedCheck(result string) {
 		return
 	}
 	m.feedChecks.WithLabelValues(result).Inc()
+}
+
+// --- webhooks ----------------------------------------------------------------
+
+// ObserveWebhookDelivery records one delivery attempt (M42).
+//
+// Both labels come from a closed vocabulary the caller computes: internal/webhook
+// reduces an HTTP code to its class before calling, so nothing user-chosen can
+// reach a label from here. See the metric's definition for why that matters.
+func (m *Metrics) ObserveWebhookDelivery(outcome, status string) {
+	if m == nil {
+		return
+	}
+	m.webhookDeliveries.WithLabelValues(outcome, status).Inc()
 }

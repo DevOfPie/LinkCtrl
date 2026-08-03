@@ -149,6 +149,27 @@ const (
 	// about.
 	ActionLinkBotBlockingChanged   = "link.bot_blocking_changed"
 	ActionDomainBotBlockingChanged = "domain.bot_blocking_changed"
+
+	// Webhooks (M42). Registering one is an administrative change with a
+	// consequence nothing else in this log has: from that moment the instance
+	// makes outbound connections to an address somebody chose, on a schedule
+	// nobody is watching. "Who pointed this workspace's events at that host, and
+	// when" is therefore a question the log has to answer.
+	//
+	// The URL is in the metadata, and it is stored **defanged** — the same
+	// treatment `destination.blocked` gives an attempted destination, for the
+	// same reason: this table is read verbatim by the audit API, and a URL
+	// somebody registered in order to be sent workspace events is not a URL a
+	// reader should follow by reflex.
+	//
+	// Rotation is its own action rather than an `updated` with a metadata flag,
+	// because it is the one change that invalidates every signature a receiver
+	// has already learned to verify, and somebody debugging "our verification
+	// broke at 14:03" needs to find it by action name.
+	ActionWebhookCreated       = "webhook.created"
+	ActionWebhookUpdated       = "webhook.updated"
+	ActionWebhookDeleted       = "webhook.deleted"
+	ActionWebhookSecretRotated = "webhook.secret_rotated"
 )
 
 // Event is one thing that happened.

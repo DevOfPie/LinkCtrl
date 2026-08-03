@@ -20,6 +20,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/webhook"
 )
 
 // jobRunner runs the periodic maintenance work.
@@ -61,8 +62,11 @@ type jobRunner struct {
 	// verification on-demand only.
 	domainVerifyInterval time.Duration
 	domainVerifyBatch    int32
-	cancel               context.CancelFunc
-	done                 chan struct{}
+	// webhooks drains the outbound delivery queue (M42). Nil skips the job
+	// entirely, which is what a runner built without one gets.
+	webhooks *webhook.Service
+	cancel   context.CancelFunc
+	done     chan struct{}
 }
 
 // advisoryLockKey is a hand-picked constant — the ASCII bytes "lcjobs" plus a
@@ -75,7 +79,7 @@ const advisoryLockKey int64 = 0x6c63_6a6f_6273_0001
 func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analytics.Roller,
 	log *slog.Logger, metrics *observability.Metrics, notifier *notify.Service,
 	mailer *mail.Service, signups *signup.Service, links *link.Service,
-	domains config.DomainsConfig,
+	webhooks *webhook.Service, domains config.DomainsConfig,
 	analyticsRetentionDays, auditRetentionDays int, auditSizeWarnBytes int64,
 ) *jobRunner {
 	batch := domains.VerifyBatch
@@ -95,6 +99,7 @@ func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analyt
 		//nolint:gosec // G115: range-checked above.
 		domainVerifyInterval: domains.VerifyInterval,
 		domainVerifyBatch:    int32(batch),
+		webhooks:             webhooks,
 		done:                 make(chan struct{}),
 	}
 }
@@ -155,6 +160,11 @@ func (j *jobRunner) start(parent context.Context) {
 		// half a minute later. Surviving the restart is the reason the outbox
 		// exists; waiting after it would be a strange way to honour that.
 		j.runMail(ctx)
+		// And so anything queued before a restart goes out at once rather than
+		// half a minute later, for the reason the outbox does: surviving the
+		// restart is the point of the queue, and waiting after it would be a
+		// strange way to honour that.
+		j.runWebhooks(ctx)
 		// And once at startup, so a hostname whose record was published while
 		// this instance was down starts serving on boot rather than an hour
 		// later — and so one whose record went away is re-checked promptly
@@ -171,6 +181,14 @@ func (j *jobRunner) start(parent context.Context) {
 				j.runDimensionRollup(ctx)
 			case <-outbox.C:
 				j.runMail(ctx)
+				// On the mail clock rather than one of its own. The two are the
+				// same job in every respect that matters — a bounded batch of
+				// network round trips to somebody else's server, drained under
+				// leadership, retried with backoff — and an event nobody
+				// receives for an hour is an event that reads as lost. A second
+				// ticker at the same period would be two timers to reason about
+				// for no difference anybody can observe.
+				j.runWebhooks(ctx)
 			case <-hourly.C:
 				j.runMaintenance(ctx)
 			case <-domains.C:
@@ -292,6 +310,33 @@ func (j *jobRunner) runMail(ctx context.Context) {
 
 	j.withLeadership(runCtx, "mail", func(ctx context.Context) error {
 		return j.mailer.Drain(ctx)
+	})
+}
+
+// runWebhooks drains the outbound delivery queue (M42).
+//
+// Under leadership *and* claimed with FOR UPDATE SKIP LOCKED, which is not
+// belt-and-braces — it is the decision this milestone had to make and record.
+// Leadership is an advisory lock released the moment its holder dies, so two
+// replicas can briefly believe they are the leader; skip-locked makes that
+// moment cost nothing instead of delivering somebody's event twice. Leadership
+// on its own would let a crash produce a duplicate, and skip-locked on its own
+// would have every replica dialling every receiver.
+//
+// The timeout is generous because the batch is a batch of network round trips to
+// somebody else's server, and bounded for the same reason: a receiver that
+// accepts a connection and then says nothing must not hold the scheduler. Each
+// attempt carries its own shorter deadline inside this one — WEBHOOK_TIMEOUT,
+// ten seconds by default, against a batch of twenty.
+func (j *jobRunner) runWebhooks(ctx context.Context) {
+	if j.webhooks == nil {
+		return
+	}
+	runCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	j.withLeadership(runCtx, "webhooks", func(ctx context.Context) error {
+		return j.webhooks.Drain(ctx)
 	})
 }
 
@@ -507,6 +552,18 @@ func (j *jobRunner) housekeeping(ctx context.Context) error {
 			errs = append(errs, err)
 		} else if n > 0 {
 			j.log.Debug("finished mail purged", slog.Int64("count", n))
+		}
+	}
+
+	// Delivered and abandoned webhook deliveries past WEBHOOK_RETENTION_DAYS.
+	// The same shape and the same reason as the outbox above, and a sharper
+	// need: this table grows by one row per link write per enabled webhook,
+	// which is the fastest-growing thing in the schema that is not analytics.
+	if j.webhooks != nil {
+		if n, err := j.webhooks.PurgeFinished(ctx); err != nil {
+			errs = append(errs, err)
+		} else if n > 0 {
+			j.log.Debug("finished webhook deliveries purged", slog.Int64("count", n))
 		}
 	}
 
