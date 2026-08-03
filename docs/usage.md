@@ -398,6 +398,7 @@ SSRF the address refusals exist to prevent.
 | `POST` to an alias that is not password-protected | `405` with `Allow: GET, HEAD`. The short-link host accepts exactly one write — a password submission — and nothing else |
 | Anything after the alias, on a link that does not forward paths | `404` — the same answer, so it cannot be used to find out which aliases exist |
 | Too many misses from one address | `429` with `Retry-After` — see [configuration.md](configuration.md#rate-limits). Links already in the cache keep resolving, and paths that could never be an alias are not counted. |
+| A sequential split test whose rotation could not be advanced | `503`. The order is strict by decision, so an arm is never chosen at random when the counter is unavailable — "approximately sequential" would be worse than briefly unavailable |
 | The server could not resolve it | `503` with `Retry-After: 1`. Deliberately not a `404`: that would claim the link does not exist, and a crawler or link checker believing it drops a live link. |
 
 Query forwarding is per-link and off by default: set `forward_query` (a checkbox

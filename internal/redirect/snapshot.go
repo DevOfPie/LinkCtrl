@@ -62,25 +62,28 @@ type Snapshot struct {
 	OneTime          bool   `json:"o,omitempty"`
 	RequireSignature bool   `json:"sg,omitempty"`
 
-	// Routing rules (M34), and the milestone that bumped CacheKeyVersion to v2.
+	// Routing rules (M34) and split testing (M36), and the two milestones that
+	// bumped CacheKeyVersion — to v2 and then to v3.
 	//
 	// Two fields, because the same destination is routinely the target of more
 	// than one rule and because "the destination list" is a thing in its own
-	// right — M36 will weight it. Destinations holds the rule targets,
+	// right. Destinations holds the rule targets and the split arms,
 	// deduplicated; the link's own destination is URL above and is where a
-	// request that matches no rule goes. Rules index into it.
+	// request that neither matched a rule nor found an arm goes. Rules index
+	// into it.
 	//
-	// **The slice order is the priority order.** Nothing here carries a priority
-	// number, because the query that built this list already applied it: rules
-	// come back ordered by (priority, created_at), disabled ones filtered out,
-	// and first match short-circuits. Storing the priority as well would be a
-	// second copy of the ordering that a re-sort could disagree with — and the
-	// only correct thing to do with it here would be to sort by it again.
+	// **The slice order is the evaluation order.** Nothing here carries a
+	// priority number, because the query that built this list already applied
+	// it: match rules come back ordered by (priority, created_at), split arms by
+	// position, disabled rules filtered out, and first match short-circuits.
+	// Storing the priority as well would be a second copy of the ordering that a
+	// re-sort could disagree with — and the only correct thing to do with it here
+	// would be to sort by it again.
 	//
 	// Both are omitempty, so a link with no rules — the default, and the
-	// overwhelming majority — carries exactly the payload it carried before this
-	// milestone existed.
-	Destinations []string       `json:"d,omitempty"`
+	// overwhelming majority — carries exactly the payload it carried before
+	// either milestone existed.
+	Destinations []SnapshotDest `json:"d,omitempty"`
 	Rules        []SnapshotRule `json:"r,omitempty"`
 
 	// Deep-link path forwarding (M33). Added without bumping CacheKeyVersion,
@@ -131,7 +134,27 @@ type Snapshot struct {
 	NotFound bool `json:"n,omitempty"`
 }
 
-// SnapshotRule is one match rule as the redirect path evaluates it.
+// SnapshotDest is one destination the redirect path may send somebody to.
+//
+// The id is here so a click can be attributed to it — click_events.destination_id
+// (M36) — and the weight so a weighted arm's share can be computed without
+// asking the database anything. Both are new in v3; before it this was a bare
+// string.
+//
+// The link's own destination is deliberately **not** in this list. It is
+// Snapshot.URL, and a click that goes there records a NULL destination_id, which
+// the breakdown reads as "the link's own destination". Carrying its id as well
+// would put a uuid in the payload of every link on the instance to say something
+// the link already says.
+type SnapshotDest struct {
+	ID  uuid.UUID `json:"i"`
+	URL string    `json:"u"`
+	// Weight is meaningful only for a weighted arm. Zero for a match rule's
+	// target, where nothing reads it.
+	Weight int32 `json:"w,omitempty"`
+}
+
+// SnapshotRule is one rule as the redirect path evaluates it.
 //
 // Dest is an index into Snapshot.Destinations rather than a URL, so two rules
 // pointing at the same place cost one copy of the string. Out-of-range is
@@ -139,51 +162,188 @@ type Snapshot struct {
 // must survive a payload it did not write, and a rule that cannot be honoured
 // falling through to the link's own destination is a survivable answer where a
 // panic on a redirect is not.
+//
+// Kind is absent for a match rule and omitempty, so M34's rules encode exactly
+// as they did — the empty string is `match`, which is what KindOf returns for
+// one. That keeps the payload of a link with only match rules the size it was,
+// while a split arm pays four bytes to say what it is.
 type SnapshotRule struct {
 	Dest int                   `json:"d"`
 	Cond domain.RuleConditions `json:"c"`
+	Kind string                `json:"k,omitempty"`
 }
 
-// Route returns the destination this request should be sent to, and reports
-// whether a rule decided it.
+// KindOf is the rule's kind, with the empty string read as `match`.
+func (r SnapshotRule) KindOf() string {
+	if r.Kind == "" {
+		return domain.RuleKindMatch
+	}
+	return r.Kind
+}
+
+// Choice is a destination the redirect path settled on.
 //
-// The whole of first-match evaluation, and it is four lines because everything
-// that makes it correct happened earlier: the query ordered the rules and
-// dropped the disabled ones, the resolver put them in the snapshot, and
-// domain.Match decides one rule against one request without reading anything.
+// ID is the destinations row the click is attributed to, and the zero uuid means
+// the link's own destination. A struct rather than two returns, because "which
+// URL" and "which row" must not be able to disagree — every place that decides
+// one decides the other in the same statement.
+type Choice struct {
+	URL string
+	ID  uuid.UUID
+}
+
+// Route returns the destination this request should be sent to by a *match*
+// rule, and reports whether one decided it.
+//
+// The whole of first-match evaluation, and it is short because everything that
+// makes it correct happened earlier: the query ordered the rules and dropped the
+// disabled ones, the resolver put them in the snapshot, and domain.Match decides
+// one rule against one request without reading anything.
 //
 // A snapshot with no rules — the default state of every link on a default
 // instance — returns on the length check without touching the subject, which is
 // what makes "links without rules resolve through the unchanged fast path"
-// structural rather than a promise.
-func (s *Snapshot) Route(subject domain.RuleSubject) (string, bool) {
+// structural rather than a promise. Split arms are skipped here rather than
+// filtered out beforehand, because they share the slice with the match rules and
+// walking past them costs a string comparison on a list bounded by
+// domain.MaxRulesPerLink.
+func (s *Snapshot) Route(subject domain.RuleSubject) (Choice, bool) {
 	if s == nil || len(s.Rules) == 0 {
-		return "", false
+		return Choice{}, false
 	}
 	for _, r := range s.Rules {
+		if r.KindOf() != domain.RuleKindMatch {
+			continue
+		}
 		if !domain.Match(r.Cond, subject) {
 			continue
 		}
-		if r.Dest < 0 || r.Dest >= len(s.Destinations) {
+		dest, ok := s.destAt(r.Dest)
+		if !ok {
 			// A rule whose target is not in the list this payload carries. The
 			// only way to write one is a corrupt or hand-edited cache entry, and
 			// the answer is to behave as though the rule had not matched rather
 			// than to send somebody to an empty Location header.
 			continue
 		}
-		return s.Destinations[r.Dest], true
+		return dest, true
 	}
-	return "", false
+	return Choice{}, false
+}
+
+// destAt reads a rule's target out of the destination list.
+func (s *Snapshot) destAt(i int) (Choice, bool) {
+	if i < 0 || i >= len(s.Destinations) {
+		return Choice{}, false
+	}
+	d := s.Destinations[i]
+	if d.URL == "" {
+		return Choice{}, false
+	}
+	return Choice{URL: d.URL, ID: d.ID}, true
+}
+
+// Split is this link's split test: the enabled arms, in rotation order, and
+// their kind (M36).
+//
+// Returns an empty kind for every link that has none, which is every link on a
+// default instance — and returns it after a walk over a slice that is nil for
+// such a link, so the loop below never starts.
+//
+// Disabled arms are already absent: the resolver's query filters on `enabled`,
+// which is what makes the `enabled` toggle a feature flag rather than a field
+// somebody has to remember to check. An arm switched off stops receiving
+// traffic on the next resolve, and the remaining arms re-share it.
+func (s *Snapshot) Split() (kind string, arms []Choice) {
+	if s == nil || len(s.Rules) == 0 {
+		return "", nil
+	}
+	for _, r := range s.Rules {
+		k := r.KindOf()
+		if k != domain.RuleKindWeighted && k != domain.RuleKindSequential {
+			continue
+		}
+		dest, ok := s.destAt(r.Dest)
+		if !ok {
+			continue
+		}
+		// The first arm found decides the kind, and an arm of the other kind is
+		// then ignored rather than allowed to change it mid-walk. The service
+		// refuses to create a mixed split, so this is a corrupt payload or a
+		// hand-edited row; ignoring is the answer that still sends somebody
+		// somewhere the owner configured.
+		if kind == "" {
+			kind = k
+		}
+		if k != kind {
+			continue
+		}
+		arms = append(arms, dest)
+	}
+	if len(arms) == 0 {
+		return "", nil
+	}
+	return kind, arms
+}
+
+// Weights are the arms' weights, in the same order Split returns them.
+//
+// Separate from Split because a sequential rotation must not pay for a slice it
+// will not read.
+//
+// A nested scan rather than a map, and that is the right shape at this size: both
+// slices are bounded by domain.MaxRulesPerLink, so the worst case is a few
+// hundred integer comparisons against one map allocation and one hash per arm.
+// This runs on the redirect path for every request to a weighted link, and an
+// allocation there costs more than the comparisons it saves.
+func (s *Snapshot) Weights(arms []Choice) []int32 {
+	out := make([]int32, len(arms))
+	for i, a := range arms {
+		for _, d := range s.Destinations {
+			if d.ID == a.ID {
+				out[i] = d.Weight
+				break
+			}
+		}
+	}
+	return out
+}
+
+// Fallback is where this link sends anybody no rule and no arm claimed (M36).
+//
+// The first enabled fallback rule wins if a payload somehow carries two; the
+// service permits only one, so this is the same "survive a payload we did not
+// write" rule the rest of this file follows.
+func (s *Snapshot) Fallback() (Choice, bool) {
+	if s == nil || len(s.Rules) == 0 {
+		return Choice{}, false
+	}
+	for _, r := range s.Rules {
+		if r.KindOf() != domain.RuleKindFallback {
+			continue
+		}
+		if dest, ok := s.destAt(r.Dest); ok {
+			return dest, true
+		}
+	}
+	return Choice{}, false
 }
 
 // RuleNeeds summarizes which lookups this link's rules can ask for, so the
 // caller resolves a city only for a link that mentions one.
+//
+// Split arms are skipped: their condition set is empty by construction — a
+// variant is chosen, never matched — and including it would be asking
+// domain.NeedsOf about a struct that is always zero.
 func (s *Snapshot) RuleNeeds() domain.RuleNeeds {
 	if s == nil || len(s.Rules) == 0 {
 		return domain.RuleNeeds{}
 	}
 	conds := make([]domain.RuleConditions, 0, len(s.Rules))
 	for _, r := range s.Rules {
+		if r.KindOf() != domain.RuleKindMatch {
+			continue
+		}
 		conds = append(conds, r.Cond)
 	}
 	return domain.NeedsOf(conds)

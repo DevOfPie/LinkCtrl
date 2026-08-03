@@ -40,7 +40,20 @@ import (
 // alias, spread over however long it takes traffic to arrive, and the
 // singleflight in Resolve is what keeps a popular alias from turning into a
 // stampede while it happens.
-const CacheKeyVersion = "v2"
+//
+// **v3 is M36's**, and it is the same argument twice rather than a second kind
+// of argument. Split testing changes the destination list from `[]string` to a
+// list of objects carrying an id and a weight, so a v2 payload does not decode
+// into the new shape at all — but that alone would only have cost a discarded
+// entry, which decodeSnapshot already handles. What forces the bump is the same
+// thing that forced v2: a v2 entry carries no split arms, and a link whose owner
+// has since divided its traffic between two destinations would keep sending all
+// of it to one of them for up to REDIRECT_TTL. The stale reading is a control the
+// owner configured being silently absent, and a cold cache is what that costs.
+//
+// Both bumps land in the same unreleased minor, so no deployed instance ever
+// holds a v2 entry this build could meet.
+const CacheKeyVersion = "v3"
 
 // Result is a resolved alias plus how it was resolved. The source drives the
 // cache-hit-ratio metric, which is the leading indicator for the latency SLO:
@@ -304,7 +317,10 @@ func (r *Resolver) fromDatabase(ctx context.Context, domainID uuid.UUID, alias, 
 // the cache payload, or the payload's compression reaching into a query
 // somebody has to read.
 type queryRule struct {
+	ID         uuid.UUID             `json:"id"`
 	URL        string                `json:"url"`
+	Kind       string                `json:"kind"`
+	Weight     int32                 `json:"weight"`
 	Conditions domain.RuleConditions `json:"conditions"`
 }
 
@@ -335,20 +351,37 @@ func (r *Resolver) attachRules(snap *Snapshot, raw []byte, alias string) {
 	// ordinary case — "everyone outside the EU goes here" written as several
 	// country rules — and the string would otherwise be in the payload once per
 	// rule.
-	index := make(map[string]int, len(rows))
-	snap.Destinations = make([]string, 0, len(rows))
+	//
+	// On the destination **id** rather than on the URL since M36, and the change
+	// costs payload to buy correct attribution. Every rule creates a destination
+	// row of its own, so two rules with the same URL are two ids and now travel
+	// as two entries where they used to collapse into one. Collapsing them was
+	// free while nothing distinguished them; it stopped being free the moment a
+	// click carries the id of the row that served it, because the merged entry
+	// would credit every one of those clicks to whichever rule happened to be
+	// first. The extra copies are bounded by domain.MaxRulesPerLink.
+	index := make(map[uuid.UUID]int, len(rows))
+	snap.Destinations = make([]SnapshotDest, 0, len(rows))
 	snap.Rules = make([]SnapshotRule, 0, len(rows))
 	for _, row := range rows {
 		if row.URL == "" {
 			continue
 		}
-		at, ok := index[row.URL]
+		at, ok := index[row.ID]
 		if !ok {
 			at = len(snap.Destinations)
-			snap.Destinations = append(snap.Destinations, row.URL)
-			index[row.URL] = at
+			snap.Destinations = append(snap.Destinations, SnapshotDest{
+				ID: row.ID, URL: row.URL, Weight: row.Weight,
+			})
+			index[row.ID] = at
 		}
-		snap.Rules = append(snap.Rules, SnapshotRule{Dest: at, Cond: row.Conditions})
+		kind := row.Kind
+		if kind == domain.RuleKindMatch {
+			// Encoded as absent. See SnapshotRule.KindOf: this is what keeps a
+			// link carrying only M34's rules at the payload size it had.
+			kind = ""
+		}
+		snap.Rules = append(snap.Rules, SnapshotRule{Dest: at, Cond: row.Conditions, Kind: kind})
 	}
 	if len(snap.Rules) == 0 {
 		// Everything was dropped. Leave the fields nil rather than empty, so the

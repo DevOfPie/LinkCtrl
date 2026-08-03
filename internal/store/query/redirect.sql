@@ -48,6 +48,21 @@
 -- that reads them. The keys are spelled out rather than short: this is the
 -- database's own vocabulary, and the compact spelling the cached snapshot uses
 -- is the Go type's business.
+--
+-- M36 widened the lateral to every kind and left it a single probe, which is the
+-- property worth protecting: a link's match rules and its split arms live in one
+-- table, on one index, and asking for them separately would double the cost of
+-- the only lookup a cache miss makes. The ordering carries both vocabularies at
+-- once. `rr.kind <> 'match'` sorts false before true, so M34's rules come first
+-- and keep their (priority, created_at) order exactly; the arms follow in
+-- `dest.position` order, which is what a rotation is explained against and what
+-- the dashboard lists. `created_at` remains the last tiebreak so the order is
+-- total whatever else ties.
+--
+-- `id` and `weight` are new here. The id is what a click is attributed to —
+-- click_events.destination_id — and the weight is the arm's share; both have to
+-- be in the snapshot because reading either at request time would be the query
+-- this design exists to avoid.
 SELECT
     l.id,
     l.workspace_id,
@@ -70,14 +85,18 @@ FROM links l
 JOIN domains d ON d.id = l.domain_id
 LEFT JOIN LATERAL (
     SELECT jsonb_agg(
-               jsonb_build_object('url', dest.url, 'conditions', rr.conditions)
-               ORDER BY rr.priority, rr.created_at
+               jsonb_build_object(
+                   'id', dest.id,
+                   'url', dest.url,
+                   'kind', rr.kind,
+                   'weight', dest.weight,
+                   'conditions', rr.conditions)
+               ORDER BY (rr.kind <> 'match'), rr.priority, dest.position, rr.created_at
            ) AS rules
     FROM routing_rules rr
     JOIN destinations dest ON dest.id = rr.destination_id AND dest.deleted_at IS NULL
     WHERE rr.link_id = l.id
       AND rr.enabled
-      AND rr.kind = 'match'
 ) r ON true
 WHERE l.domain_id = $1
   AND l.alias = $2

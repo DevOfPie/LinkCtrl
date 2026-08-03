@@ -176,6 +176,30 @@ func (s *Service) Consume(ctx context.Context, linkID, workspaceID uuid.UUID, li
 	return true, nil
 }
 
+// --- sequential rotation (M36) ----------------------------------------------
+
+// Rotate advances a link's sequential split and returns the position it
+// advanced to, counting from one.
+//
+// The same durable counter argument as Consume, in a different column and
+// without a limit: a rotation is not spent, it advances, and there is nothing
+// for it to run out of. It lives in this service because the row it writes is
+// the row Consume writes — one table, one upsert shape, one place where "a
+// counter Redis cannot hold" is implemented.
+//
+// An error is returned rather than swallowed, and the caller answers 503. The
+// alternative — choosing an arm anyway — would make the order approximate, which
+// is the one property D8 refused.
+func (s *Service) Rotate(ctx context.Context, linkID, workspaceID uuid.UUID) (int64, error) {
+	position, err := s.q.NextVariantRotation(ctx, dbgen.NextVariantRotationParams{
+		LinkID: linkID, WorkspaceID: workspaceID,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("advance split rotation: %w", err)
+	}
+	return position, nil
+}
+
 // Budget reports how much of a link's allowance has been spent, for the
 // dashboard. Never called on the redirect path.
 func (s *Service) Budget(ctx context.Context, linkID uuid.UUID) (consumed int64, exhaustedAt *time.Time, err error) {

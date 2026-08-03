@@ -185,6 +185,11 @@ day it runs, so charts always end today rather than trailing off weeks ago — a
 keeping accumulated hand-made data would mean the history slowly aging into
 something nobody would demo. Between milestones, everything you do persists.
 
+**Using the workspace switcher on the demo does not move the demo.** The refresh
+writes into the owning account's oldest workspace — the one it was given when it
+claimed the instance — whatever the switcher was last left on. A workspace you
+created yourself is never the oldest, so it is neither seeded into nor reset.
+
 Two things stop an accidental refresh from being the wrong build:
 
 - **The tree must be clean.** `make demo-update` refuses when `git status` is not

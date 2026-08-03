@@ -182,6 +182,26 @@ type Querier interface {
 	// --- tags -------------------------------------------------------------------
 	CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	// A variant's target, with its weight. The same row CreateRuleDestination
+	// writes, plus the one column that makes it an arm rather than a target: 00300
+	// has carried `weight` since Phase 1 with a comment naming this milestone.
+	CreateVariantDestination(ctx context.Context, arg CreateVariantDestinationParams) (Destination, error)
+	// --- split testing (M36) -----------------------------------------------------
+	//
+	// A variant is a rule row of kind weighted, sequential or fallback, pointing at
+	// its own `destinations` row exactly as a match rule's target does. So the
+	// writes below are the same two writes, and the M30 tier check the service
+	// applied before either row existed is the same check.
+	//
+	// Every query here excludes `match` for the reason every query above requires
+	// it: the two management surfaces address disjoint sets of rows, so a rule id
+	// handed to the wrong endpoint finds nothing rather than editing a rule of a
+	// kind the caller was not looking at.
+	// Priority is fixed at the column default and never read for a variant: arms are
+	// chosen, not matched in order, and a priority on one would be a number the
+	// dashboard shows and nothing obeys. Creation order is what orders a rotation,
+	// which is what ListVariantRules sorts by.
+	CreateVariantRule(ctx context.Context, arg CreateVariantRuleParams) (RoutingRule, error)
 	CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error)
 	// Records a decision, and only on a dispute nobody has decided yet.
 	//
@@ -248,6 +268,7 @@ type Querier interface {
 	// a decision somebody made.
 	DeleteStaleEnvBlockedDestinations(ctx context.Context, keep []string) (int64, error)
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
+	DeleteVariantRule(ctx context.Context, arg DeleteVariantRuleParams) (*uuid.UUID, error)
 	// A real delete, not a soft one, and that is the decision D32 guards.
 	//
 	// `links`, `tags` and `folders` cascade from here (00300_links.sql). Soft
@@ -402,6 +423,7 @@ type Querier interface {
 	// in the organization, which is what Phase 1 always creates.
 	GetUserPermissions(ctx context.Context, arg GetUserPermissionsParams) ([]string, error)
 	GetUserRoleInWorkspace(ctx context.Context, arg GetUserRoleInWorkspaceParams) (GetUserRoleInWorkspaceRow, error)
+	GetVariantRule(ctx context.Context, arg GetVariantRuleParams) (GetVariantRuleRow, error)
 	GetWorkspaceDefaultDomain(ctx context.Context) (GetWorkspaceDefaultDomainRow, error)
 	// One workspace, scoped by organization so an id belonging to another tenant is
 	// indistinguishable from one that does not exist.
@@ -510,6 +532,14 @@ type Querier interface {
 	// audit log stores one: the row has to stay readable after that account is
 	// gone, and the LEFT JOIN is what lets it.
 	ListInvitations(ctx context.Context, organizationID uuid.UUID) ([]ListInvitationsRow, error)
+	// Every destination a link has, for the per-destination breakdown to name.
+	//
+	// Includes the link's own destination at position 0, because a click recorded
+	// before the link had a split — or on a link whose split was later removed —
+	// carries a NULL destination_id and is attributed to exactly that row. A
+	// breakdown that could not name it would be a chart with an unlabelled bar
+	// holding most of the traffic.
+	ListLinkDestinations(ctx context.Context, arg ListLinkDestinationsParams) ([]ListLinkDestinationsRow, error)
 	// Keyset pagination over (created_at, id).
 	//
 	// The cursor is a composite so ordering is total: created_at alone is not
@@ -629,6 +659,14 @@ type Querier interface {
 	// person: the inbox row is keyed by user, the mail by address, and looking the
 	// second one up separately would mean a query per recipient.
 	ListUsersWithRoleInOrg(ctx context.Context, arg ListUsersWithRoleInOrgParams) ([]ListUsersWithRoleInOrgRow, error)
+	// A link's whole split, including the disabled arms and the fallback, in
+	// rotation order.
+	//
+	// Ordered by the destination's position rather than by created_at: position is
+	// assigned once, from NextRuleDestinationPosition, and is the only ordering that
+	// a person reading the list can predict and that a rotation can be explained
+	// against. Two arms created in the same transaction cannot tie on it.
+	ListVariantRules(ctx context.Context, arg ListVariantRulesParams) ([]ListVariantRulesRow, error)
 	// The workspace switcher: what a user may act in, and what they have chosen.
 	//
 	// Resolution itself is in auth.sql, because it is identity, not a feature.
@@ -760,6 +798,27 @@ type Querier interface {
 	// The next free position above the primary. COALESCE so the first rule on a
 	// link lands at 1 rather than at NULL.
 	NextRuleDestinationPosition(ctx context.Context, linkID uuid.UUID) (int32, error)
+	// Advance a link's sequential rotation and return the position it advanced to
+	// (M36, D8).
+	//
+	// The same table, the same upsert shape and the same concurrency argument as
+	// ConsumeClickBudget: the statement is the transaction, two replicas serialise
+	// on the row lock the ON CONFLICT path takes, and the loser is evaluated against
+	// the winner's committed value. That is what makes the order strict *globally*
+	// rather than per process — an in-memory counter would give each replica its own
+	// rotation and "sequential" would mean "sequential here", which is a support
+	// ticket rather than a feature.
+	//
+	// A different column from `consumed` on purpose. A rotation advances; a budget
+	// is spent and refuses when it runs out. Sharing one number would let a
+	// sequential arm consume a one-time link's single click on its way to being
+	// chosen, and the gate that runs afterwards would find the link already spent.
+	//
+	// Unconditional: there is no limit to reach, so unlike ConsumeClickBudget this
+	// always returns a row. The write lands only on links that actually carry a
+	// sequential arm, which is the cost D8 accepts and the reason every other link
+	// keeps the unchanged fast path.
+	NextVariantRotation(ctx context.Context, arg NextVariantRotationParams) (int64, error)
 	// The same lookup without the lock, for rendering the redemption page.
 	//
 	// A GET must not take a row lock: the page is served to anybody holding the
@@ -907,6 +966,21 @@ type Querier interface {
 	// that reads them. The keys are spelled out rather than short: this is the
 	// database's own vocabulary, and the compact spelling the cached snapshot uses
 	// is the Go type's business.
+	//
+	// M36 widened the lateral to every kind and left it a single probe, which is the
+	// property worth protecting: a link's match rules and its split arms live in one
+	// table, on one index, and asking for them separately would double the cost of
+	// the only lookup a cache miss makes. The ordering carries both vocabularies at
+	// once. `rr.kind <> 'match'` sorts false before true, so M34's rules come first
+	// and keep their (priority, created_at) order exactly; the arms follow in
+	// `dest.position` order, which is what a rotation is explained against and what
+	// the dashboard lists. `created_at` remains the last tiebreak so the order is
+	// total whatever else ties.
+	//
+	// `id` and `weight` are new here. The id is what a click is attributed to —
+	// click_events.destination_id — and the weight is the arm's share; both have to
+	// be in the snapshot because reading either at request time would be the query
+	// this design exists to avoid.
 	ResolveAliasForRedirect(ctx context.Context, arg ResolveAliasForRedirectParams) (ResolveAliasForRedirectRow, error)
 	// Read once at boot and cached. The default domain is matched on the flag
 	// rather than on a hostname string, so it never has to agree with
@@ -966,6 +1040,25 @@ type Querier interface {
 	// in the same transaction, and touches nothing that is still redeemable.
 	RevokeLapsedInvitation(ctx context.Context, arg RevokeLapsedInvitationParams) (int64, error)
 	RevokeSession(ctx context.Context, id uuid.UUID) error
+	// The per-destination breakdown a split test is read from (M36).
+	//
+	// A pass of its own rather than a seventh row in RollupDimensionDaily's LATERAL
+	// VALUES, and the reason is cost rather than tidiness. That expansion runs for
+	// every click on the instance; adding a row to it would grow the sort and the
+	// upsert count by a sixth, permanently, for a column that is NULL on every link
+	// that runs no split test. Here the `destination_id IS NOT NULL` filter is served
+	// by the partial index migration 02200 creates, so on an instance with no split
+	// tests this reads an empty index and writes nothing.
+	//
+	// The value is the destination id as text, into the same `link_dimension_daily`
+	// table under the dimension name `destination`, so the breakdown is capped,
+	// rolled up and read by exactly the query every other breakdown is read by. The
+	// reader resolves ids to URLs; storing the URL here instead would freeze it at
+	// the moment of the rollup and make an edited destination look like two.
+	//
+	// Bots excluded, like every other dimension: a split test scored on crawler
+	// traffic is a split test with a wrong answer.
+	RollupDestinationDaily(ctx context.Context, arg RollupDestinationDailyParams) error
 	// Every dimension in one pass over click_events.
 	//
 	// This was six UNION ALL branches, one per dimension, reading the same rows six
@@ -1067,6 +1160,15 @@ type Querier interface {
 	// one of these two queries would move both.
 	UpdateRuleDestinationURL(ctx context.Context, arg UpdateRuleDestinationURLParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	// The URL, the weight, or both. Scoped to one destination id for the reason
+	// UpdateRuleDestinationURL is: a link's own destination and its arms are rows in
+	// the same table on the same link.
+	UpdateVariantDestination(ctx context.Context, arg UpdateVariantDestinationParams) error
+	// Only the enabled flag, because that is the only thing on the rule row a
+	// variant has. A weight is a write to the destination; a kind is not editable at
+	// all, since changing one arm's kind would mix two kinds on a link and the
+	// service refuses that outright.
+	UpdateVariantRule(ctx context.Context, arg UpdateVariantRuleParams) (RoutingRule, error)
 	// Writes one entry from LINKCTRL_DESTINATION_BLOCKLIST at boot.
 	//
 	// ON CONFLICT DO UPDATE rather than DO NOTHING: an operator who moves a host

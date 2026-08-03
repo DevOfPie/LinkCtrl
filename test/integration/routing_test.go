@@ -24,6 +24,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/gate"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
@@ -130,6 +131,11 @@ func newRulesOn(
 		Redirect: &httpx.RedirectHandler{
 			Resolver: resolver, DomainID: dom.ID, Status: http.StatusFound,
 			Recorder: recorder, Geo: geo, Returning: returning,
+			// M36's sequential rotation is a durable Postgres counter, and the
+			// gate service is where it lives. Wired here rather than in a fixture
+			// of its own because a sequential split is a routing decision, and
+			// this is the fixture that owns those.
+			Gates: gate.NewService(pool, gate.Config{Hasher: authSvc.Hasher()}),
 		},
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc,
@@ -161,6 +167,10 @@ func (b ruleRecorder) Record(ev httpx.ClickEvent) {
 		IP: addr, UserAgent: ev.UserAgent, Referrer: ev.Referrer,
 		Language: ev.Language, LatencyUS: ev.LatencyUS,
 		TrackReturning: ev.TrackReturning,
+		// M36. Without this the attribution assertions would pass against a
+		// recorder that quietly dropped the field, which is the failure the
+		// milestone's named risk is about.
+		DestinationID: ev.DestinationID,
 	})
 }
 

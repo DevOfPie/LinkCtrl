@@ -205,9 +205,11 @@ func (s *ruleSubject) Returning() bool {
 // is the "links without rules resolve through the unchanged fast path" bullet,
 // and it is structural: there is no branch below this one for such a link to
 // take.
-func (h *RedirectHandler) route(r *http.Request, snap *redirect.Snapshot, now time.Time) (string, bool) {
+func (h *RedirectHandler) route(
+	r *http.Request, snap *redirect.Snapshot, now time.Time,
+) (redirect.Choice, bool) {
 	if snap == nil || len(snap.Rules) == 0 {
-		return "", false
+		return redirect.Choice{}, false
 	}
 	subject := newRuleSubject(r, snap, now, h.Geo, h.Returning)
 	return snap.Route(subject)

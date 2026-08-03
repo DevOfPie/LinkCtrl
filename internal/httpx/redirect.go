@@ -147,6 +147,11 @@ type ClickEvent struct {
 	// TrackReturning asks the click pipeline to remember this visitor in the
 	// within-day returning-visitor set (M34).
 	TrackReturning bool
+
+	// DestinationID is the destinations row this click was sent to (M36). The
+	// zero uuid means the link's own destination, which is where every click on
+	// a link with no rules and no split goes.
+	DestinationID uuid.UUID
 }
 
 func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -232,7 +237,9 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// already a click with is_bot true — the recorder derives that from the
 		// same Classify call this gate used — so the traffic is visible where
 		// traffic is read.
-		h.record(r, res.Snapshot, start)
+		// No destination: the request was refused before one was chosen, so the
+		// click is attributed to the link rather than to any of its arms.
+		h.record(r, res.Snapshot, start, uuid.Nil)
 		return
 	}
 
@@ -281,11 +288,38 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// link's own URL and then swapping the destination underneath would send
 	// /{alias}/pricing to the rule's destination *without* the /pricing, which
 	// is a URL nobody asked for.
+	//
+	// Split testing (M36) sits inside the same block, after the match rules and
+	// before the join, because it answers the same question they do and its
+	// answer is joined onto in the same way. The order between them is
+	// first-match-wins: a rule that named this visitor beats a split that would
+	// have divided them, because the rule is a statement about *who* and the
+	// split is a statement about *how many*. A fallback arm is last of all and
+	// stands in for the link's own destination, which is what makes switching it
+	// off a reversible act rather than an edit to the link.
 	var target string
+	var destID uuid.UUID
 	if outcome == redirect.OutcomeRedirect {
 		destination := res.Snapshot.URL
-		if routed, ok := h.route(r, res.Snapshot, start); ok {
-			destination = routed
+		switch routed, ok := h.route(r, res.Snapshot, start); {
+		case ok:
+			destination, destID = routed.URL, routed.ID
+		default:
+			sp := h.split(r, res.Snapshot, canonical)
+			switch {
+			case sp.failed:
+				// The rotation could not be advanced. 503 rather than an
+				// arbitrary arm, for the reason redirect_split.go states.
+				h.Metrics.ObserveRedirect("error", string(res.Source), time.Since(start))
+				h.unavailable(w, r)
+				return
+			case sp.chosen:
+				destination, destID = sp.choice.URL, sp.choice.ID
+			default:
+				if fb, has := res.Snapshot.Fallback(); has {
+					destination, destID = fb.URL, fb.ID
+				}
+			}
 		}
 		joined, ok := forwardable(res.Snapshot, destination, r)
 		if !ok {
@@ -350,7 +384,7 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// to the old destination long after an edit — with no way to recall it.
 	// no-store for the same reason.
 	h.Location(w, target, h.status())
-	h.record(r, res.Snapshot, start)
+	h.record(r, res.Snapshot, start, destID)
 
 	if h.LogSample > 0 && h.counter.Add(1)%h.LogSample == 0 {
 		h.Logger.Info("redirect",
@@ -395,19 +429,25 @@ func blockedAsBot(snap *redirect.Snapshot, ua string) bool {
 // disagreeing about what a click event carries. HEAD is excluded in both: it is
 // a client asking about the link rather than following it, and counting it
 // would inflate every figure a link's owner reads.
-func (h *RedirectHandler) record(r *http.Request, snap *redirect.Snapshot, start time.Time) {
+func (h *RedirectHandler) record(
+	r *http.Request, snap *redirect.Snapshot, start time.Time, destID uuid.UUID,
+) {
 	if h.Recorder == nil || snap == nil || r.Method == http.MethodHead {
 		return
 	}
 	h.Recorder.Record(ClickEvent{
-		LinkID:      snap.LinkID,
-		WorkspaceID: snap.WorkspaceID,
-		OccurredAt:  start,
-		IP:          clientIPString(r),
-		UserAgent:   r.UserAgent(),
-		Referrer:    r.Referer(),
-		Language:    r.Header.Get("Accept-Language"),
-		LatencyUS:   latencyUS(time.Since(start)),
+		LinkID: snap.LinkID,
+		// Which destination served this click (M36). The zero uuid means the
+		// link's own destination, and is what every click on every link without
+		// rules carries — see the column comment in migration 02200.
+		DestinationID: destID,
+		WorkspaceID:   snap.WorkspaceID,
+		OccurredAt:    start,
+		IP:            clientIPString(r),
+		UserAgent:     r.UserAgent(),
+		Referrer:      r.Referer(),
+		Language:      r.Header.Get("Accept-Language"),
+		LatencyUS:     latencyUS(time.Since(start)),
 		// The within-day returning-visitor set is maintained by the ingester, for
 		// the links that need it, and this flag is how it finds out which (M34).
 		// Deciding it here rather than in the pipeline is what keeps the pipeline

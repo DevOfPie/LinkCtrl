@@ -80,7 +80,8 @@ answers, not the same ones with a domain name.
 | --- | --- |
 | **Links** | Create, edit, archive, soft-delete with a 30-day window. Custom or generated aliases, tags, titles, expiry (410 past it). Full-text and substring search, cursor pagination. |
 | **Redirects** | In-process cache → Redis → Postgres, with negative caching for the unknown aliases a public shortener is mostly asked for. Redis is optional: lose it and redirects get slower, not wrong. Per link and off by default, a visitor's query string and the path segments after the alias can be forwarded onto the destination — so one short link can stand in for a whole documentation tree. With path forwarding off, anything under an alias is the same `404` an unknown alias gets. |
-| **Routing rules** | Send different visitors to different destinations from one link. Rules are checked lowest priority number first and **the first match wins**; anyone matching none goes to the link's own destination. Twelve conditions — country, region, city, language, browser, OS, device, date and time, referrer host, query parameters, UTM parameters, and whether somebody was seen on that link earlier today — combined with AND, any listed value matching. Time windows are evaluated when the visitor arrives, in a real IANA timezone, so a window opens and closes on time even on a hot link. Every rule destination goes through the same tier checks a link's own does. Region and city are resolved for the redirect and never stored. There is no cookies condition, deliberately, and asking for one is refused by name. |
+| **Routing rules** | Send different visitors to different destinations from one link. Rules are checked lowest priority number first and **the first match wins**; anyone matching none falls through to the link's split test, its fallback, or the link's own destination. Twelve conditions — country, region, city, language, browser, OS, device, date and time, referrer host, query parameters, UTM parameters, and whether somebody was seen on that link earlier today — combined with AND, any listed value matching. Time windows are evaluated when the visitor arrives, in a real IANA timezone, so a window opens and closes on time even on a hot link. Every rule destination goes through the same tier checks a link's own does. Region and city are resolved for the redirect and never stored. There is no cookies condition, deliberately, and asking for one is refused by name. |
+| **Split testing** | Divide one link's traffic between several destinations. **Weighted** arms take a share each — weights are relative, so 60/40 and 600/400 are the same test — or **sequential** arms are visited strictly in turn, in an order kept in the database so it holds across every replica and every restart. A **fallback** destination catches whoever no rule and no arm claimed, standing in for the link's own without changing it. Switching an arm off is one click and the rest re-share its traffic, which is what feature-flagging a destination looks like here. Every click records which destination served it, and the link's page shows clicks, visitors and share per arm beside its configured weight — a split with no attribution is a coin flip with extra steps. |
 | **Analytics** | Clicks, estimated unique visitors, bots, device, browser, OS, language, referrer host, and country with an optional GeoIP database. Daily rollups, server-rendered charts, a bounded recent-activity feed, retention enforced by dropping whole months. |
 | **Auth** | Email/password with argon2id, server-side sessions in `__Host-` cookies, per-account lockout and per-address rate limiting, real RBAC with four built-in roles and a working permission evaluator. |
 | **Abuse limits** | Per-address limits on credential endpoints, the API, and 404 probing. The last charges misses only, so a working link is never throttled by anyone's scanning. |
@@ -205,11 +206,17 @@ Known limitations and deferred work, so nobody discovers them in production:
   expire and there is no revocation button: invalidating a workspace's
   outstanding signatures means clearing `workspaces.signing_secret` by hand, and
   each replica keeps honouring the old key for up to a minute after that.
-- **Routing rules do one thing: match, in order.** Weighted splits, sequential
-  rotation and fallback destinations share the same table and are not built —
-  every query filters on the match kind so that adding them cannot change what a
-  match rule does. There is no cookies condition and there will not be one; the
-  refusal has a reason code rather than being an absence.
+- **A split test does not remember anybody.** Which arm a visitor gets is decided
+  per request, so the same person following the link twice may see two. That is
+  the whole feature rather than a stage of one: each click is an independent
+  trial and which arm converted is answered by the per-destination breakdown,
+  because remembering people would need a cookie this redirect path does not set.
+  A sequential rotation costs a database write on every visit to such a link —
+  strict order across replicas is what the write buys, and only links that ask
+  for it pay. Removing an arm keeps its clicks, reported as a destination that no
+  longer exists.
+- **Routing rules match, in order, and there is no cookies condition.** There
+  will not be one; the refusal has a reason code rather than being an absence.
 - **Hostile destinations are refused in tiers, and only one tier is absolute.**
   Non-`http(s)` schemes and private, loopback, link-local, carrier-NAT and
   cloud-metadata addresses are refused with no way to switch it off. Above that

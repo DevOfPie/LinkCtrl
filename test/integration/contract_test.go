@@ -269,6 +269,38 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.do("DELETE", p+"/links/"+linkID+"/rules/"+ruleID, nil, http.StatusNoContent)
 	c.do("DELETE", p+"/links/"+linkID+"/rules/"+ruleID, nil, http.StatusNotFound)
 
+	// --- split testing (M36) ------------------------------------------------
+	//
+	// The arms are created, listed, edited and removed against the same
+	// schema-validating client, which is what makes `share` more than
+	// documentation: it is computed rather than stored, so a change to how the
+	// denominator is chosen shows up here as a response the document refuses.
+	arm := c.do("POST", p+"/links/"+linkID+"/split", map[string]any{
+		"kind": "weighted", "url": "https://example.com/contract-a", "weight": 60,
+	}, http.StatusCreated)
+	armID := field(t, arm, "id")
+	c.do("POST", p+"/links/"+linkID+"/split", map[string]any{
+		"kind": "weighted", "url": "https://example.com/contract-b", "weight": 40,
+	}, http.StatusCreated)
+	// A link's arms are all one kind, so this is refused rather than stored.
+	c.do("POST", p+"/links/"+linkID+"/split", map[string]any{
+		"kind": "sequential", "url": "https://example.com/contract-c",
+	}, http.StatusUnprocessableEntity)
+	// A fallback is a third thing and sits beside them.
+	c.do("POST", p+"/links/"+linkID+"/split", map[string]any{
+		"kind": "fallback", "url": "https://example.com/contract-catch",
+	}, http.StatusCreated)
+
+	c.do("GET", p+"/links/"+linkID+"/split", nil, http.StatusOK)
+	c.do("PATCH", p+"/links/"+linkID+"/split/"+armID, map[string]any{
+		"enabled": false, "weight": 10,
+	}, http.StatusOK)
+	c.do("PATCH", p+"/links/"+linkID+"/split/"+uuid.NewString(), map[string]any{
+		"enabled": false,
+	}, http.StatusNotFound)
+	c.do("DELETE", p+"/links/"+linkID+"/split/"+armID, nil, http.StatusNoContent)
+	c.do("DELETE", p+"/links/"+linkID+"/split/"+armID, nil, http.StatusNotFound)
+
 	// --- analytics ----------------------------------------------------------
 	c.do("GET", p+"/links/"+linkID+"/stats", nil, http.StatusOK)
 	c.do("GET", p+"/links/"+linkID+"/stats?from=2026-07-01&to=2026-07-30", nil, http.StatusOK)

@@ -163,3 +163,44 @@ func (q *Queries) GetWorkspaceSigningSecret(ctx context.Context, id uuid.UUID) (
 	err := row.Scan(&signing_secret)
 	return signing_secret, err
 }
+
+const nextVariantRotation = `-- name: NextVariantRotation :one
+INSERT INTO link_click_budget (link_id, workspace_id, rotation)
+VALUES ($1, $2, 1)
+ON CONFLICT (link_id) DO UPDATE
+   SET rotation   = link_click_budget.rotation + 1,
+       updated_at = now()
+RETURNING rotation
+`
+
+type NextVariantRotationParams struct {
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+}
+
+// Advance a link's sequential rotation and return the position it advanced to
+// (M36, D8).
+//
+// The same table, the same upsert shape and the same concurrency argument as
+// ConsumeClickBudget: the statement is the transaction, two replicas serialise
+// on the row lock the ON CONFLICT path takes, and the loser is evaluated against
+// the winner's committed value. That is what makes the order strict *globally*
+// rather than per process — an in-memory counter would give each replica its own
+// rotation and "sequential" would mean "sequential here", which is a support
+// ticket rather than a feature.
+//
+// A different column from `consumed` on purpose. A rotation advances; a budget
+// is spent and refuses when it runs out. Sharing one number would let a
+// sequential arm consume a one-time link's single click on its way to being
+// chosen, and the gate that runs afterwards would find the link already spent.
+//
+// Unconditional: there is no limit to reach, so unlike ConsumeClickBudget this
+// always returns a row. The write lands only on links that actually carry a
+// sequential arm, which is the cost D8 accepts and the reason every other link
+// keeps the unchanged fast path.
+func (q *Queries) NextVariantRotation(ctx context.Context, arg NextVariantRotationParams) (int64, error) {
+	row := q.db.QueryRow(ctx, nextVariantRotation, arg.LinkID, arg.WorkspaceID)
+	var rotation int64
+	err := row.Scan(&rotation)
+	return rotation, err
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -52,9 +53,38 @@ type LinkStats struct {
 	Totals     Totals                      `json:"totals"`
 	Series     []DayPoint                  `json:"series"`
 	Dimensions map[string][]DimensionValue `json:"dimensions"`
+	// Destinations is the per-destination breakdown a split test is read from
+	// (M36). Empty for a link that has never sent a click anywhere other than
+	// its own destination, which is every link on a default instance.
+	Destinations []DestinationSplit `json:"destinations"`
 	// Caveat travels with the data rather than living only in documentation,
 	// so a client rendering these numbers can surface it.
 	Caveat string `json:"caveat"`
+}
+
+// DestinationSplit is one destination's share of a link's clicks (M36).
+//
+// The row for the link's own destination is synthesized from what the other rows
+// do not account for, because a click that went there carries a NULL
+// destination_id — see migration 02200. So `Clicks` here sums to the link's
+// non-bot total by construction rather than by the rollup happening to agree.
+type DestinationSplit struct {
+	DestinationID uuid.UUID `json:"destination_id"`
+	URL           string    `json:"url"`
+	// Weight is the arm's configured weight, or 0 where it is not a weighted
+	// arm. It is what makes the breakdown readable as a test: "40% configured,
+	// 41% observed" is a working split and "40% configured, 3% observed" is a
+	// broken destination.
+	Weight int32 `json:"weight"`
+	// IsPrimary marks the link's own destination.
+	IsPrimary bool `json:"is_primary"`
+	// Removed marks clicks attributed to a destination that has since been
+	// deleted. They are reported rather than dropped: a running test's totals
+	// must not change because somebody tidied up an arm.
+	Removed        bool    `json:"removed,omitempty"`
+	Clicks         int64   `json:"clicks"`
+	UniqueVisitors int64   `json:"unique_visitors"`
+	Share          float64 `json:"share"`
 }
 
 type Totals struct {
@@ -133,6 +163,101 @@ func (r *Reader) LinkStats(ctx context.Context, actor *auth.Identity, linkID uui
 		out.Dimensions[dim] = bucket
 	}
 
+	destinations, err := r.destinationSplit(ctx, actor.WorkspaceID, linkID, from, to, out.Totals.Clicks)
+	if err != nil {
+		return nil, err
+	}
+	out.Destinations = destinations
+
+	return out, nil
+}
+
+// destinationDimension is the name RollupDestinationDaily writes its rows under.
+const destinationDimension = "destination"
+
+// destinationSplit assembles the per-destination breakdown (M36).
+//
+// Two reads and no scan of click_events: the rolled-up per-destination rows,
+// under the same dimension machinery every other breakdown uses, and the link's
+// destination list to give each id a URL. Storing the URL in the rollup instead
+// would freeze it at the moment of the rollup and make an edited arm read as two.
+//
+// The link's own destination is not in the rollup at all — a click that went
+// there has a NULL destination_id — so its row is the remainder: total non-bot
+// clicks minus everything attributed elsewhere. That is also why this is skipped
+// entirely when nothing was attributed: a link with no split would otherwise
+// grow a one-row "breakdown" saying all of its traffic went where it was always
+// going to go.
+func (r *Reader) destinationSplit(
+	ctx context.Context, workspaceID, linkID uuid.UUID, from, to time.Time, totalClicks int64,
+) ([]DestinationSplit, error) {
+	rows, err := r.q.GetLinkDimensions(ctx, dbgen.GetLinkDimensionsParams{
+		LinkID: linkID, Dimension: destinationDimension,
+		FromDay: from, ToDay: to, RowLimit: int32(domain.MaxRulesPerLink) + 1,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read destination breakdown: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+
+	known, err := r.q.ListLinkDestinations(ctx, dbgen.ListLinkDestinationsParams{
+		LinkID: linkID, WorkspaceID: workspaceID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read link destinations: %w", err)
+	}
+	byID := make(map[uuid.UUID]dbgen.ListLinkDestinationsRow, len(known))
+	var primary DestinationSplit
+	for _, d := range known {
+		byID[d.ID] = d
+		if d.IsPrimary {
+			primary = DestinationSplit{
+				DestinationID: d.ID, URL: d.Url, Weight: d.Weight, IsPrimary: true,
+			}
+		}
+	}
+
+	out := make([]DestinationSplit, 0, len(rows)+1)
+	var attributed int64
+	for _, row := range rows {
+		id, perr := uuid.Parse(row.Value)
+		if perr != nil {
+			// A value the rollup did not write. Skipped rather than surfaced: the
+			// only way to produce one is to write into link_dimension_daily by
+			// hand, and a breakdown is not the place to report that.
+			continue
+		}
+		entry := DestinationSplit{
+			DestinationID: id, Clicks: row.Clicks, UniqueVisitors: row.UniqueVisitors,
+		}
+		if d, ok := byID[id]; ok {
+			entry.URL, entry.Weight, entry.IsPrimary = d.Url, d.Weight, d.IsPrimary
+		} else {
+			entry.Removed = true
+			entry.URL = "(destination removed)"
+		}
+		attributed += row.Clicks
+		out = append(out, entry)
+	}
+
+	// The remainder went to the link's own destination. Clamped at zero because
+	// the two figures come from two rollup passes over the same events and a
+	// recompute that lands between them can leave the totals a few clicks apart —
+	// a negative bar would be a rendering of that race rather than of anything
+	// that happened.
+	if remainder := totalClicks - attributed; remainder > 0 && primary.DestinationID != uuid.Nil {
+		primary.Clicks = remainder
+		out = append(out, primary)
+	}
+
+	if totalClicks > 0 {
+		for i := range out {
+			out[i].Share = float64(out[i].Clicks) * 100 / float64(totalClicks)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Clicks > out[j].Clicks })
 	return out, nil
 }
 

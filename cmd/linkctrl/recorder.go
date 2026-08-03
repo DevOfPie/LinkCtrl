@@ -36,5 +36,8 @@ func (c clickRecorder) Record(ev httpx.ClickEvent) {
 		// link's own rules; the pipeline has no way to know and must not acquire
 		// one, because acquiring one means a query per batch (M34).
 		TrackReturning: ev.TrackReturning,
+		// Which arm of a split test served this click (M36). Zero for every link
+		// that has none, which the ingester writes as NULL.
+		DestinationID: ev.DestinationID,
 	})
 }

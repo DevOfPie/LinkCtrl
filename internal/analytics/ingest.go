@@ -41,6 +41,15 @@ type Event struct {
 	// which links have a returning-visitor rule, which is a query per batch
 	// against data the handler already had in its hand.
 	TrackReturning bool
+
+	// DestinationID is the destinations row this click was sent to (M36).
+	//
+	// The zero uuid means the link's own destination, and is written to the
+	// column as NULL — see destinationOrNil. Every click on every link without
+	// rules carries it, which is why the column is nullable rather than
+	// backfilled: a default would be a per-row copy of what the link already
+	// says.
+	DestinationID uuid.UUID
 }
 
 // Stats are the ingester's counters.
@@ -259,11 +268,7 @@ func (i *Ingester) write(batch []Event) {
 	// not build a statement whose length grows with the batch.
 	copied, err := tx.CopyFrom(ctx,
 		pgx.Identifier{"click_events"},
-		[]string{
-			"id", "link_id", "workspace_id", "occurred_at", "visitor_hash",
-			"is_first_visit", "country", "region", "city", "device", "browser",
-			"os", "language", "referrer_host", "is_bot", "latency_us",
-		},
+		clickEventColumns,
 		pgx.CopyFromSlice(len(rows), func(n int) ([]any, error) { return rows[n], nil }),
 	)
 	if err != nil {
@@ -333,6 +338,33 @@ type linkCount struct {
 	last  time.Time
 }
 
+// clickEventColumns is the COPY column list, and prepare builds each row in
+// exactly this order.
+//
+// **Positional, binary, and silent when it is wrong.** pgx.CopyFrom sends values
+// by position: a column list and a row slice that disagree about order do not
+// produce an error, they produce rows whose values are in the wrong columns —
+// a browser stored as a country, a latency stored as a language. Nothing fails,
+// nothing logs, and the analytics are quietly untrue.
+//
+// Two things keep the two lists in step, and neither is remembering. The list is
+// named here rather than written inline at the CopyFrom call, so it sits beside
+// the function that builds the rows; and TestCopyRowsMatchTheColumnList asserts
+// the widths agree while the integration suite reads a written row back column
+// by column, which is the only check that catches a *reordering* rather than an
+// omission.
+//
+// destination_id (M36) was appended rather than inserted next to link_id, which
+// is where it would read best. Appending leaves the sixteen positions that
+// existed before it untouched, so the edit that added it could not silently
+// shift any of them.
+var clickEventColumns = []string{
+	"id", "link_id", "workspace_id", "occurred_at", "visitor_hash",
+	"is_first_visit", "country", "region", "city", "device", "browser",
+	"os", "language", "referrer_host", "is_bot", "latency_us",
+	"destination_id",
+}
+
 // prepare enriches events into COPY rows.
 //
 // This is where the raw IP is consumed and discarded: it goes into the visitor
@@ -398,6 +430,9 @@ func (i *Ingester) prepare(ctx context.Context, batch []Event) ([][]any, map[uui
 			ReferrerHost(ev.Referrer),
 			cls.IsBot,
 			ev.LatencyUS,
+			// Last, matching clickEventColumns. See the comment there for why
+			// this was appended rather than placed beside link_id.
+			destinationOrNil(ev.DestinationID),
 		})
 
 		c := counts[ev.LinkID]
@@ -409,6 +444,19 @@ func (i *Ingester) prepare(ctx context.Context, batch []Event) ([][]any, map[uui
 	}
 
 	return rows, counts, marks, nil
+}
+
+// destinationOrNil turns the zero uuid into a NULL.
+//
+// The distinction matters at the column for the same reason it does for the
+// country: NULL means "the link's own destination", and a zero uuid stored
+// literally would be a destination id that resolves to nothing and would appear
+// in the breakdown as a bucket that looks like data.
+func destinationOrNil(id uuid.UUID) *uuid.UUID {
+	if id == uuid.Nil {
+		return nil
+	}
+	return &id
 }
 
 // country resolves an address, returning nil rather than an empty string when

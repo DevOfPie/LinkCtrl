@@ -52,6 +52,16 @@ func (r *Roller) Run(ctx context.Context, from, to time.Time) error {
 	}); err != nil {
 		return fmt.Errorf("rollup dimension daily: %w", err)
 	}
+	// The per-destination breakdown (M36). Last, and separate from the pass
+	// above, because it reads only the clicks that carry a destination_id — a
+	// partial index over rows that do not exist on an instance running no split
+	// test. Folding it into the dimension pass would have made every click on
+	// every link pay for it.
+	if err := r.q.RollupDestinationDaily(ctx, dbgen.RollupDestinationDailyParams{
+		WindowStart: from, WindowEnd: to,
+	}); err != nil {
+		return fmt.Errorf("rollup destination daily: %w", err)
+	}
 
 	r.log.Debug("rollup complete",
 		slog.Time("from", from), slog.Time("to", to),

@@ -301,5 +301,13 @@ func (r *Renderer) funcs() template.FuncMap {
 		"truncate":    truncate,
 		"statusBadge": statusBadge,
 		"dict":        dict,
+		"add":         add,
 	}
 }
+
+// add is integer addition, for turning a range index into a human ordinal.
+//
+// A template function rather than a field on every row, because "this is the
+// third arm" is a fact about the position in the list being rendered and
+// carrying it in the data would be a second copy of the loop's own counter.
+func add(a, b int) int { return a + b }

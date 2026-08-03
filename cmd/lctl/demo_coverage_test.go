@@ -222,16 +222,24 @@ func demoCoverage() []demoFeature {
 
 		{
 			Milestone: "M34", Feature: "A routing-rule list somebody can read in order",
+			// Also narrowed to `match` by M36, so that seeding more split arms
+			// can never satisfy this row on M34's behalf.
 			Query: `SELECT count(*) FROM routing_rules
-			         WHERE workspace_id IN (` + demoWorkspaces + `)`,
+			         WHERE workspace_id IN (` + demoWorkspaces + `) AND kind = 'match'`,
 			Min: 4,
 			Shows: "priority ordering and first-match evaluation, which one rule " +
 				"on one link cannot demonstrate",
 		},
 		{
 			Milestone: "M34", Feature: "A routing rule that is switched off",
+			// Narrowed to `match` by M36, which seeds a parked split arm on
+			// another link. The row's claim is about a *rule* having two states;
+			// without the kind filter it started counting M36's arms too and
+			// tripped its own ceiling. The equivalent claim for an arm is M36's
+			// own row below.
 			Query: `SELECT count(*) FROM routing_rules
-			         WHERE workspace_id IN (` + demoWorkspaces + `) AND NOT enabled`,
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND kind = 'match' AND NOT enabled`,
 			Min: 1, Max: 1,
 			Shows: "that a rule has two states; a list where everything is on " +
 				"never shows the control that turns one off",
@@ -240,8 +248,10 @@ func demoCoverage() []demoFeature {
 			Milestone: "M34", Feature: "Rule targets as their own destinations",
 			Query: `SELECT count(*) FROM destinations d
 			         JOIN links l ON l.id = d.link_id
+			         JOIN routing_rules rr ON rr.destination_id = d.id
 			         WHERE d.workspace_id IN (` + demoWorkspaces + `)
-			           AND d.id <> l.primary_destination_id`,
+			           AND d.id <> l.primary_destination_id
+			           AND rr.kind = 'match'`,
 			Min: 4,
 			Shows: "that a rule's target is a destination row like any other, " +
 				"which is what puts it through the same tier check",
@@ -289,6 +299,68 @@ func demoCoverage() []demoFeature {
 			Min: 1, Max: 1,
 			Shows: "that signing minted a key on first use — without one the " +
 				"signature-gated link above refuses everybody, including its owner",
+		},
+
+		{
+			Milestone: "M36", Feature: "A weighted split with an arm switched off",
+			Query: `SELECT count(*) FROM routing_rules
+			         WHERE workspace_id IN (` + demoWorkspaces + `) AND kind = 'weighted'`,
+			Min: 3, Max: 3,
+			Shows: "percentage splits, and that `enabled` is the feature flag — " +
+				"a list where every arm is on never shows the control that parks one",
+		},
+		{
+			Milestone: "M36", Feature: "A sequential rotation",
+			Query: `SELECT count(*) FROM routing_rules
+			         WHERE workspace_id IN (` + demoWorkspaces + `) AND kind = 'sequential'`,
+			Min: 2,
+			Shows: "that a rotation is a different thing from a percentage, which " +
+				"one weighted split alone reads as the only kind there is",
+		},
+		{
+			Milestone: "M36", Feature: "A fallback destination",
+			Query: `SELECT count(*) FROM routing_rules
+			         WHERE workspace_id IN (` + demoWorkspaces + `) AND kind = 'fallback'`,
+			Min: 1, Max: 1,
+			Shows: "where a link sends anybody no rule and no arm claimed, without " +
+				"the link's own destination having been edited",
+		},
+		{
+			Milestone: "M36", Feature: "Arms with different weights",
+			Query: `SELECT count(DISTINCT d.weight) FROM destinations d
+			          JOIN routing_rules rr ON rr.destination_id = d.id
+			         WHERE d.workspace_id IN (` + demoWorkspaces + `)
+			           AND rr.kind = 'weighted'`,
+			Min: 2,
+			Shows: "that a weight is a setting; every arm at 100 is indistinguishable " +
+				"from a split that ignores weights",
+		},
+		{
+			Milestone: "M36", Feature: "Clicks attributed to a destination",
+			Query: `SELECT count(*) FROM click_events
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND destination_id IS NOT NULL`,
+			Min: 100,
+			Shows: "the per-destination breakdown. A split with no attribution is " +
+				"a coin flip with extra steps",
+		},
+		{
+			Milestone: "M36", Feature: "The breakdown reaches more than one arm",
+			Query: `SELECT count(DISTINCT destination_id) FROM click_events
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND destination_id IS NOT NULL`,
+			Min: 2,
+			Shows: "a comparison rather than a single bar, which is the only shape " +
+				"an A/B test can be read from",
+		},
+		{
+			Milestone: "M36", Feature: "The breakdown is rolled up, not read raw",
+			Query: `SELECT count(*) FROM link_dimension_daily
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND dimension = 'destination'`,
+			Min: 10,
+			Shows: "that the link detail page reads a rollup like every other " +
+				"breakdown, rather than scanning click_events per request",
 		},
 
 		// The boundary. Everything below is a milestone that has not been built,
@@ -356,6 +428,70 @@ func TestDemoSeederShowsEveryFeatureItClaimsTo(t *testing.T) {
 				"matching line in demoResetPhase2.",
 				feature.Feature, feature.Milestone, counts[i], again[i])
 		}
+	}
+
+	// Third run, from the state `make demo-update` actually meets (M36).
+	//
+	// The two runs above both start with the owner's last-used workspace equal
+	// to the one the catalogue is in, because the first run restores it and the
+	// second is a copy of the first. A long-lived demo instance is not in that
+	// state: somebody signs in and uses the workspace switcher M25 built, or a
+	// run fails between the seeder moving the owner into the second workspace
+	// and moving them back. Either leaves the account's preference pointing
+	// somewhere else, and demoReset scopes its link, tag and destination deletes
+	// to whatever workspace the actor resolved into.
+	//
+	// That is not a hypothetical: it is what broke `make demo-update` at M36.
+	// The reset committed, removed everything scoped to the organization, and
+	// removed nothing scoped to the workspace — then the very first catalogue
+	// link collided with the copy of itself the reset had walked past, because
+	// alias uniqueness is per domain rather than per workspace.
+	switchOwnerAwayFromTheCatalogue(t, pool, ownerID, orgID)
+
+	third := runDemoSeed(t, ctx, pool, cfg, owner.Email)
+	t.Logf("seeder runtime, third run (owner switched away): %s", third.Round(time.Millisecond))
+
+	orgID, ownerID = demoScope(t, pool, owner.Email)
+	moved := checkDemoCoverage(t, pool, orgID, ownerID)
+
+	for i, feature := range demoCoverage() {
+		if counts[i] != moved[i] {
+			t.Errorf("`lctl demo --reset` is not idempotent once the owner has "+
+				"switched workspace: %s (%s) counted %d on the first run and %d "+
+				"after the switch. Where the demo is written, and which rows the "+
+				"reset removes, must not depend on where somebody left the "+
+				"workspace switcher.",
+				feature.Feature, feature.Milestone, counts[i], moved[i])
+		}
+	}
+}
+
+// switchOwnerAwayFromTheCatalogue points the owner's last-used workspace at the
+// newest workspace in the organization — the one the seeder creates second.
+//
+// It writes the column the workspace switcher writes, which is the whole of what
+// somebody clicking through the demo leaves behind: auth.Service.SwitchWorkspace
+// moves the session and records the choice on the account, and only the second
+// half of that outlives the browser. A session is not needed to reproduce the
+// state, and demanding one here would be testing the switcher rather than the
+// seeder.
+func switchOwnerAwayFromTheCatalogue(t *testing.T, pool *pgxpool.Pool, ownerID, orgID uuid.UUID) {
+	t.Helper()
+	const q = `
+		UPDATE users SET last_workspace_id = (
+		    SELECT w.id FROM workspaces w
+		     WHERE w.organization_id = $2 AND w.deleted_at IS NULL
+		     ORDER BY w.created_at DESC, w.id DESC
+		     LIMIT 1)
+		 WHERE id = $1
+		RETURNING last_workspace_id`
+	var moved *uuid.UUID
+	if err := pool.QueryRow(context.Background(), q, ownerID, orgID).Scan(&moved); err != nil {
+		t.Fatalf("move the owner to another workspace: %v", err)
+	}
+	if moved == nil {
+		t.Fatal("the demo organization has no second workspace to switch to; " +
+			"the M25 coverage row above should have caught that first")
 	}
 }
 

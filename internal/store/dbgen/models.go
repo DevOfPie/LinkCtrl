@@ -83,22 +83,23 @@ type Campaign struct {
 }
 
 type ClickEvent struct {
-	ID           uuid.UUID
-	LinkID       uuid.UUID
-	WorkspaceID  uuid.UUID
-	OccurredAt   time.Time
-	VisitorHash  []byte
-	IsFirstVisit bool
-	Country      *string
-	Region       *string
-	City         *string
-	Device       *string
-	Browser      *string
-	Os           *string
-	Language     *string
-	ReferrerHost *string
-	IsBot        bool
-	LatencyUs    *int32
+	ID            uuid.UUID
+	LinkID        uuid.UUID
+	WorkspaceID   uuid.UUID
+	OccurredAt    time.Time
+	VisitorHash   []byte
+	IsFirstVisit  bool
+	Country       *string
+	Region        *string
+	City          *string
+	Device        *string
+	Browser       *string
+	Os            *string
+	Language      *string
+	ReferrerHost  *string
+	IsBot         bool
+	LatencyUs     *int32
+	DestinationID *uuid.UUID
 }
 
 type Destination struct {
@@ -217,6 +218,7 @@ type LinkClickBudget struct {
 	ExhaustedAt *time.Time
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+	Rotation    int64
 }
 
 type LinkClickDaily struct {

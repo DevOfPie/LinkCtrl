@@ -70,6 +70,10 @@ tags:
     description: >
       Routing rules: which visitors a link sends where, evaluated in priority
       order with the first match winning
+  - name: split
+    description: >
+      Split testing: weighted and sequential arms, a fallback destination, and
+      the per-arm enabled flag that is this product's feature flag
   - name: domain
     description: Settings for the hostname short links are served on
   - name: analytics
@@ -649,6 +653,135 @@ paths:
       operationId: deleteRoutingRule
       summary: Remove a routing rule
       description: Removes the rule and the destination it pointed at.
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /links/{id}/split:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+    get:
+      tags: [split]
+      operationId: getLinkSplit
+      summary: A link's split test
+      description: |
+        The whole split rather than a page of arms, because a weighted arm's
+        share is a fact about the set: `weight: 40` means nothing until you know
+        what the others add up to, so `share` is computed against the enabled
+        arms and returned beside it.
+
+        Arms come back in rotation order — the order a sequential split visits
+        them and the order the dashboard lists them — with the disabled ones
+        included. The fallback, if there is one, is returned separately: it is
+        not an arm, it is what stands in for the link's own destination when
+        nothing else applies.
+      responses:
+        "200":
+          description: The link's split test, and the kinds this version accepts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SplitResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [split]
+      operationId: createSplitVariant
+      summary: Add an arm to a link's split test
+      description: |
+        The arm's `url` is judged by every destination tier before the arm
+        exists, exactly as a routing rule's target and the link's own
+        destination are. An arm receiving 5% of the traffic is still somewhere a
+        browser is sent.
+
+        **A link's arms are all one kind.** Adding a `sequential` arm to a link
+        whose arms are `weighted` is refused with `kind`/`conflict`: "a share of
+        the traffic, in rotation" has no meaning, and permitting the mix would
+        mean the redirect path carrying a precedence rule for a state nobody
+        meant to create. A link has at most one `fallback`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSplitVariantRequest"
+      responses:
+        "201":
+          description: The created arm
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SplitVariant"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /links/{id}/split/{variantID}:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+      - $ref: "#/components/parameters/SplitVariantID"
+    patch:
+      tags: [split]
+      operationId: updateSplitVariant
+      summary: Edit a split-test arm
+      description: |
+        Partial update: absent fields are untouched. `enabled` is the feature
+        flag — a disabled arm receives nothing on the next request and the
+        remaining arms re-share its traffic, with nothing deleted and no
+        attribution lost.
+
+        `weight` is applied only to a `weighted` arm. Sending it to a sequential
+        one is accepted and ignored rather than refused, because the column
+        would hold a number the redirect path never reads.
+
+        An arm's `kind` cannot be changed. Switching a running test from
+        percentages to a rotation changes what its own history means; remove the
+        arms and start a test that is honestly a new one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSplitVariantRequest"
+      responses:
+        "200":
+          description: The updated arm
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SplitVariant"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+    delete:
+      tags: [split]
+      operationId: deleteSplitVariant
+      summary: Remove a split-test arm
+      description: |
+        Removes the arm and the destination it pointed at. Clicks already
+        attributed to that destination are kept, and the per-destination
+        breakdown reports them as a destination that no longer exists — a
+        running test's totals must not change because somebody tidied up.
       responses:
         "204":
           description: Deleted
@@ -2033,6 +2166,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    SplitVariantID:
+      name: variantID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     DisputeID:
       name: id
       in: path
@@ -2556,6 +2694,132 @@ components:
           $ref: "#/components/schemas/RuleConditions"
         enabled: { type: boolean }
 
+    SplitVariant:
+      type: object
+      additionalProperties: false
+      required: [id, link_id, kind, url, weight, share, enabled, position, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        link_id: { type: string, format: uuid }
+        kind:
+          type: string
+          enum: [weighted, sequential, fallback]
+        url:
+          type: string
+          format: uri
+          description: >
+            Where this arm sends people. Judged by every destination tier before
+            the arm is stored.
+        weight:
+          type: integer
+          format: int32
+          description: >
+            The arm's share of a weighted split, relative to the other enabled
+            arms, so 60/40 and 600/400 are the same test. Carried but never read
+            for the other two kinds.
+        share:
+          type: number
+          format: double
+          description: >
+            `weight` as a percentage of the enabled weighted arms. Computed for
+            the reader rather than stored, because it changes whenever any
+            *other* arm changes. Zero for a sequential split, where every enabled
+            arm receives one visitor in N.
+        enabled:
+          type: boolean
+          description: >
+            The feature flag. A disabled arm is kept and listed but never
+            chosen, and the remaining arms re-share its traffic.
+        position:
+          type: integer
+          format: int32
+          description: The arm's place in the rotation. Assigned once, on creation.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Split:
+      type: object
+      additionalProperties: false
+      required: [kind, variants]
+      properties:
+        kind:
+          type: string
+          description: >
+            The kind of this link's arms, or "" when it has none. A link's arms
+            are all one kind.
+          enum: ["", weighted, sequential]
+        variants:
+          type: array
+          description: In rotation order, disabled arms included.
+          items:
+            $ref: "#/components/schemas/SplitVariant"
+        fallback:
+          $ref: "#/components/schemas/SplitVariant"
+
+    SplitResponse:
+      type: object
+      additionalProperties: false
+      required: [split, kinds, fallback]
+      properties:
+        split:
+          $ref: "#/components/schemas/Split"
+        kinds:
+          type: array
+          items: { type: string }
+          description: The arm kinds this version accepts.
+        fallback:
+          type: string
+          description: The kind name a fallback destination is created under.
+
+    CreateSplitVariantRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, url]
+      properties:
+        kind:
+          type: string
+          enum: [weighted, sequential, fallback]
+        url: { type: string, format: uri }
+        weight:
+          type: integer
+          format: int32
+          description: Weighted arms only. 0 parks an arm without deleting it.
+        enabled:
+          type: boolean
+          description: Defaults to true.
+
+    UpdateSplitVariantRequest:
+      type: object
+      additionalProperties: false
+      description: Absent fields are untouched. `kind` cannot be changed.
+      properties:
+        url: { type: string, format: uri }
+        weight: { type: integer, format: int32 }
+        enabled: { type: boolean }
+
+    DestinationSplit:
+      type: object
+      additionalProperties: false
+      required: [destination_id, url, weight, is_primary, clicks, unique_visitors, share]
+      properties:
+        destination_id: { type: string, format: uuid }
+        url: { type: string }
+        weight: { type: integer, format: int32 }
+        is_primary:
+          type: boolean
+          description: The link's own destination, where every unattributed click went.
+        removed:
+          type: boolean
+          description: >
+            Clicks attributed to a destination that has since been deleted. They
+            are reported rather than dropped.
+        clicks: { type: integer, format: int64 }
+        unique_visitors: { type: integer, format: int64 }
+        share:
+          type: number
+          format: double
+          description: This destination's percentage of the link's non-bot clicks.
+
     Link:
       type: object
       additionalProperties: false
@@ -2875,7 +3139,7 @@ components:
     LinkStats:
       type: object
       additionalProperties: false
-      required: [link_id, from, to, totals, series, dimensions, caveat]
+      required: [link_id, from, to, totals, series, dimensions, destinations, caveat]
       properties:
         link_id: { type: string, format: uuid }
         from: { type: string, format: date }
@@ -2894,6 +3158,15 @@ components:
             type: array
             items:
               $ref: "#/components/schemas/DimensionValue"
+        destinations:
+          type: array
+          nullable: true
+          description: >
+            The per-destination breakdown a split test is read from (M36). Null
+            for a link that has never sent a click anywhere other than its own
+            destination, which is every link on a default instance.
+          items:
+            $ref: "#/components/schemas/DestinationSplit"
         caveat:
           type: string
           description: The honest limitation of cookie-free counting, attached to the numbers it qualifies.

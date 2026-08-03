@@ -454,6 +454,160 @@
 </div>
 {{end}}
 
+{{if and .Identity (.Identity.Can "links.read")}}
+{{/* Split testing (M36). Same permissions as the rules above and for the same
+     reason: an arm is where a link points, expressed as a share of the traffic
+     rather than as a condition on who gets it. The `enabled` toggle on each row
+     is the feature flag — one click to park an arm that has started misbehaving,
+     with nothing deleted and no attribution lost. */}}
+<div class="mt-6 rounded-lg border border-line bg-raised p-6">
+  <div class="mb-1 flex items-center justify-between">
+    <h2 class="text-sm font-medium text-ink">Split test</h2>
+    {{if and .Split .Split.Kind}}<span class="text-xs uppercase tracking-wide text-subtle">{{.Split.Kind}}</span>{{end}}
+  </div>
+  <p class="mb-4 text-sm text-muted">
+    Applied to visitors <strong>no routing rule above claimed</strong>. A rule is a statement about who; a split is a statement about how many.
+  </p>
+
+  {{if and .Split .Split.Variants}}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-line text-left text-xs uppercase tracking-wide text-subtle">
+          <th class="py-2 pr-4 font-medium">Arm</th>
+          <th class="py-2 pr-4 font-medium">Sends to</th>
+          <th class="py-2 pr-4 font-medium">{{if eq $.Split.Kind "weighted"}}Weight{{else}}Turn{{end}}</th>
+          <th class="py-2 font-medium">State</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $i, $v := .Split.Variants}}
+        <tr class="border-b border-line{{if not $v.Enabled}} text-muted{{end}}">
+          <td class="py-2 pr-4 tabular-nums">{{add $i 1}}</td>
+          <td class="py-2 pr-4 break-all">{{$v.URL}}</td>
+          <td class="py-2 pr-4 tabular-nums">
+            {{if eq $.Split.Kind "weighted"}}{{$v.Weight}}{{if $v.Enabled}} <span class="text-xs text-subtle">({{printf "%.1f" $v.Share}}%)</span>{{end}}{{else}}{{add $i 1}} of {{len $.Split.Variants}}{{end}}
+          </td>
+          <td class="py-2">
+            {{if and $.Identity ($.Identity.Can "links.update")}}
+            <div class="flex items-center gap-2">
+              <form method="post" action="/links/{{$.Link.ID}}/split/{{$v.ID}}/toggle">
+                <input type="hidden" name="enabled" value="{{if $v.Enabled}}0{{else}}1{{end}}">
+                <button type="submit" class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-surface">{{if $v.Enabled}}Disable{{else}}Enable{{end}}</button>
+              </form>
+              <form method="post" action="/links/{{$.Link.ID}}/split/{{$v.ID}}/delete"
+                    hx-post="/links/{{$.Link.ID}}/split/{{$v.ID}}/delete"
+                    hx-confirm="Delete this arm? Clicks already attributed to it are kept and reported as a destination that no longer exists.">
+                <button type="submit" class="rounded-md px-2 py-1 text-xs font-medium text-danger-ink hover:bg-sunken">Delete</button>
+              </form>
+            </div>
+            {{else}}
+            {{if $v.Enabled}}Enabled{{else}}Disabled{{end}}
+            {{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="text-sm text-subtle">No split. Every visitor no rule claimed goes to the destination above.</p>
+  {{end}}
+
+  {{if and .Split .Split.Fallback}}
+  <p class="mt-4 text-sm text-muted">
+    Fallback: <span class="break-all">{{.Split.Fallback.URL}}</span>
+    {{if .Split.Fallback.Enabled}}<span class="text-xs text-subtle">&mdash; used instead of the link's own destination when nothing else applies</span>{{else}}<span class="text-xs text-subtle">&mdash; disabled</span>{{end}}
+    {{if and $.Identity ($.Identity.Can "links.update")}}
+    <span class="ml-2 inline-flex items-center gap-2 align-middle">
+      <form method="post" action="/links/{{$.Link.ID}}/split/{{.Split.Fallback.ID}}/toggle" class="inline">
+        <input type="hidden" name="enabled" value="{{if .Split.Fallback.Enabled}}0{{else}}1{{end}}">
+        <button type="submit" class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-surface">{{if .Split.Fallback.Enabled}}Disable{{else}}Enable{{end}}</button>
+      </form>
+      <form method="post" action="/links/{{$.Link.ID}}/split/{{.Split.Fallback.ID}}/delete" class="inline"
+            hx-post="/links/{{$.Link.ID}}/split/{{.Split.Fallback.ID}}/delete"
+            hx-confirm="Delete the fallback? Visitors it was catching will go to the link's own destination.">
+        <button type="submit" class="rounded-md px-2 py-1 text-xs font-medium text-danger-ink hover:bg-sunken">Delete</button>
+      </form>
+    </span>
+    {{end}}
+  </p>
+  {{end}}
+
+  {{if .Stats.Destinations}}
+  <div class="mt-6 border-t border-line pt-6">
+    <h3 class="mb-1 text-sm font-medium text-ink">Where the clicks went</h3>
+    <p class="mb-3 text-xs text-subtle">Non-bot clicks over the selected window, attributed to the destination that served them. This is the half of a split test that makes it a test rather than a coin flip.</p>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-line text-left text-xs uppercase tracking-wide text-subtle">
+            <th class="py-2 pr-4 font-medium">Destination</th>
+            <th class="py-2 pr-4 font-medium">Clicks</th>
+            <th class="py-2 pr-4 font-medium">Visitors</th>
+            <th class="py-2 font-medium">Share</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Stats.Destinations}}
+          <tr class="border-b border-line">
+            <td class="py-2 pr-4 break-all">
+              {{.URL}}
+              {{if .IsPrimary}}<span class="text-xs text-subtle">(the link's own destination)</span>{{end}}
+              {{if .Removed}}<span class="text-xs text-subtle">(removed)</span>{{end}}
+            </td>
+            <td class="py-2 pr-4 tabular-nums">{{.Clicks}}</td>
+            <td class="py-2 pr-4 tabular-nums">{{.UniqueVisitors}}</td>
+            <td class="py-2 tabular-nums">{{printf "%.1f" .Share}}%</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {{end}}
+
+  {{if and .Identity (.Identity.Can "links.update")}}
+  <form method="post" action="/links/{{.Link.ID}}/split" class="mt-6 border-t border-line pt-6">
+    <h3 class="mb-1 text-sm font-medium text-ink">Add an arm</h3>
+    <p class="mb-4 text-xs text-subtle">{{.SplitHelp}}</p>
+
+    <div class="grid gap-4 sm:grid-cols-4">
+      <div class="sm:col-span-2">
+        <label for="variant_url" class="block text-sm font-medium text-ink">Send visitors to</label>
+        <input id="variant_url" name="variant_url" type="url" required placeholder="https://example.com/variant-b"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      </div>
+      <div>
+        <label for="variant_kind" class="block text-sm font-medium text-ink">Kind</label>
+        <select id="variant_kind" name="variant_kind"
+                class="mt-1 block w-full rounded-md border border-line-strong bg-raised px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none">
+          {{range .SplitKinds}}<option value="{{.}}"{{if and $.Split (eq $.Split.Kind .)}} selected{{end}}>{{.}}</option>{{end}}
+          <option value="fallback">fallback</option>
+        </select>
+        <p class="mt-1 text-xs text-subtle">A link's arms are all one kind. A fallback is separate, and there is one.</p>
+      </div>
+      <div>
+        <label for="variant_weight" class="block text-sm font-medium text-ink">Weight</label>
+        <input id="variant_weight" name="variant_weight" type="number" min="0" max="{{.MaxWeight}}" value="100"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        <p class="mt-1 text-xs text-subtle">Weighted arms only. Shares are relative, so 60/40 and 600/400 are the same test.</p>
+      </div>
+    </div>
+
+    <div class="mt-4 flex items-center gap-4">
+      <label class="flex items-center gap-2 text-sm text-ink">
+        <input type="checkbox" name="variant_enabled" value="1" checked class="rounded border-line-strong">
+        <span>Enabled</span>
+      </label>
+      <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Add arm</button>
+    </div>
+  </form>
+  {{end}}
+</div>
+{{end}}
+
+
 {{if and .Identity (.Identity.Can "links.delete")}}
 <div class="mt-6 rounded-lg border border-danger-line bg-raised p-6">
   <h2 class="mb-1 text-sm font-medium text-danger-ink">Danger zone</h2>

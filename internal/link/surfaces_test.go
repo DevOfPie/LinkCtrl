@@ -53,19 +53,23 @@ var judgeCallers = map[string]string{
 
 // destinationSurfaces are the functions permitted to call checkDestination.
 //
-// Three as of M30, five as of M34 — and the two that M34 added are the case
-// this test was written in advance for. Its own comment predicted it by name:
-// "a later milestone adds a surface that writes a destination — a routing rule's
-// target (M34)". It did, the test failed on the first run, and the entries below
-// were added deliberately rather than the check being loosened. M34 declares M30
-// as a dependency and asserts the full tier check in TestRuleDestinationsGo
-// ThroughEveryTier.
+// Three as of M30, five as of M34, seven as of M36 — and every addition after
+// the third is the case this test was written in advance for. Its own comment
+// predicted both by name: "a later milestone adds a surface that writes a
+// destination — a routing rule's target (M34), a split-test variant (M36)". Each
+// time the test failed on the first run and the entries below were added
+// deliberately rather than the check being loosened. M34 and M36 both declare
+// M30 as a dependency and both assert the full tier check in their own tests —
+// TestRuleDestinationsGoThroughEveryTier and
+// TestVariantDestinationsGoThroughEveryTier.
 var destinationSurfaces = map[string]string{
 	"Create":          "internal/link/service.go",
 	"Update":          "internal/link/service.go",
 	"SetRootRedirect": "internal/link/domain_settings.go",
 	"CreateRule":      "internal/link/routing.go",
 	"UpdateRule":      "internal/link/routing.go",
+	"CreateVariant":   "internal/link/split.go",
+	"UpdateVariant":   "internal/link/split.go",
 }
 
 func TestEveryDestinationSurfaceGoesThroughTheCheck(t *testing.T) {

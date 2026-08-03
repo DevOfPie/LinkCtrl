@@ -617,11 +617,169 @@ type RoutingRule struct {
 	UpdatedAt  time.Time      `json:"updated_at"`
 }
 
-// RuleKindMatch is the only kind M34 builds. The column's CHECK also permits
-// weighted, sequential and fallback, which are M36's, and every query here
-// filters on this one so that shipping M36 cannot retroactively change what a
-// match rule does.
-const RuleKindMatch = "match"
+// The four rule kinds. `match` is M34's and is the only one that reads a
+// visitor's conditions; the other three are M36's and are chosen rather than
+// matched.
+//
+// The separation is what keeps M34's promise that shipping M36 could not
+// retroactively change what a match rule does: every query M34 wrote filters on
+// RuleKindMatch, every query M36 wrote excludes it, and no query reads both.
+const (
+	RuleKindMatch = "match"
+	// RuleKindWeighted is one arm of a weighted split. Its share of the traffic
+	// is its destination's `weight` over the sum of the enabled arms' weights,
+	// which is what makes "60/40" and "600/400" the same test.
+	RuleKindWeighted = "weighted"
+	// RuleKindSequential is one arm of a strict rotation (D8). Arms are visited
+	// in creation order, once each, forever, using a durable counter rather than
+	// anything held in a process.
+	RuleKindSequential = "sequential"
+	// RuleKindFallback is where a link sends anybody no rule claimed. At most one
+	// per link, and it stands in for the link's own destination without changing
+	// it — which is what makes turning it off a reversible act rather than an
+	// edit to the link.
+	RuleKindFallback = "fallback"
+)
+
+// SplitKinds are the kinds that make a link a split test. Order is the order the
+// dashboard offers them in.
+var SplitKinds = []string{RuleKindWeighted, RuleKindSequential}
+
+// IsVariantKind reports whether a kind is one M36 manages.
+func IsVariantKind(kind string) bool {
+	switch kind {
+	case RuleKindWeighted, RuleKindSequential, RuleKindFallback:
+		return true
+	default:
+		return false
+	}
+}
+
+// MaxDestinationWeight bounds one arm's weight.
+//
+// A ceiling rather than none, because the weights of a link's arms are summed on
+// the redirect path and the sum has to stay somewhere an int32 can hold it
+// however many arms there are. Ten thousand is four decimal places of a
+// percentage split, which is more resolution than a test with a readable result
+// will ever need.
+const MaxDestinationWeight = 10_000
+
+// MaxVariantsPerLink bounds a split.
+//
+// Below MaxRulesPerLink deliberately: a link may carry match rules *and* a
+// split, both travel in the same cached snapshot, and the two ceilings together
+// are what bound the payload. Eight arms is past the point where a split test
+// produces a result anybody can act on.
+const MaxVariantsPerLink = 8
+
+// Variant is one arm of a split test, as the API and the dashboard see it.
+//
+// The same shape as RoutingRule with the condition set replaced by a weight,
+// because it is the same row: a rule, a destination, an enabled flag. Kept as its
+// own type rather than adding two nullable fields to RoutingRule, so that a
+// client reading a rule list cannot be handed a weight that means nothing and a
+// client reading a split cannot be handed conditions that are never evaluated.
+type Variant struct {
+	ID     uuid.UUID `json:"id"`
+	LinkID uuid.UUID `json:"link_id"`
+	Kind   string    `json:"kind"`
+	URL    string    `json:"url"`
+	// Weight is the arm's share, and it is meaningful only for `weighted`. A
+	// sequential arm carries whatever weight its destination row has and nothing
+	// reads it, which is the honest encoding of "this kind does not use weights"
+	// — the alternative is a column that is NULL for half the rows in a table
+	// whose CHECK says it cannot be.
+	Weight int32 `json:"weight"`
+	// Share is Weight over the sum of the link's enabled weighted arms, as a
+	// percentage, or zero when the link's split is not weighted. Computed for
+	// the reader rather than stored, because it changes whenever any *other* arm
+	// changes and a stored copy would be wrong the moment one did.
+	Share     float64   `json:"share"`
+	Enabled   bool      `json:"enabled"`
+	Position  int32     `json:"position"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// Split is a link's whole split test.
+type Split struct {
+	// Kind is the kind of the link's arms — weighted or sequential — or "" when
+	// the link has none. A link's arms are all one kind; see ValidateSplitKind.
+	Kind     string    `json:"kind"`
+	Variants []Variant `json:"variants"`
+	// Fallback is the link's fallback rule, if it has one.
+	Fallback *Variant `json:"fallback,omitempty"`
+}
+
+// ValidateWeight refuses a weight the redirect path could not honour.
+//
+// Zero is permitted and means "this arm receives nothing" — a way to park an arm
+// of a running test without deleting it and losing the clicks already attributed
+// to its destination. Every arm at zero is refused by ValidateSplit, because a
+// split that can choose nothing is a link whose destination silently reverts.
+func ValidateWeight(weight int32) ValidationErrors {
+	if weight < 0 || weight > MaxDestinationWeight {
+		return ValidationErrors{{
+			Field: "weight", Code: "out_of_range",
+			Message: fmt.Sprintf("a weight must be between 0 and %d", MaxDestinationWeight),
+		}}
+	}
+	return nil
+}
+
+// ValidateSplitKind refuses a kind, and refuses mixing two.
+//
+// A link's arms are all weighted or all sequential, and that is a product
+// decision rather than a limitation: "40% of visitors, in rotation" has no
+// meaning, and letting the two kinds coexist would mean the redirect path
+// deciding which one wins — a precedence rule nobody asked for, applied to a
+// state nobody meant to create.
+func ValidateSplitKind(kind, existing string) ValidationErrors {
+	switch kind {
+	case RuleKindWeighted, RuleKindSequential:
+	default:
+		return ValidationErrors{{
+			Field: "kind", Code: "unsupported",
+			Message: "a split arm is `weighted` or `sequential`",
+		}}
+	}
+	if existing != "" && existing != kind {
+		return ValidationErrors{{
+			Field: "kind", Code: "conflict",
+			Message: fmt.Sprintf(
+				"this link's split is already %s; a link's arms are all one kind, "+
+					"because \"a share of the traffic, in rotation\" has no meaning. "+
+					"Remove the %s arms first.", existing, existing),
+		}}
+	}
+	return nil
+}
+
+// Shares fills in each arm's percentage of a weighted split.
+//
+// Returns the variants unchanged for a sequential split, where every enabled arm
+// receives one visitor in N and a percentage would be a second, less exact way of
+// saying so.
+func Shares(kind string, variants []Variant) []Variant {
+	if kind != RuleKindWeighted {
+		return variants
+	}
+	var total int32
+	for _, v := range variants {
+		if v.Enabled {
+			total += v.Weight
+		}
+	}
+	if total <= 0 {
+		return variants
+	}
+	for i := range variants {
+		if variants[i].Enabled {
+			variants[i].Share = float64(variants[i].Weight) * 100 / float64(total)
+		}
+	}
+	return variants
+}
 
 // MaxRulesPerLink bounds a link's rule list.
 //

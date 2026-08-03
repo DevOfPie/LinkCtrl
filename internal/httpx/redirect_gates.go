@@ -290,4 +290,13 @@ type Gatekeeper interface {
 	VerifyPassword(ctx context.Context, linkID uuid.UUID, password string) (bool, error)
 	Consume(ctx context.Context, linkID, workspaceID uuid.UUID, limit int64) (bool, error)
 	Secret(ctx context.Context, workspaceID uuid.UUID) ([]byte, error)
+	// Rotate advances a sequential split's durable counter (M36, D8).
+	//
+	// Here rather than in an interface of its own because it is the same table,
+	// the same service and the same nil check: a second dependency on this
+	// handler would be a second thing to wire and a second thing to forget,
+	// for one method that exists for exactly the reason the click budget does —
+	// a counter Redis cannot hold. The name of the interface is now slightly
+	// wider than "gatekeeper", and that is the cheaper of the two prices.
+	Rotate(ctx context.Context, linkID, workspaceID uuid.UUID) (int64, error)
 }

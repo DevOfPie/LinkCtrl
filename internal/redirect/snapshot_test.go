@@ -6,10 +6,26 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 )
 
 var testNow = time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
+
+// dests builds a destination list from URLs alone, giving each a distinct id.
+//
+// A helper rather than a literal per case because M36 gave a destination an
+// identity — click_events.destination_id — and the tests written before it are
+// about routing rather than about attribution. Distinct ids, because a list with
+// two identical ones is a payload the resolver cannot produce.
+func dests(urls ...string) []SnapshotDest {
+	out := make([]SnapshotDest, len(urls))
+	for i, u := range urls {
+		out[i] = SnapshotDest{ID: uuid.UUID{byte(i + 1)}, URL: u}
+	}
+	return out
+}
 
 func TestDecideCoversEveryState(t *testing.T) {
 	past := testNow.Add(-time.Hour)
@@ -106,7 +122,7 @@ func TestSnapshotRoundTrips(t *testing.T) {
 		// cache key moved to v2. A rule that survives encoding but loses its
 		// conditions would route every visitor to the rule's destination, which
 		// is the worst possible failure of this payload.
-		Destinations: []string{"https://example.com/gb", "https://example.com/de"},
+		Destinations: dests("https://example.com/gb", "https://example.com/de"),
 		Rules: []SnapshotRule{
 			{Dest: 0, Cond: domain.RuleConditions{
 				Country:   []string{"GB"},
@@ -278,7 +294,7 @@ func (s countingSubject) Country() string {
 func TestRouteTakesTheFirstMatch(t *testing.T) {
 	snap := &Snapshot{
 		URL:          "https://example.com/default",
-		Destinations: []string{"https://example.com/gb", "https://example.com/mobile"},
+		Destinations: dests("https://example.com/gb", "https://example.com/mobile"),
 		Rules: []SnapshotRule{
 			{Dest: 0, Cond: domain.RuleConditions{Country: []string{"GB"}}},
 			{Dest: 1, Cond: domain.RuleConditions{Device: []string{"mobile"}}},
@@ -287,20 +303,20 @@ func TestRouteTakesTheFirstMatch(t *testing.T) {
 
 	// Both rules match. The first one wins and the second is never reached.
 	got, ok := snap.Route(staticSubject{country: "GB", device: "mobile", now: testNow})
-	if !ok || got != "https://example.com/gb" {
+	if !ok || got.URL != "https://example.com/gb" {
 		t.Errorf("first match = (%q, %v), want the GB destination", got, ok)
 	}
 
 	// Only the second matches.
 	got, ok = snap.Route(staticSubject{country: "DE", device: "mobile", now: testNow})
-	if !ok || got != "https://example.com/mobile" {
+	if !ok || got.URL != "https://example.com/mobile" {
 		t.Errorf("second match = (%q, %v), want the mobile destination", got, ok)
 	}
 
 	// Neither. The caller falls back to the link's own destination, which is why
 	// Route reports *whether* a rule decided rather than returning a URL.
 	if got, ok = snap.Route(staticSubject{country: "DE", device: "desktop", now: testNow}); ok {
-		t.Errorf("no rule matches, but Route returned %q", got)
+		t.Errorf("no rule matches, but Route returned %q", got.URL)
 	}
 }
 
@@ -309,7 +325,7 @@ func TestRouteTakesTheFirstMatch(t *testing.T) {
 // indirection resolves.
 func TestRouteResolvesSharedDestinations(t *testing.T) {
 	snap := &Snapshot{
-		Destinations: []string{"https://example.com/eu"},
+		Destinations: dests("https://example.com/eu"),
 		Rules: []SnapshotRule{
 			{Dest: 0, Cond: domain.RuleConditions{Country: []string{"FR"}}},
 			{Dest: 0, Cond: domain.RuleConditions{Country: []string{"DE"}}},
@@ -317,8 +333,8 @@ func TestRouteResolvesSharedDestinations(t *testing.T) {
 	}
 	for _, country := range []string{"FR", "DE"} {
 		got, ok := snap.Route(staticSubject{country: country, now: testNow})
-		if !ok || got != "https://example.com/eu" {
-			t.Errorf("%s routed to (%q, %v)", country, got, ok)
+		if !ok || got.URL != "https://example.com/eu" {
+			t.Errorf("%s routed to (%q, %v)", country, got.URL, ok)
 		}
 	}
 }
@@ -330,20 +346,20 @@ func TestRouteResolvesSharedDestinations(t *testing.T) {
 func TestRouteSurvivesADanglingDestinationIndex(t *testing.T) {
 	snap := &Snapshot{
 		URL:          "https://example.com/default",
-		Destinations: []string{"https://example.com/gb"},
+		Destinations: dests("https://example.com/gb"),
 		Rules: []SnapshotRule{
 			{Dest: 7, Cond: domain.RuleConditions{Country: []string{"GB"}}},
 			{Dest: 0, Cond: domain.RuleConditions{Country: []string{"GB"}}},
 		},
 	}
 	got, ok := snap.Route(staticSubject{country: "GB", now: testNow})
-	if !ok || got != "https://example.com/gb" {
-		t.Errorf("a dangling index should be skipped, not honoured: (%q, %v)", got, ok)
+	if !ok || got.URL != "https://example.com/gb" {
+		t.Errorf("a dangling index should be skipped, not honoured: (%q, %v)", got.URL, ok)
 	}
 
 	only := &Snapshot{Destinations: nil, Rules: []SnapshotRule{{Dest: 0}}}
 	if got, ok := only.Route(staticSubject{now: testNow}); ok {
-		t.Errorf("a rule with no destination at all returned %q", got)
+		t.Errorf("a rule with no destination at all returned %q", got.URL)
 	}
 }
 
@@ -369,7 +385,7 @@ func TestSnapshotRuleNeeds(t *testing.T) {
 	}
 
 	snap := &Snapshot{
-		Destinations: []string{"https://example.com/a"},
+		Destinations: dests("https://example.com/a"),
 		Rules: []SnapshotRule{
 			{Dest: 0, Cond: domain.RuleConditions{City: []string{"Fictionbury"}}},
 			{Dest: 0, Cond: domain.RuleConditions{Returning: func() *bool { b := true; return &b }()}},
@@ -403,5 +419,166 @@ func TestARuleFreeLinkEncodesExactlyAsItDidBeforeM34(t *testing.T) {
 		if strings.Contains(string(b), key) {
 			t.Errorf("a link with no rules carries %s in its cached payload: %s", key, b)
 		}
+	}
+}
+
+// --- split testing (M36) -----------------------------------------------------
+
+// armSnapshot is a link whose only rules are split arms.
+func armSnapshot(kind string, urls ...string) *Snapshot {
+	s := &Snapshot{URL: "https://example.com/default", Status: "active"}
+	for i, u := range urls {
+		s.Destinations = append(s.Destinations, SnapshotDest{
+			ID: uuid.UUID{byte(i + 1)}, URL: u, Weight: int32(10 * (i + 1)),
+		})
+		s.Rules = append(s.Rules, SnapshotRule{Dest: i, Kind: kind})
+	}
+	return s
+}
+
+// TestSplitReturnsTheArmsInOrder is what the redirect path's two pickers are
+// handed.
+//
+// The order is the payload's order, which the query already fixed to
+// destination position — so this is also the test that nothing re-sorts it on
+// the way through, which is the property a rotation depends on entirely.
+func TestSplitReturnsTheArmsInOrder(t *testing.T) {
+	snap := armSnapshot(domain.RuleKindSequential,
+		"https://example.com/one", "https://example.com/two", "https://example.com/three")
+
+	kind, arms := snap.Split()
+	if kind != domain.RuleKindSequential {
+		t.Fatalf("kind = %q", kind)
+	}
+	for i, want := range []string{
+		"https://example.com/one", "https://example.com/two", "https://example.com/three",
+	} {
+		if arms[i].URL != want {
+			t.Errorf("arm %d = %q, want %q", i, arms[i].URL, want)
+		}
+		if arms[i].ID != (uuid.UUID{byte(i + 1)}) {
+			t.Errorf("arm %d carries id %v; a click could not be attributed to it", i, arms[i].ID)
+		}
+	}
+
+	weights := snap.Weights(arms)
+	if len(weights) != 3 || weights[0] != 10 || weights[2] != 30 {
+		t.Errorf("Weights = %v, want the arms' own weights in the arms' order", weights)
+	}
+}
+
+// TestSplitIgnoresMatchRulesAndTheFallback is what keeps the three kinds from
+// contaminating each other while sharing one slice.
+func TestSplitIgnoresMatchRulesAndTheFallback(t *testing.T) {
+	snap := &Snapshot{
+		URL: "https://example.com/default",
+		Destinations: []SnapshotDest{
+			{ID: uuid.UUID{1}, URL: "https://example.com/gb"},
+			{ID: uuid.UUID{2}, URL: "https://example.com/arm", Weight: 5},
+			{ID: uuid.UUID{3}, URL: "https://example.com/catch"},
+		},
+		// The fallback sits ahead of the arm, because arms are ordered by
+		// destination position and a fallback created first really does come
+		// first. Anything that treated "not a match rule" as "an arm" would take
+		// the fallback for the split's kind here.
+		Rules: []SnapshotRule{
+			{Dest: 0, Cond: domain.RuleConditions{Country: []string{"GB"}}},
+			{Dest: 2, Kind: domain.RuleKindFallback},
+			{Dest: 1, Kind: domain.RuleKindWeighted},
+		},
+	}
+
+	kind, arms := snap.Split()
+	if kind != domain.RuleKindWeighted || len(arms) != 1 ||
+		arms[0].URL != "https://example.com/arm" {
+		t.Errorf("Split = (%q, %+v); only the weighted arm belongs to the split", kind, arms)
+	}
+
+	fb, ok := snap.Fallback()
+	if !ok || fb.URL != "https://example.com/catch" {
+		t.Errorf("Fallback = (%+v, %v)", fb, ok)
+	}
+
+	// And the match rule still routes, unaffected by either.
+	got, ok := snap.Route(staticSubject{country: "GB", now: testNow})
+	if !ok || got.URL != "https://example.com/gb" {
+		t.Errorf("the match rule stopped routing once arms shared its slice: (%q, %v)", got.URL, ok)
+	}
+
+	// RuleNeeds must not ask domain.NeedsOf about an arm's empty condition set.
+	if needs := snap.RuleNeeds(); !needs.Country || needs.City || needs.Returning {
+		t.Errorf("RuleNeeds = %+v; it must read the match rules and nothing else", needs)
+	}
+}
+
+// TestSplitIsEmptyForALinkWithNoArms is the fast path, asserted on the values
+// the redirect path actually branches on.
+func TestSplitIsEmptyForALinkWithNoArms(t *testing.T) {
+	for name, snap := range map[string]*Snapshot{
+		"no rules at all": {URL: "https://example.com/x"},
+		"only match rules": {
+			URL:          "https://example.com/x",
+			Destinations: dests("https://example.com/gb"),
+			Rules:        []SnapshotRule{{Dest: 0, Cond: domain.RuleConditions{Country: []string{"GB"}}}},
+		},
+		"nil": nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if kind, arms := snap.Split(); kind != "" || arms != nil {
+				t.Errorf("Split = (%q, %+v), want nothing", kind, arms)
+			}
+			if _, ok := snap.Fallback(); ok {
+				t.Error("Fallback reported one")
+			}
+		})
+	}
+}
+
+// TestSplitSurvivesAMixedPayload is the "hot path must not panic on a payload it
+// did not write" rule, applied to the one state the service refuses to create.
+func TestSplitSurvivesAMixedPayload(t *testing.T) {
+	snap := &Snapshot{
+		Destinations: []SnapshotDest{
+			{ID: uuid.UUID{1}, URL: "https://example.com/w", Weight: 10},
+			{ID: uuid.UUID{2}, URL: "https://example.com/s"},
+			{ID: uuid.UUID{3}, URL: ""},
+		},
+		Rules: []SnapshotRule{
+			{Dest: 0, Kind: domain.RuleKindWeighted},
+			{Dest: 1, Kind: domain.RuleKindSequential},
+			{Dest: 9, Kind: domain.RuleKindWeighted},
+			{Dest: 2, Kind: domain.RuleKindWeighted},
+		},
+	}
+	kind, arms := snap.Split()
+	if kind != domain.RuleKindWeighted {
+		t.Errorf("kind = %q; the first arm found decides it", kind)
+	}
+	if len(arms) != 1 || arms[0].URL != "https://example.com/w" {
+		t.Errorf("arms = %+v; the other kind, the dangling index and the empty URL "+
+			"must all be skipped rather than honoured", arms)
+	}
+}
+
+// TestALinkWithoutArmsEncodesAsItDidBefore is the compatibility claim at the
+// payload level.
+//
+// M36 changed the destination list from []string to a list of objects. A link
+// with no rules must still encode to exactly the bytes it encoded to before,
+// because omitempty on a nil slice is what makes the change cost such a link
+// nothing — and such a link is the overwhelming majority.
+func TestALinkWithoutArmsEncodesAsItDidBefore(t *testing.T) {
+	snap := &Snapshot{
+		LinkID: uuid.UUID{1}, WorkspaceID: uuid.UUID{2},
+		URL: "https://example.com/x", Status: "active",
+	}
+	b, err := snap.encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `{"i":"01000000-0000-0000-0000-000000000000",` +
+		`"w":"02000000-0000-0000-0000-000000000000","u":"https://example.com/x","s":"active"}`
+	if string(b) != want {
+		t.Errorf("a link with no rules encodes as\n  %s\nwant\n  %s", b, want)
 	}
 }

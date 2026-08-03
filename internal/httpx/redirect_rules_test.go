@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
@@ -45,10 +47,13 @@ func ruleRequest(t *testing.T, target, ua, lang, referer string) *http.Request {
 
 func ruleSnapshot(rules ...redirect.SnapshotRule) *redirect.Snapshot {
 	return &redirect.Snapshot{
-		URL:          "https://example.com/default",
-		Status:       "active",
-		Destinations: []string{"https://example.com/gb", "https://example.com/mobile"},
-		Rules:        rules,
+		URL:    "https://example.com/default",
+		Status: "active",
+		Destinations: []redirect.SnapshotDest{
+			{ID: uuid.UUID{1}, URL: "https://example.com/gb"},
+			{ID: uuid.UUID{2}, URL: "https://example.com/mobile"},
+		},
+		Rules: rules,
 	}
 }
 
@@ -109,10 +114,10 @@ func TestRouteEvaluatesAgainstARealRequest(t *testing.T) {
 			snap := ruleSnapshot(redirect.SnapshotRule{Dest: 0, Cond: tc.cond})
 			got, ok := h.route(tc.req, snap, now)
 			if ok != tc.want {
-				t.Errorf("route matched = %v, want %v (destination %q)", ok, tc.want, got)
+				t.Errorf("route matched = %v, want %v (destination %q)", ok, tc.want, got.URL)
 			}
-			if ok && got != "https://example.com/gb" {
-				t.Errorf("route returned %q", got)
+			if ok && got.URL != "https://example.com/gb" {
+				t.Errorf("route returned %q", got.URL)
 			}
 		})
 	}
@@ -181,7 +186,7 @@ func TestAGeographicRuleNeverMatchesWithoutADatabase(t *testing.T) {
 	} {
 		if got, ok := h.route(ruleRequest(t, "/x", chromeMobileUA, "", ""),
 			ruleSnapshot(redirect.SnapshotRule{Dest: 0, Cond: cond}), time.Now()); ok {
-			t.Errorf("%+v matched with no database, routing to %q", cond, got)
+			t.Errorf("%+v matched with no database, routing to %q", cond, got.URL)
 		}
 	}
 }

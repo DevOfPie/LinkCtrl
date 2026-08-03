@@ -412,6 +412,119 @@ Thirteen cached runs now read 100%, 100%, 100%,
 — the last of those being the gated configuration, which is a different path
 rather than a regression in this one.
 
+### Re-measured for M36 (2026-08-03)
+
+[M36](build-notes/phase-details/m36.md) divides a link's traffic between several
+destinations, and the two kinds it ships cost wildly different amounts. So this
+section reports **three** columns rather than one: a link with no split, the same
+links carrying a **weighted** split, and the same links carrying a **sequential**
+one. The split is the point — a weighted arm is arithmetic over the cached
+snapshot and a sequential arm is a synchronous Postgres write, and averaging them
+into one figure would hide the only number an operator needs.
+
+Three cached runs on the same image, differing **only** in what the seeded links
+carry. Both cache tiers were emptied and the container restarted before each,
+because a snapshot written under one configuration carries it.
+
+They were run in the order sequential, weighted, then no split, each run adding
+its own 240,000 clicks to the table — so the **baseline column ran against the
+largest dataset of the three**, which is the direction that cannot flatter it.
+The columns are presented in the order they are easiest to read rather than the
+order they were taken.
+
+| | Target | **No split** | **Weighted, 3 arms** | **Sequential, 3 arms** |
+| --- | --- | --- | --- | --- |
+| Cached redirect, server-side | p99 < 20ms | **100% of 240,001 under 20ms**; **100% under 0.5ms** | **100% of 240,001 under 20ms**; **100% under 0.5ms** | 99.505% of 239,984 under 20ms; 98.684% under 10ms; 92.141% under 5ms; 38.761% under 2.5ms; **0% under 1ms** |
+| Cached redirect, generator-side | — | avg **97.89µs**, median 90.74µs, p(95) 125.23µs, max 10.93ms | avg **91.96µs**, median 86.67µs, p(95) 117.47µs, max 6.81ms | avg **3.38ms**, median 3.09ms, p(95) 5.60ms, max 59.27ms |
+| Sustained rate | 2,000 rps for 2m | 2,000.0 rps, 240,001 requests, zero failures | 2,000.0 rps, 240,001 requests, zero failures | 1,999.8 rps, 239,984 requests, zero failures, 17 dropped iterations |
+| Dataset | 100k links, 5M events | 100,000 links; the click table grew from 6.2M to 7.2M rows across the three runs, having been carried past the seeded 5M by the load runs themselves | same, 15,000 arms on the 5,000 hot aliases | same |
+| Cache mix | hits only | 240,001 memory, 0 redis, 0 database | 240,001 memory, 0 redis, 0 database | 239,984 memory, 0 redis, 0 database |
+| Redirect pool | — | 0 acquire waits | 0 acquire waits | 0 acquire waits |
+
+**The weighted column is indistinguishable from no split at all**, and it is
+slightly faster than the baseline — 91.96µs against 97.89µs at the mean — which
+is run-to-run noise rather than an improvement and should be read as "the same
+number twice". That is the claim m36.md makes and it is structural: a weighted
+arm is chosen by summing three integers already inside the cached snapshot,
+drawing one random number below the total, and walking. No query, no lock, no
+shared state — `math/rand/v2`'s top-level source is per-P and takes no mutex, so
+100 concurrent VUs contend for nothing.
+
+**The sequential column is the cost D8 accepted, measured.** About 3.1ms at the
+median against 87µs weighted: **roughly thirty-six times slower**, and 0.495% of
+requests — 1,187 of 239,984 — landed over the 20ms line. Every one of those
+requests performed a synchronous `INSERT … ON CONFLICT DO UPDATE` against
+`link_click_budget`, and 5,000 hot aliases means 5,000 rows taking about 48
+updates each inside two minutes; the run advanced the rotation counters 239,984
+times across those rows. Concurrent requests for the same alias serialise on that
+row lock, and that serialisation **is** the strict global order the decision
+asked for — the latency is the guarantee being paid for, not overhead beside it.
+
+It is also the one column that could not hold the offered rate: k6 dropped 17
+iterations and landed at 1,999.8 rps rather than 2,000.0. That is the same thing
+the latency says, seen from the generator's side.
+
+This is the same shape and very nearly the same magnitude as [M35](#re-measured-for-m35-2026-08-03)'s
+gated column (3.38ms median, 0.257% over 20ms), which is what it should be: it is
+the same table, the same upsert, the same row lock, in a different column. Two
+features, one durable-counter cost, paid only by the links that ask for it.
+
+**A link that asks for neither pays nothing**, and the first column is the SLO's
+own claim re-verified on this build: 100% of cached redirects under half a
+millisecond against a 20ms budget. `Snapshot.Split()` returns on a length check
+over a slice that is nil for every link on a default instance.
+
+#### What changed under the first column, and why it still reads the same
+
+M36 bumped `CacheKeyVersion` to v3 and changed the cached destination list from
+`[]string` to a list of objects carrying an id and a weight. Neither is visible
+here, and the reason is that both fields are `omitempty`: a link with no rules
+and no split encodes to exactly the bytes it encoded to before, which
+`TestALinkWithoutArmsEncodesAsItDidBefore` asserts on the payload rather than
+inferring from the latency.
+
+The bump itself costs a cold cache once, on upgrade. It does not appear in this
+measurement because every run above flushed both tiers deliberately, which is
+what all sixteen cached runs in this document have done.
+
+#### What this run did **not** measure
+
+**A fallback.** It is one more entry in the same slice and one more string
+comparison in the same walk, reached only when no rule matched and no arm was
+chosen. There is no configuration in which it costs more than the weighted
+column, so a fourth run would have measured the same number a fourth time.
+
+**The interaction between a sequential split and a click budget.** They are two
+upserts against the same row in the same statement-per-request shape, so a link
+carrying both pays the sequential column's cost twice. Nothing was run for it
+because the arithmetic is not in doubt and the combination is rare; what *is*
+asserted, in `TestSequentialAndAClickBudgetDoNotShareACounter`, is that the two
+counters are separate columns — sharing one would have made a one-time link with
+a rotation dead on its first visit.
+
+Taken on image `sha256:210c29aba796ac…` (`linkctrl:test`, built 2026-08-03 from
+the M36 working tree at `v0.1.0-69-g541b568-dirty`). **The image was rebuilt from
+the tree immediately before these runs and the three runs share it**, which is
+the whole reason the figures below the table can be compared with each other —
+an earlier draft of this section was taken on an image that predated a change to
+`internal/redirect/snapshot.go` and has been replaced rather than amended.
+
+**Same host as [M35](#re-measured-for-m35-2026-08-03) and a different one from
+everything above it** — Linux with Docker running natively, rather than the
+Windows 11 / Docker Desktop / WSL2 machine that produced the runs from the first
+measurement through M34. The comparison that carries this milestone's claim is
+**between these three columns**, which were run minutes apart on the same machine
+and the same image. The first column is also directly comparable to M35's ungated
+column (97.89µs against 88.44µs at the mean, same host, an hour apart on a click
+table that these runs have since grown), and that comparison is offered because
+it is like-for-like; nothing here should be read against M34's figures or
+anything earlier.
+
+Sixteen cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%, 100%,
+100%, 100%, 100%, 100%, 99.743%, 100%, 100% and 99.505% under 20ms — the last of
+those being the sequential configuration and the one before the gated one, both
+different paths rather than regressions in this one.
+
 ## Reproducing it
 
 ```sh
@@ -466,6 +579,35 @@ in that section's table; they are inserted for `ld0`–`ld4999`, each with a
 apply for the same reason. The comparison run is the identical aliases with
 `DELETE FROM routing_rules` and the rule destinations removed, so the only thing
 that changes between the two columns is whether the links carry rules.
+
+Split testing (M36) is seeded with SQL for the reason routing rules are: what
+the measurement needs is a *specific arrangement*, not "some arms". Three arms
+per alias, weighted 60/30/10, on `ld0`–`ld4999`, each a `destinations` row above
+position 0 with a `routing_rules` row of the matching kind pointing at it:
+
+```sh
+docker compose exec postgres psql -U linkctrl -d linkctrl <<'EOF'
+INSERT INTO destinations (id, link_id, workspace_id, url, url_host, position, weight)
+SELECT gen_random_uuid(), l.id, l.workspace_id,
+       'https://slo.example.com/arm' || a.n || '/' || l.alias,
+       'slo.example.com', a.n, a.w
+  FROM links l
+ CROSS JOIN (VALUES (1, 60), (2, 30), (3, 10)) AS a(n, w)
+ WHERE l.alias ~ '^ld[0-9]{1,4}$' AND substring(l.alias from 3)::int < 5000;
+
+INSERT INTO routing_rules (id, link_id, workspace_id, destination_id, priority, conditions, kind, enabled)
+SELECT gen_random_uuid(), d.link_id, d.workspace_id, d.id, 100, '{}'::jsonb, 'weighted', true
+  FROM destinations d WHERE d.position > 0 AND d.url_host = 'slo.example.com';
+EOF
+docker compose exec redis redis-cli FLUSHALL
+docker compose restart app
+make load
+```
+
+The sequential column is the identical rows with `UPDATE routing_rules SET kind =
+'sequential'`, and the same flush and restart apply for the same reason: the
+snapshots written under the previous kind carry it. The comparison run is the
+same aliases with both inserts undone.
 
 `scripts/load-test.sh` reports both halves of the measurement. The server's
 histogram is cumulative since boot, so it is sampled before and after and

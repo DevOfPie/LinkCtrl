@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
@@ -18,6 +19,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/postgres"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
+	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 )
 
 // The demo dataset. Distinct from `lctl seed`, which exists to make the redirect
@@ -197,6 +199,81 @@ type demoOptions struct {
 	prng   uint64
 }
 
+// demoActor resolves who the demo is seeded as, and — the part that matters —
+// where.
+//
+// Not plain auth.IdentityForEmail. That answers "where would this person land if
+// they signed in", and the answer is a *preference*: the switcher M25 built
+// records it whenever somebody clicks through the demo, and a run that stops
+// between the seeder entering the second workspace and leaving it records it
+// too. The demo dataset must not move when that changes.
+//
+// It moved once, and the failure is the reason this function exists. demoReset
+// scopes its link, tag and destination deletes to the actor's workspace while
+// everything else it removes is scoped to the organization. An actor resolving
+// into some other workspace therefore does not seed a harmless second copy of
+// the demo: it commits a reset that takes away the accounts, the second
+// workspace and the click history while leaving the catalogue standing, and then
+// the first link it creates collides with the copy of itself the reset walked
+// past — alias uniqueness is per domain (00300_links.sql), not per workspace.
+// `make demo-update` failed exactly that way at M36, and the reset had already
+// committed by the time it did.
+//
+// The stable answer is the organization's oldest live workspace: the one the
+// account was given when it claimed the instance, and where every previous run
+// therefore put the catalogue. That is also ResolveWorkspaceForUser's own last
+// tiebreak — this makes it unconditional instead of reachable only when no
+// preference is set.
+func demoActor(ctx context.Context, pool *pgxpool.Pool, authSvc *auth.Service,
+	email string,
+) (*auth.Identity, error) {
+	actor, err := authSvc.IdentityForEmail(ctx, email)
+	if err != nil {
+		return nil, fmt.Errorf("resolve user %s: %w", email, err)
+	}
+	// D36: an account can belong to no organization at all. Nothing can be
+	// seeded for one, and the failure belongs to whatever asks for a workspace
+	// next rather than here.
+	if actor.OrgID == uuid.Nil {
+		return actor, nil
+	}
+
+	var wsID uuid.UUID
+	const oldest = `
+		SELECT id FROM workspaces
+		 WHERE organization_id = $1 AND deleted_at IS NULL
+		 ORDER BY created_at, id
+		 LIMIT 1`
+	if err := pool.QueryRow(ctx, oldest, actor.OrgID).Scan(&wsID); err != nil {
+		return nil, fmt.Errorf("find the demo workspace for %s: %w", email, err)
+	}
+	if actor.WorkspaceID == wsID {
+		return actor, nil
+	}
+
+	// Same deliberate step around SwitchWorkspace that demoSeeder.refresh and
+	// demoSeeder.actAs take, and for the same reason: that call is session-only
+	// by design, and there is no session here.
+	if _, err := dbgen.New(pool).SetLastWorkspaceForUser(ctx, dbgen.SetLastWorkspaceForUserParams{
+		UserID: actor.UserID, WorkspaceID: wsID,
+	}); err != nil {
+		return nil, fmt.Errorf("place %s in the demo workspace: %w", email, err)
+	}
+	if actor, err = authSvc.IdentityForEmail(ctx, email); err != nil {
+		return nil, fmt.Errorf("resolve user %s: %w", email, err)
+	}
+	if actor.WorkspaceID != wsID {
+		// Reachable one way: the account has pinned a default workspace, which
+		// outranks last-used. Refusing is the point — the alternative is the
+		// half-reset above, which destroys data and reports success.
+		return nil, fmt.Errorf(
+			"%s resolves into workspace %s, but the demo's own workspace is %s; "+
+				"unpin the default workspace on that account before seeding",
+			email, actor.WorkspaceID, wsID)
+	}
+	return actor, nil
+}
+
 func demoSeed(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, opt demoOptions) error {
 	authSvc := auth.NewService(pool, auth.ServiceConfig{
 		Params: auth.Params{
@@ -214,9 +291,9 @@ func demoSeed(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, opt de
 				"or pass --user: %w", err)
 		}
 	}
-	actor, err := authSvc.IdentityForEmail(ctx, email)
+	actor, err := demoActor(ctx, pool, authSvc, email)
 	if err != nil {
-		return fmt.Errorf("resolve user %s: %w", email, err)
+		return err
 	}
 
 	catalogue := demoCatalogue()
@@ -229,8 +306,8 @@ func demoSeed(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, opt de
 		// The reset deleted the second workspace, and with it whatever the last
 		// run pinned as this account's last-used one. Re-resolving keeps the
 		// identity below pointing at a workspace that still exists.
-		if actor, err = authSvc.IdentityForEmail(ctx, email); err != nil {
-			return fmt.Errorf("resolve user %s: %w", email, err)
+		if actor, err = demoActor(ctx, pool, authSvc, email); err != nil {
+			return err
 		}
 	}
 

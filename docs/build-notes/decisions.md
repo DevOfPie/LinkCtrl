@@ -114,6 +114,8 @@ file. Append a row when you append an entry.
 | [M35, the one POST the redirect tree is allowed](#2026-08-02--m35-the-one-post-the-redirect-tree-is-allowed) | D53 — the signed-off tripwire amendment, and why the CSRF waiver rests on the POST issuing nothing rather than on a general claim; the condition attached to it if an unlock ever persists; D54 — per-alias and per-address limiting on M24's limiter, why per-alias is what closes the distributed-guessing variant, and why it fails open |
 | [M35, what a link may demand before it redirects](#2026-08-02--m35-what-a-link-may-demand-before-it-redirects) | The tripwire amendment as a diff, and the three lines around it that did not move; why the click budget is a table and not a column on `links`; why the counter is one statement and what the sabotage had to do before the race showed; the signed-URL message and what each of its four fields closes; the empty box that cannot mean "clear"; why the challenge is 200 and not 401; the permission that was not minted, and which limb of D18 that matched |
 | [M35, the numbering collision this milestone caused and repaired](#2026-08-03--m35-the-numbering-collision-this-milestone-caused-and-repaired) | Why `D49`/`D50` meant two things for the length of one build; the renumber to D53/D54 and what it did not touch; why Plan.md's table was stale in the direction that hides a collision; F66 |
+| [M36, dividing one link's traffic without moving anybody else's](#2026-08-03--m36-dividing-one-links-traffic-without-moving-anybody-elses) | D55 weights on the destination; D56 the evaluation order, one kind per link, no stickiness; D57 the rotation is its own column; D58 `destination_id` nullable, unreferenced, appended to the COPY list; D59 v3; D60 the breakdown reads a rollup pass of its own |
+| [M36, the demo update that deleted half a demo](#2026-08-03--m36-the-demo-update-that-deleted-half-a-demo) | D61 — the demo is seeded into the organization's oldest workspace rather than wherever the owner last was, and why a reset scoped two ways is worse than one scoped wrongly; D62 — split attribution buckets on the visitor, because bucketing on the click id was never deterministic; the idempotency check that seeded twice from the one state that could not fail |
 
 ---
 
@@ -9249,3 +9251,359 @@ the direction that produces a silent collision. Reading **both** files, or
 reading this one alone, is the cheap habit; it is written down here rather than
 turned into a rule, because F66 may close by making `Plan.md` true again, and
 then the habit stops being necessary.
+
+
+## 2026-08-03 — M36, dividing one link's traffic without moving anybody else's
+
+[M36](phase-details/m36.md) is the third milestone in a row to touch the redirect
+path, and the first to make *where a link sends somebody* a question with more
+than one answer for the same visitor. Six decisions, **D55 through D60**. The
+milestone file asks for one of them by name — where weights live — and the other
+five are the ones a reader of the diff would otherwise have to reconstruct.
+
+### D55 — weights live on the destination, not on the rule
+
+`destinations.weight` has existed since migration 00300, `NOT NULL DEFAULT 100
+CHECK (weight >= 0)`, with a comment naming Phase 2 weighted routing as its
+reason. M36 is that reason arriving, so no migration creates it; what m36.md asks
+for is the decision behind having put it there, recorded now that something reads
+it.
+
+A weight is a property of **the place traffic goes**, not of the sentence that
+sends it there. Three consequences follow and each of them is why the column is
+where it is: an arm keeps its weight when somebody fixes a typo in its URL,
+because the URL and the weight are the same row and the edit is one UPDATE; the
+redirect path reads both out of one row rather than joining two; and the
+per-destination breakdown can put the configured weight beside the observed
+share without a second lookup, which is the reading that tells somebody whether
+their test is working.
+
+The alternative — a `weight` column on `routing_rules` — would have put the
+number beside the `kind` that gives it meaning, which is the one argument for it.
+It loses on the edit case: a rule and its destination are two rows written in one
+transaction, and splitting the arm's identity across both means every read of "an
+arm" is a join and every write is two statements that can disagree.
+
+**Weights are relative, never percentages.** 60/40 and 600/400 are the same test.
+That is what lets a third arm be added without editing the first two, which is
+the operation somebody running a test actually performs; percentages would make
+every addition a re-balancing exercise with a validation rule about summing to a
+hundred. The percentage a person wants to read is computed for the reader —
+`domain.Shares` — against the **enabled** arms, because a parked arm receives
+nothing and including it in the denominator would report a share nobody gets.
+
+### D56 — a link's split is one kind, and it applies to whoever no rule claimed
+
+The evaluation order on the redirect path, in full:
+
+1. **Match rules** ([M34](phase-details/m34.md)), in priority order, first match
+   wins. Unchanged.
+2. Otherwise **the split** — the link's enabled arms, weighted or sequential.
+3. Otherwise **the fallback**, if the link has one.
+4. Otherwise **the link's own destination**, which is what every link did before
+   any of this existed.
+
+**A matching rule beats a split**, and the reason is what the two things are: a
+rule is a statement about *who* — this visitor, in this country, on this device —
+and a split is a statement about *how many*. A rule names the visitor in front of
+you; a split does not know anything about them. Reversing it would mean a
+carefully written country rule being overridden by a percentage, which is not a
+precedence anybody would configure on purpose.
+
+**A link's arms are all one kind**, enforced by `domain.ValidateSplitKind` at the
+one door that creates them. "40% of visitors, in rotation" has no meaning, and
+permitting the mix would have meant the redirect path carrying a precedence rule
+between weighted and sequential — a rule invented to resolve a state nobody
+intended to create. Refusing it costs one validation error and removes a branch
+from the hot path.
+
+**A kind cannot be changed on an existing arm**, and there is no convert button.
+Turning a running weighted test into a rotation changes what its own history
+means: the clicks already attributed were produced under a different selection
+rule, and a chart that spans the change is two experiments drawn as one. The
+answer is to remove the arms and start a test that is honestly a new one, and the
+cost of that — losing the association between the old clicks and the new arms —
+is in `Plan.md`'s limitations table rather than hidden.
+
+**A fallback is not an arm.** It is a fourth kind, at most one per link, and it
+stands in for the link's own destination without changing it. That is the whole
+of its value: switching it off puts the link back exactly where it was, so
+redirecting a campaign's traffic somewhere temporary is a reversible act rather
+than an edit to the link that somebody has to remember to undo.
+
+**No stickiness, and it is a decision rather than an omission.** A visitor
+following the same link twice may see two arms. The milestone file does not ask
+for stickiness and this is coherent for a link-level test: each click is an
+independent trial, and which arm converted is answered by
+`click_events.destination_id` rather than by remembering people. Building it
+would need either a cookie — which this redirect path refuses to set, and which
+D2 already refused for the routing conditions — or a per-visitor lookup on a path
+whose whole design is that it performs none. What it costs is real and is in the
+limitations table: somebody who needs per-visitor consistency does not have it
+and cannot build it from what is exposed.
+
+### D57 — the rotation is a second column on the budget table, not the budget
+
+D8 chose **strict global order** for sequential routing, "via M35's durable
+counter". Reuse is the table and the mechanism — `link_click_budget`, one upsert
+per request, serialising on the row lock — and it is **not** the `consumed`
+column. Migration 02200 adds `rotation` beside it.
+
+The two numbers mean different things. `consumed` is a budget: M35's
+`ConsumeClickBudget` refuses to pass the link's limit and the caller answers 410.
+A rotation is not spent; it advances, and there is nothing for it to run out of.
+
+Sharing one column is not merely untidy, it is broken, and the failure is
+concrete: a **one-time link carrying a sequential split**. The rotation runs
+where the destination is decided, which is before the gates. The first visitor
+would advance the shared counter to 1; the budget gate would then find the single
+click already spent and answer 410. The link would be dead on the visit that was
+supposed to work, and the cause would be two features that never mention each
+other. `TestSequentialAndAClickBudgetDoNotShareACounter` is that scenario, and it
+fails against the shared-column version.
+
+`rotation` is monotonic and never reset, like `consumed`. Adding or removing an
+arm **re-phases** the rotation rather than restarting it, because the arm is
+chosen by position modulo the number of enabled arms. There is no correct answer
+to "who was next" once the list has changed underneath, and pretending there is
+would mean storing a cursor that a concurrent edit could invalidate.
+
+**A failure to advance is a 503, never a guess.** Choosing an arm anyway would
+make the order approximate, which is the thing D8 named as a support ticket;
+falling back to the link's own destination would silently retire the test the
+moment the database hiccuped. This is the same direction M35's budget failure
+takes and for the same reason.
+
+**A request that is later refused has still spent its position**, and that is
+recorded rather than fixed. The arm is chosen before the deep-link join and
+before the gates, so a 404 for an unforwardable path or a failed password check
+advances the counter. The distribution is unaffected — whether a gate passes is
+independent of which arm came up — and the alternative is deciding the
+destination twice, or moving the gates ahead of the join and spending a one-time
+link's click on a request that was about to 404 anyway. M35's ordering is the
+stronger constraint and it wins.
+
+The cost is measured rather than asserted: 3.1ms at the median against 87µs for a
+weighted split on the same run, 0.495% of requests over the 20ms line, in
+[docs/slo.md](../slo.md). That is the same shape and nearly the same magnitude as
+M35's gated column, which is what it should be — the same table, the same upsert,
+the same row lock, a different column.
+
+### D58 — `click_events.destination_id`: nullable, unreferenced, NULL means the link's own destination
+
+Three properties, and each of them is a decision about the highest-write table in
+the system.
+
+**Nullable rather than backfilled.** Every click recorded before this column
+existed went to the link's own destination, so a backfill would be writing an id
+nothing measured; and every click on a link with no rules and no split still goes
+there, so a default would be a per-row copy of a fact `links.primary_destination_id`
+already carries. NULL is therefore load-bearing rather than a gap, and the
+breakdown reads it as the link's own destination.
+
+**No foreign key.** `click_events` is partitioned and written by binary COPY; a
+reference would put a lookup on every row of every batch and would make deleting
+an arm take a lock against the whole click history. The consequence is that
+deleting an arm leaves rows naming an id that no longer resolves — and those rows
+are **reported** as *a destination that no longer exists* rather than dropped,
+because a running test's totals must not change because somebody tidied up.
+
+**Appended to the COPY column list, not inserted beside `link_id`.** It reads
+better beside `link_id` and it is last anyway. `pgx.CopyFrom` sends values by
+position: a column list and a row slice that disagree about order produce no
+error, they write a browser into a country and a latency into a language,
+silently and forever. Appending leaves the sixteen positions that predate it
+untouched, so the edit that added the column could not shift any of them. The
+milestone named this as its risk and it gets two guards rather than a comment —
+`TestCopyRowsMatchTheColumnList` compares the widths, and
+`TestClicksCarryTheDestinationTheyWereSentTo` writes a click through the real
+pipeline and reads it back **column by column**, because a shuffled row of the
+right length is still the right length. Both were sabotaged: swapping
+`language` and `referrer_host` in the row slice fails the second one with exactly
+the message it was written to produce.
+
+### D59 — v3, the second cache-key bump of an unreleased phase
+
+M34 bumped `CacheKeyVersion` to v2 and called it "the phase's one deliberate
+bump". This is the second, and the claim is not being quietly dropped: it is the
+same argument arriving for the same reason, and both ship in 0.2.0, so no
+deployed instance ever holds a v2 entry this build could meet. An upgrade from
+0.1.0 pays for one cold cache and not two.
+
+The mechanical reason is that the destination list changed shape — `[]string` to
+a list of objects carrying an id and a weight — and a v2 payload does not decode
+into it. That alone would only have cost a discarded entry, which
+`decodeSnapshot` already handles by treating an undecodable payload as a miss.
+
+The real reason is M34's, verbatim: a v2 entry carries no split arms, so a link
+whose owner has since divided its traffic between two destinations would keep
+sending all of it to one of them for up to `REDIRECT_TTL`. The stale reading is a
+control the owner configured being **silently absent**, which is precisely the
+case a cold cache exists for and precisely what separates it from the fields
+M32.5 and M33 added without a bump — where the stale reading was the behaviour
+the link already had.
+
+Two smaller consequences of the reshape, recorded because they are invisible in
+the diff:
+
+**Deduplication moved from the URL to the destination id.** M34 collapsed two
+rules pointing at the same URL into one entry in the destination list. Every rule
+creates a destination row of its own, so those were always two ids; collapsing
+them was free while nothing distinguished them, and stopped being free the moment
+a click carries the id of the row that served it — the merged entry would credit
+every one of those clicks to whichever rule happened to be first. The cost is
+extra copies of a repeated URL in the payload, bounded by
+`domain.MaxRulesPerLink`.
+
+**A match rule's kind is encoded as absent.** `SnapshotRule.Kind` is `omitempty`
+and the empty string reads as `match`, so a link carrying only M34's rules
+encodes to the size it did before. `TestALinkWithoutArmsEncodesAsItDidBefore`
+asserts the stronger version of that for a link with no rules at all: the exact
+bytes, not a size comparison.
+
+### D60 — the breakdown reads a rollup, and pays for a pass of its own to do it
+
+`internal/analytics.Reader` has one rule with one exception: every query reads a
+rollup table, never `click_events`, except the deliberately bounded recent-activity
+feed. The per-destination breakdown obeys it, which means the rollup has to
+produce the rows.
+
+It could have been a seventh entry in `RollupDimensionDaily`'s `LATERAL VALUES`
+expansion — one line. That expansion runs for **every click on the instance**, so
+a seventh row grows the sort and the upsert count by a sixth, permanently, for a
+column that is NULL on every link running no split test. The rollup is already
+this project's largest known cost — 16–21s per 60s run at 5.7M events, scheduled
+for [M37](phase-details/m37.md) — and making it a sixth worse to serve a feature
+most links do not use is the wrong trade.
+
+So `RollupDestinationDaily` is a pass of its own, filtered on `destination_id IS
+NOT NULL` and served by a partial index migration 02200 creates over exactly
+those rows. On an instance with no split tests it reads an empty index and writes
+nothing.
+
+The value stored is the destination **id** as text, under the dimension name
+`destination`, so the breakdown is read by the same `GetLinkDimensions` every
+other breakdown is read by and is capped by the same limit. The URL is resolved
+at read time from `destinations`, not stored in the rollup: storing it would
+freeze it at the moment of the rollup and make an arm that somebody edited read
+as two.
+
+The link's own destination is not in the rollup at all — its clicks carry NULL —
+so its row in the breakdown is the **remainder**: the link's non-bot total minus
+everything attributed elsewhere. The figures therefore sum to the total by
+construction rather than by two rollup passes happening to agree, and the
+remainder is clamped at zero because a recompute landing between the two reads
+can leave them a few clicks apart.
+
+## 2026-08-03 — M36, the demo update that deleted half a demo
+
+M36 was validated, built, accepted and committed. Then `make demo-update` — step
+3.7, the last gate before a push — failed:
+
+```
+reset: previous demo data removed
+lctl: create "launch": conflict: alias "launch" is already in use
+```
+
+`launch` is a **Phase 1** catalogue link. Nothing M36 built goes near it, and the
+message says the reset had already finished when the collision happened. Two
+decisions, **D61 and D62**, and the second was found only because the first was
+reproduced properly.
+
+### What the database said, before anything was changed
+
+The demo instance still held all twenty-one catalogue links from the previous
+run, their destinations, their tags, and M34's four routing rules. It held no
+click events, no rollups, no invitations, no seeded accounts and no second
+workspace.
+
+That split is the whole diagnosis. `demoReset` scopes three of its statements —
+`link_tags`, `destinations`, `links` — to **the actor's workspace**, and
+everything else it deletes to **the organization**. The organization-scoped half
+had run and committed. The workspace-scoped half had matched zero rows.
+
+`users.last_workspace_id` was NULL, and the only thing that NULLs it is the
+foreign key firing when the workspace it points at is deleted — which the reset
+had just done to the seeded `campaigns` workspace. So at the start of the failing
+run the owner's last-used workspace was the *second* one, the reset deleted the
+demo's accounts and history out from under a catalogue it could not see, and then
+the first link it tried to create collided with the copy of itself it had walked
+past. Alias uniqueness is per **domain** (00300_links.sql), not per workspace, so
+seeding into a different workspace does not produce a second demo. It produces a
+409 on the first row, with the destructive half of the operation already
+committed.
+
+The instance also carries a hand-made `Marketing` workspace created three minutes
+after the account claimed it. Somebody had been clicking around in there, which
+is the other — and much more ordinary — way the owner's last-used workspace stops
+being the catalogue's: the switcher [M25](phase-details/m25.md) built writes that
+column every time it is used.
+
+### D61 — the demo is seeded into the organization's oldest workspace
+
+`lctl demo` resolved its actor with `auth.IdentityForEmail`, which answers *where
+would this person land if they signed in*. That is a preference. It is written by
+the workspace switcher, and it is written by the seeder itself while it fills the
+second workspace — so a run that dies anywhere in the four seeding steps between
+entering that workspace and leaving it arms the next run with the same failure.
+
+`demoActor` now answers a different question: **where does the demo live**. The
+answer is the organization's oldest live workspace — the one the account was
+given when it claimed the instance, which is where every previous run put the
+catalogue. It is also `ResolveWorkspaceForUser`'s own final tiebreak; this makes
+it unconditional instead of reachable only when no preference is set. The
+account's last-used column is then pointed there, through the same deliberate
+step around `SwitchWorkspace` that `demoSeeder.refresh` and `demoSeeder.actAs`
+already take, so the demo also opens where it always did.
+
+One case it cannot fix by writing that column: an account that has *pinned* a
+default workspace outranks last-used, and there `demoActor` refuses with the
+reason. Refusing is the point. The alternative is the half-reset above, which
+destroys data and then reports success on its way to a confusing error.
+
+Widening `demoReset` to the organization was the other candidate and it is the
+weaker fix. It would stop the reset missing rows, and it would leave the
+catalogue landing in whichever workspace somebody last visited — a demo that
+moves between runs, which is the property `--reset` exists to prevent. Scoping
+the *actor* fixes the reset by construction and the seeding at the same time.
+
+### The check that could not have caught it, and now can
+
+`TestDemoSeederShowsEveryFeatureItClaimsTo` already ran the seeder twice and
+compared every coverage row, and it passed throughout. It seeds against a
+**fresh** database: the first run leaves the owner in the workspace it started
+in, and the second is a copy of the first. `make demo-update` runs against a
+**long-lived** instance that people have signed into. Only the second state can
+fail, and the check was built entirely out of the first.
+
+It now runs a third time, after moving the owner's last-used workspace the way
+the switcher does, and compares the counts again. Against the code as committed
+that third run reproduces the demo-update failure exactly, message for message.
+
+The general lesson is worth more than the fix: an idempotency test that
+constructs its own starting state tests idempotency from *that* state, and the
+state that breaks is the one the test did not think to build.
+
+### D62 — split attribution buckets on the visitor, not on the click
+
+Reproducing the above surfaced a second defect, in the two-run comparison that
+had been there all along: `link_dimension_daily` counted 59 rows for the
+`destination` dimension on one run and 60 on the next. It is a low-frequency
+failure — one run in four or so, and it did not fire while M36 was being
+accepted — which is worse than a reliable one, not better.
+
+`attributeSplitClicks` bucketed each click by `md5(ce.id)`, and its comment
+claimed that was deterministic "so `lctl demo --reset` twice produces the same
+breakdown". It never was. `demoClicks` writes every row with a fresh
+`uuid.NewV7`, so the same seeded dataset hashed differently on every run, and a
+thinly-populated day at the edge of the window could gain or lose an arm.
+
+It now buckets on `visitor_hash`, which the seeder derives from the day and the
+visitor index — both from the seeded PRNG — and which is therefore stable across
+runs. The change is an improvement on its own terms as well as a fix: a visitor
+who comes back the same day now sees the same arm, which is what a split test
+does. An arm that changed under somebody between two clicks would have made the
+demo's own numbers a lie about how the feature behaves.
+
+The weights, the 60/90ths and 30/90ths bucketing, and the deliberate gap between
+configured and observed share are unchanged.

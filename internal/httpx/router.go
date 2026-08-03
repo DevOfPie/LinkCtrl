@@ -156,10 +156,17 @@ func NewRouter(d Deps) http.Handler {
 			"POST " + APIPrefix + "/links/{id}/rules":            api.CreateRule,
 			"PATCH " + APIPrefix + "/links/{id}/rules/{ruleID}":  api.UpdateRule,
 			"DELETE " + APIPrefix + "/links/{id}/rules/{ruleID}": api.DeleteRule,
-			"GET " + APIPrefix + "/tags":                         api.ListTags,
-			"DELETE " + APIPrefix + "/tags/{id}":                 api.DeleteTag,
-			"GET " + APIPrefix + "/domain":                       api.GetDomain,
-			"PATCH " + APIPrefix + "/domain":                     api.UpdateDomain,
+			// Split testing (M36), nested under the link for the same reason and
+			// guarded by the same two permissions: an arm is where a link points,
+			// expressed as a share rather than as a condition.
+			"GET " + APIPrefix + "/links/{id}/split":                api.GetSplit,
+			"POST " + APIPrefix + "/links/{id}/split":               api.CreateVariant,
+			"PATCH " + APIPrefix + "/links/{id}/split/{variantID}":  api.UpdateVariant,
+			"DELETE " + APIPrefix + "/links/{id}/split/{variantID}": api.DeleteVariant,
+			"GET " + APIPrefix + "/tags":                            api.ListTags,
+			"DELETE " + APIPrefix + "/tags/{id}":                    api.DeleteTag,
+			"GET " + APIPrefix + "/domain":                          api.GetDomain,
+			"PATCH " + APIPrefix + "/domain":                        api.UpdateDomain,
 			// The reputation-feed disclosure (M32). Read-only, and there is no
 			// second operation here by design: the page it mirrors accepts no
 			// POST (D40), and an API that could write would be the settings
@@ -355,6 +362,12 @@ func NewRouter(d Deps) http.Handler {
 			"POST /links/{id}/rules":                 web.RuleCreate,
 			"POST /links/{id}/rules/{ruleID}/toggle": web.RuleToggle,
 			"POST /links/{id}/rules/{ruleID}/delete": web.RuleDelete,
+			// Split testing (M36). The same three actions for the same reason:
+			// parking an arm mid-test is what somebody reaches for when one of
+			// them is misbehaving, and it must not require opening an editor.
+			"POST /links/{id}/split":                    web.VariantCreate,
+			"POST /links/{id}/split/{variantID}/toggle": web.VariantToggle,
+			"POST /links/{id}/split/{variantID}/delete": web.VariantDelete,
 			// Minting a signed URL (M35). A POST because it can create the
 			// workspace's signing secret, and because a capability must not be
 			// something a link somebody clicks can produce.

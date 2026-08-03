@@ -229,7 +229,11 @@ page.
 
 It needs a user to own the data, so claim the instance first — through the setup
 form or `POST /api/v1/auth/setup`. `--user` picks one; the default is the
-earliest. The seeded accounts all sign in with `demo-account-password`, which is
+earliest. The dataset always lands in that account's **oldest** workspace — the
+one it was given when it claimed the instance — and not in whichever workspace
+the switcher was last left on, so where the demo is and what `--reset` removes
+are the same answer every run. The seeded accounts all sign in with
+`demo-account-password`, which is
 published because a demo instance exists to be signed into — and is the reason
 this command refuses `APP_ENV=production` without `--force`. Anywhere reachable
 that is not a demo, treat a run of this as three live accounts with a known
@@ -258,9 +262,9 @@ exists, so a `closed` instance stays closed throughout.
 Three things are written directly rather than through a service, and each is a
 state no surface can produce: the expired campaign's past `expires_at`, which is
 reached by the clock; the demo's own entry on the low-confidence blocklist, which
-only the environment variable and one migration ever write; and the seeded
-people's current workspace, because switching one requires a browser session and
-the CLI has none.
+only the environment variable and one migration ever write; and the current
+workspace of every account the seeder acts as, the owner included, because
+switching one requires a browser session and the CLI has none.
 
 `--reset` puts the instance back the way it found it — the demo links, the second
 workspace, the seeded accounts and their organizations, the invitations, the

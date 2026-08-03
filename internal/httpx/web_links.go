@@ -331,6 +331,19 @@ type linkDetailPageData struct {
 	// written into the template so the number the form promises and the number
 	// the validator applies cannot drift.
 	MinPasswordLength int
+
+	// The split test (M36): the arms in rotation order, the fallback, and the
+	// vocabulary the form offers. Nil for every link that has none, which is what
+	// keeps the section off a page nobody asked to see it on.
+	Split *domain.Split
+	// SplitKinds and SplitHelp are the form's own vocabulary, passed in rather
+	// than written into the template so the kinds the form offers and the ones
+	// the validator accepts cannot drift apart.
+	SplitKinds []string
+	SplitHelp  string
+	// MaxWeight bounds the weight box, so the form refuses what the service
+	// would refuse rather than posting it to find out.
+	MaxWeight int
 }
 
 func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetailPageData, bool) {
@@ -423,8 +436,17 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 	if rules, rerr := h.Links.ListRules(r.Context(), actor, id); rerr == nil {
 		data.Rules = ruleViews(rules)
 	}
+	// The link's split test. Read and failed the same way the rules are, for the
+	// same reason: this page is analytics somebody asked for, and losing it over
+	// a list of arms would be the wrong trade.
+	if split, serr := h.Links.GetSplit(r.Context(), actor, id); serr == nil {
+		data.Split = split
+	}
 	data.RuleWeekdays = domain.RuleWeekdays
 	data.RuleHelp = ruleConditionHelp
+	data.SplitKinds = domain.SplitKinds
+	data.SplitHelp = splitHelp
+	data.MaxWeight = domain.MaxDestinationWeight
 	data.GeoAvailable = h.Config.Analytics.GeoIPPath != ""
 	data.ReturningAvailable = h.Config.Redis.URL != ""
 	data.MinPasswordLength = auth.MinPasswordLength
@@ -432,6 +454,8 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 	switch {
 	case r.URL.Query().Get("rule") != "":
 		data.Notice = ruleNotice(r.URL.Query().Get("rule"))
+	case r.URL.Query().Get("split") != "":
+		data.Notice = splitNotice(r.URL.Query().Get("split"))
 	case r.URL.Query().Get("created") == "1":
 		data.Notice = "Link created: " + l.ShortURL
 	case r.URL.Query().Get("saved") == "1":

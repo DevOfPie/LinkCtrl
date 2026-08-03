@@ -23,15 +23,23 @@ migrations run at boot.
 ### Changed
 
 - **Upgrading to this version empties the redirect cache.** The cached value a
-  short link resolves through now carries its routing rules, and an entry
-  written by the previous version does not — so the cache key moved from `v1` to
-  `v2` and every old entry is abandoned rather than read. The first request for
-  each live alias after the upgrade reads the database; concurrent requests for
-  the same one are collapsed into a single query, so a popular link does not
-  become a stampede. Nothing needs to be done about this, and nothing is lost;
-  expect a brief rise in database reads while traffic warms the cache again.
-  This is the only cache-key change planned for the 0.2.0 series, and it is why
-  the earlier additions to that value deliberately avoided one.
+  short link resolves through now carries its routing rules and its split-test
+  arms, and an entry written by the previous version does not — so the cache key
+  moved from `v1` to `v3` and every old entry is abandoned rather than read. The
+  first request for each live alias after the upgrade reads the database;
+  concurrent requests for the same one are collapsed into a single query, so a
+  popular link does not become a stampede. Nothing needs to be done about this,
+  and nothing is lost; expect a brief rise in database reads while traffic warms
+  the cache again.
+
+  The version moved twice inside this unreleased series — once for routing rules
+  and once for split testing — but they ship together, so an upgrade from 0.1.0
+  pays for one cold cache and not two. Both moved it for the same reason, and it
+  is the reason the earlier additions to that value deliberately avoided one: an
+  entry written by the older build carries no rules and no arms, so a link whose
+  owner has since divided its traffic would go on sending all of it to one place
+  for up to `REDIRECT_TTL`. That is a control the owner configured being silently
+  absent, which is exactly what a cold cache is for.
 
   **On a multi-replica rolling upgrade there is one more consequence, and it is
   deliberate.** Cache invalidations are broadcast on a channel versioned with the
@@ -72,6 +80,46 @@ migrations run at boot.
     passes anything to the destination, so whoever runs the destination never
     receives a URL they could replay.
 
+- **A link can divide its traffic between several destinations.** A link now
+  carries a split test: a set of *arms*, each one a destination of its own, and
+  every visitor no routing rule claimed goes to one of them. Managed on the
+  link's own page and over the API at `/api/v1/links/{id}/split`. A link with no
+  arms is unchanged, which is every link that exists today.
+  - **Weighted, for percentage splits.** Each arm has a weight and receives that
+    share of the traffic. Weights are relative rather than percentages, so 60/40
+    and 600/400 are the same test and adding a third arm does not mean editing
+    the first two. The page shows each arm's computed share beside its weight.
+  - **Sequential, for a strict rotation.** Arms are visited in turn — first
+    visitor to the first arm, second to the second, and round again — and the
+    order is **global**: it is kept in the database rather than in a process, so
+    it holds across every replica and across restarts. That costs a database
+    write on every visit to such a link, and only to such a link. "Approximately
+    sequential" would have been free and would have been a support ticket.
+  - **A fallback destination.** One per link, used when no rule matched and no
+    arm was chosen. It stands in for the link's own destination without changing
+    it, so switching the fallback off puts the link back exactly where it was.
+  - **Switching an arm off is the feature flag.** One click, no deletion, and
+    the remaining arms re-share its traffic on the next request. Clicks already
+    recorded against the parked arm are kept. Setting an arm's weight to zero
+    does the same thing while leaving it in the weighted list.
+  - **There is no stickiness, deliberately.** Somebody following the same link
+    twice may see two different arms. Each click is an independent trial, and
+    which arm converted is answered by the per-destination breakdown rather than
+    by remembering people — which would mean either a cookie this product does
+    not set or a per-visitor lookup on the redirect path.
+- **Clicks record which destination served them.** `click_events` gains a
+  `destination_id`, and the link's page and `GET /api/v1/links/{id}/stats` gain a
+  per-destination breakdown: clicks, unique visitors and share, beside each arm's
+  configured weight. A split with no attribution is a coin flip with extra steps.
+  The breakdown reads the same daily rollup every other breakdown does, so it
+  costs nothing to a link that has none, and an unattributed click means the
+  link's own destination. Clicks recorded against an arm that has since been
+  deleted are still reported, as a destination that no longer exists — a running
+  test's totals must not change because somebody tidied up.
+- **A split arm's destination goes through the same checks as a link's.** The
+  same tiers, the same refusals, the same audit record naming the split-variant
+  surface. An arm receiving 5% of the traffic is still somewhere a browser is
+  sent.
 - **A link can send different visitors to different destinations.** A link now
   carries an ordered list of routing rules: each one has a condition set and a
   destination, they are checked from the lowest priority number upwards, and
@@ -147,7 +195,12 @@ migrations run at boot.
   documented and hoped for.
 - **`lctl demo --reset` puts an instance back the way it found it**, seeded
   accounts and organizations included, so running it twice produces the same
-  demo. A full run takes a little under two seconds against a local Postgres.
+  demo. It always writes into the owning account's oldest workspace rather than
+  into whichever one the workspace switcher was last left on, so what a reset
+  removes and where the next run writes are the same answer — on a long-lived
+  demo instance they were not, and a reset could remove the accounts and the
+  click history while leaving the links it could not see. A full run takes a
+  little under two seconds against a local Postgres.
 - **A link can forward the path a visitor arrived with, not just the query
   string.** `forward_path` is per link and off by default, in the API and as a
   checkbox on the link's edit page. With it on, `/{alias}/api/quickstart`

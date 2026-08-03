@@ -121,3 +121,61 @@ func TestRecordAfterCloseIsDropped(t *testing.T) {
 		t.Errorf("Enqueued moved from %d to %d after Close", before, got)
 	}
 }
+
+// TestCopyRowsMatchTheColumnList is half the guard on the milestone's named
+// risk (M36).
+//
+// pgx.CopyFrom sends values by position. A column list and a row slice that
+// disagree do not produce an error — they write a browser into a country and a
+// latency into a language, silently, forever. This catches the omission half:
+// a column added to one list and not the other.
+//
+// The reordering half cannot be caught here, because a shuffled row of the right
+// length is still the right length. That is asserted against a real database in
+// test/integration/split_test.go, which reads a written row back column by
+// column. Both exist because either alone would leave the failure mode open.
+//
+// **What this test does not see, stated so nobody relies on it:** the row below
+// is a hand-written copy of what `prepare` builds, not the output of `prepare`,
+// so a change made to `prepare` alone passes here. It fails in
+// test/integration/split_test.go instead, which is why that test reads every
+// column back rather than only the new one. The copy is deliberate — deriving
+// the row from `prepare` would need an enriched batch, a salt cache and a
+// database, and the check would then be an integration test wearing a unit
+// test's name.
+func TestCopyRowsMatchTheColumnList(t *testing.T) {
+	// The shape of the row prepare builds, written out here rather than derived,
+	// so that a column added to clickEventColumns alone is what fails.
+	row := []any{
+		uuid.Nil, uuid.Nil, uuid.Nil, time.Now(), []byte{1},
+		false, nil, nil, nil, "desktop", "Chrome",
+		"macOS", "en", "example.org", false, int32(1),
+		destinationOrNil(uuid.Nil),
+	}
+	if len(row) != len(clickEventColumns) {
+		t.Fatalf("prepare builds %d values for %d columns (%v); a value is about to "+
+			"land in the wrong column and nothing will report it",
+			len(row), len(clickEventColumns), clickEventColumns)
+	}
+	if clickEventColumns[len(clickEventColumns)-1] != "destination_id" {
+		t.Errorf("destination_id is no longer last in the column list. It was appended "+
+			"rather than inserted so the sixteen positions that predate it could not "+
+			"shift; moving it means the row builder has to move with it. Columns: %v",
+			clickEventColumns)
+	}
+}
+
+// TestDestinationOrNilKeepsTheZeroUUIDOutOfTheColumn is why the breakdown has no
+// bucket that looks like data.
+func TestDestinationOrNilKeepsTheZeroUUIDOutOfTheColumn(t *testing.T) {
+	if got := destinationOrNil(uuid.Nil); got != nil {
+		t.Errorf("the zero uuid became %v, want NULL — NULL is what means \"the link's "+
+			"own destination\", and a literal zero would be a destination id that "+
+			"resolves to nothing", got)
+	}
+	id := uuid.Must(uuid.NewV7())
+	got := destinationOrNil(id)
+	if got == nil || *got != id {
+		t.Errorf("destinationOrNil(%v) = %v", id, got)
+	}
+}

@@ -104,6 +104,43 @@ ON CONFLICT (link_id, day, dimension, value) DO UPDATE
    SET clicks = EXCLUDED.clicks,
        unique_visitors = EXCLUDED.unique_visitors;
 
+-- name: RollupDestinationDaily :exec
+-- The per-destination breakdown a split test is read from (M36).
+--
+-- A pass of its own rather than a seventh row in RollupDimensionDaily's LATERAL
+-- VALUES, and the reason is cost rather than tidiness. That expansion runs for
+-- every click on the instance; adding a row to it would grow the sort and the
+-- upsert count by a sixth, permanently, for a column that is NULL on every link
+-- that runs no split test. Here the `destination_id IS NOT NULL` filter is served
+-- by the partial index migration 02200 creates, so on an instance with no split
+-- tests this reads an empty index and writes nothing.
+--
+-- The value is the destination id as text, into the same `link_dimension_daily`
+-- table under the dimension name `destination`, so the breakdown is capped,
+-- rolled up and read by exactly the query every other breakdown is read by. The
+-- reader resolves ids to URLs; storing the URL here instead would freeze it at
+-- the moment of the rollup and make an edited destination look like two.
+--
+-- Bots excluded, like every other dimension: a split test scored on crawler
+-- traffic is a split test with a wrong answer.
+INSERT INTO link_dimension_daily (link_id, workspace_id, day, dimension, value, clicks, unique_visitors)
+SELECT ce.link_id,
+       ce.workspace_id,
+       (ce.occurred_at AT TIME ZONE 'UTC')::date AS day,
+       'destination',
+       ce.destination_id::text,
+       count(*)                        AS clicks,
+       count(DISTINCT ce.visitor_hash) AS unique_visitors
+  FROM click_events ce
+ WHERE ce.occurred_at >= sqlc.arg(window_start)
+   AND ce.occurred_at <  sqlc.arg(window_end)
+   AND ce.destination_id IS NOT NULL
+   AND NOT ce.is_bot
+ GROUP BY ce.link_id, ce.workspace_id, day, ce.destination_id
+ON CONFLICT (link_id, day, dimension, value) DO UPDATE
+   SET clicks = EXCLUDED.clicks,
+       unique_visitors = EXCLUDED.unique_visitors;
+
 -- name: GetLinkStats :many
 -- Reads the rollup, never the raw events. This is what keeps analytics under
 -- the 2s target as click_events grows into the tens of millions.

@@ -498,6 +498,12 @@ const (
 	// asymmetry. Nothing about it being reached only by British mobile traffic
 	// on a Tuesday makes an SSRF against 169.254.169.254 less of one.
 	surfaceRoutingRule destinationSurface = "link.routing_rule"
+	// surfaceSplitVariant is M36's, and it is the surface m36.md names M30 as a
+	// dependency for. A split-test arm is a destination somebody writes, and the
+	// fact that only a fraction of a link's traffic reaches it is not a property
+	// the tiers care about — a weighted arm at 5% pointing at a phishing page is
+	// still that page, served by this instance, under this workspace's alias.
+	surfaceSplitVariant destinationSurface = "link.split_variant"
 )
 
 // field is the form input a refusal on this surface belongs against, so the
