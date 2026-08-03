@@ -42,7 +42,7 @@ milestone, is in [workflow.md](../workflow.md).
 | [M33](m33.md) | Deep-link path forwarding | — (before M34) | done |
 | [M33.5](m33.5.md) | A demo that shows the phase, not just its links | M32.9 | done |
 | [M34](m34.md) | Routing rules: conditions, first-match evaluation | M23 M30 M33 | done |
-| [M35](m35.md) | Gated links: password, signed, one-time, max-click | M34 (ordering) | not started |
+| [M35](m35.md) | Gated links: password, signed, one-time, max-click | M34 (ordering) | done |
 | [M36](m36.md) | Split testing: weighted, sequential, fallback, flags | M34 M35 M30 | not started |
 | [M37](m37.md) | Dimension visualizations, rollup cadence first | — | not started |
 | [M38](m38.md) | Folders: API and tree UI | — | not started |

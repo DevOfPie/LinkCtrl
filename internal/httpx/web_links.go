@@ -4,10 +4,12 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
+	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
@@ -92,6 +94,19 @@ type linkFormData struct {
 	// BotBlocking is the link's own setting as the select renders it: inherit,
 	// on or off.
 	BotBlocking string
+
+	// The gates (M35).
+	//
+	// **There is no Password field and there will not be one.** The form cannot
+	// render a password it has no way to read, so the box is always empty, an
+	// empty box means "no change", and removing one is a separate checkbox
+	// rather than a value. HasPassword is what the page says instead: whether
+	// there is one, never what it is.
+	HasPassword      bool
+	ClearPassword    bool
+	MaxClicks        string
+	OneTime          bool
+	RequireSignature bool
 }
 
 type linksPageData struct {
@@ -305,6 +320,17 @@ type linkDetailPageData struct {
 	// ReturningAvailable is the same honesty for the returning-visitor
 	// condition, which needs Redis.
 	ReturningAvailable bool
+
+	// SignedURL is a freshly minted signed link (M35), shown on the page rather
+	// than carried back through a redirect. A capability belongs in a response
+	// body, not in a URL that lands in browser history, a proxy log and the
+	// Referer header of whatever the person clicks next.
+	SignedURL     string
+	SignedExpires string
+	// MinPasswordLength is the floor the service enforces, passed in rather than
+	// written into the template so the number the form promises and the number
+	// the validator applies cannot drift.
+	MinPasswordLength int
 }
 
 func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetailPageData, bool) {
@@ -345,13 +371,19 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 	}
 
 	form := linkFormData{
-		URL:          l.URL,
-		Alias:        l.Alias,
-		Title:        l.Title,
-		Description:  l.Description,
-		ForwardQuery: l.ForwardQuery,
-		ForwardPath:  l.ForwardPath,
-		BotBlocking:  string(l.BotBlocking),
+		URL:              l.URL,
+		Alias:            l.Alias,
+		Title:            l.Title,
+		Description:      l.Description,
+		ForwardQuery:     l.ForwardQuery,
+		ForwardPath:      l.ForwardPath,
+		BotBlocking:      string(l.BotBlocking),
+		HasPassword:      l.HasPassword,
+		OneTime:          l.OneTime,
+		RequireSignature: l.RequireSignature,
+	}
+	if l.MaxClicks != nil {
+		form.MaxClicks = strconv.FormatInt(*l.MaxClicks, 10)
 	}
 	if l.ExpiresAt != nil {
 		form.ExpiresAt = l.ExpiresAt.UTC().Format("2006-01-02T15:04")
@@ -395,6 +427,7 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 	data.RuleHelp = ruleConditionHelp
 	data.GeoAvailable = h.Config.Analytics.GeoIPPath != ""
 	data.ReturningAvailable = h.Config.Redis.URL != ""
+	data.MinPasswordLength = auth.MinPasswordLength
 
 	switch {
 	case r.URL.Query().Get("rule") != "":
@@ -443,10 +476,35 @@ func (h *Web) LinkUpdate(w http.ResponseWriter, r *http.Request) {
 	// rather than "leave alone".
 	forward := r.PostFormValue("forward_query") != ""
 	forwardPath := r.PostFormValue("forward_path") != ""
+	oneTime := r.PostFormValue("one_time") != ""
+	requireSig := r.PostFormValue("require_signature") != ""
+	clearPassword := r.PostFormValue("clear_password") != ""
 
 	in := link.UpdateInput{
 		URL: &urlv, Alias: &alias, Title: &title, Description: &desc, Tags: &tags,
 		ForwardQuery: &forward, ForwardPath: &forwardPath,
+		OneTime: &oneTime, RequireSignature: &requireSig,
+		ClearPassword: clearPassword,
+	}
+
+	// The password box (M35), and the asymmetry with every other field on this
+	// form is the whole design. The form posts every field and absence means
+	// "off" — except here, because nobody can re-type a password they cannot
+	// read. An empty box therefore means "leave it", and removal is the
+	// checkbox beside it.
+	if pw := r.PostFormValue("password"); pw != "" && !clearPassword {
+		in.Password = &pw
+	}
+	rawMax := strings.TrimSpace(r.PostFormValue("max_clicks"))
+	switch rawMax {
+	case "":
+		in.ClearMaxClicks = true
+	default:
+		n, cerr := strconv.ParseInt(rawMax, 10, 64)
+		if cerr != nil {
+			n = 0 // refused by the service, with the field error the form shows
+		}
+		in.MaxClicks = &n
 	}
 
 	// The one field this form may legitimately omit. A disabled select posts
@@ -476,6 +534,14 @@ func (h *Web) LinkUpdate(w http.ResponseWriter, r *http.Request) {
 			ForwardQuery: forward,
 			ForwardPath:  forwardPath,
 			BotBlocking:  r.PostFormValue("bot_blocking"),
+			// Re-rendered from what was posted, except the password: the box
+			// comes back empty because there is nothing safe to put in it and
+			// nothing the form is entitled to remember.
+			HasPassword:      data.Link != nil && data.Link.HasPassword,
+			ClearPassword:    clearPassword,
+			MaxClicks:        rawMax,
+			OneTime:          oneTime,
+			RequireSignature: requireSig,
 		}
 		data.FieldErrors = fields
 		data.Error = general
@@ -506,6 +572,62 @@ func (h *Web) LinkUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	seeOther(w, r, "/links/"+id.String()+"?saved=1")
+}
+
+// LinkSign mints a signed URL and shows it on the link's own page (M35).
+//
+// **Deliberately not a POST-redirect-GET**, which is what every other write on
+// this page does. The thing being produced is a bearer capability, and carrying
+// it back through a redirect would put it in the browser's address bar, its
+// history, the proxy log in between and the Referer header of whatever the
+// person clicks next. Rendering it in the response body keeps it in one place
+// the person can copy from and nowhere else.
+func (h *Web) LinkSign(w http.ResponseWriter, r *http.Request) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		h.webError(w, r, err)
+		return
+	}
+	if err := parseForm(w, r); err != nil {
+		h.errorPage(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
+		return
+	}
+
+	var ttl time.Duration
+	if raw := strings.TrimSpace(r.PostFormValue("ttl_hours")); raw != "" {
+		hours, perr := strconv.Atoi(raw)
+		if perr != nil || hours <= 0 {
+			h.errorPage(w, r, http.StatusBadRequest, "Bad request",
+				"The signature lifetime could not be read.")
+			return
+		}
+		ttl = time.Duration(hours) * time.Hour
+	}
+
+	signed, err := h.Links.Sign(r.Context(), IdentityFrom(r.Context()), id, ttl)
+	if err != nil {
+		fields, general := fieldErrors(err)
+		if len(fields) == 0 && general == "" {
+			h.webError(w, r, err)
+			return
+		}
+		data, ok := h.loadLinkDetail(w, r)
+		if !ok {
+			return
+		}
+		data.FieldErrors = fields
+		data.Error = general
+		h.render(w, r, http.StatusUnprocessableEntity, "link_detail", data)
+		return
+	}
+
+	data, ok := h.loadLinkDetail(w, r)
+	if !ok {
+		return
+	}
+	data.SignedURL = signed.URL
+	data.SignedExpires = signed.ExpiresAt.Format("2006-01-02 15:04 UTC")
+	h.render(w, r, http.StatusOK, "link_detail", data)
 }
 
 func splitTags(raw string) []string {

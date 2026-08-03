@@ -207,6 +207,16 @@ type Link struct {
 	CampaignID           *uuid.UUID
 	BotBlocking          string
 	ForwardPath          bool
+	RequireSignature     bool
+}
+
+type LinkClickBudget struct {
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+	Consumed    int64
+	ExhaustedAt *time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 type LinkClickDaily struct {
@@ -430,6 +440,7 @@ type Workspace struct {
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
 	DeletedAt              *time.Time
+	SigningSecret          []byte
 }
 
 type WorkspaceClickDaily struct {

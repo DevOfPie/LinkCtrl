@@ -39,10 +39,12 @@ type createLinkRequest struct {
 	ForwardQuery bool     `json:"forward_query"`
 	ForwardPath  bool     `json:"forward_path"`
 
-	// Phase 2. Present so the service can reject them by name.
-	Password  string `json:"password"`
-	MaxClicks *int64 `json:"max_clicks"`
-	OneTime   bool   `json:"one_time"`
+	// The gates (M35). Write-only in the case of Password: it is hashed on
+	// arrival and no response anywhere returns it or its hash.
+	Password         string `json:"password"`
+	MaxClicks        *int64 `json:"max_clicks"`
+	OneTime          bool   `json:"one_time"`
+	RequireSignature bool   `json:"require_signature"`
 }
 
 func (a *LinkAPI) Create(w http.ResponseWriter, r *http.Request) {
@@ -57,6 +59,7 @@ func (a *LinkAPI) Create(w http.ResponseWriter, r *http.Request) {
 		Description: req.Description, Tags: req.Tags,
 		ForwardQuery: req.ForwardQuery, ForwardPath: req.ForwardPath,
 		Password: req.Password, MaxClicks: req.MaxClicks, OneTime: req.OneTime,
+		RequireSignature: req.RequireSignature,
 	}
 	if req.ExpiresAt != nil && *req.ExpiresAt != "" {
 		at, err := time.Parse(time.RFC3339, *req.ExpiresAt)
@@ -146,6 +149,25 @@ type updateLinkRequest struct {
 	// the default" — which for this setting would silently hand the decision
 	// back to the domain.
 	BotBlocking *string `json:"bot_blocking"`
+
+	// The gates (M35). Two of them need three states, and both spell the third
+	// the way `expires_at` already does on this same type: an absent key leaves
+	// the gate alone, a sentinel removes it, a value sets it. An empty string
+	// removes a password; a zero removes a click ceiling, which is unambiguous
+	// because a ceiling of zero is refused everywhere else.
+	//
+	// The third state is not optional. A form that posts every field cannot
+	// re-send a password nobody can read, so an empty box has to mean "no
+	// change" — and without an explicit removal there would then be no way to
+	// take a password off at all.
+	//
+	// There is deliberately no way to *read* a password back. Setting one is
+	// write-only in every direction: a management API that returned the value,
+	// or its hash, would make every reader of a link a holder of its secret.
+	Password         *string `json:"password"`
+	MaxClicks        *int64  `json:"max_clicks"`
+	OneTime          *bool   `json:"one_time"`
+	RequireSignature *bool   `json:"require_signature"`
 }
 
 func (a *LinkAPI) Update(w http.ResponseWriter, r *http.Request) {
@@ -165,6 +187,17 @@ func (a *LinkAPI) Update(w http.ResponseWriter, r *http.Request) {
 		URL: req.URL, Alias: req.Alias, Title: req.Title,
 		Description: req.Description, Tags: req.Tags,
 		ForwardQuery: req.ForwardQuery, ForwardPath: req.ForwardPath,
+		OneTime: req.OneTime, RequireSignature: req.RequireSignature,
+	}
+	if req.Password != nil && *req.Password == "" {
+		in.ClearPassword = true
+	} else {
+		in.Password = req.Password
+	}
+	if req.MaxClicks != nil && *req.MaxClicks == 0 {
+		in.ClearMaxClicks = true
+	} else {
+		in.MaxClicks = req.MaxClicks
 	}
 	if req.BotBlocking != nil {
 		policy, ok := domain.ParseBotPolicy(*req.BotBlocking)
@@ -201,6 +234,56 @@ func (a *LinkAPI) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	WriteJSON(w, http.StatusOK, updated)
+}
+
+// Sign mints a signed URL for a link (M35).
+//
+// A POST rather than a GET, and the method is the honest one: this call can
+// bring the workspace's signing secret into existence, and it hands back a
+// bearer capability that should not be sitting in anybody's browser history or
+// proxy log as a URL that was fetched.
+//
+// The format the URL carries is documented in internal/gate/signature.go and in
+// docs/SECURITY.md, so a client can verify one without this endpoint.
+func (a *LinkAPI) Sign(w http.ResponseWriter, r *http.Request) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	var req struct {
+		// TTLSeconds is how long the signature stays valid. Absent takes the
+		// default; anything above the ceiling is refused rather than clamped, so
+		// a caller asking for a year is told they did not get one.
+		TTLSeconds *int64 `json:"ttl_seconds"`
+	}
+	// An empty body is the ordinary case here — "sign this, I do not care for
+	// how long" — so it is not the validation error decodeJSON makes of it
+	// everywhere else.
+	if r.ContentLength > 0 {
+		if err := decodeJSON(w, r, &req); err != nil {
+			WriteError(w, r, err)
+			return
+		}
+	}
+	var ttl time.Duration
+	if req.TTLSeconds != nil {
+		if *req.TTLSeconds <= 0 {
+			WriteError(w, r, domain.ValidationErrors{{
+				Field: "ttl_seconds", Code: "out_of_range",
+				Message: "ttl_seconds must be positive",
+			}})
+			return
+		}
+		ttl = time.Duration(*req.TTLSeconds) * time.Second
+	}
+
+	signed, err := a.Links.Sign(r.Context(), IdentityFrom(r.Context()), id, ttl)
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusCreated, signed)
 }
 
 func (a *LinkAPI) Delete(w http.ResponseWriter, r *http.Request) {

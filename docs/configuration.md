@@ -175,6 +175,7 @@ rather than serving them as current, and reconnects.
 | `LINKCTRL_REDIRECT_LOG_SAMPLE` | `0` | Log one in N successful redirects; `0` disables. At 2,000 rps, logging every redirect produces more bytes than the redirects. |
 | `LINKCTRL_REDIRECT_TIMEOUT` | `250ms` | Bounds the Postgres fallback. A query still running after this has already missed the uncached target and is holding a connection from the small redirect pool while requests queue behind it. |
 | `LINKCTRL_REDIRECT_404_RATE_LIMIT` | `60` | Misses per address per minute. See [Rate limits](#rate-limits). `0` disables. |
+| `LINKCTRL_LINK_PASSWORD_RATE_LIMIT` | `20` | Guesses at a password-protected link per minute, charged **per address and per alias**. See [Rate limits](#rate-limits). `0` disables it, which on a public instance leaves a link password worth only as much as the wordlist somebody is willing to run. |
 
 ## Aliases and destinations
 
@@ -317,6 +318,7 @@ them. A negative value is refused rather than read as "unlimited".
 | `LINKCTRL_LOGIN_RATE_PER_MIN` | `10` | The endpoints that verify a credential: login, register, first-run setup, password change — both the API and the dashboard forms, sharing one budget so alternating between them gains nothing. |
 | `LINKCTRL_API_RATE_PER_MIN` | `600` | Everything under `/api/v1`. Dashboard pages, static assets and the health endpoints are not counted. |
 | `LINKCTRL_REDIRECT_404_RATE_LIMIT` | `60` | Misses on the redirect path, and misses only. |
+| `LINKCTRL_LINK_PASSWORD_RATE_LIMIT` | `20` | Submissions to a password-protected link, charged per address **and** per alias. |
 
 Four properties are worth knowing before you tune them.
 
@@ -329,9 +331,20 @@ just an analytics nicety.
 **IPv6 is keyed by /64, not by address.** A single host is routinely handed a /64,
 so per-address keying would let one machine present unlimited identities.
 
-**Per instance.** The limiter is in memory: no Redis round trip on the redirect
-path, and no dependency on a cache that is optional by design. With N replicas the
-effective limit is N times the number.
+**Per instance, unless the limit is shared.** The limiter is in memory, so the
+404-probe limit costs no Redis round trip on the redirect path and depends on
+nothing optional; with N replicas its effective limit is N times the number. The
+credential, API and link-password limits are backed by Redis instead — see the
+degradation note below.
+
+**The link-password limit has two keys, not one.** Every submission spends a
+token from the address's bucket *and* from the alias's, and either being empty
+refuses the request. The second key is the one that matters: guesses driven
+through many visitors' browsers spread across as many addresses as there are
+visitors, and a per-address bucket would never see them. It is charged only on a
+**submitted** password — visiting a password link and being shown the challenge
+costs nothing — and there is no lockout to go with it, because there is no
+account to lock.
 
 **The 404 limit charges misses only, and never a request that costs nothing.**
 A working link never spends anything, so a popular link cannot throttle its own
@@ -346,10 +359,14 @@ a page on the dashboard. `linkctrl_rate_limited_total{limit}` counts them, and
 `linkctrl_rate_limit_overflow_total` is the one to alert on: it means a limiter's
 key table filled and it has stopped limiting.
 
-**The credential and API limits are shared across replicas** through Redis, so
-the configured rate is the whole instance's rate rather than each replica's. The
-404-probe limiter is not, and never will be: a Redis round trip on the redirect
-path would put an optional dependency inside the 20ms budget.
+**The credential, API and link-password limits are shared across replicas**
+through Redis, so the configured rate is the whole instance's rate rather than
+each replica's. The 404-probe limiter is not, and never will be: a Redis round
+trip on the redirect path would put an optional dependency inside the 20ms
+budget. The link-password limit is on that path too and is shared anyway,
+because it is charged only when somebody submits a password — never on a visit —
+and because it is the only thing standing between a link password and a
+wordlist, so an attacker must not multiply their budget by the replica count.
 
 Sharing degrades rather than fails. On any Redis error — unreachable, stalled,
 or slower than `REDIS_READ_TIMEOUT` — the limiter falls back to the per-replica
@@ -358,6 +375,10 @@ never starts refusing requests because Redis is unwell; a limiter is abuse
 mitigation, not an authorization boundary, and converting a cache outage into a
 sign-in outage would be the wrong trade. The fallback is logged once when it
 starts, not per request.
+
+That degradation is why the link-password limit is documented as **best-effort
+rather than a guarantee**: while Redis is unavailable, N replicas allow N times
+the configured number of guesses, and a restart refills the local buckets.
 
 ## Analytics
 

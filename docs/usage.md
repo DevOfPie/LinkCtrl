@@ -298,7 +298,7 @@ Every failure is `application/problem+json`. Branch on `type`, never on prose:
 | `403` | Authenticated but not permitted. The detail names the missing permission, which is useful rather than a disclosure. |
 | `404` | Does not exist, or belongs to a workspace you cannot see. Someone else's resource is never a `403`, so ids cannot be probed. |
 | `409` | Alias already taken. |
-| `422` | Validation failed; `errors` names each field. Also how Phase 2 fields (`password`, `max_clicks`, `one_time`) are refused — loudly, rather than accepted and ignored. |
+| `422` | Validation failed; `errors` names each field. |
 | `429` | Two different things, told apart by `type`: `account-locked` after repeated failed logins for one account, or `rate-limited` when your address is going too fast. The second carries `Retry-After`; the first is a fixed 15 minutes. Retrying the second is fine — retrying the first just extends it. |
 | `504` | The request exceeded the server's deadline. Retry; narrow the window if it is an analytics query. |
 
@@ -391,6 +391,11 @@ SSRF the address refusals exist to prevent.
 | Active link | `302` with `Location`, `Cache-Control: private, no-store` |
 | Expired | `410 Gone` — distinct from 404 so crawlers and link checkers stop retrying |
 | Unknown, archived or disabled | `404` |
+| Password-protected, not yet answered | `200` with a small challenge page, `no-store` and `noindex`. Submitting the right password to the same URL answers the `302` directly. Not `401`: there is no authentication scheme being offered, and a `401` without one is a status no client can act on |
+| Password-protected, wrong password | `200` with the same page and an error on it. Guesses are rate-limited per address **and** per link |
+| One-time or click-limited, budget spent | `410 Gone`, for the same reason an expired link is |
+| Signature required, and absent, wrong or expired | `403` with a fixed page. One answer for all four causes, so it cannot be asked which one applies |
+| `POST` to an alias that is not password-protected | `405` with `Allow: GET, HEAD`. The short-link host accepts exactly one write — a password submission — and nothing else |
 | Anything after the alias, on a link that does not forward paths | `404` — the same answer, so it cannot be used to find out which aliases exist |
 | Too many misses from one address | `429` with `Retry-After` — see [configuration.md](configuration.md#rate-limits). Links already in the cache keep resolving, and paths that could never be an alias are not counted. |
 | The server could not resolve it | `503` with `Retry-After: 1`. Deliberately not a `404`: that would claim the link does not exist, and a crawler or link checker believing it drops a live link. |
@@ -422,7 +427,41 @@ Three things about it are worth knowing before switching it on:
   a request for `/{alias}/%2e%2e/admin` is a `404`, not a redirect one directory
   up.
 
-`HEAD` works and does not record a click.
+`HEAD` works, does not record a click, and **does not spend one either** — so a
+link checker cannot use up a one-time link by asking whether it is alive.
+
+### Gated links
+
+Four things can be put in front of a link, each off unless you switch it on, each
+on the link's own page and in the API. They restrict **the short link**, not the
+destination: anybody who reaches the destination another way is unaffected, and
+whoever passes a gate holds the destination URL afterwards.
+
+- **A password.** Twelve characters minimum, hashed with argon2id, never
+  readable back — not in the form, not in the API. Because nothing is stored in
+  the visitor's browser, they type it on every visit. Removing one is explicit
+  (an empty box means *leave it alone*, since nobody can retype what they cannot
+  read).
+- **One-time**, and **a click limit**, which are the same gate with different
+  numbers. Past the limit the link answers `410`. The count is exact and is
+  **not** the click total on the link's page, which is approximate. Raising a
+  limit on a link that has stopped starts it again.
+- **A signed link.** With `require_signature` on, the plain short URL is refused
+  and only a signed, unexpired one works:
+
+  ```sh
+  curl -X POST -H "Authorization: Bearer $LINKCTRL_KEY" \
+       -H 'Content-Type: application/json' -d '{"ttl_seconds": 3600}' \
+       https://links.example.com/api/v1/links/$ID/sign
+  # {"url":"https://links.example.com/abc123?exp=1785739578&sig=YTK8…",
+  #  "expires_at":"2026-08-03T06:46:18Z"}
+  ```
+
+  Up to thirty days. The expiry is inside the signature, so editing the URL does
+  not extend it, and both parameters are stripped before query forwarding
+  reaches the destination. There is no revoke button — signatures expire, and
+  invalidating every outstanding one for a workspace means clearing
+  `workspaces.signing_secret`, which [SECURITY.md](SECURITY.md) documents.
 
 ## Roles
 

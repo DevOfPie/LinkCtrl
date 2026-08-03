@@ -133,9 +133,31 @@ type Link struct {
 
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 
+	// The gates (M35). What a link demands before it will redirect anybody.
+	//
+	// **HasPassword, never the password and never its hash.** A management API
+	// that returned either would make every reader of a link a reader of its
+	// secret, and the whole point of hashing it is that nothing can hand it back.
+	// Setting one is a write-only field on the request types.
+	HasPassword bool `json:"has_password"`
+	// MaxClicks caps how often the link may be followed; OneTime is the same
+	// gate fixed at one. Both are the *limit*, never the remaining budget —
+	// that is a durable counter reported separately, because a number this
+	// struct carried would be a snapshot of a value that moves on every click.
+	MaxClicks *int64 `json:"max_clicks,omitempty"`
+	OneTime   bool   `json:"one_time"`
+	// RequireSignature refuses any request that does not carry a valid,
+	// unexpired HMAC signature for this alias.
+	RequireSignature bool `json:"require_signature"`
+	// ClicksConsumed is how much of the budget has been spent, and it is exact —
+	// unlike ClickCount below. Populated only where the caller asked for one
+	// link rather than a page of them, because it is a second query per link.
+	ClicksConsumed *int64 `json:"clicks_consumed,omitempty"`
+
 	// Approximate: updated in batches with the click events, so it lags by up
 	// to one flush interval and can lose a batch on an unclean shutdown.
-	// Nothing that must be exact may read it.
+	// Nothing that must be exact may read it. **Deliberately not the counter the
+	// max-click gate reads** — see internal/gate and migration 02100.
 	ClickCount  int64      `json:"click_count"`
 	LastClickAt *time.Time `json:"last_click_at,omitempty"`
 

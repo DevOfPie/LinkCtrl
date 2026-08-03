@@ -18,6 +18,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/dispute"
+	"github.com/DevOfPie/LinkCtrl/internal/gate"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
@@ -63,6 +64,11 @@ func newAPI(t *testing.T) *apiFixture {
 		// audit record, and a fixture without a recorder would let the tests that
 		// read that record pass by never producing one.
 		Audit: audit.NewService(pool),
+		// The gates (M35), for the same reason: without them a link password is
+		// refused for want of a hasher and a signed URL cannot be minted, so the
+		// contract test would be replaying a surface this fixture disabled.
+		Hasher: authSvc.Hasher(),
+		Gates:  gate.NewService(pool, gate.Config{Hasher: authSvc.Hasher()}),
 	})
 
 	// Not started: the usage tracker's ticker is not wanted in tests, and the
@@ -413,25 +419,52 @@ func TestCreateRejectsDangerousDestinations(t *testing.T) {
 	}
 }
 
-func TestPhase2FieldsAreRejectedNotIgnored(t *testing.T) {
+// The gate fields used to answer 422 `not_implemented` here, and M35 is the
+// milestone that made that answer false. What replaces it is not "they are
+// accepted" — that is TestGateFieldsAreAcceptedAndReported, in gates_test.go,
+// where the fixture has the gate service wired. What is left here is the half
+// this file is about: the contract's *shape*, and the one refusal that is still
+// a refusal.
+func TestGateFieldsAreAcceptedByTheContract(t *testing.T) {
 	f := newAPI(t)
 	f.setupOwner()
 
-	// Accepting these silently would look like the feature works while the
-	// link is in fact unprotected — worse than refusing.
-	cases := map[string]map[string]any{
-		"password":   {"url": "https://example.com", "password": "hunter2hunter2"},
-		"max_clicks": {"url": "https://example.com", "max_clicks": 5},
-		"one_time":   {"url": "https://example.com", "one_time": true},
+	// A link with no gates asked for is still a link with no gates, and reports
+	// as such. This is the case a regression would break silently: a default
+	// that flipped to "on" would gate every link on the instance.
+	resp := f.do(http.MethodPost, "/api/v1/links", map[string]any{
+		"url": "https://example.com/plain",
+	})
+	var plain struct {
+		HasPassword      bool   `json:"has_password"`
+		MaxClicks        *int64 `json:"max_clicks"`
+		OneTime          bool   `json:"one_time"`
+		RequireSignature bool   `json:"require_signature"`
 	}
-	for name, body := range cases {
-		t.Run(name, func(t *testing.T) {
-			resp := f.do(http.MethodPost, "/api/v1/links", body)
-			defer func() { _ = resp.Body.Close() }()
-			if resp.StatusCode != http.StatusUnprocessableEntity {
-				t.Errorf("status = %d, want 422 with a not_implemented code", resp.StatusCode)
-			}
-		})
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("plain create = %d, want 201", resp.StatusCode)
+	}
+	f.decode(resp, &plain)
+	if plain.HasPassword || plain.OneTime || plain.RequireSignature || plain.MaxClicks != nil {
+		t.Errorf("a link created with no gates reports %+v; every gate is off "+
+			"unless asked for", plain)
+	}
+
+	// A password shorter than the account floor is refused, and by name, so a
+	// form can put the message beside the box.
+	resp = f.do(http.MethodPost, "/api/v1/links", map[string]any{
+		"url": "https://example.com", "password": "short",
+	})
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("a five-character link password = %d, want 422", resp.StatusCode)
+	}
+	var p httpx.Problem
+	if err := json.NewDecoder(resp.Body).Decode(&p); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Errors) == 0 || p.Errors[0].Field != "password" {
+		t.Errorf("problem = %+v, want a field error against password", p)
 	}
 }
 

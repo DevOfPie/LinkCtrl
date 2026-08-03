@@ -247,6 +247,50 @@ func demoCoverage() []demoFeature {
 				"which is what puts it through the same tier check",
 		},
 
+		{
+			Milestone: "M35", Feature: "A password-protected link",
+			Query: `SELECT count(*) FROM links
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND password_hash IS NOT NULL`,
+			Min: 1, Max: 1,
+			Shows: "the challenge page, which is the only part of this product a " +
+				"visitor sees that is not a redirect",
+		},
+		{
+			Milestone: "M35", Feature: "A one-time link and a click-limited one",
+			Query: `SELECT count(*) FROM links
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND (one_time OR max_clicks IS NOT NULL)`,
+			Min: 2,
+			Shows: "that a ceiling and a single use are two settings, not one; " +
+				"either alone reads as the other",
+		},
+		{
+			Milestone: "M35", Feature: "A click budget partly spent",
+			Query: `SELECT count(*) FROM link_click_budget
+			         WHERE workspace_id IN (` + demoWorkspaces + `) AND consumed > 0`,
+			Min: 1, Max: 1,
+			Shows: "the exact counter beside the limit. A limit with nothing " +
+				"against it is indistinguishable from a limit that does not work",
+		},
+		{
+			Milestone: "M35", Feature: "A link that requires a signed URL",
+			Query: `SELECT count(*) FROM links
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND require_signature`,
+			Min: 1, Max: 1,
+			Shows: "the 403 an unsigned request gets, and the signing form that " +
+				"produces a URL which does not get it",
+		},
+		{
+			Milestone: "M35", Feature: "A workspace signing secret",
+			Query: `SELECT count(*) FROM workspaces
+			         WHERE organization_id = $1 AND signing_secret IS NOT NULL`,
+			Min: 1, Max: 1,
+			Shows: "that signing minted a key on first use — without one the " +
+				"signature-gated link above refuses everybody, including its owner",
+		},
+
 		// The boundary. Everything below is a milestone that has not been built,
 		// so the demo showing nothing is correct — and these rows are what make
 		// the next person add a feature row above instead of quietly seeding

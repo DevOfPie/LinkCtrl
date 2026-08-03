@@ -45,6 +45,33 @@ migrations run at boot.
 
 ### Added
 
+- **A link can ask for something before it redirects.** Four gates, each off
+  unless you switch it on, each set on the link's own page or over the API.
+  Nothing changes for a link that uses none of them.
+  - **A password.** The visitor gets a small challenge page and types it in;
+    getting it right answers the redirect. It is stored as an argon2id hash with
+    the same cost parameters an account password gets, and neither the password
+    nor its hash is ever returned by the API. **Nothing is remembered in the
+    visitor's browser** — no cookie, no token, no session — so coming back later
+    means typing it again. That is deliberate rather than unfinished: it is what
+    keeps the short-link host free of the session and CSRF machinery the
+    dashboard needs, and it is why the challenge could be added to that host at
+    all. Guesses are rate-limited per address *and* per link.
+  - **A single use.** The first visit redirects, the second answers 410 Gone.
+  - **A click ceiling.** The same thing with a bigger number. The count is exact
+    and lives in the database — it is **not** the approximate click total shown
+    on the link's page, which is written in batches and can lose one. A HEAD
+    request never spends a click, so a link checker cannot use up a one-time
+    link by asking whether it is alive. Raising a ceiling on a link that has
+    already stopped starts it working again.
+  - **A signature.** The plain short URL is refused with 403 and only a signed,
+    unexpired one works. Signed URLs are minted from the link's page or with
+    `POST /api/v1/links/{id}/sign`, carry an expiry of up to thirty days, and the
+    expiry is inside the signature so it cannot be extended by editing the URL.
+    The signature parameters are stripped before a link's query forwarding
+    passes anything to the destination, so whoever runs the destination never
+    receives a URL they could replay.
+
 - **A link can send different visitors to different destinations.** A link now
   carries an ordered list of routing rules: each one has a condition set and a
   destination, they are checked from the lowest priority number upwards, and

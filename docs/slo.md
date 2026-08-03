@@ -323,6 +323,95 @@ GeoLite2-City — remains unmeasured and is recorded as such in
 the decision that chose this over the alternatives; there is no GeoLite2-City on
 this project's machines and one cannot be committed.
 
+### Re-measured for M35 (2026-08-03)
+
+[M35](build-notes/phase-details/m35.md) puts four gates in front of a link, and
+one of them does something no earlier milestone did: **a synchronous Postgres
+write on the redirect path**. So this section reports two numbers rather than
+one, and the milestone asks for exactly that split — the SLO's claim is about
+**ungated** links, and gated-path latency is measured and documented separately
+because the extra write is paid only by links that asked for it.
+
+Two cached runs on the same image, differing **only in whether the seeded links
+carry a click budget**. Both cache tiers were emptied and the container
+restarted before each.
+
+| | Target | **Ungated** | **Every link click-limited** |
+| --- | --- | --- | --- |
+| Cached redirect, server-side | p99 < 20ms | **100% of 240,001 under 20ms**; **100% under 0.5ms** | 99.743% of 240,002 under 20ms; 99.480% under 10ms; 91.175% under 5ms; 34.281% under 2.5ms; **0% under 1ms** |
+| Cached redirect, generator-side | — | avg **88.44µs**, median 84.25µs, p(95) 113.31µs, max 8.22ms | avg **3.38ms**, median 3.15ms, p(95) 5.61ms, max 43.72ms |
+| Sustained rate | 2,000 rps for 2m | 2,000.0 rps, 240,001 requests, zero failures | 2,000.0 rps, 240,002 requests, zero failures |
+| Dataset | 100k links, 5M events | 100,000 links, 5,000,000 events | same |
+| Cache mix | hits only | 240,001 memory, 0 redis, 0 database | 240,002 memory, 0 redis, 0 database |
+| Redirect pool | — | 0 acquire waits | 0 acquire waits |
+
+**The ungated column is the SLO and it is met with the largest margin this
+document has recorded**: 100% of requests under half a millisecond, against a
+20ms budget. That is the claim m35.md asks to be re-verified, and the reason it
+holds is structural rather than lucky. `Snapshot.Gated()` is one boolean
+expression over fields the resolver already produced, and it is false for every
+link on a default instance — so an ungated link reaches none of the gate code,
+performs no extra query and writes nothing.
+
+**The gated column is the honest cost, and it is not small.** About 3.3ms at the
+median against 84µs ungated: **roughly forty times slower**, and 0.257% of
+requests — 616 of 240,002 — landed over the 20ms line. This is the first
+configuration in this document that would fail the SLO if the SLO were stated
+over it, which is precisely why it is stated over cached *redirects* on a
+default instance and why this milestone was required to measure the gated path
+separately rather than fold it into one figure.
+
+The cause is not in doubt and needs no profile. Every one of those 240,002
+requests performed a synchronous `INSERT … ON CONFLICT DO UPDATE` against
+`link_click_budget`, and the 5,000 hot aliases means 5,000 rows taking about 48
+updates each inside two minutes. The measurement afterwards: 5,000 rows,
+245,003 total clicks consumed, a maximum of 76 on one row. Concurrent requests
+for the same alias serialise on that row lock, which is exactly the property
+that makes a one-time link one-time — the latency is the guarantee being paid
+for, not overhead beside it.
+
+Read the two columns as **two different links, not two different builds**. A
+link with no gate is the first column and its cached payload is byte-for-byte
+what it was before this milestone existed.
+
+#### What this run did **not** measure
+
+**The password gate.** Verifying one is an argon2id derivation, deliberately
+~50ms of CPU at the configured parameters, plus a Postgres read — and it happens
+on a POST that k6 cannot drive against 5,000 distinct aliases without 5,000
+distinct passwords. Its cost is the argon2 cost, which config validation already
+floors at RFC 9106's 19456 KiB, and it is bounded by the hasher's own semaphore
+and by `LINKCTRL_LINK_PASSWORD_RATE_LIMIT` rather than by anything measured
+here. A *visit* to a password link — the challenge page — is embedded bytes and
+no query, so it is cheaper than a redirect.
+
+**The signature gate.** It is an HMAC-SHA256 over four short strings against a
+key already in the process, and the workspace secret is cached in process for a
+minute — so at steady state it costs no I/O at all. It was not run because the
+load generator appends a fixed path suffix and a signature is per alias, so
+5,000 hot aliases would need 5,000 distinct query strings the script has no way
+to produce. What is worth saying rather than guessing is that it performs no
+write and, after the first request per workspace, no read.
+
+Taken on image `sha256:54db9f1d227d1e…` (`linkctrl:test`, built 2026-08-03 from
+the M35 working tree at `v0.1.0-68-g5409e94-dirty`).
+
+**This is a different host from every figure above it**, and that is worth
+stating rather than leaving to be inferred: the runs from the first measurement
+through M34 were taken on Windows 11 with Docker Desktop on WSL2, and these two
+were taken on Linux with Docker running natively. The ungated column is the
+tightest cached figure in this document, and some of that is the host rather
+than the code. **The comparison that carries the milestone's claim is between
+the two columns**, which were run minutes apart on the same machine and the same
+image — not between the ungated column and M34's. Anybody reading a
+milestone-over-milestone trend out of this section is reading a change of
+hardware.
+
+Thirteen cached runs now read 100%, 100%, 100%,
+99.991%, 100%, 100%, 100%, 100%, 100%, 100%, 100%, 100% and 99.743% under 20ms
+— the last of those being the gated configuration, which is a different path
+rather than a regression in this one.
+
 ## Reproducing it
 
 ```sh
@@ -351,6 +440,23 @@ The update and the restart are not optional decoration. Without the column set
 every request answers 404, and k6's `is 302` check fails the run rather than
 quietly measuring the miss path; without the flush and the restart the warm-up
 would populate the tiers from snapshots written before the column changed.
+
+The click budget (M35) is switched on with SQL, and the ceiling is set far
+higher than the run can reach so that no request is refused rather than timed:
+
+```sh
+docker compose exec postgres psql -U linkctrl -d linkctrl \
+  -c "UPDATE links SET max_clicks = 100000000 WHERE alias LIKE 'ld%'"
+docker compose exec redis redis-cli FLUSHALL
+docker compose restart app
+make load
+```
+
+A smaller ceiling would measure the 410 path, which costs a failed predicate and
+no write — the opposite of what the gated column is for. The comparison run is
+the identical aliases with `max_clicks` set back to NULL, and the same flush and
+restart apply for the same reason: the snapshots written while the column was
+set carry the gate.
 
 Routing rules (M34) are seeded with SQL rather than with a flag, because what
 the measurement needs is a *specific arrangement* of rules — one that no request

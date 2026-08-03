@@ -47,6 +47,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/dispute"
 	"github.com/DevOfPie/LinkCtrl/internal/feed"
+	"github.com/DevOfPie/LinkCtrl/internal/gate"
 	"github.com/DevOfPie/LinkCtrl/internal/geoip"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
@@ -479,6 +480,13 @@ func run(cfg config.Config, _ io.Writer) error {
 			"no destination leaves this instance")
 	}
 
+	// The gates (M35). On the application pool rather than the redirect pool,
+	// and that is not an oversight: every one of its queries is either a
+	// management read or a write that only a *gated* link performs, so putting
+	// them on the small pool the redirect path guards for itself would let a
+	// burst of password submissions starve ordinary redirects.
+	gateSvc := gate.NewService(pools.App, gate.Config{Hasher: authSvc.Hasher()})
+
 	linkSvc := link.NewService(pools.App, link.Config{
 		// The unappealable tier is not configured here and cannot be: private
 		// and metadata addresses are refused unconditionally, and the scheme
@@ -515,7 +523,13 @@ func run(cfg config.Config, _ io.Writer) error {
 		// is the protection they keep when one stops answering.
 		Feed:        feedChecker,
 		FeedMetrics: metrics,
-		Log:         log,
+		// The gates (M35). The hasher is the account hasher, deliberately: a
+		// link password lands in the same database dump an account password
+		// does, so it gets the same argon2 parameters rather than a cheaper set
+		// justified by being "only" a link.
+		Hasher: authSvc.Hasher(),
+		Gates:  gateSvc,
+		Log:    log,
 	})
 	rootRedirect.Load = linkSvc.LoadRootRedirect
 
@@ -655,6 +669,10 @@ func run(cfg config.Config, _ io.Writer) error {
 		Recorder:        clickRecorder{ingester: ingester},
 		Metrics:         metrics,
 		NotFoundLimiter: limits.NotFound,
+		// The gates (M35). Consulted only for a link whose snapshot says it is
+		// gated, which is no link at all on a default instance.
+		Gates:           gateSvc,
+		PasswordLimiter: limits.LinkPassword,
 		// Routing rules (M34). Assigned only when there is a database, for the
 		// same reason ingestCfg.Geo is: a nil *geoip.Resolver in an interface is
 		// not a nil interface, and the handler's "is geography available" check

@@ -200,10 +200,15 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	}, http.StatusCreated)
 	linkID := field(t, created, "id")
 
-	// Phase 2 fields refuse loudly, per the documented 422.
-	c.do("POST", p+"/links", map[string]any{
-		"url": "https://example.com/x", "one_time": true,
-	}, http.StatusUnprocessableEntity)
+	// The gates are settable (M35). This replayed the documented 422 while they
+	// were stubs; the spec now documents them as accepted, and a contract test
+	// still asserting the refusal would be asserting the stub.
+	gated := c.do("POST", p+"/links", map[string]any{
+		"url": "https://example.com/x", "one_time": true, "max_clicks": 3,
+		"require_signature": true,
+	}, http.StatusCreated)
+	c.do("POST", p+"/links/"+field(t, gated, "id")+"/sign",
+		map[string]any{"ttl_seconds": 3600}, http.StatusCreated)
 
 	c.do("GET", p+"/links?search=contract&include_total=true&sort=newest", nil, http.StatusOK)
 	c.do("GET", p+"/links/"+linkID, nil, http.StatusOK)

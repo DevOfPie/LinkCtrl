@@ -14,6 +14,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
+	"github.com/DevOfPie/LinkCtrl/internal/gate"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/postgres"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
@@ -247,7 +248,9 @@ func demoSeed(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, opt de
 	}
 
 	auditSvc := audit.NewService(pool)
-	linkSvc := link.NewService(pool, demoLinkConfig(cfg, auditSvc))
+	gateSvc := gate.NewService(pool, gate.Config{Hasher: authSvc.Hasher()})
+	linkSvc := link.NewService(pool,
+		demoLinkConfig(cfg, auditSvc, authSvc.Hasher(), gateSvc))
 
 	ids, err := demoCreateLinks(ctx, pool, linkSvc, actor, catalogue, now)
 	if err != nil {
@@ -264,7 +267,7 @@ func demoSeed(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, opt de
 	// Everything Phase 2 added. Before the rollup below, because the second
 	// workspace writes click events of its own and a rollup that ran first would
 	// leave its analytics pages empty.
-	seeder, err := newDemoSeeder(pool, cfg, authSvc, linkSvc, actor, opt, now)
+	seeder, err := newDemoSeeder(pool, cfg, authSvc, linkSvc, gateSvc, actor, opt, now)
 	if err != nil {
 		return err
 	}

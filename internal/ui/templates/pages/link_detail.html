@@ -133,9 +133,96 @@
         </span>
       </label>
     </div>
+    {{/* The gates (M35). Grouped rather than scattered among the fields above,
+         because they share one property nothing else on this form has: each of
+         them can stop a visitor reaching the destination, and somebody
+         auditing a link wants to read them together. */}}
+    <div class="sm:col-span-2 border-t border-line pt-4">
+      <h3 class="text-sm font-medium text-ink">Gates</h3>
+      <p class="mt-1 text-xs text-subtle">
+        Each of these is off unless you switch it on, and each is paid for on every visit to this link and no other. Nothing here is a substitute for a destination that authenticates its own visitors.
+      </p>
+    </div>
+    <div>
+      <label for="password" class="block text-sm font-medium text-ink">Password</label>
+      {{/* The box is always empty, and that is not a bug to fix later. The
+           password is stored as an argon2id hash, so there is nothing to
+           render — and because this form posts every field, an empty box has
+           to mean "leave it alone" or every save would clear the gate.
+           Removing one is therefore its own checkbox. */}}
+      <input id="password" name="password" type="password" autocomplete="new-password"
+             placeholder="{{if .Form.HasPassword}}Set — type to replace{{else}}No password{{end}}"
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      {{template "field_error" (index .FieldErrors "password")}}
+      <p class="mt-1 text-xs text-subtle">
+        At least {{.MinPasswordLength}} characters. Visitors get a challenge page and type it in; nothing is remembered in their browser, so they type it again next time.
+      </p>
+      {{if .Form.HasPassword}}
+      <label class="mt-2 flex items-start gap-2 text-sm text-ink">
+        <input type="checkbox" name="clear_password" value="1" class="mt-0.5 rounded border-line-strong"
+               {{if .Form.ClearPassword}}checked{{end}}>
+        <span>Remove the password</span>
+      </label>
+      {{end}}
+    </div>
+    <div>
+      <label for="max_clicks" class="block text-sm font-medium text-ink">Click limit <span class="text-subtle">(empty = none)</span></label>
+      <input id="max_clicks" name="max_clicks" type="number" min="1" value="{{.Form.MaxClicks}}"
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      {{template "field_error" (index .FieldErrors "max_clicks")}}
+      <p class="mt-1 text-xs text-subtle">
+        Past the limit the link answers 410. Counted exactly, in the database &mdash; not by the click total above, which is approximate.
+        {{if .Link.ClicksConsumed}}<strong class="text-ink">{{.Link.ClicksConsumed}} used so far.</strong>{{end}}
+      </p>
+    </div>
+    <div class="sm:col-span-2">
+      <label class="flex items-start gap-2 text-sm text-ink">
+        <input type="checkbox" name="one_time" value="1" class="mt-0.5 rounded border-line-strong"
+               {{if .Form.OneTime}}checked{{end}}>
+        <span>Follow once, then stop
+          <span class="block text-xs text-subtle">The same gate as a click limit of 1. With both set, the smaller wins. A HEAD request never spends a click, so a link checker cannot burn this link by looking at it.</span>
+        </span>
+      </label>
+    </div>
+    <div class="sm:col-span-2">
+      <label class="flex items-start gap-2 text-sm text-ink">
+        <input type="checkbox" name="require_signature" value="1" class="mt-0.5 rounded border-line-strong"
+               {{if .Form.RequireSignature}}checked{{end}}>
+        <span>Require a signed link
+          <span class="block text-xs text-subtle">The plain short URL stops working: only a signed one, made below and not yet expired, is accepted. Switching this on without minting a signed link makes the link unreachable.</span>
+        </span>
+      </label>
+    </div>
     <div class="sm:col-span-2">
       <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Save changes</button>
     </div>
+  </form>
+</div>
+
+{{/* Signed links (M35). Its own form, and its own POST, because minting one is
+     not editing the link: it produces a capability rather than changing a
+     setting, and it is deliberately not carried back through a redirect &mdash;
+     a signed URL in the address bar is a signed URL in the history, the proxy
+     log and the next page's Referer. */}}
+<div class="mt-6 rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-1 text-sm font-medium text-ink">Signed links</h2>
+  <p class="mb-4 text-sm text-muted">
+    A signed link carries an expiry and a signature over this alias. Anyone holding one can follow the link until it expires, and nothing identifies them &mdash; treat it as a secret rather than as a permission.
+  </p>
+  {{if .SignedURL}}
+  <div class="mb-4 rounded-md border border-line-strong bg-sunken p-3">
+    <p class="text-xs text-subtle">Valid until {{.SignedExpires}}. Shown once, here; it is not stored and reloading this page will not bring it back.</p>
+    <code class="mt-2 block break-all text-sm text-ink">{{.SignedURL}}</code>
+  </div>
+  {{end}}
+  <form method="post" action="/links/{{.Link.ID}}/sign" class="flex flex-wrap items-end gap-3">
+    <div>
+      <label for="ttl_hours" class="block text-sm font-medium text-ink">Valid for <span class="text-subtle">(hours)</span></label>
+      <input id="ttl_hours" name="ttl_hours" type="number" min="1" max="720" value="24"
+             class="mt-1 block w-32 rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      {{template "field_error" (index .FieldErrors "ttl_seconds")}}
+    </div>
+    <button type="submit" class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-sunken">Create a signed link</button>
   </form>
 </div>
 {{end}}

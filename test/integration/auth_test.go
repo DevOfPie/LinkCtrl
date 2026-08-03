@@ -54,21 +54,25 @@ func TestMigrationsProduceExpectedSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 31 was the Phase 1 count: all 20 Plan.md entities, plus the join and
-	// support tables they need. Five Phase 2 tables have been added since, and
+	// support tables they need. Six Phase 2 tables have been added since, and
 	// none of them is an entity: mail_outbox is the delivery queue decision D23
 	// chose over an in-memory retry, invitations is the grant M27 issues,
 	// pending_registrations is M29's waiting room — a self-serve registration
 	// that has not proven its address yet, which is why no account exists for
 	// it — blocked_destinations is M30's low-confidence blocklist, the one tier
-	// of three that is meant to change without a rebuild, and
-	// destination_disputes is M31's appeal against exactly that list. Each is
-	// live and typed rather than dormant jsonb, because the feature that reads
-	// it arrived in the same commit. The number moves and the sentence says why,
-	// rather than the count silently growing whenever somebody adds a table.
-	if tables != 36 {
-		t.Errorf("got %d tables, want 36 (all 20 Plan.md entities, plus mail_outbox, "+
-			"invitations, pending_registrations, blocked_destinations and "+
-			"destination_disputes)", tables)
+	// of three that is meant to change without a rebuild,
+	// destination_disputes is M31's appeal against exactly that list, and
+	// link_click_budget is M35's durable click counter — a table rather than a
+	// column on `links` because `links.click_count` is approximate by design and
+	// gating on it would make a lossy asynchronous counter into an
+	// authorization boundary. Each is live and typed rather than dormant jsonb,
+	// because the feature that reads it arrived in the same commit. The number
+	// moves and the sentence says why, rather than the count silently growing
+	// whenever somebody adds a table.
+	if tables != 37 {
+		t.Errorf("got %d tables, want 37 (all 20 Plan.md entities, plus mail_outbox, "+
+			"invitations, pending_registrations, blocked_destinations, "+
+			"destination_disputes and link_click_budget)", tables)
 	}
 
 	// The UTC guarantee the partition scheme depends on.

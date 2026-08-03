@@ -348,10 +348,13 @@ paths:
       summary: Create a link
       description: |
         Destinations are restricted to http/https and may not point at
-        private, loopback, link-local or cloud-metadata addresses. The
-        `password`, `max_clicks` and `one_time` fields exist in the schema but
-        are rejected with a 422 until Phase 2 — refusing loudly beats
-        accepting and doing nothing.
+        private, loopback, link-local or cloud-metadata addresses.
+
+        `password`, `max_clicks`, `one_time` and `require_signature` are the
+        four gates a link can put in front of its destination. Each is off
+        unless asked for. A gated link pays for its gate on every visit — an
+        argon2id verification, or a durable counter write — and an ungated one
+        pays nothing, which is why they are per link rather than per instance.
       requestBody:
         required: true
         content:
@@ -479,6 +482,72 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /links/{id}/sign:
+    post:
+      tags: [links]
+      operationId: signLink
+      summary: Mint a signed URL for a link
+      description: |
+        Returns a URL carrying an HMAC signature and an expiry. A link with
+        `require_signature` set refuses any request that does not carry a valid,
+        unexpired one; a link without it is unaffected, and signing such a link
+        simply produces a URL that also works unsigned.
+
+        **Format**, so a client can verify one without calling this:
+
+            https://<link host>/<alias>?exp=<unix seconds>&sig=<signature>
+
+        `sig` is the unpadded base64url encoding of HMAC-SHA256 over
+
+            "lc1\n" + <domain uuid> + "\n" + <canonical alias> + "\n" + <exp>
+
+        keyed by the workspace's signing secret. The expiry is inside the MAC, so
+        it cannot be extended by editing the URL, and the domain id is inside it
+        so a signature minted for one hostname does not verify on another. Both
+        parameters are stripped before `forward_query` passes the visitor's query
+        on to the destination, so a signature is never handed to whoever runs it.
+
+        The workspace's signing secret is created on the first call and is never
+        returned. Requires `links.update`, not `links.read`: a signature is what
+        makes a gated link followable, so issuing one is handing out access.
+      parameters:
+        - $ref: "#/components/parameters/LinkID"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                ttl_seconds:
+                  type: integer
+                  format: int64
+                  description: |
+                    How long the signature stays valid. Defaults to 86400.
+                    Refused above 2592000 (30 days) rather than clamped — a
+                    signature is a bearer capability, and one that never expired
+                    would be a permanent secret in whatever it was pasted into.
+      responses:
+        "201":
+          description: The signed URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, expires_at]
+                properties:
+                  url: { type: string, format: uri }
+                  expires_at: { type: string, format: date-time }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
 
   /links/{id}/rules:
     parameters:
@@ -2492,7 +2561,8 @@ components:
       additionalProperties: false
       required:
         [id, workspace_id, alias, short_url, url, status, tags, forward_query,
-         forward_path, bot_blocking, click_count, created_at, updated_at]
+         forward_path, bot_blocking, has_password, one_time, require_signature,
+         click_count, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         workspace_id: { type: string, format: uuid }
@@ -2527,10 +2597,37 @@ components:
         bot_blocking:
           $ref: "#/components/schemas/BotBlocking"
         expires_at: { type: string, format: date-time }
+        has_password:
+          type: boolean
+          description: |
+            Whether the link is password-protected. A boolean and never the
+            password or its hash: a management API that returned either would
+            make every reader of a link a holder of its secret.
+        max_clicks:
+          type: integer
+          format: int64
+          description: The click ceiling, if there is one. The limit, never the remainder.
+        one_time:
+          type: boolean
+          description: Whether the link may be followed once.
+        require_signature:
+          type: boolean
+          description: Whether the link refuses requests without a valid signature.
+        clicks_consumed:
+          type: integer
+          format: int64
+          description: |
+            How much of the click budget has been spent, exactly. Present only on
+            a single-link read of a link that has a budget — it is a second query,
+            and a page of links would be a second query each. Unlike `click_count`
+            this is the number the gate itself reads.
         click_count:
           type: integer
           format: int64
-          description: Approximate — written in batches with the click events, an unclean shutdown can lose one batch.
+          description: |
+            Approximate — written in batches with the click events, an unclean
+            shutdown can lose one batch. **Deliberately not what the max-click
+            gate counts**; see `clicks_consumed`.
         last_click_at: { type: string, format: date-time }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
@@ -2671,14 +2768,31 @@ components:
           description: Off by default. Appends the visitor's extra path segments to the destination; with it on the alias answers every path beneath itself.
         password:
           type: string
-          description: Phase 2. Present in the schema, rejected with 422.
+          description: |
+            Protects the link with a password. Write-only: it is hashed with
+            argon2id on arrival and no response returns it or its hash. Minimum
+            12 characters, the same floor an account password has — this hash
+            sits in the same database dump. A visitor gets a challenge page and
+            submits the password back to the link's own URL; nothing is issued
+            to their browser, so returning later means typing it again.
         max_clicks:
           type: integer
           format: int64
-          description: Phase 2. Present in the schema, rejected with 422.
+          minimum: 1
+          description: |
+            Refuses the link with 410 once it has been followed this many times.
+            Counted by a durable Postgres counter, not by `click_count`, which is
+            approximate and asynchronous. HEAD requests never consume a click.
         one_time:
           type: boolean
-          description: Phase 2. Present in the schema, rejected with 422.
+          description: |
+            The same gate as `max_clicks: 1`. When both are set, the smaller
+            wins.
+        require_signature:
+          type: boolean
+          description: |
+            Refuses any request without a valid, unexpired signature. See
+            `POST /links/{id}/sign` for the format.
 
     UpdateLinkRequest:
       type: object
@@ -2706,6 +2820,27 @@ components:
           description: Toggles deep-link path forwarding for the link.
         bot_blocking:
           $ref: "#/components/schemas/BotBlocking"
+        password:
+          type: string
+          description: |
+            Sets or removes the link's password. An **empty string removes it**;
+            an absent key leaves it alone. The distinction is not decoration: a
+            form that posts every field cannot re-send a password nobody can
+            read, so an empty box has to mean "no change" and removal has to be
+            asked for explicitly. Write-only — nothing reads one back.
+        max_clicks:
+          type: integer
+          format: int64
+          description: |
+            Sets or removes the click ceiling. **Zero removes it**; an absent key
+            leaves it alone. A ceiling of zero is refused everywhere else, which
+            is what makes it unambiguous as the removal sentinel.
+        one_time:
+          type: boolean
+          description: Toggles the one-time gate.
+        require_signature:
+          type: boolean
+          description: Toggles the signed-URL requirement.
 
     DayPoint:
       type: object

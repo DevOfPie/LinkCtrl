@@ -274,9 +274,13 @@ func (r *Resolver) fromDatabase(ctx context.Context, domainID uuid.UUID, alias, 
 		ExpiresAt:    row.ExpiresAt,
 		ForwardQuery: row.ForwardQuery,
 		ForwardPath:  row.ForwardPath,
-		HasPassword:  row.PasswordHash != nil,
-		MaxClicks:    row.MaxClicks,
-		OneTime:      row.OneTime,
+		// The gates (M35). Note what is *not* here: `row.PasswordHash` is
+		// reduced to a boolean and the hash itself never enters the struct that
+		// gets serialized into Redis. See the field comments on Snapshot.
+		HasPassword:      row.PasswordHash != nil && *row.PasswordHash != "",
+		MaxClicks:        row.MaxClicks,
+		OneTime:          row.OneTime,
+		RequireSignature: row.RequireSignature,
 		// Carried, not decided. Storing the resolved boolean instead would be
 		// cheaper per request and would put the answer somewhere other than
 		// domain.BlocksBots — an encoding of a decision whose inputs are no

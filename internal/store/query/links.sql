@@ -4,8 +4,8 @@
 INSERT INTO links (
     id, workspace_id, domain_id, alias, primary_url,
     title, description, status, expires_at, created_by, forward_query,
-    forward_path
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    forward_path, password_hash, max_clicks, one_time, require_signature
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 RETURNING *;
 
 -- name: CreateDestination :one
@@ -40,6 +40,17 @@ UPDATE links
        forward_query = COALESCE(sqlc.narg(forward_query), forward_query),
        forward_path  = COALESCE(sqlc.narg(forward_path), forward_path),
        bot_blocking  = COALESCE(sqlc.narg(bot_blocking), bot_blocking),
+       -- The gates (M35). Each is three-valued through its own pair of
+       -- arguments, because "leave it alone" and "remove it" are different
+       -- requests and a nullable column cannot express both with one nullable
+       -- parameter. clear_password wins over password_hash for the same reason
+       -- clear_expiry wins over expires_at, and the order is the same.
+       password_hash = CASE WHEN sqlc.arg(clear_password)::boolean THEN NULL
+                            ELSE COALESCE(sqlc.narg(password_hash), password_hash) END,
+       max_clicks    = CASE WHEN sqlc.arg(clear_max_clicks)::boolean THEN NULL
+                            ELSE COALESCE(sqlc.narg(max_clicks), max_clicks) END,
+       one_time      = COALESCE(sqlc.narg(one_time), one_time),
+       require_signature = COALESCE(sqlc.narg(require_signature), require_signature),
        updated_at    = now()
  WHERE id = sqlc.arg(id) AND workspace_id = sqlc.arg(workspace_id) AND deleted_at IS NULL
 RETURNING *;

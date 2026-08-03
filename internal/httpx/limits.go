@@ -26,6 +26,11 @@ type Limiters struct {
 	// only a miss may be charged and middleware cannot tell a miss from a hit
 	// without inspecting the response it is wrapping.
 	NotFound *ratelimit.Limiter
+	// LinkPassword throttles guesses at a link password (D54). Shared through
+	// Redis like Login, and enforced inside the redirect handler for the same
+	// reason NotFound is: only a submitted password may be charged, and the
+	// handler is the only thing that knows a request is one.
+	LinkPassword *ratelimit.Limiter
 }
 
 // NewLimiters builds the limits from configuration.
@@ -59,6 +64,16 @@ func NewLimiters(cfg config.Config, rdb *goredis.Client, log *slog.Logger) Limit
 		// on the hot path — and its job, making alias scanning tedious, is
 		// served well enough per instance.
 		NotFound: ratelimit.New(cfg.Redirect.NotFoundLimit, ratelimit.Options{}),
+		// Shared, unlike NotFound, and the difference is what the two limits
+		// protect. A probe limit makes scanning tedious; this one is the only
+		// thing standing between a link password and a wordlist, so an attacker
+		// must not multiply their budget by the replica count. It is on the
+		// redirect tree, so the round trip is paid only by a *submitted*
+		// password — never by a visit — and a Redis that does not answer falls
+		// back to this instance's own buckets rather than blocking the request.
+		LinkPassword: ratelimit.New(cfg.Redirect.PasswordLimit, ratelimit.Options{
+			Shared: shared("link_password"),
+		}),
 	}
 }
 
@@ -69,9 +84,10 @@ func NewLimiters(cfg config.Config, rdb *goredis.Client, log *slog.Logger) Limit
 // in an interface is not a nil interface, so a disabled limiter would otherwise
 // be collected as a working one reporting zeros.
 func (l Limiters) Stats() map[string]observability.LimiterStats {
-	out := make(map[string]observability.LimiterStats, 3)
+	out := make(map[string]observability.LimiterStats, 4)
 	for name, lim := range map[string]*ratelimit.Limiter{
 		"login": l.Login, "api": l.API, "redirect_404": l.NotFound,
+		"link_password": l.LinkPassword,
 	} {
 		if lim != nil {
 			out[name] = lim

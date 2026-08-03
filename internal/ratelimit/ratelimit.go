@@ -151,7 +151,30 @@ func New(perMinute int, opts Options) *Limiter {
 // Allow consumes one token, reporting whether the request may proceed and, if
 // not, how long until it could.
 func (l *Limiter) Allow(addr netip.Addr) (bool, time.Duration) {
-	return l.take(addr, true)
+	return l.takeKey(Key(addr), true)
+}
+
+// AllowKey is Allow against something that is not an address.
+//
+// Added by M35 for the one limit that has to be keyed on the *resource* rather
+// than on the client: guesses at a link's password, driven through many
+// visitors' browsers, spread across as many addresses as there are visitors and
+// slip under a per-address bucket entirely (D54). Keying the same limiter on the
+// alias closes that, and the two limbs are checked together — an attacker has to
+// stay under both.
+//
+// Deliberately the same buckets, the same sweep and the same Redis script the
+// address-keyed limit uses. A second mechanism would be a second thing to get
+// wrong, and the shared limiter M24 built already takes a string key: `Key` was
+// only ever how an address became one.
+//
+// The caller is responsible for a key that cannot collide with an address —
+// prefix it — because both live in one table.
+func (l *Limiter) AllowKey(key string) (bool, time.Duration) {
+	if key == "" {
+		key = invalidKey
+	}
+	return l.takeKey(key, true)
 }
 
 // Check reports whether a token is available without consuming one.
@@ -160,20 +183,19 @@ func (l *Limiter) Allow(addr netip.Addr) (bool, time.Duration) {
 // path checks before resolving an alias and charges only for a miss, so a
 // working short link never spends a token.
 func (l *Limiter) Check(addr netip.Addr) (bool, time.Duration) {
-	return l.take(addr, false)
+	return l.takeKey(Key(addr), false)
 }
 
 // Charge consumes a token if one is available, ignoring the answer.
 func (l *Limiter) Charge(addr netip.Addr) {
-	l.take(addr, true)
+	l.takeKey(Key(addr), true)
 }
 
-func (l *Limiter) take(addr netip.Addr, consume bool) (bool, time.Duration) {
+// takeKey is the whole limiter. Everything above is a way of arriving at a key.
+func (l *Limiter) takeKey(k string, consume bool) (bool, time.Duration) {
 	if l == nil {
 		return true, 0
 	}
-
-	k := Key(addr)
 
 	// The shared decision first, when there is one. It is authoritative because
 	// it is the only one that sees the other replicas; the local bucket below

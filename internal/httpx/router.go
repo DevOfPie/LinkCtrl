@@ -145,6 +145,10 @@ func NewRouter(d Deps) http.Handler {
 			"DELETE " + APIPrefix + "/links/{id}":       api.Delete,
 			"POST " + APIPrefix + "/links/{id}/archive": api.Archive,
 			"POST " + APIPrefix + "/links/{id}/restore": api.Restore,
+			// Minting a signed URL (M35). No permission of its own: a signature
+			// is what makes a gated link followable, so issuing one is
+			// links.update — see internal/link/gates.go.
+			"POST " + APIPrefix + "/links/{id}/sign": api.Sign,
 			// Routing rules (M34), nested under the link they belong to. No
 			// permission of their own: a rule is where a link points, and that is
 			// links.read and links.update — see internal/link/routing.go.
@@ -351,16 +355,20 @@ func NewRouter(d Deps) http.Handler {
 			"POST /links/{id}/rules":                 web.RuleCreate,
 			"POST /links/{id}/rules/{ruleID}/toggle": web.RuleToggle,
 			"POST /links/{id}/rules/{ruleID}/delete": web.RuleDelete,
-			"POST /links/{id}/archive":               web.LinkArchive,
-			"POST /links/{id}/restore":               web.LinkRestore,
-			"POST /links/{id}/delete":                web.LinkDelete,
-			"GET /keys":                              web.KeysPage,
-			"GET /notifications":                     web.NotificationsPage,
-			"POST /notifications/read":               web.NotificationReadAll,
-			"POST /notifications/{id}/read":          web.NotificationRead,
-			"POST /keys":                             web.KeyCreate,
-			"POST /keys/{id}/revoke":                 web.KeyRevoke,
-			"GET /account":                           web.AccountPage,
+			// Minting a signed URL (M35). A POST because it can create the
+			// workspace's signing secret, and because a capability must not be
+			// something a link somebody clicks can produce.
+			"POST /links/{id}/sign":         web.LinkSign,
+			"POST /links/{id}/archive":      web.LinkArchive,
+			"POST /links/{id}/restore":      web.LinkRestore,
+			"POST /links/{id}/delete":       web.LinkDelete,
+			"GET /keys":                     web.KeysPage,
+			"GET /notifications":            web.NotificationsPage,
+			"POST /notifications/read":      web.NotificationReadAll,
+			"POST /notifications/{id}/read": web.NotificationRead,
+			"POST /keys":                    web.KeyCreate,
+			"POST /keys/{id}/revoke":        web.KeyRevoke,
+			"GET /account":                  web.AccountPage,
 			// Read-only, and registered GET-only on purpose: a POST to /feeds
 			// must be refused by the mux rather than by a handler somebody
 			// could add one to. D40, and TestTheDisclosurePageAcceptsNoWrite.
@@ -537,10 +545,36 @@ func NewRouter(d Deps) http.Handler {
 	// It carries the same methodFilter for the same reason: written with a
 	// method it would be ambiguous against the specific ops routes, and
 	// method-less it is unambiguously the more general pattern.
+	// **POST on the single-segment pattern is D53, signed off 2026-08-02, and it
+	// is the only amendment to the redirect tree's tripwires this phase makes.**
+	//
+	// Before M35 both lines below read
+	// `methodFilter(d.Redirect, http.MethodGet, http.MethodHead)`, so a POST to a
+	// link host answered 405 at the mux. A password link has to accept a form,
+	// and the form posts to the URL it was served from — which is what lets the
+	// challenge page be fixed bytes with no template engine and no knowledge of
+	// the link it belongs to.
+	//
+	// The permission is exactly one method on exactly one pattern, and the rest
+	// of the redirect tree's rules stand unamended: no session lookup, no CSRF
+	// middleware, no template rendering, and no cookie set anywhere. The POST
+	// issues nothing — it verifies argon2id against Postgres and answers the 302
+	// itself — which is why there is no CSRF token and why the absence of one is
+	// a conclusion rather than an omission. If an unlock is ever made to persist
+	// across clicks, something *is* handed to the browser and D53 is revisited
+	// rather than inherited.
+	//
+	// The multi-segment pattern keeps GET and HEAD only. A password form is
+	// served at the alias itself, so nothing beneath it needs to accept a write,
+	// and widening it would be permission nobody asked for. The handler enforces
+	// the other half of the boundary: an alias with no password answers 405 to a
+	// POST exactly as the method filter used to.
 	registerRedirect := func(root *http.ServeMux) {
 		if d.Redirect != nil {
-			root.Handle("/{alias}", methodFilter(d.Redirect, http.MethodGet, http.MethodHead))
-			root.Handle("/{alias}/{rest...}", methodFilter(d.Redirect, http.MethodGet, http.MethodHead))
+			root.Handle("/{alias}",
+				methodFilter(d.Redirect, http.MethodGet, http.MethodHead, http.MethodPost))
+			root.Handle("/{alias}/{rest...}",
+				methodFilter(d.Redirect, http.MethodGet, http.MethodHead))
 		}
 	}
 

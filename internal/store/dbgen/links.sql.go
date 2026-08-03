@@ -16,7 +16,7 @@ const archiveLink = `-- name: ArchiveLink :one
 UPDATE links
    SET status = 'archived', archived_at = now(), updated_at = now()
  WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
-RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path
+RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path, require_signature
 `
 
 type ArchiveLinkParams struct {
@@ -55,6 +55,7 @@ func (q *Queries) ArchiveLink(ctx context.Context, arg ArchiveLinkParams) (Link,
 		&i.CampaignID,
 		&i.BotBlocking,
 		&i.ForwardPath,
+		&i.RequireSignature,
 	)
 	return i, err
 }
@@ -170,24 +171,28 @@ const createLink = `-- name: CreateLink :one
 INSERT INTO links (
     id, workspace_id, domain_id, alias, primary_url,
     title, description, status, expires_at, created_by, forward_query,
-    forward_path
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path
+    forward_path, password_hash, max_clicks, one_time, require_signature
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path, require_signature
 `
 
 type CreateLinkParams struct {
-	ID           uuid.UUID
-	WorkspaceID  uuid.UUID
-	DomainID     uuid.UUID
-	Alias        string
-	PrimaryUrl   string
-	Title        string
-	Description  string
-	Status       string
-	ExpiresAt    *time.Time
-	CreatedBy    *uuid.UUID
-	ForwardQuery bool
-	ForwardPath  bool
+	ID               uuid.UUID
+	WorkspaceID      uuid.UUID
+	DomainID         uuid.UUID
+	Alias            string
+	PrimaryUrl       string
+	Title            string
+	Description      string
+	Status           string
+	ExpiresAt        *time.Time
+	CreatedBy        *uuid.UUID
+	ForwardQuery     bool
+	ForwardPath      bool
+	PasswordHash     *string
+	MaxClicks        *int64
+	OneTime          bool
+	RequireSignature bool
 }
 
 // Links, destinations and tags.
@@ -205,6 +210,10 @@ func (q *Queries) CreateLink(ctx context.Context, arg CreateLinkParams) (Link, e
 		arg.CreatedBy,
 		arg.ForwardQuery,
 		arg.ForwardPath,
+		arg.PasswordHash,
+		arg.MaxClicks,
+		arg.OneTime,
+		arg.RequireSignature,
 	)
 	var i Link
 	err := row.Scan(
@@ -235,6 +244,7 @@ func (q *Queries) CreateLink(ctx context.Context, arg CreateLinkParams) (Link, e
 		&i.CampaignID,
 		&i.BotBlocking,
 		&i.ForwardPath,
+		&i.RequireSignature,
 	)
 	return i, err
 }
@@ -360,7 +370,7 @@ func (q *Queries) GetDomainBotSettings(ctx context.Context, id uuid.UUID) (GetDo
 }
 
 const getLink = `-- name: GetLink :one
-SELECT id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path FROM links
+SELECT id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path, require_signature FROM links
 WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
 `
 
@@ -404,12 +414,13 @@ func (q *Queries) GetLink(ctx context.Context, arg GetLinkParams) (Link, error) 
 		&i.CampaignID,
 		&i.BotBlocking,
 		&i.ForwardPath,
+		&i.RequireSignature,
 	)
 	return i, err
 }
 
 const getLinkByAlias = `-- name: GetLinkByAlias :one
-SELECT id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path FROM links
+SELECT id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path, require_signature FROM links
 WHERE domain_id = $1 AND alias = $2 AND deleted_at IS NULL
 `
 
@@ -449,6 +460,7 @@ func (q *Queries) GetLinkByAlias(ctx context.Context, arg GetLinkByAliasParams) 
 		&i.CampaignID,
 		&i.BotBlocking,
 		&i.ForwardPath,
+		&i.RequireSignature,
 	)
 	return i, err
 }
@@ -526,7 +538,7 @@ func (q *Queries) GetWorkspaceDefaultDomain(ctx context.Context) (GetWorkspaceDe
 
 const listLinks = `-- name: ListLinks :many
 SELECT
-    l.id, l.workspace_id, l.domain_id, l.folder_id, l.alias, l.primary_url, l.primary_destination_id, l.title, l.description, l.status, l.expires_at, l.password_hash, l.max_clicks, l.one_time, l.forward_query, l.click_count, l.last_click_at, l.created_by, l.created_at, l.updated_at, l.archived_at, l.deleted_at, l.purge_after, l.search_vector, l.campaign_id, l.bot_blocking, l.forward_path,
+    l.id, l.workspace_id, l.domain_id, l.folder_id, l.alias, l.primary_url, l.primary_destination_id, l.title, l.description, l.status, l.expires_at, l.password_hash, l.max_clicks, l.one_time, l.forward_query, l.click_count, l.last_click_at, l.created_by, l.created_at, l.updated_at, l.archived_at, l.deleted_at, l.purge_after, l.search_vector, l.campaign_id, l.bot_blocking, l.forward_path, l.require_signature,
     COALESCE(tg.names, ARRAY[]::text[])::text[] AS tag_names,
     COALESCE(tg.ids, ARRAY[]::text[])::text[]   AS tag_ids
 FROM links l
@@ -627,6 +639,7 @@ type ListLinksRow struct {
 	CampaignID           *uuid.UUID
 	BotBlocking          string
 	ForwardPath          bool
+	RequireSignature     bool
 	TagNames             []string
 	TagIds               []string
 }
@@ -694,6 +707,7 @@ func (q *Queries) ListLinks(ctx context.Context, arg ListLinksParams) ([]ListLin
 			&i.CampaignID,
 			&i.BotBlocking,
 			&i.ForwardPath,
+			&i.RequireSignature,
 			&i.TagNames,
 			&i.TagIds,
 		); err != nil {
@@ -844,7 +858,7 @@ const restoreLink = `-- name: RestoreLink :one
 UPDATE links
    SET status = 'active', archived_at = NULL, updated_at = now()
  WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
-RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path
+RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path, require_signature
 `
 
 type RestoreLinkParams struct {
@@ -883,6 +897,7 @@ func (q *Queries) RestoreLink(ctx context.Context, arg RestoreLinkParams) (Link,
 		&i.CampaignID,
 		&i.BotBlocking,
 		&i.ForwardPath,
+		&i.RequireSignature,
 	)
 	return i, err
 }
@@ -1058,22 +1073,39 @@ UPDATE links
        forward_query = COALESCE($6, forward_query),
        forward_path  = COALESCE($7, forward_path),
        bot_blocking  = COALESCE($8, bot_blocking),
+       -- The gates (M35). Each is three-valued through its own pair of
+       -- arguments, because "leave it alone" and "remove it" are different
+       -- requests and a nullable column cannot express both with one nullable
+       -- parameter. clear_password wins over password_hash for the same reason
+       -- clear_expiry wins over expires_at, and the order is the same.
+       password_hash = CASE WHEN $9::boolean THEN NULL
+                            ELSE COALESCE($10, password_hash) END,
+       max_clicks    = CASE WHEN $11::boolean THEN NULL
+                            ELSE COALESCE($12, max_clicks) END,
+       one_time      = COALESCE($13, one_time),
+       require_signature = COALESCE($14, require_signature),
        updated_at    = now()
- WHERE id = $9 AND workspace_id = $10 AND deleted_at IS NULL
-RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path
+ WHERE id = $15 AND workspace_id = $16 AND deleted_at IS NULL
+RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path, require_signature
 `
 
 type UpdateLinkParams struct {
-	Title        *string
-	Description  *string
-	ClearExpiry  bool
-	ExpiresAt    *time.Time
-	Alias        *string
-	ForwardQuery *bool
-	ForwardPath  *bool
-	BotBlocking  *string
-	ID           uuid.UUID
-	WorkspaceID  uuid.UUID
+	Title            *string
+	Description      *string
+	ClearExpiry      bool
+	ExpiresAt        *time.Time
+	Alias            *string
+	ForwardQuery     *bool
+	ForwardPath      *bool
+	BotBlocking      *string
+	ClearPassword    bool
+	PasswordHash     *string
+	ClearMaxClicks   bool
+	MaxClicks        *int64
+	OneTime          *bool
+	RequireSignature *bool
+	ID               uuid.UUID
+	WorkspaceID      uuid.UUID
 }
 
 // COALESCE with sqlc.narg gives partial update: a NULL argument leaves the
@@ -1088,6 +1120,12 @@ func (q *Queries) UpdateLink(ctx context.Context, arg UpdateLinkParams) (Link, e
 		arg.ForwardQuery,
 		arg.ForwardPath,
 		arg.BotBlocking,
+		arg.ClearPassword,
+		arg.PasswordHash,
+		arg.ClearMaxClicks,
+		arg.MaxClicks,
+		arg.OneTime,
+		arg.RequireSignature,
 		arg.ID,
 		arg.WorkspaceID,
 	)
@@ -1120,6 +1158,7 @@ func (q *Queries) UpdateLink(ctx context.Context, arg UpdateLinkParams) (Link, e
 		&i.CampaignID,
 		&i.BotBlocking,
 		&i.ForwardPath,
+		&i.RequireSignature,
 	)
 	return i, err
 }

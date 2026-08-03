@@ -31,10 +31,36 @@ type Snapshot struct {
 	Status      string     `json:"s"`
 	ExpiresAt   *time.Time `json:"e,omitempty"`
 
-	ForwardQuery bool   `json:"q,omitempty"`
-	HasPassword  bool   `json:"p,omitempty"` // PHASE 2
-	MaxClicks    *int64 `json:"m,omitempty"` // PHASE 2
-	OneTime      bool   `json:"o,omitempty"` // PHASE 2
+	ForwardQuery bool `json:"q,omitempty"`
+
+	// The gates (M35). Three of these four fields have been in the struct since
+	// Phase 1 for exactly this milestone — adding them later would have meant a
+	// cache-key bump of their own — and M35 is where something finally reads
+	// them.
+	//
+	// **HasPassword is a boolean and never the hash.** That is the one property
+	// of this struct worth stating as a rule rather than as a comment on a
+	// field: this value is serialized into Redis on every cache write, so
+	// carrying the argon2id hash would put an offline cracking target for every
+	// password link on the instance into an optional dependency that is
+	// routinely dumped, replicated and inspected. The hash is read from Postgres
+	// on the submit path only — see internal/gate — and
+	// TestCachedSnapshotCarriesNoPasswordHash asserts the payload.
+	//
+	// MaxClicks and OneTime say what the *limit* is, never how much of it is
+	// left. The remaining budget is a durable Postgres counter, because a cached
+	// count that vanishes with Redis re-opens every spent link at once.
+	//
+	// RequireSignature is M35's own addition, and it rides M34's v2 bump rather
+	// than asking for one of its own: it ships in the same release, so no
+	// instance can ever hold a v2 entry written without it. Its absence would
+	// decode as false — "this link needs no signature" — which is the direction
+	// that would matter if it ever were stale, so the shared bump is doing real
+	// work rather than being borrowed for convenience.
+	HasPassword      bool   `json:"p,omitempty"`
+	MaxClicks        *int64 `json:"m,omitempty"`
+	OneTime          bool   `json:"o,omitempty"`
+	RequireSignature bool   `json:"sg,omitempty"`
 
 	// Routing rules (M34), and the milestone that bumped CacheKeyVersion to v2.
 	//
@@ -181,6 +207,17 @@ const (
 	// alias really did exist, and 410 tells crawlers to stop asking.
 	OutcomeGone
 )
+
+// Gated reports whether this link has anything in front of its destination
+// (M35).
+//
+// One call, on a value the resolver already produced, and it is false for every
+// link on a default instance. It is what keeps the gate machinery — a Postgres
+// read for a signature key, an argon2 verification, a durable counter write —
+// out of the path of a link that asked for none of it.
+func (s *Snapshot) Gated() bool {
+	return s != nil && (s.HasPassword || s.RequireSignature || s.OneTime || s.MaxClicks != nil)
+}
 
 // Decide reports what to do with a snapshot at a given time.
 //

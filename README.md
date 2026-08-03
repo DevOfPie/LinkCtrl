@@ -192,8 +192,19 @@ Known limitations and deferred work, so nobody discovers them in production:
   at midnight UTC and yesterday's visitor is new again, because a durable answer
   needs a cookie or a per-person identifier kept across days and this product
   keeps neither.
-- **No folders, no custom domains, no QR codes, and no password/one-time
-  links.** The tables exist; the features are Phase 2.
+- **No folders, no custom domains and no QR codes.** The tables exist; the
+  features are Phase 2.
+- **A gated link is not an authenticated one.** A password, a signature, a
+  single use or a click ceiling can be put in front of a link, and each of them
+  restricts *the short link* rather than the destination — anybody who reaches
+  the destination another way is unaffected, and a visitor who has passed a gate
+  once can share the URL they were sent to. A link password is remembered
+  nowhere, so it is typed on every visit; guesses are rate-limited per address
+  and per link, but that limit falls back to per-replica buckets when Redis is
+  unavailable, which makes it a speed bump rather than a bound. Signed URLs
+  expire and there is no revocation button: invalidating a workspace's
+  outstanding signatures means clearing `workspaces.signing_secret` by hand, and
+  each replica keeps honouring the old key for up to a minute after that.
 - **Routing rules do one thing: match, in order.** Weighted splits, sequential
   rotation and fallback destinations share the same table and are not built —
   every query filters on the match kind so that adding them cannot change what a

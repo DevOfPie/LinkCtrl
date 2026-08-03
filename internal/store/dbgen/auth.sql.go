@@ -193,7 +193,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 const createWorkspace = `-- name: CreateWorkspace :one
 INSERT INTO workspaces (id, organization_id, name, slug)
 VALUES ($1, $2, $3, $4)
-RETURNING id, organization_id, name, slug, analytics_retention_days, created_at, updated_at, deleted_at
+RETURNING id, organization_id, name, slug, analytics_retention_days, created_at, updated_at, deleted_at, signing_secret
 `
 
 type CreateWorkspaceParams struct {
@@ -220,6 +220,7 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.SigningSecret,
 	)
 	return i, err
 }
@@ -622,7 +623,7 @@ func (q *Queries) RecordSuccessfulLogin(ctx context.Context, id uuid.UUID) error
 }
 
 const resolveWorkspaceForUser = `-- name: ResolveWorkspaceForUser :one
-SELECT w.id, w.organization_id, w.name, w.slug, w.analytics_retention_days, w.created_at, w.updated_at, w.deleted_at
+SELECT w.id, w.organization_id, w.name, w.slug, w.analytics_retention_days, w.created_at, w.updated_at, w.deleted_at, w.signing_secret
 FROM workspaces w
 JOIN memberships m ON m.organization_id = w.organization_id
 JOIN users u       ON u.id = m.user_id
@@ -684,6 +685,7 @@ func (q *Queries) ResolveWorkspaceForUser(ctx context.Context, arg ResolveWorksp
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.SigningSecret,
 	)
 	return i, err
 }

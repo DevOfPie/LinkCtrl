@@ -147,6 +147,13 @@ type RedirectConfig struct {
 	DefaultStatus int           `env:"REDIRECT_DEFAULT_STATUS" envDefault:"302"`
 	LogSample     int           `env:"REDIRECT_LOG_SAMPLE" envDefault:"0"`
 	NotFoundLimit int           `env:"REDIRECT_404_RATE_LIMIT" envDefault:"60"`
+	// PasswordLimit caps guesses at a password link, per minute, per address
+	// *and* per alias (M35, D54). Twenty rather than the login limit's number:
+	// a person who has been handed a link and its password types it once, and a
+	// legitimate visitor never approaches this. Zero disables it, which on a
+	// public instance means a link password is only as strong as the wordlist
+	// somebody is willing to run.
+	PasswordLimit int `env:"LINK_PASSWORD_RATE_LIMIT" envDefault:"20"`
 }
 
 type AliasConfig struct {
@@ -737,10 +744,11 @@ func (c Config) Validate() error {
 	// number is a mistake — and it is worth catching, because a limit of -1 reads
 	// like "unlimited" and would otherwise silently disable throttling.
 	for name, v := range map[string]int{
-		"LOGIN_RATE_PER_MIN":      c.Auth.LoginRatePerMin,
-		"API_RATE_PER_MIN":        c.Auth.APIRatePerMin,
-		"REDIRECT_404_RATE_LIMIT": c.Redirect.NotFoundLimit,
-		"LOGIN_LOCKOUT_THRESHOLD": c.Auth.LockoutThreshold,
+		"LOGIN_RATE_PER_MIN":       c.Auth.LoginRatePerMin,
+		"API_RATE_PER_MIN":         c.Auth.APIRatePerMin,
+		"REDIRECT_404_RATE_LIMIT":  c.Redirect.NotFoundLimit,
+		"LINK_PASSWORD_RATE_LIMIT": c.Redirect.PasswordLimit,
+		"LOGIN_LOCKOUT_THRESHOLD":  c.Auth.LockoutThreshold,
 	} {
 		if v < 0 {
 			add("%s: must be 0 (no limit) or positive, got %d", name, v)

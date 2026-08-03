@@ -59,6 +59,7 @@ SELECT
     l.password_hash,
     l.max_clicks,
     l.one_time,
+    l.require_signature,
     l.forward_query,
     l.forward_path,
     l.bot_blocking,

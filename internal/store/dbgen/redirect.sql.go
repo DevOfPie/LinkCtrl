@@ -57,6 +57,7 @@ SELECT
     l.password_hash,
     l.max_clicks,
     l.one_time,
+    l.require_signature,
     l.forward_query,
     l.forward_path,
     l.bot_blocking,
@@ -97,6 +98,7 @@ type ResolveAliasForRedirectRow struct {
 	PasswordHash      *string
 	MaxClicks         *int64
 	OneTime           bool
+	RequireSignature  bool
 	ForwardQuery      bool
 	ForwardPath       bool
 	BotBlocking       string
@@ -167,6 +169,7 @@ func (q *Queries) ResolveAliasForRedirect(ctx context.Context, arg ResolveAliasF
 		&i.PasswordHash,
 		&i.MaxClicks,
 		&i.OneTime,
+		&i.RequireSignature,
 		&i.ForwardQuery,
 		&i.ForwardPath,
 		&i.BotBlocking,

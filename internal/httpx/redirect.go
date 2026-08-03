@@ -15,6 +15,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/alias"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/gate"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/ratelimit"
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
@@ -88,6 +89,24 @@ type RedirectHandler struct {
 	// its own audience — and middleware cannot tell a hit from a miss without
 	// intercepting the response.
 	NotFoundLimiter *ratelimit.Limiter
+
+	// Gates answers the questions a gated link asks Postgres (M35): does this
+	// password match, does this signature verify, is there budget left.
+	//
+	// Nil means the gates cannot be enforced, and a *gated* link then answers 503
+	// rather than redirecting — see passGates. An ungated link never consults it,
+	// which is why nil is a valid configuration for a process that only ever
+	// serves ordinary links.
+	Gates Gatekeeper
+
+	// PasswordLimiter throttles guesses at a link password, per address and per
+	// alias (D54). Optional; nil disables it.
+	//
+	// It is the shared limiter M24 built rather than a mechanism of its own, so
+	// a guess costs the same Redis token bucket a login attempt does — and falls
+	// back to this instance's own buckets when Redis is unavailable, which makes
+	// the protection best-effort rather than a guarantee.
+	PasswordLimiter *ratelimit.Limiter
 
 	counter atomic.Int64
 }
@@ -219,6 +238,20 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	outcome := res.Snapshot.Decide(start)
 
+	// The boundary of D53's one POST.
+	//
+	// The mux registers POST on "/{alias}" because password verification needs
+	// somewhere to go, and this is where that permission stops: an alias that
+	// asks no question answers the same 405 the method filter used to. Placed
+	// after Decide so a POST to an expired or unknown alias still gets 410 or
+	// 404 rather than a method complaint about a link that is not there.
+	if r.Method == http.MethodPost && outcome == redirect.OutcomeRedirect &&
+		!res.Snapshot.HasPassword {
+		h.Metrics.ObserveRedirect("method_not_allowed", string(res.Source), time.Since(start))
+		h.methodNotAllowed(w, r)
+		return
+	}
+
 	// Deep-link path forwarding (M33), and the decision has to happen here
 	// rather than beside the Location line below, because the metric is
 	// recorded in between: converting the outcome after observing it would put
@@ -261,6 +294,23 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		target = joined
 	}
 
+	// The gates (M35), and they run here — after the destination is known,
+	// before anything is written.
+	//
+	// After, because a deep link this alias cannot forward is a 404 and must not
+	// spend a one-time link's single click on its way to being refused. Before,
+	// because the whole point of a gate is that the 302 does not happen until it
+	// has passed.
+	//
+	// `Gated()` is false for every link on a default instance, so this is one
+	// boolean expression over fields already in hand and nothing else.
+	if outcome == redirect.OutcomeRedirect && res.Snapshot.Gated() {
+		if g := h.passGates(w, r, res.Snapshot, canonical); g.answered {
+			h.Metrics.ObserveRedirect(g.label, string(res.Source), time.Since(start))
+			return
+		}
+	}
+
 	// Observed here, before the response is written, so the measurement covers
 	// resolution and decision rather than however long a client takes to read
 	// the body. Writing an empty 302 is a syscall on an already-open socket.
@@ -284,7 +334,15 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if res.Snapshot.ForwardQuery && r.URL.RawQuery != "" {
-		target = appendQuery(target, r.URL.RawQuery)
+		// The signature parameters are addressed to this server and stop here
+		// (M35). Forwarding them would hand whoever runs the destination a URL
+		// they can replay against this link until it expires, which is a
+		// capability the workspace issued to one recipient. StripSignature
+		// returns the query untouched when it carries neither parameter, which
+		// is every request to every link that is not signature-gated.
+		if raw := gate.StripSignature(r.URL.RawQuery); raw != "" {
+			target = appendQuery(target, raw)
+		}
 	}
 
 	// 302, never 301. Links are editable by design, so a permanent redirect

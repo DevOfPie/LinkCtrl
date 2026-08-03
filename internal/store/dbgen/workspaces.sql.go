@@ -37,7 +37,7 @@ func (q *Queries) DeleteWorkspace(ctx context.Context, arg DeleteWorkspaceParams
 }
 
 const getWorkspaceInOrganization = `-- name: GetWorkspaceInOrganization :one
-SELECT id, organization_id, name, slug, analytics_retention_days, created_at, updated_at, deleted_at FROM workspaces
+SELECT id, organization_id, name, slug, analytics_retention_days, created_at, updated_at, deleted_at, signing_secret FROM workspaces
 WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL
 FOR UPDATE
 `
@@ -65,6 +65,7 @@ func (q *Queries) GetWorkspaceInOrganization(ctx context.Context, arg GetWorkspa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.SigningSecret,
 	)
 	return i, err
 }
@@ -147,7 +148,7 @@ UPDATE workspaces
        slug = $4,
        updated_at = now()
  WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL
-RETURNING id, organization_id, name, slug, analytics_retention_days, created_at, updated_at, deleted_at
+RETURNING id, organization_id, name, slug, analytics_retention_days, created_at, updated_at, deleted_at, signing_secret
 `
 
 type RenameWorkspaceParams struct {
@@ -178,6 +179,7 @@ func (q *Queries) RenameWorkspace(ctx context.Context, arg RenameWorkspaceParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.SigningSecret,
 	)
 	return i, err
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/dispute"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/gate"
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
@@ -149,7 +150,9 @@ func demoWorkspace2Catalogue() []demoLink {
 // field that matters is the one that is absent: Feed is never set, so
 // link.Service.askFeed short-circuits and no destination this seeder judges
 // leaves the instance. See TestDemoSeederNeverEnablesAFeed.
-func demoLinkConfig(cfg config.Config, rec audit.Recorder) link.Config {
+func demoLinkConfig(cfg config.Config, rec audit.Recorder,
+	hasher *auth.Hasher, gates link.GateReader,
+) link.Config {
 	return link.Config{
 		Policy:  link.DefaultDestinationPolicy(),
 		BaseURL: cfg.LinkOrigin(),
@@ -158,7 +161,12 @@ func demoLinkConfig(cfg config.Config, rec audit.Recorder) link.Config {
 		// Without it the demo would show a dispute about a refusal the audit log
 		// has no trace of.
 		Audit: rec,
-		Log:   discardLogger(),
+		// The gates (M35). Without these the seeder could not set a link
+		// password or mint a signed URL, and the demo would show four controls
+		// that do nothing.
+		Hasher: hasher,
+		Gates:  gates,
+		Log:    discardLogger(),
 	}
 }
 
@@ -209,6 +217,9 @@ type demoSeeder struct {
 	invite  *invite.Service
 	link    *link.Service
 	dispute *dispute.Service
+	// gates spends part of the click-limited link's budget through the same
+	// statement the redirect path uses (M35).
+	gates *gate.Service
 
 	// owner is whoever claimed the instance, acting in their first workspace.
 	owner *auth.Identity
@@ -216,7 +227,7 @@ type demoSeeder struct {
 
 func newDemoSeeder(
 	pool *pgxpool.Pool, cfg config.Config, authSvc *auth.Service, linkSvc *link.Service,
-	owner *auth.Identity, opt demoOptions, now time.Time,
+	gateSvc *gate.Service, owner *auth.Identity, opt demoOptions, now time.Time,
 ) (*demoSeeder, error) {
 	auditSvc := audit.NewService(pool)
 	// No WithMail. The inbox is the baseline and mail is the addition, in that
@@ -247,6 +258,7 @@ func newDemoSeeder(
 		invite:  inviteSvc,
 		link:    linkSvc,
 		dispute: disputeSvc,
+		gates:   gateSvc,
 		owner:   owner,
 	}, nil
 }
@@ -269,6 +281,9 @@ func (s *demoSeeder) run(ctx context.Context, primary []demoLink, ids map[int]uu
 		return err
 	}
 	if err := s.seedRoutingRules(ctx, primary, ids); err != nil {
+		return err
+	}
+	if err := s.seedGatedLinks(ctx); err != nil {
 		return err
 	}
 	if err := s.seedBlockingAndDisputes(ctx, people); err != nil {
@@ -566,6 +581,120 @@ func (s *demoSeeder) seedRoutingRules(ctx context.Context, cat []demoLink, ids m
 	return nil
 }
 
+// The four gated links (M35), and their aliases are their explanation.
+//
+// Four separate links rather than one link wearing four gates, because the
+// gates are independent and a single link carrying all of them would show only
+// their intersection: a visitor would meet the signature refusal and never learn
+// that the other three exist. Somebody opening the demo should be able to click
+// each one and find out what it does.
+const (
+	demoPasswordAlias = "board-deck"
+	demoOneTimeAlias  = "access-once"
+	demoMaxClickAlias = "first-fifty"
+	demoSignedAlias   = "signed-preview"
+
+	// demoLinkPassword is what the password link asks for. In the clear for the
+	// same reason demoPassword is: publishing it is the point, and a demo gate
+	// nobody can get through teaches only that the gate exists.
+	// Written in the clear for the same reason demoPassword is: publishing it is
+	// the point, because a demo gate nobody can get through teaches only that
+	// the gate exists.
+	demoLinkPassword = "demo-link-password" //nolint:gosec // G101: a published demo credential, deliberately
+
+	// demoMaxClicks is the ceiling on the click-limited link. Fifty, and the
+	// budget below is spent partway, so the page shows a limit with a number
+	// against it rather than a limit nothing has ever touched.
+	demoMaxClicks = 50
+	// demoClicksSpent is how much of it the demo has already used.
+	demoClicksSpent = 12
+)
+
+// seedGatedLinks creates one link per gate and spends part of one budget.
+//
+// Through the link service like everything else here, so each destination goes
+// through the full M30 tier check and each password is hashed with the
+// instance's own argon2 parameters — a demo whose password was written straight
+// into the column would be showing a row shape the product never produces.
+func (s *demoSeeder) seedGatedLinks(ctx context.Context) error {
+	maxClicks := int64(demoMaxClicks)
+	gated := []struct {
+		in   link.CreateInput
+		what string
+	}{
+		{link.CreateInput{
+			Alias: demoPasswordAlias, URL: "https://example.com/investors/board-deck.pdf",
+			Title: "Board deck (password)",
+			Description: "Asks for a password before it redirects. Nothing is stored in the " +
+				"visitor's browser, so coming back means typing it again.",
+			Password: demoLinkPassword,
+		}, "password " + demoLinkPassword},
+		{link.CreateInput{
+			Alias: demoOneTimeAlias, URL: "https://example.com/onboarding/welcome",
+			Title:       "One-time access link",
+			Description: "Works once. The second visit is a 410, counted in Postgres rather than in the cache.",
+			OneTime:     true,
+		}, "one-time"},
+		{link.CreateInput{
+			Alias: demoMaxClickAlias, URL: "https://example.com/offers/early-bird",
+			Title:       "First fifty only",
+			Description: "Stops at fifty clicks. The count beside it is exact, unlike the click total.",
+			MaxClicks:   &maxClicks,
+		}, fmt.Sprintf("max %d clicks", demoMaxClicks)},
+		{link.CreateInput{
+			Alias: demoSignedAlias, URL: "https://example.com/press/embargoed",
+			Title: "Signed link only",
+			Description: "The plain short URL is refused with 403. Only a signed, unexpired " +
+				"URL works — make one from this link's page.",
+			RequireSignature: true,
+		}, "signature required"},
+	}
+
+	ids := make(map[string]uuid.UUID, len(gated))
+	for _, g := range gated {
+		created, err := s.link.Create(ctx, s.owner, g.in)
+		if err != nil {
+			return fmt.Errorf("create gated link /%s: %w", g.in.Alias, err)
+		}
+		ids[g.in.Alias] = created.ID
+		fmt.Fprintf(os.Stderr, "gated link: /%s — %s\n", g.in.Alias, g.what)
+	}
+
+	// Part of the click-limited link's budget, spent through the same statement
+	// the redirect path uses. A limit with a zero against it looks like a limit
+	// that does not work; a partly-spent one is the state the control is
+	// actually for.
+	//
+	// One of the three deliberate steps around a service is not what this is: it
+	// goes through internal/gate, which is where the redirect path consumes a
+	// click too. It is a loop rather than one call because the counter is
+	// deliberately incremental — there is no "set it to twelve", and adding one
+	// would be a way to write a number the gate never produced.
+	for range demoClicksSpent {
+		if _, err := s.gates.Consume(ctx, ids[demoMaxClickAlias], s.owner.WorkspaceID,
+			int64(demoMaxClicks)); err != nil {
+			return fmt.Errorf("spend part of /%s's budget: %w", demoMaxClickAlias, err)
+		}
+	}
+
+	// A signed URL for the signature-gated link, printed for whoever is looking
+	// at the demo. Without it that link is a 403 with no way past it, which
+	// demonstrates the refusal and nothing else — and minting it here is also
+	// what brings the workspace's signing secret into existence.
+	signed, err := s.link.Sign(ctx, s.owner, ids[demoSignedAlias], 30*24*time.Hour)
+	if err != nil {
+		return fmt.Errorf("sign /%s: %w", demoSignedAlias, err)
+	}
+	fmt.Fprintf(os.Stderr, "  signed link: %s\n", signed.URL)
+	return nil
+}
+
+// demoGatedAliases are the gated links the reset removes. Beside the constants
+// above, so adding one cannot be done without teaching the reset about it.
+func demoGatedAliases() []string {
+	return []string{demoPasswordAlias, demoOneTimeAlias, demoMaxClickAlias, demoSignedAlias}
+}
+
 // demoLinkID finds a created link by its catalogue alias.
 func demoLinkID(cat []demoLink, ids map[int]uuid.UUID, alias string) (uuid.UUID, bool) {
 	for i, d := range cat {
@@ -733,6 +862,23 @@ func demoResetPhase2(ctx context.Context, tx pgxExecutor, orgID, userID uuid.UUI
 		{"blocklist entry",
 			`DELETE FROM blocked_destinations WHERE host = $1 AND source = 'review'`,
 			[]any{demoBlockedHost}},
+
+		// The gated links (M35), and their durable click budgets with them —
+		// link_click_budget is ON DELETE CASCADE from links, so the budget rows
+		// need no step of their own. Destinations are deleted first for the same
+		// reason the main reset does it: links.primary_destination_id points at
+		// one, and the delete order is what keeps that foreign key satisfied.
+		{"gated link destinations", `
+			DELETE FROM destinations WHERE link_id IN (
+				SELECT l.id FROM links l
+				 WHERE l.workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)
+				   AND l.alias = ANY($2::text[]))`,
+			[]any{orgID, demoGatedAliases()}},
+		{"gated links", `
+			DELETE FROM links
+			 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)
+			   AND alias = ANY($2::text[])`,
+			[]any{orgID, demoGatedAliases()}},
 
 		{"invitations", `DELETE FROM invitations WHERE organization_id = $1`, []any{orgID}},
 		{"notifications", `DELETE FROM notifications WHERE user_id = $1`, []any{userID}},

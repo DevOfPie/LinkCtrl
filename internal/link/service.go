@@ -75,7 +75,26 @@ type Service struct {
 	feed FeedChecker
 	// feedMetrics counts feed checks. Nil counts nothing.
 	feedMetrics FeedObserver
-	log         *slog.Logger
+	// hasher turns a link password into an argon2id hash (M35). Nil refuses to
+	// set one rather than storing it in the clear, which is the direction a
+	// missing dependency has to fail in.
+	hasher *auth.Hasher
+	// gates reads the durable click budget and mints workspace signing secrets
+	// (M35). Nil leaves the budget unreported and signing unavailable; the CLI
+	// and several tests run that way.
+	gates GateReader
+	log   *slog.Logger
+}
+
+// GateReader is what the management surfaces need from internal/gate: the exact
+// budget a gated link has spent, and the workspace key a signed URL is made
+// with.
+//
+// An interface rather than the concrete service, so internal/link does not
+// import a package that imports it back through the redirect path.
+type GateReader interface {
+	Budget(ctx context.Context, linkID uuid.UUID) (int64, *time.Time, error)
+	EnsureSecret(ctx context.Context, workspaceID uuid.UUID) ([]byte, error)
 }
 
 // RootInvalidator drops the cached root redirect when it changes. Nil is valid
@@ -104,6 +123,11 @@ type Config struct {
 	// FeedMetrics counts feed checks, including the failures that fail open.
 	// Nil counts nothing.
 	FeedMetrics FeedObserver
+	// Hasher hashes link passwords (M35). Nil refuses to set one.
+	Hasher *auth.Hasher
+	// Gates reads the durable click budget and the workspace signing secret
+	// (M35). Nil leaves both unavailable.
+	Gates GateReader
 	// Log receives the warning when an audit write fails. Nil uses the default
 	// logger, so a dropped record is never silent.
 	Log *slog.Logger
@@ -127,6 +151,8 @@ func NewService(pool *pgxpool.Pool, cfg Config) *Service {
 		audit:       cfg.Audit,
 		feed:        cfg.Feed,
 		feedMetrics: cfg.FeedMetrics,
+		hasher:      cfg.Hasher,
+		gates:       cfg.Gates,
 		log:         log,
 	}
 }
@@ -162,12 +188,17 @@ type CreateInput struct {
 	// one URL.
 	ForwardPath bool
 
-	// Phase 2 fields. Accepted by the parser so the API can reject them with a
-	// specific message rather than ignoring them silently, which would look
-	// like the feature works.
-	Password  string
-	MaxClicks *int64
-	OneTime   bool
+	// The gates (M35). Each is off unless asked for, so a link created without
+	// them is byte-for-byte the link this service created before they existed.
+	//
+	// Password is write-only in every direction: it is hashed here and nothing
+	// reads it back. MaxClicks and OneTime are the same gate with different
+	// numbers — see gate.ClickLimit — and RequireSignature refuses any request
+	// without a valid HMAC for the alias.
+	Password         string
+	MaxClicks        *int64
+	OneTime          bool
+	RequireSignature bool
 }
 
 // Create makes a link, generating an alias when none is supplied.
@@ -178,19 +209,24 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 
 	var errs domain.ValidationErrors
 
-	// Phase 2 guards. Refusing loudly beats accepting and doing nothing.
+	// The gates (M35). Hashing happens before the transaction, because argon2id
+	// is deliberately expensive and holding a transaction open across ~100ms of
+	// key derivation would put the create path's cost onto every other writer.
+	var passwordHash *string
 	if in.Password != "" {
-		errs = append(errs, domain.FieldError{
-			Field: "password", Code: "not_implemented",
-			Message: "password-protected links are not available in this version",
-		})
+		hashed, perr := s.hashLinkPassword(in.Password)
+		if perr != nil {
+			var ve domain.ValidationErrors
+			if errors.As(perr, &ve) {
+				errs = append(errs, ve...)
+			} else {
+				return nil, perr
+			}
+		} else {
+			passwordHash = &hashed
+		}
 	}
-	if in.MaxClicks != nil || in.OneTime {
-		errs = append(errs, domain.FieldError{
-			Field: "max_clicks", Code: "not_implemented",
-			Message: "click-limited and one-time links are not available in this version",
-		})
-	}
+	errs = append(errs, validateClickLimit(in.MaxClicks)...)
 
 	normalizedURL, err := s.checkDestination(ctx, actor, in.URL, surfaceLinkCreate)
 	if err != nil {
@@ -268,18 +304,22 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 
 	linkID := uuid.Must(uuid.NewV7())
 	row, err := q.CreateLink(ctx, dbgen.CreateLinkParams{
-		ID:           linkID,
-		WorkspaceID:  actor.WorkspaceID,
-		DomainID:     dom.ID,
-		Alias:        code,
-		PrimaryUrl:   normalizedURL,
-		Title:        in.Title,
-		Description:  in.Description,
-		Status:       string(domain.StatusActive),
-		ExpiresAt:    in.ExpiresAt,
-		CreatedBy:    &actor.UserID,
-		ForwardQuery: in.ForwardQuery,
-		ForwardPath:  in.ForwardPath,
+		ID:               linkID,
+		WorkspaceID:      actor.WorkspaceID,
+		DomainID:         dom.ID,
+		Alias:            code,
+		PrimaryUrl:       normalizedURL,
+		Title:            in.Title,
+		Description:      in.Description,
+		Status:           string(domain.StatusActive),
+		ExpiresAt:        in.ExpiresAt,
+		CreatedBy:        &actor.UserID,
+		ForwardQuery:     in.ForwardQuery,
+		ForwardPath:      in.ForwardPath,
+		PasswordHash:     passwordHash,
+		MaxClicks:        in.MaxClicks,
+		OneTime:          in.OneTime,
+		RequireSignature: in.RequireSignature,
 	})
 	if err != nil {
 		// The unique index is the real guarantee; the pre-check only makes
@@ -344,6 +384,20 @@ type UpdateInput struct {
 	// inherit, on, or off. Nil leaves it alone, which is what the dashboard form
 	// sends when the domain enforces and the control is disabled.
 	BotBlocking *domain.BotPolicy
+
+	// The gates (M35). Two of them need three states rather than two, because
+	// "leave the password alone" and "remove the password" are different
+	// requests and a form that posts an empty box means the first: nobody can
+	// re-type a password they cannot read, so an empty field has to be "no
+	// change" or every save would clear the gate.
+	//
+	// Clearing is therefore explicit, exactly as ClearExpiry already is.
+	Password         *string
+	ClearPassword    bool
+	MaxClicks        *int64
+	ClearMaxClicks   bool
+	OneTime          *bool
+	RequireSignature *bool
 }
 
 func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID, in UpdateInput) (*domain.Link, error) {
@@ -407,6 +461,24 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 		})
 	}
 
+	// The gates (M35). Same order as Create, and hashed outside the transaction
+	// for the same reason.
+	var passwordHash *string
+	if in.Password != nil && *in.Password != "" {
+		hashed, perr := s.hashLinkPassword(*in.Password)
+		if perr != nil {
+			var ve domain.ValidationErrors
+			if errors.As(perr, &ve) {
+				errs = append(errs, ve...)
+			} else {
+				return nil, perr
+			}
+		} else {
+			passwordHash = &hashed
+		}
+	}
+	errs = append(errs, validateClickLimit(in.MaxClicks)...)
+
 	// The bot-blocking setting, and the one refusal it carries.
 	//
 	// An enforcing domain overrides a link that says off, and the override is
@@ -457,6 +529,13 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 		ForwardQuery: in.ForwardQuery,
 		ForwardPath:  in.ForwardPath,
 		BotBlocking:  newPolicy,
+
+		PasswordHash:     passwordHash,
+		ClearPassword:    in.ClearPassword,
+		MaxClicks:        in.MaxClicks,
+		ClearMaxClicks:   in.ClearMaxClicks,
+		OneTime:          in.OneTime,
+		RequireSignature: in.RequireSignature,
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -571,7 +650,9 @@ func (s *Service) Get(ctx context.Context, actor *auth.Identity, id uuid.UUID) (
 	if err != nil {
 		return nil, err
 	}
-	return s.toDomain(row, tags), nil
+	// One link, so the exact click budget is affordable here in a way it is not
+	// on the list (M35).
+	return s.withBudget(ctx, s.toDomain(row, tags)), nil
 }
 
 // List returns a keyset-paginated page of links.
@@ -674,11 +755,17 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 			ForwardQuery: r.ForwardQuery,
 			ForwardPath:  r.ForwardPath,
 			BotBlocking:  r.BotBlocking,
-			ClickCount:   r.ClickCount,
-			LastClickAt:  r.LastClickAt,
-			CreatedAt:    r.CreatedAt,
-			UpdatedAt:    r.UpdatedAt,
-			ArchivedAt:   r.ArchivedAt,
+			// The gates, so a list can mark a gated link instead of showing it
+			// as though it were open (M35).
+			PasswordHash:     r.PasswordHash,
+			MaxClicks:        r.MaxClicks,
+			OneTime:          r.OneTime,
+			RequireSignature: r.RequireSignature,
+			ClickCount:       r.ClickCount,
+			LastClickAt:      r.LastClickAt,
+			CreatedAt:        r.CreatedAt,
+			UpdatedAt:        r.UpdatedAt,
+			ArchivedAt:       r.ArchivedAt,
 		}, tags))
 	}
 	if page.HasMore && len(page.Items) > 0 {
@@ -872,12 +959,19 @@ func (s *Service) toDomain(l dbgen.Link, tags []domain.Tag) *domain.Link {
 		ForwardQuery: l.ForwardQuery,
 		ForwardPath:  l.ForwardPath,
 		BotBlocking:  domain.BotPolicy(l.BotBlocking),
-		ExpiresAt:    l.ExpiresAt,
-		ClickCount:   l.ClickCount,
-		LastClickAt:  l.LastClickAt,
-		CreatedAt:    l.CreatedAt,
-		UpdatedAt:    l.UpdatedAt,
-		ArchivedAt:   l.ArchivedAt,
+		// The gates, and the password reduced to a boolean on the way out. The
+		// hash is in `l` and stops here: nothing in this project hands one to a
+		// caller, however privileged.
+		HasPassword:      l.PasswordHash != nil && *l.PasswordHash != "",
+		MaxClicks:        l.MaxClicks,
+		OneTime:          l.OneTime,
+		RequireSignature: l.RequireSignature,
+		ExpiresAt:        l.ExpiresAt,
+		ClickCount:       l.ClickCount,
+		LastClickAt:      l.LastClickAt,
+		CreatedAt:        l.CreatedAt,
+		UpdatedAt:        l.UpdatedAt,
+		ArchivedAt:       l.ArchivedAt,
 	}
 }
 

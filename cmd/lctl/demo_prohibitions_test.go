@@ -30,7 +30,7 @@ func TestDemoSeederNeverEnablesAFeed(t *testing.T) {
 	cfg := config.Config{}
 	cfg.BaseURL = "http://localhost:8080"
 
-	if got := demoLinkConfig(cfg, nil); got.Feed != nil {
+	if got := demoLinkConfig(cfg, nil, nil, nil); got.Feed != nil {
 		t.Errorf("demoLinkConfig sets Feed = %#v, want nil. The seeder judges "+
 			"destinations, and a link service with a feed sends every one of them "+
 			"to a third party.", got.Feed)

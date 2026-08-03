@@ -111,6 +111,9 @@ file. Append a row when you append an entry.
 | [M34, what the city lookup cost is measured against](#2026-08-02--m34-what-the-city-lookup-cost-is-measured-against) | D48 — a synthetic City fixture, named as such wherever the figure appears; why no real GeoLite2-City exists to measure; the three declined alternatives; the residue that stays unmeasured and is said so |
 | [M34, twelve conditions, one refusal, and the ordering that decides a redirect](#2026-08-02--m34-twelve-conditions-one-refusal-and-the-ordering-that-decides-a-redirect) | D49 — a rule mints no permission and why the narrower operation must not need more authority; D50 — the handler flags the click and the pipeline writes the set, the salt the hot path may not create, the eight-byte member; D51 — a destination list indexed by rule, and why no priority is stored; D52 — the one field whose absence is not its own zero value, and what that does to F41's live window; the cookies code; what was deliberately not built; the destination update a second row on one link made wrong |
 | [M34, the timezone database, embedded](#2026-08-02--m34-the-timezone-database-embedded) | Why a rule stores an IANA name and not an offset; 450KB of binary against a window that fires an hour late for half the year; why the redirect path cannot refuse and the validator can |
+| [M35, the one POST the redirect tree is allowed](#2026-08-02--m35-the-one-post-the-redirect-tree-is-allowed) | D53 — the signed-off tripwire amendment, and why the CSRF waiver rests on the POST issuing nothing rather than on a general claim; the condition attached to it if an unlock ever persists; D54 — per-alias and per-address limiting on M24's limiter, why per-alias is what closes the distributed-guessing variant, and why it fails open |
+| [M35, what a link may demand before it redirects](#2026-08-02--m35-what-a-link-may-demand-before-it-redirects) | The tripwire amendment as a diff, and the three lines around it that did not move; why the click budget is a table and not a column on `links`; why the counter is one statement and what the sabotage had to do before the race showed; the signed-URL message and what each of its four fields closes; the empty box that cannot mean "clear"; why the challenge is 200 and not 401; the permission that was not minted, and which limb of D18 that matched |
+| [M35, the numbering collision this milestone caused and repaired](#2026-08-03--m35-the-numbering-collision-this-milestone-caused-and-repaired) | Why `D49`/`D50` meant two things for the length of one build; the renumber to D53/D54 and what it did not touch; why Plan.md's table was stale in the direction that hides a collision; F66 |
 
 ---
 
@@ -8919,3 +8922,330 @@ over a timezone is worse than evaluating the window an hour off. The validator
 refuses an unresolvable name at write time, which is where an error can be
 reported to somebody who can act on it; the embed is what makes the two agree
 across environments.
+
+## 2026-08-02 — M35, the one POST the redirect tree is allowed
+
+Owner-answered at [M35](phase-details/m35.md)'s validation, before any code, and
+recorded here before being acted on. **D53** and **D54**.
+
+This is the sign-off m35.md demands of itself — *"the tripwire tests are
+deliberately amended to allow exactly that one POST route and nothing else; the
+amendment is recorded, restored by counter-edit discipline, and needs owner
+sign-off before it lands"* — and the inherited rule it answers to:
+*"Tripwire tests must pass unmodified, or the amendment is deliberate, recorded
+and signed off."* Signed off 2026-08-02.
+
+### What the tree looks like now
+
+`internal/httpx/router.go:542-543` registers both redirect routes through
+`methodFilter(d.Redirect, http.MethodGet, http.MethodHead)`, so a POST to a link
+host answers 405 today. `tripwireAuthenticator`
+(`test/integration/hosts_test.go:129-130`) fails the test if the link host ever
+resolves a session, and `hosts_test.go:339` records that the link host has no
+session middleware at all and that the tripwire is what proves it.
+
+### What is authorised
+
+`methodFilter` gains `POST` on the password-verification route and nothing else.
+Everything else the tripwires assert stands unamended: no session lookup, no
+template engine, no CSRF middleware, and no cookie set anywhere on the redirect
+tree. The worker records the concrete before-and-after diff when it makes the
+change; what is settled here is the authorisation and its bounds.
+
+### Why there is no CSRF token, which is the part worth keeping
+
+Because the POST **issues nothing**. `HasPassword` is a bare boolean in the
+snapshot (`internal/redirect/snapshot.go:35`), nothing in the tree persists an
+unlock, and the redirect tree sets no cookie at all. So verification reads the
+argon2id hash from Postgres and answers the 302 itself: no cookie, no unlock
+token, no session.
+
+A forged cross-site submission therefore gets an opaque response it cannot read,
+changes no state, and at most sends somebody to a destination whose password the
+attacker already knew in order to forge it. There is no victim to protect.
+
+**The waiver rests on that fact and not on a general claim about CSRF.** If a
+later milestone makes an unlock persist across clicks — a cookie, a signed
+token, anything issued to the browser — then something *is* handed out, this
+reasoning stops holding, and the decision is revisited rather than inherited. It
+is written here so that the next person to want persistence finds the condition
+attached to the permission.
+
+Declined: a stateless HMAC token bound to the alias. It closes cross-site
+submission, and it costs an expiry — so a visitor who opens a password link,
+gets distracted, and returns to type the **correct** password is told to try
+again — and it makes the challenge HTML cache-poisonable unless every path sets
+`no-store`, since an intermediary caching one visitor's token serves it to the
+next. A usability regression and a fresh sharp edge, bought against an attack
+with no victim.
+
+### The limiter is what makes that safe (D54)
+
+m35.md never mentions brute force. It is in scope anyway, because
+[docs/SECURITY.md](../SECURITY.md) already claims credential endpoints carry
+per-account lockout *and* per-address rate limiting, and adding a credential
+endpoint with neither makes a shipped claim misleading — a failing Docs gate,
+not tidying for the phase's documentation pass.
+
+The **per-alias** limb is not decoration. The one CSRF variant with teeth was
+distributed guessing: an attacker driving attempts through many visitors'
+browsers spreads them across addresses and walks past a per-address limit. A
+limit on the alias does not care where the guess came from, so it closes the
+amplification that would otherwise have been the real argument for a token.
+D53 and D54 were answered separately and are load-bearing for each other.
+
+Accepted cost, stated rather than discovered later: the shared limiter is a
+Redis path, on a tree whose design is that Redis is optional. It therefore
+**fails open** when Redis is down. That is the only behaviour consistent with
+the cache-is-optional rule, and it makes this protection best-effort rather than
+a guarantee — which the documentation says in those words.
+
+## 2026-08-02 — M35, what a link may demand before it redirects
+
+The gates: a password, a signature, a one-time use, a click ceiling. D53 and D54
+were taken at validation and are recorded above; this is everything the build
+decided, and it leads with the one thing D53 explicitly left to the worker.
+
+### The tripwire amendment, as a diff
+
+D53 authorised it. The concrete change is recorded here because the
+authorisation and the edit are different artefacts, and an entry naming only the
+first cannot be checked against the tree.
+
+`internal/httpx/router.go`, `registerRedirect`, before:
+
+```go
+root.Handle("/{alias}", methodFilter(d.Redirect, http.MethodGet, http.MethodHead))
+root.Handle("/{alias}/{rest...}", methodFilter(d.Redirect, http.MethodGet, http.MethodHead))
+```
+
+After:
+
+```go
+root.Handle("/{alias}",
+    methodFilter(d.Redirect, http.MethodGet, http.MethodHead, http.MethodPost))
+root.Handle("/{alias}/{rest...}",
+    methodFilter(d.Redirect, http.MethodGet, http.MethodHead))
+```
+
+**One method, on one of the two patterns.** The multi-segment pattern is
+unchanged: a password form is served at the alias itself, so nothing beneath it
+needs to accept a write, and widening it would be permission nobody asked for.
+
+Everything else the tripwires assert stands unamended, and each is now asserted
+by a test in `test/integration/gates_test.go` rather than left to the diff:
+
+- `tripwireAuthenticator` still fails on **any** session lookup.
+  `TestPasswordSubmitPerformsNoSessionLookup` drives the challenge, a wrong
+  password and a correct one through a router wired with it, each carrying a
+  session cookie. It seeds through the link service rather than the API, because
+  a tripwire that fails on any session lookup also fails signing in — the same
+  constraint `hosts_test.go` works under, for the same reason.
+- No template engine. The challenge is two embedded files
+  (`static/password.html`, `static/password_wrong.html`) and the form carries no
+  `action`, so it posts to the URL it was served from. That is what lets one
+  fixed page serve every password link on the instance without knowing which
+  link it belongs to.
+- No cookie, anywhere on the tree. `TestPasswordVerificationIssuesNothing`
+  asserts zero `Set-Cookie` across all three responses, and its failure message
+  names D53 rather than describing a bug — because a cookie here is not a
+  regression to fix quietly, it is the condition the waiver was granted under.
+
+The sabotage for that last one set an `lc_unlock` cookie on successful
+verification; the test failed, and it was restored by counter-edit.
+
+### The click budget is a table, not a column
+
+`links.click_count` was the obvious place and it is the wrong one. It is written
+in batches by the analytics pipeline, lags by a flush interval, and can lose a
+batch on an unclean shutdown — the column's own comment has said so since Phase
+1. Gating on it would make a lossy asynchronous counter into an authorization
+boundary, and would put a synchronous write on the hot path of every link on the
+instance rather than only the ones that asked for it.
+
+So `link_click_budget` (migration 02100), one row per gated link, created on its
+first click. Two consequences worth stating. A link with no gate has no row and
+costs nothing; and `consumed` is monotonic and never reset, so raising
+`max_clicks` on a spent link re-opens it — which is what somebody raising a
+limit is asking for, and is the reason `exhausted_at` is a record rather than a
+decision input.
+
+**Redis could not hold this**, and that is the inherited cache-is-optional rule
+rather than a preference. A budget that vanishes with the cache re-opens every
+spent link at once, which is not a degraded mode; it is the gate not existing.
+`TestGatesAreCorrectWithoutRedis` asserts it against a process with no client at
+all, and every fixture in `gates_test.go` runs the same way.
+
+### One statement, and what the sabotage had to do before the race showed
+
+`ConsumeClickBudget` is a single `INSERT … ON CONFLICT DO UPDATE … WHERE
+consumed < limit`. Two requests for the last click serialise on the row lock the
+conflict path takes, so the second re-evaluates its predicate against the first
+one's committed value and matches nothing. There is no transaction for a caller
+to forget to open, because the statement is the transaction.
+
+m35.md required a **real-concurrency** test, not a sequential loop, and the
+sabotage is why that instruction earns its place. Replacing the statement with a
+read-then-write did **not** move the headline assertion — 32 concurrent requests
+still produced exactly one redirect on this machine, because each request's
+round trip finished before the next goroutine was scheduled. What caught it were
+the two assertions underneath: `consumed` and `exhausted_at`. Only after a 5ms
+sleep was inserted between the read and the write did the headline assertion
+fire, at 25 of 32 requests redirected.
+
+That is worth recording as a fact about the test rather than about the code. A
+race test that passes is weak evidence; this one has now been shown to fail
+against the specific wrong implementation it exists to refuse, and the
+assertions on the counter are what did most of the work. Anybody strengthening
+it should raise the racer count or add latency, not trust the headline alone.
+
+### The signed-URL message, and what each field closes
+
+```
+"lc1\n" + <domain uuid> + "\n" + <canonical alias> + "\n" + <exp>
+```
+
+HMAC-SHA256, keyed by the workspace's secret, base64url-unpadded into `?sig=`
+beside `?exp=`. Four fields, four closures:
+
+- The **version tag**, so a later format cannot be reinterpreted under the new
+  rules. A capability whose meaning can change is not one.
+- The **domain id**, so a signature minted for one hostname does not verify on
+  another. That is not hypothetical — M40's custom domains are the milestone
+  that makes one workspace serve the same alias on two.
+- The **canonical alias**, the same spelling the resolver looked the link up
+  under, so a signature cannot be made to verify by re-casing the path.
+- The **expiry, inside the MAC**. A signature whose expiry sits beside it
+  expires whenever whoever holds the URL says it does.
+
+The fields are written with a separator that cannot appear in any of them rather
+than concatenated, so `"ab"+"c"` and `"a"+"bc"` cannot sign the same bytes.
+
+The secret is **per workspace**, minted lazily on the first signing request. Per
+workspace rather than per instance so a leak stops at one tenant; per workspace
+rather than per link because a per-link key cannot be rotated without
+invalidating one link at a time, and the hot path could not cache it across
+aliases. Lazily, so the column staying NULL is itself a statement that nobody
+has asked to sign anything.
+
+It is cached in process for one minute (`gate.DefaultSecretTTL`), and that
+number is a **revocation bound rather than a performance one**. Clearing the
+column is the only revocation there is — no endpoint was built for it, because
+m35.md asked for expiring signatures and not for rotation — and every replica
+keeps honouring the old key until its own copy expires. A minute is a wait
+somebody can sit through; an hour would make the revocation unreliable.
+`docs/SECURITY.md` states both the mechanism and the wait.
+
+Both parameters are stripped before `forward_query` passes the visitor's query
+to the destination. Forwarding them would hand whoever runs the destination a
+URL they can replay until it expires, which is a capability the workspace issued
+to somebody else. `TestSignatureParametersAreNotForwarded` asserts it.
+
+**The ceiling is thirty days**, refused rather than clamped. A caller asking for
+a year should be told they did not get one. No `D` number: it follows from
+m35.md's own *expiring signatures* rather than standing on its own, and the
+same is true of the challenge status below. Both are recorded here so the
+choices are not silent, which is what the standing rule actually asks for.
+
+### The empty box that cannot mean "clear"
+
+Three gates are booleans or numbers and a form can post them every time. The
+password cannot: it is stored as an argon2id hash, so there is nothing to render
+into the box, and the dashboard form posts every field. An empty box therefore
+has to mean *leave it alone*, or every save would silently remove the gate.
+
+Removal is consequently explicit — a `clear_password` checkbox on the form, an
+empty string on the API — and `max_clicks` takes zero as its removal sentinel,
+which is unambiguous because a ceiling of zero is refused everywhere else. This
+is the same shape `expires_at` has carried since Phase 1, and it is deliberately
+not JSON `null`: a pointer cannot distinguish an absent key from an explicit
+null, and inventing a raw-body inspection to recover the difference would be a
+second convention on one type.
+
+### Why the challenge is 200 and not 401
+
+401 requires a `WWW-Authenticate` header naming a scheme, and there is no scheme
+here — this is a page asking a person a question, and no client can act on a 401
+without one. A wrong password re-serves the same page, also 200. Both carry
+`no-store` and `noindex`, like every other page the redirect tree writes.
+
+A successful POST answers the **302 itself**. That is what the whole of D53 rests
+on, and it is why the visitor who returns tomorrow types the password again.
+
+### The permission that was not minted
+
+No new permission. Setting a gate is `links.update`, reading one is
+`links.read`, and minting a signed URL is `links.update` — not `links.read`,
+because a signature is what makes a gated link followable and issuing one is
+handing out access rather than describing it.
+
+The inherited rule asks each milestone to record which limb of D18 it matched.
+**Neither**: nothing here reads an actor's identity tied to network data, and
+nothing lets a key widen its own reach, because no permission was added for
+either to apply to.
+
+### The gate order, and the one that must be last
+
+Signature, then password, then budget.
+
+The first two are cost ordering: a signature is a hash against a key already in
+memory and refuses without touching Postgres, so a link demanding both must not
+let an unsigned request spend the server's argon2 budget.
+
+The third is correctness. **The budget is the only gate that consumes
+something**, so it runs after every other gate has passed — a wrong password
+that burned a one-time link's single click would destroy the link on behalf of
+whoever guessed at it. For the same reason it runs after the destination is
+computed rather than before: a deep link the alias cannot forward is a 404, and
+must not spend a click on its way to being refused. HEAD never consumes at all,
+which is the click recorder's own rule and is what stops a link checker
+destroying a one-time link by asking whether it is alive.
+
+### Fail closed here, fail open there
+
+A gated link on an instance with no gate service answers 503, and a database
+that cannot answer a budget consumption answers 503 rather than 410. The
+direction is the opposite of the rate limiter's in D54, and deliberately: a
+limiter that under-counts costs an attacker slightly less work, while a budget
+that miscounts either publishes a destination or retires a live link with a
+status crawlers act on permanently.
+
+## 2026-08-03 — M35, the numbering collision this milestone caused and repaired
+
+Not a decision. A correction, recorded because the numbers in the code will
+otherwise look arbitrary to whoever reads them next.
+
+**What happened.** At [M35](phase-details/m35.md)'s validation the orchestrator
+minted `D49` and `D50` for the tripwire waiver and the password rate limit,
+having read `Plan.md`'s decision table to find the next free number. That table
+ran to `D48`, so `D49` looked free. It was not: [M34](phase-details/m34.md)'s
+worker had already defined **D49, D50, D51 and D52** in this file, under *twelve
+conditions, one refusal, and the ordering that decides a redirect*, and had not
+added the matching rows to `Plan.md`. M34 was committed and pushed at `5409e94`
+before M35 began, so the collision was live for the whole of M35's build — the
+worker built against `D49`/`D50` and cited them in code comments, tests, two
+embedded HTML pages and its own entry.
+
+**How it was repaired.** This file is append-only and M34's entry is committed,
+so M34's numbers stand. M35's pair was renumbered to **D53** and **D54**
+everywhere it appeared: `Plan.md`, `docs/SECURITY.md`, `internal/httpx`
+(`limits.go`, `router.go`, `redirect.go`, `redirect_gates.go`, both static
+challenge pages), `internal/config`, `internal/ratelimit`,
+`test/integration/gates_test.go`, and the two M35 entries and index rows here.
+M34's `### D49`–`### D52` headings and its index row were not touched. The
+renumber ran before the milestone was committed, so nothing false was ever
+published — the repair is in M35's own commit rather than in a later correction.
+
+**What is left, and why it is a finding rather than a fix.** `Plan.md`'s table
+still runs D44…D48 and then jumps to D53, because M34's four rows were never
+written into it. That is M34's omission, out of spec here, and it is
+[F66](deferred-findings.md).
+
+**The reusable part.** The next free decision number was read from `Plan.md`
+because the phase-details README says decisions are *"recorded in full"* there.
+That is true of every decision the orchestrator has taken and was not true of
+the four a worker took, so the authoritative-looking table was stale in exactly
+the direction that produces a silent collision. Reading **both** files, or
+reading this one alone, is the cheap habit; it is written down here rather than
+turned into a rule, because F66 may close by making `Plan.md` true again, and
+then the habit stops being necessary.
