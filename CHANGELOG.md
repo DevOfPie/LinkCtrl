@@ -22,6 +22,25 @@ migrations run at boot.
 
 ### Changed
 
+- **Analytics breakdowns are recomputed every fifteen minutes instead of every
+  minute.** A link's click count still updates every sixty seconds. What moved is
+  the expensive half — the per-country, per-device, per-browser and
+  per-destination breakdowns — whose cost grows with the number of distinct
+  values your traffic produces rather than with the number of links you have. At
+  five and a half million clicks it was using between a sixth and a third of
+  every minute; it now uses under one percent of every fifteen.
+
+  **The visible consequence: a breakdown on a link's page can be up to fifteen
+  minutes behind the click count above it.** Nothing on the page distinguishes
+  the two, which is why the staleness metric above exists and why
+  `docs/operations.md` carries an alert for it. This is what makes it safe to
+  draw a map from those numbers at all — the alternative was a visualization
+  reading a job that would eventually stop finishing inside its own interval.
+
+  Nothing needs to be done about this on upgrade. The existing job keeps its name
+  and its position, so its history carries forward; the new one starts from the
+  usual two-day window.
+
 - **Upgrading to this version empties the redirect cache.** The cached value a
   short link resolves through now carries its routing rules and its split-test
   arms, and an entry written by the previous version does not — so the cache key
@@ -52,6 +71,40 @@ migrations run at boot.
   different rules.
 
 ### Added
+
+- **A world map on a link's page, and rings on the breakdowns beside it.** The
+  country breakdown is now also a choropleth: countries shaded by their share of
+  the link's clicks, five bands, every shape carrying its exact figure. A toggle
+  switches the shading to unique visitors, and when it does, the page repeats the
+  sentence that says those are privacy-preserving estimates at daily resolution —
+  the same one the API returns — because a map is a good deal more persuasive
+  than a table and an estimate should not become a fact by being drawn.
+
+  The ranked list is not replaced. It stays a click away from the map, and it is
+  still the view that answers "exactly how many". The other breakdowns — devices,
+  browsers, operating systems, referrers, languages — each gain a ring showing
+  whether the traffic is one value or five, next to the numbers rather than
+  instead of them.
+
+  **With no GeoIP database configured the map is not drawn at all**, and says so.
+  A world coloured entirely in the no-data shade is a picture of nothing that
+  looks like a picture of something.
+
+  No JavaScript, no CDN, no build step: the map is inline SVG computed on the
+  server from country outlines compiled into the binary. Those outlines come from
+  **Natural Earth**, which is public domain, packaged as world-atlas, which is
+  ISC — vendored, version-pinned and checksummed like the two other third-party
+  assets in the tree, with `make verify-assets` failing rather than silently
+  repairing a mismatch. Nothing about the deployment changes and the Content
+  Security Policy is untouched.
+
+- **A staleness metric for the background rollups**,
+  `linkctrl_rollup_staleness_seconds{job}` — seconds since each job last
+  succeeded, read from the database rather than from process memory, so every
+  replica reports the same number and a restart does not make a stalled job look
+  healthy. Alert recipes are in `docs/operations.md`. The metric that existed
+  before it, `linkctrl_job_last_success_timestamp_seconds`, is unchanged and is
+  still the per-replica view; it is the wrong one to alert on and now says so.
 
 - **A link can ask for something before it redirects.** Four gates, each off
   unless you switch it on, each set on the link's own page or over the API.

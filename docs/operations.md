@@ -60,7 +60,8 @@ scrape_configs:
 | `linkctrl_rate_limit_overflow_total{limit}` | Requests allowed **without being limited** because the key table was full. |
 | `linkctrl_db_pool_*{pool="app"\|"redirect"}` | Saturation, per pool. |
 | `linkctrl_job_runs_total{job,result}` | `ok`, `error` or `skipped`. |
-| `linkctrl_job_last_success_timestamp_seconds{job}` | Staleness of each job. |
+| `linkctrl_job_last_success_timestamp_seconds{job}` | When each job last succeeded, **as this replica remembers it**. Absent on a replica that has not run the job, and cleared by a restart. |
+| `linkctrl_rollup_staleness_seconds{job}` | Seconds since each job last succeeded, read from `job_state` and therefore the same on every replica and unaffected by a restart. **This is the one to alert on.** A job that has never succeeded has no series at all. |
 | `linkctrl_build_info{version,commit,go}` | Always 1; the labels are the point. |
 | `linkctrl_destination_feed_checks_total{result}` | Third-party reputation checks: `clean`, `malicious`, `error`, `skipped`. **Absent entirely unless `LINKCTRL_FEED_URL` is set**, which makes the series itself the answer to "is this instance sending destinations anywhere". |
 
@@ -104,7 +105,10 @@ rate(linkctrl_db_pool_acquire_waits_total{pool="redirect"}[5m]) > 0
 | Queue climbing | `linkctrl_analytics_queue_depth > 8000` for 5m | The database is falling behind. Fires minutes before drops start. |
 | Redirect errors | `rate(linkctrl_redirects_total{outcome="error"}[5m]) > 0` | Resolution is failing; visitors get `503 Retry-After: 1` for links that exist. Usually the redirect pool or Postgres. |
 | Redirect pool starved | `linkctrl_db_pool_acquire_waits_total{pool="redirect"}` increasing | The split pool is not absorbing load; the hot path is queueing. |
-| Job stalled | `time() - linkctrl_job_last_success_timestamp_seconds{job="rollup"} > 600` | Dashboards are going stale. |
+| Rollup stalled | `linkctrl_rollup_staleness_seconds{job="analytics_rollup"} > 600` | The dashboard's headline numbers are going stale. The job runs every 60s, so ten minutes is ten missed runs — comfortably past a transient failure and well short of a working instance. |
+| Breakdowns stalled | `linkctrl_rollup_staleness_seconds{job="analytics_dimension_rollup"} > 3600` | The device, browser, country and per-destination breakdowns are going stale, including the choropleth. The threshold is **four missed runs, not ten**: this job is allowed to be fifteen minutes behind by design, so a ten-minute alert would fire on a healthy instance and a one-hour one is the first figure that cannot. Raise it if you lengthen `analytics.DimensionInterval`; leaving it while shortening the interval only makes the alert slower. |
+| A job that has stopped reporting at all | `absent(linkctrl_rollup_staleness_seconds{job="analytics_dimension_rollup"})` | The two above cannot fire on a series that does not exist, and a job that has never succeeded has no series — which is what a fresh instance looks like for its first few seconds and what a permanently broken one looks like forever. Give it a `for: 15m` so the first case does not page you. |
+| Job stalled, per replica | `time() - linkctrl_job_last_success_timestamp_seconds{job="rollup"} > 600` | The process-local view. Useful for "did *this* replica ever hold leadership", useless as a staleness alert: it is absent on every follower and cleared by a restart, so on more than one replica the answer depends on which one was scraped. |
 | Job erroring | `rate(linkctrl_job_runs_total{result="error"}[15m]) > 0` | |
 | Limiter stopped limiting | `rate(linkctrl_rate_limit_overflow_total[15m]) > 0` | The key table filled, so requests are being allowed uncounted. The design fails open deliberately — a limiter must not become an outage — which is exactly why this needs an alert rather than a log line. |
 | Credential limit stopped being shared | `rate(linkctrl_rate_limited_total{limit="login"}[5m])` unchanged while Redis is unhealthy, plus the log line below | The limit fell back to per-replica buckets, so N replicas now allow N times it. Correct by design — it never refuses because Redis is unwell — but the effective limit is looser until Redis returns. |
@@ -146,7 +150,8 @@ a follower whose scheduler has stopped.
 
 | Job | Every | Does |
 | --- | --- | --- |
-| `rollup` | 60s | Recomputes recent days from raw events and upserts. Whole days, never incremental — an "add what arrived since the watermark" design double-counts on retry and, once it drifts, stays wrong invisibly. |
+| `rollup` | 60s | Recomputes the per-link and per-workspace daily totals from raw events and upserts. Whole days, never incremental — an "add what arrived since the watermark" design double-counts on retry and, once it drifts, stays wrong invisibly. |
+| `dimension-rollup` | 15m | The same recompute for the per-dimension and per-destination breakdowns, on a longer clock because it costs far more: its upsert count is bounded by the distinct `(link, day, dimension, value)` tuples the day's clicks imply, where the totals are bounded by the links that were clicked. Measured at the SLO dataset it is 4.8–6.3s against a totals pass of ~1.5s ([slo.md](slo.md#re-measured-for-m37-2026-08-03)). **The visible consequence is that a breakdown on a link's page can be up to fifteen minutes behind the totals above it**, which is what the staleness alert below is for. Its own row in `job_state`, so a totals run cannot advance a watermark the breakdowns have not reached. |
 | `mail` | 30s | Drains `mail_outbox`. Does not run at all with no mailer configured, because nothing is ever queued then. Five attempts per message, backing off 1m to 16m; a message that never gets through is marked `failed` and kept with the relay's error. Faster than the hourly jobs because an invitation is something a person is waiting for. See [configuration.md](configuration.md#mail). |
 | `partitions` | 1h | Creates monthly partitions two months ahead. |
 | `retention` | 1h | Drops monthly partitions that are entirely outside their table's window — `ANALYTICS_RETENTION_DAYS` for `click_events` and `visitors`, `AUDIT_RETENTION_DAYS` for `audit_logs`. Runs after `partitions`, so a run can never drop what it just created. With the audit default of `0` it drops no audit partition at all. |

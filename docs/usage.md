@@ -13,7 +13,7 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 | --- | --- |
 | `/dashboard` | 30-day totals, clicks-per-day chart, your five newest links. |
 | `/links` | Create a link; search, filter by status, sort; page through with a cursor. The search box filters as you type and updates the address bar, so a reload or a shared URL shows the same view. |
-| `/links/{id}` | Everything about one link: edit destination, alias, title, description, expiry and tags; per-window analytics (7/30/90 days) with device, browser, OS, referrer, language and country breakdowns; recent activity; archive, restore and delete. |
+| `/links/{id}` | Everything about one link: edit destination, alias, title, description, expiry and tags; per-window analytics (7/30/90 days) with device, browser, OS, referrer, language and country breakdowns, each with a share ring, plus a world choropleth over the country figures; recent activity; archive, restore and delete. |
 | `/keys` | Mint, list and revoke API keys. |
 | `/notifications` | Things the instance wanted you to know about, and mark-read. |
 | `/disputes` | The review queue: destinations somebody was refused and has asked you to look at. Needs `destinations.review`. |
@@ -122,9 +122,37 @@ figures.
 
 Country breakdowns need a GeoIP database, which cannot be shipped in the image —
 see [deployment.md](deployment.md#optional-geographic-analytics). Without one the page says the data is
-unavailable rather than drawing a blank chart. Region and city are not stored even
-with a database configured: nothing shows them, and city plus a timestamp is close
-to a location history.
+unavailable rather than drawing a blank chart, and the map is not drawn at all: a
+world coloured entirely "unknown" would be a picture of nothing that looks like a
+picture of something. Region and city are not stored even with a database
+configured: nothing shows them, and city plus a timestamp is close to a location
+history.
+
+The map shades each country by its share of the link's clicks across five bands,
+and every shape carries its exact figure — hover it, or use the *Exact numbers*
+link to the ranked list below, which is the view that answers "how many". A
+toggle switches the shading to unique visitors; when it does, the page repeats
+the estimate caveat above word for word, because shading a map by an estimate
+without saying so would turn it into a fact. Two things the map cannot show are
+said in words instead: a country outside the breakdown's top twenty values is not
+drawn, and a territory the world map has no outline for — Hong Kong, Monaco,
+small islands — is listed under "counted but not drawn" so the map and the list
+cannot quietly disagree about a total.
+
+The map is not free, and the number is worth knowing before you put a dashboard
+behind a slow link: it is about **86 KB of inline SVG**, on every view of a link
+that has geography, and nothing in front of it compresses responses by default.
+A link page with a map measures 175 KB against 42 KB without one. That is the
+price of a chart with no JavaScript, no CDN and no request of its own; put a
+compressing reverse proxy in front of the instance and most of it goes away,
+because path data compresses extremely well.
+
+**Breakdowns are recomputed every fifteen minutes**, where the click count and
+the daily series are recomputed every minute. So a breakdown — and the map drawn
+from it — can be up to a quarter of an hour behind the totals at the top of the
+same page. That is the deliberate trade for a rollup whose cost grows with the
+number of distinct values your traffic produces; `docs/operations.md` has the
+metric and the alert.
 
 ## The API
 

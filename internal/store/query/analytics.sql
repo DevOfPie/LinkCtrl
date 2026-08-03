@@ -207,20 +207,48 @@ SELECT count(*) FROM click_events WHERE workspace_id = $1;
 SELECT watermark FROM job_state WHERE job = $1;
 
 -- name: SetJobWatermark :exec
-INSERT INTO job_state (job, last_run_at, watermark, last_error, updated_at)
-VALUES (sqlc.arg(job), now(), sqlc.arg(watermark), NULL, now())
+-- Runs only after the rollup returned without error, which is what makes
+-- last_success_at mean what its name says. last_run_at cannot: RecordJobFailure
+-- stamps it too, so a job failing on every tick would report itself fresh
+-- forever and the staleness alert would never fire.
+INSERT INTO job_state (job, last_run_at, last_success_at, watermark, last_error, updated_at)
+VALUES (sqlc.arg(job), now(), now(), sqlc.arg(watermark), NULL, now())
 ON CONFLICT (job) DO UPDATE
-   SET last_run_at = now(),
-       watermark   = EXCLUDED.watermark,
-       last_error  = NULL,
-       updated_at  = now();
+   SET last_run_at     = now(),
+       last_success_at = now(),
+       watermark       = EXCLUDED.watermark,
+       last_error      = NULL,
+       updated_at      = now();
 
 -- name: RecordJobFailure :exec
 -- Keeps the watermark where it was: a failed run has not covered its window,
--- and advancing past it would turn one bad run into permanent gaps.
+-- and advancing past it would turn one bad run into permanent gaps. Keeps
+-- last_success_at where it was for the same reason — the last success is a fact
+-- about the past that a later failure does not change, and it is what the
+-- staleness gauge measures against.
 INSERT INTO job_state (job, last_run_at, last_error, updated_at)
 VALUES (sqlc.arg(job), now(), sqlc.arg(last_error), now())
 ON CONFLICT (job) DO UPDATE
    SET last_run_at = now(),
        last_error  = EXCLUDED.last_error,
        updated_at  = now();
+
+-- name: GetJobStaleness :many
+-- How long ago each job last succeeded, in seconds.
+--
+-- Read from the database rather than kept in the process, and that is the whole
+-- point of it. `linkctrl_job_last_success_timestamp_seconds` is set by whichever
+-- replica ran the job and resets to absent on restart, so on a multi-replica
+-- deployment it answers differently depending on which one Prometheus scraped
+-- and it forgets everything a rolling deploy touched. job_state is shared, so
+-- every replica reports the same number and a restart does not make a stalled
+-- job look healthy.
+--
+-- A job that has never succeeded is excluded rather than reported as infinitely
+-- stale. Inventing a series for it would make every fresh instance look broken
+-- for its first few seconds, and an absent series is what the alert recipe in
+-- docs/operations.md is written against.
+SELECT job,
+       EXTRACT(EPOCH FROM (now() - last_success_at))::float8 AS stale_seconds
+FROM job_state
+WHERE last_success_at IS NOT NULL;

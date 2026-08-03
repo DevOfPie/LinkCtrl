@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -317,6 +318,33 @@ type linkDetailPageData struct {
 	// the page says so beside the boxes rather than letting somebody discover it
 	// from traffic that did not move.
 	GeoAvailable bool
+
+	// The country choropleth and the per-dimension rings (M37). Laid out in Go
+	// so the templates stay dumb loops and the CSP stays as it is.
+	Map    ui.WorldMap
+	Donuts map[string]ui.Donut
+	// GeoBase is this page's URL with its window already on it, so the map's
+	// metric toggle does not have to know how the window is spelled. GeoList is
+	// the anchor of the ranked country list, which stays one click from the map.
+	GeoBase string
+	GeoList string
+	// GeoUnavailable is the sentence the ranked list shows with no GeoIP
+	// database configured. It comes from the same constant the map uses, so the
+	// two views of this data cannot disagree about whether the instance can
+	// resolve a country at all.
+	GeoUnavailable string
+	// Countries is the ranked country list, and it is deliberately not
+	// Stats.Dimensions.country.
+	//
+	// The list has carried a "no GeoIP database is configured" empty state since
+	// it was written, and on an instance with clicks that state was unreachable:
+	// a click whose address does not resolve is rolled up under the value
+	// "unknown", so the list rendered "unknown — 4,102" and never the sentence.
+	// M37 asks the map to say it "exactly as the ranked list already does",
+	// which turned out to be a claim about something the list did not do. So the
+	// list is given nothing to rank when the instance cannot resolve a country,
+	// and its empty state finally means what it says.
+	Countries []analytics.DimensionValue
 	// ReturningAvailable is the same honesty for the returning-visitor
 	// condition, which needs Redis.
 	ReturningAvailable bool
@@ -448,6 +476,40 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 	data.SplitHelp = splitHelp
 	data.MaxWeight = domain.MaxDestinationWeight
 	data.GeoAvailable = h.Config.Analytics.GeoIPPath != ""
+	if !data.GeoAvailable {
+		// Only when it is actually true. The ranked list's empty state used to be
+		// this sentence unconditionally, which meant a link with a GeoIP database
+		// and no country rows yet — a link nobody has clicked — told its owner the
+		// instance had no database. Now the empty state falls back to the ordinary
+		// "No data yet".
+		data.GeoUnavailable = ui.GeoUnavailable
+	}
+	data.GeoBase = fmt.Sprintf("/links/%s?days=%d", l.ID, days)
+	data.GeoList = data.GeoBase + "#countries"
+
+	// The choropleth. Shaded by clicks unless asked for visitors, and the
+	// caveat travels with the figures rather than being retyped here: shading a
+	// map by a daily-resolution estimate without repeating the sentence that
+	// says so would launder an estimate into a fact.
+	geoMetric := "clicks"
+	if r.URL.Query().Get("geo") == "visitors" {
+		geoMetric = "visitors"
+	}
+	data.Map = ui.Choropleth(
+		countryValues(stats.Dimensions["country"], geoMetric),
+		geoMetric, stats.Caveat, data.GeoAvailable)
+	if data.GeoAvailable {
+		data.Countries = stats.Dimensions["country"]
+	}
+
+	// The rings. Every dimension the page ranks gets one, including countries:
+	// the map answers "where", the ring answers "how concentrated", and the list
+	// answers "exactly how many".
+	data.Donuts = make(map[string]ui.Donut, len(stats.Dimensions))
+	for dim, values := range stats.Dimensions {
+		data.Donuts[dim] = ui.DonutChart(dimensionSlices(values), stats.Totals.Clicks, 100)
+	}
+
 	data.ReturningAvailable = h.Config.Redis.URL != ""
 	data.MinPasswordLength = auth.MinPasswordLength
 
@@ -466,6 +528,48 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 		data.Notice = "Link restored."
 	}
 	return data, true
+}
+
+// countryValues turns the country breakdown into the per-code figures the
+// choropleth shades.
+//
+// The rollup already caps the breakdown at the top twenty values, which is the
+// right bound for a list and the wrong one for a map: a country outside the top
+// twenty is simply not drawn, and the map says so through the total in its
+// legend rather than pretending nobody came from there. That bound is the
+// reader's, not this function's — see GetLinkDimensions' row_limit.
+//
+// The literal value "unknown" is dropped rather than mapped to a shape. It is
+// what the rollup writes for a click whose address did not resolve, and it is
+// not a place.
+func countryValues(values []analytics.DimensionValue, metric string) map[string]int64 {
+	out := make(map[string]int64, len(values))
+	for _, v := range values {
+		if v.Value == "" || v.Value == "unknown" {
+			continue
+		}
+		n := v.Clicks
+		if metric == "visitors" {
+			n = v.UniqueVisitors
+		}
+		if n > 0 {
+			out[v.Value] += n
+		}
+	}
+	return out
+}
+
+// dimensionSlices converts a breakdown into the two fields the ring needs.
+//
+// Three assignments in a loop, so that a template change can never pull the
+// analytics package into `ui`, which depends on nothing outside the standard
+// library and is meant to keep doing so.
+func dimensionSlices(values []analytics.DimensionValue) []ui.DimensionSlice {
+	out := make([]ui.DimensionSlice, 0, len(values))
+	for _, v := range values {
+		out = append(out, ui.DimensionSlice{Name: v.Value, Count: v.Clicks})
+	}
+	return out
 }
 
 func (h *Web) LinkDetail(w http.ResponseWriter, r *http.Request) {

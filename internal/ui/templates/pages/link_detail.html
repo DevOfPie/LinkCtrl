@@ -40,13 +40,17 @@
   {{template "series_chart" (barChart .Series 720 160)}}
 </div>
 
+<div class="mt-6">
+  {{template "worldmap" (dict "Map" .Map "Base" .GeoBase "List" .GeoList)}}
+</div>
+
 <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-  {{template "breakdown" (dict "Title" "Devices"   "Items" .Stats.Dimensions.device   "Total" .Stats.Totals.Clicks)}}
-  {{template "breakdown" (dict "Title" "Browsers"  "Items" .Stats.Dimensions.browser  "Total" .Stats.Totals.Clicks)}}
-  {{template "breakdown" (dict "Title" "Operating systems" "Items" .Stats.Dimensions.os "Total" .Stats.Totals.Clicks)}}
-  {{template "breakdown" (dict "Title" "Referrers" "Items" .Stats.Dimensions.referrer "Total" .Stats.Totals.Clicks "Empty" "No referrers — direct traffic only")}}
-  {{template "breakdown" (dict "Title" "Languages" "Items" .Stats.Dimensions.language "Total" .Stats.Totals.Clicks)}}
-  {{template "breakdown" (dict "Title" "Countries" "Items" .Stats.Dimensions.country "Total" .Stats.Totals.Clicks "Empty" "Geographic data is unavailable: no GeoIP database is configured.")}}
+  {{template "breakdown" (dict "Title" "Devices"   "Items" .Stats.Dimensions.device   "Total" .Stats.Totals.Clicks "Donut" .Donuts.device)}}
+  {{template "breakdown" (dict "Title" "Browsers"  "Items" .Stats.Dimensions.browser  "Total" .Stats.Totals.Clicks "Donut" .Donuts.browser)}}
+  {{template "breakdown" (dict "Title" "Operating systems" "Items" .Stats.Dimensions.os "Total" .Stats.Totals.Clicks "Donut" .Donuts.os)}}
+  {{template "breakdown" (dict "Title" "Referrers" "Items" .Stats.Dimensions.referrer "Total" .Stats.Totals.Clicks "Donut" .Donuts.referrer "Empty" "No referrers — direct traffic only")}}
+  {{template "breakdown" (dict "Title" "Languages" "Items" .Stats.Dimensions.language "Total" .Stats.Totals.Clicks "Donut" .Donuts.language)}}
+  {{template "breakdown" (dict "ID" "countries" "Title" "Countries" "Items" .Countries "Total" .Stats.Totals.Clicks "Donut" .Donuts.country "Empty" .GeoUnavailable)}}
 </div>
 
 {{if and .Identity (.Identity.Can "links.update")}}

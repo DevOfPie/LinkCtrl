@@ -1,10 +1,29 @@
 {{define "breakdown"}}
 {{- /* Takes (dict "Title" string "Items" []analytics.DimensionValue
-       "Total" int64 "Empty" string). The share bars are SVG rects because the
-       CSP forbids inline styles, and a width attribute is not a style. */ -}}
-<div class="rounded-lg border border-line bg-raised p-4">
+       "Total" int64 "Empty" string "Donut" ui.Donut "ID" string). The share
+       bars are SVG rects because the CSP forbids inline styles, and a width
+       attribute is not a style.
+
+       Donut is optional and is the richer half (M37): the ring says whether
+       this dimension is one value or five, which a column of numbers is worst
+       at, and the ranked list underneath it answers "exactly how many" — which
+       is why the list is never replaced, only added to. Its geometry is
+       computed in Go, like every other chart here. */ -}}
+<div {{if .ID}}id="{{.ID}}" {{end}}class="rounded-lg border border-line bg-raised p-4">
   <h3 class="text-sm font-medium text-ink">{{.Title}}</h3>
   {{if .Items}}
+  {{with .Donut}}{{if not .Empty}}
+  <div class="mt-3 flex items-center gap-4">
+    <svg viewBox="0 0 {{.Size}} {{.Size}}" class="h-24 w-24 shrink-0" role="img"
+         aria-label="Share of clicks by {{$.Title}}">
+      {{range .Segments}}<path d="{{.Path}}" class="{{.Class}}"><title>{{.Label}} — {{fmtInt .Value}} ({{.Share}}%)</title></path>{{end}}
+    </svg>
+    <div class="min-w-0 text-sm">
+      <p class="tabular-nums font-semibold text-ink">{{fmtInt .Total}}</p>
+      <p class="text-muted">clicks across {{len .Segments}} {{if eq (len .Segments) 1}}value{{else}}values{{end}}</p>
+    </div>
+  </div>
+  {{end}}{{end}}
   <ul class="mt-3 space-y-2">
     {{range .Items}}
     <li>

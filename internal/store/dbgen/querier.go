@@ -323,6 +323,21 @@ type Querier interface {
 	// has to tell "no such token" from "expired" apart to decide what to log, and
 	// it answers all of them identically to the person redeeming (decision D27).
 	GetInvitationByTokenHash(ctx context.Context, tokenHash []byte) (GetInvitationByTokenHashRow, error)
+	// How long ago each job last succeeded, in seconds.
+	//
+	// Read from the database rather than kept in the process, and that is the whole
+	// point of it. `linkctrl_job_last_success_timestamp_seconds` is set by whichever
+	// replica ran the job and resets to absent on restart, so on a multi-replica
+	// deployment it answers differently depending on which one Prometheus scraped
+	// and it forgets everything a rolling deploy touched. job_state is shared, so
+	// every replica reports the same number and a restart does not make a stalled
+	// job look healthy.
+	//
+	// A job that has never succeeded is excluded rather than reported as infinitely
+	// stale. Inventing a series for it would make every fresh instance look broken
+	// for its first few seconds, and an absent series is what the alert recipe in
+	// docs/operations.md is written against.
+	GetJobStaleness(ctx context.Context) ([]GetJobStalenessRow, error)
 	// --- job bookkeeping ---------------------------------------------------------
 	// The point a job is known to have completed through. Rollups recompute rather
 	// than accumulate, so this is not a correctness dependency for a run that
@@ -869,7 +884,10 @@ type Querier interface {
 	// applies to.
 	RecordFailedLogin(ctx context.Context, arg RecordFailedLoginParams) (RecordFailedLoginRow, error)
 	// Keeps the watermark where it was: a failed run has not covered its window,
-	// and advancing past it would turn one bad run into permanent gaps.
+	// and advancing past it would turn one bad run into permanent gaps. Keeps
+	// last_success_at where it was for the same reason — the last success is a fact
+	// about the past that a later failure does not change, and it is what the
+	// staleness gauge measures against.
 	RecordJobFailure(ctx context.Context, arg RecordJobFailureParams) error
 	RecordSuccessfulLogin(ctx context.Context, id uuid.UUID) error
 	// Name and slug move together. The slug is derived from the name by the caller
@@ -1099,6 +1117,10 @@ type Querier interface {
 	// the control offers. Clearing therefore needs no membership check; setting
 	// needs the same one as above.
 	SetDefaultWorkspaceForUser(ctx context.Context, arg SetDefaultWorkspaceForUserParams) (int64, error)
+	// Runs only after the rollup returned without error, which is what makes
+	// last_success_at mean what its name says. last_run_at cannot: RecordJobFailure
+	// stamps it too, so a job failing on every tick would report itself fresh
+	// forever and the staleness alert would never fire.
 	SetJobWatermark(ctx context.Context, arg SetJobWatermarkParams) error
 	// Remembers a selection, and refuses one the user is not entitled to.
 	//

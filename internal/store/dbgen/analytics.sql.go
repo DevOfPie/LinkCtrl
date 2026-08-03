@@ -46,6 +46,52 @@ func (q *Queries) CreateSalt(ctx context.Context, arg CreateSaltParams) ([]byte,
 	return salt, err
 }
 
+const getJobStaleness = `-- name: GetJobStaleness :many
+SELECT job,
+       EXTRACT(EPOCH FROM (now() - last_success_at))::float8 AS stale_seconds
+FROM job_state
+WHERE last_success_at IS NOT NULL
+`
+
+type GetJobStalenessRow struct {
+	Job          string
+	StaleSeconds float64
+}
+
+// How long ago each job last succeeded, in seconds.
+//
+// Read from the database rather than kept in the process, and that is the whole
+// point of it. `linkctrl_job_last_success_timestamp_seconds` is set by whichever
+// replica ran the job and resets to absent on restart, so on a multi-replica
+// deployment it answers differently depending on which one Prometheus scraped
+// and it forgets everything a rolling deploy touched. job_state is shared, so
+// every replica reports the same number and a restart does not make a stalled
+// job look healthy.
+//
+// A job that has never succeeded is excluded rather than reported as infinitely
+// stale. Inventing a series for it would make every fresh instance look broken
+// for its first few seconds, and an absent series is what the alert recipe in
+// docs/operations.md is written against.
+func (q *Queries) GetJobStaleness(ctx context.Context) ([]GetJobStalenessRow, error) {
+	rows, err := q.db.Query(ctx, getJobStaleness)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetJobStalenessRow{}
+	for rows.Next() {
+		var i GetJobStalenessRow
+		if err := rows.Scan(&i.Job, &i.StaleSeconds); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getJobWatermark = `-- name: GetJobWatermark :one
 
 SELECT watermark FROM job_state WHERE job = $1
@@ -343,7 +389,10 @@ type RecordJobFailureParams struct {
 }
 
 // Keeps the watermark where it was: a failed run has not covered its window,
-// and advancing past it would turn one bad run into permanent gaps.
+// and advancing past it would turn one bad run into permanent gaps. Keeps
+// last_success_at where it was for the same reason — the last success is a fact
+// about the past that a later failure does not change, and it is what the
+// staleness gauge measures against.
 func (q *Queries) RecordJobFailure(ctx context.Context, arg RecordJobFailureParams) error {
 	_, err := q.db.Exec(ctx, recordJobFailure, arg.Job, arg.LastError)
 	return err
@@ -518,13 +567,14 @@ func (q *Queries) RollupWorkspaceDaily(ctx context.Context, arg RollupWorkspaceD
 }
 
 const setJobWatermark = `-- name: SetJobWatermark :exec
-INSERT INTO job_state (job, last_run_at, watermark, last_error, updated_at)
-VALUES ($1, now(), $2, NULL, now())
+INSERT INTO job_state (job, last_run_at, last_success_at, watermark, last_error, updated_at)
+VALUES ($1, now(), now(), $2, NULL, now())
 ON CONFLICT (job) DO UPDATE
-   SET last_run_at = now(),
-       watermark   = EXCLUDED.watermark,
-       last_error  = NULL,
-       updated_at  = now()
+   SET last_run_at     = now(),
+       last_success_at = now(),
+       watermark       = EXCLUDED.watermark,
+       last_error      = NULL,
+       updated_at      = now()
 `
 
 type SetJobWatermarkParams struct {
@@ -532,6 +582,10 @@ type SetJobWatermarkParams struct {
 	Watermark *time.Time
 }
 
+// Runs only after the rollup returned without error, which is what makes
+// last_success_at mean what its name says. last_run_at cannot: RecordJobFailure
+// stamps it too, so a job failing on every tick would report itself fresh
+// forever and the staleness alert would never fire.
 func (q *Queries) SetJobWatermark(ctx context.Context, arg SetJobWatermarkParams) error {
 	_, err := q.db.Exec(ctx, setJobWatermark, arg.Job, arg.Watermark)
 	return err

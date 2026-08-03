@@ -272,6 +272,16 @@ SWAGGER_UI_VERSION := v5.32.11
 SWAGGER_CSS_SHA256 := ca238f7d7c2cf4480c1e77a9c3b9da915ab216e96ffd354e69076560c650c6de
 SWAGGER_JS_SHA256  := fcb81e2c79e7e3b76ddb9bd7fc791552045040fde05c19d3f98f9213e7f7724d
 
+# The world map (M37, D63). world-atlas is pre-built TopoJSON of Natural Earth:
+# the data is public domain and asks for no attribution, the packaging is ISC.
+#
+# Unlike the three above, this file is never served. It is a build-time input to
+# `make mapgen`, which converts it to Go source once; the binary embeds the
+# generated paths and nothing parses TopoJSON at request time.
+WORLDMAP_VERSION := 2.0.2
+WORLDMAP_SHA256  := 2516c915867c7baf18ddec727aec46c315541a07cfb3d79a6559b05d5e94eee8
+WORLDMAP_FILE    := assets/world-atlas/countries-110m.json
+
 .PHONY: tailwind
 tailwind: ## Download the pinned Tailwind standalone CLI
 	@scripts/get-tailwind.sh "$(TAILWIND_VERSION)" "$(BIN)"
@@ -288,10 +298,21 @@ swagger-ui: ## Verify (or restore) the vendored Swagger UI against its pinned ch
 # copy, which is right for a developer and wrong for a gate: a gate that fixes
 # what it finds reports success on a tampered blob. VERIFY_ONLY makes the
 # mismatch fatal instead.
+.PHONY: worldmap
+worldmap: ## Verify (or restore) the vendored world map against its pinned checksum
+	@scripts/get-worldmap.sh "$(WORLDMAP_VERSION)" "$(WORLDMAP_SHA256)" "$(WORLDMAP_FILE)"
+
+# Generated output, committed like sqlc's dbgen. Re-running it on an unchanged
+# tree must produce no diff, which is the same property `make sqlc` is held to.
+.PHONY: mapgen
+mapgen: worldmap ## Regenerate the world-map SVG paths from the vendored TopoJSON
+	@go run ./internal/ui/geo/mapgen "$(WORLDMAP_FILE)" internal/ui/geo/countries_gen.go
+
 .PHONY: verify-assets
 verify-assets: ## Fail if a vendored asset does not match its pinned checksum
 	@VERIFY_ONLY=1 scripts/get-htmx.sh "$(HTMX_VERSION)" "$(HTMX_SHA256)" internal/ui/static/js/htmx.min.js
 	@VERIFY_ONLY=1 scripts/get-swagger.sh "$(SWAGGER_UI_VERSION)" "$(SWAGGER_CSS_SHA256)" "$(SWAGGER_JS_SHA256)" internal/ui/static/vendor
+	@VERIFY_ONLY=1 scripts/get-worldmap.sh "$(WORLDMAP_VERSION)" "$(WORLDMAP_SHA256)" "$(WORLDMAP_FILE)"
 
 .PHONY: css
 css: tailwind ## Build the stylesheet

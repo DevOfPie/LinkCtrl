@@ -11,6 +11,7 @@
 
 @source "../../templates/**/*.html";
 @source "../../funcs.go";
+@source "../../choropleth.go";
 
 /* ---------------------------------------------------------------------------
  * Theme tokens.
@@ -59,6 +60,18 @@
   --color-danger-soft: var(--t-danger-soft);
   --color-danger-ink: var(--t-danger-ink);
   --color-danger-line: var(--t-danger-line);
+
+  /* The choropleth's five shading bands (M37). A sequential ramp needs its own
+   * tokens: the semantic set above has one accent and one soft tint, which is a
+   * two-step scale, and a map shaded on two steps is a map that says "some" and
+   * "lots". Named by position rather than by colour, so the dark theme can run
+   * the ramp the other way — light-on-white and light-on-slate are opposite
+   * directions of "more". */
+  --color-choro-1: var(--t-choro-1);
+  --color-choro-2: var(--t-choro-2);
+  --color-choro-3: var(--t-choro-3);
+  --color-choro-4: var(--t-choro-4);
+  --color-choro-5: var(--t-choro-5);
 }
 
 /* ---------------------------------------------------------------------------
@@ -140,6 +153,27 @@
   --t-danger-soft: #fff1f2;
   --t-danger-ink: #be123c;
   --t-danger-line: #fecdd3;
+
+  /* Choropleth ramp, light: pale indigo to deep indigo, more traffic darker.
+   *
+   * A country with no clicks is `sunken`, which is NOT the bottom of this ramp
+   * — "nobody came from here" and "one person came from here" are different
+   * answers. Measured (WCAG 2.1 relative luminance):
+   *
+   *   no data on raised  1.10:1     step 1 on no data  1.36:1
+   *   step 1 : step 2    1.34:1     step 2 : step 3    1.50:1
+   *   step 3 : step 4    1.50:1     step 4 : step 5    1.77:1
+   *   step 5 on raised   7.90:1
+   *
+   * Adjacent bands sit between 1.34 and 1.77, which is what a monotone ramp
+   * spanning 1.10 to 7.90 in five steps costs, and it is why the map is not the
+   * only view of this data: every shape carries its exact figure in a title and
+   * the ranked list beside it answers "how many" without any colour at all. */
+  --t-choro-1: #c7d2fe;
+  --t-choro-2: #a5b4fc;
+  --t-choro-3: #818cf8;
+  --t-choro-4: #6366f1;
+  --t-choro-5: #4338ca;
 }
 
 /* Dark values, shared by the system-preference path and the explicit override.
@@ -194,6 +228,21 @@
     --t-danger-soft: #4c0519;
     --t-danger-ink: #fda4af;
     --t-danger-line: #9f1239;
+
+    /* Choropleth ramp, dark: the same five positions, run the other way. On a
+     * slate card "more" is brighter, not darker, and reusing the light values
+     * would put the busiest country at 1.4:1 against its own background.
+     *
+     *   no data on raised  1.28:1     step 1 on no data  1.88:1
+     *   step 1 : step 2    1.58:1     step 2 : step 3    1.41:1
+     *   step 3 : step 4    1.92:1     step 4 : step 5    1.56:1
+     *   step 5 on raised   9.81:1
+     */
+    --t-choro-1: #3730a3;
+    --t-choro-2: #4f46e5;
+    --t-choro-3: #6366f1;
+    --t-choro-4: #93a5fd;
+    --t-choro-5: #c7d2fe;
   }
 }
 
@@ -233,4 +282,10 @@
   --t-danger-soft: #4c0519;
   --t-danger-ink: #fda4af;
   --t-danger-line: #9f1239;
+
+  --t-choro-1: #3730a3;
+  --t-choro-2: #4f46e5;
+  --t-choro-3: #6366f1;
+  --t-choro-4: #93a5fd;
+  --t-choro-5: #c7d2fe;
 }

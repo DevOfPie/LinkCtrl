@@ -116,6 +116,9 @@ file. Append a row when you append an entry.
 | [M35, the numbering collision this milestone caused and repaired](#2026-08-03--m35-the-numbering-collision-this-milestone-caused-and-repaired) | Why `D49`/`D50` meant two things for the length of one build; the renumber to D53/D54 and what it did not touch; why Plan.md's table was stale in the direction that hides a collision; F66 |
 | [M36, dividing one link's traffic without moving anybody else's](#2026-08-03--m36-dividing-one-links-traffic-without-moving-anybody-elses) | D55 weights on the destination; D56 the evaluation order, one kind per link, no stickiness; D57 the rotation is its own column; D58 `destination_id` nullable, unreferenced, appended to the COPY list; D59 v3; D60 the breakdown reads a rollup pass of its own |
 | [M36, the demo update that deleted half a demo](#2026-08-03--m36-the-demo-update-that-deleted-half-a-demo) | D61 — the demo is seeded into the organization's oldest workspace rather than wherever the owner last was, and why a reset scoped two ways is worse than one scoped wrongly; D62 — split attribution buckets on the visitor, because bucketing on the click id was never deterministic; the idempotency check that seeded twice from the one state that could not fail |
+| [M37, the first data file this product vendors](#2026-08-03--m37-the-first-data-file-this-product-vendors) | D63 — Natural Earth via world-atlas TopoJSON, public domain under ISC packaging; why the fetched file and the generated paths follow different rules the repo already has; what a ready-made SVG would have cost; the projection that must be named |
+| [M37, giving the expensive half of the rollup its own clock](#2026-08-03--m37-giving-the-expensive-half-of-the-rollup-its-own-clock) | D64 — why fifteen minutes and not five or sixty; why staleness needed a new column rather than the metric that already existed; why each half keeps its own watermark |
+| [M37, what a map is allowed to claim](#2026-08-03--m37-what-a-map-is-allowed-to-claim) | D65 — the banding, the five steps, no-data outside the ramp, the map that refuses to draw itself, and the empty state that turned out to have been unreachable since it was written |
 
 ---
 
@@ -9607,3 +9610,234 @@ demo's own numbers a lie about how the feature behaves.
 
 The weights, the 60/90ths and 30/90ths bucketing, and the deliberate gap between
 configured and observed share are unchanged.
+
+## 2026-08-03 — M37, the first data file this product vendors
+
+Owner-answered at [M37](phase-details/m37.md)'s validation, before any code, and
+recorded before being acted on. **D63.**
+
+m37.md asks for a country choropleth *"rendered as server-computed inline SVG
+from a vendored, pinned, checksummed world-map path asset, acquired like htmx via
+a `scripts/get-*.sh`"*, and adds that *"licensing and size are checked before it
+is committed — it is the product's first vendored data file."* Its Risks section
+is blunter: *"The map asset's licence is a blocker if it turns out wrong, and it
+is easier to check before committing than after shipping."* So the question was
+put before the milestone was spawned rather than discovered inside it.
+
+### The answer
+
+**Natural Earth**, taken as the **world-atlas 110m TopoJSON** and converted to
+per-country SVG paths by a **committed Go generator**.
+
+Natural Earth is explicitly public domain and asks for no attribution.
+world-atlas is the standard derivation of it, about 100KB at 110m resolution,
+with ISC on the packaging. Public-domain data under a permissive wrapper is the
+combination that makes vendoring safe, and it is the only one of the options
+that did not require reading somebody's terms before deciding.
+
+### Two artefacts, and they do not follow the same rule
+
+This is the part worth writing down, because the milestone says "asset",
+singular, and there are going to be two files.
+
+- The fetched TopoJSON is the **vendored** file. It gets a `scripts/get-*.sh`, a
+  pinned version and a SHA-256, and the `verify-assets` gate runs it with
+  `VERIFY_ONLY=1` so a mismatch is **fatal rather than silently repaired** —
+  precisely the contract htmx and Swagger UI already have, and for the reason
+  that Taskfile comment already gives: *a gate that fixes what it finds reports
+  success on a tampered blob.*
+- The per-country SVG paths are **generated output**. They are committed the way
+  `sqlc`'s `dbgen` is committed, and regenerating them on an unchanged tree must
+  produce no diff — the same property `make sqlc` is held to.
+
+Neither idiom is new. What would have been new is inventing a third one for a
+file that is really just one of each.
+
+Conversion happens at generate time and never at request time. That keeps `ui`
+stdlib-only, leaves the CSP untouched, and means the redirect and dashboard
+paths never parse TopoJSON — the server renders inline SVG from Go data it
+already holds.
+
+### What was declined, and what it costs
+
+A ready-made SVG world map would have skipped the conversion entirely. It was
+declined because ready-made maps are exactly where the licences are worst —
+attribution clauses, share-alike, or nothing stated at all — and an unstated
+licence is the blocker m37.md names, not an absence of one.
+
+Deferring the choropleth to its own milestone, and dropping the map in favour of
+charts alone, were both offered and both declined. Each was a scope change and
+therefore the owner's; the Analytics *Dimension visualizations* row stays
+discharged by M37 as planned.
+
+The cost is accepted rather than hidden: the conversion is real work — winding
+order, the antimeridian, and a projection that must be chosen and named in the
+code rather than left implicit — and there are now two artefacts to keep honest
+where the file said one.
+
+
+## 2026-08-03 — M37, giving the expensive half of the rollup its own clock
+
+**D64.** [M37](phase-details/m37.md) says the ordering is the point: *"the map
+must not launch reading a job that overruns its own interval."* The option it
+takes — split cadence over a narrower window — was recorded in Plan.md before the
+milestone was written. Two things were not, and both are the kind that get
+re-derived differently later.
+
+### Fifteen minutes
+
+Measured on the SLO dataset, on the current host, through `analytics.Roller`
+rather than through a copy of its SQL: the dimension pass is **4.8–6.3s** and the
+totals pass is **1.5–1.6s** ([slo.md](../slo.md#re-measured-for-m37-2026-08-03)).
+
+On the sixty-second clock the expensive half had a margin of about **9.6×**
+before it stopped fitting. At fifteen minutes it has about **143×**. That is the
+difference between a fix and a postponement, and it is why the interval is not
+five minutes — five would have left 48×, which is a real improvement and still a
+number this milestone would be re-visiting.
+
+The other end is bounded by what a person sees. The interval *is* the worst-case
+lag between a link's click count and the breakdowns under it, so an hour would
+have made a busy link's country list look broken. Fifteen minutes is long enough
+to be worth an alert and short enough that nobody watching traffic arrive
+concludes the breakdown has stopped.
+
+The lag is not hidden. It is a row in Plan.md's *Known limitations*, a sentence
+in [operations.md](../operations.md#background-jobs), and a metric.
+
+### Staleness needed a column, which is the part worth arguing about
+
+`linkctrl_job_last_success_timestamp_seconds` already existed and is not the
+metric this needs. It is set by whichever replica ran the job, absent on the
+others, and cleared by a restart — so on more than one replica the answer depends
+on which one Prometheus reached, and a rolling deploy makes every job look as if
+it has never succeeded. An alert on a job that is *allowed* to be a quarter of an
+hour late cannot rest on that.
+
+So the number is read out of `job_state`, which every replica shares and no
+restart clears, and published by every replica as
+`linkctrl_rollup_staleness_seconds{job}` — the same reasoning that already puts
+`linkctrl_audit_log_bytes` outside leadership.
+
+`last_run_at` could not carry it. `RecordJobFailure` stamps that column on a run
+that *failed*, so a job failing on every tick would report itself perpetually
+fresh and the alert would never fire — the exact shape of a metric that is worse
+than no metric. Migration 02300 adds `last_success_at`, written only by the
+watermark advance, which happens after the pass returns without error. It is
+backfilled from `last_run_at` where `last_error IS NULL`, which is not a guess:
+`SetJobWatermark` clears `last_error`, so that condition means the last thing to
+touch the row was a success.
+
+A job that has never succeeded is **omitted** rather than reported as infinitely
+stale. Every fresh instance is in that state for its first few seconds, and an
+alert that fires on every boot is an alert nobody reads. `absent()` covers the
+other case, and operations.md says so.
+
+### A watermark each
+
+`analytics_rollup` keeps its name so an instance upgrading into M37 carries its
+watermark forward instead of reopening ninety days on its first tick.
+`analytics_dimension_rollup` is new, finds no row, and covers the default two-day
+window — which is correct.
+
+Sharing one row would have been the tempting simplification and it is a bug: the
+sixty-second job, running fifteen times as often, would push the watermark past a
+day the dimension job had not covered, and that day's breakdowns would never be
+computed by anything. That is precisely the permanent-gap failure the watermark
+was introduced to fix, reintroduced by splitting the cadence.
+`TestEachHalfKeepsItsOwnWatermark` is there because the mistake is one line.
+
+## 2026-08-03 — M37, what a map is allowed to claim
+
+**D65.** [D63](#2026-08-03--m37-the-first-data-file-this-product-vendors) settled
+where the shapes come from. This is what is done with them, and every choice
+below is really the same question: what may a picture assert that the numbers
+behind it do not support?
+
+### The banding
+
+Five bands, by **share of the largest country's figure**.
+
+Not by rank: the fifth-busiest country would then be the same colour whether it
+sent half the traffic or four clicks. Not by share of the total: as soon as a
+link's traffic spreads across forty countries every one of them lands in band
+one, and that is what a *working* link looks like rather than a degenerate case.
+
+Five, because the ramp spans 1.10:1 to 7.90:1 in the light theme and a monotone
+scale cannot hold more distinguishable steps than that across a country drawn a
+few units wide. The adjacent-band figures are 1.34:1 to 1.77:1, measured and
+written into `input.css` beside the values, because that is a weak separation and
+pretending otherwise would be the lie this whole entry is about avoiding. It is
+tolerable only because the exact figure is never more than a hover away and the
+ranked list is right there.
+
+A country with no clicks is `sunken`, deliberately **outside** the ramp. "Nobody
+came from here" and "one person came from here" are different answers, and a
+scale that renders them alike lies about its own bottom.
+
+### The map that refuses to draw itself
+
+With no GeoIP database configured the choropleth is not rendered at all. A
+choropleth degrades badly: every country at zero still produces 174 shapes, a
+legend and a heading — a confident picture of an instance that cannot resolve a
+country. m37.md names this exactly, as *"no world uniformly coloured unknown"*.
+
+### The empty state that had never been reachable
+
+m37.md asks the map to say so *"exactly as the ranked list already does"*, and
+checking that turned out to be checking a claim about something the list did not
+do.
+
+`internal/ui/templates/pages/link_detail.html` has passed the sentence
+*"Geographic data is unavailable: no GeoIP database is configured."* to the
+Countries card since the card was written, as its `Empty` string. `Empty` renders
+only when there are no items — and on an instance with no GeoIP database there
+always are: an unresolved click rolls up under the value `unknown`, so the card
+rendered `unknown — 4,102` and the sentence was dead code. Only a workspace with
+no clicks at all ever saw it, and that workspace has no analytics to explain.
+
+That is a defect that makes *this* milestone's claim false, so it was fixed here
+rather than deferred, per workflow.md. The handler now gives the ranked list
+nothing when the instance cannot resolve a country, and both views say the same
+sentence from the same constant, `ui.GeoUnavailable`.
+
+### The caveat, verbatim
+
+The unique-visitors layer repeats the daily-estimate caveat word for word, taken
+from the same `LinkStats.Caveat` the API returns rather than retyped. Shading a
+map by a privacy-preserving estimate without the sentence that says so would
+launder an estimate into a fact, and a map is considerably more persuasive than a
+table. The clicks layer carries no caveat, because clicks are counted.
+
+### Two things the map cannot say, said in words instead
+
+The rollup caps a breakdown at its top twenty values, so a country outside them
+is not drawn. And a GeoIP database resolves territories Natural Earth's 110m
+countries have no shape for — Hong Kong, Monaco, small islands — whose clicks
+count towards the total and colour nothing. The card names those codes under
+*"counted but not drawn"*, because the alternative is a map that quietly
+disagrees with the list beside it about a number.
+
+### What it weighs
+
+A rendered link page with a map is **174,792 bytes** against **41,916** without
+one, of which about **86 KB** is the inline SVG. Nothing compresses responses on
+the way out of this product, so that is what goes on the wire every time.
+
+It is stated in [usage.md](../usage.md) rather than left to be discovered. It is
+also why the generated paths are emitted with **relative** commands: one absolute
+`M` per subpath and `l` steps after it takes the generated file from 120,457 to
+81,312 bytes and the page from 213,940 to 174,792. The deltas are computed
+between coordinates already quantized to the emitted precision, so the encoding
+is exact rather than approximately right — a delta chain taken from unrounded
+coordinates would drift a country off its own outline, slowly, in a way that
+still looks like a map.
+
+### The other dimensions
+
+A ring per breakdown, arcs computed in Go like every other chart here, shaded by
+the same ramp so colour encodes rank rather than identity. Five slices and an
+`other` remainder, so the ring always closes on the total it is showing. It
+answers the question a column of numbers is worst at — *is this link's traffic
+one browser or five* — and it is added beside the ranked list rather than
+replacing it, which is the rule the whole milestone runs on.

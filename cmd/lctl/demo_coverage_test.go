@@ -363,6 +363,30 @@ func demoCoverage() []demoFeature {
 				"breakdown, rather than scanning click_events per request",
 		},
 
+		{
+			Milestone: "M37", Feature: "A country breakdown wide enough to shade a map",
+			Query: `SELECT count(DISTINCT value) FROM link_dimension_daily
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND dimension = 'country'`,
+			Min: 12,
+			Shows: "the choropleth as a map rather than as one shaded country: a " +
+				"five-band scale needs a spread to band, and traffic from three " +
+				"countries renders three shapes and 171 empty ones",
+		},
+		{
+			Milestone: "M37", Feature: "Countries the map can actually draw",
+			Query: `SELECT count(DISTINCT d.value) FROM link_dimension_daily d
+			         WHERE d.workspace_id IN (` + demoWorkspaces + `)
+			           AND d.dimension = 'country'
+			           AND d.value IN ('US','GB','DE','IN','FR','CA','AU','NL','BR',
+			                           'JP','ES','IT','SE','PL','MX','SG','IE','CH',
+			                           'NO','ZA')`,
+			Min: 12,
+			Shows: "that the seeded codes are ones the 110m map has shapes for — a " +
+				"demo full of territories the map cannot draw would show an empty " +
+				"world and a long \"counted but not drawn\" line",
+		},
+
 		// The boundary. Everything below is a milestone that has not been built,
 		// so the demo showing nothing is correct — and these rows are what make
 		// the next person add a feature row above instead of quietly seeding

@@ -90,6 +90,13 @@ func (j *jobRunner) start(parent context.Context) {
 		// recompute from raw events, and partitions are maintained two months
 		// ahead.
 		rollup := time.NewTicker(60 * time.Second)
+		// The dimension breakdowns, on their own clock (M37). Sixty seconds is
+		// the right cadence for numbers whose upsert count is bounded by the
+		// links that were clicked; it is the wrong one for numbers whose upsert
+		// count is bounded by the distinct (link, day, dimension, value) tuples
+		// those clicks imply, which at the SLO dataset is 553k rows and 16-21
+		// seconds of every minute. Same work, a clock it fits inside.
+		dimension := time.NewTicker(analytics.DimensionInterval)
 		hourly := time.NewTicker(time.Hour)
 		// Mail is on its own, faster clock. Nothing here is time-critical
 		// except this: an invitation is something a person is waiting for with
@@ -98,12 +105,16 @@ func (j *jobRunner) start(parent context.Context) {
 		// query that usually returns nothing.
 		outbox := time.NewTicker(30 * time.Second)
 		defer rollup.Stop()
+		defer dimension.Stop()
 		defer hourly.Stop()
 		defer outbox.Stop()
 
 		// Run once at startup rather than waiting a full interval, so a
-		// freshly started instance has current numbers.
+		// freshly started instance has current numbers. Both halves, because
+		// waiting fifteen minutes for a breakdown on a box that has just come
+		// up would look exactly like the breakdown being broken.
 		j.runRollup(ctx)
+		j.runDimensionRollup(ctx)
 		j.runMaintenance(ctx)
 		// And so mail queued before a restart goes out at once rather than
 		// half a minute later. Surviving the restart is the reason the outbox
@@ -116,6 +127,8 @@ func (j *jobRunner) start(parent context.Context) {
 				return
 			case <-rollup.C:
 				j.runRollup(ctx)
+			case <-dimension.C:
+				j.runDimensionRollup(ctx)
 			case <-outbox.C:
 				j.runMail(ctx)
 			case <-hourly.C:
@@ -170,8 +183,51 @@ func (j *jobRunner) runRollup(ctx context.Context) {
 	runCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	j.withLeadership(runCtx, "rollup", func(ctx context.Context) error {
-		return j.roller.RunRecent(ctx, time.Now())
+		return j.roller.RunRecentTotals(ctx, time.Now())
 	})
+
+	// Staleness is reported on the fast tick and outside leadership, because it
+	// is an observation of shared state rather than work: a follower that never
+	// set it would report nothing, and whether the alert fired would depend on
+	// which replica Prometheus reached. It is also the one job metric that has
+	// to keep being published while the *dimension* job is the thing that is
+	// broken, which is exactly when the leader is busy.
+	j.reportJobStaleness(runCtx)
+}
+
+// runDimensionRollup recomputes the per-dimension and per-destination
+// breakdowns (M37).
+//
+// A longer timeout than the totals, and not because it is expected to need one.
+// The pass it runs is measured at 16-21 seconds on the SLO dataset and it is
+// allowed to grow well past that before the cadence has to change again; a
+// two-minute bound would have turned the first slow day into a failed job and a
+// stale breakdown rather than into a slow one.
+func (j *jobRunner) runDimensionRollup(ctx context.Context) {
+	runCtx, cancel := context.WithTimeout(ctx, analytics.DimensionInterval)
+	defer cancel()
+	j.withLeadership(runCtx, "dimension-rollup", func(ctx context.Context) error {
+		return j.roller.RunRecentDimensions(ctx, time.Now())
+	})
+}
+
+// reportJobStaleness publishes how long ago each job last succeeded.
+//
+// Read from job_state rather than remembered in the process. The existing
+// linkctrl_job_last_success_timestamp_seconds is set by whichever replica did
+// the work and is cleared by a restart, so it cannot answer "are the breakdowns
+// stale?" on a deployment that has more than one replica or that was deployed
+// this week — and M37 makes that question one an operator has to be able to ask,
+// because the breakdowns are now allowed to be quarter of an hour behind.
+func (j *jobRunner) reportJobStaleness(ctx context.Context) {
+	stale, err := j.roller.Staleness(ctx)
+	if err != nil {
+		j.log.Debug("could not read job staleness", slog.Any("error", err))
+		return
+	}
+	for _, s := range stale {
+		j.metrics.SetJobStaleness(s.Job, s.Seconds)
+	}
 }
 
 // runMail drains the outbox.

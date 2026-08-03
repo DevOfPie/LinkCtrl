@@ -173,11 +173,12 @@ type Invitation struct {
 }
 
 type JobState struct {
-	Job       string
-	LastRunAt *time.Time
-	Watermark *time.Time
-	LastError *string
-	UpdatedAt time.Time
+	Job           string
+	LastRunAt     *time.Time
+	Watermark     *time.Time
+	LastError     *string
+	UpdatedAt     time.Time
+	LastSuccessAt *time.Time
 }
 
 type Link struct {

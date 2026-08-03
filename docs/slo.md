@@ -525,6 +525,82 @@ Sixteen cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%, 100%,
 those being the sequential configuration and the one before the gated one, both
 different paths rather than regressions in this one.
 
+### Re-measured for M37 (2026-08-03)
+
+[M37](build-notes/phase-details/m37.md) does not touch the redirect path, so
+there is no k6 column here. What it changes is the **rollup**, and the number
+that needed re-measuring is the one Plan.md's known-limitation row carries: the
+dimension breakdowns cost 16–21 seconds of a sixty-second interval, and would
+eventually stop fitting inside it.
+
+The fix is the split-cadence option Phase 1 recorded and did not take. The
+per-link and per-workspace totals keep sixty seconds; the per-dimension and
+per-destination breakdowns move to **fifteen minutes**
+(`analytics.DimensionInterval`), each half under its own `job_state` watermark.
+
+**Dataset.** 100,000 links and **5,735,005** click events, of which **800,909**
+fall inside the two-day window a run reopens — `make seed-slo` for the five
+million, then three `make load` runs of 240,001 requests each, which is how the
+earlier ~830k in-window figure was reached too. A plain `make seed-slo` leaves
+only ~66k events in that window and would have measured a job with a twelfth of
+its documented work to do.
+
+Taken on image `sha256:1845cdc3bcf5…` (`linkctrl:test`, built 2026-08-03 from the
+M37 working tree at `v0.1.0-70-gcc551c1-dirty`), rebuilt from the tree
+immediately before the runs. Each half was run three times in sequence through
+`analytics.Roller` — the code the scheduler calls, not a hand-written copy of its
+SQL.
+
+| Pass | Runs | Interval | Duty cycle |
+| --- | --- | --- | --- |
+| Totals — `link_click_daily`, `workspace_click_daily` | **1.539s, 1.541s, 1.610s** | 60s | **2.6–2.7%** |
+| Dimensions — `link_dimension_daily`, including the destination breakdown | **4.801s, 6.259s, 6.023s** | 900s | **0.53–0.70%** |
+| Both, as one job on one clock (what shipped before this) | 6.34–7.87s | 60s | 10.6–13.1% |
+
+**The dimension job no longer exceeds its interval, and the margin is the
+point.** At 6.26 seconds against 900 it would have to become about **143 times
+slower** before it stopped fitting. On the sixty-second clock the same job had a
+margin of about 9.6×, and on the host the 16–21s figure came from it had a margin
+under 3×. The narrower-window fallback recorded in Plan.md is therefore **not
+taken**, and stays recorded for the day the margin is spent.
+
+`EXPLAIN (ANALYZE, BUFFERS)` on the dimension upsert, so the shape can be
+compared with the one recorded under
+[the rollup finding](#the-dimension-rollup-is-the-real-bottleneck-and-it-is-not-the-scan):
+
+```
+Insert on link_dimension_daily (actual time=6731.809..6731.810)
+  Conflicting Tuples: 289272
+  Buffers: shared hit=5180765 read=19129 dirtied=14612 written=7537
+  ->  GroupAggregate (actual rows=289272)
+        ->  Incremental Sort (actual rows=4707636)
+              Presorted Key: ce.link_id
+              Sort Method: quicksort  Peak Memory: 140kB
+Execution Time: 6787.653 ms
+```
+
+Still no temp files, still in memory, and still dominated by the upsert: 289,272
+conflicting tuples out of 5.18M buffer hits, with the aggregate accounting for
+797k of them. **Nothing about the query got cheaper** — that was the M34-era
+finding and it stands. What changed is how often it runs.
+
+**On comparing this with the 16–21 seconds.** Do not, directly. That figure was
+taken on the Windows 11 / Docker Desktop / WSL2 machine that produced every
+measurement from the first through M34; the host moved to Linux with native
+Docker at [M35](#re-measured-for-m35-2026-08-03) and has not moved since. The
+comparison that carries this milestone's claim is the **third row of the table
+against the first two**, which are the same job, on the same host, on the same
+image, minutes apart. On this host the combined job costs 6.34–7.87s of every
+sixty seconds; split, the sixty-second half costs 1.54–1.61s and the expensive
+half costs 4.80–6.26s of every fifteen minutes.
+
+**What the split costs, stated rather than buried.** A breakdown on the link
+detail page can now be up to fifteen minutes behind the totals on the same page.
+That is why M37 also adds `linkctrl_rollup_staleness_seconds`, read from
+`job_state.last_success_at` rather than from process memory, with an alert recipe
+in [operations.md](operations.md#alerts-worth-having): a job allowed to be a
+quarter of an hour late needs a number that says how late it actually is.
+
 ## Reproducing it
 
 ```sh

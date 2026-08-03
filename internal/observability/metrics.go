@@ -33,8 +33,9 @@ type Metrics struct {
 
 	throttled *prometheus.CounterVec
 
-	jobRuns    *prometheus.CounterVec
-	jobLastRun *prometheus.GaugeVec
+	jobRuns      *prometheus.CounterVec
+	jobLastRun   *prometheus.GaugeVec
+	jobStaleness *prometheus.GaugeVec
 
 	auditBytes prometheus.Gauge
 
@@ -107,6 +108,23 @@ func NewMetrics() *Metrics {
 			Help: "Unix time of each job's last success. Absent means it has never succeeded.",
 		}, []string{"job"}),
 
+		// The durable counterpart of the gauge above, and the one M37's split
+		// cadence needs. jobLastRun is process-local: it is set by whichever
+		// replica ran the job, it is absent on the others, and it is forgotten on
+		// restart — so on a rolling deploy a stalled job reads as healthy on
+		// whichever replica happens to be scraped. This one is read out of
+		// job_state, which every replica shares and no restart clears.
+		//
+		// Seconds-since rather than a timestamp because the thing being alerted on
+		// is an age, and an age computed in PromQL against a clock that is not the
+		// database's is an age with two clocks in it.
+		jobStaleness: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "linkctrl_rollup_staleness_seconds",
+			Help: "Seconds since each background job last succeeded, as recorded in " +
+				"job_state and therefore shared by every replica. A job that has " +
+				"never succeeded has no series at all.",
+		}, []string{"job"}),
+
 		auditBytes: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "linkctrl_audit_log_bytes",
 			Help: "On-disk size of audit_logs across every partition, including indexes. " +
@@ -140,7 +158,7 @@ func NewMetrics() *Metrics {
 		m.httpRequests, m.httpDuration,
 		m.redirectDuration, m.redirects,
 		m.throttled,
-		m.jobRuns, m.jobLastRun,
+		m.jobRuns, m.jobLastRun, m.jobStaleness,
 		m.auditBytes,
 		m.feedChecks,
 		buildInfo,
@@ -370,6 +388,19 @@ func (m *Metrics) ObserveJobSkipped(job string) {
 		return
 	}
 	m.jobRuns.WithLabelValues(job, "skipped").Inc()
+}
+
+// SetJobStaleness records how long ago a job last succeeded.
+//
+// Set by every replica, like SetAuditLogBytes and for the same reason: this is
+// an observation of shared state rather than work that must happen once, and a
+// gauge only the leader wrote would make an alert depend on which replica the
+// scrape reached.
+func (m *Metrics) SetJobStaleness(job string, seconds float64) {
+	if m == nil {
+		return
+	}
+	m.jobStaleness.WithLabelValues(job).Set(seconds)
 }
 
 // SetAuditLogBytes records the audit log's on-disk size.

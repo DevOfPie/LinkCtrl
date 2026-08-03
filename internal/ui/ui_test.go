@@ -84,7 +84,15 @@ func pageData(t *testing.T) map[string]any {
 			"os":       []map[string]any{{"Value": "Android", "Clicks": int64(20)}},
 			"referrer": []map[string]any{},
 			"language": []map[string]any{{"Value": "en", "Clicks": int64(35)}},
-			"country":  []map[string]any{},
+			// Three countries and a territory the 110m map has no shape for, so
+			// every page render exercises the choropleth, its legend and its
+			// "counted but not drawn" line rather than only its empty state.
+			"country": []map[string]any{
+				{"Value": "US", "Clicks": int64(24), "UniqueVisitors": int64(9)},
+				{"Value": "GB", "Clicks": int64(10), "UniqueVisitors": int64(2)},
+				{"Value": "ZA", "Clicks": int64(4), "UniqueVisitors": int64(1)},
+				{"Value": "HK", "Clicks": int64(2), "UniqueVisitors": int64(1)},
+			},
 		},
 	}
 	series := []DayCount{
@@ -184,6 +192,31 @@ func pageData(t *testing.T) map[string]any {
 				"OS": "Android", "Referrer": "", "IsBot": true,
 			}},
 			"Days": 30, "Windows": []int{7, 30, 90},
+			// The map and the rings, laid out the way the handler lays them out
+			// (M37). Built rather than stubbed, so a change to Choropleth's own
+			// output has to survive every page-render test here.
+			"Map": Choropleth(map[string]int64{"US": 24, "GB": 10, "ZA": 4, "HK": 2},
+				"clicks", "estimates", true),
+			"Donuts": map[string]Donut{
+				"device":   DonutChart([]DimensionSlice{{Name: "mobile", Count: 30}}, 40, 100),
+				"browser":  DonutChart([]DimensionSlice{{Name: "Chrome", Count: 25}}, 40, 100),
+				"os":       DonutChart([]DimensionSlice{{Name: "Android", Count: 20}}, 40, 100),
+				"referrer": DonutChart(nil, 40, 100),
+				"language": DonutChart([]DimensionSlice{{Name: "en", Count: 35}}, 40, 100),
+				"country": DonutChart([]DimensionSlice{
+					{Name: "US", Count: 24}, {Name: "GB", Count: 10},
+					{Name: "ZA", Count: 4}, {Name: "HK", Count: 2},
+				}, 40, 100),
+			},
+			"Countries": []map[string]any{
+				{"Value": "US", "Clicks": int64(24), "UniqueVisitors": int64(9)},
+				{"Value": "GB", "Clicks": int64(10), "UniqueVisitors": int64(2)},
+				{"Value": "ZA", "Clicks": int64(4), "UniqueVisitors": int64(1)},
+				{"Value": "HK", "Clicks": int64(2), "UniqueVisitors": int64(1)},
+			},
+			"GeoBase":        "/links/0198c9c5-0000-7000-8000-000000000001?days=30",
+			"GeoList":        "/links/0198c9c5-0000-7000-8000-000000000001?days=30#countries",
+			"GeoUnavailable": GeoUnavailable,
 			"Form": map[string]string{
 				"URL": "https://example.com/x", "Alias": "demo", "Title": "A demo",
 				"Description": "", "ExpiresAt": "", "Tags": "launch",

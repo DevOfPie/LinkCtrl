@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"html/template"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -97,6 +98,160 @@ func BarChart(points []DayCount, w, h int) Chart {
 	c.First = dayShort(points[0].Day)
 	c.Last = dayShort(points[len(points)-1].Day)
 	return c
+}
+
+// Donut is a ring chart laid out in Go (M37).
+//
+// The other half of "richer charts for the other dimensions". A ranked list
+// answers "how many from Chrome"; it does not answer "is this link's traffic
+// one browser or five", which is the question a share chart exists for and the
+// one a column of numbers is worst at.
+//
+// A ring rather than a pie because the hole is where the total goes, and a
+// total in the middle is what stops somebody reading a 60% slice as a big
+// number when it is 60% of nine clicks.
+type Donut struct {
+	// Size is the square viewBox side. Geometry is absolute inside it.
+	Size     int
+	Segments []DonutSegment
+	Total    int64
+	// Empty is true when there is nothing to draw, so the template can say so
+	// rather than render a ring of nothing.
+	Empty bool
+}
+
+// DonutSegment is one slice, already turned into a path.
+type DonutSegment struct {
+	Path  string
+	Class string
+	Label string
+	Value int64
+	Share int
+}
+
+// donutSlices is how many values get their own segment before the rest are
+// gathered into one.
+//
+// Five, because the shading ramp has five bands and because a ring cut into
+// twelve pieces is a ring nobody can read. The remainder is not dropped — it
+// becomes an "other" segment, so the ring always closes and always sums to the
+// total it is showing.
+const donutSlices = 5
+
+// DonutChart lays a breakdown out as a ring.
+//
+// Segments are ordered largest first and shaded darkest first, which makes the
+// colour encode rank rather than identity. That is deliberate: a categorical
+// palette would need a token per category and would put "Chrome" and "Safari"
+// in colours that mean nothing, whereas the ramp says "this one is bigger" in
+// the same visual language the map beside it uses.
+func DonutChart(items []DimensionSlice, total int64, size int) Donut {
+	d := Donut{Size: size, Total: total}
+	if total <= 0 || len(items) == 0 {
+		d.Empty = true
+		return d
+	}
+
+	type slice struct {
+		label string
+		value int64
+	}
+	var slices []slice
+	var named int64
+	for i, it := range items {
+		if i >= donutSlices {
+			break
+		}
+		if it.Count <= 0 {
+			continue
+		}
+		label := it.Name
+		if label == "" {
+			label = "unknown"
+		}
+		slices = append(slices, slice{label: label, value: it.Count})
+		named += it.Count
+	}
+	if rest := total - named; rest > 0 {
+		slices = append(slices, slice{label: "other", value: rest})
+	}
+	if len(slices) == 0 {
+		d.Empty = true
+		return d
+	}
+
+	cx, cy := float64(size)/2, float64(size)/2
+	outer := float64(size)/2 - 1
+	inner := outer * 0.58
+
+	var at float64
+	for i, s := range slices {
+		sweep := 2 * math.Pi * float64(s.value) / float64(total)
+		class := choroFill(donutSlices - i)
+		if s.label == "other" && i >= donutSlices {
+			class = choroFill(0)
+		}
+		d.Segments = append(d.Segments, DonutSegment{
+			Path:  ringPath(cx, cy, outer, inner, at, at+sweep),
+			Class: class,
+			Label: s.label,
+			Value: s.value,
+			Share: pct(s.value, total),
+		})
+		at += sweep
+	}
+	return d
+}
+
+// DimensionSlice is the shape DonutChart consumes.
+//
+// A local type for the same reason DayCount is one: this package depends on
+// nothing outside the standard library, and a handler converting two fields is
+// cheaper than the UI importing the analytics package.
+type DimensionSlice struct {
+	Name  string
+	Count int64
+}
+
+// ringPath draws one annulus segment, clockwise from twelve o'clock.
+//
+// A segment spanning the whole circle is split in two, because an SVG arc whose
+// start and end points coincide draws nothing at all — a link whose traffic is
+// 100% one browser would otherwise render an empty ring, which is the one case
+// where the chart has the most to say.
+func ringPath(cx, cy, outer, inner, from, to float64) string {
+	if to-from >= 2*math.Pi-1e-9 {
+		mid := from + math.Pi
+		return ringPath(cx, cy, outer, inner, from, mid) +
+			ringPath(cx, cy, outer, inner, mid, to)
+	}
+	x0o, y0o := onCircle(cx, cy, outer, from)
+	x1o, y1o := onCircle(cx, cy, outer, to)
+	x0i, y0i := onCircle(cx, cy, inner, from)
+	x1i, y1i := onCircle(cx, cy, inner, to)
+	large := "0"
+	if to-from > math.Pi {
+		large = "1"
+	}
+	return fmt.Sprintf("M%s,%s A%s,%s 0 %s,1 %s,%s L%s,%s A%s,%s 0 %s,0 %s,%s Z",
+		coord(x0o), coord(y0o), coord(outer), coord(outer), large, coord(x1o), coord(y1o),
+		coord(x1i), coord(y1i), coord(inner), coord(inner), large, coord(x0i), coord(y0i))
+}
+
+func onCircle(cx, cy, r, angle float64) (float64, float64) {
+	return cx + r*math.Sin(angle), cy - r*math.Cos(angle)
+}
+
+// coord formats to two places, which is finer than a pixel at the sizes these
+// charts are drawn and keeps the markup out of float noise.
+func coord(v float64) string {
+	s := strconv.FormatFloat(v, 'f', 2, 64)
+	s = strings.TrimRight(s, "0")
+	s = strings.TrimSuffix(s, ".")
+	if s == "-0" || s == "" {
+		return "0"
+	}
+	return s
 }
 
 // niceCeil rounds up to 1, 2 or 5 times a power of ten, which is what makes an
@@ -291,6 +446,7 @@ func (r *Renderer) funcs() template.FuncMap {
 	return template.FuncMap{
 		"asset":       r.AssetURL,
 		"barChart":    BarChart,
+		"donutChart":  DonutChart,
 		"fmtInt":      fmtInt,
 		"pct":         pct,
 		"reltime":     relTime,
@@ -302,6 +458,7 @@ func (r *Renderer) funcs() template.FuncMap {
 		"statusBadge": statusBadge,
 		"dict":        dict,
 		"add":         add,
+		"mul":         mul,
 	}
 }
 
@@ -311,3 +468,9 @@ func (r *Renderer) funcs() template.FuncMap {
 // third arm" is a fact about the position in the list being rendered and
 // carrying it in the data would be a second copy of the loop's own counter.
 func add(a, b int) int { return a + b }
+
+// mul is integer multiplication, for stepping a legend's swatches across a
+// fixed-width strip. Same justification as add: it is arithmetic about the
+// loop's own index, and carrying an x on every band would be a second copy of
+// the counter.
+func mul(a, b int) int { return a * b }

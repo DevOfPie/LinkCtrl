@@ -12,6 +12,9 @@ vars:
   SWAGGER_UI_VERSION: v5.32.11
   SWAGGER_CSS_SHA256: ca238f7d7c2cf4480c1e77a9c3b9da915ab216e96ffd354e69076560c650c6de
   SWAGGER_JS_SHA256: fcb81e2c79e7e3b76ddb9bd7fc791552045040fde05c19d3f98f9213e7f7724d
+  WORLDMAP_VERSION: 2.0.2
+  WORLDMAP_SHA256: 2516c915867c7baf18ddec727aec46c315541a07cfb3d79a6559b05d5e94eee8
+  WORLDMAP_FILE: assets/world-atlas/countries-110m.json
   VERSION:
     sh: git describe --tags --always --dirty 2>/dev/null || echo dev
   COMMIT:
@@ -397,15 +400,29 @@ tasks:
     cmds:
       - sh scripts/get-swagger.sh "{{.SWAGGER_UI_VERSION}}" "{{.SWAGGER_CSS_SHA256}}" "{{.SWAGGER_JS_SHA256}}" internal/ui/static/vendor
 
-  # What CI runs instead of `task htmx swagger-ui`. Those tasks repair a stale
-  # copy, which is right for a developer and wrong for a gate: a gate that fixes
-  # what it finds reports success on a tampered blob. VERIFY_ONLY makes the
+  worldmap:
+    desc: Verify (or restore) the vendored world map against its pinned checksum
+    cmds:
+      - sh scripts/get-worldmap.sh "{{.WORLDMAP_VERSION}}" "{{.WORLDMAP_SHA256}}" "{{.WORLDMAP_FILE}}"
+
+  # Generated output, committed like sqlc's dbgen. Re-running it on an unchanged
+  # tree must produce no diff, which is the same property `task sqlc` is held to.
+  mapgen:
+    desc: Regenerate the world-map SVG paths from the vendored TopoJSON
+    deps: [worldmap]
+    cmds:
+      - go run ./internal/ui/geo/mapgen "{{.WORLDMAP_FILE}}" internal/ui/geo/countries_gen.go
+
+  # What CI runs instead of `task htmx swagger-ui worldmap`. Those tasks repair a
+  # stale copy, which is right for a developer and wrong for a gate: a gate that
+  # fixes what it finds reports success on a tampered blob. VERIFY_ONLY makes the
   # mismatch fatal instead.
   verify-assets:
     desc: Fail if a vendored asset does not match its pinned checksum
     cmds:
       - sh scripts/get-htmx.sh "{{.HTMX_VERSION}}" "{{.HTMX_SHA256}}" internal/ui/static/js/htmx.min.js
       - sh scripts/get-swagger.sh "{{.SWAGGER_UI_VERSION}}" "{{.SWAGGER_CSS_SHA256}}" "{{.SWAGGER_JS_SHA256}}" internal/ui/static/vendor
+      - sh scripts/get-worldmap.sh "{{.WORLDMAP_VERSION}}" "{{.WORLDMAP_SHA256}}" "{{.WORLDMAP_FILE}}"
     env:
       VERIFY_ONLY: "1"
 
