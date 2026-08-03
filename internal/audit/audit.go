@@ -67,6 +67,13 @@ const (
 	ActionDomainCreated = "domain.created"
 	ActionDomainRenamed = "domain.renamed"
 	ActionDomainDeleted = "domain.deleted"
+	// The verification gate (M40). These two are the only events in this list
+	// that a job writes as well as a person: a hostname starts being served when
+	// the DNS challenge passes, and stops when it has failed for longer than the
+	// grace window. "who started serving links on this name, and when did it
+	// stop" is the question a custom domain makes worth asking.
+	ActionDomainVerified   = "domain.verified"
+	ActionDomainUnverified = "domain.unverified"
 
 	// The invitation lifecycle (M27). Three actions rather than one with a
 	// state in the metadata: an operator asking "who let this person in" is

@@ -502,7 +502,11 @@ func TestTheDomainsPageRegistersAHostnameWithoutJavaScript(t *testing.T) {
 	if !strings.Contains(page, `action="/domains"`) {
 		t.Fatalf("the domains page offers no register form:\n%s", page)
 	}
-	if !strings.Contains(page, "Nothing is served on it yet") {
+	// The wording moved at M40, and the claim did not: a registered hostname
+	// still serves nothing. It stopped being "not built yet" and became "not
+	// verified yet", which is a sentence with something the reader can do about
+	// it — the record on the row below.
+	if !strings.Contains(page, "is not served until it is verified") {
 		t.Error("the page does not say that a registered hostname serves nothing")
 	}
 

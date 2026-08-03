@@ -177,6 +177,36 @@ rather than serving them as current, and reconnects.
 | `LINKCTRL_REDIRECT_404_RATE_LIMIT` | `60` | Misses per address per minute. See [Rate limits](#rate-limits). `0` disables. |
 | `LINKCTRL_LINK_PASSWORD_RATE_LIMIT` | `20` | Guesses at a password-protected link per minute, charged **per address and per alias**. See [Rate limits](#rate-limits). `0` disables it, which on a public instance leaves a link password worth only as much as the wordlist somebody is willing to run. |
 
+## Custom domains
+
+Verification of a workspace's own hostname, and what happens when it stops
+verifying. The operational half — the Caddy `ask` block, what to do when a
+customer's links stop working — is the custom-domain runbook in
+[deployment.md](deployment.md#custom-domains).
+
+**These two numbers decide when somebody's links go dark.** They are here rather
+than in the source because the trade is an operator's to make: the window is how
+long this instance keeps serving a hostname whose DNS its owner may no longer
+control, and the cadence is how much evidence there is before the window expires.
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `LINKCTRL_DOMAIN_VERIFY_INTERVAL` | `1h` | How often every registered hostname's DNS challenge is re-checked. One replica at a time. `0` switches the periodic pass off entirely, leaving verification on-demand only — and leaving a hostname that stops verifying served indefinitely. |
+| `LINKCTRL_DOMAIN_VERIFY_GRACE` | `24h` | How long a **serving** hostname keeps serving after its first failed check. The owning workspace is notified at that first failure, not only at the end. A successful check at any point clears the clock. When the window elapses the hostname stops being served on every replica, which is a stop rather than another warning. Zero or unset takes the default; there is no "no window". |
+| `LINKCTRL_DOMAIN_VERIFY_DNS_TIMEOUT` | `5s` | Bounds one TXT lookup, so a nameserver that accepts a query and never answers costs this rather than the whole pass. |
+| `LINKCTRL_DOMAIN_VERIFY_BATCH` | `500` | How many hostnames one pass checks, least recently checked first. A bound rather than a limit anybody is expected to reach. |
+
+At the defaults a hostname must fail **twenty-four consecutive hourly checks**
+before its links stop resolving. Shortening the window narrows how long a lost
+hostname keeps being served and widens the chance that a resolver outage takes a
+working one down; lengthening it does the reverse. Nothing else in this file has
+that shape, which is why the reasoning is stated rather than left to the default.
+
+This is the only outbound network traffic LinkCtrl sends on its own behalf other
+than an opt-in [reputation feed](#reputation-feeds) and [mail](#mail): TXT queries
+for a fixed label under hostnames somebody registered here. No destination is ever
+looked up.
+
 ## Aliases and destinations
 
 | Variable | Default | Notes |

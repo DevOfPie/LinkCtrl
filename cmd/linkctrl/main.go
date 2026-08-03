@@ -46,6 +46,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/build"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/dispute"
+	"github.com/DevOfPie/LinkCtrl/internal/dnsx"
 	"github.com/DevOfPie/LinkCtrl/internal/feed"
 	"github.com/DevOfPie/LinkCtrl/internal/gate"
 	"github.com/DevOfPie/LinkCtrl/internal/geoip"
@@ -308,6 +309,16 @@ func run(cfg config.Config, _ io.Writer) error {
 	// on the service, so neither side has to know the other exists first.
 	rootRedirect := &httpx.RootRedirect{Status: cfg.Redirect.DefaultStatus}
 
+	// The verified-hostname set (M40). On the application pool rather than the
+	// redirect one: it is loaded at boot and on invalidation, never on a
+	// request, and a reload must not compete for the small pool a redirect
+	// acquires from.
+	//
+	// It is the whole of the custom-domain gate on the serving side — the router
+	// resolves an alias on a Host header if and only if this map holds it, and
+	// the one query that fills it filters on `verified_at`.
+	hostCache := redirect.NewHostCache(pools.App, log)
+
 	// The audit log. Constructed before the services that emit into it, which
 	// is the ordering the whole milestone is about: emission is a dependency
 	// the emitting features are built against, not something added to them
@@ -529,9 +540,24 @@ func run(cfg config.Config, _ io.Writer) error {
 		// justified by being "only" a link.
 		Hasher: authSvc.Hasher(),
 		Gates:  gateSvc,
-		Log:    log,
+		// Custom domains (M40). The resolver is the host's own, bounded per
+		// lookup; the invalidator is the pair that refreshes this replica and
+		// tells the others; and the notifier is what makes D70's grace window
+		// fair rather than arbitrary — the workspace hears at the first failed
+		// check, not at the stop.
+		DNS: dnsx.Resolver{Timeout: cfg.Domains.VerifyDNSTimeout},
+		Hosts: redirect.BroadcastHostInvalidator{
+			Local: hostCache, Publisher: resolver,
+		},
+		DomainNotify: notifySvc,
+		VerifyGrace:  cfg.Domains.VerifyGrace,
+		Log:          log,
 	})
 	rootRedirect.Load = linkSvc.LoadRootRedirect
+	// A rename changes the hostname a short URL is built from, and that string is
+	// cached per process. The same signal that reloads the verified set drops it,
+	// so a rename on one replica reaches the URLs every other one prints.
+	hostCache.OnReload = linkSvc.ForgetHostnames
 
 	// LINKCTRL_DESTINATION_BLOCKLIST becomes rows, once per boot.
 	//
@@ -577,7 +603,7 @@ func run(cfg config.Config, _ io.Writer) error {
 	// nothing gets noticed, rather than blocking here for the rest of the
 	// entry TTL (F30).
 	subscriber := &redirect.Subscriber{
-		Redis: rdb, Resolver: resolver, Root: rootRedirect, Log: log,
+		Redis: rdb, Resolver: resolver, Root: rootRedirect, Hosts: hostCache, Log: log,
 		ReadTimeout: cfg.Redis.SubscriberReadTimeout,
 	}
 	subCtx, stopSubscriber := context.WithCancel(context.WithoutCancel(ctx))
@@ -590,6 +616,16 @@ func run(cfg config.Config, _ io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("resolve default domain: %w", err)
 	}
+
+	// The verified set, before the listener opens. Fatal on failure rather than
+	// degraded: the cache fails closed, so a process that started without it
+	// would answer the operational 404 on every custom hostname it is supposed
+	// to serve — an outage that looks exactly like the domains having been
+	// unverified. Refusing to start says what actually happened.
+	if err := hostCache.Reload(ctx); err != nil {
+		return fmt.Errorf("load verified domains: %w", err)
+	}
+	log.Info("verified custom domains loaded", slog.Int("hostnames", hostCache.Size()))
 
 	// Geographic enrichment, if an operator supplied a database. Opened before
 	// the ingester because the ingester needs it, and opened rather than trusted:
@@ -656,6 +692,7 @@ func run(cfg config.Config, _ io.Writer) error {
 
 	roller := analytics.NewRoller(pools.App, log)
 	jobs := newJobRunner(pools.App, salts, roller, log, metrics, notifySvc, mailSvc, signupSvc,
+		linkSvc, cfg.Domains,
 		cfg.Analytics.RetentionDays, cfg.Audit.RetentionDays, cfg.Audit.SizeWarnBytes)
 	jobs.start(ctx)
 	defer jobs.stop()
@@ -695,15 +732,28 @@ func run(cfg config.Config, _ io.Writer) error {
 		Config: cfg, Health: health, Auth: authSvc, Keys: keySvc,
 		Links: linkSvc, Redirect: redirectHandler,
 		RootRedirect: rootRedirect,
-		Stats:        stats,
-		Audit:        auditSvc,
-		Notify:       notifySvc,
-		Invites:      inviteSvc,
-		Team:         teamSvc,
-		Signup:       signupSvc,
-		Disputes:     disputeSvc,
-		Metrics:      metrics,
-		Limits:       limits,
+		// Custom domains (M40). Hosts is the gate: a Host header reaches the
+		// redirect tree only if this map holds it.
+		Hosts:      hostCache,
+		DomainRoot: &httpx.DomainRootRedirect{Status: cfg.Redirect.DefaultStatus},
+		TLSAsk: &httpx.TLSAsk{
+			Hosts: hostCache,
+			Activate: func(ctx context.Context, d redirect.VerifiedDomain) {
+				if _, err := dbgen.New(pools.App).MarkDomainTLSActive(ctx, d.ID); err != nil {
+					log.Debug("could not record that the TLS ask was answered",
+						slog.String("hostname", d.Hostname), slog.Any("error", err))
+				}
+			},
+		},
+		Stats:    stats,
+		Audit:    auditSvc,
+		Notify:   notifySvc,
+		Invites:  inviteSvc,
+		Team:     teamSvc,
+		Signup:   signupSvc,
+		Disputes: disputeSvc,
+		Metrics:  metrics,
+		Limits:   limits,
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
 			Links: linkSvc, Stats: stats, Notify: notifySvc, Invites: inviteSvc,

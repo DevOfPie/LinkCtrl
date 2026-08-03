@@ -22,6 +22,7 @@ openapi
 swagger
 healthz
 readyz
+tls-check
 livez
 metrics
 debug

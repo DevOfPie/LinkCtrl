@@ -77,6 +77,16 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 			Status: http.StatusConflict, Detail: err.Error(),
 		})
 
+	case errors.Is(err, domain.ErrUnavailable):
+		// 503 rather than 500: the caller did nothing wrong and the operation may
+		// well work later, or on a replica configured with the dependency this one
+		// is missing. Retry-After is deliberately absent — nothing here knows when
+		// the capability will appear.
+		WriteProblem(w, r, Problem{
+			Type: problemBase + "unavailable", Title: "Temporarily unavailable",
+			Status: http.StatusServiceUnavailable, Detail: err.Error(),
+		})
+
 	case errors.Is(err, domain.ErrForbidden):
 		// The detail names the missing permission. That is deliberate: the
 		// caller is already authenticated, so telling them which permission

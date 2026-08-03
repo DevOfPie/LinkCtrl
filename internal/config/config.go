@@ -60,6 +60,7 @@ type Config struct {
 	DB        DBConfig
 	Redis     RedisConfig
 	Redirect  RedirectConfig
+	Domains   DomainsConfig
 	Alias     AliasConfig
 	Auth      AuthConfig
 	Ingest    IngestConfig
@@ -154,6 +155,37 @@ type RedirectConfig struct {
 	// public instance means a link password is only as strong as the wordlist
 	// somebody is willing to run.
 	PasswordLimit int `env:"LINK_PASSWORD_RATE_LIMIT" envDefault:"20"`
+}
+
+// DomainsConfig is custom-domain verification (M40).
+//
+// **Every value here is operator-visible on purpose, and decision D70 is why.**
+// The grace window decides how long an instance keeps serving a hostname whose
+// DNS its owner may no longer control, and a number with that consequence
+// belongs in configuration and in the deployment runbook rather than in a
+// constant somebody has to read the source to find.
+type DomainsConfig struct {
+	// VerifyInterval is how often the leader re-checks every registered
+	// hostname. One hour: the point of the cadence is to make a single failure
+	// weak evidence and a sustained one strong, and at this rate a domain must
+	// fail twenty-four consecutive checks before serving stops. Zero disables
+	// the job entirely, which leaves verification on-demand only.
+	VerifyInterval time.Duration `env:"DOMAIN_VERIFY_INTERVAL" envDefault:"1h"`
+	// VerifyGrace is how long a *serving* hostname keeps serving after its first
+	// failed check. Twenty-four hours: long enough that somebody woken by the
+	// notification has a working day to fix their DNS, short enough that the
+	// window is stated in the runbook as "one day" rather than as a calculation.
+	// It is never zero — an unset or zero value takes the default, because a
+	// zero window would turn one resolver hiccup into an outage.
+	VerifyGrace time.Duration `env:"DOMAIN_VERIFY_GRACE" envDefault:"24h"`
+	// VerifyDNSTimeout bounds one TXT lookup. A nameserver that accepts a query
+	// and never answers must cost this and not the whole pass.
+	VerifyDNSTimeout time.Duration `env:"DOMAIN_VERIFY_DNS_TIMEOUT" envDefault:"5s"`
+	// VerifyBatch caps how many hostnames one pass checks, oldest check first.
+	// A bound rather than a limit anybody is expected to reach: it is what keeps
+	// an instance with ten thousand registrations from turning one job run into
+	// ten thousand DNS queries.
+	VerifyBatch int `env:"DOMAIN_VERIFY_BATCH" envDefault:"500"`
 }
 
 type AliasConfig struct {

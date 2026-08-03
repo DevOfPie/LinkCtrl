@@ -28,16 +28,17 @@ func (q *Queries) CountLinksOnDomain(ctx context.Context, domainID uuid.UUID) (i
 
 const createDomain = `-- name: CreateDomain :one
 
-INSERT INTO domains (id, organization_id, workspace_id, hostname)
-VALUES ($1, $2, $3, $4)
-RETURNING id, organization_id, hostname, is_default, verified_at, ssl_status, created_at, updated_at, deleted_at, root_redirect_url, block_bots, block_bots_enforced, workspace_id
+INSERT INTO domains (id, organization_id, workspace_id, hostname, verification_token)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, organization_id, hostname, is_default, verified_at, ssl_status, created_at, updated_at, deleted_at, root_redirect_url, block_bots, block_bots_enforced, workspace_id, verification_token, verification_checked_at, verification_failing_since, verification_error
 `
 
 type CreateDomainParams struct {
-	ID             uuid.UUID
-	OrganizationID *uuid.UUID
-	WorkspaceID    *uuid.UUID
-	Hostname       string
+	ID                uuid.UUID
+	OrganizationID    *uuid.UUID
+	WorkspaceID       *uuid.UUID
+	Hostname          string
+	VerificationToken *string
 }
 
 // Domain ownership and registration (M39).
@@ -57,12 +58,18 @@ type CreateDomainParams struct {
 // Registered, and deliberately unverified: verified_at stays NULL and
 // ssl_status stays at its 'none' default. is_default is never set here — there
 // is one instance default and 00700 seeded it.
+//
+// The challenge token is minted here (M40) rather than lazily on the first
+// verification attempt, so the page that tells somebody which DNS record to
+// publish can do it the moment they register — the alternative is a page that
+// asks them to come back.
 func (q *Queries) CreateDomain(ctx context.Context, arg CreateDomainParams) (Domain, error) {
 	row := q.db.QueryRow(ctx, createDomain,
 		arg.ID,
 		arg.OrganizationID,
 		arg.WorkspaceID,
 		arg.Hostname,
+		arg.VerificationToken,
 	)
 	var i Domain
 	err := row.Scan(
@@ -79,12 +86,16 @@ func (q *Queries) CreateDomain(ctx context.Context, arg CreateDomainParams) (Dom
 		&i.BlockBots,
 		&i.BlockBotsEnforced,
 		&i.WorkspaceID,
+		&i.VerificationToken,
+		&i.VerificationCheckedAt,
+		&i.VerificationFailingSince,
+		&i.VerificationError,
 	)
 	return i, err
 }
 
 const getDomainByHostname = `-- name: GetDomainByHostname :one
-SELECT id, organization_id, hostname, is_default, verified_at, ssl_status, created_at, updated_at, deleted_at, root_redirect_url, block_bots, block_bots_enforced, workspace_id FROM domains WHERE lower(hostname) = lower($1) AND deleted_at IS NULL
+SELECT id, organization_id, hostname, is_default, verified_at, ssl_status, created_at, updated_at, deleted_at, root_redirect_url, block_bots, block_bots_enforced, workspace_id, verification_token, verification_checked_at, verification_failing_since, verification_error FROM domains WHERE lower(hostname) = lower($1) AND deleted_at IS NULL
 `
 
 // Matches domains_hostname_key exactly — lower(hostname) among the undeleted —
@@ -107,12 +118,16 @@ func (q *Queries) GetDomainByHostname(ctx context.Context, lower string) (Domain
 		&i.BlockBots,
 		&i.BlockBotsEnforced,
 		&i.WorkspaceID,
+		&i.VerificationToken,
+		&i.VerificationCheckedAt,
+		&i.VerificationFailingSince,
+		&i.VerificationError,
 	)
 	return i, err
 }
 
 const getDomainByID = `-- name: GetDomainByID :one
-SELECT id, organization_id, hostname, is_default, verified_at, ssl_status, created_at, updated_at, deleted_at, root_redirect_url, block_bots, block_bots_enforced, workspace_id FROM domains WHERE id = $1 AND deleted_at IS NULL
+SELECT id, organization_id, hostname, is_default, verified_at, ssl_status, created_at, updated_at, deleted_at, root_redirect_url, block_bots, block_bots_enforced, workspace_id, verification_token, verification_checked_at, verification_failing_since, verification_error FROM domains WHERE id = $1 AND deleted_at IS NULL
 `
 
 // The row the ownership check is made against, so it carries both owner columns.
@@ -133,12 +148,16 @@ func (q *Queries) GetDomainByID(ctx context.Context, id uuid.UUID) (Domain, erro
 		&i.BlockBots,
 		&i.BlockBotsEnforced,
 		&i.WorkspaceID,
+		&i.VerificationToken,
+		&i.VerificationCheckedAt,
+		&i.VerificationFailingSince,
+		&i.VerificationError,
 	)
 	return i, err
 }
 
 const listDomains = `-- name: ListDomains :many
-SELECT d.id, d.organization_id, d.hostname, d.is_default, d.verified_at, d.ssl_status, d.created_at, d.updated_at, d.deleted_at, d.root_redirect_url, d.block_bots, d.block_bots_enforced, d.workspace_id, count(l.id)::bigint AS link_count
+SELECT d.id, d.organization_id, d.hostname, d.is_default, d.verified_at, d.ssl_status, d.created_at, d.updated_at, d.deleted_at, d.root_redirect_url, d.block_bots, d.block_bots_enforced, d.workspace_id, d.verification_token, d.verification_checked_at, d.verification_failing_since, d.verification_error, count(l.id)::bigint AS link_count
 FROM domains d
 LEFT JOIN links l ON l.domain_id = d.id AND l.deleted_at IS NULL
 WHERE d.deleted_at IS NULL
@@ -157,20 +176,24 @@ type ListDomainsParams struct {
 }
 
 type ListDomainsRow struct {
-	ID                uuid.UUID
-	OrganizationID    *uuid.UUID
-	Hostname          string
-	IsDefault         bool
-	VerifiedAt        *time.Time
-	SslStatus         string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-	DeletedAt         *time.Time
-	RootRedirectUrl   *string
-	BlockBots         bool
-	BlockBotsEnforced bool
-	WorkspaceID       *uuid.UUID
-	LinkCount         int64
+	ID                       uuid.UUID
+	OrganizationID           *uuid.UUID
+	Hostname                 string
+	IsDefault                bool
+	VerifiedAt               *time.Time
+	SslStatus                string
+	CreatedAt                time.Time
+	UpdatedAt                time.Time
+	DeletedAt                *time.Time
+	RootRedirectUrl          *string
+	BlockBots                bool
+	BlockBotsEnforced        bool
+	WorkspaceID              *uuid.UUID
+	VerificationToken        *string
+	VerificationCheckedAt    *time.Time
+	VerificationFailingSince *time.Time
+	VerificationError        *string
+	LinkCount                int64
 }
 
 // Every domain the caller may use: the instance default, whatever their
@@ -207,6 +230,10 @@ func (q *Queries) ListDomains(ctx context.Context, arg ListDomainsParams) ([]Lis
 			&i.BlockBots,
 			&i.BlockBotsEnforced,
 			&i.WorkspaceID,
+			&i.VerificationToken,
+			&i.VerificationCheckedAt,
+			&i.VerificationFailingSince,
+			&i.VerificationError,
 			&i.LinkCount,
 		); err != nil {
 			return nil, err
@@ -219,26 +246,167 @@ func (q *Queries) ListDomains(ctx context.Context, arg ListDomainsParams) ([]Lis
 	return items, nil
 }
 
-const renameDomain = `-- name: RenameDomain :one
-UPDATE domains
-   SET hostname = $2, updated_at = now()
- WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, organization_id, hostname, is_default, verified_at, ssl_status, created_at, updated_at, deleted_at, root_redirect_url, block_bots, block_bots_enforced, workspace_id
+const listDomainsForVerification = `-- name: ListDomainsForVerification :many
+SELECT id, hostname, workspace_id, organization_id, verification_token,
+       verified_at, verification_failing_since, verification_checked_at
+FROM domains
+WHERE deleted_at IS NULL
+  AND NOT is_default
+  AND verification_token IS NOT NULL
+ORDER BY verification_checked_at NULLS FIRST, id
+LIMIT $1
 `
 
-type RenameDomainParams struct {
-	ID       uuid.UUID
-	Hostname string
+type ListDomainsForVerificationRow struct {
+	ID                       uuid.UUID
+	Hostname                 string
+	WorkspaceID              *uuid.UUID
+	OrganizationID           *uuid.UUID
+	VerificationToken        *string
+	VerifiedAt               *time.Time
+	VerificationFailingSince *time.Time
+	VerificationCheckedAt    *time.Time
 }
 
-// The hostname is the only thing a registration has to change, and it is
-// changeable only while nothing serves it; see decisions.md, D69.
+// The re-verification job's work list: every registered hostname, verified or
+// not, oldest check first.
 //
-// Not scoped by owner. The caller has already been judged against the row read
-// by GetDomainByID, and repeating the predicate here would turn a 403 into a
-// 404 for anybody who got past that check by a route this file cannot see.
-func (q *Queries) RenameDomain(ctx context.Context, arg RenameDomainParams) (Domain, error) {
-	row := q.db.QueryRow(ctx, renameDomain, arg.ID, arg.Hostname)
+// Unverified rows are included deliberately. Somebody who registers a hostname
+// and publishes the record should not have to come back and press a button —
+// the on-demand check exists for the person who does not want to wait, not
+// because waiting is the only other option.
+func (q *Queries) ListDomainsForVerification(ctx context.Context, rowLimit int32) ([]ListDomainsForVerificationRow, error) {
+	rows, err := q.db.Query(ctx, listDomainsForVerification, rowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDomainsForVerificationRow{}
+	for rows.Next() {
+		var i ListDomainsForVerificationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Hostname,
+			&i.WorkspaceID,
+			&i.OrganizationID,
+			&i.VerificationToken,
+			&i.VerifiedAt,
+			&i.VerificationFailingSince,
+			&i.VerificationCheckedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listVerifiedDomains = `-- name: ListVerifiedDomains :many
+
+SELECT id, lower(hostname) AS hostname, root_redirect_url, ssl_status
+FROM domains
+WHERE verified_at IS NOT NULL
+  AND deleted_at IS NULL
+  AND NOT is_default
+`
+
+type ListVerifiedDomainsRow struct {
+	ID              uuid.UUID
+	Hostname        string
+	RootRedirectUrl *string
+	SslStatus       string
+}
+
+// Verification and serving (M40).
+//
+// The gate this milestone exists for is one column: `verified_at`. Nothing below
+// lets a hostname be served without it, and the two statements that clear it —
+// UnverifyDomain here, RenameDomain above — are the only ways serving stops.
+// Everything the host router may resolve aliases on, which is the whole of what
+// the in-process hostname cache holds.
+//
+// **`verified_at IS NOT NULL` is the gate.** A registered-but-unverified
+// hostname is absent from this result, so it is absent from the cache, so the
+// router has nothing to match a Host header against and the request lands on
+// ops-only 404. There is no second predicate anywhere that could disagree with
+// this one, because there is no second query.
+//
+// The instance default is excluded: it is matched on `is_default` at boot and
+// serves through the ordinary link host, and including it here would give one
+// hostname two routes into the redirect tree.
+//
+// Hostnames are lowered here rather than at lookup, so the map is keyed the way
+// config.CanonicalHost spells a Host header.
+func (q *Queries) ListVerifiedDomains(ctx context.Context) ([]ListVerifiedDomainsRow, error) {
+	rows, err := q.db.Query(ctx, listVerifiedDomains)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListVerifiedDomainsRow{}
+	for rows.Next() {
+		var i ListVerifiedDomainsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Hostname,
+			&i.RootRedirectUrl,
+			&i.SslStatus,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markDomainTLSActive = `-- name: MarkDomainTLSActive :execrows
+UPDATE domains
+   SET ssl_status = 'active', updated_at = now()
+ WHERE id = $1 AND ssl_status = 'pending' AND deleted_at IS NULL
+`
+
+// Caddy asked whether to obtain a certificate for this hostname and was told
+// yes. Guarded on 'pending' so it is one write per verification rather than one
+// per handshake: the ask endpoint is public and unauthenticated, and a statement
+// it could run on every request would be a write amplifier anybody can pull.
+func (q *Queries) MarkDomainTLSActive(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, markDomainTLSActive, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markDomainVerificationFailed = `-- name: MarkDomainVerificationFailed :one
+UPDATE domains
+   SET verification_checked_at    = now(),
+       verification_failing_since = COALESCE(verification_failing_since, now()),
+       verification_error         = $2::text,
+       updated_at                 = now()
+ WHERE id = $1 AND deleted_at IS NULL
+RETURNING id, organization_id, hostname, is_default, verified_at, ssl_status, created_at, updated_at, deleted_at, root_redirect_url, block_bots, block_bots_enforced, workspace_id, verification_token, verification_checked_at, verification_failing_since, verification_error
+`
+
+type MarkDomainVerificationFailedParams struct {
+	ID                uuid.UUID
+	VerificationError string
+}
+
+// A failed check, and deliberately *not* a stop.
+//
+// verified_at is untouched: a domain that is serving goes on serving while the
+// grace window runs (D70). What this records is that the window has started —
+// COALESCE keeps the first failure's timestamp, so a run of failures anchors on
+// when the run began rather than sliding forward with every poll, which would
+// make the window unreachable.
+func (q *Queries) MarkDomainVerificationFailed(ctx context.Context, arg MarkDomainVerificationFailedParams) (Domain, error) {
+	row := q.db.QueryRow(ctx, markDomainVerificationFailed, arg.ID, arg.VerificationError)
 	var i Domain
 	err := row.Scan(
 		&i.ID,
@@ -254,6 +422,162 @@ func (q *Queries) RenameDomain(ctx context.Context, arg RenameDomainParams) (Dom
 		&i.BlockBots,
 		&i.BlockBotsEnforced,
 		&i.WorkspaceID,
+		&i.VerificationToken,
+		&i.VerificationCheckedAt,
+		&i.VerificationFailingSince,
+		&i.VerificationError,
+	)
+	return i, err
+}
+
+const markDomainVerified = `-- name: MarkDomainVerified :one
+UPDATE domains
+   SET verified_at                = COALESCE(verified_at, now()),
+       ssl_status                 = CASE WHEN ssl_status = 'none' THEN 'pending' ELSE ssl_status END,
+       verification_checked_at    = now(),
+       verification_failing_since = NULL,
+       verification_error         = NULL,
+       updated_at                 = now()
+ WHERE id = $1 AND deleted_at IS NULL
+RETURNING id, organization_id, hostname, is_default, verified_at, ssl_status, created_at, updated_at, deleted_at, root_redirect_url, block_bots, block_bots_enforced, workspace_id, verification_token, verification_checked_at, verification_failing_since, verification_error
+`
+
+// A successful check. Sets verified_at only when it is not already set, so a
+// domain that has been serving for a month does not have its start date rewritten
+// every hour — the column answers "since when has this been served", and a
+// re-check is not a new answer.
+//
+// ssl_status moves to 'pending': the app never speaks ACME (decision D3), so the
+// most it can say is that it will now answer Caddy's on-demand ask for this
+// hostname. 'active' is written by that ask endpoint, once, when it is first
+// consulted.
+//
+// The failing streak is cleared unconditionally, which is D70's "a successful
+// check at any point resets the count".
+func (q *Queries) MarkDomainVerified(ctx context.Context, id uuid.UUID) (Domain, error) {
+	row := q.db.QueryRow(ctx, markDomainVerified, id)
+	var i Domain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Hostname,
+		&i.IsDefault,
+		&i.VerifiedAt,
+		&i.SslStatus,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.RootRedirectUrl,
+		&i.BlockBots,
+		&i.BlockBotsEnforced,
+		&i.WorkspaceID,
+		&i.VerificationToken,
+		&i.VerificationCheckedAt,
+		&i.VerificationFailingSince,
+		&i.VerificationError,
+	)
+	return i, err
+}
+
+const renameDomain = `-- name: RenameDomain :one
+UPDATE domains
+   SET hostname                  = $2,
+       verification_token        = $3,
+       verified_at               = NULL,
+       ssl_status                = 'none',
+       verification_checked_at   = NULL,
+       verification_failing_since = NULL,
+       verification_error        = NULL,
+       updated_at                = now()
+ WHERE id = $1 AND deleted_at IS NULL
+RETURNING id, organization_id, hostname, is_default, verified_at, ssl_status, created_at, updated_at, deleted_at, root_redirect_url, block_bots, block_bots_enforced, workspace_id, verification_token, verification_checked_at, verification_failing_since, verification_error
+`
+
+type RenameDomainParams struct {
+	ID                uuid.UUID
+	Hostname          string
+	VerificationToken *string
+}
+
+// The hostname is the only thing a registration has to change, and it is
+// changeable only while nothing serves it; see decisions.md, D69.
+//
+// Not scoped by owner. The caller has already been judged against the row read
+// by GetDomainByID, and repeating the predicate here would turn a 403 into a
+// 404 for anybody who got past that check by a route this file cannot see.
+//
+// **A rename un-verifies (M40), and that is the bullet D69 deferred to here.**
+// The proof of control is a TXT record published under the *old* name and says
+// nothing about the new one, so carrying verified_at across would let a
+// workspace verify a name it controls and then rename the row to one it does
+// not. The token is minted afresh for the same reason: the old value is
+// published in somebody else's zone.
+func (q *Queries) RenameDomain(ctx context.Context, arg RenameDomainParams) (Domain, error) {
+	row := q.db.QueryRow(ctx, renameDomain, arg.ID, arg.Hostname, arg.VerificationToken)
+	var i Domain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Hostname,
+		&i.IsDefault,
+		&i.VerifiedAt,
+		&i.SslStatus,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.RootRedirectUrl,
+		&i.BlockBots,
+		&i.BlockBotsEnforced,
+		&i.WorkspaceID,
+		&i.VerificationToken,
+		&i.VerificationCheckedAt,
+		&i.VerificationFailingSince,
+		&i.VerificationError,
+	)
+	return i, err
+}
+
+const setDomainRootRedirect = `-- name: SetDomainRootRedirect :one
+UPDATE domains
+   SET root_redirect_url = $1, updated_at = now()
+ WHERE id = $2 AND deleted_at IS NULL
+RETURNING id, organization_id, hostname, is_default, verified_at, ssl_status, created_at, updated_at, deleted_at, root_redirect_url, block_bots, block_bots_enforced, workspace_id, verification_token, verification_checked_at, verification_failing_since, verification_error
+`
+
+type SetDomainRootRedirectParams struct {
+	RootRedirectUrl *string
+	ID              uuid.UUID
+}
+
+// Where a verified hostname's own root sends a visitor (M40).
+//
+// The same column 00800 added for the instance default, addressed by id instead
+// of by `is_default`. A custom hostname is a bare domain somebody will type, and
+// answering 404 there is a choice its owner should get to make rather than
+// inherit from the instance.
+//
+// NULL clears it, restoring the 404.
+func (q *Queries) SetDomainRootRedirect(ctx context.Context, arg SetDomainRootRedirectParams) (Domain, error) {
+	row := q.db.QueryRow(ctx, setDomainRootRedirect, arg.RootRedirectUrl, arg.ID)
+	var i Domain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Hostname,
+		&i.IsDefault,
+		&i.VerifiedAt,
+		&i.SslStatus,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.RootRedirectUrl,
+		&i.BlockBots,
+		&i.BlockBotsEnforced,
+		&i.WorkspaceID,
+		&i.VerificationToken,
+		&i.VerificationCheckedAt,
+		&i.VerificationFailingSince,
+		&i.VerificationError,
 	)
 	return i, err
 }
@@ -274,4 +598,54 @@ func (q *Queries) SoftDeleteDomain(ctx context.Context, id uuid.UUID) (int64, er
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const unverifyDomain = `-- name: UnverifyDomain :one
+UPDATE domains
+   SET verified_at        = NULL,
+       ssl_status         = 'none',
+       verification_error = $2::text,
+       updated_at         = now()
+ WHERE id = $1 AND verified_at IS NOT NULL AND deleted_at IS NULL
+RETURNING id, organization_id, hostname, is_default, verified_at, ssl_status, created_at, updated_at, deleted_at, root_redirect_url, block_bots, block_bots_enforced, workspace_id, verification_token, verification_checked_at, verification_failing_since, verification_error
+`
+
+type UnverifyDomainParams struct {
+	ID                uuid.UUID
+	VerificationError string
+}
+
+// The end of the grace window, and the only place serving stops on its own.
+//
+// `verified_at` is cleared, so the next ListVerifiedDomains does not return the
+// row, so every replica's host cache drops it and the hostname goes back to
+// ops-only 404. ssl_status goes with it: this instance will stop answering
+// Caddy's ask for the name, which is the other half of no longer serving it.
+//
+// The failing streak is *kept*. The page has to be able to say "this stopped
+// being served at 03:00 because it had been failing since yesterday", and
+// clearing the anchor here would throw away the only record of why.
+func (q *Queries) UnverifyDomain(ctx context.Context, arg UnverifyDomainParams) (Domain, error) {
+	row := q.db.QueryRow(ctx, unverifyDomain, arg.ID, arg.VerificationError)
+	var i Domain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Hostname,
+		&i.IsDefault,
+		&i.VerifiedAt,
+		&i.SslStatus,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.RootRedirectUrl,
+		&i.BlockBots,
+		&i.BlockBotsEnforced,
+		&i.WorkspaceID,
+		&i.VerificationToken,
+		&i.VerificationCheckedAt,
+		&i.VerificationFailingSince,
+		&i.VerificationError,
+	)
+	return i, err
 }

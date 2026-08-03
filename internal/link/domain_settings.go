@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
@@ -41,7 +43,11 @@ func (s *Service) DomainSettings(ctx context.Context, actor *auth.Identity) (*Do
 	if !actor.Can(PermRead) {
 		return nil, fmt.Errorf("%w: reading domain settings requires %s", domain.ErrForbidden, PermRead)
 	}
-	row, err := s.q.GetDefaultDomainSettings(ctx)
+	id, err := s.defaultDomainID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	row, err := s.q.GetDefaultDomainSettings(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("read domain settings: %w", err)
 	}
@@ -109,8 +115,12 @@ func (s *Service) SetRootRedirect(ctx context.Context, actor *auth.Identity, raw
 	// what it replaced: "the root now points at example.com" does not tell an
 	// operator whether that was a change or a no-op, and the previous value is
 	// unrecoverable a moment later.
+	id, err := s.defaultDomainID(ctx)
+	if err != nil {
+		return nil, err
+	}
 	previous := ""
-	if before, err := s.q.GetDefaultDomainSettings(ctx); err == nil && before.RootRedirectUrl != nil {
+	if before, berr := s.q.GetDefaultDomainSettings(ctx, id); berr == nil && before.RootRedirectUrl != nil {
 		previous = *before.RootRedirectUrl
 	}
 
@@ -206,7 +216,11 @@ func (s *Service) SetBotBlocking(ctx context.Context, actor *auth.Identity, bloc
 	// Read before the write, for the audit record: "bot blocking is on" does not
 	// say whether that was a change, and the previous value is gone a moment
 	// later.
-	before, err := s.q.GetDefaultDomainSettings(ctx)
+	id, err := s.defaultDomainID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	before, err := s.q.GetDefaultDomainSettings(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("read domain settings: %w", err)
 	}
@@ -272,7 +286,11 @@ func (s *Service) SetBotBlocking(ctx context.Context, actor *auth.Identity, bloc
 // LoadRootRedirect reads the current value for the redirect path. Unexported
 // callers only: the hot path uses it through a cache.
 func (s *Service) LoadRootRedirect(ctx context.Context) (string, error) {
-	row, err := s.q.GetDefaultDomainSettings(ctx)
+	id, err := s.defaultDomainID(ctx)
+	if err != nil {
+		return "", err
+	}
+	row, err := s.q.GetDefaultDomainSettings(ctx, id)
 	if err != nil {
 		return "", err
 	}
@@ -280,4 +298,101 @@ func (s *Service) LoadRootRedirect(ctx context.Context) (string, error) {
 		return "", nil
 	}
 	return *row.RootRedirectUrl, nil
+}
+
+// defaultDomainID names the instance default, which the settings queries used to
+// find with `WHERE is_default` inside every statement.
+//
+// M40 gave those statements a domain filter, because a verified custom hostname
+// has settings of its own and a predicate that could only ever return the
+// default would answer about the wrong row. The flag is still how the default is
+// found — it just happens once, here, rather than in four queries.
+func (s *Service) defaultDomainID(ctx context.Context) (uuid.UUID, error) {
+	row, err := s.q.ResolveDefaultDomain(ctx)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("resolve default domain: %w", err)
+	}
+	return row.ID, nil
+}
+
+// SetDomainRootRedirect points one registered hostname's root somewhere.
+//
+// The per-domain half of a setting that has existed since 00800 for the instance
+// default. A custom hostname is a bare domain somebody will type into a browser,
+// and whether that answers 404 or goes to the workspace's own site is the
+// workspace's choice rather than the operator's.
+//
+// Three things are deliberately not shared with the instance-default version.
+// It is **not** refused on a single-host deployment: the custom hostname is not
+// the dashboard's host whatever LINK_BASE_URL says, so its root belongs to
+// nobody else. It is guarded by the **ownership** check rather than by bare
+// `domains.write`, because this is one workspace's hostname. And it is refused
+// on an **unverified** hostname, because nothing is served there — offering to
+// configure where its root points would be offering a setting with no effect.
+//
+// The destination goes through the same validation a link's does, which matters
+// here for the reason it matters on the instance root: a redirect reachable with
+// no alias and no link is the cleanest SSRF this product could offer.
+func (s *Service) SetDomainRootRedirect(
+	ctx context.Context, actor *auth.Identity, id uuid.UUID, rawURL string,
+) (*Domain, error) {
+	row, err := s.domainForWrite(ctx, actor, id, "configuring")
+	if err != nil {
+		return nil, err
+	}
+	if row.VerifiedAt == nil {
+		return nil, domain.ValidationErrors{{
+			Field: "root_redirect_url", Code: "unverified",
+			Message: "nothing is served on " + row.Hostname + " until it is verified, so its " +
+				"root has nowhere to send anybody yet",
+		}}
+	}
+
+	var stored *string
+	if trimmed := strings.TrimSpace(rawURL); trimmed != "" {
+		normalized, derr := s.checkDestination(ctx, actor, trimmed, surfaceRootRedirect)
+		if derr != nil {
+			var ve domain.ValidationErrors
+			if errors.As(derr, &ve) {
+				return nil, ve
+			}
+			return nil, derr
+		}
+		stored = &normalized
+	}
+
+	previous := ""
+	if row.RootRedirectUrl != nil {
+		previous = *row.RootRedirectUrl
+	}
+	updated, err := s.q.SetDomainRootRedirect(ctx, dbgen.SetDomainRootRedirectParams{
+		ID: id, RootRedirectUrl: stored,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("set domain root redirect: %w", err)
+	}
+
+	to := ""
+	if updated.RootRedirectUrl != nil {
+		to = *updated.RootRedirectUrl
+	}
+	// The same audit action the instance default's root redirect writes, against
+	// a different target id. One action rather than two, because it is one kind
+	// of change — where a bare hostname sends a visitor — and a reader filtering
+	// the log for it should not have to know which of two names it was called.
+	s.recordDomainEvent(ctx, actor, audit.ActionDomainRootRedirectChanged, updated.ID,
+		map[string]any{"hostname": updated.Hostname, "from": previous, "to": to})
+
+	// The root URL travels in the verified-hostname set, so this is the same
+	// broadcast a verification sends rather than the instance root's own cache
+	// invalidation — there is no second cache to clear.
+	s.invalidateHosts(ctx)
+
+	links, err := s.q.CountLinksOnDomain(ctx, updated.ID)
+	if err != nil {
+		return nil, fmt.Errorf("count links on domain: %w", err)
+	}
+	out := domainFromRow(updated, links, true)
+	out.Verification = s.verificationOf(updated)
+	return out, nil
 }

@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
+	"github.com/DevOfPie/LinkCtrl/internal/config"
+	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/mail"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
@@ -50,8 +53,16 @@ type jobRunner struct {
 	// the service is always built — but held as a pointer so a test runner
 	// without one skips the sweep rather than panicking.
 	signup *signup.Service
-	cancel context.CancelFunc
-	done   chan struct{}
+	// links re-verifies custom domains (M40). Nil skips the pass entirely,
+	// which is what a runner built without the link service gets.
+	links *link.Service
+	// domainVerifyInterval is the re-verification cadence, and
+	// domainVerifyBatch caps one pass. Zero interval disables the job, leaving
+	// verification on-demand only.
+	domainVerifyInterval time.Duration
+	domainVerifyBatch    int32
+	cancel               context.CancelFunc
+	done                 chan struct{}
 }
 
 // advisoryLockKey is a hand-picked constant — the ASCII bytes "lcjobs" plus a
@@ -63,9 +74,14 @@ const advisoryLockKey int64 = 0x6c63_6a6f_6273_0001
 
 func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analytics.Roller,
 	log *slog.Logger, metrics *observability.Metrics, notifier *notify.Service,
-	mailer *mail.Service, signups *signup.Service,
+	mailer *mail.Service, signups *signup.Service, links *link.Service,
+	domains config.DomainsConfig,
 	analyticsRetentionDays, auditRetentionDays int, auditSizeWarnBytes int64,
 ) *jobRunner {
+	batch := domains.VerifyBatch
+	if batch <= 0 || batch > math.MaxInt32 {
+		batch = 500
+	}
 	return &jobRunner{
 		pool: pool, salts: salts, roller: roller, log: log, metrics: metrics,
 		retention:              store.NewRetentionPolicy(analyticsRetentionDays, auditRetentionDays),
@@ -75,7 +91,11 @@ func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analyt
 		auditSizeWarnBytes:     auditSizeWarnBytes,
 		mailer:                 mailer,
 		signup:                 signups,
-		done:                   make(chan struct{}),
+		links:                  links,
+		//nolint:gosec // G115: range-checked above.
+		domainVerifyInterval: domains.VerifyInterval,
+		domainVerifyBatch:    int32(batch),
+		done:                 make(chan struct{}),
 	}
 }
 
@@ -104,10 +124,25 @@ func (j *jobRunner) start(parent context.Context) {
 		// like a fault rather than a queue. Thirty seconds costs one indexed
 		// query that usually returns nothing.
 		outbox := time.NewTicker(30 * time.Second)
+		// Custom-domain re-verification (M40, decision D70). Its own clock
+		// rather than the hourly maintenance tick, because the cadence is
+		// operator configuration: the pair of numbers an operator tunes —
+		// how often it checks, and how long a failing hostname keeps serving —
+		// is meaningless if one of them is a constant here.
+		//
+		// A ticker that is never read when the interval is zero, which is the
+		// documented way to switch the pass off and leave verification
+		// on-demand only.
+		domainInterval := j.domainVerifyInterval
+		if domainInterval <= 0 {
+			domainInterval = time.Hour
+		}
+		domains := time.NewTicker(domainInterval)
 		defer rollup.Stop()
 		defer dimension.Stop()
 		defer hourly.Stop()
 		defer outbox.Stop()
+		defer domains.Stop()
 
 		// Run once at startup rather than waiting a full interval, so a
 		// freshly started instance has current numbers. Both halves, because
@@ -120,6 +155,11 @@ func (j *jobRunner) start(parent context.Context) {
 		// half a minute later. Surviving the restart is the reason the outbox
 		// exists; waiting after it would be a strange way to honour that.
 		j.runMail(ctx)
+		// And once at startup, so a hostname whose record was published while
+		// this instance was down starts serving on boot rather than an hour
+		// later — and so one whose record went away is re-checked promptly
+		// rather than inheriting a stale verification from before the restart.
+		j.runDomainVerification(ctx)
 
 		for {
 			select {
@@ -133,6 +173,8 @@ func (j *jobRunner) start(parent context.Context) {
 				j.runMail(ctx)
 			case <-hourly.C:
 				j.runMaintenance(ctx)
+			case <-domains.C:
+				j.runDomainVerification(ctx)
 			}
 		}
 	}()
@@ -250,6 +292,43 @@ func (j *jobRunner) runMail(ctx context.Context) {
 
 	j.withLeadership(runCtx, "mail", func(ctx context.Context) error {
 		return j.mailer.Drain(ctx)
+	})
+}
+
+// runDomainVerification re-checks every registered hostname's DNS challenge.
+//
+// Under leadership, because it writes: three replicas each unverifying the same
+// domain would write three audit records and send three notifications for one
+// event. The *reading* half — which hostnames are served — is not leader-elected
+// at all; every replica holds it in memory and learns of a change through M23's
+// pub/sub, which is what stops a follower serving a domain the leader has just
+// unverified.
+//
+// The timeout is generous because the pass is a batch of DNS queries to other
+// people's nameservers, and bounded for the same reason: a nameserver that
+// accepts a query and never answers must not hold the scheduler. Each lookup
+// carries its own shorter deadline inside this one.
+func (j *jobRunner) runDomainVerification(ctx context.Context) {
+	if j.links == nil || j.domainVerifyInterval <= 0 {
+		return
+	}
+	runCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
+	j.withLeadership(runCtx, "domain-verification", func(ctx context.Context) error {
+		sum, err := j.links.ReverifyDomains(ctx, time.Now(), j.domainVerifyBatch)
+		// Logged whenever anything changed, at Info, because both halves are
+		// events an operator has to be able to find afterwards: a hostname
+		// starting to serve links, and one that stopped because its DNS had been
+		// failing for the whole grace window.
+		if sum.Verified > 0 || sum.Unverified > 0 || sum.Failing > 0 {
+			j.log.Info("custom domain verification",
+				slog.Int("checked", sum.Checked),
+				slog.Int("newly_verified", sum.Verified),
+				slog.Int("failing", sum.Failing),
+				slog.Int("stopped_serving", sum.Unverified))
+		}
+		return err
 	})
 }
 

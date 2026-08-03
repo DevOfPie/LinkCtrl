@@ -879,14 +879,13 @@ cloud-metadata addresses — a root redirect is the easiest thing on the instanc
 to reach, needing no link and no alias. And the redirect is a `302` that
 intermediaries are told not to cache, so changing it takes effect immediately.
 
-## Registering a domain of your own
+## Using a domain of your own
 
-A workspace can register a hostname and own it. **Nothing is served on it yet**
-— that is the honest state of this feature and the reason the page says so
-before the form. Registering records that the hostname is yours; proving you
-control it, and serving short links on it, arrive in a later release. Until then
-your links stay on the instance's default domain, and a hostname pointed at this
-instance gets the same `404` it got before you registered it.
+A workspace can register a hostname, prove it controls it, and serve its short
+links there. **Registering is not the same as serving**, and the page says so
+before the form: a registered hostname is stored unverified, and a hostname
+pointed at this instance gets the same `404` it got before you registered it
+until the DNS check passes.
 
 *Domains*, in the header's identity menu, is the page. It needs the
 **`domains.write`** permission — owner and admin hold it, editor does not.
@@ -934,3 +933,72 @@ the operator's, at `/api/v1/domain` above. And a hostname with links on it
 cannot be removed, because every one of them would stop resolving.
 
 Registering, renaming and removing are written to the audit log.
+
+### Proving you control it
+
+The row shows one DNS record. Publish it, point the hostname at this instance,
+and press **Check DNS**:
+
+```
+_linkctrl-challenge.go.example.com.  IN  TXT  "b7f0…"
+go.example.com.                      IN  CNAME  <the instance's link host>
+```
+
+```sh
+curl -sS -X POST .../api/v1/domains/$ID/verify -H "Authorization: Bearer $KEY"
+```
+
+A failed check comes back as a **422** naming what it found — no record at all,
+or a record whose value is not your token — because that is something you fix in
+your DNS provider and try again. There is no waiting period in either direction:
+the check runs the moment you ask for it.
+
+**Until it passes, nothing is served on the hostname.** That gap is deliberate
+and it is the reason this exists: without it, anybody who pointed a hostname at
+this instance could serve short links on it.
+
+Once it passes, this instance re-checks the record **every hour**. If it stops
+being there, you are told at once and your links keep working for **24 hours**;
+if the record has not come back by then, the hostname stops being served until
+you publish it again and verify. (An operator can change both numbers — see
+`docs/configuration.md`.) **Renaming a hostname un-verifies it**, because the
+record you published proves you control the old name.
+
+TLS is the operator's proxy, not this application: it never obtains a
+certificate and never contacts a certificate authority. Where the proxy is Caddy
+with on-demand TLS, a verified hostname gets a certificate on its first visit
+with nothing further to do.
+
+### Putting links on it
+
+Name the domain when you create a link, or leave it out and get your workspace's
+own hostname if it has a verified one:
+
+```sh
+curl -sS -X POST .../api/v1/links \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"url":"https://example.com/spring","alias":"spring","domain_id":"'$ID'"}'
+```
+
+`short_url` comes back built from that hostname. Two things follow from aliases
+being per hostname rather than per instance: the same alias can exist on two of
+your hostnames and point at two different places, and an alias that is reserved —
+`login`, `api`, `healthz` — is reserved on every hostname, including yours.
+
+**Links already created do not move.** Nothing rewrites a URL somebody has
+already published, so verifying a hostname changes where *new* links go and
+leaves the existing ones where they are. The links list has a hostname filter for
+exactly that reason.
+
+`https://go.example.com/` — the bare hostname — answers `404` until you point it
+somewhere:
+
+```sh
+curl -sS -X PUT .../api/v1/domains/$ID/root-redirect \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"root_redirect_url":"https://example.com"}'
+```
+
+Sending `""` removes it and restores the `404`. It is offered only on a verified
+hostname, and the destination goes through the same refusals a link's does.
+Changing it is audited.

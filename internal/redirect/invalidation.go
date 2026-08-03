@@ -29,6 +29,16 @@ const (
 	// a domain with a hundred thousand links would otherwise publish a hundred
 	// thousand messages to say one thing.
 	kindDomain = "d"
+	// kindHost says the set of verified hostnames has changed (M40). It carries
+	// no Key: the receiver reloads the whole set, because the message that
+	// matters most is a *removal* and a key naming one hostname could not say
+	// which others went with it.
+	//
+	// This is the message the whole custom-domain cache exists for. A domain
+	// unverified on one replica has to stop being served on every other one, and
+	// without this the other replicas would go on resolving aliases on a
+	// hostname whose owner has lost control of the name.
+	kindHost = "h"
 )
 
 // invalidation is one published message.
@@ -151,7 +161,10 @@ type Subscriber struct {
 	// Root is the root-redirect cache. Nil on a single-host deployment, where
 	// the link root belongs to the dashboard and there is nothing to cache.
 	Root RootCache
-	Log  *slog.Logger
+	// Hosts is the verified-hostname set (M40). Nil where no custom domain can
+	// be served, and then a kindHost message is a no-op rather than an error.
+	Hosts *HostCache
+	Log   *slog.Logger
 
 	// ReconnectBackoff bounds how fast a subscriber retries a dead connection.
 	// Zero uses defaultReconnectBackoff.
@@ -235,7 +248,7 @@ func (s *Subscriber) Run(ctx context.Context) {
 			// too and mean nothing here, which is the one service
 			// ReceiveMessage performed that this loop has to perform itself.
 			if msg, ok := reply.(*goredis.Message); ok {
-				s.apply(msg.Payload, log)
+				s.apply(ctx, msg.Payload, log)
 			}
 			continue
 		}
@@ -304,7 +317,7 @@ func (s *Subscriber) probe(ctx context.Context, ps *goredis.PubSub, log *slog.Lo
 		}
 		switch msg := reply.(type) {
 		case *goredis.Message:
-			s.apply(msg.Payload, log)
+			s.apply(ctx, msg.Payload, log)
 			return nil
 		case *goredis.Pong:
 			return nil
@@ -341,7 +354,7 @@ func (s *Subscriber) establish(ctx context.Context, old *goredis.PubSub, log *sl
 		// "flush when we reconnect" is a flush that never happens. That is the
 		// stale window F30 measured at up to REDIRECT_TTL. Flushing here bounds
 		// it to the time it took to notice instead.
-		s.flush()
+		s.flush(ctx)
 	}
 
 	for attempt := 0; ; attempt++ {
@@ -351,7 +364,7 @@ func (s *Subscriber) establish(ctx context.Context, old *goredis.PubSub, log *sl
 		ps := s.Redis.Subscribe(ctx, InvalidationChannel)
 		err := s.probe(ctx, ps, log)
 		if err == nil {
-			s.flush()
+			s.flush(ctx)
 			if first {
 				log.Info("cache invalidation subscriber ready",
 					slog.String("channel", InvalidationChannel))
@@ -390,17 +403,26 @@ func isTimeout(err error) bool {
 }
 
 // flush drops every in-process cached entry this process holds.
-func (s *Subscriber) flush() {
+//
+// The hostname set is *reloaded* rather than emptied, and the difference is the
+// direction each failure points. Emptying it would take every custom domain out
+// of service until the reload landed — an availability outage caused by a Redis
+// hiccup. Reloading replaces it with the truth, and the truth is what an
+// unverification looks like: the row is gone from the query. Until the reload
+// lands the replica serves what it last knew, bounded by however long the
+// reconnect took to notice, which is the same bound the alias tier carries.
+func (s *Subscriber) flush(ctx context.Context) {
 	if s.Resolver != nil {
 		s.Resolver.mem.flush()
 	}
 	if s.Root != nil {
 		s.Root.InvalidateRoot()
 	}
+	s.Hosts.Refresh(ctx)
 }
 
 // apply performs one invalidation.
-func (s *Subscriber) apply(payload string, log *slog.Logger) {
+func (s *Subscriber) apply(ctx context.Context, payload string, log *slog.Logger) {
 	var msg invalidation
 	if err := json.Unmarshal([]byte(payload), &msg); err != nil {
 		// A message this build cannot read is not a reason to stop listening:
@@ -432,6 +454,13 @@ func (s *Subscriber) apply(payload string, log *slog.Logger) {
 		if s.Root != nil {
 			s.Root.InvalidateRoot()
 		}
+	case kindHost:
+		// A reload rather than a delete, and it is asynchronous (see
+		// HostCache.Refresh) so this loop keeps reading. The set is small and the
+		// message is rare: a verification, an un-verification, a rename, a
+		// removal. What it must never do is block the subscriber, because a
+		// replica that stops reading stops hearing alias invalidations too.
+		s.Hosts.Refresh(ctx)
 	default:
 		// A kind this build does not know, from a newer replica. Ignored
 		// rather than treated as a flush: guessing wrong in the safe direction

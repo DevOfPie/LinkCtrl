@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -170,8 +171,43 @@ func demoLinkConfig(cfg config.Config, rec audit.Recorder,
 		// that do nothing.
 		Hasher: hasher,
 		Gates:  gates,
-		Log:    discardLogger(),
+		// Custom-domain verification (M40). A stub resolver rather than the host's
+		// own, and the substitution is the honest one: the demo's hostnames are
+		// `.example` names RFC 2606 reserves, so no real resolver can ever answer
+		// for them and a demo that waited for one would show an unverified list
+		// forever.
+		//
+		// It answers the challenge for exactly one of them, so the seeder reaches
+		// verification through link.Service.VerifyDomain — the same check, the same
+		// audit event, the same broadcast — rather than by writing verified_at
+		// behind the checker's back. The other hostname is left failing, because
+		// the state a reader has to understand is that these are two different
+		// things.
+		DNS: demoChallengeResolver{},
+		Log: discardLogger(),
 	}
+}
+
+// demoChallengeResolver answers the DNS challenge for the demo hostname that is
+// meant to verify, and nothing else.
+//
+// The token is not known here — it is minted per registration — so the seeder
+// hands it over through the map below just before it verifies. A resolver that
+// answered "yes" to everything would make the demo's *unverified* hostname
+// verify too, and the pair is the point.
+type demoChallengeResolver struct{}
+
+// demoPublishedRecords is the zone this stub serves: challenge record name to
+// the value published under it. Written once, by seedDomains, before verifying.
+var demoPublishedRecords = map[string]string{}
+
+func (demoChallengeResolver) LookupTXT(_ context.Context, name string) ([]string, error) {
+	if v, ok := demoPublishedRecords[name]; ok {
+		return []string{v}, nil
+	}
+	// No record. The sentence the page shows for this case is "no TXT record was
+	// found at …", which is exactly what the unverified demo row must say.
+	return nil, &net.DNSError{Err: "no such host", Name: name, IsNotFound: true}
 }
 
 // demoInviteConfig is the invitation service the seeder runs with.
@@ -942,12 +978,19 @@ func (s *demoSeeder) seedFolders(ctx context.Context, cat []demoLink, ids map[in
 func demoDomains() []struct {
 	workspace string
 	hostname  string
+	// verify says whether the seeder publishes this hostname's challenge record
+	// and checks it (M40). Exactly one does, and the asymmetry is the whole
+	// point: a list where both are verified shows one state, a list where
+	// neither is shows the state M39 shipped, and only a list with one of each
+	// shows what verification decides.
+	verify bool
 } {
 	return []struct {
 		workspace string
 		hostname  string
+		verify    bool
 	}{
-		{workspace: "", hostname: "go.linkctrl.example"},
+		{workspace: "", hostname: "go.linkctrl.example", verify: true},
 		{workspace: demoWorkspace2Slug, hostname: "camp.linkctrl.example"},
 	}
 }
@@ -975,10 +1018,47 @@ func (s *demoSeeder) seedDomains(ctx context.Context) error {
 			}
 			actor = here
 		}
-		if _, err := s.link.RegisterDomain(ctx, actor, d.hostname); err != nil {
+		registered, err := s.link.RegisterDomain(ctx, actor, d.hostname)
+		if err != nil {
 			return fmt.Errorf("register %s: %w", d.hostname, err)
 		}
-		fmt.Fprintf(os.Stderr, "domain %s: registered to %s, unverified\n",
+		if !d.verify {
+			// Left as M39 shipped it: registered, with a record to publish and
+			// nothing served. The page has to be able to show this state, and a
+			// demo where every hostname works would never show it.
+			fmt.Fprintf(os.Stderr, "domain %s: registered to %s, unverified\n",
+				d.hostname, actor.WorkspaceID)
+			continue
+		}
+		// "Publish" the record, then verify through the service — the real
+		// check, against a resolver that answers for a name nobody can own.
+		if registered.Verification == nil {
+			return fmt.Errorf("registering %s produced no challenge", d.hostname)
+		}
+		demoPublishedRecords[registered.Verification.RecordName] = registered.Verification.RecordData
+		verified, err := s.link.VerifyDomain(ctx, actor, registered.ID)
+		if err != nil {
+			return fmt.Errorf("verify %s: %w", d.hostname, err)
+		}
+		// A root for the bare hostname, so the demo shows the per-domain setting
+		// rather than only the instance-wide one. Through the service, so the
+		// destination goes through the blocking tiers like any other.
+		if _, err := s.link.SetDomainRootRedirect(ctx, actor, verified.ID,
+			"https://example.com/linkctrl-demo"); err != nil {
+			return fmt.Errorf("set root redirect for %s: %w", d.hostname, err)
+		}
+		// And one link on it, which is what makes the hostname visible anywhere
+		// other than the domains page: the links list shows its short URL built
+		// from this hostname rather than from the instance's own.
+		if _, err := s.link.Create(ctx, actor, link.CreateInput{
+			URL:      "https://example.com/campaigns/spring",
+			Alias:    "spring",
+			Title:    "Spring campaign, on this workspace's own hostname",
+			DomainID: &verified.ID,
+		}); err != nil {
+			return fmt.Errorf("create a link on %s: %w", d.hostname, err)
+		}
+		fmt.Fprintf(os.Stderr, "domain %s: registered to %s, verified, 1 link\n",
 			d.hostname, actor.WorkspaceID)
 	}
 	// Back where the demo opens, exactly as seedSecondWorkspace does.
@@ -1193,10 +1273,24 @@ func demoResetPhase2(ctx context.Context, tx pgxExecutor, orgID, userID uuid.UUI
 			 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
 			[]any{orgID}},
 
+		// Links served on a registered hostname (M40), before the hostnames
+		// themselves. `links.domain_id` is NOT NULL with no cascade, so the
+		// delete below is refused by the database while one of these exists —
+		// which is exactly the guard the product relies on, met here rather than
+		// worked around.
+		//
+		// Scoped by the hostname list rather than by workspace, because the links
+		// deleted earlier in this reset are the ones on the *default* domain and
+		// this is the remainder.
+		{"links on registered hostnames", `
+			DELETE FROM links
+			 WHERE domain_id IN (SELECT id FROM domains WHERE hostname = ANY($1::text[]))`,
+			[]any{demoHostnames()}},
+
 		// The registered hostnames (M39). A hard DELETE rather than the soft one
 		// the product does: the product keeps the row because click history and
-		// reserved aliases point at it, and none of that exists here — nothing
-		// is served on a registered hostname. Bounded by the hostname list, like
+		// reserved aliases point at it, and none of that exists here — the links
+		// on it went in the statement above. Bounded by the hostname list, like
 		// the gated aliases above, so this can never reach the instance default
 		// (`is_default`, seeded by migration 00700) whatever else is in the table.
 		//

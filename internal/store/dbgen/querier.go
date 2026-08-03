@@ -164,6 +164,11 @@ type Querier interface {
 	// Registered, and deliberately unverified: verified_at stays NULL and
 	// ssl_status stays at its 'none' default. is_default is never set here — there
 	// is one instance default and 00700 seeded it.
+	//
+	// The challenge token is minted here (M40) rather than lazily on the first
+	// verification attempt, so the page that tells somebody which DNS record to
+	// publish can do it the moment they register — the alternative is a page that
+	// asks them to come back.
 	CreateDomain(ctx context.Context, arg CreateDomainParams) (Domain, error)
 	// Folders (M38).
 	//
@@ -353,9 +358,18 @@ type Querier interface {
 	GetBuiltinRoleBySlug(ctx context.Context, slug string) (GetBuiltinRoleBySlugRow, error)
 	// What the dashboard shows beside a gated link. Never on the redirect path.
 	GetClickBudget(ctx context.Context, linkID uuid.UUID) (GetClickBudgetRow, error)
-	// The instance's link domain and where its root points. Phase 1 has exactly one
-	// default domain; Phase 2 gives a workspace its own and this gains a filter.
-	GetDefaultDomainSettings(ctx context.Context) (GetDefaultDomainSettingsRow, error)
+	// One domain's settings and where its root points.
+	//
+	// **The filter its own comment promised** (M40). It read `WHERE is_default`,
+	// which was the whole truth while an instance had exactly one domain and became
+	// a way of asking the wrong row the moment it had several: a verified custom
+	// hostname has a root of its own, and reading its settings through a predicate
+	// that can only ever return the default would answer about somebody else's
+	// hostname.
+	//
+	// Not scoped by owner, like every other statement addressed by id in this
+	// schema. link.Service has already judged the actor against the row.
+	GetDefaultDomainSettings(ctx context.Context, domainID uuid.UUID) (GetDefaultDomainSettingsRow, error)
 	GetDestinationDispute(ctx context.Context, id uuid.UUID) (DestinationDispute, error)
 	// One domain's bot policy, by id.
 	//
@@ -505,7 +519,26 @@ type Querier interface {
 	GetUserPermissions(ctx context.Context, arg GetUserPermissionsParams) ([]string, error)
 	GetUserRoleInWorkspace(ctx context.Context, arg GetUserRoleInWorkspaceParams) (GetUserRoleInWorkspaceRow, error)
 	GetVariantRule(ctx context.Context, arg GetVariantRuleParams) (GetVariantRuleRow, error)
-	GetWorkspaceDefaultDomain(ctx context.Context) (GetWorkspaceDefaultDomainRow, error)
+	// The hostname a new link goes on when the caller names none.
+	//
+	// **This is the filter the name promised and the query never had** (M40). It
+	// read `WHERE is_default` with no workspace argument at all, so every workspace
+	// on the instance got the same answer and the word "workspace" in the name was
+	// describing an intention rather than a predicate.
+	//
+	// A workspace's own *verified* hostname wins over the instance default, which is
+	// what registering one is for; the instance default is the fallback and is what
+	// every workspace without one still gets, unchanged. Organization-owned
+	// hostnames sit between the two — every workspace in the organization may use
+	// one, so it is more specific than the instance and less than a workspace's own.
+	//
+	// **Verified only.** An unverified hostname is not a routing target, so putting
+	// a link on it would mint a short URL that resolves nowhere; the ordering below
+	// cannot reach one because the WHERE clause has already excluded it.
+	//
+	// Ties are broken by verified_at then id, so the answer is stable: a workspace
+	// that verifies a second hostname does not silently move its new links onto it.
+	GetWorkspaceDefaultDomain(ctx context.Context, arg GetWorkspaceDefaultDomainParams) (GetWorkspaceDefaultDomainRow, error)
 	// One workspace, scoped by organization so an id belonging to another tenant is
 	// indistinguishable from one that does not exist.
 	//
@@ -614,6 +647,14 @@ type Querier interface {
 	// on today, so it belongs at the top rather than wherever its placeholder name
 	// happens to sort.
 	ListDomains(ctx context.Context, arg ListDomainsParams) ([]ListDomainsRow, error)
+	// The re-verification job's work list: every registered hostname, verified or
+	// not, oldest check first.
+	//
+	// Unverified rows are included deliberately. Somebody who registers a hostname
+	// and publishes the record should not have to come back and press a button —
+	// the on-demand check exists for the person who does not want to wait, not
+	// because waiting is the only other option.
+	ListDomainsForVerification(ctx context.Context, rowLimit int32) ([]ListDomainsForVerificationRow, error)
 	// Every folder in the workspace, with how many links are filed directly in it.
 	//
 	// Flat and unordered by structure: the caller builds the tree. Sorted by name so
@@ -773,6 +814,27 @@ type Querier interface {
 	// a person reading the list can predict and that a rotation can be explained
 	// against. Two arms created in the same transaction cannot tie on it.
 	ListVariantRules(ctx context.Context, arg ListVariantRulesParams) ([]ListVariantRulesRow, error)
+	// Verification and serving (M40).
+	//
+	// The gate this milestone exists for is one column: `verified_at`. Nothing below
+	// lets a hostname be served without it, and the two statements that clear it —
+	// UnverifyDomain here, RenameDomain above — are the only ways serving stops.
+	// Everything the host router may resolve aliases on, which is the whole of what
+	// the in-process hostname cache holds.
+	//
+	// **`verified_at IS NOT NULL` is the gate.** A registered-but-unverified
+	// hostname is absent from this result, so it is absent from the cache, so the
+	// router has nothing to match a Host header against and the request lands on
+	// ops-only 404. There is no second predicate anywhere that could disagree with
+	// this one, because there is no second query.
+	//
+	// The instance default is excluded: it is matched on `is_default` at boot and
+	// serves through the ordinary link host, and including it here would give one
+	// hostname two routes into the redirect tree.
+	//
+	// Hostnames are lowered here rather than at lookup, so the map is keyed the way
+	// config.CanonicalHost spells a Host header.
+	ListVerifiedDomains(ctx context.Context) ([]ListVerifiedDomainsRow, error)
 	// The workspace switcher: what a user may act in, and what they have chosen.
 	//
 	// Resolution itself is in auth.sql, because it is identity, not a feature.
@@ -850,6 +912,32 @@ type Querier interface {
 	// else touches it.
 	LockOrganizations(ctx context.Context) ([]uuid.UUID, error)
 	MarkAllNotificationsRead(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Caddy asked whether to obtain a certificate for this hostname and was told
+	// yes. Guarded on 'pending' so it is one write per verification rather than one
+	// per handshake: the ask endpoint is public and unauthenticated, and a statement
+	// it could run on every request would be a write amplifier anybody can pull.
+	MarkDomainTLSActive(ctx context.Context, id uuid.UUID) (int64, error)
+	// A failed check, and deliberately *not* a stop.
+	//
+	// verified_at is untouched: a domain that is serving goes on serving while the
+	// grace window runs (D70). What this records is that the window has started —
+	// COALESCE keeps the first failure's timestamp, so a run of failures anchors on
+	// when the run began rather than sliding forward with every poll, which would
+	// make the window unreachable.
+	MarkDomainVerificationFailed(ctx context.Context, arg MarkDomainVerificationFailedParams) (Domain, error)
+	// A successful check. Sets verified_at only when it is not already set, so a
+	// domain that has been serving for a month does not have its start date rewritten
+	// every hour — the column answers "since when has this been served", and a
+	// re-check is not a new answer.
+	//
+	// ssl_status moves to 'pending': the app never speaks ACME (decision D3), so the
+	// most it can say is that it will now answer Caddy's on-demand ask for this
+	// hostname. 'active' is written by that ask endpoint, once, when it is first
+	// consulted.
+	//
+	// The failing streak is cleared unconditionally, which is D70's "a successful
+	// check at any point resets the count".
+	MarkDomainVerified(ctx context.Context, id uuid.UUID) (Domain, error)
 	// The single-use write. Conditional on the invite still being redeemable, so
 	// even without the lock above this could not be spent twice.
 	MarkInvitationRedeemed(ctx context.Context, arg MarkInvitationRedeemedParams) (int64, error)
@@ -991,6 +1079,13 @@ type Querier interface {
 	// Not scoped by owner. The caller has already been judged against the row read
 	// by GetDomainByID, and repeating the predicate here would turn a 403 into a
 	// 404 for anybody who got past that check by a route this file cannot see.
+	//
+	// **A rename un-verifies (M40), and that is the bullet D69 deferred to here.**
+	// The proof of control is a TXT record published under the *old* name and says
+	// nothing about the new one, so carrying verified_at across would let a
+	// workspace verify a name it controls and then rename the row to one it does
+	// not. The token is minted afresh for the same reason: the old value is
+	// published in somebody else's zone.
 	RenameDomain(ctx context.Context, arg RenameDomainParams) (Domain, error)
 	RenameFolder(ctx context.Context, arg RenameFolderParams) (Folder, error)
 	// Name and slug move together. The slug is derived from the name by the caller
@@ -1220,6 +1315,15 @@ type Querier interface {
 	// the control offers. Clearing therefore needs no membership check; setting
 	// needs the same one as above.
 	SetDefaultWorkspaceForUser(ctx context.Context, arg SetDefaultWorkspaceForUserParams) (int64, error)
+	// Where a verified hostname's own root sends a visitor (M40).
+	//
+	// The same column 00800 added for the instance default, addressed by id instead
+	// of by `is_default`. A custom hostname is a bare domain somebody will type, and
+	// answering 404 there is a choice its owner should get to make rather than
+	// inherit from the instance.
+	//
+	// NULL clears it, restoring the 404.
+	SetDomainRootRedirect(ctx context.Context, arg SetDomainRootRedirectParams) (Domain, error)
 	// Runs only after the rollup returned without error, which is what makes
 	// last_success_at mean what its name says. last_run_at cannot: RecordJobFailure
 	// stamps it too, so a job failing on every tick would report itself fresh
@@ -1258,6 +1362,17 @@ type Querier interface {
 	// the caller, because writing on every request would turn a read-mostly path
 	// into a write on the hottest authenticated query.
 	TouchSession(ctx context.Context, id uuid.UUID) error
+	// The end of the grace window, and the only place serving stops on its own.
+	//
+	// `verified_at` is cleared, so the next ListVerifiedDomains does not return the
+	// row, so every replica's host cache drops it and the hostname goes back to
+	// ops-only 404. ssl_status goes with it: this instance will stop answering
+	// Caddy's ask for the name, which is the other half of no longer serving it.
+	//
+	// The failing streak is *kept*. The page has to be able to say "this stopped
+	// being served at 03:00 because it had been failing since yesterday", and
+	// clearing the anchor here would throw away the only record of why.
+	UnverifyDomain(ctx context.Context, arg UnverifyDomainParams) (Domain, error)
 	// The trigger on destinations mirrors this into links.primary_url, so the hot
 	// path never joins.
 	//

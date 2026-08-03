@@ -175,6 +175,11 @@ WHERE l.workspace_id = sqlc.arg(workspace_id)
   -- walk inside the dashboard's hottest query to do so.
   AND (NOT sqlc.arg(unfiled)::boolean OR l.folder_id IS NULL)
   AND (sqlc.narg(folder_id)::uuid IS NULL OR l.folder_id = sqlc.narg(folder_id)::uuid)
+  -- Which hostname the link is served on (M40). One filter and no `unhosted`
+  -- half, unlike the folder pair above: `links.domain_id` is NOT NULL, so there
+  -- is no third state to ask about — every link is on exactly one domain, and
+  -- "no filter" is the only other question there is.
+  AND (sqlc.narg(domain_id)::uuid IS NULL OR l.domain_id = sqlc.narg(domain_id)::uuid)
   -- Keyset pagination only works if the predicate compares the same tuple the
   -- ORDER BY sorts on. It did not: every sort filtered on (created_at, id)
   -- while 'clicks' ordered by click_count, so page 2 dropped rows that belonged
@@ -233,7 +238,11 @@ WHERE l.workspace_id = sqlc.arg(workspace_id)
   -- full: a folder-filtered page whose total counted the whole workspace would
   -- read "3 of 40 links" under a list of every link in one folder.
   AND (NOT sqlc.arg(unfiled)::boolean OR l.folder_id IS NULL)
-  AND (sqlc.narg(folder_id)::uuid IS NULL OR l.folder_id = sqlc.narg(folder_id)::uuid);
+  AND (sqlc.narg(folder_id)::uuid IS NULL OR l.folder_id = sqlc.narg(folder_id)::uuid)
+  -- Must mirror ListLinks exactly, for the reason the two filters above say in
+  -- full: a page filtered to one hostname whose total counted every domain
+  -- would read "4 of 40 links" over a list of four.
+  AND (sqlc.narg(domain_id)::uuid IS NULL OR l.domain_id = sqlc.narg(domain_id)::uuid);
 
 -- name: GetLinkTags :many
 SELECT t.id, t.name, t.color
@@ -321,14 +330,55 @@ ON CONFLICT DO NOTHING;
 DELETE FROM link_tags WHERE link_id = $1;
 
 -- name: GetWorkspaceDefaultDomain :one
-SELECT id, hostname FROM domains WHERE is_default AND deleted_at IS NULL;
+-- The hostname a new link goes on when the caller names none.
+--
+-- **This is the filter the name promised and the query never had** (M40). It
+-- read `WHERE is_default` with no workspace argument at all, so every workspace
+-- on the instance got the same answer and the word "workspace" in the name was
+-- describing an intention rather than a predicate.
+--
+-- A workspace's own *verified* hostname wins over the instance default, which is
+-- what registering one is for; the instance default is the fallback and is what
+-- every workspace without one still gets, unchanged. Organization-owned
+-- hostnames sit between the two — every workspace in the organization may use
+-- one, so it is more specific than the instance and less than a workspace's own.
+--
+-- **Verified only.** An unverified hostname is not a routing target, so putting
+-- a link on it would mint a short URL that resolves nowhere; the ordering below
+-- cannot reach one because the WHERE clause has already excluded it.
+--
+-- Ties are broken by verified_at then id, so the answer is stable: a workspace
+-- that verifies a second hostname does not silently move its new links onto it.
+SELECT id, hostname FROM domains
+WHERE deleted_at IS NULL
+  AND (
+        is_default
+     OR (verified_at IS NOT NULL AND workspace_id = sqlc.arg(workspace_id))
+     OR (verified_at IS NOT NULL AND workspace_id IS NULL
+         AND organization_id = sqlc.arg(organization_id))
+      )
+ORDER BY
+    CASE WHEN workspace_id = sqlc.arg(workspace_id) THEN 0
+         WHEN NOT is_default                        THEN 1
+         ELSE 2 END,
+    verified_at, id
+LIMIT 1;
 
 -- name: GetDefaultDomainSettings :one
--- The instance's link domain and where its root points. Phase 1 has exactly one
--- default domain; Phase 2 gives a workspace its own and this gains a filter.
+-- One domain's settings and where its root points.
+--
+-- **The filter its own comment promised** (M40). It read `WHERE is_default`,
+-- which was the whole truth while an instance had exactly one domain and became
+-- a way of asking the wrong row the moment it had several: a verified custom
+-- hostname has a root of its own, and reading its settings through a predicate
+-- that can only ever return the default would answer about somebody else's
+-- hostname.
+--
+-- Not scoped by owner, like every other statement addressed by id in this
+-- schema. link.Service has already judged the actor against the row.
 SELECT id, hostname, root_redirect_url, block_bots, block_bots_enforced
 FROM domains
-WHERE is_default AND deleted_at IS NULL;
+WHERE id = sqlc.arg(domain_id) AND deleted_at IS NULL;
 
 -- name: GetDomainBotSettings :one
 -- One domain's bot policy, by id.

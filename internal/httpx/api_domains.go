@@ -17,9 +17,10 @@ import (
 // that add and remove them. They are different resources and neither is a
 // version of the other, which is why the older path is left exactly as it was.
 //
-// **Nothing registered here is served.** A hostname comes back with
-// `verified` false and stays that way: verification and serving are M40's, and
-// until then no router resolves a Host header at all.
+// **A hostname is served only once it is verified** (M40). Registration comes
+// back with `verified` false and a `verification` block naming the TXT record to
+// publish; `POST /domains/{id}/verify` checks it, and until that check passes no
+// router resolves a Host header against the row.
 type createDomainRequest struct {
 	Hostname string `json:"hostname"`
 }
@@ -81,4 +82,54 @@ func (a *LinkAPI) DeleteRegisteredDomain(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// VerifyDomain runs the DNS challenge now.
+//
+// A POST because it changes something: a successful check starts serving an
+// alias namespace on a public hostname, which is the most consequential thing
+// this collection does. It is also why the response is the domain rather than a
+// bare status — the caller needs to see `verified` become true, and to see the
+// challenge block when it does not.
+func (a *LinkAPI) VerifyDomain(w http.ResponseWriter, r *http.Request) {
+	domainID, err := pathUUID(r, "domainID")
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	d, err := a.Links.VerifyDomain(r.Context(), IdentityFrom(r.Context()), domainID)
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, d)
+}
+
+type domainRootRedirectRequest struct {
+	// RootRedirectURL is where the bare hostname sends a visitor. Empty clears
+	// it, restoring the 404 — which is why this is a PUT of the whole value
+	// rather than a PATCH: "" has to mean "remove", and on a PATCH it would mean
+	// "unchanged" like every other field on this API.
+	RootRedirectURL string `json:"root_redirect_url"`
+}
+
+// SetDomainRootRedirect points a verified hostname's own root somewhere.
+func (a *LinkAPI) SetDomainRootRedirect(w http.ResponseWriter, r *http.Request) {
+	domainID, err := pathUUID(r, "domainID")
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	var req domainRootRedirectRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	d, err := a.Links.SetDomainRootRedirect(r.Context(), IdentityFrom(r.Context()),
+		domainID, req.RootRedirectURL)
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, d)
 }

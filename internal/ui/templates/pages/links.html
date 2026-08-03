@@ -80,6 +80,21 @@
       {{end}}
     </select>
     {{end}}
+    {{/* The hostname filter (M40). Drawn only when the workspace can use more
+         than one, which on a default instance is never: a select whose only
+         option is "All hostnames" is a control that cannot change anything.
+         No "none" option, unlike folders — every link is on exactly one
+         hostname, so there is no third question to ask. */}}
+    {{if .DomainOptions}}
+    <select name="domain" hx-get="/links" hx-trigger="change" hx-include="closest form"
+            aria-label="Hostname"
+            class="rounded-md border border-line-strong px-2 py-1.5 text-sm">
+      <option value="" {{if eq .Domain ""}}selected{{end}}>All hostnames</option>
+      {{range .DomainOptions}}
+      <option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Hostname}}</option>
+      {{end}}
+    </select>
+    {{end}}
     <select name="sort" hx-get="/links" hx-trigger="change" hx-include="closest form"
             class="rounded-md border border-line-strong px-2 py-1.5 text-sm">
       <option value="newest" {{if eq .Sort "newest"}}selected{{end}}>Newest first</option>

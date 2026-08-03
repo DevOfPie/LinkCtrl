@@ -353,6 +353,15 @@ paths:
             `link_count` beside that folder in `GET /folders`. An unparseable
             value is ignored rather than matching nothing, so a bookmark to a
             deleted folder shows the links instead of suggesting they are gone.
+        - name: domain
+          in: query
+          schema: { type: string, format: uuid }
+          description: >
+            A domain id: the links served on one hostname. No `none`
+            counterpart, unlike `folder` — every link is on exactly one domain,
+            so there is no third state to ask about. An id naming another
+            workspace's hostname returns an empty page rather than a refusal,
+            because a refusal would confirm the id names a real domain.
       responses:
         "200":
           description: One page of links
@@ -1093,6 +1102,92 @@ paths:
       responses:
         "204":
           description: Removed
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /domains/{domainID}/verify:
+    parameters:
+      - $ref: "#/components/parameters/DomainID"
+    post:
+      tags: [domains]
+      operationId: verifyDomain
+      summary: Check the hostname's DNS challenge now
+      description: |
+        Reads the TXT record at `_linkctrl-challenge.<hostname>` and compares it
+        with the domain's token. On success the hostname starts being served:
+        the host router resolves aliases on it, and links may be created there.
+
+        **This is the gate.** Until it passes, a Host header naming the hostname
+        gets the operational 404 whoever points DNS at this instance — which is
+        what stops a stranger registering somebody's name and serving links on
+        it.
+
+        Failure is `422` with `hostname`/`unverified` and a message naming the
+        record that is missing or wrong, because that is something the caller
+        fixes and retries. A process with no DNS resolver configured answers
+        `503`.
+
+        The check also runs on a cadence without anybody asking, and a hostname
+        that stops passing it keeps serving for a bounded grace window and then
+        stops. Both numbers are operator configuration; see the custom-domain
+        runbook in `docs/deployment.md`.
+      responses:
+        "200":
+          description: The domain, now verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Domain"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /domains/{domainID}/root-redirect:
+    parameters:
+      - $ref: "#/components/parameters/DomainID"
+    put:
+      tags: [domains]
+      operationId: setDomainRootRedirect
+      summary: Where this hostname's own root sends a visitor
+      description: |
+        `https://<hostname>/` is a URL somebody will type. Empty is the default
+        and answers 404, which says nothing about the instance.
+
+        A `PUT` rather than a `PATCH` because the empty string has to mean
+        "remove it", and on a `PATCH` every other field's empty value means
+        "unchanged".
+
+        Refused with `root_redirect_url`/`unverified` on a hostname that is not
+        verified: nothing is served there, so its root has nowhere to send
+        anybody. The destination goes through the same blocking tiers a link's
+        does — a root redirect that skipped them would be a cleaner SSRF than the
+        one they exist to prevent, because reaching it needs no alias.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DomainRootRedirectRequest"
+      responses:
+        "200":
+          description: The updated domain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Domain"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -2547,6 +2642,15 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
+    Unavailable:
+      description: >
+        The dependency needed for this operation is not present in this process.
+        Not a refusal: the caller did nothing wrong and the operation may work
+        later, or on a replica configured with it.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
     NotFound:
       description: Does not exist, or belongs to a workspace this identity cannot see
       content:
@@ -2821,7 +2925,7 @@ components:
     Domain:
       type: object
       additionalProperties: false
-      required: [id, hostname, scope, is_default, verified, link_count, manageable, created_at, updated_at]
+      required: [id, hostname, scope, is_default, verified, ssl_status, link_count, manageable, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         hostname:
@@ -2842,13 +2946,31 @@ components:
         verified:
           type: boolean
           description: >
-            False for everything a workspace registers. Proving control of a
-            hostname, and serving links on it, arrive in a later release; until
-            then a registered hostname is not a routing target.
+            Whether the hostname's DNS challenge has passed. **This is the
+            gate**: false means no router resolves an alias on the hostname,
+            whoever points DNS at this instance, and links cannot be created on
+            it.
         verified_at:
           type: string
           format: date-time
           description: Absent while `verified` is false.
+        ssl_status:
+          type: string
+          enum: [none, pending, active, error]
+          description: >
+            What this instance knows about the certificate, which is less than
+            the name suggests. It never speaks ACME: certificates are obtained
+            by the operator's proxy. `none` is unverified, `pending` means this
+            instance will answer the proxy's on-demand ask for the hostname, and
+            `active` means that ask has been answered. `error` is never written.
+        root_redirect_url:
+          type: string
+          format: uri
+          description: >
+            Where `https://<hostname>/` sends a visitor. Absent means the root
+            answers 404.
+        verification:
+          $ref: "#/components/schemas/DomainVerification"
         link_count:
           type: integer
           format: int64
@@ -2863,6 +2985,57 @@ components:
             arrival, so acting on a stale `true` still gets a `403`.
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+
+    DomainVerification:
+      type: object
+      additionalProperties: false
+      required: [record_type, record_name, record_data]
+      description: >
+        The DNS challenge, and the state of the last check. Absent on the
+        instance's default domain, which nobody verifies.
+      properties:
+        record_type: { type: string, enum: [TXT] }
+        record_name:
+          type: string
+          description: >
+            The fully-qualified name to publish under — the hostname with a
+            `_linkctrl-challenge` label in front. Given in full rather than as a
+            label to prepend, because this is copied into a DNS provider's form.
+        record_data:
+          type: string
+          description: The value the record must carry.
+        checked_at:
+          type: string
+          format: date-time
+          description: When the last check ran, whatever it concluded.
+        failing_since:
+          type: string
+          format: date-time
+          description: >
+            When the current run of failures began. Absent means the last check
+            passed. A single success clears it.
+        stops_at:
+          type: string
+          format: date-time
+          description: >
+            When the hostname stops being served if the record does not come
+            back. Present only while the domain is both serving and failing,
+            because it is a threat only in that state.
+        error:
+          type: string
+          description: What the last failed check said.
+
+    DomainRootRedirectRequest:
+      type: object
+      additionalProperties: false
+      required: [root_redirect_url]
+      properties:
+        root_redirect_url:
+          type: string
+          maxLength: 2048
+          description: >
+            Where the bare hostname sends a visitor. Empty removes it, restoring
+            the 404.
 
     DomainList:
       type: object
@@ -3552,6 +3725,19 @@ components:
           description: >
             Files the new link. Absent or null leaves it unfiled. A folder in
             another workspace is refused with `folder_id`/`not_found`.
+        domain_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            The hostname to serve the link on. Absent or null takes the
+            workspace's own default — its verified hostname if it has one, and
+            the instance default otherwise.
+
+            It must be **verified**: an unverified hostname is refused with
+            `domain_id`/`unverified`, because a link created there would be a
+            short URL that resolves nowhere. Another workspace's hostname is
+            `403`. `short_url` is built from whichever hostname is chosen.
 
     UpdateLinkRequest:
       type: object

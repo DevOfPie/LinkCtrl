@@ -11,19 +11,18 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 )
 
-// The domains page (M39).
+// The domains page (M39, verification M40).
 //
-// **It registers a hostname and it says, on the row, that nothing is served on
-// it.** That sentence is the page's whole job at this milestone. A dashboard
-// that let somebody add `go.example.com` and then looked exactly like a
-// dashboard where the hostname works would produce one support question per
-// registration; the row carries "Not verified — links are not served here yet"
-// until M40 gives it something better to say.
+// **It registers a hostname, tells you the record to publish, and says on the
+// row whether anything is served there yet.** M39's version could only say the
+// second half of that — nothing was served on anything — and the row now carries
+// the DNS challenge, the state of the last check, and, when a hostname is
+// failing, the time at which it stops being served.
 //
-// Ordinary forms, no JavaScript. Registering, renaming and removing are each a
-// POST to the URL its form names, htmx swaps the panel when it is available, and
-// the browser follows a 303 when it is not — the same shape as the folders page,
-// for the same reason.
+// Ordinary forms, no JavaScript. Registering, renaming, removing, verifying and
+// pointing the root are each a POST to the URL its form names, htmx swaps the
+// panel when it is available, and the browser follows a 303 when it is not — the
+// same shape as the folders page, for the same reason.
 //
 // Every control the page draws is one the service would accept: the row offers
 // Rename and Remove only where `Manageable` is true, which is the service's own
@@ -39,6 +38,25 @@ type domainRow struct {
 	Verified   bool
 	LinkCount  int64
 	Manageable bool
+
+	// The verification block (M40). RecordName and RecordData are what the
+	// reader copies into their DNS provider, spelled in full so nobody has to
+	// assemble `_linkctrl-challenge.` plus a hostname by hand.
+	RecordName string
+	RecordData string
+	// CheckError is what the last failed check said. Empty when the last one
+	// passed, or when none has run.
+	CheckError string
+	// StopsAt is when serving stops if the record does not come back. Empty
+	// unless the hostname is both serving and failing, because it is only a
+	// threat in that state.
+	StopsAt string
+	// RootRedirectURL is where this hostname's own root points. Empty answers
+	// 404, which is where every hostname starts.
+	RootRedirectURL string
+	// SSLLabel says what this instance knows about the certificate, which is
+	// only ever whether it will answer Caddy's ask (decision D3).
+	SSLLabel string
 }
 
 type domainsPageData struct {
@@ -71,16 +89,44 @@ func (h *Web) loadDomainsPage(w http.ResponseWriter, r *http.Request) (domainsPa
 
 	data.Rows = make([]domainRow, 0, len(domains))
 	for _, d := range domains {
-		data.Rows = append(data.Rows, domainRow{
+		row := domainRow{
 			ID: d.ID.String(), Hostname: d.Hostname,
-			ScopeLabel: domainScopeLabel(d.Scope),
-			IsDefault:  d.IsDefault,
-			Verified:   d.Verified,
-			LinkCount:  d.LinkCount,
-			Manageable: d.Manageable,
-		})
+			ScopeLabel:      domainScopeLabel(d.Scope),
+			IsDefault:       d.IsDefault,
+			Verified:        d.Verified,
+			LinkCount:       d.LinkCount,
+			Manageable:      d.Manageable,
+			RootRedirectURL: d.RootRedirectURL,
+			SSLLabel:        domainSSLLabel(d.SSLStatus),
+		}
+		if v := d.Verification; v != nil {
+			row.RecordName, row.RecordData = v.RecordName, v.RecordData
+			row.CheckError = v.Error
+			if v.StopsAt != nil {
+				row.StopsAt = v.StopsAt.UTC().Format("2 Jan 2006 15:04 MST")
+			}
+		}
+		data.Rows = append(data.Rows, row)
 	}
 	return data, true
+}
+
+// domainSSLLabel says what this instance actually knows about a certificate,
+// which is less than the column name suggests.
+//
+// The app never speaks ACME (decision D3): Caddy obtains and holds the
+// certificate, and all this program records is whether it has been asked about
+// the name. The labels say that rather than implying a certificate state this
+// process cannot observe.
+func domainSSLLabel(status string) string {
+	switch status {
+	case "pending":
+		return "Certificate will be requested on first visit"
+	case "active":
+		return "Certificate requested by the proxy"
+	default:
+		return ""
+	}
 }
 
 // domainScopeLabel turns D68's three ownership states into words a reader of the
@@ -135,6 +181,31 @@ func (h *Web) DomainRename(w http.ResponseWriter, r *http.Request) {
 func (h *Web) DomainDelete(w http.ResponseWriter, r *http.Request) {
 	h.domainAction(w, r, "removed", func(ctx context.Context, id uuid.UUID) error {
 		return h.Links.DeleteDomain(ctx, IdentityFrom(ctx), id)
+	})
+}
+
+// DomainVerify runs the DNS challenge now (M40).
+//
+// A refusal comes back as a form error on the row, which is the right shape for
+// it: "no TXT record was found at _linkctrl-challenge.go.example.com" is
+// something the reader fixes in their DNS provider and then presses this again.
+func (h *Web) DomainVerify(w http.ResponseWriter, r *http.Request) {
+	h.domainAction(w, r, "verified", func(ctx context.Context, id uuid.UUID) error {
+		_, err := h.Links.VerifyDomain(ctx, IdentityFrom(ctx), id)
+		return err
+	})
+}
+
+// DomainRootRedirect points a verified hostname's own root somewhere, or clears
+// it when the box is empty.
+func (h *Web) DomainRootRedirect(w http.ResponseWriter, r *http.Request) {
+	h.domainAction(w, r, "root-set", func(ctx context.Context, id uuid.UUID) error {
+		if err := parseForm(w, r); err != nil {
+			return err
+		}
+		_, err := h.Links.SetDomainRootRedirect(ctx, IdentityFrom(ctx), id,
+			r.PostFormValue("root_redirect_url"))
+		return err
 	})
 }
 
@@ -205,13 +276,18 @@ func (h *Web) loadDomainsPageAfter(w http.ResponseWriter, r *http.Request, marke
 func domainNotice(marker string) string {
 	switch marker {
 	case "registered":
-		return "Hostname registered to this workspace. Nothing is served on it yet — " +
-			"verifying a domain and serving links on it arrives in a later release."
+		return "Hostname registered to this workspace. Nothing is served on it until the " +
+			"DNS record below is published and the hostname verifies."
 	case "renamed":
-		return "Hostname changed. Nothing was served on the old name, so no link changed."
+		return "Hostname changed. The new name is unverified and is not served until it " +
+			"is: the record you published proves control of the old name, not this one."
 	case "removed":
-		return "Hostname removed from this workspace. It is free for anybody on this " +
-			"instance to register again."
+		return "Hostname removed from this workspace. It stops being served and is free " +
+			"for anybody on this instance to register again."
+	case "verified":
+		return "Hostname verified. Links created on it are served here now."
+	case "root-set":
+		return "Root redirect saved. It takes effect on every replica within moments."
 	default:
 		return ""
 	}

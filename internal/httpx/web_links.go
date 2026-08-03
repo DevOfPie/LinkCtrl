@@ -124,6 +124,11 @@ type linksPageData struct {
 	Search  string
 	Status  string
 	Sort    string
+	// Domain is the hostname filter as the query string spells it: a domain id,
+	// or empty for no filter (M40). No `none` counterpart, unlike Folder:
+	// links.domain_id is NOT NULL, so every link is on exactly one hostname.
+	Domain        string
+	DomainOptions []domainOption
 	// Folder is the folder filter as the query string spells it: a folder id,
 	// the word `none` for the links in no folder, or empty for no filter.
 	// FolderOptions is the select that sets it, loaded from the same tree the
@@ -171,6 +176,7 @@ func (h *Web) loadLinksPage(w http.ResponseWriter, r *http.Request) (linksPageDa
 		Status:      q.Get("status"),
 		Sort:        q.Get("sort"),
 		Folder:      q.Get("folder"),
+		Domain:      q.Get("domain"),
 		FieldErrors: map[string]string{},
 	}
 	if data.Sort == "" {
@@ -217,6 +223,26 @@ func (h *Web) loadLinksPage(w http.ResponseWriter, r *http.Request) (linksPageDa
 	} else {
 		data.Folder = ""
 	}
+	// The hostname filter (M40), spelled as the API spells it so a URL copied
+	// from one surface works on the other.
+	if id, perr := uuid.Parse(data.Domain); perr == nil {
+		f.DomainID = &id
+	} else {
+		data.Domain = ""
+	}
+
+	// The hostname select, on the same terms: a failed read leaves the control
+	// off rather than replacing the page. Only when there is more than one
+	// hostname to choose between — a filter with one option is a control that
+	// cannot change anything, and on a default instance that is every workspace.
+	if doms, derr := h.Links.Domains(r.Context(), actor); derr == nil && len(doms) > 1 {
+		for _, d := range doms {
+			id := d.ID.String()
+			data.DomainOptions = append(data.DomainOptions, domainOption{
+				ID: id, Hostname: d.Hostname, Selected: id == data.Domain,
+			})
+		}
+	}
 
 	// The folder select. Failing to read the tree leaves the control off the
 	// page rather than replacing the page: this is a filter beside a list
@@ -237,7 +263,8 @@ func (h *Web) loadLinksPage(w http.ResponseWriter, r *http.Request) (linksPageDa
 	data.Links = page.Items
 	data.HasMore = page.HasMore
 	data.Total = page.Total
-	data.Filtered = data.Search != "" || data.Status != "" || data.Folder != "" || f.Cursor != ""
+	data.Filtered = data.Search != "" || data.Status != "" || data.Folder != "" ||
+		data.Domain != "" || f.Cursor != ""
 	if page.HasMore {
 		next := url.Values{}
 		if data.Search != "" {
@@ -248,6 +275,9 @@ func (h *Web) loadLinksPage(w http.ResponseWriter, r *http.Request) (linksPageDa
 		}
 		if data.Folder != "" {
 			next.Set("folder", data.Folder)
+		}
+		if data.Domain != "" {
+			next.Set("domain", data.Domain)
 		}
 		if data.Sort != "newest" {
 			next.Set("sort", data.Sort)
@@ -880,4 +910,11 @@ func (h *Web) LinkDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	seeOther(w, r, "/links?deleted=1")
+}
+
+// domainOption is one entry in the links page's hostname filter (M40).
+type domainOption struct {
+	ID       string
+	Hostname string
+	Selected bool
 }

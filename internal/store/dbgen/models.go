@@ -133,19 +133,23 @@ type DestinationDispute struct {
 }
 
 type Domain struct {
-	ID                uuid.UUID
-	OrganizationID    *uuid.UUID
-	Hostname          string
-	IsDefault         bool
-	VerifiedAt        *time.Time
-	SslStatus         string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-	DeletedAt         *time.Time
-	RootRedirectUrl   *string
-	BlockBots         bool
-	BlockBotsEnforced bool
-	WorkspaceID       *uuid.UUID
+	ID                       uuid.UUID
+	OrganizationID           *uuid.UUID
+	Hostname                 string
+	IsDefault                bool
+	VerifiedAt               *time.Time
+	SslStatus                string
+	CreatedAt                time.Time
+	UpdatedAt                time.Time
+	DeletedAt                *time.Time
+	RootRedirectUrl          *string
+	BlockBots                bool
+	BlockBotsEnforced        bool
+	WorkspaceID              *uuid.UUID
+	VerificationToken        *string
+	VerificationCheckedAt    *time.Time
+	VerificationFailingSince *time.Time
+	VerificationError        *string
 }
 
 type Folder struct {

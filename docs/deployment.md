@@ -209,6 +209,153 @@ Two things not to forward:
   public by default, which is usually what you want; the switch is there for
   instances that should describe nothing.
 
+## Custom domains
+
+A workspace can register a hostname of its own and serve its short links on it.
+Two things have to be true before that happens, and this section is both of them.
+
+### What the application does, and what it does not
+
+LinkCtrl **never speaks ACME**. It obtains no certificates, contacts no
+certificate authority, and holds no account key. Certificates for custom
+hostnames are your proxy's, exactly as the certificates for your own hostnames
+are. All this application does is answer one question — *should you get a
+certificate for this name?* — and it answers yes only for hostnames a workspace
+has proved it controls.
+
+What it does do is **verify control by DNS**, on a cadence, and stop serving a
+hostname whose proof has gone away.
+
+### The customer's half
+
+A workspace registers `go.customer.example` on the Domains page. LinkCtrl shows
+them one TXT record. They publish it, and point the hostname at this instance:
+
+```
+_linkctrl-challenge.go.customer.example.  IN  TXT  "b7f0…"      # from the page
+go.customer.example.                      IN  CNAME  lnk.example.com.
+```
+
+Then they press **Check DNS**. Until that check passes, a request arriving with
+`Host: go.customer.example` gets the operational 404 and nothing else — no link,
+no dashboard, and never a redirect to your own hostname. **That gap is the whole
+point**: without it, anybody who pointed a hostname at your address could serve
+short links on it.
+
+### Your half: on-demand TLS
+
+Caddy asks LinkCtrl before obtaining a certificate for a name it was not
+configured with. Add the `ask` endpoint and an on-demand site block:
+
+```caddyfile
+{
+	on_demand_tls {
+		# LinkCtrl answers 200 for a verified custom hostname and 404 for
+		# everything else. Without this, Caddy would obtain a certificate for
+		# any name pointed at this address — which is the abuse `ask` exists to
+		# prevent, and the reason this endpoint answers for verified domains
+		# only.
+		ask http://localhost:8080/tls-check
+	}
+}
+
+# Your own hostnames, configured statically, exactly as before.
+manage.example.com, lnk.example.com {
+	encode zstd gzip
+	reverse_proxy localhost:8080 {
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
+
+# Everything else: certificates on demand, subject to the ask above.
+https:// {
+	tls {
+		on_demand
+	}
+	encode zstd gzip
+	reverse_proxy localhost:8080 {
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
+```
+
+The `ask` endpoint is unauthenticated by necessity — it is consulted during a TLS
+handshake, before any application request exists. It reads an in-process map,
+performs at most one write per verification, and discloses only whether a name is
+already being served publicly. **Do not expose it through the proxy**: Caddy
+reaches it on the loopback address, and nothing else needs to.
+
+Confirm it before trusting the setup:
+
+```sh
+curl -so /dev/null -w '%{http_code}\n' 'http://localhost:8080/tls-check?domain=go.customer.example'
+# 200 once verified, 404 before that and for any name this instance does not serve
+```
+
+`ssl_status` on the domain row says what this instance knows, which is not much
+and is not meant to be: `none` before verification, `pending` once it will answer
+the ask, `active` once the ask has been answered. The certificate itself is your
+proxy's and its state lives there.
+
+### Re-verification, and what happens when a record is deleted
+
+**Every registered hostname is re-checked hourly.** The check runs on one replica
+at a time — the same Postgres advisory lock the other periodic jobs use — while
+*serving* the hostnames is decided by an in-process set on every replica, kept in
+step through Redis pub/sub. That is why an un-verification takes effect
+everywhere within moments rather than on whichever replica happened to run the
+job.
+
+When a check fails:
+
+| When | What happens |
+| --- | --- |
+| The first failed check | The domain is marked failing and **the owning workspace's owners are notified**, with the time serving stops. **Links keep working.** |
+| Any successful check | The failing state is cleared and the clock is reset. Nothing was interrupted. |
+| **24 hours** of continuous failure | **Serving stops.** `verified_at` is cleared, the hostname goes back to the operational 404 on every replica, the workspace is notified again, and a `domain.unverified` record is written to the audit log. |
+
+**One day, checked hourly** — so a hostname must fail twenty-four consecutive
+checks before its links go dark. That is deliberate on both sides. A single
+failed DNS poll is weak evidence: one resolver hiccup or a brief nameserver
+outage would otherwise take a paying customer's links down with no human in the
+loop. And the window is a real deadline rather than a warning that repeats: for
+as long as it runs, this instance is serving a hostname whose DNS its owner may
+already have lost, and a grace period that never expires is not a grace period.
+
+Both numbers are yours to change:
+
+```sh
+LINKCTRL_DOMAIN_VERIFY_INTERVAL=1h    # how often every registered hostname is re-checked
+LINKCTRL_DOMAIN_VERIFY_GRACE=24h      # how long a failing hostname keeps serving
+```
+
+Setting the interval to `0` switches the periodic pass off entirely and leaves
+verification on-demand only — which also means a hostname that stops verifying
+keeps serving indefinitely. Do that only if something else is watching.
+
+Two changes take effect immediately and do not wait for the window, because
+neither is a failed check:
+
+- **Renaming a hostname un-verifies it.** The published record proves control of
+  the old name and says nothing about the new one. A fresh token is minted, and
+  the domain serves nothing until the new record is published and checked.
+- **Removing a hostname** stops it being served everywhere at once. Removal is
+  refused while any link is on the domain, because every one of them would stop
+  resolving.
+
+### If a customer says their links stopped working
+
+1. Read the domain's row on their Domains page. It names the record it expected
+   and what the last check actually found.
+2. Check it yourself: `dig +short TXT _linkctrl-challenge.go.customer.example`.
+3. If the record is there and correct, re-check from the page — verification
+   resumes serving immediately, with no waiting period in either direction.
+4. `docker compose logs app | grep 'custom domain verification'` shows what each
+   hourly pass concluded, and the audit log holds `domain.verified` and
+   `domain.unverified` with timestamps.
+
 ## 4. Claim the instance
 
 Visit `https://links.example.com`. A fresh instance redirects to a setup form

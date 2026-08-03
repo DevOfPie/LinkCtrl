@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -83,7 +84,31 @@ type Service struct {
 	// (M35). Nil leaves the budget unreported and signing unavailable; the CLI
 	// and several tests run that way.
 	gates GateReader
-	log   *slog.Logger
+	// dns answers the custom-domain challenge (M40). Nil refuses to verify
+	// anything rather than pretending a hostname passed, which is the direction
+	// a missing dependency has to fail in when the thing it decides is whether
+	// an alias namespace is served on somebody's public hostname.
+	dns TXTLookup
+	// hosts broadcasts a change to the verified set, so no replica goes on
+	// serving a domain this one has just unverified. Nil means this process is
+	// alone, which is the CLI and most tests.
+	hosts HostInvalidator
+	// domainNotify warns a workspace before its hostname stops being served.
+	// Nil warns nobody and the grace window still runs.
+	domainNotify DomainNotifier
+	// verifyGraceWindow is D70's bounded patience. Zero means the default; it is
+	// never "no window", because an unset knob must not turn one DNS hiccup into
+	// an outage.
+	verifyGraceWindow time.Duration
+	// linkScheme is http or https, taken from BaseURL, for the short URLs built
+	// on a custom hostname. A custom domain has a hostname and no scheme of its
+	// own, and guessing https would print a URL that does not work on a
+	// development instance.
+	linkScheme string
+	// hostnames caches domain id to hostname for building short URLs off the
+	// default domain. Bounded by the number of domains and dropped on rename.
+	hostnames sync.Map
+	log       *slog.Logger
 }
 
 // GateReader is what the management surfaces need from internal/gate: the exact
@@ -128,6 +153,17 @@ type Config struct {
 	// Gates reads the durable click budget and the workspace signing secret
 	// (M35). Nil leaves both unavailable.
 	Gates GateReader
+	// DNS answers the custom-domain challenge (M40). Nil refuses verification.
+	DNS TXTLookup
+	// Hosts broadcasts a change to the verified hostname set across replicas.
+	// Nil keeps the change local, which is the pre-pub/sub behaviour.
+	Hosts HostInvalidator
+	// DomainNotify warns a workspace whose hostname is failing verification.
+	// Nil warns nobody.
+	DomainNotify DomainNotifier
+	// VerifyGrace is how long a failing hostname keeps serving (D70). Zero uses
+	// DefaultVerifyGrace.
+	VerifyGrace time.Duration
 	// Log receives the warning when an audit write fails. Nil uses the default
 	// logger, so a dropped record is never silent.
 	Log *slog.Logger
@@ -153,7 +189,13 @@ func NewService(pool *pgxpool.Pool, cfg Config) *Service {
 		feedMetrics: cfg.FeedMetrics,
 		hasher:      cfg.Hasher,
 		gates:       cfg.Gates,
-		log:         log,
+
+		dns:               cfg.DNS,
+		hosts:             cfg.Hosts,
+		domainNotify:      cfg.DomainNotify,
+		verifyGraceWindow: cfg.VerifyGrace,
+		linkScheme:        schemeOf(cfg.BaseURL),
+		log:               log,
 	}
 }
 
@@ -191,6 +233,16 @@ type CreateInput struct {
 	// FolderID files the new link (M38). Nil leaves it unfiled, which is where
 	// every link created before folders existed still is.
 	FolderID *uuid.UUID
+
+	// DomainID names the hostname the link is served on (M40). Nil takes the
+	// workspace's own default, which is the instance default until the workspace
+	// has verified a hostname of its own.
+	//
+	// It must be a domain this workspace may use *and* verified. Both halves are
+	// checked, and the second is the one that matters: a link on an unverified
+	// hostname would be a short URL the product handed somebody that resolves
+	// nowhere, on a name this instance has no evidence they control.
+	DomainID *uuid.UUID
 
 	// The gates (M35). Each is off unless asked for, so a link created without
 	// them is byte-for-byte the link this service created before they existed.
@@ -254,9 +306,9 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 		return nil, errs
 	}
 
-	dom, err := s.q.GetWorkspaceDefaultDomain(ctx)
+	dom, err := s.resolveTargetDomain(ctx, actor, in.DomainID)
 	if err != nil {
-		return nil, fmt.Errorf("resolve default domain: %w", err)
+		return nil, err
 	}
 
 	// Resolve the alias before opening a transaction, so a long generation
@@ -372,7 +424,7 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 		s.cache.InvalidateAlias(ctx, dom.ID, code)
 	}
 
-	return s.toDomain(row, tags), nil
+	return s.toDomain(ctx, row, tags), nil
 }
 
 // UpdateInput is a partial update; nil fields are left unchanged.
@@ -651,7 +703,7 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 		}
 	}
 
-	return s.toDomain(row, tags), nil
+	return s.toDomain(ctx, row, tags), nil
 }
 
 func (s *Service) Get(ctx context.Context, actor *auth.Identity, id uuid.UUID) (*domain.Link, error) {
@@ -671,7 +723,7 @@ func (s *Service) Get(ctx context.Context, actor *auth.Identity, id uuid.UUID) (
 	}
 	// One link, so the exact click budget is affordable here in a way it is not
 	// on the list (M35).
-	return s.withBudget(ctx, s.toDomain(row, tags)), nil
+	return s.withBudget(ctx, s.toDomain(ctx, row, tags)), nil
 }
 
 // List returns a keyset-paginated page of links.
@@ -722,6 +774,13 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 	} else {
 		params.FolderID = f.FolderID
 	}
+	// Which hostname the links are served on (M40). Not validated against what
+	// this workspace owns: the query is already scoped to the workspace, so an
+	// id naming somebody else's domain returns an empty page rather than a
+	// refusal — and returning a refusal would confirm the id names a real
+	// hostname, which is the one thing another workspace's domain must not tell
+	// this one.
+	params.DomainID = f.DomainID
 	if f.Cursor != "" {
 		cur, err := decodeCursor(f.Cursor)
 		if err != nil {
@@ -769,7 +828,7 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 		}
 		// ListLinksRow is flat rather than embedding dbgen.Link, because the
 		// aggregated tag columns are part of the same select.
-		page.Items = append(page.Items, *s.toDomain(dbgen.Link{
+		page.Items = append(page.Items, *s.toDomain(ctx, dbgen.Link{
 			ID:           r.ID,
 			WorkspaceID:  r.WorkspaceID,
 			DomainID:     r.DomainID,
@@ -811,6 +870,7 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 			TagIds:   params.TagIds,
 			Unfiled:  params.Unfiled,
 			FolderID: params.FolderID,
+			DomainID: params.DomainID,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("count links: %w", err)
@@ -855,7 +915,7 @@ func (s *Service) setArchived(ctx context.Context, actor *auth.Identity, id uuid
 	if err != nil {
 		return nil, err
 	}
-	return s.toDomain(row, tags), nil
+	return s.toDomain(ctx, row, tags), nil
 }
 
 // Delete soft-deletes a link, keeping it restorable for TrashRetentionDays.
@@ -968,7 +1028,7 @@ func (s *Service) loadTags(ctx context.Context, q *dbgen.Queries, linkID uuid.UU
 	return out, nil
 }
 
-func (s *Service) toDomain(l dbgen.Link, tags []domain.Tag) *domain.Link {
+func (s *Service) toDomain(ctx context.Context, l dbgen.Link, tags []domain.Tag) *domain.Link {
 	if tags == nil {
 		tags = []domain.Tag{}
 	}
@@ -976,7 +1036,7 @@ func (s *Service) toDomain(l dbgen.Link, tags []domain.Tag) *domain.Link {
 		ID:          l.ID,
 		WorkspaceID: l.WorkspaceID,
 		Alias:       l.Alias,
-		ShortURL:    s.baseURL + "/" + l.Alias,
+		ShortURL:    s.shortURL(ctx, l.DomainID, l.Alias),
 		URL:         l.PrimaryUrl,
 		Title:       l.Title,
 		Description: l.Description,
@@ -1057,4 +1117,140 @@ func decodeCursor(s string) (cursor, error) {
 func isUniqueViolation(err error) bool {
 	var pgErr interface{ SQLState() string }
 	return errors.As(err, &pgErr) && pgErr.SQLState() == "23505"
+}
+
+// schemeOf takes the scheme from the configured link base URL.
+//
+// A custom hostname is a name and nothing else: the row has no scheme, and
+// hard-coding https would print a short URL that does not work on a development
+// instance served over http. Whatever the operator configured for their own link
+// host is the honest answer for a hostname served by the same listener.
+func schemeOf(baseURL string) string {
+	if strings.HasPrefix(strings.ToLower(baseURL), "http://") {
+		return "http"
+	}
+	return "https"
+}
+
+// shortURL is the public URL of a link, on whichever hostname it lives.
+//
+// Off the default domain it is the configured link base URL, exactly as it was
+// before custom domains existed. On a custom domain it is that domain's
+// hostname, because a link created on go.acme.com whose short_url named the
+// instance's own host would be a link the product told you to publish at the
+// wrong address.
+func (s *Service) shortURL(ctx context.Context, domainID uuid.UUID, alias string) string {
+	if host := s.hostnameFor(ctx, domainID); host != "" {
+		return s.linkScheme + "://" + host + "/" + alias
+	}
+	return s.baseURL + "/" + alias
+}
+
+// hostnameFor resolves a domain id to its hostname, or "" for the instance
+// default and for anything that cannot be read.
+//
+// Cached in the process, because it is consulted once per link on every list
+// page and the answer changes only when somebody renames a domain — which drops
+// the entry here and broadcasts, so the other replicas drop theirs too. Empty
+// for the instance default deliberately: that domain's hostname is a placeholder
+// the resolver never reads (00700), and its public name is LINK_BASE_URL.
+//
+// A read failure returns "" and caches nothing, so the link is described with
+// the instance's own host rather than with no host at all. Printing the wrong
+// hostname would be worse than printing the default one only if the default were
+// also wrong, and it is the address every link had before this milestone.
+func (s *Service) hostnameFor(ctx context.Context, domainID uuid.UUID) string {
+	if v, ok := s.hostnames.Load(domainID); ok {
+		host, _ := v.(string)
+		return host
+	}
+	row, err := s.q.GetDomainByID(ctx, domainID)
+	if err != nil {
+		return ""
+	}
+	host := ""
+	if !row.IsDefault {
+		host = strings.ToLower(row.Hostname)
+	}
+	s.hostnames.Store(domainID, host)
+	return host
+}
+
+// ForgetHostnames drops the id-to-hostname cache.
+//
+// Wired to the same signal that reloads the verified-hostname set, so a rename
+// on one replica reaches the short URLs printed by every other one. Without it a
+// renamed domain would keep being advertised under its old name until the
+// process restarted — a stale string in the one field whose whole job is to be
+// copied and pasted.
+func (s *Service) ForgetHostnames() {
+	s.hostnames.Range(func(k, _ any) bool {
+		s.hostnames.Delete(k)
+		return true
+	})
+}
+
+// targetDomain is the hostname a new link will be created on.
+type targetDomain struct {
+	ID       uuid.UUID
+	Hostname string
+}
+
+// resolveTargetDomain decides which hostname a new link lands on.
+//
+// Two paths and one rule. With no domain named, the workspace's own default —
+// which is its verified hostname if it has one, and the instance default
+// otherwise; GetWorkspaceDefaultDomain is where that ordering lives, and this
+// milestone is where it gained the workspace argument its name always claimed.
+//
+// With one named, it must be a domain the actor may use and it must be verified.
+// The ownership check is the same one M39 wrote, reused rather than restated:
+// the instance default is usable by everybody, an organization's domain by its
+// members, a workspace's by that workspace. The verification check is M40's, and
+// it is the reason this function exists rather than the id being passed
+// straight through — a link created on an unverified hostname is a short URL
+// that cannot resolve, minted on a name nobody has proved they hold.
+func (s *Service) resolveTargetDomain(
+	ctx context.Context, actor *auth.Identity, id *uuid.UUID,
+) (targetDomain, error) {
+	if id == nil {
+		wsID, orgID := actor.WorkspaceID, actor.OrgID
+		row, err := s.q.GetWorkspaceDefaultDomain(ctx, dbgen.GetWorkspaceDefaultDomainParams{
+			WorkspaceID: &wsID, OrganizationID: &orgID,
+		})
+		if err != nil {
+			return targetDomain{}, fmt.Errorf("resolve default domain: %w", err)
+		}
+		return targetDomain{ID: row.ID, Hostname: row.Hostname}, nil
+	}
+
+	row, err := s.q.GetDomainByID(ctx, *id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return targetDomain{}, domain.ValidationErrors{{
+				Field: "domain_id", Code: "not_found",
+				Message: "no such domain",
+			}}
+		}
+		return targetDomain{}, fmt.Errorf("read domain: %w", err)
+	}
+	// Usable, not administrable. Creating a link on a hostname is what every
+	// member of the workspace does; renaming or removing it needs
+	// domains.write, and requiring that here would mean only admins could
+	// create links once a workspace had its own hostname.
+	usable := row.IsDefault ||
+		(row.WorkspaceID != nil && *row.WorkspaceID == actor.WorkspaceID) ||
+		(row.WorkspaceID == nil && row.OrganizationID != nil && *row.OrganizationID == actor.OrgID)
+	if !usable {
+		return targetDomain{}, fmt.Errorf("%w: that hostname belongs to another workspace",
+			domain.ErrForbidden)
+	}
+	if !row.IsDefault && row.VerifiedAt == nil {
+		return targetDomain{}, domain.ValidationErrors{{
+			Field: "domain_id", Code: "unverified",
+			Message: row.Hostname + " is not verified yet, so nothing is served on it; " +
+				"publish its DNS record and verify it before putting links there",
+		}}
+	}
+	return targetDomain{ID: row.ID, Hostname: row.Hostname}, nil
 }

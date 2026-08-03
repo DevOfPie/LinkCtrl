@@ -17,9 +17,13 @@ import (
 // Sentinel errors. Handlers map these to status codes in exactly one place, so
 // a service can signal "not found" without knowing about HTTP.
 var (
-	ErrNotFound     = errors.New("not found")
-	ErrConflict     = errors.New("conflict")
-	ErrForbidden    = errors.New("forbidden")
+	ErrNotFound  = errors.New("not found")
+	ErrConflict  = errors.New("conflict")
+	ErrForbidden = errors.New("forbidden")
+	// ErrUnavailable is a dependency this process does not have, rather than a
+	// refusal. It maps to 503: the caller did nothing wrong and asking again
+	// somewhere else, or later, may work.
+	ErrUnavailable  = errors.New("unavailable")
 	ErrUnauthorized = errors.New("unauthorized")
 	ErrValidation   = errors.New("validation failed")
 	// ErrNotImplemented marks Phase 2 fields that exist in the schema and are
@@ -217,8 +221,13 @@ type LinkFilter struct {
 	// asked with a nil id. Setting both is Unfiled winning, because a request
 	// naming a folder *and* asking for the unfiled ones has contradicted itself
 	// and the empty answer is the honest one.
-	FolderID     *uuid.UUID
-	Unfiled      bool
+	FolderID *uuid.UUID
+	Unfiled  bool
+	// DomainID narrows to the links served on one hostname (M40). Nil is no
+	// filter. There is no `unhosted` counterpart, unlike the folder pair above:
+	// links.domain_id is NOT NULL, so every link is on exactly one domain and
+	// there is no third state to ask about.
+	DomainID     *uuid.UUID
 	Status       LinkStatus
 	Sort         LinkSort
 	Cursor       string

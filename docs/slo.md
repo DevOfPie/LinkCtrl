@@ -601,6 +601,55 @@ That is why M37 also adds `linkctrl_rollup_staleness_seconds`, read from
 in [operations.md](operations.md#alerts-worth-having): a job allowed to be a
 quarter of an hour late needs a number that says how late it actually is.
 
+### Re-measured for M40 (2026-08-03)
+
+[M40](build-notes/phase-details/m40.md) touches the redirect path, so this is a
+k6 run rather than a note. What it adds in front of every request is a **host
+lookup**: the router matches the `Host` header against an in-process map of
+verified custom hostnames before dispatching, and a request that matches carries
+its domain id through the context to the resolver.
+
+**The number to check is that nothing moved**, because the default link host is
+the one the SLO is defined against and it takes the *miss* branch of that lookup —
+one read lock and one map read, no allocation, no query.
+
+| | M40, cached |
+| --- | --- |
+| Requests | **240,001** at 2,000 rps for 2m |
+| Under 20ms | **100.000%** (240,001 of 240,001) |
+| Mean | **87.44µs** |
+| Median | 83.65µs |
+| p90 / p95 | 105.05µs / 113.30µs |
+| Max | 6.84ms |
+| Cache mix | memory 240,001 · redis 0 · database 0 |
+| Redirect pool waits | 0 |
+
+Taken on image `sha256:2daa92fa3903c6…` (`linkctrl:test`, built 2026-08-03 from
+the M40 working tree at `v0.1.0-73-g19fa007-dirty`), rebuilt and recreated from
+the tree immediately before the run, against a freshly seeded `make seed-slo`
+dataset of 100,000 links and 5,000,000 click events. Same host as
+[M35](#re-measured-for-m35-2026-08-03) onward.
+
+**87.44µs against M36's 97.89µs** on the same host and the same dataset size.
+That is not an improvement caused by this milestone and should not be read as
+one — the click table was freshly seeded here and had been grown by three load
+runs when M36's figure was taken. What the comparison supports is the only claim
+being made: adding a host lookup to the front of the redirect path did not move
+the distribution.
+
+**No custom hostname was in the map during this run**, and that is deliberate
+rather than an omission. The SLO is defined against the instance's own link host,
+which is the path every deployment uses and the one a regression would matter
+most on; a run against a verified custom hostname would additionally pay one
+`context.WithValue` and one request clone, which is a cost paid only by traffic
+to custom domains. It is worth stating rather than measuring here: that
+allocation is on the custom-domain branch and nowhere else, and the seventeen
+cached runs this document now records were all taken on the branch that does not
+take it.
+
+Seventeen cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%, 100%,
+100%, 100%, 100%, 100%, 99.743%, 100%, 100%, 99.505% and **100%** under 20ms.
+
 ## Reproducing it
 
 ```sh

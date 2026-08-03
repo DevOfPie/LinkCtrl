@@ -159,6 +159,19 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	code := strings.TrimSpace(r.PathValue("alias"))
 	canonical := alias.Canonical(code)
 
+	// Which alias namespace this request is in (M40).
+	//
+	// The default host resolves against the domain read once at boot, exactly as
+	// before. A verified custom hostname resolves against its own domain, and the
+	// router has already looked it up — from an in-process map, with no query —
+	// so this is a context read rather than a second resolution. Alias uniqueness
+	// is (domain_id, alias), so this one value is what makes two hostnames two
+	// namespaces instead of one shared one.
+	domainID := h.DomainID
+	if d, ok := CustomDomainFrom(r.Context()); ok {
+		domainID = d.ID
+	}
+
 	// Anything that cannot be a stored alias is refused on shape, before the
 	// limiter, the cache or the database is touched. A scanner spraying paths
 	// would otherwise turn each one into a query and a negative cache entry.
@@ -184,7 +197,7 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// keeps working for the cost of one map lookup, and an alias nobody is
 		// using cannot be turned into a database query by asking for it again.
 		// This is the whole reason the limit does not simply refuse the request.
-		cached, ok := h.Resolver.ResolveCached(h.DomainID, canonical)
+		cached, ok := h.Resolver.ResolveCached(domainID, canonical)
 		if !ok || cached.Snapshot.NotFound {
 			h.Metrics.ObserveRedirect("throttled", "rejected", time.Since(start))
 			// Counted under the same series as the other limits, not only as a
@@ -197,7 +210,7 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		res = cached
 	} else {
-		resolved, err := h.Resolver.Resolve(r.Context(), h.DomainID, canonical)
+		resolved, err := h.Resolver.Resolve(r.Context(), domainID, canonical)
 		if err != nil {
 			// Unavailable, not 404. The load test made the difference concrete: a
 			// resolution failure here is overwhelmingly a timeout under load, and

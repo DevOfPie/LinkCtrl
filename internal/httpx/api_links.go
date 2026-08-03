@@ -40,6 +40,10 @@ type createLinkRequest struct {
 	ForwardPath  bool     `json:"forward_path"`
 	// FolderID files the new link (M38). Absent or null leaves it unfiled.
 	FolderID *uuid.UUID `json:"folder_id"`
+	// DomainID names the hostname to serve the link on (M40). Absent or null
+	// takes the workspace's own default. It must be verified: a link on an
+	// unverified hostname would be a short URL that resolves nowhere.
+	DomainID *uuid.UUID `json:"domain_id"`
 
 	// The gates (M35). Write-only in the case of Password: it is hashed on
 	// arrival and no response anywhere returns it or its hash.
@@ -62,6 +66,7 @@ func (a *LinkAPI) Create(w http.ResponseWriter, r *http.Request) {
 		ForwardQuery: req.ForwardQuery, ForwardPath: req.ForwardPath,
 		Password: req.Password, MaxClicks: req.MaxClicks, OneTime: req.OneTime,
 		RequireSignature: req.RequireSignature, FolderID: req.FolderID,
+		DomainID: req.DomainID,
 	}
 	if req.ExpiresAt != nil && *req.ExpiresAt != "" {
 		at, err := time.Parse(time.RFC3339, *req.ExpiresAt)
@@ -116,6 +121,13 @@ func (a *LinkAPI) List(w http.ResponseWriter, r *http.Request) {
 		f.Unfiled = true
 	} else if id, err := uuid.Parse(raw); err == nil {
 		f.FolderID = &id
+	}
+	// The domain filter (M40), which the links list gained alongside custom
+	// domains: once a workspace serves links on more than one hostname, "which
+	// links are on go.acme.com" is a question the list has to be able to answer.
+	// An unparseable id drops the filter for the reason the folder one does.
+	if id, err := uuid.Parse(q.Get("domain")); err == nil {
+		f.DomainID = &id
 	}
 
 	// A "tag:foo" prefix in the search box is a convenience that has to be

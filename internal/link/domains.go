@@ -58,11 +58,22 @@ type Domain struct {
 	// IsDefault marks the instance default, the hostname every workspace's links
 	// are on today.
 	IsDefault bool `json:"is_default"`
-	// Verified is false for everything registered at this milestone. The field
-	// exists now because the page has to say so — a hostname that looks
-	// registered and does nothing is otherwise indistinguishable from a bug.
+	// Verified is the gate. False means no router resolves an alias on this
+	// hostname, whoever points DNS at this instance.
 	Verified   bool       `json:"verified"`
 	VerifiedAt *time.Time `json:"verified_at,omitempty"`
+	// SSLStatus is what this instance last recorded about the certificate:
+	// `none` until verified, `pending` once it will answer Caddy's on-demand
+	// ask, `active` once that ask has been answered. It is never more than that,
+	// because the app does not speak ACME (decision D3) and the certificate is
+	// Caddy's.
+	SSLStatus string `json:"ssl_status"`
+	// RootRedirectURL is where this hostname's own root sends a visitor. Empty
+	// answers 404.
+	RootRedirectURL string `json:"root_redirect_url,omitempty"`
+	// Verification is the DNS challenge and the state of the last check. Absent
+	// on the instance default, which is not verified by anybody.
+	Verification *DomainVerification `json:"verification,omitempty"`
 	// LinkCount is how many links are on it, which is what deleting one is
 	// refused for.
 	LinkCount int64 `json:"link_count"`
@@ -155,10 +166,26 @@ func (s *Service) Domains(ctx context.Context, actor *auth.Identity) ([]Domain, 
 			IsDefault:  r.IsDefault,
 			Verified:   r.VerifiedAt != nil,
 			VerifiedAt: r.VerifiedAt,
+			SSLStatus:  r.SslStatus,
 			LinkCount:  r.LinkCount,
 			Manageable: canAdminister(actor, r.OrganizationID, r.WorkspaceID) && !r.IsDefault,
 			CreatedAt:  r.CreatedAt, UpdatedAt: r.UpdatedAt,
 		}
+		if r.RootRedirectUrl != nil {
+			d.RootRedirectURL = *r.RootRedirectUrl
+		}
+		// The challenge, on every row the caller may administer. A workspace has
+		// to be able to read the record it must publish without pressing anything
+		// first, or the page that lists a registered hostname is a page that says
+		// "unverified" and offers no way forward.
+		d.Verification = s.verificationOf(dbgen.Domain{
+			ID: r.ID, Hostname: r.Hostname, IsDefault: r.IsDefault,
+			VerifiedAt:               r.VerifiedAt,
+			VerificationToken:        r.VerificationToken,
+			VerificationCheckedAt:    r.VerificationCheckedAt,
+			VerificationFailingSince: r.VerificationFailingSince,
+			VerificationError:        r.VerificationError,
+		})
 		out = append(out, d)
 	}
 	return out, nil
@@ -195,9 +222,13 @@ func (s *Service) RegisterDomain(
 	}
 
 	orgID, wsID := actor.OrgID, actor.WorkspaceID
+	// The challenge token, minted at registration so the page can print the DNS
+	// record to publish the moment somebody adds a hostname (M40). Registration
+	// itself proves nothing and still does — the token is what will.
+	token := domain.NewVerificationToken()
 	row, err := s.q.CreateDomain(ctx, dbgen.CreateDomainParams{
 		ID: uuid.Must(uuid.NewV7()), OrganizationID: &orgID, WorkspaceID: &wsID,
-		Hostname: hostname,
+		Hostname: hostname, VerificationToken: &token,
 	})
 	if err != nil {
 		// The unique index is the real guarantee; the check above only makes
@@ -215,7 +246,9 @@ func (s *Service) RegisterDomain(
 		"workspace_id": wsID.String(),
 	})
 
-	return domainFromRow(row, 0, true), nil
+	out := domainFromRow(row, 0, true)
+	out.Verification = s.verificationOf(row)
+	return out, nil
 }
 
 // RenameDomain changes a registered hostname.
@@ -246,7 +279,13 @@ func (s *Service) RenameDomain(
 		}
 	}
 
-	row, err := s.q.RenameDomain(ctx, dbgen.RenameDomainParams{ID: id, Hostname: hostname})
+	// A new token with the new name (M40). The published record lives under the
+	// old hostname and proves nothing about this one, so the rename clears
+	// verification — the statement does it, and this is the value it re-mints.
+	token := domain.NewVerificationToken()
+	row, err := s.q.RenameDomain(ctx, dbgen.RenameDomainParams{
+		ID: id, Hostname: hostname, VerificationToken: &token,
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrNotFound
@@ -269,11 +308,21 @@ func (s *Service) RenameDomain(
 	// today, because nothing serves one — and a response that hard-coded that
 	// would start lying the moment M40 makes it false, on the field that decides
 	// whether the page offers to remove the domain.
+	// Two caches, one write. The verified set is what the host router resolves
+	// against, and a renamed domain has just left it; the id-to-hostname map is
+	// what short URLs are built from, and it now holds the old name. Both are
+	// dropped on every replica, not only this one — which is the bullet D69
+	// deferred to this milestone.
+	s.hostnames.Delete(row.ID)
+	s.invalidateHosts(ctx)
+
 	links, err := s.q.CountLinksOnDomain(ctx, row.ID)
 	if err != nil {
 		return nil, fmt.Errorf("count links on domain: %w", err)
 	}
-	return domainFromRow(row, links, true), nil
+	out := domainFromRow(row, links, true)
+	out.Verification = s.verificationOf(row)
+	return out, nil
 }
 
 // DeleteDomain removes a registered hostname.
@@ -318,6 +367,12 @@ func (s *Service) DeleteDomain(ctx context.Context, actor *auth.Identity, id uui
 	s.recordDomainEvent(ctx, actor, audit.ActionDomainDeleted, id, map[string]any{
 		"hostname": current.Hostname,
 	})
+	// A removed hostname stops being served everywhere, not only here. It cannot
+	// have links on it — the guard above refuses that — but it can have been
+	// verified, and a replica that never heard about the removal would go on
+	// answering for a name this instance no longer claims.
+	s.hostnames.Delete(id)
+	s.invalidateHosts(ctx)
 	return nil
 }
 
@@ -404,14 +459,19 @@ func (s *Service) recordDomainEvent(
 }
 
 func domainFromRow(row dbgen.Domain, linkCount int64, manageable bool) *Domain {
-	return &Domain{
+	d := &Domain{
 		ID: row.ID, Hostname: row.Hostname,
 		Scope:      domainScope(row.OrganizationID, row.WorkspaceID),
 		IsDefault:  row.IsDefault,
 		Verified:   row.VerifiedAt != nil,
 		VerifiedAt: row.VerifiedAt,
+		SSLStatus:  row.SslStatus,
 		LinkCount:  linkCount,
 		Manageable: manageable && !row.IsDefault,
 		CreatedAt:  row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}
+	if row.RootRedirectUrl != nil {
+		d.RootRedirectURL = *row.RootRedirectUrl
+	}
+	return d
 }

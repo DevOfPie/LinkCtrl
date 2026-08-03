@@ -122,6 +122,8 @@ file. Append a row when you append an entry.
 | [M38, a container that cannot lose what it holds](#2026-08-03--m38-a-container-that-cannot-lose-what-it-holds) | D66 — deleting a folder is a real DELETE, so `SET NULL` and `CASCADE` actually fire; why `folders.deleted_at` stays unwritten; sibling names case-insensitive with a COALESCE index the roots need; the depth cap of eight and where the number comes from; the cycle rule stated once and read by both the writer and the page; why the filter is one folder and not a subtree. D67 — the permission that was not minted, and which limb of D18 that matched |
 | [M39, where a domain's owning workspace lives](#2026-08-03--m39-where-a-domains-owning-workspace-lives) | D68 — a nullable `workspace_id` beside `organization_id` with a CHECK for the three legal states; why per-domain alias uniqueness rules out a join table; why reusing `organization_id` would reword a scope row rather than satisfy it |
 | [M39, what "managing a domain" means before anything is served](#2026-08-03--m39-what-managing-a-domain-means-before-anything-is-served) | D69 — update is the hostname and nothing else; the instance default's guard is unchanged and the collection refuses to rename or delete it; why no hostname is checked against the instance's own names; the permission that was not minted, and the residue recorded as F70 |
+| [M40, what happens when a verified domain stops verifying](#2026-08-03--m40-what-happens-when-a-verified-domain-stops-verifying) | D70 — a bounded grace window, notify first, then a real hard stop with cross-replica invalidation; why one failed DNS poll is weak evidence; why degrading keeps the hijack surface live; the decision m40.md cited that had never been taken |
+| [M40, the numbers in the window, and the four questions serving raised](#2026-08-03--m40-the-numbers-in-the-window-and-the-four-questions-serving-raised) | D71 — one day and one hour, and why each is bounded from both sides; a workspace's own verified hostname becomes the default for its new links, which is the promise the query's name had been making; a rename un-verifies, which D69 deferred here; the ask endpoint answers for verified custom hostnames only and not for the instance's own |
 
 ---
 
@@ -10172,3 +10174,169 @@ migration, no `NonDelegableScopes` entry, and D18's delegability question does
 not arise, because nothing new is delegable. An API key holding `domains.write`
 registers hostnames for the workspace it is scoped to, which is where its
 ownership check lands like anybody else's.
+
+## 2026-08-03 — M40, what happens when a verified domain stops verifying
+
+Owner-answered at [M40](phase-details/m40.md)'s validation, before any code.
+**D70.**
+
+### Why this was a question at all
+
+m40.md says: *"Re-verification runs on a cadence. The **deleted-CNAME plan** is
+implemented and documented: serving stops or degrades per the recorded decision,
+never silently persists."* Validation went looking for that recorded decision
+and there is none — not in Plan.md's decision tables, not here, not in
+[upcoming-decisions.md](upcoming-decisions.md). The only re-verification entries
+in this file are about the SLO.
+
+That is worth naming rather than quietly fixing. A milestone file citing a
+decision that was never taken reads exactly like one citing a decision that was,
+and the difference is invisible until somebody goes to look. It was caught
+because step 1 checks the citation instead of trusting it.
+
+### The answer
+
+A bounded grace window. On the first failed re-verification the domain is marked
+failing and the owning workspace is **notified**; serving continues. If the
+window elapses without a successful check, serving **stops** — `verified_at`
+cleared, the hostname back to ops-only 404, and the change invalidated across
+replicas through M23's pub/sub, so no replica goes on serving a domain another
+one has just unverified. A successful check at any point resets the count.
+
+### Why not stop on the first failure
+
+Re-verification is a **poll against DNS**. One resolver hiccup, one rate-limited
+query, one brief nameserver outage, and a paying customer's links go dark with
+no human in the loop. A single failed check is weak evidence of anything, and
+building an outage trigger out of weak evidence is how an availability feature
+becomes an availability incident.
+
+### What it costs, which is the security half
+
+For the length of the window the instance keeps serving a hostname whose DNS the
+workspace may no longer control. The authority is stale by exactly that much,
+and there is no way to have the tolerance without having the staleness.
+
+So three things bound it: the window is short enough to state plainly in the
+deployment runbook, it is operator-visible rather than a buried constant, and
+the stop at the end of it is a **real stop** rather than another warning. The
+last is the one that matters — a grace period whose expiry escalates instead of
+acting is exactly the *silent persistence* m40.md forbids, arrived at by a
+gentler route.
+
+Degrading — keep serving existing links, refuse new ones, flag it — was
+rejected. It keeps the alias namespace live on a hostname that may already have
+been lost, which is the mildest available response to the single failure mode
+m40.md calls its whole security story.
+
+The exact window and cadence are left to the milestone as tuning rather than
+design, with one constraint from this decision: whatever they are, the runbook
+states them in the units an operator would use, and the failure is visible
+before the stop rather than only at it.
+
+## 2026-08-03 — M40, the numbers in the window, and the four questions serving raised
+
+[D70](#2026-08-03--m40-what-happens-when-a-verified-domain-stops-verifying) left
+the exact window and cadence to the milestone as tuning, and building the serving
+half raised three more questions nothing had answered. **D71.**
+
+### One day, checked hourly
+
+**`DOMAIN_VERIFY_GRACE=24h`, `DOMAIN_VERIFY_INTERVAL=1h`.** So a hostname must
+fail twenty-four consecutive checks, spread over a day, before its links stop
+resolving.
+
+The window is bounded from below by what a human can act on. The workspace is
+notified at the first failure, and a window shorter than a working day would warn
+somebody at 02:00 and take their links down before they read it — a warning that
+exists only to have technically been given. It is bounded from above by what D70
+says it costs: for the window's length this instance serves a hostname whose DNS
+its owner may already have lost, and a week of that is not a grace period, it is a
+policy of ignoring the answer. One day is also the largest window an operator can
+state without arithmetic, which D70 requires of it.
+
+The cadence is what makes the window mean anything. At an hour, a resolver blip —
+seconds, or minutes — cannot produce twenty-four consecutive failures, so the
+window separates "DNS was briefly unreachable" from "the record is gone". Faster
+polling would buy nothing, because the deadline is a day either way, and would
+multiply the queries a large instance sends to other people's nameservers.
+
+Both are environment variables rather than constants, which is D70's second
+constraint and not a convenience: the trade between "a lost hostname keeps being
+served" and "an outage takes a working one down" is an operator's to make on their
+own traffic.
+
+### A workspace's own verified hostname becomes the default for its new links
+
+`GetWorkspaceDefaultDomain` read `WHERE is_default AND deleted_at IS NULL`, with
+no workspace argument at all — the word *workspace* in its name described an
+intention. Its comment conceded the shape and named the fix: *"Phase 2 gives a
+workspace its own and this gains a filter"*. m40.md discharges that promise, and
+what the filter should return is a choice.
+
+**It returns the workspace's own verified hostname when it has one, and the
+instance default otherwise.** Organization-owned hostnames sit between the two.
+Ties break on `verified_at` then id, so verifying a second hostname does not
+silently move new links onto it.
+
+The alternative — keep the instance default until every link names a domain
+explicitly — is defensible and was rejected. *"A workspace gets its own default
+domain"* is what the comment promised, it is what registering a hostname is for,
+and a product that made somebody pick their own hostname on every create would be
+one where the feature is a checkbox rather than a setting.
+
+**What it costs, stated rather than discovered:** the day a workspace verifies a
+hostname, links created there afterwards get a different short URL from the ones
+created before. Existing links do not move — nothing rewrites a URL somebody has
+already published — so a workspace ends up with links on two hostnames, and the
+links list gained a hostname filter partly for that reason. An explicit
+`domain_id` on create overrides the default in either direction.
+
+### A rename un-verifies
+
+[D69](#2026-08-03--m39-what-managing-a-domain-means-before-anything-is-served)
+said renaming was safe *only because nothing was served*, and left the bullet
+here: **"When M40 verifies a hostname, a rename has to invalidate that
+verification."** This is that bullet, and it is not only invalidation — the
+challenge token is minted afresh at the same time.
+
+Both halves follow from what the record proves. It was published under the old
+hostname, in a zone the workspace may control and the new hostname's zone may be
+somebody else's entirely; carrying `verified_at` across would let a workspace
+verify a name it holds and then rename the row to one it does not, which is the
+alias-namespace hijack arriving by the back door. And the old token is *published*
+in that zone, so reusing it would mean a name whose challenge value is already
+readable by whoever runs the previous domain.
+
+The rename is still allowed with links on it, unlike a delete. The links keep
+resolving on nothing until the new name verifies, which is visible on the page and
+recoverable in a minute; a delete would take the hostname out from under them
+permanently, which is why that one is refused.
+
+### The ask endpoint answers for verified custom hostnames only
+
+[D3](../../Plan.md#phase-2-decisions) settled that TLS is operator-managed through
+Caddy's on-demand issuance and that this app never speaks ACME. What it did not
+settle is which names the `ask` endpoint says yes to.
+
+**Only verified custom hostnames.** Not the instance's own app and link hosts,
+which an operator configures statically because they are known before any request
+arrives; not registered-but-unverified hostnames; not anything else. Widening it
+to "any name this instance recognizes" would buy one line of Caddyfile and turn an
+unauthenticated endpoint into a certificate-issuance trigger for names nobody has
+proved they hold — the exact abuse `ask` exists to prevent.
+
+It cannot be authenticated, because it is consulted during a TLS handshake before
+any application request exists. What makes that affordable is that it reads the
+same in-process set the router does — no query, no Redis — discloses only whether
+a name is already being served publicly, and performs at most one write per
+verification. The operator's half is that it stays on the loopback address, which
+is an entry in *Operator responsibilities* rather than something the product can
+enforce.
+
+`ssl_status` is kept current to the limit of what this program can know, and no
+further: `none` before verification, `pending` once the instance will answer the
+ask, `active` once that ask has been answered. `error` exists in the column's
+CHECK and is never written, because writing it would be a claim about a
+certificate this process has never seen.
+

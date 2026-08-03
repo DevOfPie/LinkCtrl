@@ -109,6 +109,10 @@ WHERE l.workspace_id = $1
   -- read "3 of 40 links" under a list of every link in one folder.
   AND (NOT $5::boolean OR l.folder_id IS NULL)
   AND ($6::uuid IS NULL OR l.folder_id = $6::uuid)
+  -- Must mirror ListLinks exactly, for the reason the two filters above say in
+  -- full: a page filtered to one hostname whose total counted every domain
+  -- would read "4 of 40 links" over a list of four.
+  AND ($7::uuid IS NULL OR l.domain_id = $7::uuid)
 `
 
 type CountLinksParams struct {
@@ -118,6 +122,7 @@ type CountLinksParams struct {
 	TagIds      []uuid.UUID
 	Unfiled     bool
 	FolderID    *uuid.UUID
+	DomainID    *uuid.UUID
 }
 
 // Only issued when the caller explicitly asks for a total, because counting
@@ -130,6 +135,7 @@ func (q *Queries) CountLinks(ctx context.Context, arg CountLinksParams) (int64, 
 		arg.TagIds,
 		arg.Unfiled,
 		arg.FolderID,
+		arg.DomainID,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -323,7 +329,7 @@ func (q *Queries) DetachAllTags(ctx context.Context, linkID uuid.UUID) error {
 const getDefaultDomainSettings = `-- name: GetDefaultDomainSettings :one
 SELECT id, hostname, root_redirect_url, block_bots, block_bots_enforced
 FROM domains
-WHERE is_default AND deleted_at IS NULL
+WHERE id = $1 AND deleted_at IS NULL
 `
 
 type GetDefaultDomainSettingsRow struct {
@@ -334,10 +340,19 @@ type GetDefaultDomainSettingsRow struct {
 	BlockBotsEnforced bool
 }
 
-// The instance's link domain and where its root points. Phase 1 has exactly one
-// default domain; Phase 2 gives a workspace its own and this gains a filter.
-func (q *Queries) GetDefaultDomainSettings(ctx context.Context) (GetDefaultDomainSettingsRow, error) {
-	row := q.db.QueryRow(ctx, getDefaultDomainSettings)
+// One domain's settings and where its root points.
+//
+// **The filter its own comment promised** (M40). It read `WHERE is_default`,
+// which was the whole truth while an instance had exactly one domain and became
+// a way of asking the wrong row the moment it had several: a verified custom
+// hostname has a root of its own, and reading its settings through a predicate
+// that can only ever return the default would answer about somebody else's
+// hostname.
+//
+// Not scoped by owner, like every other statement addressed by id in this
+// schema. link.Service has already judged the actor against the row.
+func (q *Queries) GetDefaultDomainSettings(ctx context.Context, domainID uuid.UUID) (GetDefaultDomainSettingsRow, error) {
+	row := q.db.QueryRow(ctx, getDefaultDomainSettings, domainID)
 	var i GetDefaultDomainSettingsRow
 	err := row.Scan(
 		&i.ID,
@@ -533,16 +548,53 @@ func (q *Queries) GetTagByName(ctx context.Context, arg GetTagByNameParams) (Tag
 }
 
 const getWorkspaceDefaultDomain = `-- name: GetWorkspaceDefaultDomain :one
-SELECT id, hostname FROM domains WHERE is_default AND deleted_at IS NULL
+SELECT id, hostname FROM domains
+WHERE deleted_at IS NULL
+  AND (
+        is_default
+     OR (verified_at IS NOT NULL AND workspace_id = $1)
+     OR (verified_at IS NOT NULL AND workspace_id IS NULL
+         AND organization_id = $2)
+      )
+ORDER BY
+    CASE WHEN workspace_id = $1 THEN 0
+         WHEN NOT is_default                        THEN 1
+         ELSE 2 END,
+    verified_at, id
+LIMIT 1
 `
+
+type GetWorkspaceDefaultDomainParams struct {
+	WorkspaceID    *uuid.UUID
+	OrganizationID *uuid.UUID
+}
 
 type GetWorkspaceDefaultDomainRow struct {
 	ID       uuid.UUID
 	Hostname string
 }
 
-func (q *Queries) GetWorkspaceDefaultDomain(ctx context.Context) (GetWorkspaceDefaultDomainRow, error) {
-	row := q.db.QueryRow(ctx, getWorkspaceDefaultDomain)
+// The hostname a new link goes on when the caller names none.
+//
+// **This is the filter the name promised and the query never had** (M40). It
+// read `WHERE is_default` with no workspace argument at all, so every workspace
+// on the instance got the same answer and the word "workspace" in the name was
+// describing an intention rather than a predicate.
+//
+// A workspace's own *verified* hostname wins over the instance default, which is
+// what registering one is for; the instance default is the fallback and is what
+// every workspace without one still gets, unchanged. Organization-owned
+// hostnames sit between the two — every workspace in the organization may use
+// one, so it is more specific than the instance and less than a workspace's own.
+//
+// **Verified only.** An unverified hostname is not a routing target, so putting
+// a link on it would mint a short URL that resolves nowhere; the ordering below
+// cannot reach one because the WHERE clause has already excluded it.
+//
+// Ties are broken by verified_at then id, so the answer is stable: a workspace
+// that verifies a second hostname does not silently move its new links onto it.
+func (q *Queries) GetWorkspaceDefaultDomain(ctx context.Context, arg GetWorkspaceDefaultDomainParams) (GetWorkspaceDefaultDomainRow, error) {
+	row := q.db.QueryRow(ctx, getWorkspaceDefaultDomain, arg.WorkspaceID, arg.OrganizationID)
 	var i GetWorkspaceDefaultDomainRow
 	err := row.Scan(&i.ID, &i.Hostname)
 	return i, err
@@ -596,6 +648,11 @@ WHERE l.workspace_id = $1
   -- walk inside the dashboard's hottest query to do so.
   AND (NOT $5::boolean OR l.folder_id IS NULL)
   AND ($6::uuid IS NULL OR l.folder_id = $6::uuid)
+  -- Which hostname the link is served on (M40). One filter and no ` + "`" + `unhosted` + "`" + `
+  -- half, unlike the folder pair above: ` + "`" + `links.domain_id` + "`" + ` is NOT NULL, so there
+  -- is no third state to ask about — every link is on exactly one domain, and
+  -- "no filter" is the only other question there is.
+  AND ($7::uuid IS NULL OR l.domain_id = $7::uuid)
   -- Keyset pagination only works if the predicate compares the same tuple the
   -- ORDER BY sorts on. It did not: every sort filtered on (created_at, id)
   -- while 'clicks' ordered by click_count, so page 2 dropped rows that belonged
@@ -603,23 +660,23 @@ WHERE l.workspace_id = $1
   -- correspondingly-named ORDER BY key, and the id tiebreaker matches its
   -- direction — 'oldest' ascends, so its tiebreaker ascends too.
   AND (
-        $7::uuid IS NULL
-        OR ($8::text = 'oldest'
-              AND (l.created_at, l.id) > ($9::timestamptz, $7::uuid))
-        OR ($8::text = 'clicks'
-              AND (l.click_count, l.id) < ($10::bigint, $7::uuid))
-        OR ($8::text NOT IN ('oldest','clicks')
-              AND (l.created_at, l.id) < ($9::timestamptz, $7::uuid))
+        $8::uuid IS NULL
+        OR ($9::text = 'oldest'
+              AND (l.created_at, l.id) > ($10::timestamptz, $8::uuid))
+        OR ($9::text = 'clicks'
+              AND (l.click_count, l.id) < ($11::bigint, $8::uuid))
+        OR ($9::text NOT IN ('oldest','clicks')
+              AND (l.created_at, l.id) < ($10::timestamptz, $8::uuid))
       )
 ORDER BY
-    CASE WHEN $8::text = 'oldest' THEN l.created_at END ASC,
-    CASE WHEN $8::text = 'clicks' THEN l.click_count END DESC,
-    CASE WHEN $8::text NOT IN ('oldest','clicks') THEN l.created_at END DESC,
+    CASE WHEN $9::text = 'oldest' THEN l.created_at END ASC,
+    CASE WHEN $9::text = 'clicks' THEN l.click_count END DESC,
+    CASE WHEN $9::text NOT IN ('oldest','clicks') THEN l.created_at END DESC,
     -- Ascending tiebreaker for the ascending sort. For the others this key is
     -- NULL on every row, so it ties and the DESC key below decides.
-    CASE WHEN $8::text = 'oldest' THEN l.id END ASC,
+    CASE WHEN $9::text = 'oldest' THEN l.id END ASC,
     l.id DESC
-LIMIT $11
+LIMIT $12
 `
 
 type ListLinksParams struct {
@@ -629,6 +686,7 @@ type ListLinksParams struct {
 	TagIds        []uuid.UUID
 	Unfiled       bool
 	FolderID      *uuid.UUID
+	DomainID      *uuid.UUID
 	CursorID      *uuid.UUID
 	Sort          string
 	CursorCreated *time.Time
@@ -693,6 +751,7 @@ func (q *Queries) ListLinks(ctx context.Context, arg ListLinksParams) ([]ListLin
 		arg.TagIds,
 		arg.Unfiled,
 		arg.FolderID,
+		arg.DomainID,
 		arg.CursorID,
 		arg.Sort,
 		arg.CursorCreated,

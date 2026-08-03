@@ -72,13 +72,50 @@ migrations run at boot.
 
 ### Added
 
-- **A workspace can register a domain of its own — and nothing is served on it
-  yet.** That second half is the whole caveat and the page says it before the
-  form: registering records that a hostname belongs to your workspace. Proving
-  you control the name, and serving short links on it, arrive in the next
-  release. Until then your links stay on the instance's default domain, and a
-  hostname pointed at this instance gets the same `404` it got before you
-  registered it.
+- **A workspace can serve its short links on a hostname of its own, once it has
+  proved it controls the name.** Registering a hostname is not enough and never
+  becomes enough: until a DNS TXT record published in your zone has been read
+  back by this instance, a request arriving for the hostname gets the same `404`
+  it got before you registered it. That gap is the point of the feature rather
+  than a step on the way to it — without it, anybody who pointed a hostname at
+  this address could serve short links on it.
+
+  The Domains page shows the record to publish and checks it on demand.
+  `POST /api/v1/domains/{id}/verify` is the same check. Once it passes, links can
+  be created on the hostname (`domain_id` on create, or leave it out and get your
+  workspace's own hostname), `short_url` is built from it, and the bare hostname
+  can redirect wherever you like via
+  `PUT /api/v1/domains/{id}/root-redirect`. The links list gained a hostname
+  filter, and `GET /api/v1/links?domain=` is its API form.
+
+  **Every registered hostname is re-checked hourly, and the check has teeth.**
+  The first failure notifies the owning workspace and changes nothing else — one
+  failed DNS poll is weak evidence, and taking a customer's links down over it
+  would make an availability feature into an availability incident. After **24
+  hours** of continuous failure the hostname stops being served on every replica
+  at once, with a second notification and an audit record. Both numbers are
+  operator configuration (`LINKCTRL_DOMAIN_VERIFY_INTERVAL`,
+  `LINKCTRL_DOMAIN_VERIFY_GRACE`); the runbook in `docs/deployment.md` states
+  them and what changing them trades. **Renaming a hostname un-verifies it**: the
+  record you published proves control of the old name.
+
+  **TLS stays your reverse proxy's.** This application never speaks ACME — no
+  certificate authority is contacted and no account key is held. It answers
+  Caddy's on-demand `ask` at `/tls-check`, and answers it **only** for hostnames
+  that have verified; a wider answer would make the instance an unauthenticated
+  certificate-issuance trigger for any name on the internet. The Caddyfile block
+  is in `docs/deployment.md`. Keep the endpoint on the loopback address.
+
+  Two operational notes for anyone already running this. The links a workspace
+  created before verifying a hostname **do not move** — nothing rewrites a URL
+  somebody has already published — so a workspace ends up with links on two
+  hostnames, which is what the new filter is for. And `/tls-check` is now a
+  reserved alias: an existing link with that alias is unaffected, but a new one
+  cannot take the name.
+
+- **A workspace can register a domain of its own.** Registering records that a
+  hostname belongs to your workspace; the paragraph above is what makes it serve
+  anything.
 
   A **Domains** page in the header's identity menu registers, renames and removes
   them, behind the `domains.write` permission that owner and admin already hold.

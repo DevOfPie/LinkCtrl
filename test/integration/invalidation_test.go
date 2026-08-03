@@ -10,9 +10,11 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
@@ -854,4 +856,76 @@ func TestSubscriberWithoutRedisIsANoOp(t *testing.T) {
 		t.Fatal("Subscriber.Run did not return with no Redis client; with the " +
 			"cache disabled there is nothing to subscribe to")
 	}
+}
+
+// The staleness gap M40 closes, stated as a test: a hostname unverified on one
+// replica has to stop being served by another.
+//
+// This is the one the plan review found missing in both rival orderings. Without
+// it, a workspace that loses control of its DNS keeps having links served on the
+// name by every replica that did not handle the write — for as long as the
+// process runs, because a whole-set cache has no TTL to expire behind.
+//
+// The reload counter is not decoration. A subscriber flushes once when it first
+// establishes, and that flush reloads the host set; without waiting it out, the
+// assertion below could be satisfied by the *startup* reload landing after the
+// update rather than by the published message being applied at all — which is
+// what happened when this test was first sabotaged, and it passed.
+func TestHostInvalidationReachesAnotherReplica(t *testing.T) {
+	f := newAPI(t)
+	f.setupOwner()
+	rdb := newRedisClient(t)
+	ctx := t.Context()
+
+	// A verified hostname, written directly: what is under test is the
+	// invalidation path, and going through the service would additionally
+	// require a DNS stub for no gain here.
+	id := uuid.Must(uuid.NewV7())
+	if _, err := f.pool.Exec(ctx, `
+		INSERT INTO domains (id, hostname, verified_at, verification_token, ssl_status)
+		VALUES ($1, 'replica.custom.test', now(), 'tok', 'pending')`, id); err != nil {
+		t.Fatal(err)
+	}
+
+	publisher := redirect.NewResolver(f.pool, rdb, redirect.Options{TTL: time.Hour})
+	other := redirect.NewHostCache(f.pool, nil)
+	var reloads atomic.Int64
+	other.OnReload = func() { reloads.Add(1) }
+	if err := other.Reload(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := other.Lookup("replica.custom.test"); !ok {
+		t.Fatal("the second replica did not load the verified hostname; the rest of " +
+			"this test would prove nothing")
+	}
+
+	sub := &redirect.Subscriber{
+		Redis: rdb, Hosts: other, ReconnectBackoff: 10 * time.Millisecond,
+	}
+	subCtx, stop := context.WithCancel(context.Background())
+	defer stop()
+	go sub.Run(subCtx)
+
+	// Wait the establishment flush out, so the drop below can only come from the
+	// message.
+	waitFor(t, 10*time.Second, "the subscriber to establish and flush", func() bool {
+		return reloads.Load() >= 2
+	})
+	if _, ok := other.Lookup("replica.custom.test"); !ok {
+		t.Fatal("the hostname went out of the second replica's set before anything " +
+			"was published")
+	}
+
+	// The un-verification happens on the first replica: the column is cleared and
+	// the broadcast goes out.
+	if _, err := f.pool.Exec(ctx,
+		`UPDATE domains SET verified_at = NULL WHERE id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	publisher.PublishHostInvalidation(ctx)
+
+	waitFor(t, 10*time.Second, "the other replica to stop serving the hostname", func() bool {
+		_, ok := other.Lookup("replica.custom.test")
+		return !ok
+	})
 }

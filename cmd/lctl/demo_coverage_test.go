@@ -426,17 +426,48 @@ func demoCoverage() []demoFeature {
 				"is invisible until switching workspace changes what is shown",
 		},
 		{
-			Milestone: "M39", Feature: "Registered hostnames are unverified",
+			// M39 asserted this count was *zero*, on the grounds that a verified
+			// row would be the demo promising serving M40 had not built. M40
+			// built it, so the row becomes a real one rather than being deleted —
+			// the same move M34 and M36 made with their own boundary rows.
+			//
+			// Bounded above as well as below, and the ceiling is the whole
+			// assertion. Exactly one of the two registered hostnames verifies;
+			// the other stays registered and failing. A demo where both work
+			// shows one state, and a reader cannot see that verification decides
+			// anything unless the page shows a hostname where it has not.
+			Milestone: "M40", Feature: "One hostname verified, one not",
 			Query: `SELECT count(*) FROM domains
 			         WHERE workspace_id IN (` + demoWorkspaces + `)
 			           AND deleted_at IS NULL AND verified_at IS NOT NULL`,
-			// The one row here whose claim is that the demo shows nothing
-			// *within* a built feature. A verified hostname in the demo would be
-			// a demo asserting that links are served on a name nothing resolves,
-			// which is the single thing M39 must not appear to have done.
-			MaxIsZero: true,
-			Shows: "that a registered hostname is not a routing target — a verified " +
-				"row would make the page promise serving that M40 has not built",
+			Min: 1, Max: 1,
+			Shows: "the domains page with both states on it — a hostname serving " +
+				"links and a hostname that is not, which is what the verification " +
+				"gate is for",
+		},
+		{
+			Milestone: "M40", Feature: "A link served on a custom hostname",
+			// Scoped to a non-default domain, because every other link in the
+			// demo is on the instance default and a query counting links with a
+			// domain would be satisfied by all of them.
+			Query: `SELECT count(*) FROM links l
+			          JOIN domains d ON d.id = l.domain_id
+			         WHERE l.workspace_id IN (` + demoWorkspaces + `)
+			           AND l.deleted_at IS NULL
+			           AND NOT d.is_default AND d.verified_at IS NOT NULL`,
+			Min: 1,
+			Shows: "a short URL built from the workspace's own hostname, and the " +
+				"links list's hostname filter — with no such link the filter has " +
+				"one option and the feature is invisible",
+		},
+		{
+			Milestone: "M40", Feature: "A verified hostname's own root redirect",
+			Query: `SELECT count(*) FROM domains
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND deleted_at IS NULL AND root_redirect_url IS NOT NULL`,
+			Min: 1,
+			Shows: "that a custom hostname's bare domain goes somewhere its owner " +
+				"chose rather than answering 404",
 		},
 
 		// The boundary. Everything below is a milestone that has not been built,

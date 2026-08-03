@@ -19,11 +19,11 @@
   {{/* The standing caveat, above the form rather than beside a row.
 
        Registering a hostname is the moment somebody expects their links to
-       start working on it, and the honest answer at this milestone is that they
-       will not. Saying it once, before the form, is what keeps the page from
-       being a promise the product does not yet keep. */}}
+       start working on it, and the honest answer is still that they will not
+       until the DNS record is published. Saying it once, before the form, is
+       what keeps the page from being a promise the product does not keep. */}}
   <div class="mb-6 rounded-lg border border-line bg-sunken p-4">
-    <p class="text-sm text-ink">A registered hostname is recorded as belonging to this workspace. <span class="font-medium">Nothing is served on it yet</span> — proving you control the name, and serving short links on it, arrives in a later release. Links keep using the instance's default domain until then.</p>
+    <p class="text-sm text-ink">A registered hostname belongs to this workspace and <span class="font-medium">is not served until it is verified</span>. Publish the TXT record shown on its row, point the hostname at this instance, then check it. Links keep using the instance's default domain until then.</p>
   </div>
 
   {{if .CanRegister}}
@@ -56,7 +56,7 @@
         {{end}}
         <span class="text-xs text-subtle">{{.ScopeLabel}}</span>
         {{if .Verified}}
-        <span class="text-xs text-ok-ink">Verified</span>
+        <span class="text-xs text-ok-ink">Verified — links are served here</span>
         {{else}}
         <span class="text-xs text-muted">Not verified — no links served here</span>
         {{end}}
@@ -71,10 +71,47 @@
                    class="w-56 rounded-md border border-line-strong px-2 py-1 text-xs focus:border-accent focus:outline-none">
             <button type="submit" class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-surface">Change</button>
           </form>
+          <form method="post" action="/domains/{{.ID}}/verify"
+                hx-post="/domains/{{.ID}}/verify" hx-target="#domain-panel" hx-swap="outerHTML">
+            <button type="submit" class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-surface">Check DNS</button>
+          </form>
           <form method="post" action="/domains/{{.ID}}/delete"
                 hx-post="/domains/{{.ID}}/delete" hx-target="#domain-panel" hx-swap="outerHTML">
             <button type="submit" class="rounded-md border border-danger-line px-2 py-1 text-xs font-medium text-danger-ink hover:bg-danger-soft">Remove</button>
           </form>
+        </div>
+        {{end}}
+
+        {{/* The challenge and the state of the last check, on the row rather
+             than behind a link. Somebody who has just registered a hostname is
+             looking for exactly two strings, and a page that made them click to
+             find them would be a page that adds a step to the only task it has. */}}
+        {{if .RecordName}}
+        <div class="w-full space-y-2 border-t border-line pt-2">
+          <p class="text-xs text-subtle">Publish this DNS record, then press Check DNS:</p>
+          <pre class="overflow-x-auto rounded-md border border-line bg-sunken px-3 py-2 text-xs text-ink">{{.RecordName}}  IN  TXT  "{{.RecordData}}"</pre>
+          {{if .CheckError}}
+          <p class="text-xs text-danger-ink">Last check: {{.CheckError}}</p>
+          {{end}}
+          {{if .StopsAt}}
+          <p class="text-xs text-danger-ink">Links on this hostname stop being served at {{.StopsAt}} unless the record comes back.</p>
+          {{end}}
+          {{if .SSLLabel}}
+          <p class="text-xs text-subtle">{{.SSLLabel}}</p>
+          {{end}}
+          {{if and .Verified .Manageable}}
+          {{/* The hostname's own root. Offered only once it is verified,
+               because on an unverified name it would be a setting with no
+               effect — the service refuses it for the same reason. */}}
+          <form method="post" action="/domains/{{.ID}}/root-redirect" class="flex flex-wrap items-center gap-1"
+                hx-post="/domains/{{.ID}}/root-redirect" hx-target="#domain-panel" hx-swap="outerHTML">
+            <label class="text-xs text-subtle" for="root-{{.ID}}">https://{{.Hostname}}/ goes to</label>
+            <input id="root-{{.ID}}" name="root_redirect_url" type="url" maxlength="2048"
+                   placeholder="nothing — answers 404" value="{{.RootRedirectURL}}"
+                   class="w-72 rounded-md border border-line-strong px-2 py-1 text-xs focus:border-accent focus:outline-none">
+            <button type="submit" class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-surface">Save</button>
+          </form>
+          {{end}}
         </div>
         {{end}}
       </li>

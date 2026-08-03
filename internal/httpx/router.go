@@ -13,6 +13,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
+	"github.com/DevOfPie/LinkCtrl/internal/redirect"
 	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/team"
 )
@@ -56,6 +57,23 @@ type Deps struct {
 	// never offers a door that is not there.
 	Disputes *dispute.Service
 	Web      *Web
+	// Hosts is the verified custom-hostname set (M40). Nil leaves custom domains
+	// unrouted entirely — every Host header is answered exactly as it was before
+	// this milestone — which is what the CLI and the tests that predate it get.
+	//
+	// It is the *only* thing that decides whether an alias resolves on a name
+	// this operator did not configure, and it is populated by one query that
+	// filters on `verified_at`.
+	Hosts *redirect.HostCache
+	// DomainRoot serves a verified custom hostname's own root. Nil leaves that
+	// root a 404, which is where every custom hostname starts.
+	DomainRoot *DomainRootRedirect
+	// TLSAsk answers Caddy's on-demand TLS question. Nil leaves the endpoint
+	// unregistered, and then an operator's on-demand TLS block has nothing to
+	// ask — which is the correct failure, because issuing without the ask would
+	// obtain certificates for names nobody has verified.
+	TLSAsk *TLSAsk
+
 	// Metrics is optional. Nil disables instrumentation entirely rather than
 	// registering into a global registry, so two servers in one test process
 	// cannot collide.
@@ -199,6 +217,12 @@ func NewRouter(d Deps) http.Handler {
 			"POST " + APIPrefix + "/domains":              api.CreateDomain,
 			"PATCH " + APIPrefix + "/domains/{domainID}":  api.UpdateRegisteredDomain,
 			"DELETE " + APIPrefix + "/domains/{domainID}": api.DeleteRegisteredDomain,
+			// The gate (M40). Verification is a POST because passing it starts
+			// serving an alias namespace on a public hostname; the root redirect
+			// is a PUT because clearing it is sending the empty string, and on a
+			// PATCH that would mean "unchanged".
+			"POST " + APIPrefix + "/domains/{domainID}/verify":       api.VerifyDomain,
+			"PUT " + APIPrefix + "/domains/{domainID}/root-redirect": api.SetDomainRootRedirect,
 			// The reputation-feed disclosure (M32). Read-only, and there is no
 			// second operation here by design: the page it mirrors accepts no
 			// POST (D40), and an API that could write would be the settings
@@ -407,6 +431,11 @@ func NewRouter(d Deps) http.Handler {
 			"POST /domains":                   web.DomainCreate,
 			"POST /domains/{domainID}":        web.DomainRename,
 			"POST /domains/{domainID}/delete": web.DomainDelete,
+			// Two more forms, on the same no-JavaScript pattern (M40): checking
+			// the DNS record, and pointing the hostname's own root somewhere.
+			// Both POST because both change something.
+			"POST /domains/{domainID}/verify":        web.DomainVerify,
+			"POST /domains/{domainID}/root-redirect": web.DomainRootRedirect,
 			// Routing rules (M34). Three actions rather than one form: adding a
 			// rule and switching one off are different enough operations that
 			// making the second go through the first would mean opening an editor
@@ -539,11 +568,18 @@ func NewRouter(d Deps) http.Handler {
 	// container runtime, none of which send the operator's chosen name — the
 	// image's own healthcheck asks 127.0.0.1.
 	registerOps := func(mux *http.ServeMux) {
-		if d.Health == nil {
-			return
+		if d.Health != nil {
+			mux.HandleFunc("GET /healthz", d.Health.Live)
+			mux.HandleFunc("GET /readyz", d.Health.Ready)
 		}
-		mux.HandleFunc("GET /healthz", d.Health.Live)
-		mux.HandleFunc("GET /readyz", d.Health.Ready)
+		// Caddy's on-demand TLS ask (M40, decision D3). Registered beside the
+		// probes and for the same reason: it is asked during a TLS handshake, by
+		// a proxy that does not know or send the operator's chosen hostname, and
+		// it must answer before any application request exists.
+		if d.TLSAsk != nil {
+			mux.Handle("GET "+TLSAskPath, d.TLSAsk)
+			mux.Handle("HEAD "+TLSAskPath, d.TLSAsk)
+		}
 	}
 
 	registerApp := func(root *http.ServeMux) {
@@ -654,6 +690,20 @@ func NewRouter(d Deps) http.Handler {
 		}
 	}
 
+	// A verified custom hostname's tree (M40): operational endpoints, its own
+	// root, and aliases. No dashboard, no API and no static assets — a
+	// customer's hostname serves links and nothing else, so a session cookie is
+	// never offered a second origin and the management surface has exactly one
+	// address.
+	registerCustom := func(root *http.ServeMux) {
+		registerOps(root)
+		if d.DomainRoot != nil {
+			root.Handle("GET /{$}", d.DomainRoot)
+			root.Handle("HEAD /{$}", d.DomainRoot)
+		}
+		registerRedirect(root)
+	}
+
 	var root http.Handler
 	if d.Config.SplitHosts() {
 		appMux := http.NewServeMux()
@@ -681,6 +731,22 @@ func NewRouter(d Deps) http.Handler {
 		registerApp(mux)
 		registerRedirect(mux)
 		root = mux
+	}
+
+	// Custom domains sit in front of whichever of those two this deployment is,
+	// and change neither.
+	//
+	// A Host header that names a verified hostname is served by the tree above;
+	// anything else — unknown, registered but unverified, just unverified on
+	// another replica — falls through to exactly the handler it would have
+	// reached before this milestone existed. That is what keeps "an unverified
+	// or unknown host stays ops-only 404" true on a split-host instance without
+	// changing what a single-host instance answers to a Host header it has never
+	// been configured with.
+	if d.Hosts != nil {
+		customMux := http.NewServeMux()
+		registerCustom(customMux)
+		root = customHostRouter{hosts: d.Hosts, custom: customMux, next: root}
 	}
 
 	// RealIP wraps both trees: analytics and rate limiting need the client
@@ -742,7 +808,17 @@ var dashboardPatterns = []string{
 // health endpoints, the API prefix and the static tree. These are fixed and
 // registered individually, so unlike the dashboard set they are listed rather
 // than iterated.
-var infrastructurePatterns = []string{"/healthz", "/readyz", APIPrefix + "/", "/static/"}
+var infrastructurePatterns = []string{
+	"/healthz", "/readyz", TLSAskPath, APIPrefix + "/", "/static/",
+}
+
+// TLSAskPath is where Caddy's on-demand TLS `ask` is answered.
+//
+// A top-level path, so it is in internal/alias/reserved.txt like every other
+// route: an alias called `tls-check` would otherwise shadow the endpoint that
+// decides which hostnames get certificates, and
+// TestReservedListCoversRegisteredRoutes is what enforces that it cannot.
+const TLSAskPath = "/tls-check"
 
 // RegisteredTopLevelPaths lists the first path segment of every route the
 // router registers, for the test that guards against an alias shadowing a real

@@ -402,6 +402,27 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.do("PATCH", p+"/domains/"+uuid.NewString(), map[string]any{
 		"hostname": "nowhere.contract.example",
 	}, http.StatusNotFound)
+	// The gate (M40), replayed here as the document describes it. The contract
+	// fixture has no DNS resolver, so verification cannot pass — and the refusal
+	// is the half worth replaying anyway: it is what a caller meets when the
+	// record is not published, and it is what stops a hostname being served.
+	//
+	// 503 rather than 422 because this process cannot resolve DNS at all, which
+	// is a different answer from "the record is not there" and the document says
+	// so. Either way the domain is not verified, which is what the next call
+	// asserts.
+	c.do("POST", p+"/domains/"+registeredID+"/verify", nil, http.StatusServiceUnavailable)
+	// The root redirect is refused on an unverified hostname: nothing is served
+	// there, so its root has nowhere to send anybody.
+	c.do("PUT", p+"/domains/"+registeredID+"/root-redirect", map[string]any{
+		"root_redirect_url": "https://example.com/home",
+	}, http.StatusUnprocessableEntity)
+	// And a hostname that does not exist is 404 on both, whoever asks.
+	c.do("POST", p+"/domains/"+uuid.NewString()+"/verify", nil, http.StatusNotFound)
+	c.do("PUT", p+"/domains/"+uuid.NewString()+"/root-redirect", map[string]any{
+		"root_redirect_url": "",
+	}, http.StatusNotFound)
+
 	c.do("DELETE", p+"/domains/"+registeredID, nil, http.StatusNoContent)
 	c.do("DELETE", p+"/domains/"+registeredID, nil, http.StatusNotFound)
 
