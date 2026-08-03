@@ -170,6 +170,31 @@ const (
 	ActionWebhookUpdated       = "webhook.updated"
 	ActionWebhookDeleted       = "webhook.deleted"
 	ActionWebhookSecretRotated = "webhook.secret_rotated"
+
+	// Automation rules (M43). A rule is a standing instruction the scheduler
+	// runs unattended, so the three administrative actions are here for the
+	// reason the webhook ones are — somebody has to be able to ask who left this
+	// instruction behind, and when.
+	ActionAutomationRuleCreated = "automation.rule_created"
+	ActionAutomationRuleUpdated = "automation.rule_updated"
+	ActionAutomationRuleDeleted = "automation.rule_deleted"
+
+	// ActionAutomationFired is the fourth, and it is the one with no person in
+	// it. Every other action in this log was taken by somebody who was signed in
+	// or holding a key; this one was taken by a rule, on a clock, and the actor
+	// label says so.
+	//
+	// It is recorded for every firing whatever the actions did, which is what
+	// makes "why is this link archived?" answerable. Without it the only trace
+	// of an automated archive would be a link whose status changed with nothing
+	// in the log beside it, and that is indistinguishable from a bug.
+	//
+	// **It is deliberately not a trigger source.** domain/automation.go declares
+	// this action as something every automation action writes, and no trigger
+	// reads it; TestNoAutomationActionWritesATriggerSource is what keeps that
+	// true, because a trigger that read the log's automation rows would be the
+	// cycle M43 exists to make impossible.
+	ActionAutomationFired = "automation.fired"
 )
 
 // Event is one thing that happened.

@@ -12,7 +12,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
+	"github.com/DevOfPie/LinkCtrl/internal/automation"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
+	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/mail"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
@@ -65,8 +67,13 @@ type jobRunner struct {
 	// webhooks drains the outbound delivery queue (M42). Nil skips the job
 	// entirely, which is what a runner built without one gets.
 	webhooks *webhook.Service
-	cancel   context.CancelFunc
-	done     chan struct{}
+	// automation evaluates the workspaces' standing instructions (M43). Nil
+	// skips the job entirely, which is what a runner built without one gets —
+	// and which is what makes "evaluation runs here and nowhere else" a property
+	// of the wiring rather than a promise.
+	automation *automation.Service
+	cancel     context.CancelFunc
+	done       chan struct{}
 }
 
 // advisoryLockKey is a hand-picked constant — the ASCII bytes "lcjobs" plus a
@@ -79,7 +86,7 @@ const advisoryLockKey int64 = 0x6c63_6a6f_6273_0001
 func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analytics.Roller,
 	log *slog.Logger, metrics *observability.Metrics, notifier *notify.Service,
 	mailer *mail.Service, signups *signup.Service, links *link.Service,
-	webhooks *webhook.Service, domains config.DomainsConfig,
+	webhooks *webhook.Service, automations *automation.Service, domains config.DomainsConfig,
 	analyticsRetentionDays, auditRetentionDays int, auditSizeWarnBytes int64,
 ) *jobRunner {
 	batch := domains.VerifyBatch
@@ -100,6 +107,7 @@ func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analyt
 		domainVerifyInterval: domains.VerifyInterval,
 		domainVerifyBatch:    int32(batch),
 		webhooks:             webhooks,
+		automation:           automations,
 		done:                 make(chan struct{}),
 	}
 }
@@ -115,6 +123,12 @@ func (j *jobRunner) start(parent context.Context) {
 		// recompute from raw events, and partitions are maintained two months
 		// ahead.
 		rollup := time.NewTicker(60 * time.Second)
+		// Automation evaluation, on its own clock (M43). One minute, and its own
+		// ticker rather than the rollup's because the two are unrelated jobs
+		// that happen to share a period: a change to how often the breakdowns
+		// recompute must not silently change how often somebody's standing
+		// instruction runs.
+		automations := time.NewTicker(domain.AutomationInterval)
 		// The dimension breakdowns, on their own clock (M37). Sixty seconds is
 		// the right cadence for numbers whose upsert count is bounded by the
 		// links that were clicked; it is the wrong one for numbers whose upsert
@@ -148,6 +162,7 @@ func (j *jobRunner) start(parent context.Context) {
 		defer hourly.Stop()
 		defer outbox.Stop()
 		defer domains.Stop()
+		defer automations.Stop()
 
 		// Run once at startup rather than waiting a full interval, so a
 		// freshly started instance has current numbers. Both halves, because
@@ -170,6 +185,11 @@ func (j *jobRunner) start(parent context.Context) {
 		// later — and so one whose record went away is re-checked promptly
 		// rather than inheriting a stale verification from before the restart.
 		j.runDomainVerification(ctx)
+		// And once at startup, so a rule whose subject appeared while this
+		// instance was down fires on boot rather than a minute later. Safe to
+		// run eagerly for the reason every other job here is: the watermark
+		// means a restart cannot make a rule fire twice for one subject.
+		j.runAutomation(ctx)
 
 		for {
 			select {
@@ -193,6 +213,8 @@ func (j *jobRunner) start(parent context.Context) {
 				j.runMaintenance(ctx)
 			case <-domains.C:
 				j.runDomainVerification(ctx)
+			case <-automations.C:
+				j.runAutomation(ctx)
 			}
 		}
 	}()
@@ -374,6 +396,39 @@ func (j *jobRunner) runDomainVerification(ctx context.Context) {
 				slog.Int("stopped_serving", sum.Unverified))
 		}
 		return err
+	})
+}
+
+// runAutomation evaluates the workspaces' standing instructions (M43).
+//
+// **This is the only caller of automation.Evaluate anywhere in the product**,
+// and that is the first of the two claims m43.md turns on: evaluation runs on
+// the leader-elected scheduler, never on the request path. There is no endpoint
+// that runs it, no link write that triggers it, and internal/httpx does not
+// import the package's Service at all.
+//
+// Under leadership, because it writes: three replicas each firing the same rule
+// would archive the same links three times, put three copies of one notification
+// in an inbox, and queue three identical webhook deliveries. The watermark makes
+// that cost nothing even so — the compare-and-set means the second replica loses
+// rather than duplicates — but leadership is what stops the race being run at
+// all, and the pair is the same belt-and-braces D77 chose for webhook delivery
+// and for the same reason: an advisory lock is released the moment its holder
+// dies.
+//
+// The timeout is domain.AutomationTimeout, twice the interval, so a slow run overlaps
+// at most one tick and a stuck one is cut off rather than holding the scheduler.
+// What bounds the run itself is not the timeout: it is the four constants in
+// internal/domain that the package's doc comment multiplies out.
+func (j *jobRunner) runAutomation(ctx context.Context) {
+	if j.automation == nil {
+		return
+	}
+	runCtx, cancel := context.WithTimeout(ctx, domain.AutomationTimeout)
+	defer cancel()
+
+	j.withLeadership(runCtx, "automation", func(ctx context.Context) error {
+		return j.automation.Evaluate(ctx)
 	})
 }
 

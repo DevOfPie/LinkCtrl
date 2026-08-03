@@ -20,13 +20,13 @@ import (
 // through the same tier check every destination goes through, and again in
 // internal/webhook at the moment the socket is opened.
 //
-// **The event vocabulary is closed and small.** Six events: five for a link's
-// lifecycle and one for a destination somebody was refused. It is closed for the
-// reason `ClickSource` is closed — a value that reaches storage keyed on it must
-// not be a value anybody can invent — and small because a receiver has to be
-// able to write a handler for all of it in an afternoon. Adding one is a
-// deliberate edit here, a line in the docs, and a row in the test that asserts
-// the size.
+// **The event vocabulary is closed and small.** Seven events: five for a link's
+// lifecycle, one for a destination somebody was refused, and one for an
+// automation rule that fired (M43). It is closed for the reason `ClickSource` is
+// closed — a value that reaches storage keyed on it must not be a value anybody
+// can invent — and small because a receiver has to be able to write a handler
+// for all of it in an afternoon. Adding one is a deliberate edit here, a line in
+// the docs, and a row in the test that asserts the size.
 
 // The event vocabulary. Every value a `webhooks.events` array may hold.
 //
@@ -60,6 +60,20 @@ const (
 	// rule and the surface, and carries the attempted URL **defanged** exactly as
 	// the audit record stores it.
 	EventDestinationBlocked = "destination.blocked"
+	// EventAutomationFired is the seventh, added by M43, and adding it is the
+	// deliberate edit the paragraph above says it has to be.
+	//
+	// **It is the only event a workspace can cause this server to emit on
+	// purpose**, and that is why an automation rule may not choose which event
+	// its `webhook` action sends. A rule that could emit `destination.blocked`
+	// could manufacture the thing another rule triggers on, which is the cascade
+	// M43 is arranged to make impossible; a rule that can only emit *this* one
+	// cannot, because nothing triggers on it.
+	//
+	// The payload names the rule, the trigger, how many subjects matched and the
+	// first few of them — enough for a receiver to act, and bounded so one
+	// firing is one message rather than a page of them.
+	EventAutomationFired = "automation.fired"
 )
 
 // WebhookEvents is the vocabulary, in the order a UI should list it.
@@ -74,6 +88,7 @@ var WebhookEvents = []string{
 	EventLinkRestored,
 	EventLinkDeleted,
 	EventDestinationBlocked,
+	EventAutomationFired,
 }
 
 var webhookEventSet = func() map[string]struct{} {

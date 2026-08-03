@@ -263,6 +263,72 @@ func pageData(t *testing.T) map[string]any {
 				"once and cannot be read back.",
 			"Error": "",
 		},
+		// Automation rules (M43). Both switch states in one render, for the
+		// reason the webhooks fixture has both: a page where every row is
+		// enabled never draws the paused pill or the Resume button, so a
+		// regression in either is invisible.
+		//
+		// One row is open in the editor and one is not, so both the list body
+		// and the inline form are exercised — and the open one carries a
+		// threshold above one, which is the only state that renders the "after
+		// N" fragment.
+		"automation": map[string]any{
+			"Title": "Automation", "Nav": "automation", "Identity": owner(),
+			"Count": 2, "MaxRules": 20, "MaxActions": 3,
+			"RulesPerRun": 100, "MatchesPerRule": 25, "IntervalMins": 1,
+			"Triggers": []map[string]any{
+				{"Name": "link.expired", "Checked": true},
+				{"Name": "link.max_clicks", "Checked": false},
+				{"Name": "destination.blocked", "Checked": false},
+			},
+			"Actions": []map[string]any{
+				{"Name": "notify", "Checked": true, "LinkOnly": false},
+				{"Name": "webhook", "Checked": false, "LinkOnly": false},
+				{"Name": "archive_link", "Checked": false, "LinkOnly": true},
+			},
+			"Rows": []map[string]any{
+				{
+					"ID":      "0198c9c5-0000-7000-8000-000000000070",
+					"Name":    "Tell the team when a campaign link expires",
+					"Trigger": "link.expired",
+					"Actions": []string{"notify", "webhook"},
+					"Enabled": true, "MinCount": 1,
+					"LastFired": "2026-08-03 09:12", "CreatedAt": "2026-07-30",
+					"TriggerChoices": []map[string]any{
+						{"Name": "link.expired", "Checked": true},
+						{"Name": "destination.blocked", "Checked": false},
+					},
+					"ActionChoices": []map[string]any{
+						{"Name": "notify", "Checked": true, "LinkOnly": false},
+						{"Name": "archive_link", "Checked": false, "LinkOnly": true},
+					},
+					"Editing": false,
+				},
+				{
+					"ID":      "0198c9c5-0000-7000-8000-000000000071",
+					"Name":    "Chase a refused destination after three attempts",
+					"Trigger": "destination.blocked",
+					"Actions": []string{"notify"},
+					"Enabled": false, "MinCount": 3,
+					"LastFired": "2026-08-01 14:00", "CreatedAt": "2026-07-14",
+					"TriggerChoices": []map[string]any{
+						{"Name": "link.expired", "Checked": false},
+						{"Name": "destination.blocked", "Checked": true},
+					},
+					"ActionChoices": []map[string]any{
+						{"Name": "notify", "Checked": true, "LinkOnly": false},
+						{"Name": "archive_link", "Checked": false, "LinkOnly": true},
+					},
+					"Editing": true,
+				},
+			},
+			"FormName": "", "FormMinCount": "",
+			"EditingID": "0198c9c5-0000-7000-8000-000000000071",
+			"CanRead":   true, "CanWrite": true,
+			"Notice": "Rule created and armed. It acts on what happens from now on, " +
+				"never on what already happened.",
+			"Error": "",
+		},
 		// Registered hostnames (M39), with all three ownership states in one
 		// render: the instance default, which nobody manages from this page; a
 		// hostname this workspace owns and may change; and one owned elsewhere

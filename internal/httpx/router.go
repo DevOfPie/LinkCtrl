@@ -243,10 +243,24 @@ func NewRouter(d Deps) http.Handler {
 			"DELETE " + APIPrefix + "/webhooks/{webhookID}":         api.DeleteWebhook,
 			"POST " + APIPrefix + "/webhooks/{webhookID}/rotate":    api.RotateWebhookSecret,
 			"GET " + APIPrefix + "/webhooks/{webhookID}/deliveries": api.ListWebhookDeliveries,
-			"GET " + APIPrefix + "/tags":                            api.ListTags,
-			"DELETE " + APIPrefix + "/tags/{id}":                    api.DeleteTag,
-			"GET " + APIPrefix + "/domain":                          api.GetDomain,
-			"PATCH " + APIPrefix + "/domain":                        api.UpdateDomain,
+			// Automation rules (M43). A sibling collection for the reason
+			// webhooks are one: a rule belongs to the workspace and watches
+			// every link in it.
+			//
+			// **No run-now endpoint, deliberately.** Evaluation happens on the
+			// leader-elected scheduler and nowhere else, and an endpoint that
+			// ran it would put trigger matching, notification writes and link
+			// archiving on the request path of whoever called it. See
+			// internal/automation.
+			"GET " + APIPrefix + "/automation":                   api.ListAutomationRules,
+			"POST " + APIPrefix + "/automation":                  api.CreateAutomationRule,
+			"GET " + APIPrefix + "/automation/{automationID}":    api.GetAutomationRule,
+			"PATCH " + APIPrefix + "/automation/{automationID}":  api.UpdateAutomationRule,
+			"DELETE " + APIPrefix + "/automation/{automationID}": api.DeleteAutomationRule,
+			"GET " + APIPrefix + "/tags":                         api.ListTags,
+			"DELETE " + APIPrefix + "/tags/{id}":                 api.DeleteTag,
+			"GET " + APIPrefix + "/domain":                       api.GetDomain,
+			"PATCH " + APIPrefix + "/domain":                     api.UpdateDomain,
 			// Registered hostnames (M39). A different resource from the
 			// singular /domain above, which is the instance default's settings
 			// and predates there being more than one domain.
@@ -524,13 +538,23 @@ func NewRouter(d Deps) http.Handler {
 			"POST /webhooks/{webhookID}/toggle": web.WebhookToggle,
 			"POST /webhooks/{webhookID}/rotate": web.WebhookRotate,
 			"POST /webhooks/{webhookID}/delete": web.WebhookDelete,
-			"GET /keys":                         web.KeysPage,
-			"GET /notifications":                web.NotificationsPage,
-			"POST /notifications/read":          web.NotificationReadAll,
-			"POST /notifications/{id}/read":     web.NotificationRead,
-			"POST /keys":                        web.KeyCreate,
-			"POST /keys/{id}/revoke":            web.KeyRevoke,
-			"GET /account":                      web.AccountPage,
+			// Automation rules (M43). Four forms and no JavaScript, on the
+			// webhooks page's shape. The toggle is its own action for the reason
+			// every other toggle in this router is: pausing a standing
+			// instruction that is misbehaving must not require opening an
+			// editor.
+			"GET /automation":                        web.AutomationPage,
+			"POST /automation":                       web.AutomationCreate,
+			"POST /automation/{automationID}":        web.AutomationUpdate,
+			"POST /automation/{automationID}/toggle": web.AutomationToggle,
+			"POST /automation/{automationID}/delete": web.AutomationDelete,
+			"GET /keys":                              web.KeysPage,
+			"GET /notifications":                     web.NotificationsPage,
+			"POST /notifications/read":               web.NotificationReadAll,
+			"POST /notifications/{id}/read":          web.NotificationRead,
+			"POST /keys":                             web.KeyCreate,
+			"POST /keys/{id}/revoke":                 web.KeyRevoke,
+			"GET /account":                           web.AccountPage,
 			// Read-only, and registered GET-only on purpose: a POST to /feeds
 			// must be refused by the mux rather than by a handler somebody
 			// could add one to. D40, and TestTheDisclosurePageAcceptsNoWrite.

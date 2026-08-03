@@ -86,6 +86,15 @@ tags:
       `webhooks.write`, both owner and admin — rather than reusing the link
       permissions that guard folders, campaigns and QR codes. `webhooks.write` is
       not delegable to an API key.
+  - name: automation
+    description: >
+      Standing instructions the scheduler runs unattended: when this happens in
+      this workspace, do these things. Carries permissions of its own —
+      `automation.read` and `automation.write`, both owner and admin — for the
+      reason webhooks do, and one turn further: a webhook is an instruction to
+      *report*, and a rule is an instruction to *act*. `automation.write` is not
+      delegable to an API key. **There is no endpoint that evaluates a rule**;
+      evaluation runs on the leader-elected scheduler and nowhere else.
   - name: qr
     description: >
       A link's QR code. SVG only, and the one non-JSON response this API has
@@ -1683,6 +1692,145 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /automation:
+    get:
+      tags: [automation]
+      operationId: listAutomationRules
+      summary: The workspace's automation rules
+      description: |
+        Unpaginated and bounded instead: a workspace holds at most twenty rules,
+        because every enabled one is work the scheduler does on every tick.
+
+        The response carries the trigger and action vocabularies alongside the
+        list, so a client building a rule editor discovers what it may write from
+        the API rather than from the docs — and it carries the **evaluation
+        bounds**, which is what makes "why has my rule not fired yet" answerable
+        without reading the source: how often the scheduler looks, how many rules
+        one run considers, and how many subjects one rule handles per run.
+
+        `last_fired_at` is a watermark rather than a diagnostic. A rule sees only
+        subjects whose event time is after it, and it is set when the rule is
+        created and when a paused rule is resumed — so a rule that has never
+        matched anything and one that fired a moment ago carry the same kind of
+        value.
+      responses:
+        "200":
+          description: Every rule in the workspace, the vocabularies, and the evaluation bounds
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRuleList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [automation]
+      operationId: createAutomationRule
+      summary: Create an automation rule
+      description: |
+        **The rule is armed at creation.** It acts on what happens from this
+        instant on, never on what already happened — a rule created this
+        afternoon does not fire for every link that expired last year.
+
+        `archive_link` is refused on `destination.blocked`, which has no link to
+        archive. It is refused at write time rather than skipped at evaluation
+        time, because a rule that saves and then never does what it says is worse
+        than one that will not save.
+
+        There is deliberately **no `disable` action**. `archived` and `disabled`
+        produce the identical outcome on the redirect path, and `disabled` has no
+        restore affordance — an automation writing it would create links in a
+        state the dashboard offers no way out of.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAutomationRuleRequest"
+      responses:
+        "201":
+          description: The rule, armed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRule"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /automation/{automationID}:
+    parameters:
+      - $ref: "#/components/parameters/AutomationID"
+    get:
+      tags: [automation]
+      operationId: getAutomationRule
+      summary: One automation rule
+      responses:
+        "200":
+          description: The rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRule"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [automation]
+      operationId: updateAutomationRule
+      summary: Edit an automation rule
+      description: |
+        Partial: an omitted field is unchanged. The whole rule is re-validated
+        rather than only what changed, because an action list that was legal
+        against the old trigger can be illegal against the new one.
+
+        **Switching `enabled` from false to true re-arms the rule** — the
+        watermark moves to the current instant — so a rule paused for a month does
+        not fire for a month of backlog the moment somebody resumes it. Switching
+        it off leaves the watermark alone, because a disabled rule is not
+        evaluated and the value is what a reader is shown.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAutomationRuleRequest"
+      responses:
+        "200":
+          description: The rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRule"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+    delete:
+      tags: [automation]
+      operationId: deleteAutomationRule
+      summary: Remove an automation rule
+      responses:
+        "204":
+          description: Removed
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /folders:
     get:
       tags: [folders]
@@ -3082,6 +3230,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    AutomationID:
+      name: automationID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     DomainID:
       name: domainID
       in: path
@@ -3673,8 +3826,12 @@ components:
     WebhookEvent:
       type: string
       description: >
-        One event name. The vocabulary is closed and deliberately small: five
-        for a link's lifecycle and one for a destination that was refused.
+        One event name. The vocabulary is closed and deliberately small: five for
+        a link's lifecycle, one for a destination that was refused, and one for an
+        automation rule that fired. `automation.fired` is the only event a
+        workspace can cause this server to emit on purpose, and nothing triggers
+        on it — which is what stops a rule that emits a webhook being a rule that
+        fires a rule.
       enum:
         - link.created
         - link.updated
@@ -3682,6 +3839,7 @@ components:
         - link.restored
         - link.deleted
         - destination.blocked
+        - automation.fired
 
     WebhookList:
       type: object
@@ -3701,6 +3859,134 @@ components:
             How to verify a delivery, so a receiver can be written from the API
             alone. The full worked example is in `docs/usage.md`.
           additionalProperties: true
+
+    AutomationTrigger:
+      type: string
+      description: >
+        What a rule watches for. The vocabulary is closed and deliberately tiny:
+        a large trigger set is untestable and becomes the place surprises live.
+      enum:
+        - link.expired
+        - link.max_clicks
+        - destination.blocked
+
+    AutomationAction:
+      type: string
+      description: >
+        What a rule does when it fires. `notify` writes one in-app notification
+        per firing to the organization's owners; `webhook` emits one
+        `automation.fired` event to the workspace's subscribed webhooks;
+        `archive_link` archives the matched links and is legal only on a trigger
+        whose subject is a link. There is no `disable` action, by decision D10.
+      enum:
+        - notify
+        - webhook
+        - archive_link
+
+    AutomationTriggerConfig:
+      type: object
+      additionalProperties: false
+      description: >
+        The threshold. Nothing is discarded while it is unmet — matches
+        accumulate across runs until the count is reached, because a threshold
+        that discarded what it counted could never be reached one subject at a
+        time.
+      properties:
+        min_count:
+          type: integer
+          minimum: 0
+          maximum: 25
+          default: 1
+          description: >
+            How many subjects must accumulate before the rule fires. Zero and one
+            both mean "fire on the first". Capped at the per-run match cap: a
+            higher threshold would be a rule that validates, saves, displays and
+            never fires.
+
+    AutomationRule:
+      type: object
+      additionalProperties: false
+      required: [id, workspace_id, name, trigger, trigger_config, actions, enabled, last_fired_at, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        workspace_id: { type: string, format: uuid }
+        name: { type: string, maxLength: 120 }
+        trigger: { $ref: "#/components/schemas/AutomationTrigger" }
+        trigger_config: { $ref: "#/components/schemas/AutomationTriggerConfig" }
+        actions:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items: { $ref: "#/components/schemas/AutomationAction" }
+        enabled: { type: boolean }
+        last_fired_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            The watermark. A rule sees only subjects whose event time is after
+            this instant, and the claim that fires a rule advances it before any
+            action runs — which is what stops a rule firing twice for one
+            subject. Set at creation and on resume, so a rule that has never
+            matched anything still carries a value.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    AutomationRuleList:
+      type: object
+      additionalProperties: false
+      required: [rules, triggers, actions, evaluation]
+      properties:
+        rules:
+          type: array
+          items: { $ref: "#/components/schemas/AutomationRule" }
+        triggers:
+          type: array
+          description: The whole trigger vocabulary, so a rule editor needs no hard-coded list.
+          items: { $ref: "#/components/schemas/AutomationTrigger" }
+        actions:
+          type: array
+          description: The whole action vocabulary.
+          items: { $ref: "#/components/schemas/AutomationAction" }
+        evaluation:
+          type: object
+          description: >
+            Where evaluation happens and what bounds one run. Advertised because
+            "why has my rule not fired yet" is otherwise a question only the
+            source answers.
+          additionalProperties: true
+
+    CreateAutomationRuleRequest:
+      type: object
+      additionalProperties: false
+      required: [name, trigger, actions]
+      properties:
+        name: { type: string, maxLength: 120 }
+        trigger: { $ref: "#/components/schemas/AutomationTrigger" }
+        trigger_config: { $ref: "#/components/schemas/AutomationTriggerConfig" }
+        actions:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items: { $ref: "#/components/schemas/AutomationAction" }
+        enabled:
+          type: boolean
+          default: true
+          description: Absent means enabled, which is what a rule somebody just wrote should be.
+
+    UpdateAutomationRuleRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 120 }
+        trigger: { $ref: "#/components/schemas/AutomationTrigger" }
+        trigger_config: { $ref: "#/components/schemas/AutomationTriggerConfig" }
+        actions:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items: { $ref: "#/components/schemas/AutomationAction" }
+        enabled: { type: boolean }
 
     CreateWebhookRequest:
       type: object

@@ -562,16 +562,76 @@ func demoCoverage() []demoFeature {
 				"cannot resolve for anyone",
 		},
 
-		// The boundary. Everything below is a milestone that has not been built,
-		// so the demo showing nothing is correct — and these rows are what make
-		// the next person add a feature row above instead of quietly seeding
-		// something the list does not mention. Turn a row into a real one when its
-		// milestone lands; do not delete it.
 		{
-			Milestone: "M43", Feature: "Automation rules (not built yet)",
-			Query:     `SELECT count(*) FROM automation_rules`,
+			// M43 asserted this count was *zero* until M43 was built, which is
+			// the boundary-row move M34, M36, M39, M40, M41 and M42 each made
+			// before it.
+			//
+			// Bounded above as well as below, and the ceiling carries the claim.
+			// Exactly three rules: two enabled and one paused. A page where every
+			// rule says the same thing shows one state, and a reader cannot see
+			// that the pause button does anything.
+			Milestone: "M43", Feature: "Three automation rules, one of them paused",
+			Query: `SELECT count(*) FROM automation_rules
+			         WHERE workspace_id IN (` + demoWorkspaces + `)`,
+			Min: 3, Max: 3,
+			Shows: "the automation page with both states on it — standing " +
+				"instructions the scheduler runs, and one that is switched off",
+		},
+		{
+			// The vocabulary, not the count. One rule per trigger, so the page
+			// shows what a rule can watch for rather than three spellings of one
+			// thing — and so a trigger that stopped working is visible as a row
+			// that never fires rather than as an absence nobody notices.
+			Milestone: "M43", Feature: "Every trigger in the vocabulary has a rule",
+			Query: `SELECT count(DISTINCT trigger) FROM automation_rules
+			         WHERE workspace_id IN (` + demoWorkspaces + `)`,
+			Min: 3, Max: 3,
+			Shows: "all three triggers on one page: a link expiring, a click " +
+				"budget running out, and a destination somebody was refused",
+		},
+		{
+			// Not a display claim — a safety claim, and the same one D81 made
+			// about the demo's webhooks, one turn further out.
+			//
+			// The demo is a public instance anybody can drive. `archive_link` is
+			// the one action that changes what another visitor sees: somebody who
+			// set an expiry on a link they were showing a colleague would come
+			// back to find a rule they did not write had archived it. The action
+			// exists and the form offers it; the demo seeds only the two that
+			// report.
+			//
+			// Asserted rather than trusted, because "the seeder does not do that"
+			// is exactly the kind of claim that survives the change that makes it
+			// false.
+			Milestone: "M43", Feature: "No seeded rule archives anybody's link",
+			Query: `SELECT count(*) FROM automation_rules
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND actions @> '["archive_link"]'::jsonb`,
 			MaxIsZero: true,
-			Shows:     "nothing: M43 is unbuilt",
+			Shows: "that the demo's automation reports and never changes a " +
+				"visitor's links behind their back",
+		},
+		{
+			// The second safety claim, and it is the reason a `webhook` action is
+			// in the demo at all.
+			//
+			// A firing queues a delivery, and every seeded registration points at
+			// a `.example` hostname RFC 2606 guarantees never resolves — so the
+			// demo can show an automation with an outbound consequence without
+			// becoming a machine that connects to a stranger's server on a
+			// schedule. It stays true because CreateAutomationRule arms a rule at
+			// the instant it is written, so the watermark is already past
+			// everything the seeder wrote and the first evaluation matches
+			// nothing.
+			Milestone: "M43", Feature: "The seeder fires no rule",
+			Query: `SELECT count(*) FROM audit_logs
+			         WHERE action = 'automation.fired'
+			           AND organization_id = $1`,
+			MaxIsZero: true,
+			Shows: "that seeding the demo runs nobody's standing instruction: " +
+				"every rule is armed at creation, so the backlog it was created " +
+				"beside is behind its watermark and invisible to it",
 		},
 	}
 }

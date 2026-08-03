@@ -448,6 +448,52 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.do("DELETE", p+"/webhooks/"+webhookID, nil, http.StatusNoContent)
 	c.do("DELETE", p+"/webhooks/"+webhookID, nil, http.StatusNotFound)
 
+	// --- automation rules (M43) ---------------------------------------------
+	//
+	// The whole lifecycle, because every operation is one the document makes a
+	// claim about: that a rule is armed at creation rather than left with a null
+	// watermark, that the list carries both vocabularies and the evaluation
+	// bounds, and that `archive_link` is refused on a trigger with no link.
+	//
+	// **Nothing here evaluates anything**, and that is the point rather than an
+	// omission — there is no endpoint that could. Evaluation is the scheduler's,
+	// and test/integration/automation_test.go is where it is driven.
+	autoRule := c.do("POST", p+"/automation", map[string]any{
+		"name": "contract", "trigger": "link.expired",
+		"actions": []string{"notify", "webhook"},
+	}, http.StatusCreated)
+	autoID := field(t, autoRule, "id")
+	if field(t, autoRule, "last_fired_at") == "" {
+		t.Error("the created rule carried a null watermark; the document says a rule " +
+			"is armed at creation, and a null one means it fires for the whole " +
+			"history of the workspace on its first run")
+	}
+
+	// `archive_link` on a trigger with no link subject. Refused at write time,
+	// which the document says and which is the difference between a rule that
+	// will not save and one that saves and silently does nothing.
+	//
+	// Reachable through the enum, unlike the webhook vocabulary refusal above:
+	// the action name is legal, and what makes it invalid is the trigger it is
+	// paired with — which no schema can express and only the server can decide.
+	c.do("POST", p+"/automation", map[string]any{
+		"name": "no link to archive", "trigger": "destination.blocked",
+		"actions": []string{"archive_link"},
+	}, http.StatusUnprocessableEntity)
+
+	c.do("GET", p+"/automation", nil, http.StatusOK)
+	c.do("GET", p+"/automation/"+autoID, nil, http.StatusOK)
+	c.do("GET", p+"/automation/"+uuid.NewString(), nil, http.StatusNotFound)
+	c.do("PATCH", p+"/automation/"+autoID, map[string]any{
+		"trigger_config": map[string]any{"min_count": 3}, "enabled": false,
+	}, http.StatusOK)
+	c.do("PATCH", p+"/automation/"+uuid.NewString(), map[string]any{
+		"enabled": false,
+	}, http.StatusNotFound)
+
+	c.do("DELETE", p+"/automation/"+autoID, nil, http.StatusNoContent)
+	c.do("DELETE", p+"/automation/"+autoID, nil, http.StatusNotFound)
+
 	// --- QR codes (M41) -----------------------------------------------------
 	//
 	// The JSON half is replayed like everything else. The picture is not: it is

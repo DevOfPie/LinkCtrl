@@ -1156,7 +1156,7 @@ keeps verifying for as long as the window lasts.
 
 ### The events
 
-Six, and the vocabulary is closed — an unknown name is refused rather than
+Seven, and the vocabulary is closed — an unknown name is refused rather than
 ignored, so a subscription that would never fire is not something you can
 accidentally create.
 
@@ -1168,6 +1168,7 @@ accidentally create.
 | `link.restored` | It was un-paused. |
 | `link.deleted` | Somebody deleted it, starting the 30-day recovery window. **Not** the purge at the end of that window — you would otherwise be told twice about one link. |
 | `destination.blocked` | Somebody was refused a destination. The payload names the tier, the rule and the surface, and carries the attempted URL **defanged** — `https[:]//evil[.]example` — so nothing that renders it produces a live link to the thing that was refused. |
+| `automation.fired` | An [automation rule](#automation-rules) ran. The payload names the rule, its trigger, how many subjects it matched and the first five of them. **This is the only event a workspace can cause this server to emit on purpose, and nothing triggers on it** — which is what stops a rule that emits a webhook being a rule that sets off another rule. |
 
 ### The payload
 
@@ -1283,3 +1284,108 @@ into another outbound connection, which is what the ceiling is about.
 
 The queue is Postgres. Redis on this instance is a cache and nothing durable
 depends on it, webhook delivery included: flushing the cache loses no event.
+
+
+## Automation rules
+
+A rule is a standing instruction: *when this happens in this workspace, do these
+things*. Write one at `/automation`, or through `/api/v1/automation`.
+
+They are managed by the people accountable for the workspace — owner and admin,
+behind `automation.read` and `automation.write` — for the reason webhooks are, and
+one turn further. A webhook is an instruction to *report*. A rule is an
+instruction to *act*: it runs unattended, and it can archive links.
+
+### When a rule runs
+
+**On the scheduler, under a leader lock, and never on a request.** There is no
+run-now button and no endpoint that evaluates a rule, deliberately: creating a
+link, following a short URL and calling the API all leave rules alone until the
+next tick, which is every minute. On a multi-replica deployment exactly one
+replica evaluates.
+
+That has a consequence worth knowing before you write a rule expecting a
+stopwatch: a rule fires *within about a minute* of its subject appearing, not at
+the instant it appears.
+
+### What a rule can watch for
+
+Three triggers, and the vocabulary is closed. It is small on purpose — a large
+trigger set is one nobody can test exhaustively, and untested triggers are where
+surprises live.
+
+| Trigger | When |
+| --- | --- |
+| `link.expired` | A link's `expires_at` passed. The link itself is not changed by expiring; the redirect path reads the timestamp. |
+| `link.max_clicks` | A gated link's durable click budget ran out — the counter the gate spends transactionally, not the approximate `click_count` the analytics write afterwards. |
+| `destination.blocked` | Somebody in this workspace was refused a destination by any tier. |
+
+### What a rule can do
+
+Three actions. A rule may hold at most three, and they run in the order you
+listed them.
+
+| Action | What happens |
+| --- | --- |
+| `notify` | One in-app notification per firing to the organization's owners, naming the rule, the count and the first five subjects. One per **firing**, not one per subject: forty items in an inbox is how an inbox stops being read. |
+| `webhook` | One `automation.fired` event to every webhook subscribed to it. You cannot choose which event it sends, and that is the loop guard rather than a limitation. |
+| `archive_link` | Archives the links that matched. Only available on `link.expired` and `link.max_clicks`, because `destination.blocked` has no link to archive — a rule that pairs them is refused when you save it rather than saved and silently ineffective. |
+
+**There is no "disable" action.** An archived link and a disabled one produce the
+identical answer on the redirect path, and `disabled` has nothing that restores
+it — a rule writing it would leave links in a state the dashboard cannot get them
+out of. Restore an archived link from its page.
+
+### Firing once, and not looping
+
+`last_fired_at` is not a note about the past. It is the point a rule has already
+seen up to, and it is what stops a rule going off forever on the same link.
+
+- A rule sees only subjects whose event time is **after** it, and the moment a
+  rule fires that point moves past the last subject it handled.
+- **Creating a rule arms it**, so it acts on what happens from then on rather than
+  on your back catalogue. A rule you write this afternoon does not archive every
+  link that expired last year.
+- **Resuming a paused rule re-arms it**, so a rule switched off for a month does
+  not deliver a month of backlog when you switch it back on.
+
+The page calls the column *last fired or armed*, because it is both: a rule that
+has never matched anything and a rule that fired a moment ago carry the same kind
+of value.
+
+Rules also cannot set each other off. Nothing an action produces is anything a
+trigger watches for — which is why the `webhook` action emits only
+`automation.fired`, and why archiving a link never moves its expiry.
+
+### Firing after several, rather than after one
+
+Every rule has a threshold, *fire after N*. Below it nothing happens and **nothing
+is discarded**: matches accumulate across runs until the count is reached. "Tell
+me after five refusals" therefore works on an instance where refusals arrive one
+at a time.
+
+The threshold cannot exceed the number of subjects one run handles (25), because
+a higher one would be a rule that saves and never fires.
+
+### What one run costs, and what it will not do
+
+| Bound | Value |
+| --- | --- |
+| How often the scheduler evaluates | every minute |
+| Rules considered in one run, across the instance | 100, oldest watermark first |
+| Subjects one rule handles in one run | 25 |
+| Actions on one rule | 3 |
+| Rules in one workspace | 20 |
+
+A run that hits either cap says so in the log and **loses nothing**: the rules it
+did not reach hold the oldest watermarks next time and go first, and a rule that
+matched more than 25 subjects picks up the remainder on the next run. All of it is
+in the `evaluation` block of `GET /api/v1/automation`, so a client never has to
+guess.
+
+### What it records
+
+Creating, editing and removing a rule are audit events. So is every firing, as
+`automation.fired` — and that record's actor is the *rule*, not a person, which is
+what makes an automated archive answerable afterwards. `linkctrl_automation_firings_total`
+counts firings by trigger and outcome.

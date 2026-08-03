@@ -42,6 +42,7 @@ type Metrics struct {
 	feedChecks *prometheus.CounterVec
 
 	webhookDeliveries *prometheus.CounterVec
+	automationFirings *prometheus.CounterVec
 }
 
 // redirectBuckets straddle the 20ms cached-redirect target, densely below it
@@ -168,6 +169,27 @@ func NewMetrics() *Metrics {
 			Help: "Webhook delivery attempts by outcome (delivered, retry, abandoned) " +
 				"and HTTP status class (2xx, 3xx, 4xx, 5xx, or none when there was no response).",
 		}, []string{"outcome", "status"}),
+
+		// Automation firings (M43). Two bounded labels for the same reason, and
+		// the bound is tighter: `trigger` is one of three names from a closed
+		// vocabulary and `outcome` is one of two words, so the whole metric is
+		// six series however many rules exist.
+		//
+		// A rule name is the obvious thing to want and the thing that must not be
+		// here — rules are named by users and there is no ceiling on how many
+		// distinct names an instance accumulates. Which rule fired is a question
+		// the audit log answers, per workspace, where it belongs.
+		//
+		// Counting only firings and not evaluations is deliberate. A rule that
+		// matched nothing is the expected case on every tick, and a counter that
+		// incremented for it would be a counter whose rate says how often the
+		// scheduler ran rather than how much automation is happening.
+		automationFirings: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "linkctrl_automation_firings_total",
+			Help: "Automation rule firings by trigger (link.expired, link.max_clicks, " +
+				"destination.blocked) and outcome (fired, or partial when at least one " +
+				"action failed).",
+		}, []string{"trigger", "outcome"}),
 	}
 
 	buildInfo := prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -185,6 +207,7 @@ func NewMetrics() *Metrics {
 		m.auditBytes,
 		m.feedChecks,
 		m.webhookDeliveries,
+		m.automationFirings,
 		buildInfo,
 		// Go runtime and process collectors: memory, goroutines, GC, file
 		// descriptors, CPU. Free, standard, and the first thing anyone asks
@@ -473,4 +496,18 @@ func (m *Metrics) ObserveWebhookDelivery(outcome, status string) {
 		return
 	}
 	m.webhookDeliveries.WithLabelValues(outcome, status).Inc()
+}
+
+// --- automation --------------------------------------------------------------
+
+// ObserveAutomationFiring records one rule firing (M43).
+//
+// Called once per firing, not once per subject and not once per evaluation: the
+// question this answers is "how much is the scheduler doing on somebody's
+// behalf", and a rule that matched forty links did one thing.
+func (m *Metrics) ObserveAutomationFiring(trigger, outcome string) {
+	if m == nil {
+		return
+	}
+	m.automationFirings.WithLabelValues(trigger, outcome).Inc()
 }

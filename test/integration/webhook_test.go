@@ -333,13 +333,22 @@ func TestWebhookSecretIsShownOnceAndNeverAgain(t *testing.T) {
 
 // TestTheEventVocabularyIsClosed is the "deliberately small vocabulary" bullet,
 // asserted rather than described.
+//
+// **The count moved from six to seven in M43, and this test is why that was a
+// decision rather than a diff.** D79 said widening the vocabulary is a deliberate
+// edit, a line in the docs, and a row in the test that asserts the size; M43
+// added `automation.fired` and met all three, this one by failing the integration
+// suite until somebody came back and changed the number on purpose. See D83 for
+// why an automation may emit only that event and nothing else — a rule that could
+// choose would be a rule that could manufacture what another rule triggers on.
 func TestTheEventVocabularyIsClosed(t *testing.T) {
 	f := newWebhooks(t, nil)
 
-	if len(domain.WebhookEvents) != 6 {
-		t.Errorf("the vocabulary holds %d events, want 6 — five for a link's "+
-			"lifecycle and one for a refusal. Widening it is a deliberate edit "+
-			"with a docs line, not a side effect.", len(domain.WebhookEvents))
+	if len(domain.WebhookEvents) != 7 {
+		t.Errorf("the vocabulary holds %d events, want 7 — five for a link's "+
+			"lifecycle, one for a refusal, and one for an automation rule that "+
+			"fired. Widening it is a deliberate edit with a docs line, not a side "+
+			"effect.", len(domain.WebhookEvents))
 	}
 
 	_, err := f.links.CreateWebhook(t.Context(), f.owner, link.CreateWebhookInput{

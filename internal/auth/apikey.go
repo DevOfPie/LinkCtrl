@@ -168,6 +168,21 @@ func APIKeyHash(pepper []byte, prefix, secret string) []byte {
 // what an integrator's tooling needs and escalates nothing. The pair therefore
 // splits the way apikeys.* does not, and the split is the point: a key can watch
 // its own integration, and a human has to create one.
+//
+// automation.write is the durability limb again, and one turn further round than
+// webhooks.write (M43, applying D18). A webhook is a standing instruction to
+// *report*; an automation rule is a standing instruction to *act* — it archives
+// links on the scheduler, unattended, and it can make the server emit an event
+// on top of that. Both outlive the credential that created them, so revoking the
+// key does not revoke the instruction, and that is what makes it escalation
+// rather than ordinary use of a permission the holder already has. An editor can
+// archive a link today; nobody should be able to leave behind a token that keeps
+// archiving links after it has been revoked.
+//
+// automation.read is deliberately **not** here, for the reason webhooks.read is
+// not: reading the list says what a workspace has told the scheduler to do and
+// when each rule last fired, which is exactly what an integrator's tooling needs
+// and escalates nothing.
 var NonDelegableScopes = map[string]struct{}{
 	PermAPIKeysRead:       {},
 	PermAPIKeysWrite:      {},
@@ -175,6 +190,7 @@ var NonDelegableScopes = map[string]struct{}{
 	"audit.read":          {},
 	"destinations.review": {},
 	"webhooks.write":      {},
+	"automation.write":    {},
 }
 
 // APIKeyInfo is a key as its owner sees it. The secret is absent by

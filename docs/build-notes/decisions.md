@@ -135,6 +135,11 @@ file. Append a row when you append an entry.
 | [M42, the part of a webhook that is a published interface](#2026-08-03--m42-the-part-of-a-webhook-that-is-a-published-interface) | D79 — six events and why the vocabulary is closed; an explicit payload map rather than a marshalled struct; the HMAC key is the secret *as displayed*; seven attempts across 61 minutes, and why the attempt count is a constant while the timeout and retention are settings |
 | [M42, webhooks mint two permissions, and one of them is not delegable](#2026-08-03--m42-webhooks-mint-two-permissions-and-one-of-them-is-not-delegable) | D80 — where D75's reasoning stops; matched D18's **second** limb, and the limb is *durability* of reach rather than escalation; why `webhooks.read` stays delegable, and the one-line reversal |
 | [M42, what the demo shows, and why it dials nobody](#2026-08-03--m42-what-the-demo-shows-and-why-it-dials-nobody) | D81 — one enabled and one paused so the pause control is visible; `.example` hostnames that cannot resolve for anyone; the seeder queues nothing, asserted as a coverage row rather than trusted |
+| [M43, `last_fired_at` is a watermark, and it is the loop guard](#2026-08-03--m43-last_fired_at-is-a-watermark-and-it-is-the-loop-guard) | D82 — a position rather than a diagnostic; the half-open window `(last_fired_at, now]`; a compare-and-set that advances **before** the actions, and why that direction loses a firing rather than repeating one; advancing to the last subject handled rather than to `now`; armed at creation and re-armed on resume; why the threshold does not move it |
+| [M43, the cascade a watermark cannot stop, and what does](#2026-08-03--m43-the-cascade-a-watermark-cannot-stop-and-what-does) | D83 — two rules feeding each other is what no per-rule bookkeeping catches; `TriggerReads` and `ActionWrites` declared at query granularity and asserted disjoint; why the webhook action cannot choose its event, and the **seventh** webhook event that follows; why the archive must not move `expires_at` and the expiry query must not filter on status; D10's no-`disable` re-checked against the tree |
+| [M43, what bounds one evaluation run, and where the numbers live](#2026-08-03--m43-what-bounds-one-evaluation-run-and-where-the-numbers-live) | D84 — four constants in `internal/domain` and the arithmetic beside them, 2,900 statements worst case against a one-minute clock; both caps logged rather than implicit; the bounds advertised on the API; `MaxAutomationMinCount` defined *as* the match cap; three indexes and no new column |
+| [M43, automation mints two permissions, and one is not delegable](#2026-08-03--m43-automation-mints-two-permissions-and-one-is-not-delegable) | D85 — where D80's reasoning goes one turn further: a webhook is an instruction to *report*, a rule is an instruction to *act*; D18's durability limb again; why `automation.read` stays delegable; and why the archive takes no actor rather than a synthetic identity holding `links.delete` |
+| [M43, what the demo shows, and why it changes nobody's links](#2026-08-03--m43-what-the-demo-shows-and-why-it-changes-nobodys-links) | D86 — one rule per trigger and one paused; **no seeded rule archives a link**, asserted rather than trusted, because the demo is public and that is the one action another visitor feels; the webhook action seeded precisely because `.example` dials nobody; the seeder fires nothing because arming outruns it |
 
 ---
 
@@ -10891,3 +10896,240 @@ therefore carries a third M42 row asserting **zero pending deliveries**: not a
 display claim like every other row in that list, but a safety one, and the first
 row there whose failure would mean the demo had started doing something rather
 than stopped showing something.
+
+---
+
+## 2026-08-03 — M43, `last_fired_at` is a watermark, and it is the loop guard
+
+**D82.**
+
+m43.md asks for two things that turn out to be the same mechanism: `last_fired_at`
+is maintained, and **a rule cannot trigger itself or loop**. The obvious reading of
+the first is a diagnostic — a timestamp on the page so somebody can see the rule
+did something. That reading is what makes the second hard, because a rule that
+matches "links that have expired" matches the same link on every tick forever, and
+a diagnostic column does nothing to stop it.
+
+So the column is a **position**, not a report. Every match query reads the
+half-open window `(last_fired_at, now]`, and the statement that fires a rule
+advances the column past the last subject it handled **before any action runs**.
+A subject is visible to a rule exactly once, whatever the actions did, however
+many times the scheduler ticks, and whatever else in the workspace changed.
+
+Three consequences, each of which had to be chosen rather than fallen into.
+
+**The advance is a compare-and-set, and it happens before the actions.** The
+`UPDATE` matches only if `last_fired_at` is still where the match query saw it —
+`IS NOT DISTINCT FROM`, so a NULL from a row written outside this product compares
+correctly rather than never matching. That is the same shape D77 chose for claiming
+a webhook delivery, and for the same reason: leadership is an advisory lock
+released the instant its holder dies, so two replicas can briefly both believe they
+are the leader, and the claim has to make that moment cost nothing. Ordering the
+advance *before* the actions trades a lost firing for a repeated one on a process
+killed mid-run, which is the right way round for an instruction that archives links
+and sends events — a missed notification is recoverable by looking, and a rule that
+archived the same links twice is one nobody can leave running unattended.
+
+**It advances to the last subject handled, not to `now`.** Advancing to the clock
+is the natural implementation and it silently drops everything past the per-run
+match cap: twenty-eight expired links, twenty-five handled, three gone. Advancing
+to the subject means the remainder is simply the head of the next run's window.
+`TestATruncatedRunPicksUpTheRemainder` is the assertion, and the sabotage that
+proves it — changing the advance to `now` — leaves three links unarchived.
+
+**A rule is armed at creation, and re-armed on resume.** A NULL watermark means
+"everything that ever happened", so a rule somebody writes this afternoon would
+fire for every link that expired last year — which for `archive_link` is not a
+noisy inbox, it is a workspace's back catalogue archived by a rule that had existed
+for four seconds. `CreateAutomationRule` therefore sets the column to the current
+instant, and `UpdateAutomationRule` moves it on the disabled-to-enabled transition
+only, inside the same statement rather than as a second write. The cost is that the
+column means two things at once — "armed at" and "last fired at" — and the page
+says so in as many words rather than pretending they are different fields.
+
+Below the threshold the watermark **does not** move. A run that matched two
+subjects against a `min_count` of three leaves them where they are, so they
+accumulate and the rule fires when the third arrives. A threshold that discarded
+what it counted would mean "tell me after five" reads as "never" on any instance
+where refusals arrive one at a time.
+
+## 2026-08-03 — M43, the cascade a watermark cannot stop, and what does
+
+**D83.**
+
+The watermark stops a rule feeding *itself*. It does nothing about rule A's action
+producing what rule B triggers on, and rule B's action producing what rule A
+triggers on: each fires once per subject, every subject is genuinely new, and the
+pair runs forever. m43.md names this exactly — *an automation that fires a webhook
+that fires an automation* — and it is the failure that cannot be caught by any
+amount of per-rule bookkeeping.
+
+**The answer is that the cycle cannot be drawn.** `domain.TriggerReads` says what
+each trigger looks at and `domain.ActionWrites` says what each action produces, at
+the granularity the queries actually filter at — `audit_log(destination.blocked)`
+rather than `audit_log`, `links.expires_at` and `links.status` as separate sources
+rather than `links`. `TestNoAutomationActionWritesATriggerSource` asserts the two
+sets never intersect. That is a property of the vocabulary rather than of any rule,
+so it holds for every wiring of every rule anybody can write, including rules that
+do not exist yet.
+
+Four things follow from it, and three of them are constraints on the design rather
+than observations about it.
+
+**The webhook action cannot choose its event.** Letting a rule emit
+`destination.blocked` would put that source in `ActionWrites`, the assertion would
+go red, and the cycle would be one form submission away. So the action emits
+`automation.fired` and nothing else — a **seventh** webhook event, added
+deliberately, and the only one a workspace can cause this server to emit on
+purpose. Nothing triggers on it. D79 called the vocabulary closed and said adding
+one is a deliberate edit, a line in the docs and a row in the test that asserts the
+size; this is that edit.
+
+**The archive must not move the expiry.** "Link expired → archive link" is the one
+place in this tree where an action writes the same *table* its trigger reads, and
+the reason it is not a loop is that the two touch different columns. An archive
+implemented as `expires_at = now()` — a perfectly natural way to write one — would
+put the link back inside the next window forever.
+`ArchiveLinkByAutomation` therefore writes `status` and `archived_at` and nothing
+else, and `TestArchivingDoesNotRearmTheTrigger` is what says so.
+
+**The link-expired match query must not filter on status.** The inverse of the
+same rule: a trigger whose match set shrank when its own action ran would be
+feeding off its effect in the other direction. That is why `links_expiry_idx`
+(00300) is unusable here — its predicate carries `status = 'active'` — and why
+02900 adds `automation_links_expiry_idx`, which does not. The index exists because
+of the loop guard, not because of the query plan.
+
+**There is no `disable` action**, which is D10 and needs no re-litigating; what M43
+adds is that the decision survived contact with the code. `snapshot.go` maps
+`archived` and `disabled` to the same `OutcomeNotFound` deliberately, so a scanner
+cannot tell them apart, and `disabled` has no restore affordance — an automation
+writing it would create links in a state the dashboard offers no way out of.
+
+## 2026-08-03 — M43, what bounds one evaluation run, and where the numbers live
+
+**D84.**
+
+m43.md's Risks say trigger evaluation cost on the scheduler must be bounded and
+that the trigger vocabulary must stay small enough to test exhaustively. A bound
+that is a product of four numbers spread across three packages is a bound nobody
+can state, so all four are constants in `internal/domain`, with the arithmetic
+written out beside them:
+
+```
+AutomationRulesPerRun x (1 match query
+                         + MaxAutomationActions actions
+                         + AutomationMatchesPerRule archive statements)
+```
+
+which at 100, 3 and 25 is **2,900 statements**, against a one-minute clock and a
+two-minute job timeout. The expected case is 100 indexed range scans that return
+nothing, because the watermark means a rule only ever looks at what happened since
+it last fired.
+
+**Both caps are made visible rather than left implicit**, which is the difference
+between a bound and a hope. Hitting the per-run rule cap logs at Info, because an
+instance permanently at it is one where every rule runs less often than the clock
+suggests. Hitting the per-rule match cap logs too, and the run is not lossy: the
+watermark advances only to the last subject handled. The API's list response
+carries the whole `evaluation` block — where evaluation happens, how often, and
+both caps — because "why has my rule not fired yet" is otherwise a question only
+the source answers.
+
+`MaxAutomationMinCount` is defined **as** `AutomationMatchesPerRule` rather than as
+a round number, and `TestAThresholdIsAlwaysReachable` holds them together: a
+threshold larger than one run can match would be a rule that validates, saves,
+displays and never fires.
+
+**The vocabulary is three triggers and three actions**, which is nine combinations
+— a number a test enumerates rather than samples. Two of the nine are refused at
+write time (`archive_link` on `destination.blocked`, which has no link), and
+refused at *write* time rather than skipped at evaluation time, because a rule
+whose page says it archives links and whose scheduler never does is worse than one
+that will not save.
+
+**`trigger_config` holds exactly one key**, `min_count`, and it stays jsonb.
+m43.md asks that the structure stay in the existing jsonb columns and it does:
+02900 adds no column to `automation_rules` at all. What it adds is three indexes —
+the due-rule index the scheduler needs, the status-free expiry index the loop guard
+requires, and a workspace-and-action index on `audit_logs`, none of which existed
+because nothing had ever asked these questions.
+
+## 2026-08-03 — M43, automation mints two permissions, and one is not delegable
+
+**D85.**
+
+The same fork D75 and D80 have already been at, one turn further round.
+
+D75 reused `links.*` for QR codes and campaigns because each is a *property of a
+link*: whoever may edit the link may edit them. D80 minted `webhooks.*` because a
+webhook is not a property of anything — it is a standing instruction to make this
+server connect somewhere — and made `webhooks.write` non-delegable on **D18's
+second limb, durability of reach**: a webhook keeps delivering after the credential
+that created it is revoked, so revoking the key does not revoke the channel.
+
+An automation rule is the same shape and more of it. A webhook is a standing
+instruction to **report**; a rule is a standing instruction to **act**. It runs
+unattended on the scheduler, it can archive links, and it can make the server emit
+an event on top of that — and like a webhook it outlives whatever created it. So:
+`automation.read` and `automation.write`, seeded and granted explicitly by 02900 to
+owner and admin (the seed migration's "owner gets everything" ran at its own
+version, against the permissions that existed then), and `automation.write` in
+`NonDelegableScopes`.
+
+`automation.read` is deliberately **not** there, for the reason `webhooks.read` is
+not: reading the list says what a workspace has told the scheduler to do and when
+each rule last fired, which is exactly what an integrator's tooling needs and
+escalates nothing.
+
+An editor keeps `links.delete` and can archive a link themselves. What they cannot
+do is leave behind an instruction that keeps archiving links after they have
+stopped looking, and that is the whole distinction the permission encodes.
+
+**The archive an automation performs takes no actor**, which is the other half of
+this decision. The obvious implementation is a synthetic `auth.Identity` holding
+`links.delete`, and it is worse: `Identity`'s permission set is private precisely
+so nothing outside `internal/auth` can mint authority, and a scheduler that
+manufactures a principal is a scheduler whose reach nobody can audit by reading the
+role map. `link.Service.ArchiveByRule` is workspace-scoped in the statement instead,
+and the firing writes an `automation.fired` audit record whose actor label names the
+rule — the one record in that log with no person in it, and the reason "why is this
+link archived?" has an answer.
+
+## 2026-08-03 — M43, what the demo shows, and why it changes nobody's links
+
+**D86.**
+
+D81 settled the demo's webhooks: `.example` hostnames that resolve for nobody, one
+enabled and one paused, and a seeder that queues no delivery — asserted as a
+coverage row rather than trusted. An automation whose action fires a webhook
+deserves the same care and one more question, because this is the first demo
+feature that can change what another visitor sees.
+
+**Three rules, one per trigger, one of them paused.** One per trigger rather than
+three of the interesting one, so the page shows what a rule can watch for rather
+than three spellings of one thing — and so a trigger that stopped working is a row
+that never fires rather than an absence nobody notices. One paused for the reason
+D81 paused a webhook: a page where every row says the same thing shows one state,
+and a reader cannot tell that the pause button does anything.
+
+**No seeded rule archives a link.** The demo is a public instance anybody can
+drive, and `archive_link` is the one action whose effect somebody else feels: a
+visitor who set an expiry on a link they were showing a colleague would come back
+to find a rule they did not write had archived it. The action exists, the API
+documents it and the form offers it; the demo seeds the two that only report.
+`demoCoverage()` asserts it, because "the seeder does not do that" is exactly the
+kind of claim that survives the change which makes it false.
+
+**The webhook action is seeded, and it dials nobody.** That is why it is worth
+having: every registration the seeder writes points at a `.example` name, so a
+firing queues a delivery that gets as far as a failed DNS lookup and no further.
+The demo can therefore show an automation with an outbound consequence without
+becoming a machine that connects to a stranger's server on a schedule.
+
+**The seeder fires nothing, and that is asserted too.** Every rule is armed at the
+instant it is created, so the watermark is already past the catalogue the seeder
+wrote around it and the first evaluation on a freshly seeded demo matches nothing.
+A demo whose first scheduler tick archived twenty links and sent three
+notifications would be a demo that had done something to itself before anybody
+looked at it.

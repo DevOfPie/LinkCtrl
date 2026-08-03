@@ -43,6 +43,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
+	"github.com/DevOfPie/LinkCtrl/internal/automation"
 	"github.com/DevOfPie/LinkCtrl/internal/build"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/dispute"
@@ -712,9 +713,26 @@ func run(cfg config.Config, _ io.Writer) error {
 	ingester.Start()
 	metrics.Register(observability.NewIngestCollector(ingester))
 
+	// Automation rules (M43). Built after the link service, because it is the
+	// link service it hands an archive to — the one-way graph internal/webhook
+	// already has, in the other direction.
+	//
+	// Always built and always wired into the scheduler, with no operator switch:
+	// a rule is a workspace's instruction, not an operator's feature. What
+	// switches it off is the workspace having no enabled rules, which costs one
+	// indexed query per minute that returns nothing.
+	automationSvc := automation.NewService(pools.App, automation.Config{
+		Links:    linkSvc,
+		Notifier: notifySvc,
+		Events:   webhookSvc,
+		Audit:    auditSvc,
+		Logger:   log,
+		Observer: metrics,
+	})
+
 	roller := analytics.NewRoller(pools.App, log)
 	jobs := newJobRunner(pools.App, salts, roller, log, metrics, notifySvc, mailSvc, signupSvc,
-		linkSvc, webhookSvc, cfg.Domains,
+		linkSvc, webhookSvc, automationSvc, cfg.Domains,
 		cfg.Analytics.RetentionDays, cfg.Audit.RetentionDays, cfg.Audit.SizeWarnBytes)
 	jobs.start(ctx)
 	defer jobs.stop()

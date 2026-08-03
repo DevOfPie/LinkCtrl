@@ -342,6 +342,9 @@ func (s *demoSeeder) run(ctx context.Context, primary []demoLink, ids map[int]uu
 	if err := s.seedWebhooks(ctx); err != nil {
 		return err
 	}
+	if err := s.seedAutomation(ctx); err != nil {
+		return err
+	}
 	if err := s.seedBlockingAndDisputes(ctx, people); err != nil {
 		return err
 	}
@@ -1179,6 +1182,95 @@ func (s *demoSeeder) seedWebhooks(ctx context.Context) error {
 	return nil
 }
 
+// demoAutomationRules are the standing instructions the demo shows.
+//
+// **Three, and the third one is disabled**, for the reason the paused webhook
+// exists: a page where every row says the same thing shows one state, and a
+// reader cannot tell that the pause button does anything.
+//
+// **None of them archives a link**, and that is the deliberate half of this
+// choice rather than an oversight. The demo is a public instance anybody can
+// drive, and `archive_link` is the one action that changes what somebody else
+// sees — a visitor who set an expiry on a link they were showing a colleague
+// would come back to it archived by a rule they did not write. The action
+// exists, it is documented, and the form offers it; the demo shows the two that
+// only report.
+//
+// **The webhook action is here on purpose, and it dials nobody**, which is the
+// same argument D81 made for the demo's webhooks. Every registration the seeder
+// writes points at a `.example` hostname that RFC 2606 guarantees never
+// resolves, so a firing queues a delivery that gets as far as a failed DNS
+// lookup. The rule is what makes the page show a firing with an outbound
+// consequence without the demo becoming a machine that connects to a stranger's
+// server on a schedule.
+func demoAutomationRules() []struct {
+	name     string
+	trigger  string
+	actions  []string
+	minCount int
+	enabled  bool
+} {
+	return []struct {
+		name     string
+		trigger  string
+		actions  []string
+		minCount int
+		enabled  bool
+	}{
+		{
+			name:    "Tell the team when a campaign link expires",
+			trigger: domain.TriggerLinkExpired,
+			actions: []string{domain.ActionNotify, domain.ActionWebhook},
+			enabled: true,
+		},
+		{
+			name:     "Chase a refused destination after three attempts",
+			trigger:  domain.TriggerDestinationBlocked,
+			actions:  []string{domain.ActionNotify},
+			minCount: 3,
+			enabled:  true,
+		},
+		{
+			name:    "Tell the team when a one-time link is spent",
+			trigger: domain.TriggerLinkMaxClicks,
+			actions: []string{domain.ActionNotify},
+			enabled: false,
+		},
+	}
+}
+
+// seedAutomation writes the demo's automation rules.
+//
+// Through link.Service like everything else in this file, so the trigger
+// vocabulary, the action vocabulary, the archive-needs-a-link rule and the
+// workspace cap all apply to the demo's own data: a rule the seeder can write is
+// one the product would have accepted.
+//
+// **The seeder fires nothing.** Every rule is armed at the instant it is
+// created — that is what CreateAutomationRule does — so the watermark is already
+// past everything the seeder wrote, and the first evaluation on a freshly seeded
+// demo matches nothing. What the demo shows is the page: three rules, one
+// paused, with their triggers, actions, thresholds and arming times. Firings
+// arrive when somebody uses the demo, which is the right way round.
+func (s *demoSeeder) seedAutomation(ctx context.Context) error {
+	specs := demoAutomationRules()
+	enabled := 0
+	for _, spec := range specs {
+		if _, err := s.link.CreateAutomationRule(ctx, s.owner, link.CreateAutomationRuleInput{
+			Name: spec.name, Trigger: spec.trigger, Actions: spec.actions,
+			TriggerConfig: domain.AutomationTriggerConfig{MinCount: spec.minCount},
+			Enabled:       spec.enabled,
+		}); err != nil {
+			return fmt.Errorf("create automation rule %q: %w", spec.name, err)
+		}
+		if spec.enabled {
+			enabled++
+		}
+	}
+	fmt.Fprintf(os.Stderr, "automation rules: %d (%d enabled)\n", len(specs), enabled)
+	return nil
+}
+
 // demoDomains are the hostnames the demo registers, one per workspace.
 //
 // **Two, and in different workspaces, because one would show nothing.** A single
@@ -1540,6 +1632,14 @@ func demoResetPhase2(ctx context.Context, tx pgxExecutor, orgID, userID uuid.UUI
 		// off the workspace, not off a link.
 		{"webhooks", `
 			DELETE FROM webhooks
+			 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
+			[]any{orgID}},
+
+		// The automation rules (M43). A step of its own for the reason webhooks
+		// have one: the rows hang off the workspace rather than off a link, so
+		// nothing else deleted above reaches them.
+		{"automation rules", `
+			DELETE FROM automation_rules
 			 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
 			[]any{orgID}},
 

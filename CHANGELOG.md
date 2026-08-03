@@ -72,8 +72,55 @@ migrations run at boot.
 
 ### Added
 
+- **Automation rules: standing instructions the scheduler carries out.** Write a
+  rule at `/automation` or through `/api/v1/automation` — *when this happens in
+  this workspace, do these things*. Three triggers: a link reaching its expiry, a
+  link's click budget running out, and somebody in the workspace being refused a
+  destination. Three actions: an in-app notification to the organization's owners,
+  an `automation.fired` webhook to whoever subscribed to it, and archiving the
+  links that matched. A rule may hold at most three actions and a workspace at
+  most twenty rules.
+
+  **Evaluation runs on the scheduler under the leader lock and never on a
+  request.** There is no endpoint that evaluates a rule and no button that does;
+  a link write, a redirect and an API call all leave rules alone until the next
+  scheduler tick, which is every minute. That is enforced by the import graph
+  rather than promised: no package on a request path can reach the evaluator.
+
+  **A rule acts on what happens after it exists.** Creating one arms it at that
+  instant and resuming a paused one re-arms it, so a rule written this afternoon
+  does not fire for every link that expired last year, and a rule paused for a
+  month does not deliver a month of backlog when you switch it back on.
+  `last_fired_at` is what does this: it is the point a rule has already seen up
+  to, so a rule sees each subject exactly once and cannot re-fire on its own
+  effect. The page calls it "last fired or armed", because it is both.
+
+  **A rule cannot set another rule off.** No action produces anything any trigger
+  watches for, and that is asserted rather than assumed — which is why the webhook
+  action always emits `automation.fired` rather than an event you choose, and why
+  archiving a link never touches its expiry.
+
+  A threshold is available on every trigger: *fire after N*, with nothing
+  discarded while the count is unmet. One run considers at most 100 rules and 25
+  subjects per rule, logs when either cap bites, and defers the remainder to the
+  next run rather than dropping it; `/api/v1/automation` reports all of it.
+
+  Every rule change is an audit event, and so is every firing — the firing record
+  names the rule rather than a person, which is what makes an automated archive
+  answerable. `linkctrl_automation_firings_total{trigger,outcome}` counts them.
+
+  **Two new permissions**, `automation.read` and `automation.write`, granted to
+  the owner and admin roles. `automation.write` cannot be held by an API key: a
+  rule keeps acting after the credential that created it is revoked, and it can
+  archive links, so a key that could write one would have reach that survives its
+  own revocation.
+
+  Nothing needs to be done on upgrade, and there is nothing to configure. No rule
+  exists until somebody writes one, and an instance where nobody does pays one
+  indexed query a minute that returns nothing.
+
 - **Webhooks: a workspace can have this instance POST its events somewhere.**
-  Register a URL at `/webhooks` or through `/api/v1/webhooks`, choose from six
+  Register a URL at `/webhooks` or through `/api/v1/webhooks`, choose from seven
   events — `link.created`, `link.updated`, `link.archived`, `link.restored`,
   `link.deleted` and `destination.blocked` — and each one arrives as a signed
   JSON POST. The vocabulary is closed: an unknown event name is refused rather

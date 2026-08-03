@@ -176,6 +176,17 @@
     {{if .Identity.Can "webhooks.read"}}
     <a href="/webhooks" class="block px-3 py-2 text-sm {{if eq .Nav "webhooks"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">Webhooks</a>
     {{end}}
+    {{/* Automation (M43). The menu again, and for the sharpest version of the
+         reason every entry above gives (D35): a rule is written once and then
+         runs unattended on a clock nobody is watching. The page is where
+         somebody goes to find out whether it did anything, and to switch it off
+         if it did the wrong thing.
+
+         Gated on automation.read, which is owner and admin. An editor sees no
+         entry, because every action on the page needs automation.write. */}}
+    {{if .Identity.Can "automation.read"}}
+    <a href="/automation" class="block px-3 py-2 text-sm {{if eq .Nav "automation"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">Automation</a>
+    {{end}}
     {{/* Account goes with the rest: it is a page, and a page needs an
          organization to render in (D36). Sign out never does — an account that
          belongs to nothing must still be able to leave, and it is the one thing
