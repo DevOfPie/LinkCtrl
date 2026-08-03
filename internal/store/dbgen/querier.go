@@ -62,6 +62,7 @@ type Querier interface {
 	// not succeed twice even without the lock above; zero rows rolls the
 	// transaction back.
 	ConsumePendingRegistration(ctx context.Context, id uuid.UUID) (int64, error)
+	CountCampaigns(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	CountClickEvents(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	CountFolders(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	// Only issued when the caller explicitly asks for a total, because counting
@@ -146,6 +147,21 @@ type Querier interface {
 	CountWorkspaceLinks(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	// API keys and the permission vocabulary their scopes are drawn from.
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error)
+	// Campaigns and QR codes (M41).
+	//
+	// Both tables were created dormant by 00600 and woken by 02700. They share this
+	// file because they share a milestone and neither is large enough to be worth
+	// its own; nothing else connects them.
+	//
+	// **A campaign is soft-deleted and a QR style is not.** The asymmetry is
+	// deliberate. A campaign names a body of work whose links keep their history
+	// after it ends, and `links.campaign_id` is ON DELETE SET NULL, so a hard delete
+	// would unlabel every link the moment somebody tidied up a finished campaign —
+	// exactly the failure the folder migration (02400) argues against. `deleted_at`
+	// keeps the row, and every statement here filters on it. A QR style is a
+	// rendering preference with nothing to restore: deleting it returns the link's
+	// code to the default style, which is the state every link starts in.
+	CreateCampaign(ctx context.Context, arg CreateCampaignParams) (Campaign, error)
 	CreateDestination(ctx context.Context, arg CreateDestinationParams) (Destination, error)
 	// Domain ownership and registration (M39).
 	//
@@ -276,6 +292,10 @@ type Querier interface {
 	// row anywhere. That is the structural half of "decisions act only on the
 	// runtime low-confidence list".
 	DeleteBlockedDestination(ctx context.Context, host string) (int64, error)
+	// Soft. The links keep their history; `links.campaign_id` is cleared by the
+	// statement below rather than by a cascade, because a cascade would fire on a
+	// hard delete this statement never performs.
+	DeleteCampaign(ctx context.Context, arg DeleteCampaignParams) (int64, error)
 	// Reaper. Revoked rows are kept briefly so "sign out everywhere" is visible in
 	// the session list before it disappears.
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
@@ -304,6 +324,9 @@ type Querier interface {
 	// working at the same moment, which is what makes this safe: there is never
 	// more than one live link per address.
 	DeleteOutstandingRegistration(ctx context.Context, email string) (int64, error)
+	// Returns the link's code to the default style. A hard delete, because a style
+	// row holds nothing but the preference being withdrawn.
+	DeleteQRCode(ctx context.Context, arg DeleteQRCodeParams) (int64, error)
 	// Reaper. Kept long enough to be visible in the key list after revocation, and
 	// long enough for the audit question above to be answerable.
 	DeleteRevokedAPIKeys(ctx context.Context) (int64, error)
@@ -356,6 +379,10 @@ type Querier interface {
 	// say which it was, and a deleted user's key resolves to no row at all.
 	GetAPIKeyByPrefix(ctx context.Context, prefix string) (GetAPIKeyByPrefixRow, error)
 	GetBuiltinRoleBySlug(ctx context.Context, slug string) (GetBuiltinRoleBySlugRow, error)
+	// Workspace-scoped like GetLink and GetFolder, and for the same reason: the
+	// wrong workspace returns no rows rather than a row the caller must remember to
+	// reject.
+	GetCampaign(ctx context.Context, arg GetCampaignParams) (Campaign, error)
 	// What the dashboard shows beside a gated link. Never on the redirect path.
 	GetClickBudget(ctx context.Context, linkID uuid.UUID) (GetClickBudgetRow, error)
 	// One domain's settings and where its root points.
@@ -495,6 +522,10 @@ type Querier interface {
 	// FOR UPDATE, so two clicks on the same link serialize and the second sees the
 	// row the first consumed.
 	GetPendingRegistrationByTokenHash(ctx context.Context, tokenHash []byte) (PendingRegistration, error)
+	// The stored style for a link's code, or no rows for a link that has never been
+	// styled. No rows is not an error: it means the default style, which is what
+	// every link's code is drawn with until somebody changes it.
+	GetQRCode(ctx context.Context, arg GetQRCodeParams) (QrCode, error)
 	// The live-activity feed. Bounded and index-backed on (link_id, occurred_at).
 	GetRecentClicks(ctx context.Context, arg GetRecentClicksParams) ([]GetRecentClicksRow, error)
 	GetRoleBySlug(ctx context.Context, slug string) (Role, error)
@@ -625,6 +656,16 @@ type Querier interface {
 	// The four seeded roles, most powerful first. Feeds the invite form's role
 	// choices, filtered by the inviter's own rank in the service (decision D28).
 	ListBuiltinRoles(ctx context.Context) ([]ListBuiltinRolesRow, error)
+	// Every campaign in the workspace, with how many live links carry it.
+	//
+	// The count is a grouped scan of links_campaign_idx rather than a correlated
+	// subquery per campaign, exactly as ListFolders counts filed links: a workspace
+	// with many campaigns costs one pass instead of one index probe each.
+	//
+	// Unpaginated, and bounded instead by domain.MaxCampaignsPerWorkspace. A
+	// campaign list is a picker as much as it is a page — the link form offers it —
+	// and a picker that paginates is a picker nobody can choose from.
+	ListCampaigns(ctx context.Context, workspaceID uuid.UUID) ([]ListCampaignsRow, error)
 	// The queue, newest first, keyset on (created_at, id).
 	//
 	// Instance-wide rather than scoped to the reader's organization, because the
@@ -1362,6 +1403,13 @@ type Querier interface {
 	// the caller, because writing on every request would turn a read-mostly path
 	// into a write on the hottest authenticated query.
 	TouchSession(ctx context.Context, id uuid.UUID) error
+	// Takes every link out of a deleted campaign.
+	//
+	// Run in the same transaction as DeleteCampaign. Without it the links keep an id
+	// pointing at a row no query returns, which is a link filtered by a campaign
+	// that is not in the campaign list — the invisible-rows failure 02400 describes
+	// for folders, in the one place the schema does not prevent it.
+	UnassignCampaignLinks(ctx context.Context, arg UnassignCampaignLinksParams) (int64, error)
 	// The end of the grace window, and the only place serving stops on its own.
 	//
 	// `verified_at` is cleared, so the next ListVerifiedDomains does not return the
@@ -1373,6 +1421,11 @@ type Querier interface {
 	// being served at 03:00 because it had been failing since yesterday", and
 	// clearing the anchor here would throw away the only record of why.
 	UnverifyDomain(ctx context.Context, arg UnverifyDomainParams) (Domain, error)
+	// Partial update through COALESCE, like UpdateLink. The two schedule bounds are
+	// three-valued through their own clear flags, because "leave the end date alone"
+	// and "this campaign no longer ends" are different requests and one nullable
+	// parameter cannot express both.
+	UpdateCampaign(ctx context.Context, arg UpdateCampaignParams) (Campaign, error)
 	// The trigger on destinations mirrors this into links.primary_url, so the hot
 	// path never joins.
 	//
@@ -1422,6 +1475,9 @@ type Querier interface {
 	// that never happened. created_at is left alone, because the entry is the same
 	// entry it was before the restart.
 	UpsertEnvBlockedDestination(ctx context.Context, arg UpsertEnvBlockedDestinationParams) error
+	// One row per link, which qr_codes_link_key (02700) is what makes true. Without
+	// the unique index this is two concurrent inserts and a link with two styles.
+	UpsertQRCode(ctx context.Context, arg UpsertQRCodeParams) (QrCode, error)
 }
 
 var _ Querier = (*Queries)(nil)

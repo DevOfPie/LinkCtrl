@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"html/template"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -172,6 +173,36 @@ func pageData(t *testing.T) map[string]any {
 			"CanCreate": true, "CanUpdate": true, "CanDelete": true,
 			"Notice": "Folder created.", "Error": "",
 		},
+		// Campaigns (M41). Two rows, one of them open for editing and one of
+		// them scheduled, because the page's three interesting states — the
+		// list, the inline editor and a schedule that has or has not started —
+		// are all conditional markup that a single plain row would leave
+		// unexercised.
+		"campaigns": map[string]any{
+			"Title": "Campaigns", "Nav": "links", "Identity": owner(),
+			"Count": 2, "NoCampaignURL": "/links?campaign=none", "MaxCampaigns": 500,
+			"Rows": []map[string]any{
+				{
+					"ID": "0198c9c5-0000-7000-8000-000000000050", "Name": "Summer 2026",
+					"Slug": "summer-2026", "Description": "The June push",
+					"LinkCount": int64(6), "LinksURL": "/links?campaign=0198c9c5-0000-7000-8000-000000000050",
+					"Schedule": "1 Jun 2026 to 31 Aug 2026", "Active": true,
+					"Editing": true, "StartsAt": "2026-06-01", "EndsAt": "2026-08-31",
+				},
+				{
+					"ID": "0198c9c5-0000-7000-8000-000000000051", "Name": "Evergreen",
+					"Slug": "evergreen", "Description": "",
+					"LinkCount": int64(0), "LinksURL": "/links?campaign=0198c9c5-0000-7000-8000-000000000051",
+					"Schedule": "", "Active": false,
+					"Editing": false, "StartsAt": "", "EndsAt": "",
+				},
+			},
+			"FormName": "", "FormSlug": "", "FormDescription": "",
+			"FormStartsAt": "", "FormEndsAt": "",
+			"EditingID": "0198c9c5-0000-7000-8000-000000000050",
+			"CanCreate": true, "CanUpdate": true, "CanDelete": true,
+			"Notice": "Campaign created.", "Error": "",
+		},
 		// Registered hostnames (M39), with all three ownership states in one
 		// render: the instance default, which nobody manages from this page; a
 		// hostname this workspace owns and may change; and one owned elsewhere
@@ -285,9 +316,26 @@ func pageData(t *testing.T) map[string]any {
 			"Form": map[string]string{
 				"URL": "https://example.com/x", "Alias": "demo", "Title": "A demo",
 				"Description": "", "ExpiresAt": "", "Tags": "launch",
+				"CampaignID": "0198c9c5-0000-7000-8000-000000000050",
 			},
-			"FieldErrors": map[string]string{},
-			"Notice":      "", "Error": "",
+			// The campaign select and the QR panel (M41). The SVG is a stub
+			// rather than a real code: this test exercises the template, and
+			// internal/qr is where the drawing is tested against the encoder.
+			"CampaignOptions": []map[string]any{
+				{"ID": "0198c9c5-0000-7000-8000-000000000050", "Label": "Summer 2026", "Selected": true},
+			},
+			"QRSVG":     template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" role="img"></svg>`),
+			"QRContent": "http://links.test/demo?src=qr",
+			"QRStyle": map[string]any{
+				"Foreground": "#000000", "Background": "#ffffff",
+				"Level": "M", "Margin": 4, "Scale": 8,
+			},
+			"QRLevels":      []string{"L", "M", "Q", "H"},
+			"QRStored":      true,
+			"QRDownload":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.svg",
+			"QRSourceLabel": "qr",
+			"FieldErrors":   map[string]string{},
+			"Notice":        "", "Error": "",
 		},
 		"keys": map[string]any{
 			"Title": "API keys", "Nav": "keys", "Identity": owner(),

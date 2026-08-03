@@ -650,6 +650,64 @@ take it.
 Seventeen cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%, 100%,
 100%, 100%, 100%, 100%, 99.743%, 100%, 100%, 99.505% and **100%** under 20ms.
 
+### Re-measured for M41 (2026-08-03)
+
+[M41](build-notes/phase-details/m41.md) touches the redirect path, so this is a
+k6 run rather than a note. What it adds is **one read of the query string**:
+`clickSource` looks for the reserved `src` parameter, which is what a QR code
+encodes so a scan can be told apart from a typed URL
+([D76](../Plan.md#phase-2-decisions-taken-after-the-plan-was-finalised)).
+
+**Two request shapes, because this milestone has two branches and the
+interesting one is not the default.** A request with no query pays a length check and a
+`strings.Contains` over a string already in hand; only a request that could carry
+the parameter reaches `url.ParseQuery`, which allocates. So the second shape puts
+`?src=qr` on every request — exactly what a scan looks like — and it is the one
+that measures the cost being introduced.
+
+| | No query (the default path) | `?src=qr` (a scan) |
+| --- | --- | --- |
+| Requests | **240,000** at 2,000 rps for 2m | **240,001** at 2,000 rps for 2m |
+| Under 20ms | **100.000%** (240,000 of 240,000) | **100.000%** (240,001 of 240,001) |
+| Mean | **87.04µs** | **86.58µs** |
+| Median | 82.99µs | 82.73µs |
+| p90 / p95 | 104.12µs / 112.09µs | 103.39µs / 111.48µs |
+| Max | 6.97ms | 8.26ms |
+| Cache mix | memory 240,000 · redis 0 · database 0 | memory 240,001 · redis 0 · database 0 |
+| Redirect pool waits | 0 | 0 |
+
+Taken on image `sha256:bae11abd25c1a4…` (`linkctrl:test`, built 2026-08-03 from
+the M41 working tree at `v0.1.0-74-ge4c5979-dirty`), rebuilt and recreated from
+the tree immediately before the run, against a freshly seeded `make seed-slo`
+dataset of 100,000 links and 5,000,000 click events. Same host as
+[M35](#re-measured-for-m35-2026-08-03) onward.
+
+**87.04µs against M40's 87.44µs**, on the same host, the same dataset size and a
+dataset seeded the same way. Nothing moved, which is the only claim being made.
+
+**And the scan path is not slower than the default one** — 86.58µs against
+87.04µs, a difference smaller than the spread between two runs of the same
+configuration this document already records. That is not a claim that parsing a
+query is free; it is the honest reading that the parse is too small to see
+against a redirect that already costs 87µs, and that the two figures are the same
+number measured twice.
+
+**What was actually run, so the table is not read as more than it is**: three k6
+runs, one without a query and two with `?src=qr`. The figures in the `?src=qr`
+column are the *second* of those two; the first was let through with only its
+histogram captured — 240,001 requests, 100% under 20ms, memory-only — and its
+mean was not recorded, so it is counted below and quoted nowhere.
+
+`SUFFIX` is what produced the `?src=qr` runs — it appends to the measured URL, so
+`SUFFIX='?src=qr' make load` is a query rather than the path segments
+[M33](build-notes/phase-details/m33.md) used it for. The cache key is the alias,
+so the query changes nothing about which tier answers, and the mix confirms it:
+240,001 memory, zero elsewhere.
+
+Twenty cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%, 100%,
+100%, 100%, 100%, 100%, 99.743%, 100%, 100%, 99.505%, 100%, **100%**, **100%**
+and **100%** under 20ms.
+
 ## Reproducing it
 
 ```sh

@@ -234,6 +234,11 @@ type CreateInput struct {
 	// every link created before folders existed still is.
 	FolderID *uuid.UUID
 
+	// CampaignID labels the new link (M41). Nil leaves it unlabelled. A folder
+	// and a campaign are different questions — where the link lives and what it
+	// is for — so a link may carry both, one or neither.
+	CampaignID *uuid.UUID
+
 	// DomainID names the hostname the link is served on (M40). Nil takes the
 	// workspace's own default, which is the instance default until the workspace
 	// has verified a hostname of its own.
@@ -301,6 +306,7 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 		})
 	}
 	errs = append(errs, s.resolveFolder(ctx, actor.WorkspaceID, in.FolderID)...)
+	errs = append(errs, s.resolveCampaign(ctx, actor.WorkspaceID, in.CampaignID)...)
 
 	if len(errs) > 0 {
 		return nil, errs
@@ -378,6 +384,7 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 		OneTime:          in.OneTime,
 		RequireSignature: in.RequireSignature,
 		FolderID:         in.FolderID,
+		CampaignID:       in.CampaignID,
 	})
 	if err != nil {
 		// The unique index is the real guarantee; the pre-check only makes
@@ -450,6 +457,13 @@ type UpdateInput struct {
 	// unfiled.
 	FolderID    *uuid.UUID
 	ClearFolder bool
+
+	// Which campaign the link belongs to (M41). Three states for the reason the
+	// folder above has them, and the third is the one that matters: without
+	// ClearCampaign the only way out of a campaign joined by mistake would be to
+	// delete the campaign, which would take every other link with it.
+	CampaignID    *uuid.UUID
+	ClearCampaign bool
 
 	// The gates (M35). Two of them need three states rather than two, because
 	// "leave the password alone" and "remove the password" are different
@@ -546,6 +560,7 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 	errs = append(errs, validateClickLimit(in.MaxClicks)...)
 	if !in.ClearFolder {
 		errs = append(errs, s.resolveFolder(ctx, actor.WorkspaceID, in.FolderID)...)
+		errs = append(errs, s.resolveCampaign(ctx, actor.WorkspaceID, in.CampaignID)...)
 	}
 
 	// The bot-blocking setting, and the one refusal it carries.
@@ -607,6 +622,8 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 		RequireSignature: in.RequireSignature,
 		FolderID:         in.FolderID,
 		ClearFolder:      in.ClearFolder,
+		CampaignID:       in.CampaignID,
+		ClearCampaign:    in.ClearCampaign,
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -774,6 +791,13 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 	} else {
 		params.FolderID = f.FolderID
 	}
+	// The campaign filter (M41), resolved exactly as the folder pair above is
+	// and for the same reason.
+	if f.Uncampaigned {
+		params.Uncampaigned = true
+	} else {
+		params.CampaignID = f.CampaignID
+	}
 	// Which hostname the links are served on (M40). Not validated against what
 	// this workspace owns: the query is already scoped to the workspace, so an
 	// id naming somebody else's domain returns an empty page rather than a
@@ -833,6 +857,7 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 			WorkspaceID:  r.WorkspaceID,
 			DomainID:     r.DomainID,
 			FolderID:     r.FolderID,
+			CampaignID:   r.CampaignID,
 			Alias:        r.Alias,
 			PrimaryUrl:   r.PrimaryUrl,
 			Title:        r.Title,
@@ -867,10 +892,12 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 			Search:      params.Search,
 			// The same filter the page itself used, or the total describes a
 			// different set of links than the items beside it.
-			TagIds:   params.TagIds,
-			Unfiled:  params.Unfiled,
-			FolderID: params.FolderID,
-			DomainID: params.DomainID,
+			TagIds:       params.TagIds,
+			Unfiled:      params.Unfiled,
+			FolderID:     params.FolderID,
+			Uncampaigned: params.Uncampaigned,
+			CampaignID:   params.CampaignID,
+			DomainID:     params.DomainID,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("count links: %w", err)
@@ -1047,6 +1074,7 @@ func (s *Service) toDomain(ctx context.Context, l dbgen.Link, tags []domain.Tag)
 			domain.LinkStatus(l.Status), l.ExpiresAt, time.Now()),
 		Tags:         tags,
 		FolderID:     l.FolderID,
+		CampaignID:   l.CampaignID,
 		ForwardQuery: l.ForwardQuery,
 		ForwardPath:  l.ForwardPath,
 		BotBlocking:  domain.BotPolicy(l.BotBlocking),

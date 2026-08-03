@@ -83,6 +83,8 @@ answers, not the same ones with a domain name.
 | **Routing rules** | Send different visitors to different destinations from one link. Rules are checked lowest priority number first and **the first match wins**; anyone matching none falls through to the link's split test, its fallback, or the link's own destination. Twelve conditions — country, region, city, language, browser, OS, device, date and time, referrer host, query parameters, UTM parameters, and whether somebody was seen on that link earlier today — combined with AND, any listed value matching. Time windows are evaluated when the visitor arrives, in a real IANA timezone, so a window opens and closes on time even on a hot link. Every rule destination goes through the same tier checks a link's own does. Region and city are resolved for the redirect and never stored. There is no cookies condition, deliberately, and asking for one is refused by name. |
 | **Split testing** | Divide one link's traffic between several destinations. **Weighted** arms take a share each — weights are relative, so 60/40 and 600/400 are the same test — or **sequential** arms are visited strictly in turn, in an order kept in the database so it holds across every replica and every restart. A **fallback** destination catches whoever no rule and no arm claimed, standing in for the link's own without changing it. Switching an arm off is one click and the rest re-share its traffic, which is what feature-flagging a destination looks like here. Every click records which destination served it, and the link's page shows clicks, visitors and share per arm beside its configured weight — a split with no attribution is a coin flip with extra steps. |
 | **Folders** | File links into a tree, up to eight levels deep. Create, rename, move and delete from a page of its own; filter the link list by a folder, or by **No folder** for everything never filed. Moving is two clicks — **Move**, then **Move here** on a destination — and only destinations that would be accepted offer the button, because a folder can never be moved into itself or into anything inside it. Works with JavaScript off and from a keyboard; there is no drag-and-drop, deliberately. **Deleting a folder deletes the folders inside it and no links at all**: everything filed anywhere in the branch survives as unfiled. Two folders in the same place cannot share a name, ignoring case. |
+| **QR codes** | Every link has one, drawn as **SVG** by a pure-Go encoder — no PNG, no image encoder, nothing rasterised on a request, and a code that prints at any size. `GET /api/v1/links/{id}/qr.svg` is the picture and the link's page shows it inline with a download beside it. Restyle it — foreground, background, error-correction level, quiet zone, module size — and the style is stored per link; a style changes the drawing and never what the code says. **The code carries its own white background and stays black on white in both themes**, because an inverted QR code is refused by a large share of scanners. **Scans are counted as ordinary clicks**: the code encodes your short URL with `?src=qr`, which a camera cannot add for you, and they appear in the Referrers breakdown as `qr`. |
+| **Campaigns** | Label links with the body of work they belong to, and filter the list by it. Create, edit and delete from a page of its own; a slug is derived from the name and is unique per workspace, because it is what a filter URL names. Start and end dates **describe** the campaign and enforce nothing — a link in a finished campaign still redirects, because expiry belongs to the link. **Deleting a campaign keeps every link it held**, unlabelled. A link can carry a folder and a campaign at once: one is where it lives, the other is what it is for. There is no per-campaign analytics — that is a later phase. |
 | **Domains** | A workspace registers a hostname of its own, proves it controls it, and serves its links there: register, verify, rename, remove, from a page and from the API, behind `domains.write`. **A hostname belongs to exactly one workspace** — it is one alias namespace, so it cannot be shared and a second registration of the same name is refused instance-wide. An admin manages their own workspace's hostnames and gets `403` on anybody else's; the instance's default domain stays the operator's. Every administrative change is audited. |
 | **Custom domain verification** | A **DNS TXT record** is what turns a registration into a served hostname, and nothing else does. Until the check passes, a `Host` header naming the hostname gets the operational `404` whatever DNS points at this instance — which is what stops a stranger registering your name and serving links on it. Verified hostnames are re-checked hourly; a hostname that stops passing keeps working for **24 hours** while its owner is notified, and then stops being served on every replica at once. Both numbers are yours to set. Renaming a hostname un-verifies it, because the record you published proves control of the old name. Links can then be created on your own hostname, with `short_url` built from it, and its bare domain can redirect wherever you like. **TLS stays your proxy's**: LinkCtrl never speaks ACME, and answers Caddy's on-demand `ask` for verified hostnames only. |
 | **Analytics** | Clicks, estimated unique visitors, bots, device, browser, OS, language, referrer host, and country with an optional GeoIP database. Daily rollups, server-rendered charts — including a world choropleth and a share ring per breakdown, both computed in Go and drawn as inline SVG, no JavaScript and no CDN — a bounded recent-activity feed, retention enforced by dropping whole months. Totals are recomputed every minute and the per-dimension breakdowns every fifteen, so a breakdown can lag the click count above it by up to that; `linkctrl_rollup_staleness_seconds` says by how much. |
@@ -206,7 +208,32 @@ Known limitations and deferred work, so nobody discovers them in production:
   proxy's job. LinkCtrl answers Caddy's on-demand `ask` for hostnames that have
   verified and refuses everything else; if you use a proxy that cannot ask, you
   configure each custom hostname there by hand.
-- **No QR codes.** The table exists; the feature is Phase 2.
+- **A QR code is SVG only, one per link, and it does not follow your theme.**
+  There is no PNG download — the code is vector text, which prints at any size —
+  and there is no way to have two codes for one link. The picture paints its own
+  white background across its quiet zone rather than going transparent: a QR
+  code inverted onto a dark page is refused by a large share of scanners, so the
+  drawing stays black on white in both themes and the frame around it is what
+  the theme colours. You can restyle it — colours, error correction, quiet zone,
+  module size — and the form will let you choose a low-contrast pair if that is
+  what your brand wants; it refuses only the two that are certainly broken, the
+  same colour twice and anything that is not a hex colour.
+- **A scan is a click labelled `qr`, and anybody can type that label.** The code
+  encodes your short URL with `?src=qr` on it, because a camera sends no
+  referrer and the fact has to travel in the picture. Scans then show up in the
+  Referrers breakdown as `qr` beside `direct`. Two consequences worth knowing:
+  somebody who types `?src=qr` by hand is counted as a scan, and two printed
+  codes for one link cannot be told apart. Any other `?src=` value is ignored
+  entirely — the parameter accepts one word on purpose, because the analytics
+  table keys on the value and an open one would let anybody grow it without
+  bound.
+- **A campaign is a label, not a report or a schedule.** It groups links so the
+  list can be filtered by it. There is no per-campaign click total, chart or
+  export — that is a later phase, because computing one means a new pass over
+  every click. Its start and end dates describe the work and enforce nothing: a
+  link in a campaign that ended last month still redirects, because expiry
+  belongs to the link. Deleting a campaign keeps every link it held; they simply
+  stop carrying it.
 - **A folder is only a place to put a link.** It carries no settings, grants
   nobody access to anything, and changes nothing about where a link sends
   somebody. Filtering the link list by a folder shows the links filed *directly*

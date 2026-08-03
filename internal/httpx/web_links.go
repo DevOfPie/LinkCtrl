@@ -3,6 +3,7 @@ package httpx
 import (
 	"errors"
 	"fmt"
+	"html/template"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -15,6 +16,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
+	"github.com/DevOfPie/LinkCtrl/internal/qr"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
 )
 
@@ -100,6 +102,9 @@ type linkFormData struct {
 	// FolderID is the folder select's current value: a folder id, or empty for
 	// "no folder", which is the option that unfiles a link (M38).
 	FolderID string
+	// CampaignID is the campaign select's current value: a campaign id, or empty
+	// for "no campaign", which is the option that unlabels a link (M41).
+	CampaignID string
 
 	// The gates (M35).
 	//
@@ -135,9 +140,15 @@ type linksPageData struct {
 	// folders page renders.
 	Folder        string
 	FolderOptions []folderOption
-	Filtered      bool
-	Form          linkFormData
-	FieldErrors   map[string]string
+	// Campaign is the campaign filter as the query string spells it: a campaign
+	// id, the word `none` for the links carrying none, or empty for no filter
+	// (M41). Spelled with the same `none` sentinel the folder filter uses, so
+	// the two controls read the same way.
+	Campaign        string
+	CampaignOptions []campaignOption
+	Filtered        bool
+	Form            linkFormData
+	FieldErrors     map[string]string
 	// DisputeURL is the destination an appeal may be filed about, or "" when
 	// there is nothing to appeal. Set only after a low-confidence refusal, which
 	// is the one tier M31 gives a dispute path — the other two protect a party
@@ -176,6 +187,7 @@ func (h *Web) loadLinksPage(w http.ResponseWriter, r *http.Request) (linksPageDa
 		Status:      q.Get("status"),
 		Sort:        q.Get("sort"),
 		Folder:      q.Get("folder"),
+		Campaign:    q.Get("campaign"),
 		Domain:      q.Get("domain"),
 		FieldErrors: map[string]string{},
 	}
@@ -223,6 +235,15 @@ func (h *Web) loadLinksPage(w http.ResponseWriter, r *http.Request) (linksPageDa
 	} else {
 		data.Folder = ""
 	}
+	// The campaign filter (M41), resolved exactly as the folder filter above is
+	// and dropping just as quietly when its id no longer names anything.
+	if data.Campaign == campaignFilterNone {
+		f.Uncampaigned = true
+	} else if id, perr := uuid.Parse(data.Campaign); perr == nil {
+		f.CampaignID = &id
+	} else {
+		data.Campaign = ""
+	}
 	// The hostname filter (M40), spelled as the API spells it so a URL copied
 	// from one surface works on the other.
 	if id, perr := uuid.Parse(data.Domain); perr == nil {
@@ -254,6 +275,15 @@ func (h *Web) loadLinksPage(w http.ResponseWriter, r *http.Request) (linksPageDa
 		}
 	}
 
+	// The campaign select, on the same terms as the folder select above: a
+	// failed read leaves the control off the page rather than replacing the page.
+	if campaigns, cerr := h.Links.Campaigns(r.Context(), actor); cerr == nil {
+		data.CampaignOptions = campaignOptions(campaigns, nil)
+		for i := range data.CampaignOptions {
+			data.CampaignOptions[i].Selected = data.CampaignOptions[i].ID == data.Campaign
+		}
+	}
+
 	page, err := h.Links.List(r.Context(), actor, f)
 	if err != nil {
 		h.webError(w, r, err)
@@ -264,7 +294,7 @@ func (h *Web) loadLinksPage(w http.ResponseWriter, r *http.Request) (linksPageDa
 	data.HasMore = page.HasMore
 	data.Total = page.Total
 	data.Filtered = data.Search != "" || data.Status != "" || data.Folder != "" ||
-		data.Domain != "" || f.Cursor != ""
+		data.Campaign != "" || data.Domain != "" || f.Cursor != ""
 	if page.HasMore {
 		next := url.Values{}
 		if data.Search != "" {
@@ -275,6 +305,9 @@ func (h *Web) loadLinksPage(w http.ResponseWriter, r *http.Request) (linksPageDa
 		}
 		if data.Folder != "" {
 			next.Set("folder", data.Folder)
+		}
+		if data.Campaign != "" {
+			next.Set("campaign", data.Campaign)
 		}
 		if data.Domain != "" {
 			next.Set("domain", data.Domain)
@@ -444,6 +477,32 @@ type linkDetailPageData struct {
 	// what keeps a workspace that has never made one from carrying a select with
 	// a single meaningless entry.
 	FolderOptions []folderOption
+
+	// CampaignOptions is every campaign this link may carry (M41), on the same
+	// terms FolderOptions is loaded on. Empty when the workspace has made none.
+	CampaignOptions []campaignOption
+
+	// The link's QR code (M41). QRSVG is the drawing, inlined rather than
+	// fetched: it is bytes this process just generated, so an <img> pointing at
+	// the API endpoint would be a second authenticated request for something
+	// already in hand.
+	//
+	// Safe as template.HTML because internal/qr builds the document out of
+	// integers and colours it has parsed itself; nothing a workspace controls
+	// reaches the markup. See the package comment there.
+	QRSVG     template.HTML
+	QRContent string
+	// QRSourceLabel is the value a scan appears under in the referrers
+	// breakdown, passed in rather than written into the template so the word the
+	// page promises and the word the redirect path writes cannot drift apart.
+	QRSourceLabel string
+	QRStyle       qr.Style
+	QRLevels      []qr.Level
+	QRStored      bool
+	QRDownload    string
+	// QRError is what went wrong drawing the code, if anything. The page keeps
+	// its analytics and says so, rather than failing over a picture.
+	QRError string
 }
 
 func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetailPageData, bool) {
@@ -501,6 +560,9 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 	if l.FolderID != nil {
 		form.FolderID = l.FolderID.String()
 	}
+	if l.CampaignID != nil {
+		form.CampaignID = l.CampaignID.String()
+	}
 	if l.ExpiresAt != nil {
 		form.ExpiresAt = l.ExpiresAt.UTC().Format("2006-01-02T15:04")
 	}
@@ -554,6 +616,33 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 			data.FolderOptions[i].Selected = data.FolderOptions[i].ID == form.FolderID
 		}
 	}
+	// The campaigns this link could carry, and the link's own QR code. Both are
+	// read and failed exactly as the rules, the split and the folder tree above
+	// are: this page is analytics somebody asked for, and losing it over a
+	// select or a picture would be the wrong trade.
+	if campaigns, cerr := h.Links.Campaigns(r.Context(), actor); cerr == nil {
+		data.CampaignOptions = campaignOptions(campaigns, nil)
+		for i := range data.CampaignOptions {
+			data.CampaignOptions[i].Selected = data.CampaignOptions[i].ID == form.CampaignID
+		}
+	}
+	data.QRLevels = qr.Levels
+	data.QRSourceLabel = domain.ClickSourceQR
+	data.QRDownload = fmt.Sprintf("%s/links/%s/qr.svg", APIPrefix, l.ID)
+	if code, qerr := h.Links.QRCode(r.Context(), actor, id); qerr != nil {
+		data.QRError = "The QR code could not be read."
+	} else {
+		data.QRContent = code.Content
+		data.QRStyle = code.Style
+		data.QRStored = code.Stored
+		if svg, rerr := qr.Render(code.Content, code.Style); rerr != nil {
+			data.QRError = "The QR code could not be drawn."
+		} else {
+			//nolint:gosec // G203: internal/qr emits integers and parsed colours only
+			data.QRSVG = template.HTML(svg)
+		}
+	}
+
 	data.RuleWeekdays = domain.RuleWeekdays
 	data.RuleHelp = ruleConditionHelp
 	data.SplitKinds = domain.SplitKinds
@@ -602,6 +691,8 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 		data.Notice = ruleNotice(r.URL.Query().Get("rule"))
 	case r.URL.Query().Get("split") != "":
 		data.Notice = splitNotice(r.URL.Query().Get("split"))
+	case r.URL.Query().Get("qr") != "":
+		data.Notice = qrNotice(r.URL.Query().Get("qr"))
 	case r.URL.Query().Get("created") == "1":
 		data.Notice = "Link created: " + l.ShortURL
 	case r.URL.Query().Get("saved") == "1":
@@ -719,6 +810,19 @@ func (h *Web) LinkUpdate(w http.ResponseWriter, r *http.Request) {
 		in.MaxClicks = &n
 	}
 
+	// Which campaign the link carries (M41), read exactly as the folder select
+	// below is and for the same reason: this form posts every field.
+	if raw := strings.TrimSpace(r.PostFormValue("campaign_id")); raw == "" {
+		in.ClearCampaign = true
+	} else {
+		campaignID, cerr := uuid.Parse(raw)
+		if cerr != nil {
+			h.errorPage(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
+			return
+		}
+		in.CampaignID = &campaignID
+	}
+
 	// Where the link is filed (M38). This form posts every field, so an empty
 	// select really is "take it out of every folder" rather than "leave it
 	// alone" — the same rule the checkboxes above follow, and the reason
@@ -762,6 +866,7 @@ func (h *Web) LinkUpdate(w http.ResponseWriter, r *http.Request) {
 			ForwardPath:  forwardPath,
 			BotBlocking:  r.PostFormValue("bot_blocking"),
 			FolderID:     r.PostFormValue("folder_id"),
+			CampaignID:   r.PostFormValue("campaign_id"),
 			// Re-rendered from what was posted, except the password: the box
 			// comes back empty because there is nothing safe to put in it and
 			// nothing the form is entitled to remember.

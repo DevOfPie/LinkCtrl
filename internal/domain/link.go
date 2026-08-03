@@ -129,6 +129,14 @@ type Link struct {
 	// than being sent a copy on every row of every page.
 	FolderID *uuid.UUID `json:"folder_id,omitempty"`
 
+	// CampaignID is the campaign this link belongs to (M41), or nil. The id and
+	// not the name, for exactly the reason FolderID gives above.
+	//
+	// A campaign and a folder are different questions and a link answers both:
+	// a folder is where the link lives and a campaign is what it is for, so a
+	// launch link filed under Product can still belong to Summer 2026.
+	CampaignID *uuid.UUID `json:"campaign_id,omitempty"`
+
 	// ForwardQuery merges the incoming query string into the destination on
 	// redirect. Off by default: destinations were configured deliberately, and
 	// most callers do not expect ?utm_source to reach them.
@@ -223,6 +231,11 @@ type LinkFilter struct {
 	// and the empty answer is the honest one.
 	FolderID *uuid.UUID
 	Unfiled  bool
+	// CampaignID narrows to one campaign (M41). Uncampaigned narrows to the
+	// links carrying none, and the pair works exactly as the folder pair above
+	// does, including which one wins when a request asks for both.
+	CampaignID   *uuid.UUID
+	Uncampaigned bool
 	// DomainID narrows to the links served on one hostname (M40). Nil is no
 	// filter. There is no `unhosted` counterpart, unlike the folder pair above:
 	// links.domain_id is NOT NULL, so every link is on exactly one domain and

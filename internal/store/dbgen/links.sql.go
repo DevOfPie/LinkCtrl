@@ -109,20 +109,27 @@ WHERE l.workspace_id = $1
   -- read "3 of 40 links" under a list of every link in one folder.
   AND (NOT $5::boolean OR l.folder_id IS NULL)
   AND ($6::uuid IS NULL OR l.folder_id = $6::uuid)
+  -- Must mirror ListLinks exactly (M41), for the reason the folder pair above
+  -- says in full: a campaign-filtered page whose total counted the workspace
+  -- would read "5 of 40 links" over a list of five.
+  AND (NOT $7::boolean OR l.campaign_id IS NULL)
+  AND ($8::uuid IS NULL OR l.campaign_id = $8::uuid)
   -- Must mirror ListLinks exactly, for the reason the two filters above say in
   -- full: a page filtered to one hostname whose total counted every domain
   -- would read "4 of 40 links" over a list of four.
-  AND ($7::uuid IS NULL OR l.domain_id = $7::uuid)
+  AND ($9::uuid IS NULL OR l.domain_id = $9::uuid)
 `
 
 type CountLinksParams struct {
-	WorkspaceID uuid.UUID
-	Status      *string
-	Search      *string
-	TagIds      []uuid.UUID
-	Unfiled     bool
-	FolderID    *uuid.UUID
-	DomainID    *uuid.UUID
+	WorkspaceID  uuid.UUID
+	Status       *string
+	Search       *string
+	TagIds       []uuid.UUID
+	Unfiled      bool
+	FolderID     *uuid.UUID
+	Uncampaigned bool
+	CampaignID   *uuid.UUID
+	DomainID     *uuid.UUID
 }
 
 // Only issued when the caller explicitly asks for a total, because counting
@@ -135,6 +142,8 @@ func (q *Queries) CountLinks(ctx context.Context, arg CountLinksParams) (int64, 
 		arg.TagIds,
 		arg.Unfiled,
 		arg.FolderID,
+		arg.Uncampaigned,
+		arg.CampaignID,
 		arg.DomainID,
 	)
 	var count int64
@@ -187,8 +196,8 @@ INSERT INTO links (
     id, workspace_id, domain_id, alias, primary_url,
     title, description, status, expires_at, created_by, forward_query,
     forward_path, password_hash, max_clicks, one_time, require_signature,
-    folder_id
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+    folder_id, campaign_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path, require_signature
 `
 
@@ -210,6 +219,7 @@ type CreateLinkParams struct {
 	OneTime          bool
 	RequireSignature bool
 	FolderID         *uuid.UUID
+	CampaignID       *uuid.UUID
 }
 
 // Links, destinations and tags.
@@ -232,6 +242,7 @@ func (q *Queries) CreateLink(ctx context.Context, arg CreateLinkParams) (Link, e
 		arg.OneTime,
 		arg.RequireSignature,
 		arg.FolderID,
+		arg.CampaignID,
 	)
 	var i Link
 	err := row.Scan(
@@ -648,11 +659,18 @@ WHERE l.workspace_id = $1
   -- walk inside the dashboard's hottest query to do so.
   AND (NOT $5::boolean OR l.folder_id IS NULL)
   AND ($6::uuid IS NULL OR l.folder_id = $6::uuid)
+  -- The campaign filter (M41), in two halves for the reason the folder pair
+  -- above is: "no filter" and "the links in no campaign" are different
+  -- questions. ` + "`" + `uncampaigned` + "`" + ` is what the campaigns page links to when somebody
+  -- asks which links are not attributed to anything yet, which is the question
+  -- every campaign list eventually raises.
+  AND (NOT $7::boolean OR l.campaign_id IS NULL)
+  AND ($8::uuid IS NULL OR l.campaign_id = $8::uuid)
   -- Which hostname the link is served on (M40). One filter and no ` + "`" + `unhosted` + "`" + `
   -- half, unlike the folder pair above: ` + "`" + `links.domain_id` + "`" + ` is NOT NULL, so there
   -- is no third state to ask about — every link is on exactly one domain, and
   -- "no filter" is the only other question there is.
-  AND ($7::uuid IS NULL OR l.domain_id = $7::uuid)
+  AND ($9::uuid IS NULL OR l.domain_id = $9::uuid)
   -- Keyset pagination only works if the predicate compares the same tuple the
   -- ORDER BY sorts on. It did not: every sort filtered on (created_at, id)
   -- while 'clicks' ordered by click_count, so page 2 dropped rows that belonged
@@ -660,23 +678,23 @@ WHERE l.workspace_id = $1
   -- correspondingly-named ORDER BY key, and the id tiebreaker matches its
   -- direction — 'oldest' ascends, so its tiebreaker ascends too.
   AND (
-        $8::uuid IS NULL
-        OR ($9::text = 'oldest'
-              AND (l.created_at, l.id) > ($10::timestamptz, $8::uuid))
-        OR ($9::text = 'clicks'
-              AND (l.click_count, l.id) < ($11::bigint, $8::uuid))
-        OR ($9::text NOT IN ('oldest','clicks')
-              AND (l.created_at, l.id) < ($10::timestamptz, $8::uuid))
+        $10::uuid IS NULL
+        OR ($11::text = 'oldest'
+              AND (l.created_at, l.id) > ($12::timestamptz, $10::uuid))
+        OR ($11::text = 'clicks'
+              AND (l.click_count, l.id) < ($13::bigint, $10::uuid))
+        OR ($11::text NOT IN ('oldest','clicks')
+              AND (l.created_at, l.id) < ($12::timestamptz, $10::uuid))
       )
 ORDER BY
-    CASE WHEN $9::text = 'oldest' THEN l.created_at END ASC,
-    CASE WHEN $9::text = 'clicks' THEN l.click_count END DESC,
-    CASE WHEN $9::text NOT IN ('oldest','clicks') THEN l.created_at END DESC,
+    CASE WHEN $11::text = 'oldest' THEN l.created_at END ASC,
+    CASE WHEN $11::text = 'clicks' THEN l.click_count END DESC,
+    CASE WHEN $11::text NOT IN ('oldest','clicks') THEN l.created_at END DESC,
     -- Ascending tiebreaker for the ascending sort. For the others this key is
     -- NULL on every row, so it ties and the DESC key below decides.
-    CASE WHEN $9::text = 'oldest' THEN l.id END ASC,
+    CASE WHEN $11::text = 'oldest' THEN l.id END ASC,
     l.id DESC
-LIMIT $12
+LIMIT $14
 `
 
 type ListLinksParams struct {
@@ -686,6 +704,8 @@ type ListLinksParams struct {
 	TagIds        []uuid.UUID
 	Unfiled       bool
 	FolderID      *uuid.UUID
+	Uncampaigned  bool
+	CampaignID    *uuid.UUID
 	DomainID      *uuid.UUID
 	CursorID      *uuid.UUID
 	Sort          string
@@ -751,6 +771,8 @@ func (q *Queries) ListLinks(ctx context.Context, arg ListLinksParams) ([]ListLin
 		arg.TagIds,
 		arg.Unfiled,
 		arg.FolderID,
+		arg.Uncampaigned,
+		arg.CampaignID,
 		arg.DomainID,
 		arg.CursorID,
 		arg.Sort,
@@ -1178,8 +1200,15 @@ UPDATE links
        -- because it points at folders(id) and says nothing about tenancy.
        folder_id     = CASE WHEN $15::boolean THEN NULL
                             ELSE COALESCE($16, folder_id) END,
+       -- Which campaign the link belongs to (M41). Three-valued for the reason
+       -- the folder above is, and the third state is the one that matters: a
+       -- link joins a campaign by mistake as easily as it joins one on purpose,
+       -- and without clear_campaign the only way out would be to delete the
+       -- campaign, which would take every other link with it.
+       campaign_id   = CASE WHEN $17::boolean THEN NULL
+                            ELSE COALESCE($18, campaign_id) END,
        updated_at    = now()
- WHERE id = $17 AND workspace_id = $18 AND deleted_at IS NULL
+ WHERE id = $19 AND workspace_id = $20 AND deleted_at IS NULL
 RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path, require_signature
 `
 
@@ -1200,6 +1229,8 @@ type UpdateLinkParams struct {
 	RequireSignature *bool
 	ClearFolder      bool
 	FolderID         *uuid.UUID
+	ClearCampaign    bool
+	CampaignID       *uuid.UUID
 	ID               uuid.UUID
 	WorkspaceID      uuid.UUID
 }
@@ -1224,6 +1255,8 @@ func (q *Queries) UpdateLink(ctx context.Context, arg UpdateLinkParams) (Link, e
 		arg.RequireSignature,
 		arg.ClearFolder,
 		arg.FolderID,
+		arg.ClearCampaign,
+		arg.CampaignID,
 		arg.ID,
 		arg.WorkspaceID,
 	)

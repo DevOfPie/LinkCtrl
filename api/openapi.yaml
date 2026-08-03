@@ -71,6 +71,17 @@ tags:
       A workspace's folder tree: where links are filed. Guarded by the link
       permissions rather than by folder permissions of their own — a folder is
       where a link lives, in the sense a routing rule is where a link points.
+  - name: campaigns
+    description: >
+      A workspace's campaigns: the label a link carries to say what body of work
+      it belongs to. Guarded by the link permissions rather than by campaign
+      permissions of their own, for the reason folders are. **No campaign
+      analytics** — that stays a later phase; the links list filtered by
+      campaign is what this surface answers with.
+  - name: qr
+    description: >
+      A link's QR code. SVG only, and the one non-JSON response this API has
+      besides the spec document itself.
   - name: rules
     description: >
       Routing rules: which visitors a link sends where, evaluated in priority
@@ -353,6 +364,13 @@ paths:
             `link_count` beside that folder in `GET /folders`. An unparseable
             value is ignored rather than matching nothing, so a bookmark to a
             deleted folder shows the links instead of suggesting they are gone.
+        - name: campaign
+          in: query
+          schema: { type: string }
+          description: >
+            A campaign id, or the word `none` for the links carrying no
+            campaign. Read exactly as `folder` above is, including that an
+            unparseable value drops the filter rather than matching nothing.
         - name: domain
           in: query
           schema: { type: string, format: uuid }
@@ -1196,6 +1214,257 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/Validation"
+
+  /links/{id}/qr:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+    get:
+      tags: [qr]
+      operationId: getLinkQR
+      summary: What the link's QR code says, and how it is drawn
+      description: |
+        The JSON view. `GET /links/{id}/qr.svg` beside it is the picture.
+
+        `content` is exactly what the code encodes: the link's short URL with
+        `?src=qr` on it. That parameter is what makes a scan countable — a
+        camera sends no `Referer`, so without it every scan would arrive
+        indistinguishable from somebody typing the URL. It is read by the
+        redirect path, attributed through the existing `referrer` breakdown as
+        the value `qr`, and is **not** stripped before the query reaches the
+        destination.
+
+        Every link has a code. `stored` is false for one whose style has never
+        been set, which renders at the default rather than not at all.
+      responses:
+        "200":
+          description: The code, its style, and the levels a style may name
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QRCodeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [qr]
+      operationId: setLinkQR
+      summary: Set how the link's code is drawn
+      description: |
+        A PUT rather than a PATCH: the style is replaced whole and an omitted
+        field means its default, which makes `{"style": {}}` the way back to
+        plain black on white.
+
+        A style changes the drawing and never the content. Colours are
+        `#rgb` or `#rrggbb` and nothing else — a stored style becomes the
+        attributes of an SVG this server generates, so the vocabulary is closed
+        rather than passed through.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetQRRequest"
+      responses:
+        "200":
+          description: The code, as it will now be drawn
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QRCodeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+    delete:
+      tags: [qr]
+      operationId: deleteLinkQR
+      summary: Put the link's code back to the default style
+      description: |
+        Not "delete the QR code" — there is no such thing to delete, because
+        every link has one. A link that had no stored style still answers 204:
+        "draw this at the default" was already true.
+      responses:
+        "204":
+          description: Back to the default style
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /links/{id}/qr.svg:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+    get:
+      tags: [qr]
+      operationId: getLinkQRSVG
+      summary: The link's QR code, drawn
+      description: |
+        SVG, and only SVG (decision D11): the output is vector text, so no image
+        encoder is in this program's dependency set and nothing rasterises on a
+        request. A PNG download, if it is ever wanted, is an additive change.
+
+        The picture paints its own background across the quiet zone rather than
+        leaving it transparent. A QR code inverted onto a dark field is refused
+        by a large share of scanners, and a transparent one inverts itself the
+        moment it is placed on one.
+
+        A second path rather than content negotiation on `Accept`, because an
+        `<img>` and a download both send an `Accept` header nobody chose.
+      responses:
+        "200":
+          description: The code as an SVG document
+          content:
+            image/svg+xml:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /campaigns:
+    get:
+      tags: [campaigns]
+      operationId: listCampaigns
+      summary: The workspace's campaigns
+      description: |
+        Unpaginated and bounded instead: a campaign list is a picker as much as
+        it is a page, and a picker that paginates is one nobody can choose from.
+
+        `link_count` is the live links carrying the campaign, which has to mean
+        the same thing as the number `GET /links?campaign={id}` returns.
+      responses:
+        "200":
+          description: Every campaign in the workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [campaigns]
+      operationId: createCampaign
+      summary: Create a campaign
+      description: |
+        The slug is optional and is derived from the name when it is absent. It
+        is folded to lowercase letters, digits and hyphens, because it is what a
+        `?campaign=` filter names and a slug that does not survive being copied
+        out of a browser bar is worth less than one that preserves the spelling.
+
+        Two campaigns in a workspace may not share a slug, case-insensitively.
+
+        **The dates describe the work and enforce nothing.** A link in a
+        campaign that has ended still redirects: expiry is a property of the
+        link, and a second weaker one on the campaign would give two answers to
+        "why did this stop".
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCampaignRequest"
+      responses:
+        "201":
+          description: The created campaign
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /campaigns/{campaignID}:
+    parameters:
+      - $ref: "#/components/parameters/CampaignID"
+    get:
+      tags: [campaigns]
+      operationId: getCampaign
+      summary: One campaign
+      description: |
+        `link_count` is zero here whatever the campaign holds. The number costs
+        a grouped scan and the only caller of this endpoint is an edit form,
+        which never shows one; the list is where it is read.
+      responses:
+        "200":
+          description: The campaign
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [campaigns]
+      operationId: updateCampaign
+      summary: Edit a campaign
+      description: |
+        Partial: an omitted field is unchanged. The two schedule bounds are the
+        exception a PATCH cannot express on its own — `clear_starts_at` and
+        `clear_ends_at` remove a bound, because a decoded `null` is
+        indistinguishable from an absent field and guessing wrong either drops a
+        schedule nobody asked to drop or refuses to drop one somebody did.
+
+        An empty `slug` regenerates it from the name.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCampaignRequest"
+      responses:
+        "200":
+          description: The campaign
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+    delete:
+      tags: [campaigns]
+      operationId: deleteCampaign
+      summary: Delete a campaign
+      description: |
+        **The links survive.** Every link carrying the campaign stops carrying
+        it, in the same transaction; none is deleted, archived or moved.
+        Deleting a label deletes no link.
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /folders:
     get:
@@ -2586,6 +2855,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    CampaignID:
+      name: campaignID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     DomainID:
       name: domainID
       in: path
@@ -3091,6 +3365,161 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 
+    Campaign:
+      type: object
+      additionalProperties: false
+      required: [id, workspace_id, name, slug, description, link_count, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        workspace_id: { type: string, format: uuid }
+        name: { type: string, maxLength: 64 }
+        slug:
+          type: string
+          maxLength: 48
+          description: >
+            Lowercase letters, digits and hyphens. Unique in the workspace,
+            case-insensitively, because it is what a `?campaign=` filter names.
+        description: { type: string, maxLength: 500 }
+        starts_at:
+          type: string
+          format: date-time
+          description: >
+            Descriptive. Nothing consults it at redirect time, and a link in a
+            campaign that has not started still redirects.
+        ends_at:
+          type: string
+          format: date-time
+          description: Descriptive, exactly as `starts_at` is.
+        link_count:
+          type: integer
+          format: int64
+          description: >
+            The live links carrying this campaign — the same number
+            `GET /links?campaign={id}` returns. Zero on `GET /campaigns/{id}`,
+            which does not count.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CampaignList:
+      type: object
+      additionalProperties: false
+      required: [campaigns]
+      properties:
+        campaigns:
+          type: array
+          items: { $ref: "#/components/schemas/Campaign" }
+
+    CreateCampaignRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 64 }
+        slug:
+          type: string
+          maxLength: 48
+          description: Derived from the name when absent or empty.
+        description: { type: string, maxLength: 500 }
+        starts_at: { type: string, format: date-time, nullable: true }
+        ends_at: { type: string, format: date-time, nullable: true }
+
+    UpdateCampaignRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 64 }
+        slug:
+          type: string
+          maxLength: 48
+          description: An empty value regenerates the slug from the name.
+        description: { type: string, maxLength: 500 }
+        starts_at: { type: string, format: date-time, nullable: true }
+        ends_at: { type: string, format: date-time, nullable: true }
+        clear_starts_at:
+          type: boolean
+          description: Removes the start bound. Wins over `starts_at`.
+        clear_ends_at:
+          type: boolean
+          description: Removes the end bound. Wins over `ends_at`.
+
+    QRStyle:
+      type: object
+      additionalProperties: false
+      description: >
+        How a code is drawn. Every field is optional and an omitted one is its
+        default, so `{}` is plain black on white.
+      properties:
+        foreground:
+          type: string
+          pattern: "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+          description: Default `#000000`.
+        background:
+          type: string
+          pattern: "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+          description: >
+            Default `#ffffff`, and always painted. It covers the quiet zone as
+            well as the code, so the picture does not take the colour of
+            whatever it is placed on.
+        level:
+          type: string
+          enum: [L, M, Q, H]
+          description: >
+            Error correction, as ISO/IEC 18004 names the levels. Default `M`. A
+            higher level survives more damage and packs the code tighter at the
+            same printed size.
+        margin:
+          type: integer
+          minimum: 0
+          maximum: 16
+          description: >
+            The quiet zone, in modules. Default 4, which is the minimum
+            ISO/IEC 18004 specifies.
+        scale:
+          type: integer
+          minimum: 2
+          maximum: 32
+          description: >
+            Pixels per module. Decides the `width` and `height` attributes only
+            — the drawing itself is in module units inside a `viewBox`, so a
+            consumer sizing the element with CSS gets the same code at any size.
+            Default 8.
+
+    QRCode:
+      type: object
+      additionalProperties: false
+      required: [link_id, content, style, stored]
+      properties:
+        link_id: { type: string, format: uuid }
+        content:
+          type: string
+          description: >
+            Exactly what the picture encodes: the link's short URL carrying
+            `?src=qr`.
+        style: { $ref: "#/components/schemas/QRStyle" }
+        stored:
+          type: boolean
+          description: >
+            False for a link whose style has never been set, which renders at
+            the default rather than not at all.
+
+    QRCodeResponse:
+      type: object
+      additionalProperties: false
+      required: [qr, levels]
+      properties:
+        qr: { $ref: "#/components/schemas/QRCode" }
+        levels:
+          type: array
+          description: The error-correction levels a style may name.
+          items: { type: string, enum: [L, M, Q, H] }
+
+    SetQRRequest:
+      type: object
+      additionalProperties: false
+      required: [style]
+      properties:
+        style: { $ref: "#/components/schemas/QRStyle" }
+
     FolderList:
       type: object
       additionalProperties: false
@@ -3507,6 +3936,14 @@ components:
             link starts as. The id and not the name: a name here would be stale
             the moment somebody renamed the folder, and `GET /folders` answers
             names once rather than on every row of every page.
+        campaign_id:
+          type: string
+          format: uuid
+          description: >
+            The campaign the link belongs to. Absent for a link carrying none.
+            The id and not the name, for the reason `folder_id` gives — and a
+            different question from it: a folder is where the link lives, a
+            campaign is what it is for, so a link may carry both.
         forward_query:
           type: boolean
           description: When true, a visitor's query string is merged into the destination on redirect. The destination's own parameters win on conflict.
@@ -3725,6 +4162,13 @@ components:
           description: >
             Files the new link. Absent or null leaves it unfiled. A folder in
             another workspace is refused with `folder_id`/`not_found`.
+        campaign_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            Labels the new link. Absent or null leaves it unlabelled. A campaign
+            in another workspace is refused with `campaign_id`/`not_found`.
         domain_id:
           type: string
           format: uuid
@@ -3794,6 +4238,12 @@ components:
             `expires_at` above spells its removal rather than inventing a second
             idiom on one type — and without an explicit removal a filed link
             could never be unfiled.
+        campaign_id:
+          type: string
+          description: |
+            Labels the link, or takes it out of its campaign. **An empty string
+            removes the label**; an absent key leaves it alone. Spelled exactly
+            as `folder_id` above spells the same three states.
 
     DayPoint:
       type: object

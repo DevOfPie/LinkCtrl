@@ -470,17 +470,55 @@ func demoCoverage() []demoFeature {
 				"chose rather than answering 404",
 		},
 
+		{
+			// M41 asserted this count was *zero* until M41 was built, which is
+			// the boundary-row move M34, M36, M39 and M40 each made before it.
+			//
+			// Bounded above as well as below, and the ceiling is the assertion.
+			// Exactly one link carries a stored style; every other link's code
+			// is drawn at the default. A demo where all of them are styled shows
+			// one state, and a reader cannot see that a style is a preference —
+			// nor that "back to black on white" is a button that appears only on
+			// a link that has one.
+			Milestone: "M41", Feature: "A QR code somebody has styled",
+			Query: `SELECT count(*) FROM qr_codes
+			         WHERE workspace_id IN (` + demoWorkspaces + `)`,
+			Min: 1, Max: 1,
+			Shows: "the QR panel with a code that is not black on white, and the " +
+				"reset button beside it — with no styled code the panel shows one " +
+				"state and the style form looks like it does nothing",
+		},
+		{
+			Milestone: "M41", Feature: "Campaigns, more than one, and one of them over",
+			Query: `SELECT count(*) FROM campaigns
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND deleted_at IS NULL`,
+			Min: 3,
+			Shows: "the campaigns page as a list rather than as a single row, with " +
+				"a schedule column that means something — one campaign has closed, " +
+				"and its link still redirects, which is what \"the dates enforce " +
+				"nothing\" looks like",
+		},
+		{
+			Milestone: "M41", Feature: "Links carrying a campaign, and links carrying none",
+			Query: `SELECT count(*) FROM links
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND deleted_at IS NULL AND campaign_id IS NOT NULL`,
+			Min: 4,
+			// Bounded above for the reason the folder row is: labelling every
+			// link would empty the "No campaign" filter, and the campaign counts
+			// would stop being visibly a subset of the catalogue.
+			Max: 15,
+			Shows: "the links list filtered by campaign, and the \"No campaign\" " +
+				"filter beside it — one of them is empty if every link is labelled " +
+				"or none is",
+		},
+
 		// The boundary. Everything below is a milestone that has not been built,
 		// so the demo showing nothing is correct — and these rows are what make
 		// the next person add a feature row above instead of quietly seeding
 		// something the list does not mention. Turn a row into a real one when its
 		// milestone lands; do not delete it.
-		{
-			Milestone: "M41", Feature: "QR codes and campaigns (not built yet)",
-			Query:     `SELECT count(*) FROM qr_codes`,
-			MaxIsZero: true,
-			Shows:     "nothing: M41 is unbuilt",
-		},
 		{
 			Milestone: "M42", Feature: "Webhooks (not built yet)",
 			Query:     `SELECT count(*) FROM webhooks`,

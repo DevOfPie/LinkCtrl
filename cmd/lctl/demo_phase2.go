@@ -21,6 +21,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
+	"github.com/DevOfPie/LinkCtrl/internal/qr"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 	"github.com/DevOfPie/LinkCtrl/internal/team"
 )
@@ -333,6 +334,9 @@ func (s *demoSeeder) run(ctx context.Context, primary []demoLink, ids map[int]uu
 		return err
 	}
 	if err := s.seedDomains(ctx); err != nil {
+		return err
+	}
+	if err := s.seedCampaigns(ctx, primary, ids); err != nil {
 		return err
 	}
 	if err := s.seedBlockingAndDisputes(ctx, people); err != nil {
@@ -962,6 +966,115 @@ func (s *demoSeeder) seedFolders(ctx context.Context, cat []demoLink, ids map[in
 	return nil
 }
 
+// demoCampaigns are the campaigns the demo shows, and the links each holds.
+//
+// **Three, with different schedules, because one would show nothing.** The list
+// is the page; the schedule is the column beside it that says a campaign is a
+// span of work rather than a tag; and a campaign whose window has closed is the
+// state that makes the "the dates enforce nothing" sentence checkable — its
+// links still redirect, and a reader can follow one and see that.
+//
+// Deliberately not every link. The campaigns page links through to "the links in
+// no campaign", and a catalogue where every link is labelled makes that page
+// empty and the filter beside it pointless — the same ceiling demoFolders keeps
+// for the same reason.
+func demoCampaigns() []demoCampaign {
+	return []demoCampaign{
+		{
+			name: "Summer 2026", slug: "summer-2026",
+			description: "The June push: launch assets, the sale page and the webinar.",
+			startsIn:    -20, endsIn: 40,
+			links: []string{"summer-sale", "launch", "webinar"},
+		},
+		{
+			name: "Product launch", slug: "product-launch",
+			description: "Everything pointing at the 2026 roadmap and what shipped.",
+			startsIn:    -5, endsIn: 25,
+			links: []string{"roadmap-2026", "whats-new"},
+		},
+		{
+			// Closed, and its link still redirects. That is the whole of D-for-
+			// descriptive: a campaign is a label with dates on it, and expiry
+			// belongs to the link.
+			name: "Spring webinar series", slug: "spring-webinars",
+			description: "Finished. The links still work, which is the point.",
+			startsIn:    -120, endsIn: -30,
+			links: []string{"demo-call"},
+		},
+	}
+}
+
+// demoCampaign is one seeded campaign. The two offsets are days from now, so the
+// seeded schedule moves with the instance rather than ageing into the past.
+type demoCampaign struct {
+	name        string
+	slug        string
+	description string
+	startsIn    int
+	endsIn      int
+	links       []string
+}
+
+// demoQRStyled is the link whose QR code carries a stored style.
+//
+// One, not all of them. Every link has a code — the endpoint answers for any of
+// them — so seeding a style everywhere would show one state; seeding exactly one
+// shows both, and the link detail page's "back to black on white" button only
+// appears on a link that has a stored style at all.
+const demoQRStyled = "summer-sale"
+
+// seedCampaigns creates the campaigns, labels the links, and styles one QR code.
+//
+// Through link.Service like everything else in this file: the slug rule, the
+// schedule check and the workspace scoping all apply to the demo's own data, so
+// a campaign the seeder can create is a campaign the product would have
+// accepted.
+func (s *demoSeeder) seedCampaigns(ctx context.Context, cat []demoLink, ids map[int]uuid.UUID) error {
+	var labelled int
+	for _, spec := range demoCampaigns() {
+		starts := s.now.AddDate(0, 0, spec.startsIn)
+		ends := s.now.AddDate(0, 0, spec.endsIn)
+		campaign, err := s.link.CreateCampaign(ctx, s.owner, link.CreateCampaignInput{
+			Name: spec.name, Slug: spec.slug, Description: spec.description,
+			StartsAt: &starts, EndsAt: &ends,
+		})
+		if err != nil {
+			return fmt.Errorf("create campaign %q: %w", spec.name, err)
+		}
+		for _, alias := range spec.links {
+			id, ok := demoLinkID(cat, ids, alias)
+			if !ok {
+				return fmt.Errorf("demo catalogue has no %q link for campaign %q",
+					alias, spec.name)
+			}
+			if _, err := s.link.Update(ctx, s.owner, id, link.UpdateInput{
+				CampaignID: &campaign.ID,
+			}); err != nil {
+				return fmt.Errorf("label /%s with %q: %w", alias, spec.name, err)
+			}
+			labelled++
+		}
+	}
+
+	styled, ok := demoLinkID(cat, ids, demoQRStyled)
+	if !ok {
+		return fmt.Errorf("demo catalogue has no %q link to style a QR code on", demoQRStyled)
+	}
+	// A dark blue on a pale field, which is a real brand choice and still passes
+	// the contrast a scanner needs. Level Q, so a printed code survives being
+	// scuffed — the reason anybody changes the level at all.
+	if _, err := s.link.SetQRStyle(ctx, s.owner, styled, qr.Style{
+		Foreground: "#123a6b", Background: "#f5f7fa",
+		Level: qr.LevelQ, Margin: 4, Scale: 10,
+	}); err != nil {
+		return fmt.Errorf("style the QR code on /%s: %w", demoQRStyled, err)
+	}
+
+	fmt.Fprintf(os.Stderr, "campaigns: %d, holding %d links; 1 QR code styled\n",
+		len(demoCampaigns()), labelled)
+	return nil
+}
+
 // demoDomains are the hostnames the demo registers, one per workspace.
 //
 // **Two, and in different workspaces, because one would show nothing.** A single
@@ -1301,6 +1414,20 @@ func demoResetPhase2(ctx context.Context, tx pgxExecutor, orgID, userID uuid.UUI
 			DELETE FROM domains
 			 WHERE organization_id = $1 AND hostname = ANY($2::text[])`,
 			[]any{orgID, demoHostnames()}},
+
+		// The campaigns and the styled QR code (M41). The QR row goes first
+		// only for readability — `qr_codes.link_id` is ON DELETE CASCADE, so it
+		// would go with the links either way — while the campaigns need a step
+		// of their own: the product soft-deletes them, so nothing cascades, and
+		// a second run would refuse every slug this one took.
+		{"qr codes", `
+			DELETE FROM qr_codes
+			 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
+			[]any{orgID}},
+		{"campaigns", `
+			DELETE FROM campaigns
+			 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
+			[]any{orgID}},
 
 		{"invitations", `DELETE FROM invitations WHERE organization_id = $1`, []any{orgID}},
 		{"notifications", `DELETE FROM notifications WHERE user_id = $1`, []any{userID}},

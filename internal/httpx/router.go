@@ -191,15 +191,41 @@ func NewRouter(d Deps) http.Handler {
 			// The move is its own POST rather than a field on the PATCH, because
 			// `parent_id: null` has to mean "the top level" and a PATCH field's
 			// null means "unchanged" everywhere else on this API.
+			// QR codes (M41), nested under the link because a code is a picture
+			// of that link's own short URL. No permission of their own either:
+			// seeing the code is links.read and styling it is links.update — see
+			// internal/link/qr.go and decisions.md, D75.
+			//
+			// The `.svg` sibling is the picture and is the one non-JSON response
+			// this API has besides the spec document. A second path rather than
+			// Accept negotiation, because an <img> and a download both send an
+			// Accept header nobody chose.
+			//
+			// PUT rather than PATCH: an omitted style field means its default,
+			// which is what makes "back to plain black on white" an empty object.
+			"GET " + APIPrefix + "/links/{id}/qr":            api.GetQR,
+			"GET " + APIPrefix + "/links/{id}/qr.svg":        api.GetQRSVG,
+			"PUT " + APIPrefix + "/links/{id}/qr":            api.SetQR,
+			"DELETE " + APIPrefix + "/links/{id}/qr":         api.DeleteQR,
 			"GET " + APIPrefix + "/folders":                  api.ListFolders,
 			"POST " + APIPrefix + "/folders":                 api.CreateFolder,
 			"PATCH " + APIPrefix + "/folders/{folderID}":     api.UpdateFolder,
 			"DELETE " + APIPrefix + "/folders/{folderID}":    api.DeleteFolder,
 			"POST " + APIPrefix + "/folders/{folderID}/move": api.MoveFolder,
-			"GET " + APIPrefix + "/tags":                     api.ListTags,
-			"DELETE " + APIPrefix + "/tags/{id}":             api.DeleteTag,
-			"GET " + APIPrefix + "/domain":                   api.GetDomain,
-			"PATCH " + APIPrefix + "/domain":                 api.UpdateDomain,
+			// Campaigns (M41). A sibling collection rather than a subresource of
+			// a link, exactly as folders are: a campaign exists whether or not
+			// anything carries it, and which links do is a question the links
+			// list answers with `?campaign=`. Guarded by the link permissions
+			// (D75), so no seed migration and no delegability call.
+			"GET " + APIPrefix + "/campaigns":                 api.ListCampaigns,
+			"POST " + APIPrefix + "/campaigns":                api.CreateCampaign,
+			"GET " + APIPrefix + "/campaigns/{campaignID}":    api.GetCampaign,
+			"PATCH " + APIPrefix + "/campaigns/{campaignID}":  api.UpdateCampaign,
+			"DELETE " + APIPrefix + "/campaigns/{campaignID}": api.DeleteCampaign,
+			"GET " + APIPrefix + "/tags":                      api.ListTags,
+			"DELETE " + APIPrefix + "/tags/{id}":              api.DeleteTag,
+			"GET " + APIPrefix + "/domain":                    api.GetDomain,
+			"PATCH " + APIPrefix + "/domain":                  api.UpdateDomain,
 			// Registered hostnames (M39). A different resource from the
 			// singular /domain above, which is the instance default's settings
 			// and predates there being more than one domain.
@@ -417,11 +443,21 @@ func NewRouter(d Deps) http.Handler {
 			// is on, which is the enhancement rather than the mechanism — and
 			// dragging is deliberately absent, because a drag target is
 			// unreachable by keyboard and unreachable without script.
-			"GET /folders":                    web.FoldersPage,
-			"POST /folders":                   web.FolderCreate,
-			"POST /folders/{folderID}":        web.FolderRename,
-			"POST /folders/{folderID}/move":   web.FolderMove,
-			"POST /folders/{folderID}/delete": web.FolderDelete,
+			// Campaigns (M41). The same three forms and the same no-JavaScript
+			// shape as the folder page, minus the move: a campaign has no
+			// parent, so there is nowhere to move one to. The QR form below is
+			// on the link's own page rather than here, because a code belongs to
+			// a link and not to a campaign.
+			"GET /campaigns":                      web.CampaignsPage,
+			"POST /campaigns":                     web.CampaignCreate,
+			"POST /campaigns/{campaignID}":        web.CampaignUpdate,
+			"POST /campaigns/{campaignID}/delete": web.CampaignDelete,
+			"POST /links/{id}/qr":                 web.LinkQRStyle,
+			"GET /folders":                        web.FoldersPage,
+			"POST /folders":                       web.FolderCreate,
+			"POST /folders/{folderID}":            web.FolderRename,
+			"POST /folders/{folderID}/move":       web.FolderMove,
+			"POST /folders/{folderID}/delete":     web.FolderDelete,
 			// Registered hostnames (M39). Three POSTs and no JavaScript, like
 			// the folder page: registering, renaming and removing are each a
 			// form that submits on its own. The page exists to say what the API
@@ -795,7 +831,8 @@ func (h hostRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // alias that shadows it; TestReservedListCoversRegisteredRoutes enforces that.
 var dashboardPatterns = []string{
 	"/{$}", "/login", "/logout", "/setup", "/dashboard", "/docs",
-	"/links", "/links/", "/folders", "/folders/", "/keys", "/keys/", "/account", "/account/",
+	"/links", "/links/", "/folders", "/folders/", "/campaigns", "/campaigns/",
+	"/keys", "/keys/", "/account", "/account/",
 	"/domains", "/domains/",
 	"/notifications", "/notifications/", "/theme", "/workspace/", "/feeds",
 	"/invites", "/invites/", "/invite/", "/disputes", "/disputes/",

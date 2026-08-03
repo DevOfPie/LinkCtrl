@@ -40,6 +40,10 @@ type createLinkRequest struct {
 	ForwardPath  bool     `json:"forward_path"`
 	// FolderID files the new link (M38). Absent or null leaves it unfiled.
 	FolderID *uuid.UUID `json:"folder_id"`
+	// CampaignID labels the new link (M41). Absent or null leaves it unlabelled.
+	// A folder and a campaign are different questions — where the link lives and
+	// what it is for — so a link may carry both, one or neither.
+	CampaignID *uuid.UUID `json:"campaign_id"`
 	// DomainID names the hostname to serve the link on (M40). Absent or null
 	// takes the workspace's own default. It must be verified: a link on an
 	// unverified hostname would be a short URL that resolves nowhere.
@@ -66,7 +70,8 @@ func (a *LinkAPI) Create(w http.ResponseWriter, r *http.Request) {
 		ForwardQuery: req.ForwardQuery, ForwardPath: req.ForwardPath,
 		Password: req.Password, MaxClicks: req.MaxClicks, OneTime: req.OneTime,
 		RequireSignature: req.RequireSignature, FolderID: req.FolderID,
-		DomainID: req.DomainID,
+		CampaignID: req.CampaignID,
+		DomainID:   req.DomainID,
 	}
 	if req.ExpiresAt != nil && *req.ExpiresAt != "" {
 		at, err := time.Parse(time.RFC3339, *req.ExpiresAt)
@@ -121,6 +126,13 @@ func (a *LinkAPI) List(w http.ResponseWriter, r *http.Request) {
 		f.Unfiled = true
 	} else if id, err := uuid.Parse(raw); err == nil {
 		f.FolderID = &id
+	}
+	// The campaign filter (M41), spelled exactly as the folder filter above is
+	// and dropping just as quietly when its id names nothing.
+	if raw := q.Get("campaign"); raw == campaignFilterNone {
+		f.Uncampaigned = true
+	} else if id, err := uuid.Parse(raw); err == nil {
+		f.CampaignID = &id
 	}
 	// The domain filter (M40), which the links list gained alongside custom
 	// domains: once a workspace serves links on more than one hostname, "which
@@ -178,6 +190,9 @@ type updateLinkRequest struct {
 	// unambiguous — no folder has an empty id — and without it a filed link
 	// could never be unfiled.
 	FolderID *string `json:"folder_id"`
+	// CampaignID is which campaign the link carries (M41), spelling its three
+	// states exactly as FolderID above does.
+	CampaignID *string `json:"campaign_id"`
 
 	// The gates (M35). Two of them need three states, and both spell the third
 	// the way `expires_at` already does on this same type: an absent key leaves
@@ -242,6 +257,22 @@ func (a *LinkAPI) Update(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			in.FolderID = &folderID
+		}
+	}
+	if req.CampaignID != nil {
+		if *req.CampaignID == "" {
+			in.ClearCampaign = true
+		} else {
+			campaignID, perr := uuid.Parse(*req.CampaignID)
+			if perr != nil {
+				WriteError(w, r, domain.ValidationErrors{{
+					Field: "campaign_id", Code: "invalid",
+					Message: "campaign_id must be a campaign's id, or empty to take the " +
+						"link out of its campaign",
+				}})
+				return
+			}
+			in.CampaignID = &campaignID
 		}
 	}
 	if req.BotBlocking != nil {

@@ -150,6 +150,107 @@ Folders need no permission of their own. Seeing the tree and filtering by it is
 deleting is `links.delete`. A viewer can therefore read the tree, and an editor
 can organise it.
 
+### Campaigns
+
+A campaign is a label saying what body of work a link belongs to. It is not a
+folder and it does not replace one: a folder is *where a link lives*, a campaign
+is *what it is for*, so a launch link filed under Product can belong to Summer
+2026 at the same time.
+
+**Campaigns** at the top of the links list opens the page. Create one with a name;
+the slug is derived from it unless you type one, and it is folded to lowercase
+letters, digits and hyphens because it is what a filter URL names. Two campaigns
+in one workspace cannot share a slug, ignoring case.
+
+**The dates describe the campaign and enforce nothing.** A link in a campaign
+that ended last month redirects exactly as it did before it ended. Expiry is a
+property of the link, and putting a second, weaker one on the campaign would give
+two answers to "why did this stop working" — and would put a second table on the
+redirect path to find out. The page shows the schedule and says so.
+
+**Deleting a campaign keeps every link it held.** They stop carrying it; none is
+deleted, archived or moved. The **No campaign** filter finds them afterwards.
+
+To label a link, use the **Campaign** select on the link's own page; the first
+option, *No campaign*, is how a link comes back out. Over the API it is
+`campaign_id` on create and update, where an empty string removes the label —
+the same idiom `folder_id` uses:
+
+```sh
+curl -sS -X PATCH "$BASE/api/v1/links/$LINK_ID" \
+  -H "Authorization: Bearer $LINKCTRL_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"campaign_id": "'"$CAMPAIGN_ID"'"}'
+```
+
+The links list filters with `?campaign=<id>`, and `?campaign=none` returns
+everything carrying no campaign.
+
+**There is no campaign analytics.** No per-campaign click total, chart or export
+exists, and none is planned for this phase: computing one means a new pass over
+every click event, and the rollup job that would carry it has only just been
+rewritten to fit inside its own interval. The filtered links list is what answers
+"how is this campaign doing", one link at a time.
+
+Campaigns need no permission of their own, exactly as folders do not. Reading the
+list and filtering by it is `links.read`; creating is `links.create`, editing is
+`links.update`, deleting is `links.delete`.
+
+### QR codes
+
+Every link has one. There is nothing to create and no row to make: open a link's
+page and the code is drawn under **QR code**, with a **Download the SVG** link
+beside it.
+
+**SVG only.** The code is vector text, so it prints at any size, and no image
+encoder is anywhere in this program. There is no PNG download, and there is no
+way to have two codes for one link.
+
+**The code encodes your short URL with `?src=qr` on it**, and that is what makes
+a scan countable. A camera sends no `Referer` header, so without the parameter
+every scan would arrive indistinguishable from somebody typing the URL by hand.
+Scans show up in the link's **Referrers** breakdown as `qr`, beside `direct` —
+counted, deduplicated by visitor and filtered for bots like every other click.
+Two things follow: somebody who types `?src=qr` by hand is counted as a scan, and
+two printed codes for one link cannot be told apart.
+
+**Restyling changes the drawing and never the content.** The form takes a
+foreground colour, a background colour, an error-correction level (`L`, `M`, `Q`,
+`H` — higher survives more damage and packs the code tighter at the same printed
+size), a quiet zone in modules, and a module size in pixels. **Back to black on
+white** appears once a style is stored.
+
+**The code does not follow your theme.** It paints its own background across its
+quiet zone and defaults to black on white in both light and dark mode, because a
+QR code inverted onto a dark field is refused by a large share of scanners and a
+transparent one inverts itself the moment somebody switches theme. The frame
+around the code is what the theme colours. The form will accept a low-contrast
+pair if that is what your brand wants; it refuses the two that are certainly
+broken — the same colour twice, and anything that is not a `#rgb` or `#rrggbb`
+colour.
+
+Over the API:
+
+```sh
+# The picture.
+curl -sS "$BASE/api/v1/links/$LINK_ID/qr.svg" \
+  -H "Authorization: Bearer $LINKCTRL_API_KEY" -o code.svg
+
+# What it encodes, and how it is drawn.
+curl -sS "$BASE/api/v1/links/$LINK_ID/qr" \
+  -H "Authorization: Bearer $LINKCTRL_API_KEY"
+
+# Restyle it. An omitted field is its default, so {} is plain black on white.
+curl -sS -X PUT "$BASE/api/v1/links/$LINK_ID/qr" \
+  -H "Authorization: Bearer $LINKCTRL_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"style": {"foreground": "#123a6b", "level": "Q"}}'
+```
+
+Seeing a code is `links.read` and styling one is `links.update`: a QR code is a
+picture of the link's own short URL, so anybody who can see the link can see its
+code.
+
 ### Reading the analytics
 
 Numbers come from daily rollups, not from raw events, which is what keeps them
@@ -165,6 +266,17 @@ fast once the click table is large. Two honest caveats travel with them:
 Every API response carrying these numbers includes that caveat as a `caveat`
 field. Bots are recorded and counted separately, and excluded from the headline
 figures.
+
+**The Referrers breakdown holds two values that are not hostnames.** `direct` is
+a click that sent no `Referer` header — a typed URL, a link in a native app, a
+browser configured not to send one. `qr` is a scan of this link's QR code, which
+carries `?src=qr` in the picture because a camera sends no referrer either. Both
+sit beside the real hostnames because they answer the same question. `?src=`
+accepts no other value: anything else is ignored and the click is attributed as
+it would have been without the parameter.
+
+Whether a QR code is scanned or its URL is typed cannot be distinguished — the
+label travels in the URL, and anybody can type it.
 
 Country breakdowns need a GeoIP database, which cannot be shipped in the image —
 see [deployment.md](deployment.md#optional-geographic-analytics). Without one the page says the data is
@@ -479,6 +591,14 @@ Query forwarding is per-link and off by default: set `forward_query` (a checkbox
 on the link's edit form, a boolean in the API) and the visitor's query string is
 merged into the destination, with the destination's own parameters winning on
 conflict.
+
+**`src` is a reserved parameter**, read by this server on every redirect. It is
+what a QR code carries — `?src=qr` — so a scan can be told apart from a typed
+URL, and it is the only value the parameter accepts; anything else is ignored
+entirely. Unlike the signature parameters below, **it is not stripped**: with
+query forwarding on it reaches your destination like any other parameter, because
+a source label is not a credential and a destination whose own analytics also see
+it is better informed rather than compromised.
 
 **Deep-link path forwarding** is the other half, and the same shape:
 `forward_path`, per link, off by default. With it on, path segments after the

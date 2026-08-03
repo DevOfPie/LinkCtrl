@@ -323,7 +323,6 @@ type QrCode struct {
 	LinkID      uuid.UUID
 	WorkspaceID uuid.UUID
 	Style       []byte
-	ScanCount   int64
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }

@@ -29,8 +29,16 @@ type Event struct {
 	IP          netip.Addr
 	UserAgent   string
 	Referrer    string
-	Language    string
-	LatencyUS   int32
+	// Source is a resolved attribution token (M41) — see domain.ClickSource. It
+	// replaces the referrer host on the stored row when set, because the clicks
+	// it describes carry no Referer at all: a QR scan comes from a camera.
+	//
+	// No new column and no new dimension: the value lands in `referrer_host` and
+	// is rolled up as the `referrer` breakdown, beside the `direct` sentinel that
+	// column already holds for a click with no referrer.
+	Source    string
+	Language  string
+	LatencyUS int32
 
 	// TrackReturning asks the ingester to remember this visitor in the
 	// within-day returning-visitor set (M34).
@@ -358,6 +366,25 @@ type linkCount struct {
 // is where it would read best. Appending leaves the sixteen positions that
 // existed before it untouched, so the edit that added it could not silently
 // shift any of them.
+// referrerOrSource decides what goes in `referrer_host` (M41).
+//
+// The source wins when there is one, and there is one only for a click carrying
+// a value from domain's closed vocabulary. The two cannot both be meaningful:
+// a scan sends no Referer, so the branch is a choice between a token and an
+// empty string rather than between two facts about the same visit.
+//
+// It returns the source verbatim rather than passing it through ReferrerHost.
+// That function exists to strip a URL down to its host and to throw away the
+// personal data the rest of a referrer carries; a token that never was a URL
+// has nothing to strip, and running it through anyway would make the stored
+// value depend on a parser it has no reason to meet.
+func referrerOrSource(ev Event) string {
+	if ev.Source != "" {
+		return ev.Source
+	}
+	return ReferrerHost(ev.Referrer)
+}
+
 var clickEventColumns = []string{
 	"id", "link_id", "workspace_id", "occurred_at", "visitor_hash",
 	"is_first_visit", "country", "region", "city", "device", "browser",
@@ -427,7 +454,7 @@ func (i *Ingester) prepare(ctx context.Context, batch []Event) ([][]any, map[uui
 			cls.Browser,
 			cls.OS,
 			PrimaryLanguage(ev.Language),
-			ReferrerHost(ev.Referrer),
+			referrerOrSource(ev),
 			cls.IsBot,
 			ev.LatencyUS,
 			// Last, matching clickEventColumns. See the comment there for why

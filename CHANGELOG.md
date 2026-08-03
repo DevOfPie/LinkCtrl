@@ -72,6 +72,65 @@ migrations run at boot.
 
 ### Added
 
+- **Every link now has a QR code, and scanning one is counted.** `GET
+  /api/v1/links/{id}/qr.svg` draws it; `GET /api/v1/links/{id}/qr` says what it
+  encodes and how it is drawn; `PUT` the same path stores a style — foreground,
+  background, error-correction level, quiet zone and module size — and `DELETE`
+  puts it back to plain black on white. The link's own page shows the code inline
+  with the same controls and a download beside it.
+
+  **SVG only**, by decision: the output is vector text, so no image encoder is in
+  this program's dependency set and nothing rasterises on a request. A code
+  prints at any size. There is no PNG download and no way to have two codes for
+  one link.
+
+  **The code paints its own white background and stays black on white in both
+  themes.** A QR code inverted onto a dark field is refused by a large share of
+  scanners, and a transparent one inverts itself the moment somebody switches to
+  dark mode — so the picture does not follow the theme and the frame around it
+  does. The style form will accept a low-contrast pair if that is what your brand
+  wants; it refuses the same colour twice and anything that is not a hex colour.
+
+  **A scan is an ordinary click, labelled `qr`.** The code encodes your short URL
+  with `?src=qr` on it, because a camera sends no referrer and there is nowhere
+  else the fact could come from. Scans then appear in the Referrers breakdown as
+  `qr`, beside the `direct` you already had, with no new table, column or
+  dimension — so they are deduplicated by visitor, filtered for bots and broken
+  down by device and country like everything else. Two things follow and are
+  worth knowing: anybody who types `?src=qr` by hand is counted as a scan, and
+  two printed codes for one link cannot be told apart. **Any other `?src=` value
+  is ignored**, deliberately — the analytics table keys on that value, so an open
+  parameter would let anybody grow it without bound.
+
+  `?src=qr` is **forwarded** to your destination when a link has query forwarding
+  on, unlike the signature parameters, which are stripped. A signature is a
+  credential; a source label is not.
+
+  Nothing to do on upgrade. Codes are generated on demand and no link needs a row
+  until somebody restyles its code.
+
+- **Campaigns: label your links with the work they belong to, and filter by it.**
+  `GET|POST /api/v1/campaigns`, `GET|PATCH|DELETE /api/v1/campaigns/{id}`, and a
+  Campaigns page beside Folders. A link carries a campaign through `campaign_id`
+  on create and update, and `GET /api/v1/links?campaign={id}` — or
+  `?campaign=none` — filters the list, exactly as the folder filter does.
+
+  A slug is derived from the name if you do not give one and is unique per
+  workspace, because it is what a filter URL names. Start and end dates
+  **describe** the campaign and enforce nothing: a link in a campaign that ended
+  last month redirects exactly as it did before, because expiry is a property of
+  the link. **Deleting a campaign keeps every link it held** — they stop carrying
+  it, and none is deleted, archived or moved.
+
+  A link can carry a folder and a campaign at the same time; they answer
+  different questions. Campaigns are guarded by the link permissions you already
+  have rather than by new ones, so a viewer sees and filters by them and an
+  editor manages them.
+
+  **There is no per-campaign analytics** — no click total, chart or export. That
+  is a later phase, because computing one means a new pass over every click
+  event, stacked on the rollup job this release has just rewritten.
+
 - **A workspace can serve its short links on a hostname of its own, once it has
   proved it controls the name.** Registering a hostname is not enough and never
   becomes enough: until a DNS TXT record published in your zone has been read
@@ -492,6 +551,20 @@ migrations run at boot.
   notification is unchanged and does not depend on one; the email is the
   addition, and it is the only message this product sends to somebody who did not
   choose to be an administrator.
+
+
+### Removed
+
+- **`qr_codes.scan_count`.** A dormant column that nothing has ever incremented
+  since it was created, dropped rather than wired: incrementing it would have
+  cost a database write on the redirect path, and the number it produced would
+  have disagreed with the click figures beside it — those exclude bots and
+  deduplicate visitors, and a raw counter does neither. A QR scan is now counted
+  as a click labelled `qr`, which is strictly more than the counter would have
+  said. No instance has a non-zero value in it, so nothing is lost on upgrade.
+
+  This is the one non-additive schema change in this release, and it is stated
+  here rather than left to be found in a migration.
 
 ### Changed
 

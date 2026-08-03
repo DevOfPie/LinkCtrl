@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -349,6 +350,67 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.do("DELETE", p+"/folders/"+childFolderID, nil, http.StatusNoContent)
 	c.do("DELETE", p+"/folders/"+childFolderID, nil, http.StatusNotFound)
 	c.do("DELETE", p+"/folders/"+parentFolderID, nil, http.StatusNoContent)
+
+	// --- campaigns (M41) ----------------------------------------------------
+	//
+	// The lifecycle, the slug rule the document names, and the labelling of a
+	// link in both directions. The slug conflict is replayed here rather than
+	// only in campaigns_test.go because the *document* claims it.
+	campaign := c.do("POST", p+"/campaigns", map[string]any{
+		"name": "Summer 2026", "description": "The June push",
+	}, http.StatusCreated)
+	campaignID := field(t, campaign, "id")
+	// Two campaigns in a workspace may not share a slug, case-insensitively.
+	c.do("POST", p+"/campaigns", map[string]any{
+		"name": "Another", "slug": "SUMMER-2026",
+	}, http.StatusUnprocessableEntity)
+
+	c.do("GET", p+"/campaigns", nil, http.StatusOK)
+	c.do("GET", p+"/campaigns/"+campaignID, nil, http.StatusOK)
+	c.do("GET", p+"/campaigns/"+uuid.NewString(), nil, http.StatusNotFound)
+	c.do("PATCH", p+"/campaigns/"+campaignID, map[string]any{
+		"name": "Summer 2026 (paid)", "clear_ends_at": true,
+	}, http.StatusOK)
+	c.do("PATCH", p+"/campaigns/"+uuid.NewString(), map[string]any{
+		"name": "Nowhere",
+	}, http.StatusNotFound)
+
+	// Labelling a link, and taking it out again with the empty-string sentinel
+	// `folder_id` above uses.
+	c.do("PATCH", p+"/links/"+linkID, map[string]any{
+		"campaign_id": campaignID,
+	}, http.StatusOK)
+	c.do("GET", p+"/links?campaign="+campaignID, nil, http.StatusOK)
+	c.do("GET", p+"/links?campaign=none", nil, http.StatusOK)
+	c.do("PATCH", p+"/links/"+linkID, map[string]any{"campaign_id": ""}, http.StatusOK)
+
+	c.do("DELETE", p+"/campaigns/"+campaignID, nil, http.StatusNoContent)
+	c.do("DELETE", p+"/campaigns/"+campaignID, nil, http.StatusNotFound)
+
+	// --- QR codes (M41) -----------------------------------------------------
+	//
+	// The JSON half is replayed like everything else. The picture is not: it is
+	// the second non-JSON response this API has, and kin-openapi has no SVG body
+	// decoder any more than it has a YAML one — so it is checked by hand, below,
+	// exactly as the spec document is.
+	c.do("GET", p+"/links/"+linkID+"/qr", nil, http.StatusOK)
+	c.do("PUT", p+"/links/"+linkID+"/qr", map[string]any{
+		"style": map[string]any{"foreground": "#102030", "level": "H"},
+	}, http.StatusOK)
+	// A colour that is not a colour. Refused rather than escaped: a stored style
+	// becomes the attributes of an SVG this server generates.
+	//
+	// doBadRequest, because the point is the server's 422 and the body is
+	// deliberately outside the schema — the document's own pattern rejects it,
+	// which is the request-side check being skipped here rather than a gap.
+	c.doBadRequest("PUT", p+"/links/"+linkID+"/qr", map[string]any{
+		"style": map[string]any{"foreground": "red"},
+	}, http.StatusUnprocessableEntity)
+	c.do("PUT", p+"/links/"+uuid.NewString()+"/qr", map[string]any{
+		"style": map[string]any{},
+	}, http.StatusNotFound)
+	c.do("DELETE", p+"/links/"+linkID+"/qr", nil, http.StatusNoContent)
+	c.svgEndpoint(linkID)
 
 	// --- registered domains (M39) -------------------------------------------
 	//
@@ -721,6 +783,49 @@ func TestAPIMatchesItsContract(t *testing.T) {
 		t.Errorf("spec operations never exercised by this test:\n  %s",
 			strings.Join(missed, "\n  "))
 	}
+}
+
+// svgEndpoint checks the other non-JSON response by hand (M41), following the
+// shape yamlSpecEndpoint established below: kin-openapi has no SVG body decoder
+// either, so the generic validator cannot cover it.
+//
+// What the validator would have checked is checked here instead — the status,
+// the exact content type, and that the body is what the document says it is.
+// The last one is stronger than "a string": the document says this is an SVG
+// document holding a QR code, so the check is that it parses as one and that the
+// drawing has modules in it. A 200 with an empty `<svg/>` would satisfy the
+// schema and would be a blank square on a poster.
+func (c *contract) svgEndpoint(linkID string) {
+	c.t.Helper()
+	req, err := http.NewRequestWithContext(c.t.Context(), http.MethodGet,
+		c.f.server.URL+"/api/v1/links/"+linkID+"/qr.svg", nil)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	resp, err := c.f.client.Do(req)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		c.t.Fatalf("qr.svg returned %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "image/svg+xml" {
+		c.t.Errorf("qr.svg Content-Type = %q", ct)
+	}
+	// Well-formed XML, which is the one property "type: string" cannot express
+	// and the one a browser will refuse the response over.
+	if err := xml.Unmarshal(body, new(struct {
+		XMLName xml.Name `xml:"svg"`
+	})); err != nil {
+		c.t.Errorf("qr.svg is not a well-formed SVG document: %v", err)
+	}
+	if !bytes.Contains(body, []byte("<rect")) {
+		c.t.Error("qr.svg holds no modules; the document promises a QR code, not a blank square")
+	}
+	c.hit["getLinkQRSVG"] = true
 }
 
 // yamlSpecEndpoint checks the one non-JSON response by hand: kin-openapi has

@@ -144,6 +144,12 @@ type ClickEvent struct {
 	Language    string
 	LatencyUS   int32
 
+	// Source is the resolved `?src=` value (M41), empty for every request that
+	// did not carry a recognised one. When set it replaces the referrer host on
+	// the stored click — a QR scan sends no Referer, so the column is otherwise
+	// empty and the click is indistinguishable from a typed URL.
+	Source string
+
 	// TrackReturning asks the click pipeline to remember this visitor in the
 	// within-day returning-visitor set (M34).
 	TrackReturning bool
@@ -459,14 +465,46 @@ func (h *RedirectHandler) record(
 		IP:            clientIPString(r),
 		UserAgent:     r.UserAgent(),
 		Referrer:      r.Referer(),
-		Language:      r.Header.Get("Accept-Language"),
-		LatencyUS:     latencyUS(time.Since(start)),
+		// Where the visitor came from when the browser cannot say (M41). Read
+		// from the raw query without parsing it: the substring test is false for
+		// every request to every link that is not a QR scan, which is nearly all
+		// of them, and `r.URL.Query()` allocates a map the 20ms budget should
+		// not pay for on a path that would throw it away.
+		Source:    clickSource(r.URL.RawQuery),
+		Language:  r.Header.Get("Accept-Language"),
+		LatencyUS: latencyUS(time.Since(start)),
 		// The within-day returning-visitor set is maintained by the ingester, for
 		// the links that need it, and this flag is how it finds out which (M34).
 		// Deciding it here rather than in the pipeline is what keeps the pipeline
 		// from having to ask the database which links carry such a rule.
 		TrackReturning: tracksReturning(snap),
 	})
+}
+
+// clickSource pulls a recognised `?src=` value out of a raw query string (M41).
+//
+// **It parses nothing unless the parameter is there.** `strings.Contains` on the
+// raw string is one scan with no allocation and is false for every request that
+// is not a QR scan; only a request that could carry the parameter pays for
+// `url.ParseQuery`. That is the same shape gate.StripSignature uses, and for the
+// same reason: this runs on every redirect, inside a 20ms budget.
+//
+// An unparseable query is not an error here. A malformed query string is the
+// visitor's problem and it does not stop a redirect, so it simply attributes
+// nothing.
+func clickSource(rawQuery string) string {
+	if rawQuery == "" || !strings.Contains(rawQuery, domain.ClickSourceParam+"=") {
+		return ""
+	}
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return ""
+	}
+	src, ok := domain.ClickSource(values.Get(domain.ClickSourceParam))
+	if !ok {
+		return ""
+	}
+	return src
 }
 
 // blocked refuses an automated client.

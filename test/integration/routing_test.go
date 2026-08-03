@@ -165,6 +165,11 @@ func (b ruleRecorder) Record(ev httpx.ClickEvent) {
 	b.ingester.Record(analytics.Event{
 		LinkID: ev.LinkID, WorkspaceID: ev.WorkspaceID, OccurredAt: ev.OccurredAt,
 		IP: addr, UserAgent: ev.UserAgent, Referrer: ev.Referrer,
+		// M41. Without this a QR scan would be recorded with an empty referrer
+		// host and the attribution assertions would pass against a recorder that
+		// silently dropped the field — the same failure the DestinationID
+		// comment below names.
+		Source:   ev.Source,
 		Language: ev.Language, LatencyUS: ev.LatencyUS,
 		TrackReturning: ev.TrackReturning,
 		// M36. Without this the attribution assertions would pass against a

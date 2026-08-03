@@ -5,7 +5,10 @@
        nav holds exactly three destinations by decision (F6, F7), and folders
        are read from here — which is where somebody is when they wonder where a
        link went. */}}
-  <a href="/folders" class="text-sm font-medium text-accent-ink hover:underline">Folders →</a>
+  <div class="flex items-baseline gap-4">
+    <a href="/campaigns" class="text-sm font-medium text-accent-ink hover:underline">Campaigns →</a>
+    <a href="/folders" class="text-sm font-medium text-accent-ink hover:underline">Folders →</a>
+  </div>
 </div>
 
 {{template "flash_ok" .Notice}}
@@ -76,6 +79,21 @@
       <option value="" {{if eq .Folder ""}}selected{{end}}>All folders</option>
       <option value="none" {{if eq .Folder "none"}}selected{{end}}>No folder</option>
       {{range .FolderOptions}}
+      <option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
+      {{end}}
+    </select>
+    {{end}}
+    {{/* The campaign filter (M41). Drawn only when the workspace has campaigns,
+         on the same terms and for the same reason the folder filter above is,
+         and spelling "no campaign" with the same `none` sentinel so the two
+         controls read the same way. */}}
+    {{if .CampaignOptions}}
+    <select name="campaign" hx-get="/links" hx-trigger="change" hx-include="closest form"
+            aria-label="Campaign"
+            class="rounded-md border border-line-strong px-2 py-1.5 text-sm">
+      <option value="" {{if eq .Campaign ""}}selected{{end}}>All campaigns</option>
+      <option value="none" {{if eq .Campaign "none"}}selected{{end}}>No campaign</option>
+      {{range .CampaignOptions}}
       <option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
       {{end}}
     </select>

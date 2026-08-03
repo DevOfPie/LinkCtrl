@@ -5,8 +5,8 @@ INSERT INTO links (
     id, workspace_id, domain_id, alias, primary_url,
     title, description, status, expires_at, created_by, forward_query,
     forward_path, password_hash, max_clicks, one_time, require_signature,
-    folder_id
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+    folder_id, campaign_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 RETURNING *;
 
 -- name: CreateDestination :one
@@ -60,6 +60,13 @@ UPDATE links
        -- because it points at folders(id) and says nothing about tenancy.
        folder_id     = CASE WHEN sqlc.arg(clear_folder)::boolean THEN NULL
                             ELSE COALESCE(sqlc.narg(folder_id), folder_id) END,
+       -- Which campaign the link belongs to (M41). Three-valued for the reason
+       -- the folder above is, and the third state is the one that matters: a
+       -- link joins a campaign by mistake as easily as it joins one on purpose,
+       -- and without clear_campaign the only way out would be to delete the
+       -- campaign, which would take every other link with it.
+       campaign_id   = CASE WHEN sqlc.arg(clear_campaign)::boolean THEN NULL
+                            ELSE COALESCE(sqlc.narg(campaign_id), campaign_id) END,
        updated_at    = now()
  WHERE id = sqlc.arg(id) AND workspace_id = sqlc.arg(workspace_id) AND deleted_at IS NULL
 RETURNING *;
@@ -175,6 +182,13 @@ WHERE l.workspace_id = sqlc.arg(workspace_id)
   -- walk inside the dashboard's hottest query to do so.
   AND (NOT sqlc.arg(unfiled)::boolean OR l.folder_id IS NULL)
   AND (sqlc.narg(folder_id)::uuid IS NULL OR l.folder_id = sqlc.narg(folder_id)::uuid)
+  -- The campaign filter (M41), in two halves for the reason the folder pair
+  -- above is: "no filter" and "the links in no campaign" are different
+  -- questions. `uncampaigned` is what the campaigns page links to when somebody
+  -- asks which links are not attributed to anything yet, which is the question
+  -- every campaign list eventually raises.
+  AND (NOT sqlc.arg(uncampaigned)::boolean OR l.campaign_id IS NULL)
+  AND (sqlc.narg(campaign_id)::uuid IS NULL OR l.campaign_id = sqlc.narg(campaign_id)::uuid)
   -- Which hostname the link is served on (M40). One filter and no `unhosted`
   -- half, unlike the folder pair above: `links.domain_id` is NOT NULL, so there
   -- is no third state to ask about — every link is on exactly one domain, and
@@ -239,6 +253,11 @@ WHERE l.workspace_id = sqlc.arg(workspace_id)
   -- read "3 of 40 links" under a list of every link in one folder.
   AND (NOT sqlc.arg(unfiled)::boolean OR l.folder_id IS NULL)
   AND (sqlc.narg(folder_id)::uuid IS NULL OR l.folder_id = sqlc.narg(folder_id)::uuid)
+  -- Must mirror ListLinks exactly (M41), for the reason the folder pair above
+  -- says in full: a campaign-filtered page whose total counted the workspace
+  -- would read "5 of 40 links" over a list of five.
+  AND (NOT sqlc.arg(uncampaigned)::boolean OR l.campaign_id IS NULL)
+  AND (sqlc.narg(campaign_id)::uuid IS NULL OR l.campaign_id = sqlc.narg(campaign_id)::uuid)
   -- Must mirror ListLinks exactly, for the reason the two filters above say in
   -- full: a page filtered to one hostname whose total counted every domain
   -- would read "4 of 40 links" over a list of four.

@@ -30,8 +30,11 @@ func (c clickRecorder) Record(ev httpx.ClickEvent) {
 		IP:          addr,
 		UserAgent:   ev.UserAgent,
 		Referrer:    ev.Referrer,
-		Language:    ev.Language,
-		LatencyUS:   ev.LatencyUS,
+		// The resolved `?src=` token (M41), already checked against the closed
+		// vocabulary by the handler. Empty for every click that is not a scan.
+		Source:    ev.Source,
+		Language:  ev.Language,
+		LatencyUS: ev.LatencyUS,
 		// Carried through rather than re-derived. The handler read it off the
 		// link's own rules; the pipeline has no way to know and must not acquire
 		// one, because acquiring one means a query per batch (M34).

@@ -1,0 +1,109 @@
+-- Campaigns and QR codes (M41).
+--
+-- Both tables were created dormant by 00600 and woken by 02700. They share this
+-- file because they share a milestone and neither is large enough to be worth
+-- its own; nothing else connects them.
+--
+-- **A campaign is soft-deleted and a QR style is not.** The asymmetry is
+-- deliberate. A campaign names a body of work whose links keep their history
+-- after it ends, and `links.campaign_id` is ON DELETE SET NULL, so a hard delete
+-- would unlabel every link the moment somebody tidied up a finished campaign —
+-- exactly the failure the folder migration (02400) argues against. `deleted_at`
+-- keeps the row, and every statement here filters on it. A QR style is a
+-- rendering preference with nothing to restore: deleting it returns the link's
+-- code to the default style, which is the state every link starts in.
+
+-- name: CreateCampaign :one
+INSERT INTO campaigns (id, workspace_id, name, slug, description, starts_at, ends_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING *;
+
+-- name: GetCampaign :one
+-- Workspace-scoped like GetLink and GetFolder, and for the same reason: the
+-- wrong workspace returns no rows rather than a row the caller must remember to
+-- reject.
+SELECT * FROM campaigns
+WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL;
+
+-- name: ListCampaigns :many
+-- Every campaign in the workspace, with how many live links carry it.
+--
+-- The count is a grouped scan of links_campaign_idx rather than a correlated
+-- subquery per campaign, exactly as ListFolders counts filed links: a workspace
+-- with many campaigns costs one pass instead of one index probe each.
+--
+-- Unpaginated, and bounded instead by domain.MaxCampaignsPerWorkspace. A
+-- campaign list is a picker as much as it is a page — the link form offers it —
+-- and a picker that paginates is a picker nobody can choose from.
+SELECT c.*, COALESCE(k.n, 0)::bigint AS link_count
+FROM campaigns c
+LEFT JOIN (
+    SELECT l.campaign_id, count(*) AS n
+      FROM links l
+     WHERE l.workspace_id = sqlc.arg(workspace_id)
+       AND l.deleted_at IS NULL
+       AND l.campaign_id IS NOT NULL
+     GROUP BY l.campaign_id
+) k ON k.campaign_id = c.id
+WHERE c.workspace_id = sqlc.arg(workspace_id) AND c.deleted_at IS NULL
+ORDER BY lower(c.name), c.id;
+
+-- name: CountCampaigns :one
+SELECT count(*) FROM campaigns
+WHERE workspace_id = $1 AND deleted_at IS NULL;
+
+-- name: UpdateCampaign :one
+-- Partial update through COALESCE, like UpdateLink. The two schedule bounds are
+-- three-valued through their own clear flags, because "leave the end date alone"
+-- and "this campaign no longer ends" are different requests and one nullable
+-- parameter cannot express both.
+UPDATE campaigns
+   SET name        = COALESCE(sqlc.narg(name), name),
+       slug        = COALESCE(sqlc.narg(slug), slug),
+       description = COALESCE(sqlc.narg(description), description),
+       starts_at   = CASE WHEN sqlc.arg(clear_starts_at)::boolean THEN NULL
+                          ELSE COALESCE(sqlc.narg(starts_at), starts_at) END,
+       ends_at     = CASE WHEN sqlc.arg(clear_ends_at)::boolean THEN NULL
+                          ELSE COALESCE(sqlc.narg(ends_at), ends_at) END,
+       updated_at  = now()
+ WHERE id = sqlc.arg(id) AND workspace_id = sqlc.arg(workspace_id) AND deleted_at IS NULL
+RETURNING *;
+
+-- name: DeleteCampaign :execrows
+-- Soft. The links keep their history; `links.campaign_id` is cleared by the
+-- statement below rather than by a cascade, because a cascade would fire on a
+-- hard delete this statement never performs.
+UPDATE campaigns SET deleted_at = now(), updated_at = now()
+ WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL;
+
+-- name: UnassignCampaignLinks :execrows
+-- Takes every link out of a deleted campaign.
+--
+-- Run in the same transaction as DeleteCampaign. Without it the links keep an id
+-- pointing at a row no query returns, which is a link filtered by a campaign
+-- that is not in the campaign list — the invisible-rows failure 02400 describes
+-- for folders, in the one place the schema does not prevent it.
+UPDATE links SET campaign_id = NULL, updated_at = now()
+ WHERE workspace_id = $2 AND campaign_id = $1;
+
+-- name: GetQRCode :one
+-- The stored style for a link's code, or no rows for a link that has never been
+-- styled. No rows is not an error: it means the default style, which is what
+-- every link's code is drawn with until somebody changes it.
+SELECT q.* FROM qr_codes q
+JOIN links l ON l.id = q.link_id
+WHERE q.link_id = $1 AND q.workspace_id = $2 AND l.deleted_at IS NULL;
+
+-- name: UpsertQRCode :one
+-- One row per link, which qr_codes_link_key (02700) is what makes true. Without
+-- the unique index this is two concurrent inserts and a link with two styles.
+INSERT INTO qr_codes (id, link_id, workspace_id, style)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (link_id) DO UPDATE
+   SET style = EXCLUDED.style, updated_at = now()
+RETURNING *;
+
+-- name: DeleteQRCode :execrows
+-- Returns the link's code to the default style. A hard delete, because a style
+-- row holds nothing but the preference being withdrawn.
+DELETE FROM qr_codes WHERE link_id = $1 AND workspace_id = $2;
