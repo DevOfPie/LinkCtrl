@@ -67,6 +67,10 @@ type Querier interface {
 	// Only issued when the caller explicitly asks for a total, because counting
 	// costs a scan the common page load should not pay for.
 	CountLinks(ctx context.Context, arg CountLinksParams) (int64, error)
+	// What deletion is refused for. Zero on every registered hostname today, because
+	// nothing serves one and links are created on the default domain — the guard is
+	// here so that it is already true when M40 makes it reachable.
+	CountLinksOnDomain(ctx context.Context, domainID uuid.UUID) (int64, error)
 	// Whether the person at this address is already in this organization.
 	//
 	// Asked at creation, where the actor holds members.write on the organization
@@ -143,6 +147,24 @@ type Querier interface {
 	// API keys and the permission vocabulary their scopes are drawn from.
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error)
 	CreateDestination(ctx context.Context, arg CreateDestinationParams) (Destination, error)
+	// Domain ownership and registration (M39).
+	//
+	// The settings queries for the instance default live in links.sql, where they
+	// were written when there was exactly one domain. These are the ones that exist
+	// because there can now be more than one, and every statement here reads or
+	// writes the *ownership* columns rather than the serving ones — nothing on a
+	// registered hostname is served until M40 verifies it.
+	//
+	// Ownership is never decided in SQL. Every write below is by id, and
+	// link.Service reads the row first and judges the actor against it, so the
+	// refusal is a sentence naming whose domain it is rather than a statement that
+	// silently affected no rows. ListDomains is the exception, and it is a read: it
+	// is scoped by the actor's organization and workspace because a list is only
+	// ever the caller's own.
+	// Registered, and deliberately unverified: verified_at stays NULL and
+	// ssl_status stays at its 'none' default. is_default is never set here — there
+	// is one instance default and 00700 seeded it.
+	CreateDomain(ctx context.Context, arg CreateDomainParams) (Domain, error)
 	// Folders (M38).
 	//
 	// **There is no recursive SQL here, and that is a decision rather than an
@@ -343,6 +365,12 @@ type Querier interface {
 	// runs this — it gets the same two columns from ResolveAliasForRedirect's join,
 	// which is the whole reason that join exists.
 	GetDomainBotSettings(ctx context.Context, id uuid.UUID) (GetDomainBotSettingsRow, error)
+	// Matches domains_hostname_key exactly — lower(hostname) among the undeleted —
+	// so the availability check and the unique index cannot disagree about which
+	// names collide.
+	GetDomainByHostname(ctx context.Context, lower string) (Domain, error)
+	// The row the ownership check is made against, so it carries both owner columns.
+	GetDomainByID(ctx context.Context, id uuid.UUID) (Domain, error)
 	// Workspace-scoped like GetLink, and for the same reason: the wrong workspace
 	// returns no rows rather than a row the caller must remember to reject. This is
 	// also the only check that a link is being filed into a folder of its own
@@ -574,6 +602,18 @@ type Querier interface {
 	// @open_only lets the page show the work and the archive from one query, which
 	// is the same shape ListNotifications' unread filter has.
 	ListDestinationDisputes(ctx context.Context, arg ListDestinationDisputesParams) ([]DestinationDispute, error)
+	// Every domain the caller may use: the instance default, whatever their
+	// organization owns, and whatever their own workspace owns.
+	//
+	// Another workspace's hostname is absent rather than present and unmanageable.
+	// A list that showed it would disclose which hostnames a neighbouring workspace
+	// has registered, and the registration is the only thing there is to disclose at
+	// this milestone.
+	//
+	// Ordered default-first, then by hostname: the default is the one every link is
+	// on today, so it belongs at the top rather than wherever its placeholder name
+	// happens to sort.
+	ListDomains(ctx context.Context, arg ListDomainsParams) ([]ListDomainsRow, error)
 	// Every folder in the workspace, with how many links are filed directly in it.
 	//
 	// Flat and unordered by structure: the caller builds the tree. Sorted by name so
@@ -945,6 +985,13 @@ type Querier interface {
 	// staleness gauge measures against.
 	RecordJobFailure(ctx context.Context, arg RecordJobFailureParams) error
 	RecordSuccessfulLogin(ctx context.Context, id uuid.UUID) error
+	// The hostname is the only thing a registration has to change, and it is
+	// changeable only while nothing serves it; see decisions.md, D69.
+	//
+	// Not scoped by owner. The caller has already been judged against the row read
+	// by GetDomainByID, and repeating the predicate here would turn a 403 into a
+	// 404 for anybody who got past that check by a route this file cannot see.
+	RenameDomain(ctx context.Context, arg RenameDomainParams) (Domain, error)
 	RenameFolder(ctx context.Context, arg RenameFolderParams) (Folder, error)
 	// Name and slug move together. The slug is derived from the name by the caller
 	// rather than kept as a separate field somebody can edit into disagreement with
@@ -1192,6 +1239,11 @@ type Querier interface {
 	// repointed, and revoked sessions are excluded because moving one would be
 	// writing to a credential that no longer authenticates.
 	SetSessionWorkspace(ctx context.Context, arg SetSessionWorkspaceParams) (int64, error)
+	// Soft, unlike a folder. A domain is the namespace its links' aliases live in
+	// and `links.domain_id` is NOT NULL with no cascade, so a hard delete is refused
+	// by the database the moment one link exists; a soft delete keeps the row that
+	// every historic click event and reserved alias still points at.
+	SoftDeleteDomain(ctx context.Context, id uuid.UUID) (int64, error)
 	// Soft delete with a purge deadline rather than an immediate DELETE. Restoring
 	// a link someone deleted by accident is a common request, and the alias stays
 	// reserved while the row exists.

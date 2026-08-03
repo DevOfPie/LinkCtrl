@@ -182,6 +182,23 @@ func NewRouter(d Deps) http.Handler {
 			"DELETE " + APIPrefix + "/tags/{id}":             api.DeleteTag,
 			"GET " + APIPrefix + "/domain":                   api.GetDomain,
 			"PATCH " + APIPrefix + "/domain":                 api.UpdateDomain,
+			// Registered hostnames (M39). A different resource from the
+			// singular /domain above, which is the instance default's settings
+			// and predates there being more than one domain.
+			//
+			// No permission of its own: domains.write already exists (00800)
+			// and M39 turns it into an ownership check rather than adding a
+			// second slug — a workspace admin administers their own hostnames
+			// and gets a 403 on anybody else's. See internal/link/domains.go
+			// and decisions.md, D68 and D69.
+			//
+			// Nothing registered here is served. The host router still refuses
+			// an unrecognized Host with the operational 404; verification and
+			// serving are M40's.
+			"GET " + APIPrefix + "/domains":               api.ListDomains,
+			"POST " + APIPrefix + "/domains":              api.CreateDomain,
+			"PATCH " + APIPrefix + "/domains/{domainID}":  api.UpdateRegisteredDomain,
+			"DELETE " + APIPrefix + "/domains/{domainID}": api.DeleteRegisteredDomain,
 			// The reputation-feed disclosure (M32). Read-only, and there is no
 			// second operation here by design: the page it mirrors accepts no
 			// POST (D40), and an API that could write would be the settings
@@ -381,6 +398,15 @@ func NewRouter(d Deps) http.Handler {
 			"POST /folders/{folderID}":        web.FolderRename,
 			"POST /folders/{folderID}/move":   web.FolderMove,
 			"POST /folders/{folderID}/delete": web.FolderDelete,
+			// Registered hostnames (M39). Three POSTs and no JavaScript, like
+			// the folder page: registering, renaming and removing are each a
+			// form that submits on its own. The page exists to say what the API
+			// says — that a registered hostname is stored unverified and that
+			// nothing is served on it until M40.
+			"GET /domains":                    web.DomainsPage,
+			"POST /domains":                   web.DomainCreate,
+			"POST /domains/{domainID}":        web.DomainRename,
+			"POST /domains/{domainID}/delete": web.DomainDelete,
 			// Routing rules (M34). Three actions rather than one form: adding a
 			// rule and switching one off are different enough operations that
 			// making the second go through the first would mean opening an editor
@@ -704,6 +730,7 @@ func (h hostRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 var dashboardPatterns = []string{
 	"/{$}", "/login", "/logout", "/setup", "/dashboard", "/docs",
 	"/links", "/links/", "/folders", "/folders/", "/keys", "/keys/", "/account", "/account/",
+	"/domains", "/domains/",
 	"/notifications", "/notifications/", "/theme", "/workspace/", "/feeds",
 	"/invites", "/invites/", "/invite/", "/disputes", "/disputes/",
 	"/members", "/members/", "/workspaces", "/workspaces/",

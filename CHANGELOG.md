@@ -72,6 +72,35 @@ migrations run at boot.
 
 ### Added
 
+- **A workspace can register a domain of its own — and nothing is served on it
+  yet.** That second half is the whole caveat and the page says it before the
+  form: registering records that a hostname belongs to your workspace. Proving
+  you control the name, and serving short links on it, arrive in the next
+  release. Until then your links stay on the instance's default domain, and a
+  hostname pointed at this instance gets the same `404` it got before you
+  registered it.
+
+  A **Domains** page in the header's identity menu registers, renames and removes
+  them, behind the `domains.write` permission that owner and admin already hold.
+  The same operations are on the API: `GET/POST /api/v1/domains`, `PATCH` and
+  `DELETE /api/v1/domains/{id}`. The existing `/api/v1/domain` — singular, the
+  instance default's root redirect and bot policy — is unchanged and is a
+  different resource.
+
+  **A hostname belongs to exactly one workspace, instance-wide.** A hostname is
+  one alias namespace, so it cannot be shared: registering a name somebody else
+  already registered is refused, and the refusal names the hostname rather than
+  its owner. `domains.write` now checks ownership as well as permission — an
+  admin manages their own workspace's hostnames and receives `403` on another
+  workspace's, which is also absent from their list. The instance's default
+  domain stays the operator's and is not renamed or removed from this page.
+
+  Registering, renaming and removing a domain are written to the audit log.
+
+  Nothing to do on upgrade. The migration adds one nullable column and a
+  constraint; no existing row changes, and an instance where nobody registers a
+  hostname behaves exactly as it did.
+
 - **Folders.** Links can be filed into a tree of folders, up to eight levels
   deep, with a page at **Folders** — linked from the top of the links list — that
   creates, renames, moves and deletes them. The links list gains a folder filter,

@@ -145,6 +145,7 @@ type Domain struct {
 	RootRedirectUrl   *string
 	BlockBots         bool
 	BlockBotsEnforced bool
+	WorkspaceID       *uuid.UUID
 }
 
 type Folder struct {

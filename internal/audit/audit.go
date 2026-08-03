@@ -52,6 +52,22 @@ const PermRead = "audit.read"
 const (
 	ActionDomainRootRedirectChanged = "domain.root_redirect_changed"
 
+	// Registering a hostname (M39). The three that M39 exists to record: a
+	// domain arriving, being renamed and going away.
+	//
+	// These are the unowned changes of the phase. Every other administrative
+	// action here happens inside one organization and is answerable by asking
+	// somebody in it; a hostname is a public name, and "who put this domain on
+	// this instance" has, until now, had no answer at all. That is why they are
+	// part of the milestone rather than a nicety trimmed from it.
+	//
+	// Recorded even though nothing is served on the hostname yet. The
+	// registration is the act worth a record — by the time M40 verifies it and
+	// traffic arrives, the interesting question is who asked for it and when.
+	ActionDomainCreated = "domain.created"
+	ActionDomainRenamed = "domain.renamed"
+	ActionDomainDeleted = "domain.deleted"
+
 	// The invitation lifecycle (M27). Three actions rather than one with a
 	// state in the metadata: an operator asking "who let this person in" is
 	// reading for an action, and a filter on `action` is the query the read API

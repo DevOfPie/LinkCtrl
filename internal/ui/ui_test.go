@@ -172,6 +172,36 @@ func pageData(t *testing.T) map[string]any {
 			"CanCreate": true, "CanUpdate": true, "CanDelete": true,
 			"Notice": "Folder created.", "Error": "",
 		},
+		// Registered hostnames (M39), with all three ownership states in one
+		// render: the instance default, which nobody manages from this page; a
+		// hostname this workspace owns and may change; and one owned elsewhere
+		// in the organization, which draws no controls.
+		//
+		// None of them is verified, which is the milestone's whole claim — the
+		// row has to say so, and a fixture where everything were verified would
+		// never render the sentence that carries it.
+		"domains": map[string]any{
+			"Title": "Domains", "Nav": "domains", "Identity": owner(),
+			"CanRegister": true, "FormHostname": "",
+			"Rows": []map[string]any{
+				{
+					"ID": "0198c9c5-0000-7000-8000-000000000050", "Hostname": "default",
+					"ScopeLabel": "This instance", "IsDefault": true, "Verified": true,
+					"LinkCount": int64(21), "Manageable": false,
+				},
+				{
+					"ID": "0198c9c5-0000-7000-8000-000000000051", "Hostname": "go.example.com",
+					"ScopeLabel": "This workspace", "IsDefault": false, "Verified": false,
+					"LinkCount": int64(0), "Manageable": true,
+				},
+				{
+					"ID": "0198c9c5-0000-7000-8000-000000000052", "Hostname": "l.example.org",
+					"ScopeLabel": "This organization", "IsDefault": false, "Verified": false,
+					"LinkCount": int64(0), "Manageable": false,
+				},
+			},
+			"Notice": "Hostname registered to this workspace.", "Error": "",
+		},
 		// The review queue, with every state it can draw in one render: an open
 		// dispute that can be allowed, an open one that cannot (a heuristic has
 		// no blocklist row to remove), and both decided outcomes.

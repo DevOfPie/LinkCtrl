@@ -878,3 +878,59 @@ exactly as a link's is, so `http` and `https` only and no private, loopback or
 cloud-metadata addresses — a root redirect is the easiest thing on the instance
 to reach, needing no link and no alias. And the redirect is a `302` that
 intermediaries are told not to cache, so changing it takes effect immediately.
+
+## Registering a domain of your own
+
+A workspace can register a hostname and own it. **Nothing is served on it yet**
+— that is the honest state of this feature and the reason the page says so
+before the form. Registering records that the hostname is yours; proving you
+control it, and serving short links on it, arrive in a later release. Until then
+your links stay on the instance's default domain, and a hostname pointed at this
+instance gets the same `404` it got before you registered it.
+
+*Domains*, in the header's identity menu, is the page. It needs the
+**`domains.write`** permission — owner and admin hold it, editor does not.
+
+```sh
+curl -sS -X POST .../api/v1/domains \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"hostname":"go.example.com"}'
+```
+
+Type the hostname on its own: no `https://`, no path, no port. It is stored
+lowercased with a trailing dot removed, so `Example.COM.` and `example.com` are
+one name. A pasted URL, an IP address, a bare `localhost` and a numeric
+top-level domain are each refused with a message saying which.
+
+**A hostname belongs to exactly one workspace, across the whole instance.** It
+is one alias namespace — every alias on it has to be unambiguous — so it cannot
+be shared, and registering a name somebody else has already registered is
+refused. The message names the hostname and not its owner.
+
+`GET /api/v1/domains` lists what your workspace may use: the instance's default
+domain, and whatever your workspace owns. Another workspace's hostname is not in
+it. Each entry carries `manageable`, which says whether *you* may change that
+one.
+
+Changing and removing are the other two operations:
+
+```sh
+curl -sS -X PATCH .../api/v1/domains/$ID \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"hostname":"links.example.com"}'
+
+curl -sS -X DELETE .../api/v1/domains/$ID -H "Authorization: Bearer $KEY"
+```
+
+The hostname is the only thing a registration has, which is why changing one is
+the whole of the update. Removing frees the name for anybody on the instance to
+register again.
+
+Three refusals worth knowing before you meet them. Another workspace's hostname
+answers **403** — you are being told it is not yours, rather than that it does
+not exist. The instance's **default domain** is listed but is not administered
+here: it is the hostname every workspace's links are on, and its settings are
+the operator's, at `/api/v1/domain` above. And a hostname with links on it
+cannot be removed, because every one of them would stop resolving.
+
+Registering, renaming and removing are written to the audit log.

@@ -296,6 +296,9 @@ func (s *demoSeeder) run(ctx context.Context, primary []demoLink, ids map[int]uu
 	if err := s.seedFolders(ctx, primary, ids); err != nil {
 		return err
 	}
+	if err := s.seedDomains(ctx); err != nil {
+		return err
+	}
 	if err := s.seedBlockingAndDisputes(ctx, people); err != nil {
 		return err
 	}
@@ -923,6 +926,78 @@ func (s *demoSeeder) seedFolders(ctx context.Context, cat []demoLink, ids map[in
 	return nil
 }
 
+// demoDomains are the hostnames the demo registers, one per workspace.
+//
+// **Two, and in different workspaces, because one would show nothing.** A single
+// registered hostname makes the domains page a list; two, owned by the two
+// workspaces the demo already has, make it the thing M39 built — switch
+// workspace and the list changes, because a hostname belongs to exactly one of
+// them. That is also the only way a reader sees the ownership rule without
+// having a second account to be refused with.
+//
+// Both are `.example` names, which RFC 2606 reserves and which therefore cannot
+// resolve for anybody. That matters more here than it looks: nothing on the
+// instance serves these, and a demo that registered a name somebody owns would
+// be a demo suggesting it had been claimed.
+func demoDomains() []struct {
+	workspace string
+	hostname  string
+} {
+	return []struct {
+		workspace string
+		hostname  string
+	}{
+		{workspace: "", hostname: "go.linkctrl.example"},
+		{workspace: demoWorkspace2Slug, hostname: "camp.linkctrl.example"},
+	}
+}
+
+// seedDomains registers a hostname for each workspace (M39).
+//
+// Through link.Service.RegisterDomain, like everything else here, so the demo
+// exercises the ownership check and the audit events rather than writing rows
+// that look like its output. Each registration is stored unverified and nothing
+// on the instance serves it — which is what the page says, and what the demo has
+// to show rather than contradict.
+func (s *demoSeeder) seedDomains(ctx context.Context) error {
+	for _, d := range demoDomains() {
+		actor := s.owner
+		if d.workspace != "" {
+			var wsID uuid.UUID
+			if err := s.pool.QueryRow(ctx,
+				`SELECT id FROM workspaces WHERE organization_id = $1 AND slug = $2`,
+				s.owner.OrgID, d.workspace).Scan(&wsID); err != nil {
+				return fmt.Errorf("find workspace %q for %s: %w", d.workspace, d.hostname, err)
+			}
+			here, err := s.actAs(ctx, s.owner.Email, wsID)
+			if err != nil {
+				return err
+			}
+			actor = here
+		}
+		if _, err := s.link.RegisterDomain(ctx, actor, d.hostname); err != nil {
+			return fmt.Errorf("register %s: %w", d.hostname, err)
+		}
+		fmt.Fprintf(os.Stderr, "domain %s: registered to %s, unverified\n",
+			d.hostname, actor.WorkspaceID)
+	}
+	// Back where the demo opens, exactly as seedSecondWorkspace does.
+	if _, err := s.actAs(ctx, s.owner.Email, s.owner.WorkspaceID); err != nil {
+		return err
+	}
+	return nil
+}
+
+// demoHostnames are the registered hostnames the reset removes. Beside the list
+// above, so adding one cannot be done without teaching the reset about it.
+func demoHostnames() []string {
+	out := make([]string, 0, 2)
+	for _, d := range demoDomains() {
+		out = append(out, d.hostname)
+	}
+	return out
+}
+
 // demoLinkID finds a created link by its catalogue alias.
 func demoLinkID(cat []demoLink, ids map[int]uuid.UUID, alias string) (uuid.UUID, bool) {
 	for i, d := range cat {
@@ -1117,6 +1192,21 @@ func demoResetPhase2(ctx context.Context, tx pgxExecutor, orgID, userID uuid.UUI
 			DELETE FROM folders
 			 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
 			[]any{orgID}},
+
+		// The registered hostnames (M39). A hard DELETE rather than the soft one
+		// the product does: the product keeps the row because click history and
+		// reserved aliases point at it, and none of that exists here — nothing
+		// is served on a registered hostname. Bounded by the hostname list, like
+		// the gated aliases above, so this can never reach the instance default
+		// (`is_default`, seeded by migration 00700) whatever else is in the table.
+		//
+		// Before the workspace delete below only for readability; the second
+		// workspace's hostname would go with it either way, since
+		// `domains.workspace_id` is ON DELETE CASCADE.
+		{"registered domains", `
+			DELETE FROM domains
+			 WHERE organization_id = $1 AND hostname = ANY($2::text[])`,
+			[]any{orgID, demoHostnames()}},
 
 		{"invitations", `DELETE FROM invitations WHERE organization_id = $1`, []any{orgID}},
 		{"notifications", `DELETE FROM notifications WHERE user_id = $1`, []any{userID}},

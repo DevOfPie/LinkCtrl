@@ -143,6 +143,19 @@
     {{if .Identity.Can "workspace.write"}}
     <a href="/workspaces" class="block px-3 py-2 text-sm {{if eq .Nav "workspaces"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">Workspaces</a>
     {{end}}
+    {{/* Registered hostnames (M39). The menu rather than a fourth top-level
+         slot, for the reason M28 argued for the three above it (D35): a domain
+         is registered once and then not thought about, which is the opposite of
+         what a top-level destination is for — and until M40 serves on one there
+         is nothing on the page to come back to.
+
+         Gated on domains.write, which is the owner and admin roles. An editor
+         sees no entry, because the page's only actions need that permission and
+         a menu entry leading to a read-only list of one placeholder hostname is
+         worse than no entry. */}}
+    {{if .Identity.Can "domains.write"}}
+    <a href="/domains" class="block px-3 py-2 text-sm {{if eq .Nav "domains"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">Domains</a>
+    {{end}}
     {{/* The review queue joins the administrative entries rather than taking a
          fourth top-level slot, and for the same reason the other three did not:
          it is visited when something needs deciding, never while work is being

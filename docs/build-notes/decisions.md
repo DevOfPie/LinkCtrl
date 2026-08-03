@@ -120,6 +120,8 @@ file. Append a row when you append an entry.
 | [M37, giving the expensive half of the rollup its own clock](#2026-08-03--m37-giving-the-expensive-half-of-the-rollup-its-own-clock) | D64 — why fifteen minutes and not five or sixty; why staleness needed a new column rather than the metric that already existed; why each half keeps its own watermark |
 | [M37, what a map is allowed to claim](#2026-08-03--m37-what-a-map-is-allowed-to-claim) | D65 — the banding, the five steps, no-data outside the ramp, the map that refuses to draw itself, and the empty state that turned out to have been unreachable since it was written |
 | [M38, a container that cannot lose what it holds](#2026-08-03--m38-a-container-that-cannot-lose-what-it-holds) | D66 — deleting a folder is a real DELETE, so `SET NULL` and `CASCADE` actually fire; why `folders.deleted_at` stays unwritten; sibling names case-insensitive with a COALESCE index the roots need; the depth cap of eight and where the number comes from; the cycle rule stated once and read by both the writer and the page; why the filter is one folder and not a subtree. D67 — the permission that was not minted, and which limb of D18 that matched |
+| [M39, where a domain's owning workspace lives](#2026-08-03--m39-where-a-domains-owning-workspace-lives) | D68 — a nullable `workspace_id` beside `organization_id` with a CHECK for the three legal states; why per-domain alias uniqueness rules out a join table; why reusing `organization_id` would reword a scope row rather than satisfy it |
+| [M39, what "managing a domain" means before anything is served](#2026-08-03--m39-what-managing-a-domain-means-before-anything-is-served) | D69 — update is the hostname and nothing else; the instance default's guard is unchanged and the collection refuses to rename or delete it; why no hostname is checked against the instance's own names; the permission that was not minted, and the residue recorded as F70 |
 
 ---
 
@@ -10042,3 +10044,131 @@ What would change this: a folder that could carry a *setting* — a default
 destination policy, a per-folder bot rule, a grant scoped to a branch. Then a
 folder would decide something, holding it would widen reach, and D18's second
 limb would reach it. None of those exists, and none is planned in Phase 2.
+
+## 2026-08-03 — M39, where a domain's owning workspace lives
+
+Owner-answered at [M39](phase-details/m39.md)'s validation, **before any code**,
+which is what that file requires of this particular choice rather than a habit
+applied to it. Its Risks section: *"The ownership-column choice is the one Phase
+3 lives with. It deserves the decisions.md entry before, not after."* **D68.**
+
+### The tension that made it a question
+
+`domains.organization_id` already exists, nullable, and its comment says *"NULL
+for the instance default domain, which every workspace shares. Custom domains
+(Phase 2) belong to an **organization**."* Plan.md's scope row at line 143
+promises *"Per-domain ownership, so a **workspace** administers its own
+hostname."* Those are different grains, and the schema was written expecting the
+coarser one.
+
+### The answer
+
+A new nullable `domains.workspace_id`, alongside the existing
+`organization_id`, with a CHECK expressing the three legal states: the instance
+default owns nothing (both NULL), an organization-owned domain sets
+`organization_id`, and a workspace-owned domain sets both — the workspace
+implying the organization it belongs to.
+
+### What decided it, which is not flexibility
+
+**Alias uniqueness is per domain.** A hostname is one alias namespace, and two
+workspaces sharing one would contend for the same aliases with nothing to
+arbitrate between them. Exactly one owning workspace per domain is what keeps
+that namespace unambiguous, and it is the reason the most flexible option is the
+wrong one here.
+
+That is the case against a `domain_workspaces` join table. It is the shape Phase
+3 would find easiest to extend, and it admits the shared-namespace race
+above — which is the alias-hijack surface M39 exists to make reviewable in
+isolation. Adding it in the milestone that was split out to contain that risk
+would defeat the split.
+
+Reusing `organization_id` was the smallest schema and the least honest fit. It
+discharges the scope row only by reinterpreting *workspace* as *organization*,
+and reinterpreting a scope row is a scope change — the owner's, and not one made
+by picking a column.
+
+### The cost, stated rather than discovered later
+
+Two nullable ownership columns whose valid combinations are expressed in a CHECK
+constraint rather than in the type. A reader has to consult the constraint to
+know which pairs are legal, and Phase 3 inherits the constraint along with the
+column. The alternative that avoids it — a single polymorphic owner — trades a
+readable constraint for an unreadable foreign key, which is worse in a schema
+this one otherwise keeps honest with real references.
+
+## 2026-08-03 — M39, what "managing a domain" means before anything is served
+
+Three questions [M39](phase-details/m39.md) forced once [D68](#2026-08-03--m39-where-a-domains-owning-workspace-lives) had
+settled where ownership lives, and none of them is answered by the column. **D69.**
+
+### What the U in CRUD is
+
+**The hostname, and nothing else.** m39.md asks for "domain CRUD API and UI",
+and a `domains` row has more columns than a workspace owns: `root_redirect_url`
+and the two bot-blocking flags are also on it. Extending those per domain would
+be configuring how a hostname *serves* before anything serves it, which is
+[M40](phase-details/m40.md)'s work, and it would give a workspace a second route
+to settings the instance default administers through `/api/v1/domain`. So update
+is rename, create is register, delete is remove, and the settings endpoint is
+untouched.
+
+Renaming is safe only because nothing is served: the domain's links, click
+history and reserved aliases all hang off `domain_id`, and the name is not read
+by anything on the redirect path. When M40 verifies a hostname, a rename has to
+invalidate that verification — that bullet belongs to M40 rather than being
+written here against behaviour that does not exist.
+
+### Who administers the instance default
+
+**Unchanged: `domains.write`, which migration 00800 grants to the owner and
+admin roles and to nobody else.** m39.md's word is *stays*, and this is what
+staying means. The ownership check has three limbs, one per legal state — a
+workspace-owned domain is the actor's own workspace, an organization-owned one
+is their own organization, and the instance default is the permission on its
+own.
+
+The instance default is additionally refused a rename or a delete through the
+collection, whoever asks. Its hostname is a placeholder the resolver never
+reads — 00700 says so, and `ResolveDefaultDomain` matches on `is_default` —
+so renaming it would change a name nothing consults; deleting it would take the
+hostname out from under every link on the instance. Its real settings are the
+singular endpoint's, and that is the only surface that changes them.
+
+**The residue, named rather than left to be discovered:** `domains.write` is a
+role permission, so on an instance with several organizations *any* of their
+owners or admins holds it and can therefore change the instance-wide root
+redirect and bot policy. That is the behaviour before M39 and the behaviour
+after it; M39 neither widens nor narrows it, and registering a hostname is not a
+route to it. It is recorded as **F70** rather than fixed here, because narrowing
+it is a scope change to who administers an instance rather than a defect in
+per-domain ownership. Migration 01600 already reasoned the same way about
+`destinations.review`, which is owner-only for exactly this reason.
+
+### Whether a hostname is checked against the instance's own names
+
+**No, and deliberately.** Nothing here refuses `manage.example.com` — the
+dashboard's own host — or any name the person registering it does not control.
+Whether a registrant controls a hostname is a question DNS answers, and M40's
+verification is the answer; a syntax-level refusal that rejected a few
+recognizable names would read as protection while proving nothing about the rest.
+Until verification exists, no router resolves a Host header against the table at
+all, so a hostname registered here reaches no traffic whatever it says.
+
+What is refused is what cannot work: a URL pasted instead of a hostname, an IP
+address, a single label, a numeric top-level domain, and anything DNS itself
+would reject. Names are lowercased and a trailing dot is dropped, because
+`example.com.` and `example.com` are one host and storing both would make the
+unique index treat them as two.
+
+### The permission that was not minted
+
+No new slug. `domains.write` already exists and what M39 adds is a *scope* check
+on it, not a second kind of permission — the same call [D67](#2026-08-03--m38-a-container-that-cannot-lose-what-it-holds)
+made for folders, reached differently: there the answer was that the existing
+`links.*` vocabulary already said it, here it is that the existing slug is
+already the right one and was simply never asked whose domain it was. No seed
+migration, no `NonDelegableScopes` entry, and D18's delegability question does
+not arise, because nothing new is delegable. An API key holding `domains.write`
+registers hostnames for the workspace it is scoped to, which is where its
+ownership check lands like anybody else's.

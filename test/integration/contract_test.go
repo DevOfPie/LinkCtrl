@@ -350,6 +350,61 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.do("DELETE", p+"/folders/"+childFolderID, nil, http.StatusNotFound)
 	c.do("DELETE", p+"/folders/"+parentFolderID, nil, http.StatusNoContent)
 
+	// --- registered domains (M39) -------------------------------------------
+	//
+	// The lifecycle, plus the two refusals the document names by code. Both are
+	// replayed here rather than only in domains_test.go because the *document*
+	// claims them: one hostname belongs to one workspace, and the instance
+	// default is not administered through this collection. An implementation
+	// that quietly allowed either would leave openapi.yaml describing rules
+	// nothing enforces.
+	registered := c.do("POST", p+"/domains", map[string]any{
+		"hostname": "go.contract.example",
+	}, http.StatusCreated)
+	registeredID := field(t, registered, "id")
+	// A hostname is one alias namespace, so a second registration of the same
+	// name is refused rather than shared — whoever asks.
+	c.do("POST", p+"/domains", map[string]any{
+		"hostname": "GO.contract.example",
+	}, http.StatusUnprocessableEntity)
+	// Not a hostname: the shape people type instead of one.
+	c.do("POST", p+"/domains", map[string]any{
+		"hostname": "https://go.contract.example/path",
+	}, http.StatusUnprocessableEntity)
+
+	domainList := c.do("GET", p+"/domains", nil, http.StatusOK)
+	// The instance default is listed, and it is not administered here.
+	var listed struct {
+		Domains []struct {
+			ID        string `json:"id"`
+			IsDefault bool   `json:"is_default"`
+		} `json:"domains"`
+	}
+	if err := json.Unmarshal(domainList, &listed); err != nil {
+		t.Fatalf("domain list is not the documented shape: %v", err)
+	}
+	var defaultDomainID string
+	for _, d := range listed.Domains {
+		if d.IsDefault {
+			defaultDomainID = d.ID
+		}
+	}
+	if defaultDomainID == "" {
+		t.Fatal("the instance default is missing from GET /domains")
+	}
+	c.do("PATCH", p+"/domains/"+defaultDomainID, map[string]any{
+		"hostname": "renamed.contract.example",
+	}, http.StatusUnprocessableEntity)
+
+	c.do("PATCH", p+"/domains/"+registeredID, map[string]any{
+		"hostname": "links.contract.example",
+	}, http.StatusOK)
+	c.do("PATCH", p+"/domains/"+uuid.NewString(), map[string]any{
+		"hostname": "nowhere.contract.example",
+	}, http.StatusNotFound)
+	c.do("DELETE", p+"/domains/"+registeredID, nil, http.StatusNoContent)
+	c.do("DELETE", p+"/domains/"+registeredID, nil, http.StatusNotFound)
+
 	// --- analytics ----------------------------------------------------------
 	c.do("GET", p+"/links/"+linkID+"/stats", nil, http.StatusOK)
 	c.do("GET", p+"/links/"+linkID+"/stats?from=2026-07-01&to=2026-07-30", nil, http.StatusOK)

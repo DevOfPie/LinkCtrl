@@ -81,6 +81,10 @@ tags:
       the per-arm enabled flag that is this product's feature flag
   - name: domain
     description: Settings for the hostname short links are served on
+  - name: domains
+    description: >
+      Hostnames a workspace has registered. Ownership and management only —
+      nothing is served on a registered hostname yet
   - name: analytics
     description: Rollup-backed statistics and recent activity
   - name: api-keys
@@ -955,6 +959,146 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /domains:
+    get:
+      tags: [domains]
+      operationId: listDomains
+      summary: The hostnames this workspace may use
+      description: |
+        The instance's default domain, whatever this organization owns, and
+        whatever this workspace owns. Another workspace's hostname is **absent**
+        rather than present and unmanageable — the registration is the only thing
+        there is to disclose at this point, and disclosing it would answer "what
+        has my neighbour registered".
+
+        `manageable` says whether *this* caller may rename or remove the entry.
+        It is a rendering hint for a client drawing controls; every write is
+        re-judged on arrival.
+
+        **Nothing registered here is served.** Every entry a workspace registers
+        comes back with `verified` false, no router resolves a `Host` header
+        against it, and an unrecognized host still gets the operational `404`.
+        Proving control of a name and serving links on it arrive in a later
+        release.
+      responses:
+        "200":
+          description: Every domain the caller may use
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DomainList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [domains]
+      operationId: createDomain
+      summary: Register a hostname for this workspace
+      description: |
+        Requires the `domains.write` permission, and registers the hostname to
+        the caller's current workspace.
+
+        **One workspace owns a hostname.** A hostname is exactly one alias
+        namespace, so a second registration of the same name — by any workspace
+        on the instance — is refused with `hostname`/`conflict` rather than
+        shared. The message names the collision and never its owner.
+
+        The hostname is stored as typed, lowercased, with a trailing dot removed.
+        A scheme or a path is refused (`hostname`/`not_a_hostname`), as is an IP
+        address and a single-label name. Internationalized names are registered
+        in their `xn--` form, because that is what DNS and a certificate carry.
+
+        Stored **unverified**: nothing checks that the caller controls the name,
+        and nothing is served on it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDomainRequest"
+      responses:
+        "201":
+          description: The registered domain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Domain"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /domains/{domainID}:
+    parameters:
+      - $ref: "#/components/parameters/DomainID"
+    patch:
+      tags: [domains]
+      operationId: renameDomain
+      summary: Change a registered hostname
+      description: |
+        The hostname is the only thing a registration has, and changing it is
+        possible only because nothing is served on it yet: the domain's links,
+        click history and reserved aliases all hang off its id and are untouched
+        by the name.
+
+        **Only the owning workspace.** `domains.write` held in another workspace
+        buys nothing here: a caller who is not in the owning workspace gets
+        `403`, not `404` — they are being told the hostname is not theirs, which
+        is the true answer and the one that does not invite guessing.
+
+        The instance's default domain is refused with
+        `hostname`/`instance_default`: every workspace's links are on it and it
+        is configured by the operator rather than registered here.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDomainRequest"
+      responses:
+        "200":
+          description: The updated domain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Domain"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+    delete:
+      tags: [domains]
+      operationId: deleteDomain
+      summary: Remove a registered hostname
+      description: |
+        Soft: the row stays, stops being listed, and the hostname becomes free
+        for anybody on the instance to register again. Every historic click event
+        and every reserved alias still points at the row, which is why it is not
+        removed.
+
+        Refused with `hostname`/`in_use` while any link is on the domain — every
+        one of them would stop resolving. Refused with
+        `hostname`/`instance_default` for the instance's default domain. Another
+        workspace's hostname is `403`.
+      responses:
+        "204":
+          description: Removed
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/Validation"
 
@@ -2347,6 +2491,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    DomainID:
+      name: domainID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     DisputeID:
       name: id
       in: path
@@ -2668,6 +2817,82 @@ components:
           type: string
           minLength: 1
           maxLength: 80
+
+    Domain:
+      type: object
+      additionalProperties: false
+      required: [id, hostname, scope, is_default, verified, link_count, manageable, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        hostname:
+          type: string
+          maxLength: 253
+          description: Lowercased, with no trailing dot.
+        scope:
+          type: string
+          enum: [instance, organization, workspace]
+          description: >
+            Who owns the hostname. `instance` is the default domain every
+            workspace shares; `workspace` is a hostname one workspace registered
+            and administers. `organization` is a legal state of the schema that
+            nothing registers yet.
+        is_default:
+          type: boolean
+          description: The instance's default domain — the hostname every link is on today.
+        verified:
+          type: boolean
+          description: >
+            False for everything a workspace registers. Proving control of a
+            hostname, and serving links on it, arrive in a later release; until
+            then a registered hostname is not a routing target.
+        verified_at:
+          type: string
+          format: date-time
+          description: Absent while `verified` is false.
+        link_count:
+          type: integer
+          format: int64
+          description: >
+            Links on this domain. Removing a domain is refused while it is
+            non-zero.
+        manageable:
+          type: boolean
+          description: >
+            Whether **this** caller may rename or remove the entry. A rendering
+            hint for a client drawing controls; every write is re-judged on
+            arrival, so acting on a stale `true` still gets a `403`.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    DomainList:
+      type: object
+      additionalProperties: false
+      required: [domains]
+      properties:
+        domains:
+          type: array
+          items:
+            $ref: "#/components/schemas/Domain"
+          description: The default domain first, then by hostname.
+
+    CreateDomainRequest:
+      type: object
+      additionalProperties: false
+      required: [hostname]
+      properties:
+        hostname:
+          type: string
+          maxLength: 253
+          description: >
+            The hostname on its own — no scheme, no path, no port. Lowercased
+            and stripped of a trailing dot before it is stored.
+
+    UpdateDomainRequest:
+      type: object
+      additionalProperties: false
+      required: [hostname]
+      properties:
+        hostname: { type: string, maxLength: 253 }
 
     Folder:
       type: object

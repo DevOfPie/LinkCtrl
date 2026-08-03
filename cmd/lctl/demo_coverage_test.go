@@ -411,6 +411,34 @@ func demoCoverage() []demoFeature {
 				"beside it — one of them is empty if every link is filed or none is",
 		},
 
+		{
+			Milestone: "M39", Feature: "A hostname registered to a workspace",
+			// Workspace-owned, which is the whole of what M39 added: the
+			// instance default (00700) has both owner columns NULL and would
+			// satisfy a query that only counted rows in `domains`.
+			Query: `SELECT count(*) FROM domains
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND deleted_at IS NULL`,
+			Min: 2,
+			Shows: "the domains page with something on it, in more than one " +
+				"workspace — with one registration the page is a list, and the " +
+				"rule it exists for (a hostname belongs to exactly one workspace) " +
+				"is invisible until switching workspace changes what is shown",
+		},
+		{
+			Milestone: "M39", Feature: "Registered hostnames are unverified",
+			Query: `SELECT count(*) FROM domains
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND deleted_at IS NULL AND verified_at IS NOT NULL`,
+			// The one row here whose claim is that the demo shows nothing
+			// *within* a built feature. A verified hostname in the demo would be
+			// a demo asserting that links are served on a name nothing resolves,
+			// which is the single thing M39 must not appear to have done.
+			MaxIsZero: true,
+			Shows: "that a registered hostname is not a routing target — a verified " +
+				"row would make the page promise serving that M40 has not built",
+		},
+
 		// The boundary. Everything below is a milestone that has not been built,
 		// so the demo showing nothing is correct — and these rows are what make
 		// the next person add a feature row above instead of quietly seeding
