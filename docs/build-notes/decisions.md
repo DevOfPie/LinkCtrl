@@ -152,6 +152,7 @@ file. Append a row when you append an entry.
 | [M44.9 lands, and what it leaves for M45](#2026-08-04--m449-lands-and-what-it-leaves-for-m45) | Every bullet discharged; eleven approved rows closed across six reopenings and one sub-milestone commit; why the row reads done while 110 findings stay open, on M32.9's precedent; the five rows the reopenings themselves found and why F135 is the one to read first; the fix-traps being worth more than the findings, and the one that was wrong; how scope held |
 | [M45, how a hundred and ten rows get reviewed](#2026-08-04--m45-how-a-hundred-and-ten-rows-get-reviewed) | Why per-item approval is bounded by volume rather than reinterpreted; groups never mix severities and any row the owner pulls out is answered alone; why a grouped deferral is cheap and a grouped approval is not; recorded before the triage so the method cannot be fitted to its outcome |
 | [M45's triage, and the widest option four times](#2026-08-04--m45s-triage-and-the-widest-option-four-times) | All eleven moderate security rows, the disclosure taught its second channel, the non-security set including the dispute family, and hygiene plus the comment sweep; **F15 and F31 are blocked on D38's missing instance-level principal and that choice is not made here**; why hygiene goes first, and the three rows that cannot be judged on their own terms |
+| [D98, the instance-level principal D38 said did not exist](#2026-08-04--d98-the-instance-level-principal-d38-said-did-not-exist) | The owner's choice over three alternatives, and the two constraints that came with it; why "a change requires a person" is built as a split permission with the decide half non-delegable rather than as a credential-type branch the inherited rule forbids; why a holder may not re-delegate; and why the principal's scopes are enumerated rather than implied |
 | [M35, which namespace a gate is keyed on](#2026-08-04--m35-which-namespace-a-gate-is-keyed-on) | D94 — three corrections and one amendment: a verified password answers **303** unconditionally and D53's *"answers the 302 itself"* is superseded, with 303 joining `REDIRECT_DEFAULT_STATUS`'s allowed set; the signature and the password bucket keyed on the domain the request arrived on rather than the boot constant; the signed URL minted on the link's own hostname, with an unreadable domain row an error rather than a fallback; HEAD reading the budget without spending it, and what that read costs; why the fix invalidates no signature that ever worked, against a constraint that expected it to; the fixture in which the defect was testable at all |
 | [M42, what one drain costs, and the fix that would have moved the cost rather than removed it](#2026-08-04--m42-what-one-drain-costs-and-the-fix-that-would-have-moved-the-cost-rather-than-removed-it) | D95 — a claimed batch is dialled together and `Drain` waits for it, so one drain costs one attempt and not `DrainBatch` of them; why the WaitGroup is what makes D77's lock trap inapplicable rather than survived; why a webhook goroutine of its own is not a fix, `pg_try_advisory_lock` being session-scoped, and would convert every other job's stall into a skip; what it does to F90 (nothing) and to F91 (unreachable, not fixed); what a receiver now sees |
 | [M43, the queue's own clock, and why the watermark could not be it](#2026-08-04--m43-the-queues-own-clock-and-why-the-watermark-could-not-be-it) | D96 — one column was carrying two facts, and ordering the due query on the firing watermark meant the hundred-and-first enabled rule was never evaluated at all; `last_checked_at` added by 03100 with the due index rebuilt on it; why advancing `last_fired_at` on a no-match run is the tempting fix and breaks `min_count`; one cursor statement a run rather than one a rule, and the three deliberate details in it — no `updated_at`, failed rules stamped too, `WithoutCancel` so a cut-off run keeps what it looked at; why a NULL cursor is the right thing for a new or resumed rule; the test's shape, and why its first assertion is that nothing happened |
@@ -13990,3 +13991,65 @@ the point: adding work fails closed, removing it fails open.
 
 The alternative is recorded rather than merely rejected, because the next reader
 of `refuse` will have the same idea.
+
+## 2026-08-04 — D98, the instance-level principal D38 said did not exist
+
+D38 recorded that this product has no instance-level principal, so *"the instance
+owner"* is not a thing the permission system can name. Three findings bottom out
+there — [F15](deferred-findings.md) (every organization owner reads every dispute
+on the instance and lifts a blocklist entry for everybody), F31 (a workspace-scoped
+admin reads the whole organization's audit log) and F36 (an instance-wide
+administrative act is logged in exactly one tenant's log). M45's triage approved
+the work; the shape was the owner's and is answered here.
+
+**The owner chose to introduce the principal**, over naming a moderator in
+configuration, scoping the blocklist per organization, or carrying all three. Two
+constraints came with it, and one of them changed how it is built.
+
+### The constraints, as given
+
+1. **Only the instance-owner level may delegate the permission.**
+2. **API access is read-only for disputes; a change requires a person.**
+
+### What the second one is implemented as, and why not literally
+
+Taken at face value, *"a change requires a user through the UI"* is a branch on
+credential type — and `phase-details/README.md`'s Permissions row says in as many
+words that anything branching on credential type outside `NonDelegableScopes` and
+D43 is a defect. F104 is the row filed for the seven places that already do, and
+its whole finding is that the rule under-describes the tree rather than the tree
+being wrong. Adding an eighth deliberately would be the wrong direction.
+
+So the permission is **split in two**, which produces exactly the requested
+outcome through the sanctioned mechanism:
+
+- a **read** scope, delegable, so a key may list and inspect disputes;
+- a **decide** scope, in `NonDelegableScopes`, so a key may not act on one.
+
+A key that tries to decide is refused by the map, not by a check on what kind of
+credential it is. *"Requires a person"* becomes a consequence of the scope being
+non-delegable rather than an assertion made at a call site — which is the same
+argument D18's second limb makes, and the same shape D43 took for invitations.
+
+It also keeps *"Every UI feature has API support"* true. The decide endpoint
+exists, is documented and is replayed by the contract test; it refuses an API key,
+exactly as the `apikeys.*` operations already do. A surface that exists and
+refuses is a different thing from a surface that does not exist.
+
+### The delegation bound, made explicit
+
+*"Only the instance owner may delegate"* is stated as: **the instance-level
+principal may grant instance-level review, and a holder of it may not.** Without
+that second half the permission spreads without bound — the first delegatee
+appoints the next, and the property the constraint exists to protect is gone in
+two hops. It is the same reasoning D43 applies to a key-issued invitation: bound
+what a grant may produce, not only who may make one.
+
+### What this does not become
+
+It is not a general instance-administration role. Its reach is the three findings
+that needed it — the dispute queue, the blocklist entries those decisions lift,
+and the instance-wide audit surface F36 names — and nothing else inherits from it.
+A principal that accumulates scopes because it exists is how the thing D38 avoided
+gets built by accident, so the scopes it holds are enumerated rather than implied,
+and adding one later is a decision rather than a consequence.
