@@ -153,6 +153,7 @@ file. Append a row when you append an entry.
 | [M45, how a hundred and ten rows get reviewed](#2026-08-04--m45-how-a-hundred-and-ten-rows-get-reviewed) | Why per-item approval is bounded by volume rather than reinterpreted; groups never mix severities and any row the owner pulls out is answered alone; why a grouped deferral is cheap and a grouped approval is not; recorded before the triage so the method cannot be fitted to its outcome |
 | [M45's triage, and the widest option four times](#2026-08-04--m45s-triage-and-the-widest-option-four-times) | All eleven moderate security rows, the disclosure taught its second channel, the non-security set including the dispute family, and hygiene plus the comment sweep; **F15 and F31 are blocked on D38's missing instance-level principal and that choice is not made here**; why hygiene goes first, and the three rows that cannot be judged on their own terms |
 | [D98, the instance-level principal D38 said did not exist](#2026-08-04--d98-the-instance-level-principal-d38-said-did-not-exist) | The owner's choice over three alternatives, and the two constraints that came with it; why "a change requires a person" is built as a split permission with the decide half non-delegable rather than as a credential-type branch the inherited rule forbids; why a holder may not re-delegate; and why the principal's scopes are enumerated rather than implied |
+| [M45's second triage, a standing rule, and a validation that failed](#2026-08-04--m45s-second-triage-a-standing-rule-and-a-validation-that-failed) | F114 closed approved-but-not-built and why that is a third disposition rather than a dropped row; the owner's standing rule that a recorded abuse path is in a fix milestone's scope by default, and why the recommendation habit it corrects needed correcting; F141 — there is no account recovery in this product at all, why a claims-based review could not see it, and what it does to F140 |
 | [M35, which namespace a gate is keyed on](#2026-08-04--m35-which-namespace-a-gate-is-keyed-on) | D94 — three corrections and one amendment: a verified password answers **303** unconditionally and D53's *"answers the 302 itself"* is superseded, with 303 joining `REDIRECT_DEFAULT_STATUS`'s allowed set; the signature and the password bucket keyed on the domain the request arrived on rather than the boot constant; the signed URL minted on the link's own hostname, with an unreadable domain row an error rather than a fallback; HEAD reading the budget without spending it, and what that read costs; why the fix invalidates no signature that ever worked, against a constraint that expected it to; the fixture in which the defect was testable at all |
 | [M42, what one drain costs, and the fix that would have moved the cost rather than removed it](#2026-08-04--m42-what-one-drain-costs-and-the-fix-that-would-have-moved-the-cost-rather-than-removed-it) | D95 — a claimed batch is dialled together and `Drain` waits for it, so one drain costs one attempt and not `DrainBatch` of them; why the WaitGroup is what makes D77's lock trap inapplicable rather than survived; why a webhook goroutine of its own is not a fix, `pg_try_advisory_lock` being session-scoped, and would convert every other job's stall into a skip; what it does to F90 (nothing) and to F91 (unreachable, not fixed); what a receiver now sees |
 | [M43, the queue's own clock, and why the watermark could not be it](#2026-08-04--m43-the-queues-own-clock-and-why-the-watermark-could-not-be-it) | D96 — one column was carrying two facts, and ordering the due query on the firing watermark meant the hundred-and-first enabled rule was never evaluated at all; `last_checked_at` added by 03100 with the due index rebuilt on it; why advancing `last_fired_at` on a no-match run is the tempting fix and breaks `min_count`; one cursor statement a run rather than one a rule, and the three deliberate details in it — no `updated_at`, failed rules stamped too, `WithoutCancel` so a cut-off run keeps what it looked at; why a NULL cursor is the right thing for a new or resumed rule; the test's shape, and why its first assertion is that nothing happened |
@@ -14372,3 +14373,60 @@ workspace *before* the reset runs, which is why the third limb's owner-switch
 does not reach the asymmetry; and `click_events` is truncated wholesale rather
 than by workspace, so the counts that moved were never workspace-scoped in the
 first place.
+
+## 2026-08-04 — M45's second triage, a standing rule, and a validation that failed
+
+Three answers came back on the rows M45's own fix work produced. Two are
+dispositions; the third is a rule that outlives this milestone, and one of them
+turned into a finding rather than a confirmation.
+
+### F114 closes without being built
+
+Approved as work, examined after [F33](deferred-findings.md) landed, and
+**deliberately not built**. The reasoning is in F114's own row and in `90c51ec`:
+the oracle's two answers do not cost the same, the free one is a failed insert,
+and every proposed mitigation bounds the other one. The alternative that genuinely
+closes it hands a prober the first filer's address in its obvious form.
+
+A row leaving *Open* without the defect being gone is a precedent worth naming.
+It is not the tracker's usual "fixed" and it is not "dropped": it is **reviewed,
+approved, studied and declined**, with the study on record. The row keeps its
+evidence and its approval, and the Closed cell carries why nothing followed.
+
+### The standing rule, owner-set
+
+> **A recorded abuse path is in a fix milestone's scope by default** — including
+> one found *during* that milestone. Carrying it is the owner's to choose and is
+> not a thing to recommend without a stated reason.
+
+Written into [workflow.md](workflow.md)'s standing rules, because it governs
+triage rather than this phase. It is a correction to how the choice was being
+framed: three times this milestone the recommendation led with the narrower
+option, and three times the owner took the wider one. The rule removes the
+default that produced that, and the second half matters as much as the first —
+*carry* stays on the list, so the owner keeps the choice; what changes is that
+cheapness stops being a reason on its own.
+
+### The validation that failed, and became F141
+
+The owner's answer on F140 asked for something to be checked rather than
+assumed — *validate that account recovery is possible as long as a mailer is set
+up.* It is not.
+
+**There is no account recovery in this product at all.** No route, no token, no
+column, no template. `POST /account/password` requires a session, so the only
+password write in the tree is one a signed-in person makes. A mailer changes
+nothing, because there is no mechanism for it to carry.
+
+Recorded as [F141](deferred-findings.md) at moderate-to-major, and it is worth
+saying why the question found it when six milestone readers and a dimension sweep
+did not. Every one of them audited what the tree *claims*, and this claims
+nothing: Plan.md does not list password reset as built, as deferred, or as out of
+scope. A review that tests documented claims against code cannot see a feature
+nobody ever wrote down — which is the same shape as Phase 1's missing purge job,
+found by somebody using the product rather than reading it, and the reason
+m44.9.md requires three things be verified live.
+
+It also changes F140's weight. The instance principal is one account whose only
+credential is a password, so *lost password* and *lost principal* are the same
+event, and both currently end at `psql`.

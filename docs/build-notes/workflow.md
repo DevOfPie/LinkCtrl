@@ -259,6 +259,14 @@ when it has already been acted on, in which case the entry names the behaviour
 the tree currently has. This applies to whoever is deciding, and most of all to
 an actor deciding on the owner's behalf because the loop would otherwise stall.
 
+**A recorded abuse path is in a fix milestone's scope by default.** A row whose
+evidence describes something a principal can *do* — not merely observe, not merely
+a claim that is wrong — belongs in the fix milestone that is running, **including
+when it is found during that milestone**. It does not wait for the next phase
+because it arrived late. Carrying one is available and is the owner's to choose;
+it is not a thing to recommend, and a recommendation to carry needs a reason
+stated in the prompt rather than a default of cheapness. Owner-set, 2026-08-04.
+
 **Stop and ask** for: destructive operations, scope changes, anything the owner
 would reasonably want to decide. Proceed without asking for reversible work that
 follows from the current milestone.
