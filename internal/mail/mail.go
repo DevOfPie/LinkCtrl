@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/mail"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,6 +48,11 @@ type Renderer interface {
 // Sender delivers one message. The seam the integration tests substitute at,
 // because standing up a real relay to prove the outbox drains would be testing
 // somebody else's SMTP server.
+//
+// **Called from SendConcurrency goroutines at once**, because Drain hands a
+// claimed batch to the relay together. SMTPSender qualifies by holding nothing
+// across a call — its options are read-only and each Send dials its own
+// connection — and anything substituted here has to do the same.
 type Sender interface {
 	Send(ctx context.Context, to, subject, body string) error
 }
@@ -71,6 +77,42 @@ const (
 	// anyway: a backlog drains over several runs instead of holding the job for
 	// minutes.
 	DrainBatch = 20
+
+	// SendConcurrency is how many of a claimed batch are handed to the relay at
+	// once, and it is DrainBatch because that is what makes the sentence above
+	// true.
+	//
+	// There was no such constant before and the value it replaces was one, which
+	// is finding F133 — the shape M42's reopening had already fixed one package
+	// over (D95), on the same scheduler goroutine, one line earlier in the same
+	// select case. A batch sent one message after another costs DrainBatch times
+	// SMTP_TIMEOUT: twenty times ten seconds at the shipped defaults, against a
+	// relay that accepts connections and then says nothing, which is what a
+	// firewalled SMTP host looks like from here. That time is spent inline on the
+	// goroutine that reads every scheduled job's ticker, and a Go ticker holds one
+	// tick, so the rest are dropped rather than queued. The cost never landed on
+	// mail: it landed on webhook delivery, on automation's advertised clock, on
+	// domain re-verification and on the rollups.
+	//
+	// Equal to DrainBatch rather than smaller, for D95's reason. Any value below
+	// it puts the batch size back into the wall-clock cost — a limit of eight is
+	// three waves, thirty seconds at the default timeout, and back inside the tick
+	// it has to fit under. What keeps the number small is the claim itself: a
+	// drain never holds more than DrainBatch rows, so it can never open more than
+	// that at once.
+	//
+	// **The difference from webhooks is where the connections go.** A webhook
+	// batch is spread over as many receivers as it has rows; this one opens up to
+	// twenty sessions to the single relay the operator named. A relay that caps
+	// concurrent connections below twenty refuses the extra ones, and a refused
+	// message is a spent attempt that retries with backoff — the path a refusal
+	// already takes, and no message is lost by it. What it costs is the tail: a
+	// backlog held continuously above the cap for five attempts abandons the
+	// overflow where the sequential version would have crawled. That trade is
+	// taken deliberately, because the stall it removes is instance-wide and
+	// needs no misconfiguration, while this needs a relay that is both
+	// connection-capped and continuously saturated.
+	SendConcurrency = DrainBatch
 
 	// FinishedRetentionDays is how long a sent or failed row is kept.
 	//
@@ -165,6 +207,18 @@ func (s *Service) Enqueue(ctx context.Context, to, kind string, data map[string]
 // One row's failure never stops the batch: errors are collected and the
 // remaining messages are still attempted, because a single unreachable
 // recipient must not hold up everyone else's mail.
+//
+// **The batch goes to the relay together, and Drain does not return until all of
+// it has.** Both halves are load-bearing, and the second is why this is written
+// with a WaitGroup rather than fired and forgotten. The caller is `withLeadership`
+// in cmd/linkctrl/jobs.go — the same caller the webhook drain has, with the same
+// constraint, which is what made D95's shape correct here rather than merely
+// similar. It holds D77's advisory lock on a pooled connection it releases the
+// moment the function it was given returns, so a goroutine that outlived this call
+// would send *without* the lock, and `pg_try_advisory_lock` is session-scoped, so
+// a goroutine of its own would not even have one. Waiting here means the lock
+// covers every send exactly as it did when they were sequential, and neither D77
+// nor the skip-locked claim beneath it moves.
 func (s *Service) Drain(ctx context.Context) error {
 	rows, err := s.q.ClaimDueMail(ctx, dbgen.ClaimDueMailParams{
 		BatchSize: DrainBatch,
@@ -177,47 +231,79 @@ func (s *Service) Drain(ctx context.Context) error {
 		return fmt.Errorf("mail: claim due mail: %w", err)
 	}
 
-	var errs []error
+	var (
+		mu   sync.Mutex
+		errs []error
+		wg   sync.WaitGroup
+	)
+	// Bounded by construction — the claim returns at most DrainBatch rows — and
+	// bounded again here, so that raising the batch size is a decision about how
+	// many sessions this opens rather than an accident of one.
+	inFlight := make(chan struct{}, SendConcurrency)
 	for _, row := range rows {
-		sendErr := s.sender.Send(ctx, row.Recipient, row.Subject, row.Body)
-		if sendErr == nil {
-			if err := s.q.MarkMailSent(ctx, row.ID); err != nil {
-				errs = append(errs, fmt.Errorf("mail: mark %s sent: %w", row.ID, err))
+		inFlight <- struct{}{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-inFlight }()
+			if e := s.send(ctx, row); len(e) > 0 {
+				mu.Lock()
+				errs = append(errs, e...)
+				mu.Unlock()
 			}
-			// Logged at info on any attempt past the first. "It arrived on the
-			// fourth try" is a different operational story from "it arrived",
-			// and the row alone does not put it in the log.
-			if row.Attempts > 1 {
-				s.log.Info("mail delivered after retrying",
-					slog.String("kind", row.Kind), slog.Int("attempts", int(row.Attempts)))
-			}
-			continue
-		}
-
-		errs = append(errs, sendErr)
-		if row.Attempts >= MaxAttempts {
-			// Terminal, and kept. A row saying what was attempted and why it
-			// never arrived is the whole reason this is a table.
-			if err := s.q.MarkMailFailed(ctx, dbgen.MarkMailFailedParams{
-				ID: row.ID, LastError: sendErr.Error(),
-			}); err != nil {
-				errs = append(errs, fmt.Errorf("mail: mark %s failed: %w", row.ID, err))
-			}
-			s.log.Error("mail abandoned after the last attempt",
-				slog.String("kind", row.Kind),
-				slog.Int("attempts", int(row.Attempts)),
-				slog.Any("error", sendErr))
-			continue
-		}
-		if err := s.q.MarkMailRetry(ctx, dbgen.MarkMailRetryParams{
-			ID:             row.ID,
-			BackoffSeconds: int32(Backoff(int(row.Attempts)).Seconds()),
-			LastError:      sendErr.Error(),
-		}); err != nil {
-			errs = append(errs, fmt.Errorf("mail: reschedule %s: %w", row.ID, err))
-		}
+		}()
 	}
+	wg.Wait()
 	return errors.Join(errs...)
+}
+
+// send makes one delivery attempt and records what it produced.
+//
+// Called from SendConcurrency goroutines at once, so it holds nothing across the
+// call: the row is its own, `s.q` is a pgxpool the driver already shares, `s.log`
+// is a *slog.Logger, and `s.sender` is required to be safe for concurrent use —
+// see Sender. Anything added here that touches Service state needs its own guard.
+func (s *Service) send(ctx context.Context, row dbgen.ClaimDueMailRow) []error {
+	var errs []error
+
+	sendErr := s.sender.Send(ctx, row.Recipient, row.Subject, row.Body)
+	if sendErr == nil {
+		if err := s.q.MarkMailSent(ctx, row.ID); err != nil {
+			errs = append(errs, fmt.Errorf("mail: mark %s sent: %w", row.ID, err))
+		}
+		// Logged at info on any attempt past the first. "It arrived on the
+		// fourth try" is a different operational story from "it arrived",
+		// and the row alone does not put it in the log.
+		if row.Attempts > 1 {
+			s.log.Info("mail delivered after retrying",
+				slog.String("kind", row.Kind), slog.Int("attempts", int(row.Attempts)))
+		}
+		return errs
+	}
+
+	errs = append(errs, sendErr)
+	if row.Attempts >= MaxAttempts {
+		// Terminal, and kept. A row saying what was attempted and why it
+		// never arrived is the whole reason this is a table.
+		if err := s.q.MarkMailFailed(ctx, dbgen.MarkMailFailedParams{
+			ID: row.ID, LastError: sendErr.Error(),
+		}); err != nil {
+			errs = append(errs, fmt.Errorf("mail: mark %s failed: %w", row.ID, err))
+		}
+		s.log.Error("mail abandoned after the last attempt",
+			slog.String("kind", row.Kind),
+			slog.Int("attempts", int(row.Attempts)),
+			slog.Any("error", sendErr))
+		return errs
+	}
+	if err := s.q.MarkMailRetry(ctx, dbgen.MarkMailRetryParams{
+		ID:             row.ID,
+		BackoffSeconds: int32(Backoff(int(row.Attempts)).Seconds()),
+		LastError:      sendErr.Error(),
+	}); err != nil {
+		errs = append(errs, fmt.Errorf("mail: reschedule %s: %w", row.ID, err))
+	}
+	return errs
 }
 
 // PurgeFinished deletes sent and failed rows past the retention window,

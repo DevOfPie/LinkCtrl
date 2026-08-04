@@ -53,6 +53,11 @@ func newWebOn(t *testing.T, pool *pgxpool.Pool) *webFixture {
 	authSvc := auth.NewService(pool, auth.ServiceConfig{
 		Params: fastParams,
 		TTL:    auth.SessionTTL{Absolute: cfg.Auth.SessionAbsoluteTTL, Idle: cfg.Auth.SessionIdleTTL},
+		// The shipped default, wired as main.go wires it. Left unset this is
+		// zero, which the service reads as "no lockout" — so a fixture without
+		// it lets a test about what a locked account answers pass by never
+		// locking one (finding F92).
+		Lockout: auth.LockoutPolicy{Threshold: 5, Window: 15 * time.Minute},
 	})
 	keySvc, err := auth.NewAPIKeyService(pool, authSvc, auth.APIKeyConfig{Pepper: testPepper})
 	if err != nil {

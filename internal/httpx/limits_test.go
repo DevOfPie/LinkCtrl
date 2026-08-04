@@ -75,8 +75,9 @@ func TestRateLimitRefusesWithProblemAndRetryAfter(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}
-	// Distinct from account-locked, which is also a 429. A client cannot retry
-	// sensibly if the two are indistinguishable.
+	// The only 429 this API produces, since F92 folded account-locked into the
+	// ordinary sign-in refusal. A client that cannot recognise this one cannot
+	// honour Retry-After.
 	if p.Type != problemBase+"rate-limited" {
 		t.Errorf("problem type = %q, want %srate-limited", p.Type, problemBase)
 	}

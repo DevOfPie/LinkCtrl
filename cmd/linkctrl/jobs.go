@@ -212,9 +212,13 @@ func (j *jobRunner) start(parent context.Context) {
 				// **Everything in this select is inline, including this.** A job
 				// that runs long here does not delay itself; it delays every
 				// other case, and a Go ticker holds one tick, so the ones after
-				// that are dropped and not queued. Which is why what a webhook
-				// drain costs is bounded by one WEBHOOK_TIMEOUT rather than by
-				// the batch size — see runWebhooks below.
+				// that are dropped and not queued. Which is why both drains on
+				// this line cost one attempt rather than a batch of them: one
+				// WEBHOOK_TIMEOUT for the deliveries and one SMTP_TIMEOUT for the
+				// mail, whatever either backlog is. The mail half is finding F133
+				// and was fixed second — the webhook drain stopped stalling the
+				// scheduler while the mail drain that runs immediately before it
+				// still could, which left the harm class half-closed.
 				j.runWebhooks(ctx)
 			case <-hourly.C:
 				j.runMaintenance(ctx)
@@ -327,9 +331,16 @@ func (j *jobRunner) reportJobStaleness(ctx context.Context) {
 // rather than close it.
 //
 // The timeout is generous because the batch is a batch of network round trips
-// to somebody else's server. It is still bounded, so a relay that accepts
-// connections and then says nothing cannot hold the scheduler forever — and the
-// sender sets its own per-message deadline inside this one.
+// to somebody else's server, and bounded for the same reason: a relay that
+// accepts connections and then says nothing must not hold the scheduler. Each
+// message carries its own shorter deadline inside this one — SMTP_TIMEOUT, ten
+// seconds by default — and the batch is handed over together rather than in
+// turn, so what this call costs is *one* of those and not twenty. That is the
+// number that matters here: this runs inline on the goroutine below, and a drain
+// that took DrainBatch × SMTP_TIMEOUT held every other job on the instance for
+// the duration, this line's own runWebhooks included. See
+// internal/mail.SendConcurrency, and finding F133, which is that defect one
+// package over from the one M42 was reopened for.
 func (j *jobRunner) runMail(ctx context.Context) {
 	if j.mailer == nil {
 		return

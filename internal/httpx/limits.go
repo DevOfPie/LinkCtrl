@@ -144,9 +144,13 @@ func setRetryAfter(w http.ResponseWriter, retry time.Duration) {
 
 // writeTooManyRequests is the API's refusal.
 //
-// A distinct problem type from account-locked, which is also a 429: one means
-// "this account is frozen for a while", the other "you are going too fast". A
-// client that cannot tell them apart will retry the wrong one.
+// `rate-limited` is the only 429 this API produces. It used to share the status
+// with `account-locked`, and the two were deliberately distinguishable so a
+// client would not retry the wrong one; finding F92 removed that second type,
+// because which of them a caller got answered whether the address they named is
+// registered. What survives is the distinction a client can still act on: this
+// refusal carries Retry-After and is worth waiting out, and a sign-in refusal is
+// a 401 whatever caused it.
 func writeTooManyRequests(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	WriteProblem(w, r, Problem{

@@ -529,7 +529,7 @@ and nowhere else, nothing is queued, and no outbound connection is ever made.
 | `LINKCTRL_SMTP_FROM` | *(empty)* | Required once a host is set. A bare address or `LinkCtrl <links@example.com>`. Parsed at boot, not at the first send. |
 | `LINKCTRL_SMTP_USERNAME` | *(empty)* | PLAIN authentication. Set both this and the password, or neither. |
 | `LINKCTRL_SMTP_PASSWORD` | *(empty)* | Also accepts a `_FILE` suffix, for mounted secrets. Held as a secret that refuses to print itself. |
-| `LINKCTRL_SMTP_TIMEOUT` | `10s` | Bounds one delivery attempt end to end: dial, handshake, `DATA`. |
+| `LINKCTRL_SMTP_TIMEOUT` | `10s` | Bounds one delivery attempt end to end: dial, handshake, `DATA`. A batch of twenty is handed over together on a thirty-second tick, so a drain costs one of these rather than twenty; this is also how long a drain occupies the scheduler, which every other background job shares. The batch opens up to twenty sessions to this one relay — a relay that caps concurrent connections lower refuses the extra ones, and those messages retry with backoff. |
 
 ### What is supported, and what is not
 

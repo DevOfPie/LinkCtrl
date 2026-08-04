@@ -386,11 +386,15 @@ func (h *Web) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 			SignupOpen: h.signupOpen(),
 		}
 		switch {
-		case errors.Is(err, auth.ErrAccountLocked):
-			data.Error = "Too many failed attempts. The account is locked briefly; try again in a few minutes."
-		case errors.Is(err, auth.ErrInvalidCredentials), errors.Is(err, auth.ErrAccountInactive):
-			// One message for every credential failure, same as the API.
-			data.Error = "The email or password is incorrect."
+		case isCredentialFailure(err):
+			// One message for every credential failure, same as the API, and
+			// the same words in the same order — SignInRefusedDetail is shared
+			// rather than restated, because a form that said "the account is
+			// locked briefly" while the API said "the email or password is
+			// incorrect" is the second half of finding F92. Whoever wanted to
+			// know whether an address was registered only had to ask the surface
+			// that would tell them.
+			data.Error = SignInRefusedDetail
 		default:
 			h.webError(w, r, err)
 			return

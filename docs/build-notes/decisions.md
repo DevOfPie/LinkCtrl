@@ -159,6 +159,7 @@ file. Append a row when you append an entry.
 | [Mounting derived from registration](#2026-08-04--mounting-derived-from-registration-after-eleven-routes-shipped-unreachable) | D97 — F85: eleven of M42's and M43's routes were registered, reserved, linked from the nav and documented, and unreachable, because the root mux mounted from a hand-written slice that the only guard was also built from; why adding the four missing strings fixes the instance and not the class, and why the comment claiming the opposite is the reason nobody looked; `appMux` recording what it is handed so registering *is* mounting; the reduction rule chosen because it reproduces the old slice exactly plus the four, and the wider rule rejected; why the API subtree stays hand-mounted; `dashboardPatterns` deleted so the reserved guard reads registrations too, `registerAppRoutes` split out to make them enumerable, and `maximalDeps` filled by reflection because a literal would be the third list and would fail silently; and the sabotage whose control result is that the old guard stayed green |
 | [M45, four ways one membership rule was not read](#2026-08-04--m45-four-ways-one-membership-rule-was-not-read) | F93, F94, F97 and F60 — the first four approved rows of M45's moderate security cluster, fixed on their own terms rather than behind a shared abstraction; why `List` had to be refused alongside `Revoke` and why `invite.Roles` was reading the wrong rank; why F94's recipient set is a second *parameter* and not a second predicate, and what `DISTINCT` is for; F97's three limbs, and why F43's `CreateOrganization` door closes with no credential-type branch at all — the state it opened on is what was wrong; `apikey.revoked` added because *the person is the record* stops holding when the credential's owner is not present; D43's mechanism reused for F60 rather than `NonDelegableScopes`, and `KeyIssuableRoles` moved to `internal/auth` so one list bounds both doors; and the one residue left deliberately — the `/invites` nav entry that now leads to a 403 for a workspace-scoped admin, and what removing it would cost |
 | [M45, three places a secret was sitting still](#2026-08-04--m45-three-places-a-secret-was-sitting-still) | F32, F34 and F35 — one theme, three mechanisms, fixed separately; **F32's design fork decided in the open**: scrub at the terminal transition, with what a send-time reference and a shortened retention would each have cost, and why the scrub covers every kind and is a database constraint rather than a convention; the pending-row exposure that remains and the two migration comments corrected to admit it; `03200` bending the additive-DDL rule and why `mail_outbox` is the one table where that costs nothing; F34's URL **replaced** rather than removed, and the GET-method destination leak that closes with it; F35's denylist inverted to an allowlist plus a boot refusal, and the path-embedded credential named as residue; and the `net/url` import ban that turned out to guard nothing and to have caused both |
+| [M45, two refusals that answered a question nobody asked them](#2026-08-04--m45-two-refusals-that-answered-a-question-nobody-asked-them) | F92 and F133 — unrelated rows, fixed on their own terms; **F92's two traps answered rather than half-answered**: both surfaces collapsed onto one shared string so the form's prose cannot leak what the status no longer does, and `DummyVerify` on the locked branch because equalising the status and not the work leaves the question answerable with a stopwatch; why `ErrAccountLocked` stays a distinct sentinel and the collapse belongs at the boundary; why the lockout is named *unconditionally* and why that sentence is not in `WriteError`; `account-locked` removed as a problem type and named as a client break; the fixture that had no lockout wired and would have passed by never locking one; **F133** — mail's `withLeadership` and skip-locked claim checked to be D95's constraint exactly, so the WaitGroup transfers whole; the one difference D95 does not cover, twenty sessions to *one* relay, and the tail cost accepted in the open; and why the eleven lines are spelled twice rather than shared |
 
 ---
 
@@ -13096,3 +13097,137 @@ string surgery precisely because the standard parser was kept out, and it missed
 a case the standard parser handles by construction. `queryEscape` stays as it is
 regardless — it encodes a space as `%20` where `url.QueryEscape` writes `+`, and
 a comment correction does not get to change what goes on the wire.
+
+---
+
+## 2026-08-04 — M45, two refusals that answered a question nobody asked them
+
+F92 and F133, the next two approved rows of [M45's
+triage](#2026-08-04--m45s-triage-and-the-widest-option-four-times) — one from the
+moderate security cluster, one from the non-security set. They are unrelated and
+were fixed on their own terms; what they share is being bounded corrections whose
+shape was already known, and in F133's case already written down.
+
+### F92 — the fifth wrong password was the answer
+
+Sign-in told an unauthenticated stranger whether an address had an account here.
+Five wrong passwords against a registered one came back `429`
+`…/problems/account-locked`; five against an unregistered one came back `401`
+`…/problems/invalid-credentials`. Five fits inside `LOGIN_RATE_PER_MIN`, so the
+per-address limiter never masked it, and the limiter's own refusal is a third
+type, so all three states were tellable apart. It worked on the shipped `closed`
+default — where the registration endpoint, F13's oracle, refuses before it looks
+anything up — and it charged the target a fifteen-minute lockout for the
+privilege, so it was a cheap denial of service on the same request.
+
+The file already disagreed with itself. `problem.go` collapsed
+`ErrAccountInactive` into invalid-credentials twelve lines above the branch that
+did the opposite, *because* "telling an unauthenticated caller 'this account
+exists but is suspended' gives back exactly what that refusal withholds", and
+`service.go`'s own comment asserted *"Every failure returns
+ErrInvalidCredentials"*. Neither statement was true of the branch between them.
+
+**Both surfaces, because fixing one is the trap.** The row named it: mapping the
+error to a 401 closes the API and leaves the form saying *"Too many failed
+attempts. The account is locked briefly"* in prose, and whoever wants to know only
+has to ask the surface that still answers. So the API answer, the browser prose
+and the status are one thing now — `SignInRefusedDetail`, a single string both
+call sites use rather than two that agree today.
+
+**Timing was the second leak, and equalising the status alone would have left it
+open.** The locked branch returned before any verification, so it refused in one
+database round trip where the unknown-address path pays a dummy argon2. The same
+question, asked with a stopwatch. It now spends `DummyVerify` before returning —
+which buys the timing back and nothing else: the lockout still holds whatever the
+password was.
+
+**What is deliberately *not* uniform: the error inside the process.**
+`ErrAccountLocked` stays a distinct sentinel, exactly as `ErrAccountInactive`
+always has. A lockout is a different operational event from a typo and a test can
+assert it (`TestAccountLocksAfterRepeatedFailures` still does), so the collapse
+belongs at the two boundaries that answer a person and nowhere earlier. Making
+`Login` return `ErrInvalidCredentials` for everything would have made the doc
+comment true by deleting the signal.
+
+**And what the fix must not cost: a real user's explanation.** Somebody locked
+out of their own account now gets "the email or password is incorrect" for
+fifteen minutes while their password is, in fact, correct. The answer is a
+constant: the refusal names the lockout *unconditionally* — the same sentence
+whether or not the address is registered and whether or not a lockout is in
+force — so it discloses nothing and still tells the one person who needs it why
+waiting is what helps. A message conditioned on the lockout would have been the
+oracle again in softer words.
+
+**The one place that sentence is not written is `WriteError`.** The generic
+`invalid-credentials` mapping also answers `POST /api/v1/auth/password`, where
+nothing locks and the sentence would be untrue, so sign-in carries its own writer
+(`writeSignInRefused`) and the generic detail is unchanged. That is a second
+place mapping the same three errors, and it fails safe: an error added to
+`problem.go` and forgotten here still gets the identical status, type and title,
+losing only the lockout sentence.
+
+**`account-locked` is gone as a problem type**, because nothing emits it any
+more. That is a break for a client branching on it, and the CHANGELOG says so
+rather than leaving it to be discovered: `rate-limited` is now the only type this
+API answers `429` with. `api/openapi.yaml`, `docs/usage.md`, `docs/operations.md`
+and the comment on `writeTooManyRequests` all said there were two; each now says
+what is true, and operations.md gains the query an operator needs, because the
+response deliberately no longer tells them.
+
+The test fixture had to change to make the defect reachable at all.
+`newWeb` built its auth service without a `Lockout`, which the service reads as
+"no lockout" — so a test about what a locked account answers would have passed by
+never locking one. It now wires the shipped default, as `main.go` does.
+
+### F133 — the same drain, one package over
+
+`internal/mail` had the shape M42 was reopened for: a claimed batch of twenty sent
+one message after another, on the single goroutine that reads every scheduled
+job's ticker, one line *earlier* in the same `case <-outbox.C` than the webhook
+drain that had just been fixed. At the default `SMTP_TIMEOUT` that is two hundred
+seconds against a relay that accepts connections and never answers, and Go tickers
+hold one tick, so every other job's is dropped rather than queued. `mail.go`'s own
+comment made the claim [D95](#2026-08-04--m42-what-one-drain-costs-and-the-fix-that-would-have-moved-the-cost-rather-than-removed-it)
+had already falsified for webhooks — a backlog *"drains over several runs instead
+of holding the job for minutes"*.
+
+**The leadership constraint is the same one, checked rather than assumed.**
+`runMail` calls `withLeadership` exactly as `runWebhooks` does, and the claim
+underneath is `FOR UPDATE SKIP LOCKED` exactly as the webhook claim is. So D95's
+reasoning transfers whole: the advisory lock lives on a pooled connection released
+by `defer` when the function `withLeadership` was given returns, so a goroutine
+outliving `Drain` would send **without** the lock, and `pg_try_advisory_lock` is
+session-scoped, so a goroutine with its own connection would not have one at all.
+The `sync.WaitGroup` waited on before `Drain` returns is what makes that trap
+inapplicable rather than survived. Nothing about D77 moves, and nothing had to.
+
+**What is not the same is where the connections go**, and that is the part D95
+does not cover. A webhook batch spreads over as many receivers as it has rows;
+this one opens up to twenty sessions to the single relay the operator named. A
+relay capping concurrent connections below twenty refuses the extra ones, and a
+refusal is a spent attempt that retries with backoff — no message is lost by it.
+What it costs is the tail: an outbox held continuously above that cap for five
+attempts abandons the overflow, where the sequential version would have crawled.
+That trade is taken deliberately and written into `mail.go`, `docs/SECURITY.md`
+and `docs/configuration.md` rather than left to be discovered, because the stall it
+removes is instance-wide and needs no misconfiguration, while this needs a relay
+that is both connection-capped and continuously saturated.
+
+**Spelled twice rather than shared, which the row said was the part worth
+deciding.** The two `Drain`s now hold the same eleven lines of WaitGroup, bounded
+channel and mutex. A shared helper would be a generic bounded-concurrent-for-each
+spanning `internal/mail` and `internal/webhook` — and this milestone has already
+recorded, for [four unrelated call sites](#2026-08-04--m45-four-ways-one-membership-rule-was-not-read),
+that an abstraction built to make them look alike is one more thing to get wrong.
+The concurrency bound is not the same decision in the two packages: one is
+"how many receivers may we dial", the other is "how many sessions may we open to
+one relay", and they happen to agree on twenty for different reasons. A shared
+constant would hide that, and the day one of them wants a different number the
+abstraction is what would have to be undone first.
+
+### Both, on the same footing
+
+Neither closes its class. F92 answers sign-in and leaves F13 — the registration
+endpoint's oracle on an `open` instance — open, which is the row it was always
+distinguished from. F133 leaves F90's capacity and fairness untouched in both
+directions: same batch size, same ordering, still no per-tenant term.

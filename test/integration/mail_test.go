@@ -108,27 +108,7 @@ func newMailService(t *testing.T, pool *pgxpool.Pool, sender mail.Sender) *mail.
 // outbox returns every row, newest last, as (recipient, kind, status, attempts).
 func (f *mailFixture) outbox(t *testing.T) []outboxRow {
 	t.Helper()
-	rows, err := f.pool.Query(t.Context(), `
-		SELECT recipient, kind, subject, body, status, attempts, last_error
-		  FROM mail_outbox ORDER BY created_at, id`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-
-	var out []outboxRow
-	for rows.Next() {
-		var r outboxRow
-		if err := rows.Scan(&r.Recipient, &r.Kind, &r.Subject, &r.Body,
-			&r.Status, &r.Attempts, &r.LastError); err != nil {
-			t.Fatal(err)
-		}
-		out = append(out, r)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	return out
+	return outboxRows(t, f.pool)
 }
 
 type outboxRow struct {
@@ -465,6 +445,162 @@ func TestFinishedMailIsPurgedAndPendingMailIsNot(t *testing.T) {
 	if p, _ := f.mail.Pending(t.Context()); p != 1 {
 		t.Errorf("Pending() = %d, want 1", p)
 	}
+}
+
+// ─── Finding F133: what one drain costs the rest of the scheduler ────────────
+
+// blockingSender is a relay that holds every send until `want` of them are in
+// flight together, and records the high-water mark.
+//
+// It exists because *the batch went out at once* is a claim about overlap rather
+// than about duration. A stopwatch alone would pass on a machine fast enough to
+// serialize twenty round trips inside whatever threshold the test picked, and
+// fail on a loaded one for reasons that have nothing to do with the code. The
+// high-water mark cannot be reached at all without concurrency.
+//
+// The grace is the fallback a serialized drain hits instead of the barrier, so a
+// run against sequential sending finishes in DrainBatch × grace rather than
+// hanging until the test's own deadline.
+type blockingSender struct {
+	want  int
+	grace time.Duration
+
+	mu       sync.Mutex
+	inFlight int
+	high     int
+	full     chan struct{}
+	filled   bool
+}
+
+func newBlockingSender(want int, grace time.Duration) *blockingSender {
+	return &blockingSender{want: want, grace: grace, full: make(chan struct{})}
+}
+
+func (s *blockingSender) Send(ctx context.Context, _, _, _ string) error {
+	s.mu.Lock()
+	s.inFlight++
+	s.high = max(s.high, s.inFlight)
+	if s.inFlight >= s.want && !s.filled {
+		s.filled = true
+		close(s.full)
+	}
+	s.mu.Unlock()
+
+	select {
+	case <-s.full:
+	case <-time.After(s.grace):
+	case <-ctx.Done():
+	}
+
+	s.mu.Lock()
+	s.inFlight--
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *blockingSender) peak() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.high
+}
+
+// TestOneMailDrainSpendsOneSendRatherThanTwenty is finding F133.
+//
+// The shipped drain sent a claimed batch one message after another on the
+// scheduler's single goroutine, so at the default SMTP_TIMEOUT a relay that
+// accepts connections and never answers — a firewalled SMTP host, from here —
+// held every other job on the instance for DrainBatch × SMTP_TIMEOUT. Go tickers
+// hold a cap-one channel, so those ticks were dropped rather than queued, and the
+// job that suffered most was the webhook drain running one line later in the same
+// select case. That is the shape M42 was reopened for (D95); this is the same
+// defect in the package immediately beside it.
+//
+// What is asserted is the claim mail.go's own DrainBatch comment makes: a backlog
+// drains without holding the job for minutes.
+func TestOneMailDrainSpendsOneSendRatherThanTwenty(t *testing.T) {
+	pool := newDB(t)
+	sender := newBlockingSender(mail.DrainBatch, 400*time.Millisecond)
+	svc := newMailService(t, pool, sender)
+
+	for i := range mail.DrainBatch {
+		if err := svc.Enqueue(t.Context(),
+			fmt.Sprintf("backlog-%02d@example.com", i), notify.MailAuditGrowth,
+			map[string]string{
+				"Instance": "links.example.com", "Name": "Someone",
+				"Size": "6.0 GiB", "Threshold": "5.0 GiB", "AppURL": "https://links.example.com",
+			}); err != nil {
+			t.Fatalf("enqueue %d: %v", i, err)
+		}
+	}
+	if n, err := svc.Pending(t.Context()); err != nil || n != mail.DrainBatch {
+		t.Fatalf("%d pending messages (err %v), want %d — the batch under test is "+
+			"one full claim", n, err, mail.DrainBatch)
+	}
+
+	start := time.Now()
+	if err := svc.Drain(t.Context()); err != nil {
+		t.Fatalf("drain: %v", err)
+	}
+	elapsed := time.Since(start)
+
+	if peak := sender.peak(); peak != mail.DrainBatch {
+		t.Errorf("at most %d messages were in flight at once, want %d — a batch sent "+
+			"one message at a time holds the scheduler goroutine for "+
+			"DrainBatch × SMTP_TIMEOUT, and every other job's tick is dropped for "+
+			"the duration", peak, mail.DrainBatch)
+	}
+	// The consequence, as arithmetic rather than as a feeling about speed:
+	// sending these one after another cannot finish inside half the time the
+	// sequential path is obliged to spend.
+	if limit := time.Duration(mail.DrainBatch/2) * sender.grace; elapsed >= limit {
+		t.Errorf("the drain took %s; %d messages sent one at a time take at least "+
+			"%s, and sent together take about %s",
+			elapsed, mail.DrainBatch,
+			time.Duration(mail.DrainBatch)*sender.grace, sender.grace)
+	}
+
+	// Concurrency must not have cost the bookkeeping. Every row is marked, once.
+	if n, err := svc.Pending(t.Context()); err != nil || n != 0 {
+		t.Errorf("%d messages still pending after the drain (err %v), want 0", n, err)
+	}
+	rows := outboxRows(t, pool)
+	if len(rows) != mail.DrainBatch {
+		t.Fatalf("the outbox holds %d rows after the drain, want %d", len(rows), mail.DrainBatch)
+	}
+	for _, r := range rows {
+		if r.Status != "sent" || r.Attempts != 1 {
+			t.Errorf("row %s is %q after %d attempts, want sent after 1",
+				r.Recipient, r.Status, r.Attempts)
+		}
+	}
+}
+
+// outboxRows reads every row, newest last. A free function rather than a method
+// so the tests that build a Service directly, with no mailFixture around it, read
+// the table the same way.
+func outboxRows(t *testing.T, pool *pgxpool.Pool) []outboxRow {
+	t.Helper()
+	rows, err := pool.Query(t.Context(), `
+		SELECT recipient, kind, subject, body, status, attempts, last_error
+		  FROM mail_outbox ORDER BY created_at, id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	var out []outboxRow
+	for rows.Next() {
+		var r outboxRow
+		if err := rows.Scan(&r.Recipient, &r.Kind, &r.Subject, &r.Body,
+			&r.Status, &r.Attempts, &r.LastError); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
 }
 
 // ─── The transport ───────────────────────────────────────────────────────────

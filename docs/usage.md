@@ -550,12 +550,12 @@ Every failure is `application/problem+json`. Branch on `type`, never on prose:
 
 | Status | Means |
 | --- | --- |
-| `401` | No valid credential — or the credential itself is being rejected. Invalid, revoked and expired keys are indistinguishable on purpose. |
+| `401` | No valid credential — or the credential itself is being rejected. Invalid, revoked and expired keys are indistinguishable on purpose, and so is every sign-in failure: a wrong password, an unregistered address, a suspended account and an account locked out by repeated failures are one answer, because telling them apart says whether an address has an account here. |
 | `403` | Authenticated but not permitted. The detail names the missing permission, which is useful rather than a disclosure. |
 | `404` | Does not exist, or belongs to a workspace you cannot see. Someone else's resource is never a `403`, so ids cannot be probed. |
 | `409` | Alias already taken. |
 | `422` | Validation failed; `errors` names each field. |
-| `429` | Two different things, told apart by `type`: `account-locked` after repeated failed logins for one account, or `rate-limited` when your address is going too fast. The second carries `Retry-After`; the first is a fixed 15 minutes. Retrying the second is fine — retrying the first just extends it. |
+| `429` | `rate-limited`: your address is going too fast. `Retry-After` says how long to wait, and waiting works. This used to be two types — the other was `account-locked` — and it is one now, because which of them you got answered whether the address you named is registered. A locked account is a `401` like every other sign-in refusal; the lockout is fifteen minutes and further attempts extend it, so the `401` body says so whether or not one is in force. |
 | `504` | The request exceeded the server's deadline. Retry; narrow the window if it is an analytics query. |
 
 Unknown JSON fields are rejected rather than ignored: a misspelled field silently

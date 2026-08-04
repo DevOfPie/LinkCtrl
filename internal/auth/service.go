@@ -279,9 +279,28 @@ type LoginResult struct {
 
 // Login authenticates and starts a session.
 //
-// Every failure returns ErrInvalidCredentials regardless of cause — unknown
-// email, wrong password, no local password set. Distinguishing them tells an
-// attacker which addresses are registered.
+// **Every failure is answered identically, and every failure costs the same.**
+// Unknown address, wrong password, no local password set, suspended account, and
+// an account already locked out by repeated failures are one answer to whoever
+// asked, and each spends one argon2 verification on the way. Distinguishing any
+// of them — by problem type, by status, by prose, or by how long the refusal
+// takes — tells a stranger which addresses are registered.
+//
+// The errors below stay distinct because the process wants them: a lockout is a
+// different operational event from a typo, and a test can assert it. What must
+// not differ is what a caller sees, so the two boundaries that answer a person
+// collapse them — internal/httpx/problem.go for the API, internal/httpx/web.go
+// for the sign-in form. That split is the one ErrAccountInactive has always had.
+//
+// Finding F92 is why both halves are spelled out here. ErrAccountLocked used to
+// reach the API as its own problem type and a 429, so the fifth wrong password
+// against a registered address answered differently from the fifth against an
+// unregistered one — unauthenticated, on the shipped `closed` default, where the
+// registration oracle is refused before any lookup, and inside LOGIN_RATE_PER_MIN
+// so the per-address limiter never masked it. It also returned before any
+// verification, which made it *fast* where every other refusal pays a hash; a fix
+// that equalised the status and not the work would have left the question
+// answerable with a stopwatch.
 func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error) {
 	email := NormalizeEmail(in.Email)
 
@@ -297,6 +316,13 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 	}
 
 	if user.LockedUntil != nil && user.LockedUntil.After(time.Now()) {
+		// Spend the verification this branch is about to skip. Without it a
+		// locked account refuses in one database round trip where every other
+		// refusal costs an argon2 hash, and that gap answers "is this address
+		// registered?" on its own — five wrong passwords, then time the sixth.
+		// The lockout still holds whatever the password was: this buys the
+		// timing back, not an early exit.
+		s.hasher.DummyVerify(in.Password)
 		return nil, ErrAccountLocked
 	}
 	if user.Status != "active" {

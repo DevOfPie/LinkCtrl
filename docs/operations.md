@@ -305,7 +305,7 @@ path while it waits.
 | Dashboard unstyled | Image built without `make css`. The server warns at boot. Rebuild. |
 | `/docs` renders as plain text | Its CSP relaxes `style-src` only; a proxy overriding `Content-Security-Policy` breaks it. Stop overriding it — LinkCtrl sets its own security headers. |
 | API keys all rejected after a config change | `API_KEY_PEPPER` changed. Every hash is keyed with it. Restore the old value or reissue every key. |
-| Login always fails, no obvious reason | A CRLF in `.env` gave Postgres or a secret a trailing carriage return. Also check whether the account is locked — five failures triggers a 15-minute lockout. |
+| Login always fails, no obvious reason | A CRLF in `.env` gave Postgres or a secret a trailing carriage return. Also check whether the account is locked: five failures triggers a 15-minute lockout, and **the response does not say so** — every sign-in refusal is the same 401, deliberately, because a distinct answer for a lockout tells a stranger which addresses are registered. `SELECT email, locked_until FROM users WHERE locked_until > now();` is how you find out, and `UPDATE users SET locked_until = NULL WHERE email_lower = '…';` is how you lift one early. |
 | Cannot claim a fresh instance | `/setup` is single-use and returns 404 once a user exists. Invite the person instead, or set `SIGNUP_MODE` and restart. |
 | `/signup` answers 403 with `SIGNUP_MODE=open` | No `LINKCTRL_SMTP_HOST`. Public registration confirms the address by email before the account exists, so with no relay the effective mode is `invite`. The boot log says so; set a relay and restart. |
 

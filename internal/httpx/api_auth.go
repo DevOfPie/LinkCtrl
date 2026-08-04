@@ -121,6 +121,46 @@ func writeSignupClosed(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// SignInRefusedDetail is the body every failed sign-in gets, on both surfaces.
+//
+// One string rather than two so the API and the form cannot drift into saying
+// different things, which is half of what finding F92 was: the API's answer and
+// the browser's prose disagreed about whether an account existed, and fixing
+// either alone leaves the other one answering.
+//
+// **The lockout is named unconditionally**, and that is the point of the second
+// sentence rather than a hedge. It is identical whether or not the address is
+// registered and whether or not a lockout is in force, so it discloses nothing —
+// while somebody certain they typed their own password correctly is told why
+// waiting is the thing that helps. Without it, the price of closing the oracle is
+// that a real user spends their own lockout being told they cannot type.
+const SignInRefusedDetail = "The email or password is incorrect. Repeated failures " +
+	"lock an account for a while; if this one is yours, wait a few minutes before " +
+	"trying again."
+
+// writeSignInRefused is the one refusal every sign-in failure gets.
+//
+// Its own writer rather than the generic mapping in WriteError because the detail
+// above names the lockout, and `invalid-credentials` also answers
+// POST /api/v1/auth/password — where nothing locks and the sentence would be a lie.
+// The status, type and title are exactly what WriteError produces for all three
+// errors, so a caller that has never read this cannot tell which wrote it.
+func writeSignInRefused(w http.ResponseWriter, r *http.Request) {
+	WriteProblem(w, r, Problem{
+		Type: problemBase + "invalid-credentials", Title: "Invalid credentials",
+		Status: http.StatusUnauthorized,
+		Detail: SignInRefusedDetail,
+	})
+}
+
+// isCredentialFailure reports whether err is one of the sign-in refusals that
+// must be indistinguishable from each other (F92).
+func isCredentialFailure(err error) bool {
+	return errors.Is(err, auth.ErrInvalidCredentials) ||
+		errors.Is(err, auth.ErrAccountInactive) ||
+		errors.Is(err, auth.ErrAccountLocked)
+}
+
 func (a *AuthAPI) Login(w http.ResponseWriter, r *http.Request) {
 	var req credentials
 	if err := decodeJSON(w, r, &req); err != nil {
@@ -135,6 +175,10 @@ func (a *AuthAPI) Login(w http.ResponseWriter, r *http.Request) {
 		UserAgent: r.UserAgent(),
 	})
 	if err != nil {
+		if isCredentialFailure(err) {
+			writeSignInRefused(w, r)
+			return
+		}
 		WriteError(w, r, err)
 		return
 	}

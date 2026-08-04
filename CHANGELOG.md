@@ -1118,6 +1118,53 @@ migrations run at boot.
 
 ### Fixed
 
+- **Signing in no longer says whether an address has an account here.** Five
+  wrong passwords against a registered address answered `429` with problem type
+  `account-locked`; five against an unregistered one answered `401`
+  `invalid-credentials`. Five attempts fit inside `LINKCTRL_LOGIN_RATE_PER_MIN`,
+  so nothing masked the difference, and the sign-in form said the same thing in
+  prose — *"the account is locked briefly"* against *"the email or password is
+  incorrect"*. Anybody with a list of addresses could sort it into accounts and
+  non-accounts, unauthenticated, on an instance with `SIGNUP_MODE=closed` where
+  the registration endpoint refuses before it looks anything up — and asking cost
+  each of them a fifteen-minute lockout.
+
+  Every sign-in failure is now one answer on both surfaces: same status, same
+  problem type, same body, same words on the page. The refusal also costs the
+  same, which was the second half of it — a locked account used to refuse without
+  hashing anything, so the question was answerable with a stopwatch even once the
+  status codes matched.
+
+  **If you have a client that branches on `account-locked`, it will not see that
+  type again**; a locked account is a `401 invalid-credentials` like every other
+  refusal. `rate-limited` is now the only problem type this API answers `429`
+  with. The lockout itself is unchanged — five failures, fifteen minutes, and
+  `LINKCTRL_LOGIN_LOCKOUT_THRESHOLD=0` still turns it off. The refusal names it in
+  words whether or not one is in force, so somebody sitting out their own lockout
+  is still told why waiting helps; an operator who needs to know which account is
+  locked reads `users.locked_until`, and `docs/operations.md` says how.
+
+- **A stalled SMTP relay no longer holds up every other background job.**
+  Queued mail was sent one message after another on the single goroutine that
+  runs every scheduled job, so at the default `LINKCTRL_SMTP_TIMEOUT` of ten
+  seconds a full batch of twenty took up to two hundred seconds — and for that
+  whole time nothing else ran: webhook deliveries did not go out, automation
+  rules missed the minute they advertise, custom domains were not re-verified and
+  the analytics rollups went stale. It needed no attack and nothing a tenant
+  could do, only a relay that accepts connections and then says nothing, which is
+  what a firewalled SMTP host looks like from here. This is the same defect fixed
+  for webhook delivery earlier in this release, in the package immediately beside
+  it.
+
+  A drain now costs one attempt rather than twenty, whatever the backlog is.
+  **The visible change is that this instance can open up to twenty connections to
+  your relay at once rather than one at a time.** If your relay caps concurrent
+  connections below that it will refuse the extra ones; a refused message is a
+  spent attempt that retries with backoff, so nothing is lost, but an outbox held
+  continuously above that cap for five attempts will abandon the overflow.
+  Nothing to configure, and the batch size, retry schedule and attempt count are
+  all unchanged.
+
 - **A delivered invitation left its token readable in the database.** Mail is
   queued rendered, and an invitation's message contains the single-use link — so
   while the `invitations` row stored only a hash of the token, the outbox row
