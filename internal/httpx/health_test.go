@@ -136,9 +136,20 @@ func TestRouterRegistersHealthEndpoints(t *testing.T) {
 // by adding a route, so the failure should surface where routes are declared.
 //
 // M7 extends this to walk the live route tree once the alias catch-all exists.
+//
+// The paths come from a real registration pass with every dependency present,
+// not from a slice declared beside the router. Reading a declared slice made
+// this guard a tautology in one direction — see F85 and
+// TestEveryRegisteredAppRouteIsMountedOnTheRoot.
 func TestReservedListCoversRegisteredRoutes(t *testing.T) {
-	// Paths registered in NewRouter today.
-	registered := RegisteredTopLevelPaths()
+	app := newAppMux()
+	registerAppRoutes(maximalDeps(), app)
+	if len(app.patterns) < patternFloor {
+		t.Fatalf("a maximal registration pass produced only %d patterns, want at least %d; "+
+			"maximalDeps has stopped filling something and this guard is now checking almost nothing",
+			len(app.patterns), patternFloor)
+	}
+	registered := topLevelSegments(append(app.mounts(), infrastructurePatterns...))
 
 	for _, path := range registered {
 		t.Run(path, func(t *testing.T) {

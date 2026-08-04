@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
@@ -103,26 +104,48 @@ func (d Deps) authenticator() Authenticator {
 // APIPrefix is the versioned API root.
 const APIPrefix = "/api/v1"
 
-// NewRouter builds the application handler.
+// appMux is the application ServeMux plus a record of every pattern registered
+// on it.
 //
-// The structure is two handler trees, not one, and that split is the point.
+// The record exists because net/http exposes no way to enumerate a ServeMux's
+// patterns, and two things downstream need that list. The root mux cannot mount
+// the application tree at "/" — that belongs to the alias catch-all — so it
+// mounts it path by path, and the reserved-word list has to name every
+// top-level path a route occupies. Both are derived from this slice, so neither
+// can fall behind a route somebody added.
 //
-// The application tree carries session lookup, security headers and the rest.
-// The redirect tree carries almost nothing: a request for /{alias} must not
-// pay for a session query, a CSRF check or template machinery, because the
-// budget for the entire response is 20ms and a session lookup alone is a
-// database round trip.
+// Recording rather than declaring is the whole point, and is D97. A hand-written
+// mount list sitting beside the registrations reads as if it were checked and is
+// not: it can only ever be compared against itself, which is how eleven of M42's
+// and M43's routes shipped registered, reserved, linked from the nav, documented
+// — and unreachable on every deployment shape (F85).
+type appMux struct {
+	mux      *http.ServeMux
+	patterns []string
+}
+
+func newAppMux() *appMux { return &appMux{mux: http.NewServeMux()} }
+
+func (m *appMux) Handle(pattern string, h http.Handler) {
+	m.patterns = append(m.patterns, pattern)
+	m.mux.Handle(pattern, h)
+}
+
+func (m *appMux) HandleFunc(pattern string, h func(http.ResponseWriter, *http.Request)) {
+	m.Handle(pattern, http.HandlerFunc(h))
+}
+
+// registerAppRoutes registers every application route — API and dashboard — on
+// the application mux.
 //
-// Only RealIP is shared, because analytics needs the client address and
-// resolving it is a header read.
+// Split out of NewRouter so the route set can be enumerated without building a
+// whole router: the reserved-list guard registers into a throwaway appMux and
+// reads what came back, rather than reading a list written beside these calls.
 //
 // Every top-level path registered here must also appear in
 // internal/alias/reserved.txt, or a user could create an alias that shadows
 // it. TestReservedListCoversRegisteredRoutes enforces that.
-func NewRouter(d Deps) http.Handler {
-	// --- application tree (authenticated, full middleware) ----------------
-	app := http.NewServeMux()
-
+func registerAppRoutes(d Deps, app *appMux) {
 	if d.Auth != nil {
 		authAPI := &AuthAPI{Auth: d.Auth, Signup: d.Signup, Config: d.Config}
 		// Credential endpoints carry the login limit rather than the API one.
@@ -611,8 +634,26 @@ func NewRouter(d Deps) http.Handler {
 			app.Handle("POST /organizations", web.RequireWebAuth(http.HandlerFunc(web.OrganizationCreate)))
 		}
 	}
+}
 
-	var appHandler http.Handler = app
+// NewRouter builds the application handler.
+//
+// The structure is two handler trees, not one, and that split is the point.
+//
+// The application tree carries session lookup, security headers and the rest.
+// The redirect tree carries almost nothing: a request for /{alias} must not
+// pay for a session query, a CSRF check or template machinery, because the
+// budget for the entire response is 20ms and a session lookup alone is a
+// database round trip.
+//
+// Only RealIP is shared, because analytics needs the client address and
+// resolving it is a header read.
+func NewRouter(d Deps) http.Handler {
+	// --- application tree (authenticated, full middleware) ----------------
+	app := newAppMux()
+	registerAppRoutes(d, app)
+
+	var appHandler http.Handler = app.mux
 	if a := d.authenticator(); a != nil {
 		appHandler = Session(a, d.Config.SecureCookies)(appHandler)
 	}
@@ -692,11 +733,15 @@ func NewRouter(d Deps) http.Handler {
 		root.Handle(APIPrefix+"/", RateLimit(d.Limits.API, "api", d.Metrics, nil)(appHandler))
 
 		if d.Web != nil {
-			// Mounted from the same slice the reserved-list guard reads, so a
-			// new dashboard route cannot be registered without the guard seeing
-			// it. Two lists that had to agree by hand is what the guard existed
-			// to prevent in the first place.
-			for _, p := range dashboardPatterns {
+			// Mounted from the patterns the application mux was actually
+			// handed, not from a list written beside them. There is no second
+			// list to fall behind: registering a handler is what produces its
+			// mount, so a route cannot be registered and left unreachable.
+			//
+			// This replaced a hand-written slice that had done exactly that —
+			// see appMux, and F85. The reserved-list guard now reads the same
+			// registrations, so neither direction is checked against itself.
+			for _, p := range app.mounts() {
 				root.Handle(p, appHandler)
 			}
 
@@ -879,29 +924,67 @@ func (h hostRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// dashboardPatterns are the dashboard routes mounted on the root mux, one by
-// one rather than at "/", because "/" belongs to the redirect catch-all.
-//
-// A package-level slice rather than a literal inside NewRouter so that the
-// reserved-list guard reads the same values the router registers. Every entry
-// must also appear in internal/alias/reserved.txt, or a user could create an
-// alias that shadows it; TestReservedListCoversRegisteredRoutes enforces that.
-var dashboardPatterns = []string{
-	"/{$}", "/login", "/logout", "/setup", "/dashboard", "/docs",
-	"/links", "/links/", "/folders", "/folders/", "/campaigns", "/campaigns/",
-	"/keys", "/keys/", "/account", "/account/",
-	"/domains", "/domains/",
-	"/notifications", "/notifications/", "/theme", "/workspace/", "/feeds",
-	"/invites", "/invites/", "/invite/", "/disputes", "/disputes/",
-	"/members", "/members/", "/workspaces", "/workspaces/",
-	"/organizations", "/organizations/",
-	"/signup", "/verify/",
+// patternPath strips the optional method from a ServeMux pattern, leaving the
+// path. "GET /links/{id}" becomes "/links/{id}"; "/static/" is unchanged.
+func patternPath(pattern string) string {
+	if i := strings.IndexByte(pattern, ' '); i >= 0 {
+		return strings.TrimSpace(pattern[i+1:])
+	}
+	return pattern
 }
 
-// infrastructurePatterns are the routes registered outside dashboardPatterns:
-// health endpoints, the API prefix and the static tree. These are fixed and
-// registered individually, so unlike the dashboard set they are listed rather
-// than iterated.
+// mounts returns the root-mux patterns that make every route registered on the
+// application mux reachable, and nothing wider.
+//
+// The rule is one line per registration: a single-segment path mounts itself, a
+// deeper one mounts its first segment as a subtree. So "GET /webhooks" produces
+// "/webhooks" and "POST /webhooks/{webhookID}/rotate" produces "/webhooks/",
+// while "POST /theme" — which has no deeper route — produces "/theme" alone and
+// leaves "/theme/anything" to the alias catch-all, exactly as before.
+//
+// The API subtree is excluded because registerApp mounts it itself, wrapped in
+// the API rate limiter; mounting "/api/" here as well would hand anything under
+// /api that is not /api/v1 to the application tree without that limiter.
+//
+// Sorted, because most registrations happen by ranging over a map literal and
+// Go randomizes that order. A mount list that differed run to run would make
+// the reserved-list guard's subtest names differ too.
+func (m *appMux) mounts() []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(p string) {
+		if !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	for _, pattern := range m.patterns {
+		path := patternPath(pattern)
+		switch {
+		case path == "/{$}":
+			// The root exact-match pattern. It has no segment, and "/{alias}"
+			// does not match "/", so it has to be mounted verbatim.
+			add("/{$}")
+		case strings.HasPrefix(path, APIPrefix+"/"):
+			continue
+		default:
+			rest := strings.TrimPrefix(path, "/")
+			if i := strings.IndexByte(rest, '/'); i >= 0 {
+				add("/" + rest[:i] + "/")
+			} else {
+				add("/" + rest)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// infrastructurePatterns are the routes registered on the root mux directly
+// rather than reached through the application mux: health endpoints, Caddy's
+// TLS ask, the API prefix and the static tree. These are fixed and registered
+// individually, so unlike the application set they are listed rather than
+// derived.
 var infrastructurePatterns = []string{
 	"/healthz", "/readyz", TLSAskPath, APIPrefix + "/", "/static/",
 }
@@ -914,19 +997,19 @@ var infrastructurePatterns = []string{
 // TestReservedListCoversRegisteredRoutes is what enforces that it cannot.
 const TLSAskPath = "/tls-check"
 
-// RegisteredTopLevelPaths lists the first path segment of every route the
-// router registers, for the test that guards against an alias shadowing a real
-// route.
+// topLevelSegments reduces root-mux patterns to the first path segment each one
+// occupies — the unit internal/alias/reserved.txt is written in, because an
+// alias is a single segment and that is all it can shadow.
 //
-// Derived from the slices the router actually mounts rather than hand-written
-// beside them. It is still not a walk of the live mux — net/http exposes no way
-// to enumerate a ServeMux's patterns — but adding a dashboard route now updates
-// this automatically, which is where routes are actually added.
-func RegisteredTopLevelPaths() []string {
+// Its caller is the reserved-list guard, which feeds it the mounts derived from
+// a real registration pass plus infrastructurePatterns. That is what makes the
+// guard a check rather than a tautology: before F85 the same list was both the
+// thing being protected and the record of what needed protecting.
+func topLevelSegments(patterns []string) []string {
 	seen := map[string]bool{}
 	var out []string
-	for _, p := range append(append([]string{}, dashboardPatterns...), infrastructurePatterns...) {
-		seg := strings.Trim(p, "/")
+	for _, p := range patterns {
+		seg := strings.Trim(patternPath(p), "/")
 		if i := strings.IndexByte(seg, '/'); i >= 0 {
 			seg = seg[:i]
 		}

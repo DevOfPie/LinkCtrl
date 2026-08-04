@@ -153,6 +153,7 @@ file. Append a row when you append an entry.
 | [M42, what one drain costs, and the fix that would have moved the cost rather than removed it](#2026-08-04--m42-what-one-drain-costs-and-the-fix-that-would-have-moved-the-cost-rather-than-removed-it) | D95 — a claimed batch is dialled together and `Drain` waits for it, so one drain costs one attempt and not `DrainBatch` of them; why the WaitGroup is what makes D77's lock trap inapplicable rather than survived; why a webhook goroutine of its own is not a fix, `pg_try_advisory_lock` being session-scoped, and would convert every other job's stall into a skip; what it does to F90 (nothing) and to F91 (unreachable, not fixed); what a receiver now sees |
 | [M43, the queue's own clock, and why the watermark could not be it](#2026-08-04--m43-the-queues-own-clock-and-why-the-watermark-could-not-be-it) | D96 — one column was carrying two facts, and ordering the due query on the firing watermark meant the hundred-and-first enabled rule was never evaluated at all; `last_checked_at` added by 03100 with the due index rebuilt on it; why advancing `last_fired_at` on a no-match run is the tempting fix and breaks `min_count`; one cursor statement a run rather than one a rule, and the three deliberate details in it — no `updated_at`, failed rules stamped too, `WithoutCancel` so a cut-off run keeps what it looked at; why a NULL cursor is the right thing for a new or resumed rule; the test's shape, and why its first assertion is that nothing happened |
 | [M32, the promise restated as two channels](#2026-08-04--m32-the-promise-restated-as-two-channels) | F86 — why the fix is four documents and no code, and why removing `url` from the payload would break every receiver to make a README sentence true; the four wordings as they stood; the checked facts the replacement rests on — `webhooks.write` is owner and admin only and not delegable, there is no operator gate, and `automation.fired` carries no destination; why the refused-destination leg is the strongest of the four and what a half-fix drops; F134 widened at step 3.4 — `CHANGELOG.md:750` and `feed_test.go`'s three wordings taken in under the deferred-overlap rule with no assertion touched, the *Egress* row's count left open because re-deriving it is a decision; and F135, seven more sites a deliberate sweep found where two rounds of noticing had not, including the `/feeds` disclosure page this milestone itself shipped, which no rewording can make true |
+| [Mounting derived from registration](#2026-08-04--mounting-derived-from-registration-after-eleven-routes-shipped-unreachable) | D97 — F85: eleven of M42's and M43's routes were registered, reserved, linked from the nav and documented, and unreachable, because the root mux mounted from a hand-written slice that the only guard was also built from; why adding the four missing strings fixes the instance and not the class, and why the comment claiming the opposite is the reason nobody looked; `appMux` recording what it is handed so registering *is* mounting; the reduction rule chosen because it reproduces the old slice exactly plus the four, and the wider rule rejected; why the API subtree stays hand-mounted; `dashboardPatterns` deleted so the reserved guard reads registrations too, `registerAppRoutes` split out to make them enumerable, and `maximalDeps` filled by reflection because a literal would be the third list and would fail silently; and the sabotage whose control result is that the old guard stayed green |
 
 ---
 
@@ -12509,3 +12510,132 @@ disclosure learns about a second channel it was never designed to describe. Both
 are product decisions, `test/integration/feed_test.go:503` and
 `internal/ui/feeds_test.go:132` pin the string either way, and this reopening had
 already been widened once.
+
+## 2026-08-04 — Mounting derived from registration, after eleven routes shipped unreachable
+
+[F85](deferred-findings.md), approved by the owner on M44.9's triage. Not a
+reopening: neither [m42.md](phase-details/m42.md) nor
+[m43.md](phase-details/m43.md) requires a dashboard page, so no `done` row
+asserted anything untrue. Work smaller than a milestone, on its own commit per
+[workflow.md](workflow.md)'s scope gate.
+
+`GET /webhooks` and `GET /automation` answered 404 on every deployment shape,
+rendering the *redirect handler's* "Link not found" page, while the nav linked to
+both and `docs/usage.md` and `README.md` documented them. Eleven handlers were
+registered on the application mux; four strings were missing from the slice the
+root mux mounted from.
+
+### The four strings were the instance. The list that could only check itself was the class
+
+`RegisteredTopLevelPaths()` was built **from** `dashboardPatterns`, and
+`dashboardPatterns` was what the router mounted from. So
+`TestReservedListCoversRegisteredRoutes` compared a list to itself and could
+only ever answer one question — *is a mounted path reserved* — while the
+question F85 needed was *is a registered path mounted*, which nothing asked.
+
+The comment above the mount loop asserted the opposite of the tree, in as many
+words: *"Mounted from the same slice the reserved-list guard reads, so a new
+dashboard route cannot be registered without the guard seeing it. Two lists that
+had to agree by hand is what the guard existed to prevent in the first place."*
+There were two lists that had to agree by hand, the guard could not see either
+half, and the comment is why nobody looked. That comment is the reason this is
+recorded as a decision rather than as a four-string diff: a fix that left it
+standing would have re-armed the same trap for the next route.
+
+### D97 — the mount list is produced by registering, not written beside it
+
+Three shapes were available.
+
+| | Buys | Costs |
+| --- | --- | --- |
+| Add the four strings | One line, no risk | Fixes the instance. The next route added does it again, and the comment still lies |
+| A third list, plus a test comparing all three | Catches drift | Another hand-written list, and the drift it catches is drift it also creates |
+| **Derive the mounts from the registrations** | The gap becomes unrepresentable — registering *is* mounting | A recorder in front of the mux, and a way to enumerate routes without a database |
+
+The third. `appMux` wraps `http.ServeMux` and appends each pattern as it is
+handed one; `(*appMux).mounts()` reduces those patterns to root-mux patterns and
+`registerApp` mounts exactly that. There is no list to fall behind, because
+there is no list.
+
+Recording rather than walking is forced: net/http exposes no way to enumerate a
+ServeMux's patterns, which is the same constraint `openapi_test.go` already
+works around by scanning source with a regex. Recording is the cheaper answer to
+it, and unlike the regex it cannot rot on a formatting change.
+
+**The reduction rule is one line per registration.** A single-segment path
+mounts itself; a deeper one mounts its first segment as a subtree. So
+`GET /webhooks` produces `/webhooks` and `POST /webhooks/{webhookID}/rotate`
+produces `/webhooks/`, while `POST /theme` — which has no deeper route —
+produces `/theme` alone and leaves `/theme/anything` to the alias catch-all.
+
+That rule was chosen because it reproduces the old hand-written slice exactly.
+The derived set is the thirty-six entries `dashboardPatterns` held, in the same
+shapes, plus `/webhooks`, `/webhooks/`, `/automation` and `/automation/` — the
+four that were missing and nothing else. A wider rule was available and rejected:
+mounting `/seg` **and** `/seg/` for every segment would also have been correct,
+and would additionally have moved a dozen paths like `/login/x` and `/feeds/y`
+from the redirect handler's 404 to a bare mux 404. Harmless, unreserved by
+anything, and not what this was approved to change.
+
+The API subtree is excluded from the derivation and still mounted by hand, with
+its own wrapper. `registerApp` puts `RateLimit(d.Limits.API, …)` in front of
+`/api/v1/`; a derived `/api/` mount would hand anything under `/api` that is not
+`/api/v1` to the application tree **without** that limiter, which is a wider
+change than the one being made and in the wrong direction.
+
+### The reserved guard now reads the registrations too, which cost a way to enumerate them
+
+Deriving the mounts and leaving the reserved list reading a declared slice would
+have moved the tautology rather than removed it. So `dashboardPatterns` is gone
+entirely and both consumers read the same registrations.
+
+That needed the route set enumerable without building a router, which is what
+splitting `registerAppRoutes` out of `NewRouter` buys: a test registers into a
+throwaway `appMux` and reads back what it was handed. It also needs *every*
+route, including the ones gated on an optional dependency — a hostname reserved
+on an instance wired without invitations must still be reserved, because the
+instance can be rewired and an alias created meanwhile would shadow the route on
+the day it is.
+
+`maximalDeps()` fills every dependency by reflection rather than by hand, and
+that is deliberate. **A hand-written literal would have been the third list this
+decision exists to refuse, and its failure would have been silent**: a
+dependency added to `Deps` and forgotten there leaves its routes unregistered,
+so they are never checked for a mount and never checked against the reserved
+list, and both guards go green having stopped looking. Nothing is ever called on
+those zero-value services — registration takes method values and stores them, no
+request is served — so the reflection buys the completeness without needing a
+database.
+
+`TestMaximalDepsFillsEveryDependency` walks `Deps` and `*Web` with its own
+traversal rather than reusing `fillPointers`, so a `fillPointers` that stopped
+recursing is caught instead of agreed with.
+
+### What was sabotaged, and the one result worth writing down
+
+Every guard was broken before it was trusted.
+
+- Dropping `webhooks` and `automation` from `mounts()` — F85's exact shape —
+  fails `TestEveryRegisteredAppRouteIsMountedOnTheRoot` on all **eleven** routes,
+  each naming `/{alias}` or `/{alias}/{rest...}` as what covers it instead.
+- Making `mounts()` emit `/` fails `TestMountsAreNoWiderThanTheRoutesTheyServe`,
+  which is the other half: a derivation that swallowed the alias namespace would
+  otherwise pass the first test perfectly.
+- Removing `webhooks` from `reserved.txt` fails
+  `TestReservedListCoversRegisteredRoutes` — it could not have, before.
+- Stopping `fillPointers` recursing fails `TestMaximalDepsFillsEveryDependency`
+  on all ten fields of `*Web`.
+
+The result worth recording is the first one's control. Under the sabotage that
+reproduces F85 exactly, `TestReservedListCoversRegisteredRoutes` **stayed
+green** — which is not a weakness of the new guard but the demonstration, run
+rather than argued, that the old one never could have caught this and that
+`webhooks` sitting in `reserved.txt` all along was never evidence of anything.
+
+### Left alone
+
+[F16](deferred-findings.md) names `dashboardPatterns` in its fix note —
+*"the honest fix is to derive the classifier from `dashboardPatterns`"* — and
+that symbol no longer exists. The row is not edited and stays open: its finding
+is unchanged, and the source it wants is now `(*appMux).mounts()`, which is a
+better one than it asked for.

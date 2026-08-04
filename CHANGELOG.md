@@ -1116,6 +1116,20 @@ migrations run at boot.
 
 ### Fixed
 
+- **The webhooks and automation pages returned "Link not found".** Both are
+  linked from the sidebar, both are documented in `docs/usage.md`, and both
+  answered 404 for everybody on every deployment shape, as did all nine of their
+  forms. The handlers were there and the API worked throughout; what was missing
+  was the entry that attaches those paths to the dashboard, so the requests fell
+  through to the short-link handler and were answered as if somebody had followed
+  a link that does not exist. Nothing needs to be done on upgrade, and no data
+  was affected — the pages simply start working.
+
+  The list those entries lived in is gone. The dashboard's paths are now produced
+  by registering the pages themselves, so a page cannot be added and left
+  unreachable, and the test that guards the reserved-word list reads the same
+  registrations instead of reading that list back to itself.
+
 - **Two organizations with the same name, created within about a minute of each
   other, failed with an internal error.** The suffix that makes an organization
   slug unique was taken from the front of its UUIDv7 — which is the timestamp,
