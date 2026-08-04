@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -667,6 +668,123 @@ func TestAClaimedDeliveryIsLeasedForward(t *testing.T) {
 		t.Errorf("a second drain re-delivered immediately (%d then %d requests); the "+
 			"backoff is what keeps a failing receiver from being dialled every tick",
 			before, after)
+	}
+}
+
+// barrier is a receiver that holds every request until `want` of them are in
+// flight together, and records the high-water mark.
+//
+// It exists because *the batch went out at once* is a claim about overlap rather
+// than about duration. A stopwatch alone would pass on a machine fast enough to
+// serialize twenty round trips inside whatever threshold the test picked, and
+// would fail on a loaded one for reasons that have nothing to do with the code.
+// The high-water mark cannot be reached at all without concurrency.
+//
+// The grace is the fallback a serialized drain hits instead of the barrier, so a
+// run against sequential delivery finishes in DrainBatch × grace rather than
+// hanging until the client's own timeout.
+type barrier struct {
+	server *httptest.Server
+	want   int
+	grace  time.Duration
+
+	mu       sync.Mutex
+	inFlight int
+	high     int
+	full     chan struct{}
+	filled   bool
+}
+
+func newBarrier(t *testing.T, want int, grace time.Duration) *barrier {
+	t.Helper()
+	b := &barrier{want: want, grace: grace, full: make(chan struct{})}
+	b.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		b.mu.Lock()
+		b.inFlight++
+		b.high = max(b.high, b.inFlight)
+		if b.inFlight >= b.want && !b.filled {
+			b.filled = true
+			close(b.full)
+		}
+		b.mu.Unlock()
+
+		select {
+		case <-b.full:
+		case <-time.After(b.grace):
+		case <-req.Context().Done():
+		}
+
+		b.mu.Lock()
+		b.inFlight--
+		b.mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(b.server.Close)
+	return b
+}
+
+func (b *barrier) peak() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.high
+}
+
+// TestOneDrainSpendsOneAttemptRatherThanTwenty is M42's reopening.
+//
+// The shipped drain delivered a claimed batch one row after another on the
+// scheduler's single goroutine, so at the default WEBHOOK_TIMEOUT one workspace
+// pointing a webhook at a public address that drops SYNs held every other job on
+// the instance — mail, automation, the rollups, domain verification — for
+// DrainBatch × WEBHOOK_TIMEOUT. Go tickers hold a cap-one channel, so those ticks
+// were dropped rather than queued.
+//
+// What is asserted is the claim the comment above DrainBatch makes: one drain
+// costs one attempt, whatever the batch size is.
+func TestOneDrainSpendsOneAttemptRatherThanTwenty(t *testing.T) {
+	rec := newBarrier(t, webhook.DrainBatch, 400*time.Millisecond)
+	f := newWebhooks(t, rec.server.Client().Transport)
+
+	_, _ = f.registerRaw(rec.server.URL, []string{domain.EventLinkCreated}, true)
+	for i := range webhook.DrainBatch {
+		if _, err := f.links.Create(t.Context(), f.owner, link.CreateInput{
+			Alias: fmt.Sprintf("backlog-%02d", i), URL: "https://example.com/dest",
+		}); err != nil {
+			t.Fatalf("create link %d: %v", i, err)
+		}
+	}
+	if n := f.pendingCount(); n != webhook.DrainBatch {
+		t.Fatalf("%d pending deliveries, want %d — the batch under test is one full "+
+			"claim", n, webhook.DrainBatch)
+	}
+
+	start := time.Now()
+	if err := f.hooks.Drain(t.Context()); err != nil {
+		t.Fatalf("drain: %v", err)
+	}
+	elapsed := time.Since(start)
+
+	if peak := rec.peak(); peak != webhook.DrainBatch {
+		t.Errorf("at most %d deliveries were in flight at once, want %d — a batch "+
+			"delivered one row at a time holds the scheduler goroutine for "+
+			"DrainBatch × WEBHOOK_TIMEOUT, and every other job's tick is dropped "+
+			"for the duration", peak, webhook.DrainBatch)
+	}
+	// The consequence, as arithmetic rather than as a feeling about speed:
+	// delivering these rows one after another cannot finish inside half the time
+	// the sequential path is obliged to spend.
+	if limit := time.Duration(webhook.DrainBatch/2) * rec.grace; elapsed >= limit {
+		t.Errorf("the drain took %s; %d rows delivered one at a time take at least "+
+			"%s, and delivered together take about %s",
+			elapsed, webhook.DrainBatch,
+			time.Duration(webhook.DrainBatch)*rec.grace, rec.grace)
+	}
+
+	// Concurrency must not have cost the bookkeeping. Every row is marked, once.
+	if n := f.pendingCount(); n != 0 {
+		t.Errorf("%d deliveries still pending after the drain, want 0", n)
+	}
+	if got := f.obs.get("delivered", "2xx"); got != webhook.DrainBatch {
+		t.Errorf("delivered/2xx counted %d, want %d", got, webhook.DrainBatch)
 	}
 }
 

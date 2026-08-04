@@ -960,19 +960,21 @@ func (c Config) Validate() error {
 	// these two numbers apply the moment anybody registers one.
 	//
 	// Bounded on both sides. A timeout of zero would mean one unresponsive
-	// receiver holds a delivery slot until the job's own bound expires, and
-	// anything past a minute would let a batch of twenty outlast the drain
-	// interval and stack runs on top of each other.
+	// receiver holds a delivery slot until the job's own bound expires; the
+	// ceiling is what a drain occupies the shared scheduler goroutine for,
+	// because a batch is dialled together (webhook.DeliveryConcurrency) and so
+	// costs one of these rather than one per row.
+	//
+	// The batch size and the concurrency limit are both named in prose rather
+	// than imported: internal/webhook reaches internal/link for the address
+	// predicate, and a config package that imported it would put the whole
+	// service graph behind the thing that parses the environment.
 	if c.Webhooks.Timeout <= 0 {
 		add("WEBHOOK_TIMEOUT: must be positive, got %s", c.Webhooks.Timeout)
 	} else if c.Webhooks.Timeout > time.Minute {
-		// The batch size is webhook.DrainBatch. Named in prose rather than
-		// imported: internal/webhook reaches internal/link for the address
-		// predicate, and a config package that imported it would put the whole
-		// service graph behind the thing that parses the environment.
-		add("WEBHOOK_TIMEOUT (%s): must not exceed 1m; deliveries drain in batches "+
-			"of twenty on a 30s tick, and a longer bound lets one batch outlast "+
-			"the next", c.Webhooks.Timeout)
+		add("WEBHOOK_TIMEOUT (%s): must not exceed 1m; a drain occupies the "+
+			"scheduler for this long, and deliveries are attempted on a 30s tick",
+			c.Webhooks.Timeout)
 	}
 	// Zero is refused rather than read as "keep forever". Everywhere else in
 	// this file zero means forever (audit retention, D5) and is a deliberate

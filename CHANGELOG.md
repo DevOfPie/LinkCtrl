@@ -80,6 +80,24 @@ migrations run at boot.
   Nothing to do on upgrade, and `302` instances — the default — never had the
   problem.
 
+- **A webhook batch is now sent all at once, so one unresponsive receiver no
+  longer holds up the rest of the instance.** Deliveries were sent one after
+  another on the same goroutine that runs every other scheduled job. At the
+  default `LINKCTRL_WEBHOOK_TIMEOUT` of ten seconds a full batch of twenty
+  therefore took up to two hundred seconds — and for that whole time nothing else
+  ran: invitation and verification mail sat in the outbox, automation rules did
+  not fire on their advertised minute, custom-domain re-verification did not
+  happen, and the analytics rollups went stale. It needed no misconfiguration and
+  no attack, only one webhook pointed at a host that accepts nothing and answers
+  nothing, which any member who can register a webhook could do by accident.
+
+  A drain now costs one attempt rather than twenty, whatever the backlog is.
+  **If you operate a receiver, the visible change is that it can see up to twenty
+  concurrent requests from this instance rather than a steady trickle, and they
+  no longer arrive in queue order** — deduplicate on the `X-LinkCtrl-Delivery`
+  header, as `docs/usage.md` has always said to. Nothing to configure, and the
+  retry schedule, the attempt count and the batch size are all unchanged.
+
 ### Added
 
 - **An API key can now replace itself, unattended.** `POST /api/v1/api-keys/rotate`,

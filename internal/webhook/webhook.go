@@ -32,6 +32,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -71,6 +72,27 @@ const (
 	// drains over several runs instead of holding the job for minutes.
 	DrainBatch = 20
 
+	// DeliveryConcurrency is how many of a claimed batch are dialled at once,
+	// and it is DrainBatch because that is what makes the sentence above true.
+	//
+	// There was no such constant before and the value it replaces was one, which
+	// is what M42 was reopened for. A batch delivered one row after another costs
+	// DrainBatch times the per-attempt timeout — twenty times ten seconds at the
+	// shipped defaults, with no misconfiguration — and that time is spent on the
+	// scheduler's single goroutine, where every other job's tick is dropped rather
+	// than queued. The cost never landed on webhooks: it landed on invitation
+	// mail, on automation's advertised clock, and on domain re-verification.
+	// Delivered together, one drain costs one attempt, and the arithmetic no
+	// longer has a batch size in it.
+	//
+	// Equal to DrainBatch rather than smaller, deliberately. Any value below it
+	// puts the batch size back into the wall-clock cost — a limit of eight is
+	// three waves, which at the default timeout is thirty seconds and back inside
+	// the tick it is meant to fit under. What keeps the number small is the claim
+	// itself: a drain never holds more than DrainBatch rows, so it can never dial
+	// more than that at once.
+	DeliveryConcurrency = DrainBatch
+
 	// DefaultRetentionDays is how long a delivered or abandoned row is kept when
 	// the operator has not said. The setting is WEBHOOK_RETENTION_DAYS; this is
 	// the fallback, not a second policy.
@@ -94,6 +116,9 @@ type Emitter interface {
 // The label vocabulary is fixed by the implementation, not assembled here: M13's
 // cardinality rule is that a bounded label is fine and an unbounded one is not,
 // so an outcome and an HTTP status *class* are counted and a URL never is.
+//
+// Called from several goroutines at once, because Drain delivers a batch
+// together. A Prometheus counter already is; anything else here has to be.
 type Observer interface {
 	ObserveWebhookDelivery(outcome, status string)
 }
@@ -196,6 +221,15 @@ func (s *Service) Emit(ctx context.Context, workspaceID uuid.UUID, event string,
 // One delivery's failure never stops the batch: errors are collected and the
 // remaining rows are still attempted, because one dead receiver must not hold up
 // everybody else's events.
+//
+// **The batch goes out together, and Drain does not return until all of it has.**
+// Both halves are load-bearing, and the second one is why this is written with a
+// WaitGroup rather than fired and forgotten. The caller is `withLeadership` in
+// cmd/linkctrl/jobs.go, which holds D77's advisory lock on a pooled connection it
+// releases the moment the function it was given returns — so a goroutine that
+// outlived this call would deliver *without* the lock, which is the duplicate
+// delivery under split brain that D77 exists to prevent. Waiting here means the
+// lock covers every dial, exactly as it did when they were sequential.
 func (s *Service) Drain(ctx context.Context) error {
 	rows, err := s.q.ClaimDueWebhookDeliveries(ctx, dbgen.ClaimDueWebhookDeliveriesParams{
 		BatchSize: DrainBatch,
@@ -209,14 +243,39 @@ func (s *Service) Drain(ctx context.Context) error {
 		return fmt.Errorf("webhook: claim due deliveries: %w", err)
 	}
 
-	var errs []error
+	var (
+		mu   sync.Mutex
+		errs []error
+		wg   sync.WaitGroup
+	)
+	// Bounded by construction — the claim returns at most DrainBatch rows — and
+	// bounded again here, so that raising the batch size is a decision about
+	// concurrency rather than an accident of it.
+	inFlight := make(chan struct{}, DeliveryConcurrency)
 	for _, row := range rows {
-		errs = append(errs, s.deliver(ctx, row)...)
+		inFlight <- struct{}{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-inFlight }()
+			if e := s.deliver(ctx, row); len(e) > 0 {
+				mu.Lock()
+				errs = append(errs, e...)
+				mu.Unlock()
+			}
+		}()
 	}
+	wg.Wait()
 	return errors.Join(errs...)
 }
 
 // deliver makes one attempt and records what it produced.
+//
+// Called from DeliveryConcurrency goroutines at once, so it holds nothing across
+// the call: the row is its own, `s.q` is a pgxpool the driver already shares, and
+// `s.obs` is required to count from several goroutines because a Prometheus
+// counter does. Anything added here that touches Service state needs its own
+// guard.
 func (s *Service) deliver(ctx context.Context, row dbgen.ClaimDueWebhookDeliveriesRow) []error {
 	code, sendErr := s.client.Deliver(ctx, row.Url, row.Secret, Delivery{
 		ID: row.ID, Event: row.Event, Payload: row.Payload,

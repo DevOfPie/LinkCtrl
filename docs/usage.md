@@ -1325,6 +1325,10 @@ Nothing is delivered on the request path. A link write queues one row per
 subscribed webhook and returns; the scheduler drains that queue every thirty
 seconds, under a leader lock, in batches of twenty.
 
+**A batch is sent all at once**, so your receiver can see up to twenty concurrent
+requests from this instance and should not assume they arrive in order. Each one
+carries its own delivery id, which is what you deduplicate on.
+
 A delivery is a success on **2xx** and a failure on anything else. A redirect is a
 failure too, and is not followed: a receiver answering `302` is pointing this
 server at a URL nobody registered. The `3xx` is recorded so you can see it.

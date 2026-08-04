@@ -330,7 +330,7 @@ an outbound connection for this feature.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `LINKCTRL_WEBHOOK_TIMEOUT` | `10s` | Bounds one delivery attempt end to end — connect, write, read. Deliveries drain in batches of twenty on a thirty-second tick, so validation refuses anything above `1m`: a longer bound lets one batch outlast the next. |
+| `LINKCTRL_WEBHOOK_TIMEOUT` | `10s` | Bounds one delivery attempt end to end — connect, write, read. A batch of twenty is dialled together on a thirty-second tick, so a drain costs one of these rather than twenty; this is also how long a drain occupies the scheduler, which is why validation refuses anything above `1m`. |
 | `LINKCTRL_WEBHOOK_RETENTION_DAYS` | `30` | How long a delivered or abandoned delivery row is kept. **Must be at least 1.** Zero means "keep forever" elsewhere in this file — `AUDIT_RETENTION_DAYS` — and is refused here, because this table grows by one row per link write per enabled webhook and nobody would choose that on purpose. |
 
 **The attempt count is not configurable.** Seven attempts spanning 61 minutes,

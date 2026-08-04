@@ -150,6 +150,7 @@ file. Append a row when you append an entry.
 | [M30, the same claim in a different alphabet](#2026-08-04--m30-the-same-claim-in-a-different-alphabet) | D93 — why a host written outside ASCII reached none of the four mechanisms the trailing dot walked past, and why that is one missing conversion rather than four bugs; UTS-46 ToASCII folded at D46's existing fold, mapping before the dot; the profile measured against `idna.Lookup`, which refuses three destinations this validator accepts; the ASCII skip and why it cannot let a spelling through; an unmappable host refused with an untiered code; the list entries folded by the same function, and the address rule moved after the fold; what D91 cost, and `isHomograph` working as designed for the first time |
 | [M35's reopening, two amendments made at acceptance](#2026-08-04--m35s-reopening-two-amendments-made-at-acceptance) | A1 — the reopening claimed the F79 fix invalidates every minted signature; the signer was never wrong, so nothing that works stops. The first M44.9 fix-trap that was itself wrong, and why that position produces them. A2 — the inherited rule's label moves from "Redirects are 302" to "never permanent", the assertion unchanged, because the verified-password POST now answers 303 |
 | [M35, which namespace a gate is keyed on](#2026-08-04--m35-which-namespace-a-gate-is-keyed-on) | D94 — three corrections and one amendment: a verified password answers **303** unconditionally and D53's *"answers the 302 itself"* is superseded, with 303 joining `REDIRECT_DEFAULT_STATUS`'s allowed set; the signature and the password bucket keyed on the domain the request arrived on rather than the boot constant; the signed URL minted on the link's own hostname, with an unreadable domain row an error rather than a fallback; HEAD reading the budget without spending it, and what that read costs; why the fix invalidates no signature that ever worked, against a constraint that expected it to; the fixture in which the defect was testable at all |
+| [M42, what one drain costs, and the fix that would have moved the cost rather than removed it](#2026-08-04--m42-what-one-drain-costs-and-the-fix-that-would-have-moved-the-cost-rather-than-removed-it) | D95 — a claimed batch is dialled together and `Drain` waits for it, so one drain costs one attempt and not `DrainBatch` of them; why the WaitGroup is what makes D77's lock trap inapplicable rather than survived; why a webhook goroutine of its own is not a fix, `pg_try_advisory_lock` being session-scoped, and would convert every other job's stall into a skip; what it does to F90 (nothing) and to F91 (unreachable, not fixed); what a receiver now sees |
 
 ---
 
@@ -12178,3 +12179,81 @@ triage and 303 is the only status that does what the fix needs — but it is nam
 here rather than left in a diff, because a silently edited inherited rule is the
 one amendment that would be invisible in exactly the file that exists to make
 scope visible.
+
+## 2026-08-04 — M42, what one drain costs, and the fix that would have moved the cost rather than removed it
+
+M42 is reopened on [F82](deferred-findings.md). The claim it falsifies is the
+package's own, at `internal/webhook/webhook.go`: *"a backlog drains over several
+runs instead of holding the job for minutes."* It held the job for minutes at the
+shipped defaults — twenty rows delivered one after another, ten seconds of
+`WEBHOOK_TIMEOUT` each, on the one goroutine that reads every job ticker in the
+process. **D95.**
+
+**The batch is delivered together, inside `Drain`, and `Drain` waits for it.**
+`DeliveryConcurrency` is `DrainBatch`, so a drain costs one attempt rather than
+`DrainBatch` of them, and the arithmetic that produced two hundred seconds no
+longer has a batch size in it.
+
+**Why the concurrency is inside `Drain` rather than around it.** m42.md's
+reopening named the trap precisely: `withLeadership` holds D77's advisory lock on
+a pooled connection released by `defer` when the function it was given returns, so
+a goroutine outliving that function delivers **without** the lock — duplicate
+delivery under split brain, which is the thing D77 was written to prevent. A
+`sync.WaitGroup` waited on before `Drain` returns is what makes that trap
+inapplicable rather than survived: no goroutine outlives the call, so the lock
+covers every dial exactly as it did when they were sequential. Nothing about D77
+moves, and nothing had to.
+
+**The other surviving fix was measured and rejected, and it is worth writing down
+because it is the obvious one.** The reopening's second prohibition rules out a
+second ticker *read by the same select*, which leaves "give the webhook drain its
+own goroutine" looking like the answer — the stall is the shared goroutine, so
+stop sharing it. It is not the answer, and the reason is that
+`pg_try_advisory_lock` is **session-scoped**. A second goroutine acquires its own
+pooled connection, which is its own session, so while a drain holds the leader
+lock every other job's `pg_try_advisory_lock` on the same key returns `false` and
+the job **skips**. Mail would not go out for the same two hundred seconds; it
+would simply be counted as `job_skipped` instead of being invisible. That converts
+a stall into a skip and changes nothing an operator or a workspace can feel, while
+adding a second scheduler thread to reason about. The only version of it that
+works needs a second lock key, and D77 rejected a dedicated webhook lock on its
+own grounds: the purge that trims the same table runs under the first lock, so the
+two would be able to run against each other.
+
+**What this does to the two findings deliberately left out of scope.** Both were
+named in the reopening as out of scope and neither is folded in.
+[F90](deferred-findings.md) — the queue's instance-wide capacity and its lack of a
+per-tenant bound — is untouched in both directions: `DrainBatch` is still twenty,
+the claim query still has no workspace term, and the ordering is still by
+`next_attempt_at`. Forty rows a minute is what it was. [F91](deferred-findings.md)
+— attempts spent without a dial when `WEBHOOK_TIMEOUT` is raised — is not fixed
+either, but it is no longer *reachable*: its mechanism was twenty rows at sixty
+seconds costing 1,200 seconds against a five-minute `runCtx`, after which roughly
+fifteen rows had spent an attempt with no socket opened and could not even be
+marked, because the mark ran on the same dead context. Twenty rows at sixty
+seconds now cost sixty seconds. The defect F91 actually names — that the
+`WEBHOOK_TIMEOUT` validator was written against the thirty-second drain interval
+and never against the five-minute job bound — is still there, and the row stays
+open for M45 to schedule. It has been made harmless at every setting the validator
+permits, not correct.
+
+**The cost, stated.** A drain can now hold twenty outbound connections at once
+instead of one, and can ask the application pool (`DB_MAX_CONNS`, twenty) for
+twenty short marking queries in the same instant if every receiver answers
+together — one of which the leader lock is already holding. Marks are single
+statements and the pool queues rather than fails, so this is contention for
+milliseconds rather than a bound anybody will hit; it is recorded because it is
+the thing that would start to matter if `DrainBatch` were raised, and raising it
+is now explicitly a decision about concurrency.
+
+**What a receiver sees changed**, which is the part that is a published interface
+rather than an internal one: up to twenty concurrent requests from the instance,
+not in queue order. `docs/usage.md` says so and points at the delivery id, which
+has been the documented idempotency key since D79.
+
+`TestOneDrainSpendsOneAttemptRatherThanTwenty` holds the claim, and holds it as
+overlap rather than as a stopwatch reading: the test receiver blocks every request
+until `DrainBatch` of them are in flight together and records the high-water mark,
+so a drain that delivers in turn cannot reach the count however fast the machine
+is. Run against the shipped tree first, where it reported a peak of one and took
+8.08 seconds for twenty rows a concurrent drain finishes in about one.

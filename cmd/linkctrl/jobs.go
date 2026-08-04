@@ -208,6 +208,13 @@ func (j *jobRunner) start(parent context.Context) {
 				// receives for an hour is an event that reads as lost. A second
 				// ticker at the same period would be two timers to reason about
 				// for no difference anybody can observe.
+				//
+				// **Everything in this select is inline, including this.** A job
+				// that runs long here does not delay itself; it delays every
+				// other case, and a Go ticker holds one tick, so the ones after
+				// that are dropped and not queued. Which is why what a webhook
+				// drain costs is bounded by one WEBHOOK_TIMEOUT rather than by
+				// the batch size — see runWebhooks below.
 				j.runWebhooks(ctx)
 			case <-hourly.C:
 				j.runMaintenance(ctx)
@@ -349,7 +356,11 @@ func (j *jobRunner) runMail(ctx context.Context) {
 // somebody else's server, and bounded for the same reason: a receiver that
 // accepts a connection and then says nothing must not hold the scheduler. Each
 // attempt carries its own shorter deadline inside this one — WEBHOOK_TIMEOUT,
-// ten seconds by default, against a batch of twenty.
+// ten seconds by default — and the batch is dialled together rather than in
+// turn, so what this call costs is *one* of those and not twenty. That is the
+// number that matters here: this runs inline on the goroutine below, and a drain
+// that took DrainBatch × WEBHOOK_TIMEOUT held every other job on the instance for
+// the duration. See internal/webhook.DeliveryConcurrency.
 func (j *jobRunner) runWebhooks(ctx context.Context) {
 	if j.webhooks == nil {
 		return
