@@ -274,8 +274,18 @@ from the vocabulary `Classify` emits.
 
 **It needs no mailer and enables no reputation feed.** The outstanding
 invitation is delivered by the copyable link printed above, which is how a
-default instance delivers one; nothing is queued for a relay. No destination is
-sent anywhere off the box. Both are asserted by test, in `cmd/lctl`.
+default instance delivers one; nothing is queued for a relay. No destination
+reaches a third-party feed. Both are asserted by test, in `cmd/lctl`.
+
+That is not the same as *nothing leaves*, and the difference is the demo's own
+data. The dataset registers **webhooks**, because a page with no registrations
+shows nothing, and a webhook is the one channel no operator setting turns off —
+so on a demo instance every link somebody creates queues a delivery carrying that
+link's destination. Both registered hostnames are `.example`, which RFC 2606
+reserves as a name that never resolves, so a delivery gets as far as a failed DNS
+lookup and reaches nobody's server; the seeder itself queues nothing, asserted by
+a coverage row. The instance's own `/feeds` page says all of this, because it
+reads the workspace's registrations and not only the feed setting.
 
 **It does not touch `LINKCTRL_SIGNUP_MODE`.** The extra accounts are written by
 the seeder; redemption only ever adds a membership to an account that already

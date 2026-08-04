@@ -4,11 +4,13 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -31,10 +33,17 @@ import (
 // The unit tests hold the adapter's own behaviour and the structural claims —
 // off means no client, a verdict cannot name a tier, nothing else in
 // internal/link reaches the network. What can only be asserted here is the part
-// the milestone is actually about: that a default instance sends nothing
-// anywhere, that turning a feed on changes no built-in tier's answer, that a
-// feed which errors is a feed that decides nothing, and that the instance owner
-// can overrule a verdict and stop the sending with it.
+// the milestone is actually about: that a default instance sends nothing **to a
+// feed**, that turning a feed on changes no built-in tier's answer, that a feed
+// which errors is a feed that decides nothing, and that the instance owner can
+// overrule a verdict and stop the sending with it.
+//
+// *To a feed* rather than *anywhere*, since M45 (F135). The feed is one of two
+// channels a destination can leave by and the only one this file is about; the
+// other is a webhook a workspace registered, which no operator setting turns off
+// and which nothing in this file configures. The disclosure page has to answer
+// for both, and TestTheDisclosureReadsTheWorkspacesWebhooks is where that is
+// asserted against a real registration.
 
 const feedPassword = "a-sufficiently-long-password"
 
@@ -505,7 +514,12 @@ func TestTheDisclosureIsReadableAndAcceptsNoWrite(t *testing.T) {
 	f.claim()
 
 	page := f.body(f.get("/feeds", nil))
-	if !strings.Contains(page, "No destination leaves this instance") {
+	// The string moved with the page at M45 (F135): the default state is now no
+	// feed *and* no webhook, and the claim is scoped to what the reader points
+	// links at rather than asserted about the whole instance from the feed
+	// setting alone. What is asserted is unchanged — that the default state
+	// renders and says so, rather than answering by rendering nothing.
+	if !strings.Contains(page, "Nothing you point a link at leaves this instance") {
 		t.Errorf("the disclosure page did not render its default state:\n%s", firstLines(page))
 	}
 	// The page is reachable from the chrome, or nobody finds it.
@@ -534,6 +548,136 @@ func TestTheDisclosureIsReadableAndAcceptsNoWrite(t *testing.T) {
 					method, path, resp.StatusCode)
 			}
 		}
+	}
+}
+
+// TestTheDisclosureReadsTheWorkspacesWebhooks is F135, asserted against a real
+// registration rather than against a fixture.
+//
+// The template tests in internal/ui render the four states from a map and read
+// the words; what they cannot see is whether anything actually looks the
+// registrations up. Until M45 nothing did — `Service.FeedDisclosure` read the
+// feed checker and knew nothing about webhooks, so this page told a workspace
+// posting every link it created to somebody's server that nothing it pointed a
+// link at left the instance, in a green panel, gated on no permission.
+//
+// Three claims here, and the second is the one the fixture cannot make:
+//
+//   - the strong claim is rendered while nothing is registered;
+//   - registering one enabled webhook subscribed to a destination-carrying event
+//     replaces it, on the very next render, with no restart and no setting;
+//   - the JSON half agrees, because a client reading `{"enabled": false}` and a
+//     browser reading a green panel must not get different answers about the
+//     same workspace.
+//
+// No feed is configured anywhere in this test. That is deliberate: the channel
+// under test is the one no operator setting turns off.
+func TestTheDisclosureReadsTheWorkspacesWebhooks(t *testing.T) {
+	f := newWeb(t)
+	f.claim()
+
+	const strong = "Nothing you point a link at leaves this instance"
+
+	if page := f.body(f.get("/feeds", nil)); !strings.Contains(page, strong) {
+		t.Fatalf("a workspace with no webhook is not told the strong claim:\n%s", firstLines(page))
+	}
+	if receiving, count := f.apiDisclosure(); receiving || count != 0 {
+		t.Errorf("the API reports receiving=%v count=%d for a workspace with no webhook",
+			receiving, count)
+	}
+
+	// Through the dashboard form, so what is registered is what the product
+	// would have accepted — the URL goes through the same tier check every
+	// destination does. `.example` never resolves, so nothing is ever delivered
+	// to anybody; what matters here is that the row exists.
+	resp := f.postForm("/webhooks", url.Values{
+		"url":         {"https://receiver.linkctrl.example/events"},
+		"events":      {"link.created", "link.updated"},
+		"description": {"F135"},
+	}, nil)
+	if code := resp.StatusCode; code != http.StatusOK && code != http.StatusSeeOther {
+		t.Fatalf("registering a webhook answered %d", code)
+	}
+	_ = resp.Body.Close()
+
+	page := f.body(f.get("/feeds", nil))
+	if strings.Contains(page, strong) {
+		t.Errorf("a workspace that has registered a webhook is still told %q. That "+
+			"sentence is the one this page exists to be right about, and a webhook "+
+			"carries the destination as typed:\n%s", strong, firstLines(page))
+	}
+	if !strings.Contains(page, "Destinations you type here are sent somewhere else") {
+		t.Errorf("the disclosure does not warn after a webhook was registered:\n%s",
+			firstLines(page))
+	}
+	// Scoped to the workspace and said out loud. A per-workspace read printed as
+	// an instance-wide claim is the same defect facing the other way.
+	if !strings.Contains(page, "this workspace") {
+		t.Error("the warning does not name the workspace as whose doing this is")
+	}
+	// The address is not on this page. `webhooks.read` gates who a workspace
+	// posts to; this page is gated on nothing at all.
+	if strings.Contains(page, "receiver.linkctrl.example") {
+		t.Error("the disclosure page printed the webhook's address; the count is owed " +
+			"to every member, the registry is not")
+	}
+
+	if receiving, count := f.apiDisclosure(); !receiving || count != 1 {
+		t.Errorf("the page warns and the API reports receiving=%v count=%d; the two "+
+			"surfaces must not answer differently about one workspace", receiving, count)
+	}
+}
+
+// apiDisclosure reads the webhook half of GET /api/v1/feeds.
+//
+// Decoded rather than string-matched: the handler pretty-prints, so a substring
+// assertion pins the indentation instead of the answer.
+func (f *webFixture) apiDisclosure() (receiving bool, count int64) {
+	f.t.Helper()
+	var got struct {
+		Webhooks struct {
+			Receiving bool  `json:"receiving"`
+			Count     int64 `json:"count"`
+		} `json:"webhooks"`
+	}
+	body := f.body(f.get("/api/v1/feeds", nil))
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		f.t.Fatalf("decode /api/v1/feeds: %v\n%s", err, body)
+	}
+	return got.Webhooks.Receiving, got.Webhooks.Count
+}
+
+// TestTheDisclosureIgnoresAWebhookThatCarriesNoDestination.
+//
+// The predicate is the fan-out's predicate — enabled, and subscribed to an event
+// whose payload carries a destination — rather than "a row exists". Both halves
+// are load-bearing in the same direction: a disclosure that warned about a
+// registration receiving nothing would be crying wolf on the one page whose
+// value is that its green panel can be believed.
+//
+// `automation.fired` is the event that carries no destination (its subject
+// labels are aliases, or a defanged host), and a disabled registration is
+// skipped by the fan-out itself, so neither can put a destination on the wire.
+func TestTheDisclosureIgnoresAWebhookThatCarriesNoDestination(t *testing.T) {
+	f := newWeb(t)
+	f.claim()
+
+	const strong = "Nothing you point a link at leaves this instance"
+
+	resp := f.postForm("/webhooks", url.Values{
+		"url":         {"https://rules.linkctrl.example/fired"},
+		"events":      {"automation.fired"},
+		"description": {"no destination in this payload"},
+	}, nil)
+	if code := resp.StatusCode; code != http.StatusOK && code != http.StatusSeeOther {
+		t.Fatalf("registering a webhook answered %d", code)
+	}
+	_ = resp.Body.Close()
+
+	if page := f.body(f.get("/feeds", nil)); !strings.Contains(page, strong) {
+		t.Errorf("a workspace subscribed only to automation.fired is warned that its "+
+			"destinations leave. They do not: that payload carries an alias or a "+
+			"defanged host and never a destination:\n%s", firstLines(page))
 	}
 }
 

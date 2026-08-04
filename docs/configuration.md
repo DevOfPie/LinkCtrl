@@ -294,8 +294,11 @@ existing links are never re-checked in the background.
 
 - **Asked last.** The feed only ever sees a destination every built-in tier has
   already accepted. A private address, a host on the compiled list, a listed
-  host, a homograph — none of them is ever sent anywhere, and none of them
-  changes answer with a feed on, off or failing.
+  host, a homograph — none of them ever reaches the feed, and none of them
+  changes answer with a feed on, off or failing. That is a bound on the feed and
+  not on the instance: the refusal is itself a `destination.blocked` event, and a
+  workspace that has subscribed a webhook to it receives the refused destination,
+  defanged.
 - **Low confidence.** A refusal it produces is `low_confidence.feed_reputation`:
   disputable like any other, and the instance owner can overrule it from
   `/disputes`. Overruling also stops that host being sent again, so an override

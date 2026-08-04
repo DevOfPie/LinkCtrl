@@ -3,7 +3,7 @@ package httpx
 import (
 	"net/http"
 
-	"github.com/DevOfPie/LinkCtrl/internal/feed"
+	"github.com/DevOfPie/LinkCtrl/internal/link"
 )
 
 // feedsPageData is what pages/feeds.html renders.
@@ -14,7 +14,7 @@ import (
 // happens to follow — see FeedsPage.
 type feedsPageData struct {
 	shell
-	Disclosure feed.Disclosure
+	Disclosure link.DestinationDisclosure
 }
 
 // FeedsPage discloses what this instance does with destinations.
@@ -38,11 +38,29 @@ type feedsPageData struct {
 // Ungated on purpose. Every signed-in user's destinations are what get sent, so
 // every signed-in user may read this — a disclosure only owners can see is a
 // disclosure to the people who already configured it.
+//
+// **Ungated includes the webhook half**, which is the one thing about this page
+// that is not a copy of how it shipped. Reading the registry — who a workspace
+// posts to — needs `webhooks.read`; being told that *something* receives the
+// destinations you type needs nothing, because it is a fact about your own data
+// rather than about the workspace's configuration. link.WebhookDisclosure is
+// what enforces that distinction: it carries a count and no URL.
 func (h *Web) FeedsPage(w http.ResponseWriter, r *http.Request) {
+	// From the link service rather than from config, so the page describes the
+	// client that actually does the sending and the rows that actually exist.
+	disclosure, err := h.Links.DestinationDisclosure(r.Context(), IdentityFrom(r.Context()))
+	if err != nil {
+		// Not swallowed to a zero value the way the shell's badge is. A zero
+		// disclosure is the green panel, so failing this read quietly would print
+		// the strongest claim on the page at exactly the moment nothing is known.
+		h.webError(w, r, err)
+		return
+	}
 	h.render(w, r, http.StatusOK, "feeds", feedsPageData{
-		shell: h.shell(r, "Reputation feeds", "feeds"),
-		// From the link service rather than from config, so the page describes
-		// the client that actually does the sending.
-		Disclosure: h.Links.FeedDisclosure(),
+		// The menu still calls this entry "Reputation feeds", which is what
+		// somebody looking for it is looking for; the page names both channels
+		// because both are what it now answers.
+		shell:      h.shell(r, "Reputation feeds and webhooks", "feeds"),
+		Disclosure: disclosure,
 	})
 }

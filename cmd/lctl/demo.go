@@ -152,8 +152,12 @@ for right now; every column matches what the ingester would have written.
 
 No mailer is needed and none is used: the invitation it leaves outstanding is
 reachable by the link printed below. No reputation feed is enabled, so no
-destination leaves this instance. LINKCTRL_SIGNUP_MODE is not read and not
-changed.
+destination reaches a third party for a reputation check. It does register
+webhooks, which is the other way a destination leaves and the one no operator
+setting turns off, so a link created on a demo instance queues a delivery
+carrying its destination — to a .example hostname that never resolves, so
+nobody receives it. The instance's own /feeds page says so.
+LINKCTRL_SIGNUP_MODE is not read and not changed.
 
 For load testing rather than looking at, use `+"`lctl seed`"+` instead.
 

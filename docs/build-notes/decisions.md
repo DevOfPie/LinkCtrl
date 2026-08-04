@@ -160,6 +160,7 @@ file. Append a row when you append an entry.
 | [M45, four ways one membership rule was not read](#2026-08-04--m45-four-ways-one-membership-rule-was-not-read) | F93, F94, F97 and F60 — the first four approved rows of M45's moderate security cluster, fixed on their own terms rather than behind a shared abstraction; why `List` had to be refused alongside `Revoke` and why `invite.Roles` was reading the wrong rank; why F94's recipient set is a second *parameter* and not a second predicate, and what `DISTINCT` is for; F97's three limbs, and why F43's `CreateOrganization` door closes with no credential-type branch at all — the state it opened on is what was wrong; `apikey.revoked` added because *the person is the record* stops holding when the credential's owner is not present; D43's mechanism reused for F60 rather than `NonDelegableScopes`, and `KeyIssuableRoles` moved to `internal/auth` so one list bounds both doors; and the one residue left deliberately — the `/invites` nav entry that now leads to a 403 for a workspace-scoped admin, and what removing it would cost |
 | [M45, three places a secret was sitting still](#2026-08-04--m45-three-places-a-secret-was-sitting-still) | F32, F34 and F35 — one theme, three mechanisms, fixed separately; **F32's design fork decided in the open**: scrub at the terminal transition, with what a send-time reference and a shortened retention would each have cost, and why the scrub covers every kind and is a database constraint rather than a convention; the pending-row exposure that remains and the two migration comments corrected to admit it; `03200` bending the additive-DDL rule and why `mail_outbox` is the one table where that costs nothing; F34's URL **replaced** rather than removed, and the GET-method destination leak that closes with it; F35's denylist inverted to an allowlist plus a boot refusal, and the path-embedded credential named as residue; and the `net/url` import ban that turned out to guard nothing and to have caused both |
 | [M45, two refusals that answered a question nobody asked them](#2026-08-04--m45-two-refusals-that-answered-a-question-nobody-asked-them) | F92 and F133 — unrelated rows, fixed on their own terms; **F92's two traps answered rather than half-answered**: both surfaces collapsed onto one shared string so the form's prose cannot leak what the status no longer does, and `DummyVerify` on the locked branch because equalising the status and not the work leaves the question answerable with a stopwatch; why `ErrAccountLocked` stays a distinct sentinel and the collapse belongs at the boundary; why the lockout is named *unconditionally* and why that sentence is not in `WriteError`; `account-locked` removed as a problem type and named as a client break; the fixture that had no lockout wired and would have passed by never locking one; **F133** — mail's `withLeadership` and skip-locked claim checked to be D95's constraint exactly, so the WaitGroup transfers whole; the one difference D95 does not cover, twenty sessions to *one* relay, and the tail cost accepted in the open; and why the eleven lines are spelled twice rather than shared |
+| [M45, a disclosure that reads both channels, and a count re-derived](#2026-08-04--m45-a-disclosure-that-reads-both-channels-and-a-count-re-derived) | F135 and F134 — the disclosure **learns** the second channel rather than being weakened, and why the weaker sentence was refused; why the page had no state to read and no wording could have been right; where the second read belongs and what it costs, said rather than assumed — a query because a registration is a row, on `link.Service` because the handler's route to it needs `webhooks.read` and this page is gated on nothing, and an error rather than a swallowed zero because a zero *is* the green panel; the predicate taken from the fan-out so the page asks *would anything have been queued*; the classification asserted total so an eighth event is a decision; four states, and why the scope of each claim is now part of the claim — a per-workspace read printed as an instance claim is the same defect inverted; a count and never a URL; the API field an **addition** by embedding; which assertions the two pinned tests kept and why the old string could not be; **F134 enumerated in a table** with what was excluded and why, the DNS query counted and the technicality that would have excluded it named; and the two sites F135 called defensible that the demo's own seeder falsifies |
 
 ---
 
@@ -13231,3 +13232,244 @@ Neither closes its class. F92 answers sign-in and leaves F13 — the registratio
 endpoint's oracle on an `open` instance — open, which is the row it was always
 distinguished from. F133 leaves F90's capacity and fairness untouched in both
 directions: same batch size, same ordering, still no per-tenant term.
+
+---
+
+## 2026-08-04 — M45, a disclosure that reads both channels, and a count re-derived
+
+[F135](deferred-findings.md) and [F134](deferred-findings.md), approved by the
+owner on [M45's triage](#2026-08-04--m45s-triage-and-the-widest-option-four-times)
+as one item: *the disclosure learns the second channel, and F134 follows from
+it*. Not a reopening of [M32](phase-details/m32.md) — m45.md's Findings bullet is
+this work, so both land under M45's own number.
+
+The alternative was offered and refused, and it is worth recording as the shape
+of the decision rather than as a rejected option. One weaker sentence, true on
+every instance, would have made the page honest for the price of making it
+useless: it rewords the promise a third time instead of making it structural, and
+it costs the instances where the strong claim *is* true the ability to say so. So
+the page reads the workspace's webhooks.
+
+### The page had no second state to read, and that is why it was a row
+
+`internal/ui/templates/pages/feeds.html:106` put *"No destination leaves this
+instance"* in a green panel for every signed-in account whenever no feed was
+configured, and `:109-113` pressed further: *"Nothing you point a link at is sent
+anywhere."* A webhook makes both false — `internal/link/webhook.go:379-386` puts
+the raw destination in all five link-lifecycle payloads and `:403-409` puts the
+defanged attempt on `destination.blocked` — and there was no operator setting
+anywhere in that path to condition on. `Service.FeedDisclosure` read the feed
+checker and nothing else, so no wording could have been right: the data was not
+there.
+
+That page is M32's own deliverable, and m32.md's *Risks* says the disclosure
+wording is the deliverable as much as the code is. The milestone that exists to
+keep this promise precise shipped the least precise statement of it, on the one
+surface a user actually reads.
+
+### Where the second read belongs, and what it costs
+
+`Service.FeedDisclosure()` becomes
+`Service.DestinationDisclosure(ctx, actor) (DestinationDisclosure, error)`. Four
+things decided there rather than in the handler:
+
+**It is a query, and the cost is named rather than assumed.** A registration is a
+row somebody wrote, not a process-wide setting, so there is nothing to read from
+memory. The two callers are `GET /feeds` and `GET /api/v1/feeds`; neither is on
+the redirect path, which reaches none of this. One indexed count on a dashboard
+page that already makes several queries — the shell alone runs the unread badge
+and the workspace switcher — is affordable, and saying so is the point: the same
+read on the redirect path would not be.
+
+**It lives on `link.Service` rather than in the handler**, because the handler
+would have had to call `Service.Webhooks`, which requires `webhooks.read`. This
+page is gated on nothing at all (D40), so a plain member — the reader it exists
+for — would have got a 403 or, worse, a handler that swallowed the refusal and
+rendered the green panel. The disclosure is not a read of the registry and must
+not be authorized like one.
+
+**internal/link does not import internal/webhook, and still does not.** That
+package's own comment declares the graph one-way. The count goes through `s.q`,
+the sqlc store internal/link already uses for webhook registration CRUD, as
+`CountDestinationWebhooks`.
+
+**An error is returned, not swallowed.** The shell swallows a failed badge count
+to zero because a page must not fail for a decoration. This one may not: a zero
+`DestinationDisclosure` *is* the green panel, so a swallowed error would print
+the strongest claim on the page at the moment nothing is known. `FeedsPage`
+answers the error page instead.
+
+### The predicate is the fan-out's predicate
+
+`EnqueueWebhookDeliveries` queues a row for `w.enabled AND event = ANY(w.events)`.
+`CountDestinationWebhooks` asks those same two conditions with the
+destination-carrying events as the set, so the page is asking *would anything have
+been queued* rather than estimating it. Both halves matter, in opposite
+directions: a looser test would warn a workspace about a registration that
+receives nothing, which is crying wolf on the one page whose value is that its
+green panel can be believed; a tighter one would reassure a workspace whose URLs
+are being posted somewhere.
+
+Which payloads carry a destination is a fact about internal/link's payload
+builders, so it is declared in `internal/domain` as `WebhookDestinationEvents`
+and passed in as a parameter rather than written into the `.sql` file, where it
+would be the same knowledge in a second place. The classification is **total and
+asserted total**: `TestEveryWebhookEventIsClassifiedForDisclosure` fails on an
+event in neither half, in both, or absent from the vocabulary. Without it an
+eighth event would default to *carries nothing*, which is the one direction this
+disclosure must never be wrong in — and defaulting quietly is exactly how the
+page got wrong in the first place.
+
+`automation.fired` is the event that carries none: its subject labels are aliases
+or a defanged host, never a URL somebody typed. A workspace subscribed only to it
+still gets the strong claim, and an integration test says so.
+
+### Four states, and the scope of each claim is now part of the claim
+
+The page enumerates the two channels and answers each in both directions, in all
+four combinations. Enumerating rather than summarising is the structural half of
+the fix: a page that lists the ways out cannot be quietly falsified by a third one
+the way a page that summarised them was, because a channel with no section is a
+visible gap.
+
+The harder half is that the two claims are not the same kind. The feed is the
+operator's and instance-wide, so *no feed is configured* is true of everybody
+here. A webhook is a **workspace's**, so *nothing is registered* is true of the
+workspace being viewed and says nothing whatever about the one next door. The old
+sentence's error was making an instance-wide promise from an instance-wide
+reading that was only half the question; the fix's available error is making an
+instance-wide promise from a per-workspace reading, which is the same defect
+inverted. Hence the strong claim is now *"Nothing you point a link at leaves this
+instance"* — *you*, and therefore the workspace being viewed — and *this
+instance* appears only where the feed is the subject.
+
+### What the disclosure publishes, and what it does not
+
+A boolean and a count. No URL, no name, no id. `webhooks.read` gates who a
+workspace posts to; this page is gated on nothing, so rendering an address here
+would widen that permission by way of a disclosure page — the same accident one
+turn earlier than the one D40's no-controls test exists to prevent. What every
+member is owed is whether their destinations leave, which is a fact about their
+own data; where to is the registry, which is not.
+
+The boolean is published beside the count rather than left to be derived from
+`count > 0`, so the page and any API client cannot each re-derive the predicate
+and disagree. On the API it is an **addition**: `link.DestinationDisclosure`
+embeds `feed.Disclosure`, so every field that response already carried is exactly
+where it was and `webhooks` is new. `additionalProperties: false` in the spec
+meant the schema had to move with it, which is how `TestAPIMatchesItsContract`
+caught the omission before anything else did.
+
+### The two tests the row said were the cost, and what each still asserts
+
+Both were changed, deliberately, and neither lost an assertion.
+
+`internal/ui/feeds_test.go` went from two fixtures to four, because two was the
+bug: a fixture that cannot express *no feed and a webhook* is a test that cannot
+see the defect. `TestTheDisclosureAnswersTheSameQuestionInBothStates` is
+`…InEveryState`; its *configured* case is unchanged word for word, and its *not
+configured* case now pins *"Nothing you point a link at leaves this instance"* in
+place of *"No destination leaves this instance"*. The claim being asserted is the
+same claim — that the default state renders and says so plainly, rather than
+answering by rendering nothing. The old string could not be kept, because the old
+string was the false one.
+
+`test/integration/feed_test.go:503` pins that same sentence against the live
+router, for the same reason and with the same assertion behind it.
+
+Two integration tests are new, and they assert what a template fixture cannot:
+that anything reads the registrations at all. `TestTheDisclosureReadsTheWorkspacesWebhooks`
+registers one through the dashboard form and re-reads both surfaces — the panel
+flips, the address does not appear, and the JSON agrees with the page.
+`TestTheDisclosureIgnoresAWebhookThatCarriesNoDestination` registers an
+`automation.fired` subscription and asserts the strong claim survives.
+
+### F134: enumerated rather than counted, and the DNS question answered
+
+The row required the number be **re-derived rather than edited**. Every socket
+this product opens was enumerated, and each one decided:
+
+| Opened by | Peer | Whose decision | Counted |
+| --- | --- | --- | --- |
+| `internal/mail/smtp.go:142-151` | the SMTP relay (`SMTP_HOST`) | operator's, off by default | **yes** |
+| `internal/feed/feed.go:158` | the reputation feed (`FEED_URL`) | operator's, off by default | **yes** |
+| `internal/webhook/client.go:155,175-181` | a URL a workspace registered | a workspace's; no operator setting exists | **yes** |
+| `internal/dnsx/dnsx.go:46`, from `internal/link/verification.go:275` | this host's own resolver | a workspace's, by registering a hostname; hourly thereafter | **yes** — see below |
+| pgxpool | Postgres (`DATABASE_URL`) | operator's, required | no — the deployment |
+| redis client | Redis (`REDIS_URL`) | operator's, optional | no — the deployment |
+| `cmd/linkctrl/main.go:899` | this process's own listener | nobody's; `linkctrl healthcheck` | no — not outward |
+
+GeoIP was checked and is a local file open (`internal/geoip/geoip.go:50`), as the
+row already said. No exporter, no telemetry client, nothing else in the tree
+holds an `http.Client`, a dialer or a resolver.
+
+**Four.** The DNS query is the one the row said had to be decided rather than
+counted, and it is decided here in the open: it counts. The honest complication
+is that the socket goes to *this host's own resolver*, which the operator
+configured — it is the **query** that reaches a nameserver the registrant chose,
+not the connection. Excluding it on that basis would rest the number on which end
+of a resolver you stand at, and a count arrived at on a technicality is precisely
+the count that was wrong before. What the registrant's nameserver observes is
+this instance asking about a name it was given, hourly, for as long as the
+hostname stays registered — which `docs/SECURITY.md`'s re-verification row
+already described in those words.
+
+That distinction also resolves the contradiction the row recorded. `SECURITY.md`'s
+*Outbound webhooks* row says webhooks are *"the one place this product connects
+to an address a user chose"*, and that stays true beside a count of four: DNS is
+a name a user chose, resolved by the operator's resolver, and not an address this
+product connects to. The *Egress* row now says so, so the two rows agree instead
+of contradicting.
+
+The row's three exclusions are named in the document rather than left implicit,
+because a count whose boundary is unstated is a count nobody can check.
+
+### Two sites this row got wrong, found by checking rather than by reading
+
+F135 listed seven sites and called two of them defensible — `cmd/lctl/demo.go:155`
+and `docs/cli.md:270`, both scoped to `lctl demo`, *"where no webhook exists"*.
+`cmd/lctl/demo_phase2.go:1118-1145` registers two, one of them **enabled** and
+subscribed to four link-lifecycle events, so every link created on a demo
+instance queues a delivery carrying that link's destination. The `.example`
+hostnames mean nobody receives it (D81), and that is a statement about delivery
+rather than about the sentence: *no destination leaves this instance* was wrong
+in the demo's own help text and in the CLI documentation, and both are corrected.
+
+`CHANGELOG.md:594` went with them, and that one is not a widening. It is in
+`[Unreleased]`, it describes the demo seeder, and it said *"no destination leaves
+the box"* — three lines from the entry this milestone was in the middle of
+writing, which says the demo registers webhooks. A changelog contradicting itself
+inside one unreleased release is this diff failing to be internally consistent
+rather than a site somebody chose not to fix, and it is the same argument M32's
+reopening used for `CHANGELOG.md:750`.
+
+Worth recording as a pattern rather than as an erratum. F134's number and F135's
+two defensible sites were both wrong in the same way — asserted from what the
+author remembered rather than checked against the tree — which is the same
+failure the findings themselves describe, one level up. Re-deriving is what
+caught it; nothing else would have.
+
+### One residue, filed rather than taken
+
+Re-running F135's sweep after closing it turned up a ninth site, and it is left
+open as [F136](deferred-findings.md) instead of folded in.
+`internal/link/feed_test.go` calls its guard
+`TestTheFeedIsTheOnlyWayADestinationLeaves`, and `emitLink` — in that same
+package — hands every destination to the webhook queue. The *assertion* is
+right and is the property M32 built: no outbound symbol anywhere in internal/link,
+so the feed is the only way that package opens a socket. The name and the
+comments around it over-claim, in the shape `feed_test.go`'s three wordings did.
+
+It is a row and not a diff because F135's evidence enumerates its sites and this
+is not one of them, and because scope on this milestone is two rows the owner
+approved individually. It is worth naming here anyway: that file's whole job is
+to keep the disclosure honest, so a reader who trusts its test name concludes the
+page has one channel to describe — which is the belief that produced F135.
+
+### What did not change
+
+The webhook payload. `internal/link/webhook.go:366-372` declares it a published
+interface and M32's entry already refused that trade: removing `url` would break
+every receiver in the world to make a sentence in a green panel true. The page
+was wrong, the capability was disclosed the whole time, and it is the page that
+moved.

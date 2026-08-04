@@ -257,8 +257,14 @@ func (c *Client) transportError(err error) error {
 // what happens to somebody's data; a person who reads it through a client is
 // owed the same answer as one who reads it in a browser.
 type Disclosure struct {
-	// Enabled is false on a default instance, and false is the whole disclosure:
-	// no destination leaves the box.
+	// Enabled is false on a default instance, and false is the whole of *this*
+	// channel's disclosure: no destination reaches a feed.
+	//
+	// It is not the whole disclosure, and reading it as one is F135. A webhook a
+	// workspace registered is a second channel with no operator setting anywhere
+	// in its path, so the page and the API report both — see
+	// link.DestinationDisclosure, which embeds this type rather than replacing
+	// it.
 	Enabled bool `json:"enabled"`
 	// Name is the third party. Empty when disabled.
 	Name string `json:"third_party,omitempty"`

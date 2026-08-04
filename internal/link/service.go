@@ -71,8 +71,10 @@ type Service struct {
 	audit audit.Recorder
 	// feed is the opt-in third-party reputation check (M32). Nil on every
 	// instance that has not named a feed, which is the default, and nil is what
-	// "no destination leaves the box" is made of: there is no client to call
-	// and no flag whose false branch could be missed.
+	// the *operator's* half of "no destination leaves the box" is made of: there
+	// is no client to call and no flag whose false branch could be missed. The
+	// workspace's half is a webhook registration and is a row rather than a
+	// field — see DestinationDisclosure.
 	feed FeedChecker
 	// feedMetrics counts feed checks. Nil counts nothing.
 	feedMetrics FeedObserver
@@ -221,18 +223,92 @@ func NewService(pool *pgxpool.Pool, cfg Config) *Service {
 	}
 }
 
-// FeedDisclosure is what this instance does with destinations, as the
-// disclosure page and the API print it.
+// DestinationDisclosure is what happens to the destinations an actor's workspace
+// submits, as the `/feeds` page and `GET /api/v1/feeds` print it.
 //
-// It reads the service's own checker rather than the configuration the checker
-// was built from, so the page cannot describe a feed the service is not using.
-// The zero Disclosure — Enabled false — is the default instance and is the
-// whole of the answer there: nothing is sent anywhere.
-func (s *Service) FeedDisclosure() feed.Disclosure {
-	if s.feed == nil {
-		return feed.Disclosure{}
+// **Two channels, and they are not the same kind of thing.** The reputation feed
+// is the operator's, instance-wide, and off unless somebody set `FEED_URL`.
+// Outbound webhooks are a *workspace's*, registered by anybody holding
+// `webhooks.write` there, with no operator switch anywhere in the path
+// (internal/config: "there is no switch: webhooks are a workspace feature rather
+// than an operator one"). One page answers both because one question is being
+// asked — *does what I type here go anywhere* — and until M45 it answered only
+// half of it, in a green panel, to every signed-in user (F135).
+//
+// The feed half stays instance-scoped and the webhook half is scoped to the
+// actor's own workspace. Neither half may be read as the other: this instance
+// having no feed says nothing about the workspace next door's webhooks, and this
+// workspace having no webhook says nothing about anybody else's.
+type DestinationDisclosure struct {
+	// Embedded rather than a named field, so every field the feed disclosure has
+	// always published stays exactly where an API client already found it, and
+	// the new channel arrives as an addition rather than as a reshuffle. The
+	// template reads .Disclosure.Enabled unchanged for the same reason.
+	feed.Disclosure
+	// Webhooks is the workspace's own channel.
+	Webhooks WebhookDisclosure `json:"webhooks"`
+}
+
+// WebhookDisclosure is how much of a workspace's own egress it is being told
+// about.
+//
+// No URL, no name, no id. Who a workspace sends its events to is behind
+// `webhooks.read`, and this page is behind nothing at all — what every member is
+// owed is whether their destinations leave, not the registry of where to. The
+// number is here because "a webhook is registered" and "four are" are different
+// facts to somebody about to go and ask an administrator.
+type WebhookDisclosure struct {
+	// Receiving is true when at least one enabled registration in this workspace
+	// is subscribed to an event whose payload carries a destination.
+	//
+	// A boolean beside a count is not redundancy. The page and any client would
+	// otherwise each re-derive the predicate from `Count > 0`, and the first one
+	// to get it wrong renders the green panel — so the predicate is computed once,
+	// here, and published.
+	Receiving bool `json:"receiving"`
+	// Count is how many such registrations there are. Not how many exist: a
+	// disabled one and one subscribed only to `automation.fired` receive no
+	// destination and are not counted.
+	Count int64 `json:"count"`
+}
+
+// DestinationDisclosure answers, for this actor's workspace, what leaves.
+//
+// The feed half reads the service's own checker rather than the configuration
+// the checker was built from, so the page cannot describe a feed the service is
+// not using. The webhook half is one indexed count — it has to be a query,
+// because a registration is a row somebody wrote and not a process-wide setting,
+// and the two callers are a dashboard page and a JSON GET. Neither is the
+// redirect path, which reaches none of this: nothing here is on the hot path and
+// the cost is one round trip on a page that already makes several.
+//
+// **It returns an error rather than a partial answer.** A disclosure assembled
+// from a failed read would report `Receiving: false`, which is the green panel —
+// so the page fails instead, and says nothing rather than something reassuring
+// and unchecked.
+func (s *Service) DestinationDisclosure(
+	ctx context.Context, actor *auth.Identity,
+) (DestinationDisclosure, error) {
+	out := DestinationDisclosure{}
+	if s.feed != nil {
+		out.Disclosure = s.feed.Describe()
 	}
-	return s.feed.Describe()
+	// No workspace, no workspace webhook. An account that belongs to nothing is a
+	// state D36 made legitimate, and `workspaces.id` is a foreign key, so no row
+	// can carry the nil workspace: skipping the query answers exactly what asking
+	// would, and does it without a nil identity reaching a parameter.
+	if actor == nil || actor.WorkspaceID == uuid.Nil {
+		return out, nil
+	}
+	n, err := s.q.CountDestinationWebhooks(ctx, dbgen.CountDestinationWebhooksParams{
+		WorkspaceID: actor.WorkspaceID,
+		Events:      domain.WebhookDestinationEvents,
+	})
+	if err != nil {
+		return DestinationDisclosure{}, fmt.Errorf("count destination webhooks: %w", err)
+	}
+	out.Webhooks = WebhookDisclosure{Receiving: n > 0, Count: n}
+	return out, nil
 }
 
 // CreateInput describes a new link.

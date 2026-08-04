@@ -172,7 +172,10 @@ five link-lifecycle events carry the link's destination as typed, and
 `destination.blocked` carries the attempted destination defanged — so a
 destination your own rules *refused* leaves this way, even though it never
 reaches a feed. It reaches one workspace's own links and no further, and who
-holds `webhooks.write` is the whole of the control over it. See
+holds `webhooks.write` is the whole of the control over it. **`/feeds` answers
+for this channel too**, per workspace: anybody signed in is told whether anything
+their workspace registered receives the destinations they type, and how many do —
+never to what address, which stays behind `webhooks.read`. See
 [docs/configuration.md](docs/configuration.md#reputation-feeds) and
 [docs/SECURITY.md](docs/SECURITY.md).
 

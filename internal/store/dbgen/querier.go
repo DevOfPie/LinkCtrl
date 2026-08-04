@@ -127,6 +127,28 @@ type Querier interface {
 	CountAutomationRules(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	CountCampaigns(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	CountClickEvents(ctx context.Context, workspaceID uuid.UUID) (int64, error)
+	//
+	// How many of this workspace's registrations actually receive a destination
+	// somebody typed. The `/feeds` disclosure is built on it (M45, F135).
+	//
+	// **The predicate is the fan-out's predicate, deliberately.**
+	// EnqueueWebhookDeliveries below queues a row for `w.enabled AND event =
+	// ANY(w.events)`, so asking the same two conditions with the destination-carrying
+	// events as the set is asking *would anything have been queued* rather than
+	// guessing at it. A disclosure built on a looser test would warn about a
+	// registration that receives nothing; one built on a tighter test would reassure
+	// a workspace whose URLs are being posted somewhere.
+	//
+	// The event names come from the caller (domain.WebhookDestinationEvents) rather
+	// than being written out here, because which payloads carry a destination is a
+	// fact about internal/link's payload builders and must not be restated in a
+	// second place that can drift from them.
+	//
+	// Cost: the same partial index the fan-out uses, `webhooks_workspace_idx ...
+	// WHERE enabled` (00600), over at most MaxWebhooksPerWorkspace rows. It is read
+	// on a dashboard page and on GET /api/v1/feeds, neither of which is the redirect
+	// path.
+	CountDestinationWebhooks(ctx context.Context, arg CountDestinationWebhooksParams) (int64, error)
 	CountFolders(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	// Only issued when the caller explicitly asks for a total, because counting
 	// costs a scan the common page load should not pay for.

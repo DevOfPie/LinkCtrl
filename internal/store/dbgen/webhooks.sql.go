@@ -90,6 +90,45 @@ func (q *Queries) ClaimDueWebhookDeliveries(ctx context.Context, arg ClaimDueWeb
 	return items, nil
 }
 
+const countDestinationWebhooks = `-- name: CountDestinationWebhooks :one
+SELECT count(*) FROM webhooks
+ WHERE workspace_id = $1
+   AND enabled
+   AND events && $2::text[]
+`
+
+type CountDestinationWebhooksParams struct {
+	WorkspaceID uuid.UUID
+	Events      []string
+}
+
+// How many of this workspace's registrations actually receive a destination
+// somebody typed. The `/feeds` disclosure is built on it (M45, F135).
+//
+// **The predicate is the fan-out's predicate, deliberately.**
+// EnqueueWebhookDeliveries below queues a row for `w.enabled AND event =
+// ANY(w.events)`, so asking the same two conditions with the destination-carrying
+// events as the set is asking *would anything have been queued* rather than
+// guessing at it. A disclosure built on a looser test would warn about a
+// registration that receives nothing; one built on a tighter test would reassure
+// a workspace whose URLs are being posted somewhere.
+//
+// The event names come from the caller (domain.WebhookDestinationEvents) rather
+// than being written out here, because which payloads carry a destination is a
+// fact about internal/link's payload builders and must not be restated in a
+// second place that can drift from them.
+//
+// Cost: the same partial index the fan-out uses, `webhooks_workspace_idx ...
+// WHERE enabled` (00600), over at most MaxWebhooksPerWorkspace rows. It is read
+// on a dashboard page and on GET /api/v1/feeds, neither of which is the redirect
+// path.
+func (q *Queries) CountDestinationWebhooks(ctx context.Context, arg CountDestinationWebhooksParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countDestinationWebhooks, arg.WorkspaceID, arg.Events)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPendingWebhookDeliveries = `-- name: CountPendingWebhookDeliveries :one
 SELECT count(*) FROM webhook_deliveries WHERE status = 'pending'
 `

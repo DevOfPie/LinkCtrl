@@ -592,9 +592,12 @@ migrations run at boot.
 - **The demo seeder needs no mailer, enables no reputation feed, and does not
   touch `LINKCTRL_SIGNUP_MODE`.** The outstanding invitation is delivered by the
   copyable link, which is how a default instance delivers one; no destination
-  leaves the box; and the extra accounts are written directly, so a `closed`
-  instance stays closed while it runs. All three are asserted by test rather than
-  documented and hoped for.
+  reaches a third-party feed; and the extra accounts are written directly, so a
+  `closed` instance stays closed while it runs. All three are asserted by test
+  rather than documented and hoped for. The dataset does register **webhooks**,
+  because a page with none shows nothing — so a link created on a demo instance
+  queues a delivery carrying its destination, to a `.example` hostname that never
+  resolves. The seeder itself queues nothing, which is asserted too.
 - **`lctl demo --reset` puts an instance back the way it found it**, seeded
   accounts and organizations included, so running it twice produces the same
   demo. It always writes into the owning account's oldest workspace rather than
@@ -742,9 +745,13 @@ migrations run at boot.
   signed-in account rather than to administrators only — what it describes is
   what happens to their own destinations. It names the feed, states what is sent
   and when, and says that only the operator can change it; with no feed
-  configured it says plainly that nothing leaves. The page is read-only and
-  accepts no `POST`, asserted by test: this product has no instance-level
-  principal, so instance-wide settings are not changed from the dashboard.
+  configured it says plainly that no destination reaches one. It answers for
+  outbound webhooks too, which are the other way a destination leaves and are a
+  workspace's rather than an operator's — see *Fixed*, where that half is
+  described, because it was not there when this feature shipped. The page is
+  read-only and accepts no `POST`, asserted by test: this product has no
+  instance-level principal, so instance-wide settings are not changed from the
+  dashboard.
 - **A feed is a low-confidence signal and never a dependency.** It is asked
   **last**, only about destinations every built-in check already accepted — so a
   destination your own rules refuse never reaches the feed, and those rules
@@ -1117,6 +1124,53 @@ migrations run at boot.
   There is one now.
 
 ### Fixed
+
+- **`/feeds` no longer tells you nothing leaves when your own webhooks are
+  receiving your destinations.** With no reputation feed configured, that page
+  put *"No destination leaves this instance"* in a green panel for every
+  signed-in account, and added *"Nothing you point a link at is sent anywhere"*.
+  A webhook makes both false: the five link-lifecycle events carry the
+  destination exactly as it was typed, `destination.blocked` carries the refused
+  attempt defanged, and no operator setting turns any of it off — registering one
+  is an owner's or an administrator's decision inside a workspace. The page was
+  reading the feed setting and nothing else, so there was no state in which it
+  could have been right about the second channel.
+
+  It now reads your workspace's registrations as well, and answers for both
+  channels in every combination. The reputation feed is the operator's and its
+  answer is instance-wide; a webhook is your workspace's and its answer is about
+  your workspace alone — neither is stated as the other, so an instance where the
+  strong claim is true can still make it. `GET /api/v1/feeds` gained a
+  `webhooks` object saying whether anything enabled there is subscribed to an
+  event that carries a destination, and how many are: **an addition, so every
+  field that response already carried is unmoved.** It carries a count and never
+  an address, because reading who a workspace posts to needs `webhooks.read`
+  while this disclosure needs no permission at all.
+
+  If your instance has no feed and no webhooks, the page says what it always
+  said, in different words. If it has webhooks, it now says so — which is the
+  point, and may be the first time anybody there is told.
+
+- **`lctl demo`'s own description said no destination left the instance, and its
+  dataset registers webhooks.** The demo seeds two registrations because a page
+  with none shows nothing, one of them enabled and subscribed to four
+  link-lifecycle events, so every link created on a demo instance queues a
+  delivery carrying that link's destination. Both hostnames are `.example`,
+  which never resolves, so nothing reaches anybody's server — but *no destination
+  leaves this instance* was the wrong sentence for it, and `docs/cli.md` repeated
+  it. Both now say what is true: no destination reaches a third-party feed, and
+  the webhooks are there.
+
+- **`docs/SECURITY.md` counted two outbound connections and there are four.**
+  The *Egress* row named an SMTP relay and a reputation feed, said both were off
+  until an operator configured them, and added that nothing else in the product
+  opens a socket outwards. Webhook delivery was the third — shipped, documented
+  two rows above, and with no operator setting anywhere in its path — and the
+  hourly DNS `TXT` query custom-domain re-verification makes is the fourth. The
+  row now enumerates all four rather than counting them, says who decides each,
+  names what it excludes and why (Postgres, Redis, and the health check dialling
+  this process's own listener), and states plainly that the DNS query is the
+  weakest member and is counted anyway.
 
 - **Signing in no longer says whether an address has an account here.** Five
   wrong passwords against a registered address answered `429` with problem type

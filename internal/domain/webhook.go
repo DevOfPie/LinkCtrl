@@ -105,6 +105,63 @@ func IsWebhookEvent(name string) bool {
 	return ok
 }
 
+// The vocabulary split by whether an event's payload carries a destination.
+//
+// **This is what the `/feeds` disclosure asks the database about**, and it is
+// declared here rather than inside that query for the reason the vocabulary
+// itself is declared here: the answer to *does anything in this workspace
+// receive the destinations I submit* is a fact about what the payloads contain,
+// and the payloads are built in internal/link. A list of event names inside a
+// `.sql` file would be the same knowledge kept in a second place, drifting the
+// first time an eighth event lands.
+//
+// Both halves are spelled out, and neither is derived from the other, so that
+// adding an event to WebhookEvents and forgetting to classify it fails
+// TestEveryWebhookEventIsClassifiedForDisclosure rather than quietly reading as
+// "carries nothing" — which is the direction the disclosure must never be wrong
+// in.
+var (
+	// WebhookDestinationEvents carry a destination somebody typed. The five
+	// lifecycle events put the link's URL in `data.url` **as typed**
+	// (link.Service.emitLink), and `destination.blocked` puts the refused
+	// attempt in `data.url_defanged` (link.Service.emitBlocked). Defanged is
+	// still the destination: it is reversible by anybody who wants it back.
+	WebhookDestinationEvents = []string{
+		EventLinkCreated,
+		EventLinkUpdated,
+		EventLinkArchived,
+		EventLinkRestored,
+		EventLinkDeleted,
+		EventDestinationBlocked,
+	}
+	// webhookEventsWithoutDestination carry none. `automation.fired`'s subject
+	// labels are aliases, or a defanged *host* for the blocked trigger — a
+	// fragment rather than a destination, and never the URL a person typed.
+	webhookEventsWithoutDestination = []string{
+		EventAutomationFired,
+	}
+)
+
+var webhookDestinationEventSet = func() map[string]struct{} {
+	m := make(map[string]struct{}, len(WebhookDestinationEvents))
+	for _, e := range WebhookDestinationEvents {
+		m[e] = struct{}{}
+	}
+	return m
+}()
+
+// CarriesDestination reports whether an event's payload contains a destination
+// somebody submitted to this instance.
+//
+// An unknown name answers false, and that is safe only because the classification
+// is asserted total against WebhookEvents: nothing outside the vocabulary can be
+// stored in `webhooks.events` (ValidateWebhookEvents), so a false here means
+// "this event does not carry one" rather than "nobody has said".
+func CarriesDestination(event string) bool {
+	_, ok := webhookDestinationEventSet[event]
+	return ok
+}
+
 // MaxWebhooksPerWorkspace bounds the list.
 //
 // Every enabled webhook multiplies one link write into one queued row, so this

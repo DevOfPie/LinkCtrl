@@ -42,8 +42,9 @@ rather than at the top level because each is visited when something *changes*,
 where the three top-level destinations are where work happens.
 
 **Reputation feeds** is the one entry gated on no permission at all, and
-deliberately so: it says whether this instance sends the destinations *you* type
-to a third party, so an editor is exactly the reader it is for.
+deliberately so: it says whether the destinations *you* type leave this instance
+— by the operator's reputation feed, or by a webhook an administrator of your own
+workspace registered — so an editor is exactly the reader it is for.
 
 Both are popovers, which the browser opens and closes on its own: they work with
 a keyboard, close on **Escape** or a click anywhere outside, and open only one at
@@ -627,20 +628,46 @@ re-asked on every write — so the decision itself is the override: after it, th
 host is neither refused nor sent to the feed again. It is scoped to the exact
 host, so allowing `evil.example` says nothing about `login.evil.example`.
 
-#### What this instance does with your destinations
+#### What happens to your destinations
 
-`GET /api/v1/feeds` answers whether destinations are being sent to a third party,
-and to whom. On a default instance it is `{"enabled": false}` and that is the
-whole answer: nothing leaves. It is readable with any credential, because what it
-describes is what happens to the caller's own data, and it is the same disclosure
-the dashboard shows at `/feeds`.
+`GET /api/v1/feeds` answers for **both** channels a destination can leave by. It
+is readable with any credential, because what it describes is what happens to the
+caller's own data, and it is the same disclosure the dashboard shows at `/feeds`.
 
 ```sh
 curl -sS "$BASE/api/v1/feeds" -H "Authorization: Bearer $KEY"
 ```
 
+```json
+{
+  "enabled": false,
+  "webhooks": { "receiving": false, "count": 0 }
+}
+```
+
+That is the answer on a fresh instance, and both halves are needed to read it.
+`enabled` is the reputation feed: the **operator's**, instance-wide, unset in the
+shipped default. `webhooks` is **your workspace's**: `receiving` is true when at
+least one enabled registration there is subscribed to an event whose payload
+carries a destination — the five link-lifecycle events, which carry the URL as
+typed, or `destination.blocked`, which carries the refused attempt defanged. An
+`automation.fired` subscription carries neither and does not count, nor does a
+registration that is switched off.
+
+`{"enabled": false}` alone was once treated as the whole answer, and it is not
+one: no operator setting turns webhooks off, so a workspace with one registered
+is sending destinations somewhere on an instance whose feed is unset. Read
+neither field as a statement about the other — `enabled` says nothing about your
+workspace, and `webhooks` says nothing about anybody else's.
+
+The answer carries a count and never an address. Reading *who* a workspace posts
+to needs `webhooks.read` (`GET /api/v1/webhooks`); being told that your
+destinations leave needs nothing, so a key holding no webhook scope still gets a
+true answer here.
+
 There is no write counterpart. A feed is switched on in the instance's
-configuration and nowhere else.
+configuration and nowhere else; a webhook is registered through
+`/api/v1/webhooks`, which is a different operation behind a different permission.
 
 **Every destination this API returns is defanged**, in `host_defanged` and
 `destination_defanged`, and there is no way to obtain the original through it.

@@ -30,6 +30,33 @@ SELECT id, workspace_id, url, events, description, enabled, created_at, updated_
 -- name: CountWebhooks :one
 SELECT count(*) FROM webhooks WHERE workspace_id = @workspace_id;
 
+-- name: CountDestinationWebhooks :one
+--
+-- How many of this workspace's registrations actually receive a destination
+-- somebody typed. The `/feeds` disclosure is built on it (M45, F135).
+--
+-- **The predicate is the fan-out's predicate, deliberately.**
+-- EnqueueWebhookDeliveries below queues a row for `w.enabled AND event =
+-- ANY(w.events)`, so asking the same two conditions with the destination-carrying
+-- events as the set is asking *would anything have been queued* rather than
+-- guessing at it. A disclosure built on a looser test would warn about a
+-- registration that receives nothing; one built on a tighter test would reassure
+-- a workspace whose URLs are being posted somewhere.
+--
+-- The event names come from the caller (domain.WebhookDestinationEvents) rather
+-- than being written out here, because which payloads carry a destination is a
+-- fact about internal/link's payload builders and must not be restated in a
+-- second place that can drift from them.
+--
+-- Cost: the same partial index the fan-out uses, `webhooks_workspace_idx ...
+-- WHERE enabled` (00600), over at most MaxWebhooksPerWorkspace rows. It is read
+-- on a dashboard page and on GET /api/v1/feeds, neither of which is the redirect
+-- path.
+SELECT count(*) FROM webhooks
+ WHERE workspace_id = @workspace_id
+   AND enabled
+   AND events && @events::text[];
+
 -- name: UpdateWebhook :one
 --
 -- Partial: a NULL parameter leaves its column alone. Same shape as every other

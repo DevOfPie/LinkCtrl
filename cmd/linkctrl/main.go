@@ -486,7 +486,7 @@ func run(cfg config.Config, _ io.Writer) error {
 		feedChecker = feedClient
 		// Said at boot, at info, and worded as what it does rather than as what
 		// was configured. An operator who inherits a box should be able to find
-		// this in the first screen of its log: it is the one setting on this
+		// this in the first screen of its log: it is the one *setting* on this
 		// instance that sends its users' data somewhere else.
 		log.Info("reputation feed enabled; destinations are sent to a third party "+
 			"when a link is created, edited, or a refusal is disputed",
@@ -495,8 +495,17 @@ func run(cfg config.Config, _ io.Writer) error {
 			slog.Duration("timeout", cfg.Feed.Timeout),
 			slog.String("disclosed_at", cfg.AppOrigin()+"/feeds"))
 	} else {
+		// Scoped to the feed, and it did not used to be. This line said "no
+		// destination leaves this instance", which is a claim about the whole
+		// instance made from one operator setting — and a workspace webhook,
+		// which no setting here turns off, makes it false. Boot is the wrong
+		// place to answer for the second channel anyway: registrations are rows
+		// that change while the process runs, so /feeds answers per request and
+		// this answers for the setting it is about.
 		log.Info("no reputation feed configured (LINKCTRL_FEED_URL is empty); " +
-			"no destination leaves this instance")
+			"no destination is sent to a third party for a reputation check. " +
+			"Webhooks are the other way out and are a workspace's to register; " +
+			"each workspace's answer is at /feeds")
 	}
 
 	// The gates (M35). On the application pool rather than the redirect pool,

@@ -243,8 +243,13 @@ Four constraints the implementation inherits rather than chooses:
   verdicts are low-confidence: disputable, and the instance owner can overrule one
   from the review queue, which also stops that host being sent again. And the
   instance discloses the whole of the above at **`/feeds`**, to every signed-in
-  user, in both states — a read-only page with no controls, because only the
-  operator can change any of it (D40).
+  user, with a feed or without one — a read-only page with no controls, because
+  only the operator can change any of it (D40). **That page answers for both
+  channels**, and it did not always: it read the feed setting alone, so on an
+  instance with no feed it told everybody nothing left, which a webhook in their
+  own workspace made false. It now reads the workspace's registrations too, and
+  keeps the two claims apart — the feed's answer is instance-wide, the webhook's
+  is about the workspace being viewed.
 
 Blocked attempts are recorded through the audit writer [M21](docs/build-notes/phase-details/m21.md)
 builds, which is why the two rows sit together — the writer exists before the

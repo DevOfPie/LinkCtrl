@@ -2235,28 +2235,39 @@ paths:
     get:
       tags: [feeds]
       operationId: getFeedDisclosure
-      summary: What this instance does with the destinations you submit
+      summary: What happens to the destinations you submit
       description: |
         Every blocking decision LinkCtrl makes is local by default: a host list
         compiled into the binary, a list held in this instance's own database,
-        and rules that read a URL's own text. An operator may additionally
-        switch on a third-party reputation feed, and doing so means the
-        destination you submit is **sent to somebody else's server** — a
-        deliberate exception to this product's promise that no destination
-        leaves the box uninvited.
+        and rules that read a URL's own text. A destination can nevertheless
+        leave, by **two** channels, and this operation answers for both.
 
-        This operation answers whether that is happening here, and to whom. It
-        is the same disclosure the dashboard shows at `/feeds`, available to
+        **The reputation feed is the operator's**, instance-wide, and unset in
+        the shipped default. Switching it on means the destination you submit is
+        sent to somebody else's server for a check — a deliberate exception to
+        this product's promise that no destination leaves the box uninvited.
+
+        **Webhooks are your workspace's**, and no operator setting turns them
+        off. An owner or administrator there registers a URL of their own
+        choosing, and the workspace's link events are posted to it carrying the
+        destination — as typed for the five lifecycle events, defanged for a
+        refusal. `webhooks.receiving` is whether that is happening in the
+        workspace this credential acts in. It says nothing about any other
+        workspace, and `enabled` says nothing about this one.
+
+        It is the same disclosure the dashboard shows at `/feeds`, available to
         anyone with a credential because what it describes is what happens to
-        their own data.
+        their own data — including a credential holding no webhook scope, which
+        is why the answer carries a count and never an address.
 
         **There is no write counterpart and there will not be one.** A feed is
         switched on by the operator, in this instance's configuration, and
         restarting it — no request to this API and nothing in the dashboard can
-        change it. See decision D40.
+        change it. See decision D40. A webhook is registered through
+        `/webhooks`, which is a different operation with a different permission.
       responses:
         "200":
-          description: What this instance sends, and to whom
+          description: What leaves this workspace, and by which channel
           content:
             application/json:
               schema:
@@ -4778,17 +4789,30 @@ components:
     FeedDisclosure:
       type: object
       additionalProperties: false
-      required: [enabled]
+      required: [enabled, webhooks]
       description: >
-        What this instance does with a destination you submit. `enabled: false`
-        is the shipped default and the whole answer: nothing is sent anywhere.
-        The remaining fields are present only when a feed is configured.
+        What happens to a destination you submit, by both of the channels one
+        can leave by.
+
+        `enabled` is the **operator's** channel and is instance-wide: a
+        third-party reputation feed, unset in the shipped default. `webhooks` is
+        **your workspace's** and is not the operator's to switch off — a
+        registration made by an owner or administrator there, receiving the
+        workspace's link events, which carry the destination.
+
+        `enabled: false` was once the whole answer and was not: a workspace with
+        a webhook registered was told nothing left. Read both fields, and read
+        neither as a statement about the other — this instance having no feed
+        says nothing about another workspace's webhooks, and your workspace
+        having none says nothing about anybody else's.
       properties:
         enabled:
           type: boolean
           description: >
             True when destinations are sent to a third party for a reputation
-            check.
+            check. Instance-wide, and set by the operator alone.
+        webhooks:
+          $ref: "#/components/schemas/WebhookDisclosure"
         third_party:
           type: string
           description: >
@@ -4816,6 +4840,40 @@ components:
             open accepts the destination: the built-in tiers had already
             accepted it, and a third party's outage must not decide that this
             instance may not create links.
+
+    WebhookDisclosure:
+      type: object
+      additionalProperties: false
+      required: [receiving, count]
+      description: >
+        Whether anything your workspace registered receives the destinations you
+        submit. Scoped to the workspace this credential acts in, and to no other.
+
+        Note what is **not** here: no URL, no name, no id. Reading who a
+        workspace posts to needs `webhooks.read`; being told that your
+        destinations leave needs nothing, because it is a fact about your own
+        data rather than about the workspace's configuration. A credential with
+        no webhook scope still gets a true answer here.
+      properties:
+        receiving:
+          type: boolean
+          description: >
+            True when at least one enabled registration in this workspace is
+            subscribed to an event whose payload carries a destination — the
+            five link-lifecycle events, which carry the URL as typed, and
+            `destination.blocked`, which carries the refused attempt defanged.
+            `automation.fired` carries neither and does not count.
+
+            Published rather than left to be derived from `count`, so a client
+            and this product cannot disagree about what the predicate is.
+        count:
+          type: integer
+          format: int64
+          description: >
+            How many such registrations there are. Not how many exist: a
+            registration that is switched off, or subscribed only to
+            `automation.fired`, receives no destination and is not counted here.
+          example: 1
 
     LinkPage:
       type: object
