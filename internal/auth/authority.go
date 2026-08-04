@@ -108,6 +108,40 @@ func (m *MembershipAuthority) In(workspaceID *uuid.UUID) Authority {
 	return out
 }
 
+// Scopes is the same answer In gives, turned inside out: instead of "may this
+// actor exercise the permission over that object", it is "which scopes may they
+// exercise it over at all".
+//
+// orgWide true means an organization-wide membership grants it, which reaches
+// every workspace in the organization — the workspace list is then redundant and
+// the caller should ignore it. Otherwise the list is exactly the workspaces
+// whose own membership grants it, and it may be empty.
+//
+// It exists because a *read* has no single object to ask In about. F31 is that
+// gap: ListAuditLogs was scoped by the actor's organization alone, so a
+// workspace-scoped admin read the rows of workspaces they hold no membership in.
+// Answering that per row would be a query per row; answering it as a predicate
+// needs the set, and this is the set.
+//
+// A nil receiver answers "nothing, nowhere", so a caller that skipped the load
+// cannot read authority out of it.
+func (m *MembershipAuthority) Scopes() (orgWide bool, workspaceIDs []uuid.UUID) {
+	if m == nil {
+		return false, nil
+	}
+	for _, row := range m.rows {
+		if !row.GrantsPermission {
+			continue
+		}
+		if row.WorkspaceID == nil {
+			orgWide = true
+			continue
+		}
+		workspaceIDs = append(workspaceIDs, *row.WorkspaceID)
+	}
+	return orgWide, workspaceIDs
+}
+
 // Permission is the permission this was loaded for, so a refusal can name it
 // without the caller carrying the slug alongside.
 func (m *MembershipAuthority) Permission() string {

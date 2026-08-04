@@ -96,10 +96,15 @@ func bothChannels() map[string]any { return disclosure(true, true, 2) }
 //
 // Why a test rather than a convention: D38 removed the ability to change
 // instance-wide settings from the dashboard, on the finding that this product
-// has no instance-level principal who could be trusted with one. This page is
+// had no instance-level principal who could be trusted with one. This page is
 // read-only and therefore does not reverse that. The risk is the row somebody
 // adds here next year with a toggle beside it, at which point D38 has been
 // reversed by nobody in particular. This is what makes that an explicit act.
+//
+// D98 introduced a principal for three findings that needed one (M45) and
+// enumerated its scopes; the feed configuration is not one of them. That makes
+// this test more load-bearing rather than less: there is now a permission a
+// toggle here would look plausible under.
 func TestTheDisclosurePageHasNoControls(t *testing.T) {
 	// Every element that submits, and the two attributes that make something
 	// else submit. hx-post is in the list because this codebase uses htmx: a

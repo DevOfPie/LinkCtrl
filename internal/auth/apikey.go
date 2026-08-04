@@ -148,12 +148,38 @@ func APIKeyHash(pepper []byte, prefix, secret string) []byte {
 // permission like every other endpoint — so if machine export ever outweighs
 // the disclosure, deleting this one line is the whole change. See decisions.md.
 //
-// destinations.review is the escalating limb again, and more directly than key
+// destinations.decide is the escalating limb again, and more directly than key
 // management is. Allowing a disputed destination deletes a row from the
 // instance-wide low-confidence blocklist, after which every destination under
 // that host becomes creatable — by the key that removed it, among others. A key
 // that can decide what it is allowed to point at has widened its own reach by an
 // action it took itself (M31, applying D18).
+//
+// **destinations.review is deliberately no longer here** (M45, D98). It used to
+// be, because one permission guarded both reading the queue and deciding what is
+// in it, and the deciding half is what the paragraph above convicts. D98 split
+// them, and the split is how "API access is read-only for disputes; a change
+// requires a person" is built: a key may list and inspect disputes, and is
+// refused by this map when it tries to act on one. That refusal comes from the
+// map rather than from a check on what kind of credential is calling — the
+// inherited Permissions rule says anything branching on credential type outside
+// this map and D43 is a defect, and F104 already convicts seven places for it,
+// so adding an eighth deliberately would have been the wrong direction. Reading
+// the queue matches neither limb of D18: it discloses who filed a dispute and a
+// defanged host, never an address or a network prefix, and it escalates nothing.
+//
+// instance.admin is the second limb in its hardest form (M45, D98). Holding it
+// confers destinations.decide on a person, so a key holding it would be a key
+// that widens its own reach by manufacturing somebody else's — the shape D9
+// keeps apikeys.* out of the map for, one step further removed. It is also the
+// only permission in this product whose whole content is granting another one,
+// which is exactly the thing a credential must not be able to do unattended.
+//
+// audit.read.instance is the *disclosing* limb, for the reason audit.read is:
+// the instance audit surface is the same table, carrying the same ip_prefix tied
+// to the same named actors, differing only in that its rows belong to no tenant.
+// A permission that leaks what its sibling is listed here to protect would make
+// the sibling's entry decorative.
 //
 // webhooks.write is the *durability* of a reach, which is the shape none of the
 // entries above quite has (M42, applying D18's second limb). A webhook is a
@@ -184,13 +210,15 @@ func APIKeyHash(pepper []byte, prefix, secret string) []byte {
 // when each rule last fired, which is exactly what an integrator's tooling needs
 // and escalates nothing.
 var NonDelegableScopes = map[string]struct{}{
-	PermAPIKeysRead:       {},
-	PermAPIKeysWrite:      {},
-	"org.delete":          {},
-	"audit.read":          {},
-	"destinations.review": {},
-	"webhooks.write":      {},
-	"automation.write":    {},
+	PermAPIKeysRead:        {},
+	PermAPIKeysWrite:       {},
+	"org.delete":           {},
+	"audit.read":           {},
+	"webhooks.write":       {},
+	"automation.write":     {},
+	PermInstanceAdmin:      {},
+	PermDestinationsDecide: {},
+	PermAuditReadInstance:  {},
 }
 
 // KeyIssuableRoles are the roles an API key may put somebody into (D43).

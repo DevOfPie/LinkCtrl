@@ -308,6 +308,32 @@ path while it waits.
 | Login always fails, no obvious reason | A CRLF in `.env` gave Postgres or a secret a trailing carriage return. Also check whether the account is locked: five failures triggers a 15-minute lockout, and **the response does not say so** — every sign-in refusal is the same 401, deliberately, because a distinct answer for a lockout tells a stranger which addresses are registered. `SELECT email, locked_until FROM users WHERE locked_until > now();` is how you find out, and `UPDATE users SET locked_until = NULL WHERE email_lower = '…';` is how you lift one early. |
 | Cannot claim a fresh instance | `/setup` is single-use and returns 404 once a user exists. Invite the person instead, or set `SIGNUP_MODE` and restart. |
 | `/signup` answers 403 with `SIGNUP_MODE=open` | No `LINKCTRL_SMTP_HOST`. Public registration confirms the address by email before the account exists, so with no relay the effective mode is `invite`. The boot log says so; set a relay and restart. |
+| Nobody can see `/disputes` after upgrading to 0.2.0 | The dispute queue moved off the owner role and onto the instance-level principal. The upgrade conferred it on the **earliest surviving account**, which on any instance that went through `/setup` is the setup account — sign in as that account and appoint whoever should review, at the bottom of `/disputes`. If that account is gone or was never yours, see *Moving the instance principal* below. |
+
+### Moving the instance principal
+
+The account that claimed the instance holds `instance.admin`, and there is
+deliberately no operation anywhere that confers it: a principal that could mint
+another principal would defeat the bound that makes delegation safe. Somebody
+holding it appoints reviewers, and reviewers appoint nobody.
+
+That leaves one case with no in-product answer — the founding account is gone, or
+was never the operator's. It is a `psql` fix, and it is a fix an operator can
+make because they have the database and the person who lost the account does not:
+
+```sql
+INSERT INTO instance_grants (user_id, permission_id)
+SELECT u.id, p.id
+  FROM users u, permissions p
+ WHERE u.email_lower = lower('you@example.com')
+   AND p.slug IN ('instance.admin', 'destinations.review',
+                  'destinations.decide', 'audit.read.instance')
+ON CONFLICT DO NOTHING;
+```
+
+Withdrawing the old one is the same statement with `DELETE … USING`. The change
+takes effect on that account's next request; nothing is cached.
+
 
 ## What is not here yet
 

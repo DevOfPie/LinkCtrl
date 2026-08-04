@@ -49,7 +49,7 @@ Stated as claims, because each one is testable and several have tests naming the
 | Organization creation | Behind a new `orgs.create` permission granted to the **owner role only**, which on a default instance means the account from the setup form and nobody else until an owner grants somebody that role. Expressed as a role grant rather than as a check on how an account was created, so there is exactly one authorization axis. The single exemption is an account holding **no membership at all**, which can create its first organization — a check on present state, at one call site, whose entire effect is to give that account the owner membership `orgs.create` then decides from. |
 | Organization deletion | Behind `org.delete`, seeded since the first release, held by the **owner role only** and **never delegable to an API key**: an irreversible action belongs behind an interactive sign-in. The id in the path must be the organization the caller is acting in, so an id cannot be probed and a mistyped one deletes nothing. Refused while any workspace still holds a link — the workspace-level rule one level up, so deleting above it is not a way around it — and while it is the instance's only organization. Both guards lock the rows they count before counting them, so two administrators acting at once cannot each pass a check the other invalidates. The whole teardown is one transaction; a partially deleted organization would leave members resolving into workspaces that no longer exist. |
 | API keys | Only an HMAC is stored; the token is shown once. Scopes are intersected with the holder's current role on every request, so demoting a user weakens their keys immediately, and a key whose owner holds no membership covering its scope **does not authenticate at all** — removing somebody from an organization stops their credentials into it, rather than leaving one that resolves with the tenancy attached and an empty permission set. Rotation re-reads the same membership under its own lock, so a removal landing mid-rotation wins. An administrator holding `apikeys.write` from an organization-wide membership can revoke any key issued into their organization, which is the answer to a credential whose owner will not stop it; that revocation is audited, and revoking your own key is not, because you are the record. `apikeys.*`, `org.delete` and `audit.read` are **not delegable** — the first two because a key that can mint keys or delete the organization makes revoking a leaked one meaningless, the third because the audit log ties a network prefix to a named person. Reading it requires a signed-in session. A key issued for a single workspace acts only there; the organization-wide alternative is opt-in and needs `apikeys.write` held through an organization-wide membership, so a role scoped to one workspace cannot issue a credential reaching the rest. An organization-wide key reaches its **own** organization's workspaces and no others, even when its owner belongs to several and has pinned a default elsewhere. **Self-rotation is the one exception to *a key cannot manage keys*, and it is deliberately not an exception to the rule behind it** — see *A key can replace itself, and what that costs* below. |
-| Audit log | An event that *is* recorded carries the actor snapshotted at write time, so it stays readable after the account is deleted, and a network prefix rather than an address. Reading needs `audit.read`, held by owners and admins, and not delegable to an API key. Retention is its own setting and defaults to keeping everything, so history is never deleted by an upgrade nobody configured. **Coverage is eighteen events so far** — root-redirect changes, an invitation issued, revoked or accepted, a member added, removed or re-roled, a workspace created, renamed or deleted, an organization created or deleted, a destination refused, bot blocking changed on a link or on the domain, and a domain registered, renamed or removed — see *What is not defended*. (The count read twelve until M32.5 and had omitted `destination.blocked`; the sentence was being edited anyway and a number known to be wrong is not worth preserving.) What is **not** recorded is a bot actually being refused: that is traffic, counted as a bot click, and a crawler would otherwise write thousands of rows a day into this table. An organization's records carry no foreign key to it, so deleting one leaves its trail, deletion record included, intact in the table; the read API is scoped to the caller's organization, so afterwards that trail is reachable only with database access. |
+| Audit log | An event that *is* recorded carries the actor snapshotted at write time, so it stays readable after the account is deleted, and a network prefix rather than an address. Reading needs `audit.read`, held by owners and admins, and not delegable to an API key. **What that read returns is bounded by the reader's own authority since 0.2.0**: an organization-wide membership reads the whole organization, as it always did, and a membership scoped to one workspace reads that workspace's records rather than every workspace in the organization — which is what it used to do, including workspaces where the reader held no membership at all. Retention is its own setting and defaults to keeping everything, so history is never deleted by an upgrade nobody configured. **Coverage is eighteen events so far** — root-redirect changes, an invitation issued, revoked or accepted, a member added, removed or re-roled, a workspace created, renamed or deleted, an organization created or deleted, a destination refused, bot blocking changed on a link or on the domain, and a domain registered, renamed or removed — see *What is not defended*. (The count read twelve until M32.5 and had omitted `destination.blocked`; the sentence was being edited anyway and a number known to be wrong is not worth preserving.) What is **not** recorded is a bot actually being refused: that is traffic, counted as a bot click, and a crawler would otherwise write thousands of rows a day into this table. An organization's records carry no foreign key to it, so deleting one leaves its trail, deletion record included, intact in the table; the read API is scoped to the caller's organization, so afterwards that trail is reachable only with database access. **Acts that belong to no organization have their own surface**, `GET /api/v1/instance/audit`, behind `audit.read.instance`, held by the instance principal alone and not delegable: the default domain's root redirect and bot policy, every dispute decision, and every change to who reviews them all govern every organization on the instance, and until 0.2.0 each was filed under whichever organization the person happened to be acting in — visible to a tenant with no claim to it, and invisible to every tenant it changed. |
 | Secrets | Configuration secrets are a type that refuses to print itself through `fmt`, `slog` or `json`. A config dump or a formatted panic cannot leak the database password, the API-key pepper or the SMTP password. |
 | Outbound mail | Plain text only — no HTML part, so no remote image that reports when a message was opened and no anchor text that disagrees with its link. Every interpolated value has its control and bidirectional-formatting characters removed before it reaches a template, so nothing a person typed can inject a header, forge a second message, or make an address render as one it is not. A relay that will not take STARTTLS is refused rather than downgraded to plaintext. |
 | Analytics | No IP address is stored in any column of `click_events`. A visitor is `HMAC(daily salt, ip ‖ user-agent ‖ workspace)` and the salts are deleted after two days, which is the de-identification step rather than housekeeping. Session and audit rows keep a prefix only: /24 for IPv4, /48 for IPv6. |
@@ -185,21 +185,37 @@ The queue's whole job is to show an administrator a URL a stranger chose, so:
   direction: filing one answers `422 not_disputable`, and a decision can only
   ever delete a `blocked_destinations` row.
 
-**Who can review, and the reach that comes with it.** `destinations.review` is
-granted to the **owner** role and to nothing else — admins do not hold it — and
-`auth.NonDelegableScopes` keeps it off every API key, because a key that can
-allow a destination could then point links at it.
+**Who can review, and the reach that comes with it.** The queue is instance-wide,
+because the blocklist it argues with is: a decision here changes what every
+workspace on the instance may link to. Since 0.2.0 the permissions that reach it
+are held **instance-wide by named people and by no organization role**.
 
-It is nonetheless wider than one organization, and you should size that before
-opening sign-ups. The blocklist is instance-wide, so the queue and its decisions
-are too: the owner of *any* organization on the instance sees every dispute filed
-on it — including the address of whoever filed it — and can lift an entry for
-everybody. With `LINKCTRL_SIGNUP_MODE=open` that is one registration away, since
-registering provisions an organization and makes the registrant its owner. This
-is the same shape `domains.write` has and one degree wider; the cause is that
-this product has no instance-level principal, which is also why the signup mode
-lives in the environment. **Keep sign-ups closed, or run one organization, if
-that reach matters to you.**
+`destinations.review` reads the queue; `destinations.decide` acts on one. Both
+are conferred on the account that claimed the instance through
+`POST /api/v1/auth/setup`, which is the only account in this product with a claim
+to the box rather than to a tenant. That account holds `instance.admin` and may
+confer instance-level review on other accounts, at `/disputes` or through
+`POST /api/v1/instance/reviewers`. **A reviewer it appoints cannot appoint
+anybody else**, and cannot read the roster: `instance.admin` is not among the
+scopes a grant confers, so the set of people who may delegate cannot grow.
+
+`destinations.decide` and `instance.admin` are kept off every API key by
+`auth.NonDelegableScopes` — a key that can allow a destination could then point
+links at it, and a key that can appoint a reviewer widens its reach by
+manufacturing somebody else's. `destinations.review` **is** delegable: reading
+the queue discloses who filed a dispute and a defanged host, never an address or
+a network prefix, and escalates nothing. That split is what "read it with a
+token, change it with a person" is built out of; there is no check anywhere on
+what kind of credential is calling.
+
+*Before 0.2.0* `destinations.review` was granted to the **owner role**, which is
+per-organization — so the owner of *any* organization on the instance saw every
+dispute filed on it, including the address of whoever filed it, and could lift an
+entry for everybody. With `LINKCTRL_SIGNUP_MODE=open` that was one registration
+away. **Upgrading moves it**: the migration removes the role grant and confers
+the instance permissions on the earliest surviving account, which on any instance
+that went through setup is the setup account. If that is not the operator's
+account any more, see [operations.md](operations.md).
 
 **What tiered blocking still does not do.** Nothing *in the default
 configuration* decides whether a destination is a phishing page. The
@@ -305,13 +321,15 @@ Phase 3.
 
 **Who may sign up is the operator's setting and nobody else's.**
 `LINKCTRL_SIGNUP_MODE` is the mode, there is no runtime toggle, and no session
-or API call changes it — which is deliberate rather than unfinished. This
-product has no instance-level principal: an account is an owner *of an
-organization*, and a self-registered one owns the organization it was given, so
-any permission gating this on the owner role would have been held by every
-stranger who signed up on an open instance. Decision D38 removed the toggle
-instead of narrowing it. Changing the mode requires whoever can edit the
-environment and restart the process.
+or API call changes it — which is deliberate rather than unfinished. When that
+was decided this product had no instance-level principal: an account is an owner
+*of an organization*, and a self-registered one owns the organization it was
+given, so any permission gating this on the owner role would have been held by
+every stranger who signed up on an open instance. Decision D38 removed the toggle
+instead of narrowing it. 0.2.0 introduces a principal for the dispute queue and
+the instance audit log (D98), and its scopes are enumerated rather than implied —
+the signup mode is deliberately not one of them, so changing the mode still
+requires whoever can edit the environment and restart the process.
 
 **Open sign-ups have no CAPTCHA and no proof-of-work.** Registration shares the
 sign-in rate limit per address, and confirming an address by email is what stops

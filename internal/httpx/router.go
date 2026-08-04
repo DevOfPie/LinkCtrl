@@ -10,6 +10,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/dispute"
+	"github.com/DevOfPie/LinkCtrl/internal/instance"
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
@@ -57,6 +58,12 @@ type Deps struct {
 	// also takes the "ask for a review" button off the links form, so a refusal
 	// never offers a door that is not there.
 	Disputes *dispute.Service
+	// Instance serves the instance-level principal's roster (D98). Nil leaves
+	// the endpoints and the reviewer section of the dispute page unregistered,
+	// which is what the parity test against openapi.yaml compares itself to —
+	// and which leaves whoever the principal already is holding what they hold,
+	// because the grants are rows rather than a running service.
+	Instance *instance.Service
 	Web      *Web
 	// Hosts is the verified custom-hostname set (M40). Nil leaves custom domains
 	// unrouted entirely — every Host header is answered exactly as it was before
@@ -344,6 +351,22 @@ func registerAppRoutes(d Deps, app *appMux) {
 	if d.Audit != nil {
 		a := &AuditAPI{Audit: d.Audit}
 		app.Handle("GET "+APIPrefix+"/audit", RequireAuth(http.HandlerFunc(a.List)))
+		// The instance-wide log sits under the principal's own prefix rather
+		// than beside /audit, because what it is scoped to is the thing that
+		// distinguishes it and the permission it needs is the principal's.
+		app.Handle("GET "+APIPrefix+"/instance/audit",
+			RequireAuth(http.HandlerFunc(a.ListInstance)))
+	}
+
+	if d.Instance != nil {
+		in := &InstanceAPI{Instance: d.Instance}
+		for pattern, h := range map[string]http.HandlerFunc{
+			"GET " + APIPrefix + "/instance/reviewers":         in.Reviewers,
+			"POST " + APIPrefix + "/instance/reviewers":        in.GrantReviewer,
+			"DELETE " + APIPrefix + "/instance/reviewers/{id}": in.RevokeReviewer,
+		} {
+			app.Handle(pattern, RequireAuth(h))
+		}
 	}
 
 	if d.Invites != nil {
@@ -607,6 +630,20 @@ func registerAppRoutes(d Deps, app *appMux) {
 				"POST /disputes/{id}/uphold": web.DisputeUphold,
 			} {
 				app.Handle(pattern, signedIn(fn))
+			}
+
+			// The reviewer roster shares the queue's path because it is the
+			// same page, and it is registered separately because it needs a
+			// dependency the queue does not: without it the section is not
+			// drawn, and a route with no handler behind it would be a form
+			// posting into a 404.
+			if web.Instance != nil {
+				for pattern, fn := range map[string]http.HandlerFunc{
+					"POST /disputes/reviewers":             web.DisputeReviewerGrant,
+					"POST /disputes/reviewers/{id}/revoke": web.DisputeReviewerRevoke,
+				} {
+					app.Handle(pattern, signedIn(fn))
+				}
 			}
 		}
 

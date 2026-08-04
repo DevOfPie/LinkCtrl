@@ -156,6 +156,7 @@ file. Append a row when you append an entry.
 | [M35, which namespace a gate is keyed on](#2026-08-04--m35-which-namespace-a-gate-is-keyed-on) | D94 — three corrections and one amendment: a verified password answers **303** unconditionally and D53's *"answers the 302 itself"* is superseded, with 303 joining `REDIRECT_DEFAULT_STATUS`'s allowed set; the signature and the password bucket keyed on the domain the request arrived on rather than the boot constant; the signed URL minted on the link's own hostname, with an unreadable domain row an error rather than a fallback; HEAD reading the budget without spending it, and what that read costs; why the fix invalidates no signature that ever worked, against a constraint that expected it to; the fixture in which the defect was testable at all |
 | [M42, what one drain costs, and the fix that would have moved the cost rather than removed it](#2026-08-04--m42-what-one-drain-costs-and-the-fix-that-would-have-moved-the-cost-rather-than-removed-it) | D95 — a claimed batch is dialled together and `Drain` waits for it, so one drain costs one attempt and not `DrainBatch` of them; why the WaitGroup is what makes D77's lock trap inapplicable rather than survived; why a webhook goroutine of its own is not a fix, `pg_try_advisory_lock` being session-scoped, and would convert every other job's stall into a skip; what it does to F90 (nothing) and to F91 (unreachable, not fixed); what a receiver now sees |
 | [M43, the queue's own clock, and why the watermark could not be it](#2026-08-04--m43-the-queues-own-clock-and-why-the-watermark-could-not-be-it) | D96 — one column was carrying two facts, and ordering the due query on the firing watermark meant the hundred-and-first enabled rule was never evaluated at all; `last_checked_at` added by 03100 with the due index rebuilt on it; why advancing `last_fired_at` on a no-match run is the tempting fix and breaks `min_count`; one cursor statement a run rather than one a rule, and the three deliberate details in it — no `updated_at`, failed rules stamped too, `WithoutCancel` so a cut-off run keeps what it looked at; why a NULL cursor is the right thing for a new or resumed rule; the test's shape, and why its first assertion is that nothing happened |
+| [M45, building the principal D98 authorized](#2026-08-04--m45-building-the-principal-d98-authorized) | Why the principal is a person and not an organization, which is what D38 refused; instance grants unioned into the identity and indistinguishable afterwards, and why one survives losing every organization; bootstrap at `/auth/setup` and nowhere else; the migration moving the role grant to the earliest surviving account, and why that direction can only narrow; which D18 limb each of the four permissions matched, including the one that **leaves** `NonDelegableScopes`; F31 as D44's rule reaching a read, and the nil-array trap; F36 as a separate surface rather than a widened predicate, and why its own fix note could not have been taken literally before D98; `domains.write` and `notify.EveryOwner` deliberately untouched; and the recovery gap named rather than closed |
 | [M32, the promise restated as two channels](#2026-08-04--m32-the-promise-restated-as-two-channels) | F86 — why the fix is four documents and no code, and why removing `url` from the payload would break every receiver to make a README sentence true; the four wordings as they stood; the checked facts the replacement rests on — `webhooks.write` is owner and admin only and not delegable, there is no operator gate, and `automation.fired` carries no destination; why the refused-destination leg is the strongest of the four and what a half-fix drops; F134 widened at step 3.4 — `CHANGELOG.md:750` and `feed_test.go`'s three wordings taken in under the deferred-overlap rule with no assertion touched, the *Egress* row's count left open because re-deriving it is a decision; and F135, seven more sites a deliberate sweep found where two rounds of noticing had not, including the `/feeds` disclosure page this milestone itself shipped, which no rewording can make true |
 | [Mounting derived from registration](#2026-08-04--mounting-derived-from-registration-after-eleven-routes-shipped-unreachable) | D97 — F85: eleven of M42's and M43's routes were registered, reserved, linked from the nav and documented, and unreachable, because the root mux mounted from a hand-written slice that the only guard was also built from; why adding the four missing strings fixes the instance and not the class, and why the comment claiming the opposite is the reason nobody looked; `appMux` recording what it is handed so registering *is* mounting; the reduction rule chosen because it reproduces the old slice exactly plus the four, and the wider rule rejected; why the API subtree stays hand-mounted; `dashboardPatterns` deleted so the reserved guard reads registrations too, `registerAppRoutes` split out to make them enumerable, and `maximalDeps` filled by reflection because a literal would be the third list and would fail silently; and the sabotage whose control result is that the old guard stayed green |
 | [M45, four ways one membership rule was not read](#2026-08-04--m45-four-ways-one-membership-rule-was-not-read) | F93, F94, F97 and F60 — the first four approved rows of M45's moderate security cluster, fixed on their own terms rather than behind a shared abstraction; why `List` had to be refused alongside `Revoke` and why `invite.Roles` was reading the wrong rank; why F94's recipient set is a second *parameter* and not a second predicate, and what `DISTINCT` is for; F97's three limbs, and why F43's `CreateOrganization` door closes with no credential-type branch at all — the state it opened on is what was wrong; `apikey.revoked` added because *the person is the record* stops holding when the credential's owner is not present; D43's mechanism reused for F60 rather than `NonDelegableScopes`, and `KeyIssuableRoles` moved to `internal/auth` so one list bounds both doors; and the one residue left deliberately — the `/invites` nav entry that now leads to a 403 for a workspace-scoped admin, and what removing it would cost |
@@ -14053,3 +14054,189 @@ and the instance-wide audit surface F36 names — and nothing else inherits from
 A principal that accumulates scopes because it exists is how the thing D38 avoided
 gets built by accident, so the scopes it holds are enumerated rather than implied,
 and adding one later is a decision rather than a consequence.
+
+---
+
+## 2026-08-04 — M45, building the principal D98 authorized
+
+The design is [D98](#2026-08-04--d98-the-instance-level-principal-d38-said-did-not-exist)
+and is not restated here. This entry is what building it decided, plus the three
+things D98 left open and named as the builder's: representation, bootstrap, and
+what happens to an instance at upgrade.
+
+### The principal is a person, not an organization, and that is what D38 refused
+
+D38 weighed binding an instance-wide permission to *the instance's founding
+organization* and refused it: it invents a root tenant the plan does not have,
+and every later instance-wide setting inherits the concept. That refusal is
+untouched here. `instance_grants` is keyed on `user_id`, not on an organization,
+because the thing being named is somebody who administers the box, and a person
+who administers a box is not a tenant.
+
+The practical difference shows in one query. A role-shaped answer would have had
+to reach `memberships`, which is keyed on an organization, so it would have had
+to pick an organization to hang the reach off — which is exactly the shape D38
+rejected. A row per `(user, permission)` also makes *who can decide a dispute on
+this instance* a `SELECT` rather than a graph walk, and it makes the enumeration
+D98 requires literal: the four scopes are four rows, and adding a fifth is a
+visible statement rather than a consequence of somebody's role changing.
+
+`ListInstanceGrants` is unioned into the identity beside `GetUserPermissions`,
+and the two sources are deliberately **indistinguishable afterwards**.
+`Identity.Can` stays the one evaluator. A second question — *but is this an
+instance permission?* — asked at a call site is how the grants would drift out of
+step with `NonDelegableScopes`, which is the map that actually decides what a key
+may hold.
+
+One consequence worth stating because it is not obvious: an instance grant
+survives losing every organization. D36 made *belongs to nothing* a state a
+signed-in account can be in, and every membership-derived permission is gone
+there by construction. If instance reach went with it, one tenancy teardown would
+silently strand the dispute queue — a sharper version of the finding the
+principal exists to close. `identityWithoutOrganization` became a method for that
+one reason, and `TestAnInstanceGrantSurvivesLosingEveryOrganization` is the
+assertion.
+
+### Bootstrap: `POST /api/v1/auth/setup`, and why nowhere else
+
+D98 asked whether the principal is conferred at setup. It is, and the argument is
+that setup is the **only** place in this product where *this account is the
+instance's* is established rather than assumed. `Register` already holds an
+advisory lock and re-counts users inside the transaction that creates the first
+account, so exactly one account can ever take it; and the tree already says who
+that account is, in the comment on `EmailVerifiedAt` — *the first user is trusted
+by construction: they had filesystem or deploy access to reach the setup page*.
+That is a claim to the box. Every other account has a claim to a tenant.
+
+Conferring it in the same transaction matters: an instance is otherwise briefly
+observable in the state where it has been claimed and has nobody who can
+administer it.
+
+`Register` **without** `IsFirstUser` confers nothing, and that half is the one
+worth a test. Conferring there would rebuild F15 in one line — under
+`LINKCTRL_SIGNUP_MODE=open` a stranger would become the moderator of every
+organization's destinations by filling in a form. `TestClaimingTheInstance…`
+asserts both halves, and its sabotage was the one-word change that produces
+exactly that.
+
+### Upgrade: the migration moves the grant, and only ever narrows
+
+`destinations.review` has been granted to the `owner` role since 01600. 03400
+deletes that row. That is the only destructive statement in the migration, and
+everything else about it is additive — a new table, three new permissions, no
+column dropped or retyped.
+
+Who it lands on is the **earliest surviving account**: on any instance that went
+through setup, the setup account. The direction is what makes it safe. The
+permission leaves a set that grows with every registration and lands on exactly
+one person, so nobody gains reach and the holder count can only fall. The two
+alternatives both fail on that test — conferring it on every current owner
+preserves F15 verbatim under a new mechanism, and leaving the role grant beside
+the new table is additive and useless.
+
+No users at all is the normal case rather than an error: a fresh database is
+migrated before anybody claims it, and setup confers the principal then. So the
+migration and the setup flow between them cover every instance that exists or
+will exist, with no window in which a claimed instance has no principal.
+
+What the migration cannot do is *ask*. If the earliest account is not the
+operator's any more, the operator has the database and the person who lost the
+account does not, so the answer is documented in
+[operations.md](../operations.md) — *Moving the instance principal* — rather than
+guessed at in SQL. It is the only case with no in-product answer, and it is that
+way on purpose: an operation that could confer `instance.admin` would defeat the
+bound that makes delegation safe.
+
+### Which D18 limb each of the four matched
+
+The inherited Permissions rule asks every milestone to record this, or to record
+that neither limb matched. Four permissions, and one of them **changes direction**.
+
+| Permission | Limb | Why |
+| --- | --- | --- |
+| `instance.admin` | **Second**, hardest form | Holding it confers `destinations.decide` on a person. A key holding it widens its own reach by manufacturing somebody else's — D9's `apikeys.*` argument, one step removed. It is the only permission in this product whose whole content is granting another one. |
+| `destinations.decide` | **Second** | Verbatim the argument `destinations.review` used to carry: an allow deletes a row from the instance-wide blocklist, after which the key that deleted it may point links there. |
+| `audit.read.instance` | **First**, disclosing | The same table, the same `ip_prefix` tied to the same named actors, differing only in that the rows belong to no tenant. A permission that leaks what `audit.read` is listed to protect would make that entry decorative. |
+| `destinations.review` | **Neither**, and it **leaves** `NonDelegableScopes` | Reading the queue discloses who filed a dispute and a defanged host — never an address or a network prefix — and escalates nothing. It was non-delegable only because one permission guarded both halves. |
+
+That last row is how D98's *"API access is read-only for disputes; a change
+requires a person"* is actually built. The map refuses the key; nothing anywhere
+asks what kind of credential is calling. `internal/instance` contains no
+reference to `IsAPIKey`, and that absence is the design rather than an omission.
+
+### F31 is a read inheriting a rule that was written for writes
+
+`ListAuditLogs` was scoped by `organization_id` alone, and `audit.sql` argues for
+that in the query: a log that narrowed itself to the workspace the reader happens
+to be *acting in* would hide exactly the actions worth reviewing. That argument
+is M21's, it is correct, and it was written when `audit.read` could only be held
+organization-wide. M28 made a membership scopable to one workspace and nothing
+revisited the read.
+
+D44 already states the rule for writes — authority is per scope, and only an
+organization-wide membership reaches the organization-wide scope. The repair is
+that rule reaching a read, through a new `MembershipAuthority.Scopes()`. A read
+has no single object to ask `In` about, and answering per row would be a query
+per row; answering as a predicate needs the set, so `Scopes` returns the set.
+
+Two details are load-bearing. `Can` stays the gate — *may you read the audit log
+at all* — and the authority bounds *which rows*; keeping them separate is what
+lets an organization-wide reader be provably unaffected. And a workspace-scoped
+reader sees no rows with a NULL `workspace_id`, because `= ANY` is false against
+NULL: organization-level acts are the organization-wide scope, which is the same
+asymmetry `In(nil)` enforces for writes.
+
+The `workspace_ids` parameter is never nil. A nil `uuid[]` reaches Postgres as
+NULL, `workspace_id = ANY(NULL)` is NULL rather than false, and the whole
+predicate would go unknown and return nothing. That state is unreachable — `Can`
+already refused a reader who holds the permission nowhere — which is exactly why
+it is handled rather than left to be discovered.
+
+### F36 is a separate surface, not a widened predicate
+
+F36's own fix note proposed one predicate and one branch: write these rows with
+`organization_id = NULL` and widen the read to `… OR organization_id IS NULL`.
+The write half is taken exactly as written — `audit.Event.InstanceWide`, and the
+tenancy columns left NULL while the actor is still recorded in full, because what
+moved is the tenancy and not the accountability.
+
+The read half is a second statement instead, for two reasons that point the same
+way. `ListAuditLogs` rides `audit_logs_org_time_idx` as a range scan, and an OR
+reaching NULL organizations turns it into a bitmap scan and a sort on a table
+designed to grow forever. And the surface is genuinely separate: it is read under
+`audit.read.instance` by the principal, not by whoever happens to hold
+`audit.read` in some organization, so merging the two would mean deciding per row
+which permission had authorized it. F36 could not have taken this shape when it
+was filed, because there was nobody to give the surface to — which is why the row
+sat open rather than being the one-line fix its note describes.
+
+Both limbs F36 names are marked, plus the two writes this milestone itself adds:
+the default domain's root redirect and bot policy, every dispute decision, and
+every change to who reviews them. The per-domain events at `recordDomainEvent`
+are deliberately **not** marked — a registered hostname belongs to an
+organization, and its record belongs there too.
+
+### Two things this deliberately did not do
+
+**`domains.write` is untouched.** F70 records that it reaches every
+organization's owner and admin on a multi-organization instance, and narrowing it
+would be a change to who administers an instance rather than a use of the
+principal. D98 enumerates the principal's scopes and `domains.write` is not among
+them; adding it is a decision, and this milestone is not where it gets taken by
+accident.
+
+**`notify.EveryOwner` is untouched**, so a filed dispute still notifies every
+organization owner on the instance. That is F49's and F137's territory: the
+reviewers are now a named set, and the notification fan-out is a different list
+computed by a different function for a different reason. Narrowing it is
+obviously *available* now in a way it was not before, and that is worth saying
+plainly rather than doing quietly.
+
+### The recovery gap, named rather than closed
+
+Nothing in this product deletes or soft-deletes a `users` row — checked, not
+assumed — so a conferred principal cannot be lost through the product. The gap
+is an account somebody loses access to, and the answer is the operator's database
+rather than a CLI. Recorded as a deferred finding rather than built, because
+adding an operation that confers `instance.admin` is precisely what D98's
+delegation bound forbids, and any in-product recovery path is a variation on it.

@@ -814,6 +814,21 @@ type Querier interface {
 	// presented as a distinct-person count, because the exact figure cannot be
 	// recovered once the salts are purged. That is the intended trade.
 	GetWorkspaceTotals(ctx context.Context, arg GetWorkspaceTotalsParams) (GetWorkspaceTotalsRow, error)
+	// Confer one instance-level permission on one account.
+	//
+	// Idempotent. Re-conferring what somebody already holds is the ordinary result
+	// of two administrators doing the same obvious thing, and it must not turn into
+	// an error that reads like a refusal; the original granted_by and granted_at
+	// stand, because the first grant is the one that happened.
+	//
+	// It returns the row count for a reason that has nothing to do with idempotence:
+	// the SELECT finds no row for a slug that does not exist, so a typo would confer
+	// nothing and report success. On the setup path that means an instance that has
+	// been claimed and has nobody who can administer it, which is the one outcome
+	// this whole table exists to prevent. The caller distinguishes 0 from 1 by
+	// reading the count against a permission it already knows the account did not
+	// hold; see internal/auth's grantInstancePrincipal.
+	GrantInstancePermission(ctx context.Context, arg GrantInstancePermissionParams) (int64, error)
 	// Whether the instance owner has allowed this host (M32).
 	//
 	// Read at exactly one call site — internal/link's feed step — and that
@@ -885,9 +900,24 @@ type Querier interface {
 	// logic, and the planner does not always recognise it as a range scan on the
 	// (organization_id, occurred_at DESC) index.
 	//
-	// Scoped by organization, never by workspace: an audit log that can be narrowed
-	// to the workspace the reader happens to be in would hide exactly the actions
-	// worth reviewing.
+	// Scoped by organization, never by the workspace the reader happens to be
+	// *acting in*: an audit log that narrowed itself to the current workspace would
+	// hide exactly the actions worth reviewing. That is M21's argument and it still
+	// holds; what it never said is that the reader's own authority does not bound
+	// the rows either.
+	//
+	// It does now (F31). `org_wide` is true when the reader holds audit.read from an
+	// organization-wide membership, which is the only membership that reaches the
+	// organization-wide scope (auth.MembershipAuthority, D44) — such a reader sees
+	// every row, exactly as before. A reader whose audit.read comes only from
+	// workspace-scoped memberships sees the rows of those workspaces and nothing
+	// else, because a workspace-scoped membership grants authority over its own
+	// workspace and not over the organization.
+	//
+	// Rows with a NULL workspace_id are organization-level acts, and `= ANY` is
+	// false against NULL, so a workspace-scoped reader does not see them. That is
+	// the same asymmetry MembershipAuthority.In(nil) enforces for writes, arriving
+	// here for reads.
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error)
 	ListAutomationRules(ctx context.Context, workspaceID uuid.UUID) ([]AutomationRule, error)
 	// The four seeded roles, most powerful first. Feeds the invite form's role
@@ -959,6 +989,42 @@ type Querier interface {
 	// not report its children's links, because the number beside a folder has to
 	// mean the same thing as the number of rows the list shows when you click it.
 	ListFolders(ctx context.Context, workspaceID uuid.UUID) ([]ListFoldersRow, error)
+	//
+	// The instance-wide audit surface (F36, D98). Rows with no organization at all:
+	// an act that changed every tenant and belongs to none of them.
+	//
+	// A separate statement rather than a predicate bolted onto the one above, for
+	// two reasons that point the same way. The query above rides
+	// audit_logs_org_time_idx as a range scan; an OR reaching NULL organizations
+	// would turn it into a bitmap scan and a sort on a table designed to grow
+	// forever. And the surface is genuinely separate: it is read by the instance
+	// principal under audit.read.instance, not by whoever happens to hold audit.read
+	// in some organization, so merging the two would mean deciding per row which
+	// permission had authorized it.
+	//
+	// Same keyset shape, so a client that paginates the organization log paginates
+	// this one.
+	ListInstanceAuditLogs(ctx context.Context, arg ListInstanceAuditLogsParams) ([]AuditLog, error)
+	// Who holds one instance-level permission, with enough of the account to name
+	// them on the page that confers it.
+	//
+	// Soft-deleted accounts are filtered rather than shown as inert: a grant to an
+	// account that cannot authenticate is not reach, and listing it invites somebody
+	// to revoke a row that was already doing nothing.
+	ListInstanceGrantHolders(ctx context.Context, permission string) ([]ListInstanceGrantHoldersRow, error)
+	// Instance-level grants: what a person may do to the instance rather than to a
+	// tenant (D98). Every statement here joins `permissions` on the slug instead of
+	// taking a permission id, so the slugs stay the vocabulary the Go code speaks
+	// and no caller has to carry a uuid literal around.
+	// Every instance-level permission one person holds.
+	//
+	// Read on every identity resolution, beside GetUserPermissions, which is why it
+	// is keyed on the user alone and returns slugs: the caller folds it into the
+	// same set and Identity.Can cannot tell the two sources apart. It deliberately
+	// does not join workspaces or memberships — an instance grant is not reached
+	// through a tenancy, and an account that belongs to no organization at all (D36)
+	// keeps whatever it holds here.
+	ListInstanceGrants(ctx context.Context, userID uuid.UUID) ([]string, error)
 	// The administrator's list, newest first.
 	//
 	// No pagination and no cursor. An organization's outstanding invitations are a
@@ -1750,6 +1816,12 @@ type Querier interface {
 	// session's id to leave the browser the user is changing their password in
 	// still signed in.
 	RevokeAllUserSessions(ctx context.Context, arg RevokeAllUserSessionsParams) error
+	// Withdraw one instance-level permission from one account.
+	//
+	// Returns the row count so the caller can tell "withdrawn" from "they never held
+	// it" without a read first. Which permissions may travel this path at all is
+	// decided in Go, not here: instance.admin is deliberately not one of them.
+	RevokeInstancePermission(ctx context.Context, arg RevokeInstancePermissionParams) (int64, error)
 	// Scoped by organization as well as id, so an id from another organization is
 	// indistinguishable from one that does not exist: both change zero rows.
 	//

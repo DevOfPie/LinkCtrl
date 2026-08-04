@@ -101,7 +101,14 @@
       </div>
 
       <div class="flex shrink-0 items-center gap-2">
-        {{if eq .Status "open"}}
+        {{/* $.CanDecide, not .CanDecide: inside this range the dot is one
+             dispute. The buttons are drawn only for somebody holding
+             destinations.decide, which is the deciding half of the permission
+             D98 split in two (M45). Somebody holding only the reading half sees
+             the queue and no controls, which is what the API answers them too —
+             the gate is in the service, and this only avoids offering a button
+             that would be refused. */}}
+        {{if and (eq .Status "open") $.CanDecide}}
         {{if .Liftable}}
         {{/* Both branches of the confirmation are literals in this template. The
              entry itself is rendered in the body above rather than interpolated
@@ -116,6 +123,8 @@
         <form method="post" action="/disputes/{{.ID}}/uphold">
           <button type="submit" class="rounded-md border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-surface">Uphold</button>
         </form>
+        {{else if eq .Status "open"}}
+        <span class="{{statusBadge "pending"}}">waiting</span>
         {{else if eq .Status "allowed"}}
         <span class="{{statusBadge "active"}}">allowed</span>
         {{else}}
@@ -149,5 +158,67 @@
     page.
   </p>
 </div>
+{{end}}
+
+{{/* The reviewer roster (M45, D98).
+
+     Drawn only for the instance-level principal — instance.admin — and never for
+     a reviewer they appointed. That is D98's delegation bound: the principal may
+     confer instance-level review, and a holder of it may not confer it onwards,
+     or the first delegatee appoints the next and the bound is gone in two hops.
+     The section is absent rather than disabled, because who else administers the
+     instance is not a reviewer's business either.
+
+     There is no scope picker. What a grant confers is enumerated in Go
+     (auth.InstanceGrantable) and a form that could name a scope could name
+     instance.admin, which is the one thing this must not be able to hand over. */}}
+{{if .CanAdminister}}
+<section class="mt-10 border-t border-line pt-6">
+  <h2 class="text-base font-semibold tracking-tight">Who reviews disputes</h2>
+  <p class="mt-1 text-sm text-muted">
+    This queue is instance-wide: a decision here changes what every workspace on this
+    instance may link to. Only the accounts listed below can see it, and only you can
+    change that list — somebody you appoint reviews disputes, and cannot appoint
+    anybody else.
+  </p>
+
+  <ul class="mt-4 space-y-2">
+    {{range .Reviewers}}
+    <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-raised px-4 py-3">
+      <div class="min-w-0">
+        <p class="truncate text-sm font-medium text-ink">{{.Email}}</p>
+        <p class="mt-0.5 text-xs text-subtle">
+          {{.Name}} · appointed {{.GrantedAt.Format "2 Jan 2006"}}
+          {{if not .GrantedBy}}· when this instance was claimed{{end}}
+          {{if not .CanDecide}}· can read the queue but not decide{{end}}
+        </p>
+      </div>
+      {{if ne .UserID $.Identity.UserID}}
+      <form method="post" action="/disputes/reviewers/{{.UserID}}/revoke"
+            hx-post="/disputes/reviewers/{{.UserID}}/revoke"
+            hx-confirm="Withdraw instance-level review from this account? They keep every permission their own organization gives them.">
+        <button type="submit" class="rounded-md border border-line-strong px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface">Withdraw</button>
+      </form>
+      {{else}}
+      <span class="text-xs text-subtle">you</span>
+      {{end}}
+    </li>
+    {{end}}
+  </ul>
+
+  <form method="post" action="/disputes/reviewers" class="mt-4 flex flex-wrap items-end gap-3">
+    <div class="min-w-0 grow">
+      <label for="reviewer-email" class="block text-sm font-medium text-ink">Appoint a reviewer</label>
+      <input id="reviewer-email" name="email" type="email" required autocomplete="off"
+             placeholder="somebody@example.com"
+             class="mt-1 block w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-subtle">
+      <p class="mt-1 text-xs text-subtle">
+        They need an account on this instance already. Appointing somebody grants nothing
+        inside your organization, and nothing inside theirs.
+      </p>
+    </div>
+    <button type="submit" class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Appoint</button>
+  </form>
+</section>
 {{end}}
 {{end}}

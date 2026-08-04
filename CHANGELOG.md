@@ -22,6 +22,16 @@ migrations run at boot.
 
 ### Changed
 
+- **The audit log is now bounded by the reader's own authority, not only by
+  their organization.** A membership scoped to one workspace used to read every
+  record in the organization, including workspaces where its holder had no
+  membership at all — a per-action timeline and a network prefix tied to a named
+  actor, for workspaces they do not administer. It now reads the records of the
+  workspaces its own scope covers. **An organization-wide membership is
+  unaffected** and still reads the whole organization, which is what the log is
+  for; only the workspace-scoped case narrows. Nothing needs to be done on
+  upgrade.
+
 - **Analytics breakdowns are recomputed every fifteen minutes instead of every
   minute.** A link's click count still updates every sixty seconds. What moved is
   the expensive half — the per-country, per-device, per-browser and
@@ -99,6 +109,43 @@ migrations run at boot.
   retry schedule, the attempt count and the batch size are all unchanged.
 
 ### Added
+
+- **An instance-level principal: somebody who administers the box rather than a
+  tenant in it.** Until now every instance-wide reach in this product was guarded
+  by a permission granted to the **owner** role — and `owner` is
+  per-organization, with registration provisioning every self-registered account
+  an organization it owns. On an instance running `LINKCTRL_SIGNUP_MODE=open`,
+  that made the moderation of every organization's destinations one registration
+  away.
+
+  **The account that claimed the instance through `POST /api/v1/auth/setup` is
+  now the principal.** It reads the dispute queue, decides what is in it, and
+  reads the audit log of acts that belong to no organization. It may confer
+  instance-level review on other accounts — at `/disputes`, or through
+  `POST /api/v1/instance/reviewers` — and **somebody it appoints cannot appoint
+  anybody else**, so the set of people who may delegate cannot grow.
+
+  Its reach is enumerated and nothing inherits from it. The dispute queue, the
+  blocklist entries those decisions lift, and the instance-wide audit surface;
+  nothing else. `domains.write` is unchanged and still reaches every
+  organization's owner and admin.
+
+  **On upgrade the migration moves the grant rather than duplicating it.**
+  `destinations.review` is removed from the owner role, and the instance
+  permissions are conferred on the earliest surviving account — which on any
+  instance that went through setup is the setup account. Nobody gains reach; the
+  set of people holding it shrinks from "every owner on the instance" to one. If
+  that account is no longer the operator's, see `docs/operations.md` for how to
+  move it.
+
+- **`GET /api/v1/instance/audit`**, the audit log of acts that belong to no
+  organization, behind the new `audit.read.instance`. The default domain's root
+  redirect and bot policy, every dispute decision, and every change to who
+  reviews them all govern every organization on the instance — and each was
+  previously filed under whichever organization the person happened to be acting
+  in, where the tenants it changed could not see it. Those records are no longer
+  returned by `GET /api/v1/audit`; they are here instead. Records written by
+  earlier versions keep the organization they were written with.
 
 - **An API key can now replace itself, unattended.** `POST /api/v1/api-keys/rotate`,
   sent with the key's own token, returns a successor and the only copy of its
@@ -721,11 +768,13 @@ migrations run at boot.
   browser resolves, and **the server never fetches it** — no preview, no
   screenshot, no favicon, no liveness check. A test parses the feature's source
   and fails on any outbound-HTTP symbol, so that stays true.
-- **`destinations.review`**, a new permission, granted to the **owner** role
-  only and never to an API key. Admins do not hold it: it decides what every
-  workspace on the instance may link to, which is wider than the one
-  organization an admin administers. A key cannot hold it because allowing a
-  destination would let that same key point links there.
+- **`destinations.review` and `destinations.decide`**, two new permissions,
+  **held instance-wide by named people and by no organization role**. Reading
+  the queue and acting on one are separate grants because they are different
+  risks: a key may hold the first — the queue discloses who filed a dispute and
+  a defanged host, and escalates nothing — and may never hold the second,
+  because allowing a destination would let that same key point links there. Who
+  holds them is below, under the instance-level principal.
 - Two refusals `allow` gives instead of pretending to work: a punycode or
   credentials refusal has no blocklist row to delete (the queue marks it and
   offers only *Uphold*), and an entry that came from

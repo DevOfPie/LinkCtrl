@@ -44,6 +44,18 @@ import (
 // scope, and a token in a CI variable is the wrong custodian for it.
 const PermRead = "audit.read"
 
+// PermReadInstance guards the instance-wide read surface (D98).
+//
+// A second permission rather than a wider reading of the first, because the rows
+// it reaches belong to no organization: an act that changed every tenant is not
+// any tenant's to read, and answering it out of audit.read would mean picking an
+// organization whose holders get to see it. That is the choice D38 refused and
+// D98 replaced with a principal.
+//
+// Not delegable to a key either, and for audit.read's own reason: these are the
+// same columns, carrying the same ip_prefix tied to the same named actors.
+const PermReadInstance = "audit.read.instance"
+
 // Actions are the vocabulary of the log. String constants rather than an enum
 // type because they are stored verbatim and read by operators, and because
 // later milestones add to this list without coordinating with this file.
@@ -252,6 +264,27 @@ type Event struct {
 	// backfill, and it is the partition key, so a value outside every existing
 	// partition lands in the default one.
 	OccurredAt time.Time
+	// InstanceWide marks an act that belongs to the instance rather than to the
+	// actor's tenant: the record is written with a NULL organization_id and a
+	// NULL workspace_id, whoever made it and wherever they were acting.
+	//
+	// F36 is what this is for. Changing the default domain's bot policy enforces
+	// it on every link in every organization, and the record went into exactly
+	// one of them — the actor's — where the tenants it changed could not see it
+	// and the tenant it landed in had no particular claim to it. The same is true
+	// of a dispute decision, which deletes a row from the instance-wide
+	// blocklist.
+	//
+	// The column was always nullable and the product already used a NULL
+	// organization to mean instance-wide for the default `domains` row, so this
+	// is that existing convention arriving in the table that describes it. What
+	// D98 adds is somebody who can read the result: audit.read.instance, held by
+	// the principal. Before that there was nowhere honest to put these rows,
+	// which is why F36 sat open rather than being a one-line fix.
+	//
+	// A field on the event, not a property of the actor, because the same actor
+	// makes both kinds of change in the same session.
+	InstanceWide bool
 }
 
 // Entry is an audit record as a reader sees it.
@@ -345,13 +378,21 @@ func (s *Service) Record(ctx context.Context, actor *auth.Identity, e Event) err
 		params.TargetType = &e.TargetType
 	}
 	if actor != nil {
-		if actor.OrgID != uuid.Nil {
-			org := actor.OrgID
-			params.OrganizationID = &org
-		}
-		if actor.WorkspaceID != uuid.Nil {
-			ws := actor.WorkspaceID
-			params.WorkspaceID = &ws
+		// The tenancy columns are the actor's, except when the act was not the
+		// tenant's. An instance-wide event leaves both NULL — the actor is still
+		// recorded in full, because who did it is exactly the question, but the
+		// change belongs to the instance and stamping it with whichever
+		// organization the person happened to be standing in is the
+		// misattribution F36 names.
+		if !e.InstanceWide {
+			if actor.OrgID != uuid.Nil {
+				org := actor.OrgID
+				params.OrganizationID = &org
+			}
+			if actor.WorkspaceID != uuid.Nil {
+				ws := actor.WorkspaceID
+				params.WorkspaceID = &ws
+			}
 		}
 		if actor.UserID != uuid.Nil {
 			uid := actor.UserID
@@ -457,12 +498,32 @@ const (
 	maxPageLimit     = 200
 )
 
-// List returns a page of the actor's organization's audit records, newest
-// first.
+// List returns a page of the audit records the actor's own authority covers in
+// their organization, newest first.
+//
+// Two questions, deliberately asked separately. `Can` answers whether they may
+// read the audit log at all — the ordinary permission check every other endpoint
+// makes. The authority load answers *which rows*, and it is the repair for F31:
+// a workspace-scoped admin resolves audit.read while acting in their workspace,
+// and until now that read the whole organization, including workspaces where
+// they hold no membership at all. `auth.MembershipAuthority` already states the
+// rule for writes — a workspace-scoped membership grants authority over its own
+// workspace, not over the organization (D44) — and this is the same rule
+// reaching a read.
+//
+// An organization-wide membership is unaffected in either direction: it reaches
+// the organization-wide scope, so it still reads every row, which is what
+// audit.sql argues for and what M21 shipped.
 func (s *Service) List(ctx context.Context, actor *auth.Identity, f Filter) (*domain.Page[Entry], error) {
 	if !actor.Can(PermRead) {
 		return nil, fmt.Errorf("%w: reading the audit log requires %s", domain.ErrForbidden, PermRead)
 	}
+
+	authority, err := auth.LoadMembershipAuthority(ctx, s.q, actor.UserID, actor.OrgID, PermRead)
+	if err != nil {
+		return nil, err
+	}
+	orgWide, workspaces := authority.Scopes()
 
 	limit := f.Limit
 	if limit <= 0 || limit > maxPageLimit {
@@ -472,9 +533,21 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f Filter) (*do
 	org := actor.OrgID
 	params := dbgen.ListAuditLogsParams{
 		OrganizationID: &org,
+		OrgWide:        orgWide,
+		// Never nil: a nil uuid[] parameter reaches Postgres as NULL, and
+		// `workspace_id = ANY(NULL)` is NULL rather than false, which would make
+		// the whole predicate unknown and return nothing at all. An empty array
+		// is the honest encoding of "no workspace grants it", and it is
+		// unreachable in practice — Can already refused an actor who holds the
+		// permission nowhere — which is exactly why it must not be left to be
+		// discovered later.
+		WorkspaceIds: workspaces,
 		// One extra row answers "is there another page" without a second query
 		// and without a count over a table designed to grow forever.
 		PageLimit: limit + 1,
+	}
+	if workspaces == nil {
+		params.WorkspaceIds = []uuid.UUID{}
 	}
 	if f.Cursor != "" {
 		cur, err := decodeCursor(f.Cursor)
@@ -491,7 +564,56 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f Filter) (*do
 	if err != nil {
 		return nil, fmt.Errorf("list audit log: %w", err)
 	}
+	return pageOf(rows, limit), nil
+}
 
+// ListInstance returns a page of the instance-wide audit records — the ones that
+// belong to no organization — newest first.
+//
+// The other half of F36. Marking an act instance-wide keeps it out of a tenant's
+// log where it never belonged; this is where it goes instead, and without it the
+// repair would have been a deletion rather than a correction. Gated on
+// audit.read.instance, which only the instance principal holds (D98).
+//
+// Its own cursor namespace, because it is its own ordering: a cursor from the
+// organization log names a position in a different result set, and the two are
+// never mixed.
+func (s *Service) ListInstance(
+	ctx context.Context, actor *auth.Identity, f Filter,
+) (*domain.Page[Entry], error) {
+	if !actor.Can(PermReadInstance) {
+		return nil, fmt.Errorf("%w: reading the instance audit log requires %s",
+			domain.ErrForbidden, PermReadInstance)
+	}
+
+	limit := f.Limit
+	if limit <= 0 || limit > maxPageLimit {
+		limit = defaultPageLimit
+	}
+
+	params := dbgen.ListInstanceAuditLogsParams{PageLimit: limit + 1}
+	if f.Cursor != "" {
+		cur, err := decodeCursor(f.Cursor)
+		if err != nil {
+			return nil, domain.ValidationErrors{{
+				Field: "cursor", Code: "invalid", Message: "pagination cursor is not valid",
+			}}
+		}
+		params.CursorOccurred = &cur.OccurredAt
+		params.CursorID = &cur.ID
+	}
+
+	rows, err := s.q.ListInstanceAuditLogs(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("list instance audit log: %w", err)
+	}
+	return pageOf(rows, limit), nil
+}
+
+// pageOf turns one over-fetched row set into a page. Shared by the two lists so
+// the has-more and cursor arithmetic exists once; both queries select the same
+// columns and sqlc gives both the same row type.
+func pageOf(rows []dbgen.AuditLog, limit int32) *domain.Page[Entry] {
 	page := &domain.Page[Entry]{Items: make([]Entry, 0, limit)}
 	if len(rows) > int(limit) {
 		page.HasMore = true
@@ -504,7 +626,7 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f Filter) (*do
 		last := page.Items[len(page.Items)-1]
 		page.NextCursor = encodeCursor(last.OccurredAt, last.ID)
 	}
-	return page, nil
+	return page
 }
 
 func toEntry(r dbgen.AuditLog) Entry {

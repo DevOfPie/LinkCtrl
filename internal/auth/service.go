@@ -256,6 +256,28 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*Identity, er
 		return nil, err
 	}
 
+	// The setup account becomes the instance-level principal (D98), here and
+	// nowhere else on this path — `Register` without IsFirstUser is ordinary
+	// self-serve registration, and conferring instance reach there would rebuild
+	// F15 exactly: under LINKCTRL_SIGNUP_MODE=open, one registration would make
+	// a stranger the person who moderates every organization's destinations.
+	//
+	// This is the right home for it because it is the only place in the product
+	// where "this account is the instance's" is already established rather than
+	// assumed. The branch above holds an advisory lock and re-counts users inside
+	// this transaction, so exactly one account can ever take it — and the comment
+	// on EmailVerifiedAt says what that account is: somebody who had filesystem or
+	// deploy access to reach the setup page. That is the claim to the box; every
+	// other account has a claim to a tenant.
+	//
+	// In the same transaction, so an instance is never observable in the state
+	// where it has been claimed and has nobody who can administer it.
+	if in.IsFirstUser {
+		if err := grantInstancePrincipal(ctx, q, user.ID); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit: %w", err)
 	}
@@ -407,9 +429,12 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 
 	var identity *Identity
 	if orphaned {
-		identity = identityWithoutOrganization(user.ID, user.Email, user.Name)
-	} else if identity, err = s.identityFor(
-		ctx, user.ID, user.Email, user.Name, ws.ID, ws.OrganizationID); err != nil {
+		identity, err = s.identityWithoutOrganization(ctx, user.ID, user.Email, user.Name)
+	} else {
+		identity, err = s.identityFor(
+			ctx, user.ID, user.Email, user.Name, ws.ID, ws.OrganizationID)
+	}
+	if err != nil {
 		return nil, err
 	}
 	identity.SessionID = session.ID
@@ -467,9 +492,12 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*Identity, er
 
 	var identity *Identity
 	if errors.Is(err, ErrNoWorkspace) {
-		identity = identityWithoutOrganization(row.UserID, row.Email, row.Name)
-	} else if identity, err = s.identityFor(
-		ctx, row.UserID, row.Email, row.Name, ws.ID, ws.OrganizationID); err != nil {
+		identity, err = s.identityWithoutOrganization(ctx, row.UserID, row.Email, row.Name)
+	} else {
+		identity, err = s.identityFor(
+			ctx, row.UserID, row.Email, row.Name, ws.ID, ws.OrganizationID)
+	}
+	if err != nil {
 		return nil, err
 	}
 	identity.SessionID = row.ID
@@ -496,7 +524,7 @@ func (s *Service) IdentityForEmail(ctx context.Context, email string) (*Identity
 	// the person would land if they signed in — including, since D36, nowhere.
 	ws, err := s.resolveWorkspace(ctx, user.ID, nil, nil)
 	if errors.Is(err, ErrNoWorkspace) {
-		return identityWithoutOrganization(user.ID, user.Email, user.Name), nil
+		return s.identityWithoutOrganization(ctx, user.ID, user.Email, user.Name)
 	}
 	if err != nil {
 		return nil, err
@@ -570,6 +598,9 @@ func (s *Service) identityFor(ctx context.Context, userID uuid.UUID, email, name
 	for _, p := range perms {
 		set[p] = struct{}{}
 	}
+	if err := s.addInstanceGrants(ctx, userID, set); err != nil {
+		return nil, err
+	}
 
 	role, rank := "", int32(NoRoleRank)
 	if r, err := s.q.GetUserRoleInWorkspace(ctx, dbgen.GetUserRoleInWorkspaceParams{
@@ -593,27 +624,64 @@ func (s *Service) identityFor(ctx context.Context, userID uuid.UUID, email, name
 // identityWithoutOrganization is who an account is when it belongs to nothing.
 //
 // Everything tenancy-shaped is zero: no workspace, no organization, no role, and
-// an empty permission set, so Can answers false for every permission there is
-// and every service call refuses on the check it already makes. That is the
-// whole enforcement — there is no second authorization path for this state, and
-// the one operation that must remain reachable from it (creating a first
+// no permission that came from a membership, so Can answers false for every one
+// of those and every service call refuses on the check it already makes. That is
+// the whole enforcement — there is no second authorization path for this state,
+// and the one operation that must remain reachable from it (creating a first
 // organization) opens its own door, at its own call site, where a reader can see
 // it. See team.CreateOrganization and D36.
+//
+// **Instance grants survive it**, and that is the point of them (D98). An
+// instance-level permission is held over the box rather than through a tenancy,
+// so an operator whose only organization was deleted must not stop being able to
+// review the instance's disputes — the alternative is that a tenancy teardown
+// silently strands the queue, which is a sharper version of the finding this
+// principal exists to close.
 //
 // RoleRank is NoRoleRank rather than zero for the reason the constant explains:
 // rank counts downward in authority, so a zero here would read as outranking the
 // owner role.
 //
-// A function rather than a method: it touches no database, and the point of it
-// is that there is nothing to load.
-func identityWithoutOrganization(userID uuid.UUID, email, name string) *Identity {
+// A method rather than a function since D98, because there is now exactly one
+// thing to load and it is not reached through any tenancy.
+func (s *Service) identityWithoutOrganization(
+	ctx context.Context, userID uuid.UUID, email, name string,
+) (*Identity, error) {
+	set := map[string]struct{}{}
+	if err := s.addInstanceGrants(ctx, userID, set); err != nil {
+		return nil, err
+	}
 	return &Identity{
 		UserID:      userID,
 		Email:       email,
 		Name:        name,
 		RoleRank:    NoRoleRank,
-		permissions: map[string]struct{}{},
+		permissions: set,
+	}, nil
+}
+
+// addInstanceGrants folds a user's instance-level permissions into a set that
+// already holds whatever their memberships granted.
+//
+// A union, never a replacement, and the two sources are deliberately
+// indistinguishable afterwards: Identity.Can is the one evaluator, and a second
+// "but is it an instance permission?" question asked at a call site is how the
+// grants would drift out of step with the map that says which of them a key may
+// hold.
+//
+// The instance permissions themselves are enumerated in migration 03400 and
+// granted to no role, so this is the only way any of them reaches an identity.
+func (s *Service) addInstanceGrants(
+	ctx context.Context, userID uuid.UUID, into map[string]struct{},
+) error {
+	grants, err := s.q.ListInstanceGrants(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("load instance grants: %w", err)
 	}
+	for _, g := range grants {
+		into[g] = struct{}{}
+	}
+	return nil
 }
 
 // HasOrganization reports whether this identity belongs to an organization.

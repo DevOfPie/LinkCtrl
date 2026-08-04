@@ -192,8 +192,15 @@ func TestChangingTheRootRedirectIsAudited(t *testing.T) {
 		if r.Action != audit.ActionDomainRootRedirectChanged {
 			t.Errorf("record %d action = %q", i, r.Action)
 		}
-		if r.OrgID == nil || *r.OrgID != f.owner.OrgID {
-			t.Errorf("record %d is not scoped to the actor's organization", i)
+		// Scoped to no organization since M45 (F36). The setter targets the
+		// instance default domain — `WHERE is_default`, on a row whose own
+		// organization_id is NULL — so this redirects every stray visitor to
+		// every workspace on the box. Filing it under whichever organization the
+		// actor was standing in named a tenant with no claim to it and hid it
+		// from every tenant it changed.
+		if r.OrgID != nil {
+			t.Errorf("record %d is filed under organization %s; an instance-wide "+
+				"act belongs to no tenant", i, *r.OrgID)
 		}
 		if r.IPPrefix == nil || *r.IPPrefix != "198.51.100.0/24" {
 			t.Errorf("record %d ip_prefix = %v, want 198.51.100.0/24", i, r.IPPrefix)

@@ -154,8 +154,12 @@ func newFeedFixture(t *testing.T, checker link.FeedChecker) *feedFixture {
 		Params: fastParams,
 		TTL:    auth.SessionTTL{Absolute: 30 * 24 * time.Hour, Idle: 7 * 24 * time.Hour},
 	})
+	// IsFirstUser: this fixture overrules a feed verdict by deciding a dispute,
+	// and since D98 that needs destinations.decide, which is held instance-wide
+	// by the account that claimed the instance rather than by the owner role.
 	if _, err := authSvc.Register(t.Context(), auth.RegisterInput{
 		Email: "owner@example.com", Name: "Owner", Password: feedPassword,
+		IsFirstUser: true,
 	}); err != nil {
 		t.Fatalf("register owner: %v", err)
 	}

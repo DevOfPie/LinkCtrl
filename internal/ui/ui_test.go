@@ -16,7 +16,10 @@ type identityStub struct {
 	Email string
 	Name  string
 	Role  string
-	perms map[string]bool
+	// UserID is read by the dispute queue's reviewer roster, which declines to
+	// draw a Withdraw control against the signed-in account (M45).
+	UserID string
+	perms  map[string]bool
 }
 
 func (s *identityStub) Can(p string) bool { return s.perms[p] }
@@ -25,14 +28,20 @@ func (s *identityStub) IsAPIKey() bool    { return false }
 func owner() *identityStub {
 	return &identityStub{
 		Email: "o@example.com", Name: "Owner", Role: "owner",
+		UserID: "0198c9c5-0000-7000-8000-000000000001",
 		perms: map[string]bool{
 			"links.create": true, "links.update": true, "links.delete": true,
 			// The identity menu's three administrative entries are drawn from
 			// the shell on every page, so an owner holds all three permissions
 			// here and every page exercises those branches.
 			"members.read": true, "members.write": true, "workspace.write": true,
-			// The review queue's entry, held by the owner role alone (M31).
+			// The review queue's entry. Held by no role since M45 (D98): it is an
+			// instance-level grant, and this fixture's owner is the account that
+			// claimed the instance, so it holds all three of the queue's
+			// permissions and every branch of the page is exercised.
 			"destinations.review": true,
+			"destinations.decide": true,
+			"instance.admin":      true,
 			// Held by the owner role and by nothing else (D16), which is what
 			// draws the organization form on the workspaces page.
 			"orgs.create": true,
@@ -68,6 +77,7 @@ func twoWorkspaces() []map[string]any {
 func pageData(t *testing.T) map[string]any {
 	t.Helper()
 	now := time.Now()
+	ownerUserID := "0198c9c5-0000-7000-8000-000000000001"
 	lnk := map[string]any{
 		"ID": "0198c9c5-0000-7000-8000-000000000001", "Alias": "demo",
 		"ShortURL": "http://links.test/demo", "URL": "https://example.com/x",
@@ -414,6 +424,23 @@ func pageData(t *testing.T) map[string]any {
 				},
 			},
 			"NextCursor": "abc", "Notice": "", "Error": "",
+			"CanDecide": true, "CanAdminister": true,
+			// Two reviewers, because the roster's interesting branch is the row
+			// that is *not* the reader: one carries a Withdraw control and the
+			// other says "you". A single-row fixture would leave half the
+			// section unrendered, which is the same trap twoWorkspaces avoids.
+			"Reviewers": []map[string]any{
+				{
+					"UserID": "0198c9c5-0000-7000-8000-000000000001",
+					"Email":  "o@example.com", "Name": "Owner",
+					"GrantedAt": now, "GrantedBy": (*string)(nil), "CanDecide": true,
+				},
+				{
+					"UserID": "0198c9c5-0000-7000-8000-000000000002",
+					"Email":  "admin@example.com", "Name": "Admin",
+					"GrantedAt": now, "GrantedBy": &ownerUserID, "CanDecide": true,
+				},
+			},
 		},
 		"link_detail": map[string]any{
 			"Title": "/demo", "Nav": "links", "Identity": owner(),

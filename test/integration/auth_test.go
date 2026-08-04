@@ -58,7 +58,7 @@ func TestMigrationsProduceExpectedSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 31 was the Phase 1 count: all 20 Plan.md entities, plus the join and
-	// support tables they need. Six Phase 2 tables have been added since, and
+	// support tables they need. Seven Phase 2 tables have been added since, and
 	// none of them is an entity: mail_outbox is the delivery queue decision D23
 	// chose over an in-memory retry, invitations is the grant M27 issues,
 	// pending_registrations is M29's waiting room — a self-serve registration
@@ -69,14 +69,17 @@ func TestMigrationsProduceExpectedSchema(t *testing.T) {
 	// link_click_budget is M35's durable click counter — a table rather than a
 	// column on `links` because `links.click_count` is approximate by design and
 	// gating on it would make a lossy asynchronous counter into an
-	// authorization boundary. Each is live and typed rather than dormant jsonb,
-	// because the feature that reads it arrived in the same commit. The number
-	// moves and the sentence says why, rather than the count silently growing
-	// whenever somebody adds a table.
-	if tables != 37 {
-		t.Errorf("got %d tables, want 37 (all 20 Plan.md entities, plus mail_outbox, "+
+	// authorization boundary. And instance_grants is M45's instance-level
+	// principal (D98) — a permission held by a person over the whole instance
+	// rather than through a membership, which is the one thing this schema had no
+	// way to express and the reason F15, F31 and F36 all bottomed out at D38.
+	// Each is live and typed rather than dormant jsonb, because the feature that
+	// reads it arrived in the same commit. The number moves and the sentence says
+	// why, rather than the count silently growing whenever somebody adds a table.
+	if tables != 38 {
+		t.Errorf("got %d tables, want 38 (all 20 Plan.md entities, plus mail_outbox, "+
 			"invitations, pending_registrations, blocked_destinations, "+
-			"destination_disputes and link_click_budget)", tables)
+			"destination_disputes, link_click_budget and instance_grants)", tables)
 	}
 
 	// The UTC guarantee the partition scheme depends on.

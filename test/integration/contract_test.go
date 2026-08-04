@@ -726,6 +726,48 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	}, http.StatusCreated)
 	c.do("POST", p+"/disputes/"+field(t, second, "id")+"/allow", nil, http.StatusOK)
 
+	// --- the instance-level principal ---------------------------------------
+	// This fixture's account claimed the instance through /auth/setup, so it is
+	// the principal (D98) — which is also why the two decisions above succeeded:
+	// destinations.decide is held instance-wide and by no organization role.
+	//
+	// The roster is exercised in full because the delegation bound is a
+	// documented behaviour rather than an implementation detail: the response
+	// carries no scope list, the request takes no scope field, and there is no
+	// operation anywhere in this spec that confers instance.admin.
+	c.do("GET", p+"/instance/reviewers", nil, http.StatusOK)
+	// An address with no account is the documented 422 rather than a silent
+	// no-op: appointing nobody and believing you had is the mistake this
+	// endpoint's reader would actually make.
+	c.doBadRequest("POST", p+"/instance/reviewers", map[string]any{
+		"email": "nobody@contract.example",
+	}, http.StatusUnprocessableEntity)
+
+	// A second account to appoint, made the way this instance makes one.
+	reviewerEmail := "reviewer@contract.example"
+	c.f.registerAccount(reviewerEmail)
+	appointed := c.do("POST", p+"/instance/reviewers", map[string]any{
+		"email": reviewerEmail,
+	}, http.StatusOK)
+	// Idempotent, and 200 both times: the second call creates nothing, so a 201
+	// would describe something that did not happen.
+	c.do("POST", p+"/instance/reviewers", map[string]any{
+		"email": reviewerEmail,
+	}, http.StatusOK)
+	c.do("DELETE", p+"/instance/reviewers/"+field(t, appointed, "user_id"), nil,
+		http.StatusNoContent)
+	// Withdrawing from somebody who holds nothing is a 404 rather than a 204,
+	// because "there was nothing to withdraw" and "withdrawn" are different
+	// answers to an administrator.
+	c.do("DELETE", p+"/instance/reviewers/"+uuid.NewString(), nil, http.StatusNotFound)
+
+	// The instance-wide audit surface (F36). It has rows by now: the two dispute
+	// decisions above and the appointment belong to no organization, which is
+	// the whole of what this endpoint exists to make readable.
+	c.do("GET", p+"/instance/audit", nil, http.StatusOK)
+	c.do("GET", p+"/instance/audit?limit=10", nil, http.StatusOK)
+	c.do("GET", p+"/instance/audit?cursor=not-a-cursor", nil, http.StatusUnprocessableEntity)
+
 	// --- reputation feeds ---------------------------------------------------
 	// One operation, and the fixture has no feed configured — which is the
 	// shipped default and the answer this replay validates against the schema:

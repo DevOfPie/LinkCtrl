@@ -52,6 +52,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/gate"
 	"github.com/DevOfPie/LinkCtrl/internal/geoip"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
+	"github.com/DevOfPie/LinkCtrl/internal/instance"
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/mail"
@@ -642,6 +643,15 @@ func run(cfg config.Config, _ io.Writer) error {
 		return err
 	}
 
+	// Who administers the instance rather than a tenant in it (D98). It writes
+	// the two grants and nothing else — the grants themselves are rows, so an
+	// instance whose principal was conferred by migration 03400 or by the setup
+	// flow is administered whether or not this service is ever constructed.
+	instanceSvc := instance.NewService(pools.App, instance.Config{
+		Audit: auditSvc,
+		Log:   log,
+	})
+
 	// The other half of invalidation: this replica hearing what the others
 	// published. Off the request path entirely — it only ever deletes from the
 	// in-process tiers — and a nil Redis client makes Run return immediately,
@@ -825,12 +835,14 @@ func run(cfg config.Config, _ io.Writer) error {
 		Team:     teamSvc,
 		Signup:   signupSvc,
 		Disputes: disputeSvc,
+		Instance: instanceSvc,
 		Metrics:  metrics,
 		Limits:   limits,
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
 			Links: linkSvc, Stats: stats, Notify: notifySvc, Invites: inviteSvc,
 			Team: teamSvc, Signup: signupSvc, Disputes: disputeSvc,
+			Instance: instanceSvc,
 		},
 	})
 

@@ -123,6 +123,13 @@ tags:
     description: What changed, who changed it, and when
   - name: disputes
     description: Appealing a blocked destination, and the queue that decides them
+  - name: instance
+    description: >
+      Who administers the instance rather than a tenant in it. The account that
+      claimed the instance holds `instance.admin`; it may confer instance-level
+      review of disputed destinations on other accounts, and a holder of that
+      review may not confer it onwards. None of these permissions is delegable
+      to an API key, and no organization role carries any of them.
   - name: feeds
     description: >
       Whether this instance sends destinations to a third party, and to whom.
@@ -2231,6 +2238,166 @@ paths:
         "422":
           $ref: "#/components/responses/Validation"
 
+  /instance/reviewers:
+    get:
+      tags: [instance]
+      operationId: listInstanceReviewers
+      summary: Who reviews this instance's disputed destinations
+      description: |
+        The accounts holding instance-level review: they read the dispute queue
+        and decide what is in it, across every organization on the instance.
+
+        **Requires `instance.admin`**, which is the instance-level principal —
+        the account that claimed the instance through `/auth/setup`. A reviewer
+        it appointed cannot read this list: who else administers the instance is
+        the principal's business, and a reviewer needs the queue rather than the
+        roster.
+
+        Not delegable to an API key.
+      responses:
+        "200":
+          description: The reviewers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InstanceReviewer"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+    post:
+      tags: [instance]
+      operationId: grantInstanceReviewer
+      summary: Appoint an account to review disputed destinations
+      description: |
+        Confers `destinations.review` and `destinations.decide` on an existing
+        account, instance-wide. It grants nothing inside any organization, and
+        the account keeps every organization permission it already had.
+
+        **There is no scope field, and that is the design.** What a grant
+        confers is fixed; a caller who could name the scopes could name
+        `instance.admin`, and a reviewer who could appoint the next reviewer
+        would defeat the bound this operation exists under. Only the principal
+        delegates, and what it delegates cannot delegate further.
+
+        Idempotent: appointing somebody who already holds it answers `200` and
+        changes nothing. `422` with `unknown` means no account on this instance
+        has that address.
+
+        Recorded as an **instance-wide** audit event, readable at
+        `/instance/audit`.
+
+        Requires `instance.admin`. Not delegable to an API key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  description: The address of an account on this instance.
+      responses:
+        "200":
+          description: The reviewer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstanceReviewer"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /instance/reviewers/{id}:
+    delete:
+      tags: [instance]
+      operationId: revokeInstanceReviewer
+      summary: Withdraw instance-level review from an account
+      description: |
+        Removes both halves of the dispute permission. The account keeps
+        everything its own organization gives it.
+
+        **It cannot reach `instance.admin`.** Only what this surface confers can
+        be withdrawn through it, so the instance can never be left with nobody
+        able to appoint anybody — which would strand the dispute queue exactly
+        as it was stranded before the principal existed.
+
+        `404` means the account holds no instance-level review.
+
+        Requires `instance.admin`. Not delegable to an API key.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: The account to withdraw it from.
+      responses:
+        "204":
+          description: Withdrawn
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /instance/audit:
+    get:
+      tags: [instance]
+      operationId: listInstanceAuditLog
+      summary: The audit log of acts that belong to no organization
+      description: |
+        Records of changes made **to the instance** rather than inside a tenant:
+        the default domain's root redirect and bot policy, every dispute
+        decision, and every change to who reviews them. All of these govern
+        every organization on the instance, so they are recorded against none of
+        them.
+
+        They used to be filed under whichever organization the person happened
+        to be acting in, which named a tenant with no claim to the change and
+        hid it from every tenant it changed. `/audit` therefore no longer
+        returns them, and this is where they went.
+
+        **Requires `audit.read.instance`**, held by the instance principal
+        alone — not by reviewers it appointed. Not delegable to an API key, for
+        `audit.read`'s reason: these are the same columns carrying the same
+        network prefixes tied to the same named actors.
+
+        Same page shape and cursor vocabulary as `/audit`, and a separate
+        ordering: a cursor from one names a position in the other's result set
+        and must not be passed across.
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string }
+          description: Opaque, from `next_cursor` of the previous page.
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+          description: Page size; out-of-range values fall back to the server default.
+      responses:
+        "200":
+          description: One page of instance-wide audit records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Validation"
+
   /feeds:
     get:
       tags: [feeds]
@@ -2282,7 +2449,8 @@ paths:
       summary: Ask for a refused destination to be reviewed
       description: |
         Files a dispute about a destination this instance refused, and puts it
-        in front of whoever holds `destinations.review`.
+        in front of whoever holds `destinations.review` — the instance-level
+        reviewers, who are named people rather than a role.
 
         **Only a low-confidence refusal can be disputed.** The tier is
         re-derived from the URL on the server, by the same evaluator that
@@ -2350,12 +2518,15 @@ paths:
         organization. The blocklist a decision acts on is instance-wide, so a
         queue scoped narrower would hide rows the same reader is nonetheless
         deciding for. `destinations.review` is what bounds who sees it, and it
-        is granted to the owner role alone.
+        is held **instance-wide by named people** — no organization role carries
+        it. The account that claimed the instance holds it, and may confer it on
+        others through `/instance/reviewers`.
 
-        **Requires a session, not an API key.** `destinations.review` is not
-        delegable: allowing a destination deletes a blocklist entry, after which
-        the key that deleted it may point links there — a credential widening
-        its own reach.
+        **An API key may read this.** `destinations.review` is delegable: the
+        queue discloses who filed a dispute and a defanged host, never an
+        address or a network prefix, and reading it widens nobody's reach. The
+        deciding half is a separate permission and is not delegable — see
+        `/disputes/{id}/allow`.
 
         **Every destination in the response is defanged**, in `host_defanged`
         and `destination_defanged`. The scheme delimiter and every dot are
@@ -2398,7 +2569,16 @@ paths:
       description: |
         Deletes one row from the runtime low-confidence blocklist and closes the
         dispute as `allowed`. The person who filed it is notified in-app, and
-        the decision is an audit event.
+        the decision is an audit event — an **instance-wide** one, recorded
+        against no organization, because what it changes belongs to no
+        organization. Read it at `/instance/audit`.
+
+        **Requires `destinations.decide`, and a session rather than an API
+        key.** That permission is not delegable: allowing a destination deletes
+        a blocklist entry, after which the key that deleted it may point links
+        there — a credential widening its own reach. This operation exists for a
+        key, is documented for a key, and answers `403` to one however it was
+        scoped; reading the queue is a separate permission and stays delegable.
 
         **The row it deletes is `blocked_host_defanged`, not
         `host_defanged`**, and the two differ whenever somebody was refused by
@@ -2447,6 +2627,11 @@ paths:
       description: |
         Closes the dispute as `upheld`, changing no list. Available for every
         open dispute, including the ones `allow` cannot act on.
+
+        **Requires `destinations.decide`, and a session rather than an API
+        key**, for the reason `allow` gives: the two decisions are one
+        permission, and a queue where a key could uphold but not allow would be
+        a queue a key could empty.
 
         Still an audit event: "somebody looked and said no" is a different fact
         from "nobody has looked yet", and a log that recorded only the decisions
@@ -5565,6 +5750,36 @@ components:
           type: string
           description: Opaque keyset cursor; present when `has_more`.
         has_more: { type: boolean }
+
+    InstanceReviewer:
+      type: object
+      additionalProperties: false
+      required: [user_id, email, name, granted_at, can_decide]
+      description: |
+        One account holding instance-level review.
+
+        There is no scope list here, for the reason the grant request has no
+        scope field: what instance-level review is, is fixed.
+      properties:
+        user_id: { type: string, format: uuid }
+        email: { type: string }
+        name: { type: string }
+        granted_at:
+          type: string
+          format: date-time
+          description: When they were appointed.
+        granted_by:
+          type: string
+          format: uuid
+          description: >
+            Who appointed them. Absent for the account that claimed the
+            instance, which nobody appointed.
+        can_decide:
+          type: boolean
+          description: >
+            Whether they hold the deciding half as well as the reading half.
+            Normally true; the halves are separately revocable, so a list that
+            folded them together would show a state the instance cannot be in.
 
     Dispute:
       type: object

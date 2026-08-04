@@ -26,14 +26,21 @@ type feedsPageData struct {
 // decision log first:
 //
 // D38 removed the ability to change instance-wide settings from the dashboard.
-// This product has no instance-level principal — under open signup every
-// stranger who registers owns an organization — so there is nobody the
-// permission system can name who may move a setting that affects everyone.
+// At the time this product had no instance-level principal — under open signup
+// every stranger who registers owns an organization — so there was nobody the
+// permission system could name who may move a setting that affects everyone.
 // Reading is not changing, and being told what an instance does with your
-// destinations is not a privilege that needs a principal. The risk is not this
-// page; it is the toggle somebody adds beside the row next year, at which point
-// D38 has been reversed by nobody in particular. The no-POST test is what makes
-// that an explicit act.
+// destinations is not a privilege that needs a principal.
+//
+// **D98 introduced a principal, and it does not reach this page** (M45). Its
+// scopes are enumerated rather than implied — the dispute queue, the blocklist
+// entries those decisions lift, and the instance-wide audit surface — and the
+// feed configuration is deliberately not among them, because a principal that
+// accumulates scopes because it exists is the thing D38 was avoiding. So the
+// risk is unchanged and one degree sharper: it is the toggle somebody adds
+// beside the row next year, now that there is a permission it would look
+// plausible under, at which point D38 has been reversed by nobody in particular.
+// The no-POST test is what makes that an explicit act.
 //
 // Ungated on purpose. Every signed-in user's destinations are what get sent, so
 // every signed-in user may read this — a disclosure only owners can see is a

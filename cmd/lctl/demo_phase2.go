@@ -18,6 +18,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/dispute"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/gate"
+	"github.com/DevOfPie/LinkCtrl/internal/instance"
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
@@ -275,6 +276,9 @@ type demoSeeder struct {
 	// than one borrowed from elsewhere, because it is the only thing here that
 	// needs the HMAC pepper.
 	keys *auth.APIKeyService
+	// instance appoints the demo's second dispute reviewer (M45, D98), through
+	// the same service call the dashboard makes.
+	instance *instance.Service
 
 	// owner is whoever claimed the instance, acting in their first workspace.
 	owner *auth.Identity
@@ -317,16 +321,17 @@ func newDemoSeeder(
 
 	return &demoSeeder{
 		pool: pool, q: dbgen.New(pool), cfg: cfg, now: now, opt: opt,
-		auth:    authSvc,
-		audit:   auditSvc,
-		notify:  notifySvc,
-		team:    team.NewService(pool, team.Config{Audit: auditSvc, Log: discardLogger()}),
-		invite:  inviteSvc,
-		link:    linkSvc,
-		dispute: disputeSvc,
-		gates:   gateSvc,
-		keys:    keySvc,
-		owner:   owner,
+		auth:     authSvc,
+		audit:    auditSvc,
+		notify:   notifySvc,
+		team:     team.NewService(pool, team.Config{Audit: auditSvc, Log: discardLogger()}),
+		invite:   inviteSvc,
+		link:     linkSvc,
+		dispute:  disputeSvc,
+		instance: instance.NewService(pool, instance.Config{Audit: auditSvc}),
+		gates:    gateSvc,
+		keys:     keySvc,
+		owner:    owner,
 	}, nil
 }
 
@@ -1551,6 +1556,20 @@ func (s *demoSeeder) seedBlockingAndDisputes(ctx context.Context, people demoPeo
 		}
 	}
 	fmt.Fprintln(os.Stderr, "disputes: one open, one allowed, one upheld")
+
+	// The delegation D98 introduced, shown rather than described. The owner is
+	// the instance principal — the migration or the setup flow conferred it —
+	// and the roster below the queue would otherwise render one row saying
+	// "you", which teaches nothing about what the section is for.
+	//
+	// The admin is the right delegate for the same reason they file the
+	// disputes: they arrived by invitation into somebody else's organization, so
+	// a demo visitor can see that instance-level review is not a thing an
+	// organization role carries.
+	if _, err := s.instance.GrantReviewer(ctx, s.owner, people.admin.Email); err != nil {
+		return fmt.Errorf("appoint the demo reviewer: %w", err)
+	}
+	fmt.Fprintln(os.Stderr, "instance reviewers: the owner, plus one they appointed")
 	return nil
 }
 

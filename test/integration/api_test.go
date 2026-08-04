@@ -20,6 +20,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/dispute"
 	"github.com/DevOfPie/LinkCtrl/internal/gate"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
+	"github.com/DevOfPie/LinkCtrl/internal/instance"
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
@@ -128,6 +129,13 @@ func newAPI(t *testing.T) *apiFixture {
 		t.Fatal(err)
 	}
 
+	// The instance-level principal's roster (M45, D98). Wired as main.go wires
+	// it: the account this fixture creates claims the instance through
+	// /auth/setup, so it is the principal, and without this service its two
+	// endpoints would be unregistered and the contract test would report them as
+	// spec operations nothing exercises.
+	instanceSvc := instance.NewService(pool, instance.Config{Audit: audit.NewService(pool)})
+
 	srv := httptest.NewServer(httpx.NewRouter(httpx.Deps{
 		Config:   cfg,
 		Health:   &httpx.Health{DB: pool},
@@ -141,6 +149,7 @@ func newAPI(t *testing.T) *apiFixture {
 		Team:     teamSvc,
 		Signup:   signupSvc,
 		Disputes: disputeSvc,
+		Instance: instanceSvc,
 	}))
 	t.Cleanup(srv.Close)
 
@@ -189,6 +198,23 @@ func (f *apiFixture) decode(resp *http.Response, dst any) {
 	}
 	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
 		f.t.Fatalf("decode response: %v", err)
+	}
+}
+
+// registerAccount makes a second account on this instance, through the service
+// rather than through the signup form.
+//
+// The form is deliberately not used: with a mailer configured, self-serve
+// registration writes a pending row and answers 202, and the account only exists
+// once the emailed link is followed (M29). Walking that here would be replaying
+// the registration surface inside a test about a different one. The service call
+// is the same one the verification handler makes.
+func (f *apiFixture) registerAccount(email string) {
+	f.t.Helper()
+	if _, err := f.auth.Register(f.t.Context(), auth.RegisterInput{
+		Email: email, Name: email, Password: "a-sufficiently-long-password",
+	}); err != nil {
+		f.t.Fatalf("register %s: %v", email, err)
 	}
 }
 

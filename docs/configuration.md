@@ -236,7 +236,9 @@ does not know about is the same statement with `INSERT`.
 
 Since 0.2.0 the same deletion is a button. A person refused by any
 `low_confidence.*` rule can ask for a review, and whoever holds
-`destinations.review` decides it at `/disputes`; allowing removes the row. That
+`destinations.decide` decides it at `/disputes`; allowing removes the row. That
+permission is held instance-wide by the account that claimed the instance and by
+anybody it appointed, never by an organization role and never by an API key. That
 path deliberately will not touch a `source = 'env'` row — this variable owns
 those, and boot would put one back — so an entry you listed here is retired by
 editing the variable and restarting, exactly as before.

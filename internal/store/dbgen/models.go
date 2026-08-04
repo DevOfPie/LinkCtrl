@@ -167,6 +167,13 @@ type Folder struct {
 	DeletedAt   *time.Time
 }
 
+type InstanceGrant struct {
+	UserID       uuid.UUID
+	PermissionID uuid.UUID
+	GrantedBy    *uuid.UUID
+	GrantedAt    time.Time
+}
+
 type Invitation struct {
 	ID             uuid.UUID
 	OrganizationID uuid.UUID

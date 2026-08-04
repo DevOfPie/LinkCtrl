@@ -17,13 +17,41 @@ type AuditAPI struct {
 	Audit *audit.Service
 }
 
-// List answers one page of the caller's organization's audit records.
+// List answers one page of the audit records the caller's own authority covers
+// in their organization.
 //
 // Authorization is the ordinary permission check in the service — audit.read —
 // with nothing here about which credential the caller used. That the permission
 // is not delegable to an API key is enforced once, in auth.NonDelegableScopes,
 // so no key can ever hold it and this handler never has to ask.
 func (a *AuditAPI) List(w http.ResponseWriter, r *http.Request) {
+	page, err := a.Audit.List(r.Context(), IdentityFrom(r.Context()), auditFilter(r))
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, page)
+}
+
+// ListInstance answers one page of the instance-wide audit records — the acts
+// that belong to the instance rather than to any tenant (F36).
+//
+// Gated on audit.read.instance in the service, which only the instance principal
+// holds (D98). A separate endpoint rather than a query parameter on the one
+// above, because it is a separate authorization and a separate result set: a
+// flag on a list is a thing a client sets by accident, and this one would
+// silently change which permission the request needed.
+func (a *AuditAPI) ListInstance(w http.ResponseWriter, r *http.Request) {
+	page, err := a.Audit.ListInstance(r.Context(), IdentityFrom(r.Context()), auditFilter(r))
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, page)
+}
+
+// auditFilter reads the page request both surfaces share.
+func auditFilter(r *http.Request) audit.Filter {
 	q := r.URL.Query()
 
 	f := audit.Filter{Cursor: q.Get("cursor")}
@@ -36,11 +64,5 @@ func (a *AuditAPI) List(w http.ResponseWriter, r *http.Request) {
 			f.Limit = int32(n) //nolint:gosec // G109: range-checked on the line above
 		}
 	}
-
-	page, err := a.Audit.List(r.Context(), IdentityFrom(r.Context()), f)
-	if err != nil {
-		WriteError(w, r, err)
-		return
-	}
-	WriteJSON(w, http.StatusOK, page)
+	return f
 }

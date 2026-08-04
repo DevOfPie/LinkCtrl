@@ -11,6 +11,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/dispute"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/instance"
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
@@ -52,6 +53,10 @@ type Web struct {
 	// off the link form, because a refusal must not offer a door that is not
 	// there.
 	Disputes *dispute.Service
+	// Instance backs the reviewer roster on the dispute queue (D98). Nil leaves
+	// the section undrawn and its two routes unregistered, which is the state a
+	// deployment without the queue is already in.
+	Instance *instance.Service
 }
 
 // shell is what the layout template needs on every page.

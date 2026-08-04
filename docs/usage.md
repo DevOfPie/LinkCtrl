@@ -16,7 +16,7 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 | `/links/{id}` | Everything about one link: edit destination, alias, title, description, expiry and tags; per-window analytics (7/30/90 days) with device, browser, OS, referrer, language and country breakdowns, each with a share ring, plus a world choropleth over the country figures; recent activity; archive, restore and delete. |
 | `/keys` | Mint, list and revoke API keys, and choose whether a new one reaches one workspace or the organization. Rotation is not here: it replaces the credential that made the request, and a browser session is not one. |
 | `/notifications` | Things the instance wanted you to know about, and mark-read. |
-| `/disputes` | The review queue: destinations somebody was refused and has asked you to look at. Needs `destinations.review`. |
+| `/disputes` | The review queue: destinations somebody was refused and has asked you to look at. Needs `destinations.review`, which is held instance-wide rather than by a role. The account that claimed the instance also appoints other reviewers here. |
 | `/feeds` | Whether this instance sends the destinations you type to a third party, and to whom. Read-only, and readable by everybody — what it describes is what happens to your own data. |
 | `/account` | Your profile, password and appearance. |
 
@@ -379,11 +379,19 @@ members.read members.write  workspace.read workspace.write
 orgs.create
 ```
 
-`apikeys.read`, `apikeys.write`, `org.delete`, `audit.read` and
-`destinations.review` are never grantable to a key — a key that can mint keys
-makes revoking a leaked one meaningless, an irreversible action should need an
-interactive sign-in, the audit log ties a network prefix to a named person, and a
-key that could allow a blocked destination could then point links at it.
+`apikeys.read`, `apikeys.write`, `org.delete`, `audit.read`,
+`audit.read.instance`, `destinations.decide` and `instance.admin` are never
+grantable to a key — a key that can mint keys makes revoking a leaked one
+meaningless, an irreversible action should need an interactive sign-in, the audit
+log ties a network prefix to a named person, a key that could allow a blocked
+destination could then point links at it, and a key that could appoint a reviewer
+would widen its reach by manufacturing somebody else's.
+
+`destinations.review` **is** grantable, and the pair is the point: reading the
+dispute queue discloses who filed a dispute and a defanged host, escalating
+nothing, so an integration can watch the queue while acting on one stays with a
+person. That is enforced by which scopes a key may hold, not by any check on what
+kind of credential is calling.
 
 Everything else is grantable, and each one has a reason it is safe to be.
 `members.write` gates invitations and member management, and an invitation
@@ -613,11 +621,19 @@ either about the same host, or about the same **blocklist entry**, so once
 somebody has appealed the row that says `evil.example`, `login.evil.example` is
 the same appeal rather than a second one.
 
-Whoever holds `destinations.review` — the **owner** role, and no API key — reads
-the queue with `GET /api/v1/disputes?open=true` and answers with
-`POST /api/v1/disputes/{id}/allow` or `.../uphold`. Allowing deletes the
-blocklist entry; upholding changes nothing. Both are audit events and both notify
-the person who asked.
+Whoever holds `destinations.review` reads the queue with
+`GET /api/v1/disputes?open=true`, and whoever holds `destinations.decide` answers
+with `POST /api/v1/disputes/{id}/allow` or `.../uphold`. Allowing deletes the
+blocklist entry; upholding changes nothing. Both are audit events — recorded
+against no organization, because what they change belongs to none — and both
+notify the person who asked.
+
+**Neither permission comes from an organization role.** The account that claimed
+the instance holds both, plus `instance.admin`, and appoints other reviewers at
+`/disputes` or with `POST /api/v1/instance/reviewers`. Somebody it appoints
+reviews disputes and cannot appoint anybody else. An API key may hold the reading
+half and never the deciding half, so a token can watch the queue and a person has
+to answer it.
 
 **The entry allowing deletes is `blocked_host_defanged`, not `host_defanged`.**
 The two differ whenever somebody was refused by a subdomain of a listed host: a

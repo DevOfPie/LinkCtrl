@@ -715,6 +715,55 @@ func demoCoverage() []demoFeature {
 				"dead, so the page shows a window closing instead of a revocation " +
 				"that happened before anybody arrived",
 		},
+		{
+			// The instance-level principal, and the delegation that is the whole
+			// point of it (M45, D98). Two holders: the owner, conferred when the
+			// instance was claimed, and the admin they appointed.
+			//
+			// Bounded above as well as below, because this is instance-wide reach
+			// on a public instance. A seeder that quietly grew this number would be
+			// handing the demo's dispute queue to more people on every
+			// demo-update — the same reason the API key row is capped.
+			Milestone: "M45", Feature: "Instance-level review, held by two people",
+			Query: `SELECT count(*) FROM instance_grants ig
+			          JOIN permissions p ON p.id = ig.permission_id
+			         WHERE p.slug = 'destinations.review'`,
+			Min: 2, Max: 2,
+			Shows: "the reviewer roster under the dispute queue as a list somebody " +
+				"appointed, rather than one row saying \"you\"",
+		},
+		{
+			// Not a display claim — the claim F15 is about, asserted against the
+			// demo rather than only against a test fixture.
+			//
+			// No organization role may carry instance-wide reach. If a later
+			// migration grants one of these four to owner or admin, every account
+			// that registers on a public instance holds it, which is the finding
+			// this milestone closed and the one shape most likely to come back by
+			// accident.
+			Milestone: "M45", Feature: "No organization role carries instance-wide reach",
+			Query: `SELECT count(*) FROM role_permissions rp
+			          JOIN permissions p ON p.id = rp.permission_id
+			         WHERE p.slug IN ('instance.admin', 'destinations.review',
+			                          'destinations.decide', 'audit.read.instance')`,
+			MaxIsZero: true,
+			Shows: "that instance-wide reach is held by named people and by no role, " +
+				"so registering an account never confers it",
+		},
+		{
+			// The instance-wide audit surface (F36). Rows belonging to no
+			// organization: the demo's two dispute decisions and the reviewer it
+			// appointed.
+			//
+			// Deliberately not scoped by $1 — being outside every organization is
+			// the property being asserted, so a query that filtered by one would
+			// pass by testing nothing.
+			Milestone: "M45", Feature: "An audit trail for acts that belong to no tenant",
+			Query: `SELECT count(DISTINCT action) FROM audit_logs WHERE organization_id IS NULL`,
+			Min:   2,
+			Shows: "that an instance-wide act is recorded where it happened rather " +
+				"than filed under whichever organization the person was standing in",
+		},
 	}
 }
 

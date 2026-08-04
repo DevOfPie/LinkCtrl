@@ -7,6 +7,7 @@ import (
 
 	"github.com/DevOfPie/LinkCtrl/internal/dispute"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/instance"
 )
 
 // disputesPageData is what pages/disputes.html renders.
@@ -23,6 +24,19 @@ type disputesPageData struct {
 	NextCursor string
 	Notice     string
 	Error      string
+	// CanDecide is the deciding half of the permission D98 split in two. It
+	// draws the Allow and Uphold controls, and nothing else: the enforcement is
+	// in the service, which refuses the POST whatever this says. Somebody
+	// holding only the reading half sees the queue and no buttons.
+	CanDecide bool
+	// CanAdminister is the instance-level principal, and it draws the reviewer
+	// roster below the queue. False for a reviewer the principal appointed —
+	// D98's bound is that a holder of instance-level review may not confer it
+	// onwards, so they see neither the list nor the form.
+	CanAdminister bool
+	// Reviewers is the roster, loaded only when CanAdminister. Empty otherwise,
+	// and empty is never rendered.
+	Reviewers []instance.Reviewer
 }
 
 // DisputesPage is the review queue.
@@ -41,7 +55,22 @@ func (h *Web) DisputesPage(w http.ResponseWriter, r *http.Request) {
 		shell: h.shell(r, "Blocked destinations", "disputes"),
 		// Open-first is the default because this is a queue rather than an
 		// archive: the reason to open it is that something is waiting.
-		OpenOnly: r.URL.Query().Get("all") != "1",
+		OpenOnly:      r.URL.Query().Get("all") != "1",
+		CanDecide:     actor.Can(dispute.PermDecide),
+		CanAdminister: actor.Can(instance.PermAdmin),
+	}
+
+	if data.CanAdminister && h.Instance != nil {
+		// Failure here is not a reason to replace the queue with an error: the
+		// roster is a section below it, and the page's actual subject is still
+		// readable. Reported in place, where somebody can see the list did not
+		// load rather than assume it is empty.
+		reviewers, err := h.Instance.Reviewers(r.Context(), actor)
+		if err != nil {
+			data.Error = "The reviewer list could not be loaded."
+		} else {
+			data.Reviewers = reviewers
+		}
 	}
 
 	n, err := h.Disputes.CountOpen(r.Context(), actor)
@@ -67,6 +96,14 @@ func (h *Web) DisputesPage(w http.ResponseWriter, r *http.Request) {
 		data.Notice = "Allowed. The blocklist entry is gone and the person who asked has been told."
 	case "upheld":
 		data.Notice = "Upheld. The destination stays refused and the person who asked has been told."
+	}
+	switch r.URL.Query().Get("reviewers") {
+	case "granted":
+		data.Notice = "Appointed. They can now read this queue and decide what is in it."
+	case "revoked":
+		data.Notice = "Withdrawn. They keep every permission their own organization gives them."
+	case "unknown":
+		data.Error = "No account on this instance has that address."
 	}
 
 	h.render(w, r, http.StatusOK, "disputes", data)
@@ -98,6 +135,49 @@ func (h *Web) decideDispute(w http.ResponseWriter, r *http.Request, outcome stri
 		return
 	}
 	seeOther(w, r, "/disputes?decided="+outcome)
+}
+
+// DisputeReviewerGrant appoints somebody to this instance's review queue.
+//
+// It carries an address rather than an id, because the principal appointing
+// somebody knows who they are and not what their uuid is. An address with no
+// account is a sentence on the page rather than an error page: the form is on
+// the queue, and mistyping an address is not a reason to take the queue away.
+func (h *Web) DisputeReviewerGrant(w http.ResponseWriter, r *http.Request) {
+	if err := parseForm(w, r); err != nil {
+		h.errorPage(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
+		return
+	}
+
+	_, err := h.Instance.GrantReviewer(r.Context(), IdentityFrom(r.Context()),
+		strings.TrimSpace(r.PostFormValue("email")))
+	switch {
+	case errors.Is(err, domain.ErrValidation):
+		seeOther(w, r, "/disputes?reviewers=unknown")
+	case err != nil:
+		h.webError(w, r, err)
+	default:
+		seeOther(w, r, "/disputes?reviewers=granted")
+	}
+}
+
+// DisputeReviewerRevoke withdraws it.
+//
+// It cannot reach the principal's own instance.admin — the service revokes only
+// what auth.InstanceGrantable holds — so the instance cannot be left with nobody
+// able to appoint anybody. The page also declines to draw the control against
+// the signed-in account, which is an affordance rather than the enforcement.
+func (h *Web) DisputeReviewerRevoke(w http.ResponseWriter, r *http.Request) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		h.webError(w, r, err)
+		return
+	}
+	if err := h.Instance.RevokeReviewer(r.Context(), IdentityFrom(r.Context()), id); err != nil {
+		h.webError(w, r, err)
+		return
+	}
+	seeOther(w, r, "/disputes?reviewers=revoked")
 }
 
 // DisputeFile is how a person who was refused asks for a review.

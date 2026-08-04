@@ -295,12 +295,14 @@ Known limitations and deferred work, so nobody discovers them in production:
   the URL rather than held as a list entry. Nothing decides whether a destination
   is a phishing page. Blocking runs when a link is created or edited, never on
   the redirect path: a link accepted before its host was blocked keeps working.
-- **The review queue is instance-wide, and so is the permission.**
-  `destinations.review` is granted to the **owner** role — of any organization on
-  the instance — and never to an API key. On an instance with open sign-ups, that
-  means anyone who registers becomes an owner who can read every dispute and lift
-  any low-confidence entry for everybody. Run one organization, or keep sign-ups
-  closed, until this product has an instance-level principal.
+- **The review queue is instance-wide, and so is the permission** — but it is
+  no longer held by a role. The account that claimed the instance reads the queue
+  and decides what is in it, and may appoint other accounts to do the same;
+  nobody it appoints can appoint anybody else. Reading the queue is delegable to
+  an API key and deciding is not, so an integration can watch the queue and a
+  person has to act on it. Before 0.2.0 this was granted to the **owner** role of
+  any organization, which on an instance with open sign-ups meant anybody who
+  registered.
 - **Open sign-ups have no CAPTCHA.** Email confirmation before the account
   exists, and the shared sign-in rate limit, are the whole defence. On a public
   instance that is the largest abuse surface there is, which is why the shipped

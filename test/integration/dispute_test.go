@@ -62,8 +62,13 @@ func newDisputeWith(t *testing.T, withMailer bool) *disputeFixture {
 		Params: fastParams,
 		TTL:    auth.SessionTTL{Absolute: 30 * 24 * time.Hour, Idle: 7 * 24 * time.Hour},
 	})
+	// IsFirstUser, because since D98 that is what makes an account the instance
+	// principal: the queue's permissions are held instance-wide by named people
+	// and by no organization role, so an owner registered any other way holds
+	// nothing here — which is F15 being closed rather than a fixture detail.
 	owner, err := authSvc.Register(t.Context(), auth.RegisterInput{
 		Email: "owner@example.com", Name: "Owner", Password: disputePassword,
+		IsFirstUser: true,
 	})
 	if err != nil {
 		t.Fatalf("register owner: %v", err)
@@ -103,8 +108,8 @@ func newDisputeWith(t *testing.T, withMailer bool) *disputeFixture {
 		notify: notifySvc, disputes: disputes, owner: owner, ctx: ctx,
 		sender: sender,
 	}
-	// Re-read, so the owner carries destinations.review from the migration's
-	// grant rather than from whatever Register happened to compute.
+	// Re-read, so the owner carries the instance grants conferred when it
+	// claimed the instance rather than whatever Register happened to compute.
 	f.owner = f.identity("owner@example.com")
 	return f
 }
@@ -671,24 +676,55 @@ func TestAllowRefusesWhatItCannotActuallyLift(t *testing.T) {
 
 // TestTheQueueIsGatedOnTheNewPermission.
 //
-// Reading it and deciding in it both require destinations.review, which the
-// migration grants to the owner role alone — so an editor, who can file, cannot
-// review, and an admin who arrived by invitation cannot either.
+// Reading the queue requires destinations.review and deciding in it requires
+// destinations.decide, and **no organization role grants either** since D98:
+// they are instance-level grants held by the account that claimed the instance
+// and by whoever it appoints. So an editor cannot review, an admin who arrived
+// by invitation cannot, and — the whole of F15 — neither can the owner of any
+// other organization on the instance.
 func TestTheQueueIsGatedOnTheNewPermission(t *testing.T) {
 	f := newDispute(t)
 	editor := f.editor("editor@example.com")
 	admin := f.editor("admin@example.com")
 	f.blockHost("evil.example", link.SourceReview)
 
-	if editor.Can(dispute.PermReview) {
-		t.Error("an editor holds destinations.review")
+	for _, perm := range []string{dispute.PermReview, dispute.PermDecide} {
+		if editor.Can(perm) {
+			t.Errorf("an editor holds %s", perm)
+		}
+		if admin.Can(perm) {
+			t.Errorf("somebody who arrived by invitation holds %s", perm)
+		}
+		if !f.owner.Can(perm) {
+			t.Fatalf("the account that claimed the instance does not hold %s; the "+
+				"setup flow's grant did not reach it", perm)
+		}
 	}
-	if admin.Can(dispute.PermReview) {
-		t.Error("somebody who arrived by invitation holds destinations.review")
+
+	// F15 itself, and the reason this milestone exists: a second organization's
+	// owner is an owner in full, and reaches nothing here. Before D98 they read
+	// every dispute on the instance and could lift a blocklist entry for
+	// everybody, one registration away on an open instance.
+	other, err := f.auth.Register(f.ctx, auth.RegisterInput{
+		Email: "stranger@example.com", Name: "Stranger", Password: disputePassword,
+	})
+	if err != nil {
+		t.Fatalf("register a second organization's owner: %v", err)
 	}
-	if !f.owner.Can(dispute.PermReview) {
-		t.Fatal("the owner does not hold destinations.review; the seed migration's grant " +
-			"did not reach the role")
+	if other.Role != "owner" {
+		t.Fatalf("the second account is %q, not an owner; this test proves nothing "+
+			"unless it is one", other.Role)
+	}
+	for _, perm := range []string{dispute.PermReview, dispute.PermDecide} {
+		if other.Can(perm) {
+			t.Errorf("the owner of a second organization holds %s. That is F15: the "+
+				"queue and its decisions are instance-wide, so a role grant hands "+
+				"every registrant on an open instance the moderation of every other "+
+				"organization's destinations.", perm)
+		}
+	}
+	if _, err := f.disputes.List(f.ctx, other, dispute.Filter{}); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("List for a second organization's owner returned %v, want forbidden", err)
 	}
 
 	d, err := f.disputes.File(f.ctx, editor, "https://evil.example/x")
@@ -747,17 +783,28 @@ func TestOneOpenDisputePerHost(t *testing.T) {
 	}
 }
 
-// TestTheReviewPermissionIsNotDelegable.
+// TestTheDisputePermissionSplitsIntoAReadAKeyMayHoldAndADecisionItMayNot is
+// D98's second constraint — "API access is read-only for disputes; a change
+// requires a person" — asserted as what it is actually built out of.
 //
-// D18's escalating limb: a key that can allow a destination can then point links
-// at it. auth.NonDelegableScopes is the one place that enforces it, so this
-// asserts the mechanism rather than a handler branch.
-func TestTheReviewPermissionIsNotDelegable(t *testing.T) {
-	if _, blocked := auth.NonDelegableScopes[dispute.PermReview]; !blocked {
+// It is deliberately **not** a branch on credential type. The inherited
+// Permissions rule says anything branching on credential type outside
+// NonDelegableScopes and D43 is a defect, so the constraint is implemented as
+// the map: destinations.review leaves it and destinations.decide enters it. The
+// two halves of this test are therefore the map itself and a key minted through
+// the real service, because the map is the whole mechanism and a handler check
+// would be the defect.
+func TestTheDisputePermissionSplitsIntoAReadAKeyMayHoldAndADecisionItMayNot(t *testing.T) {
+	if _, blocked := auth.NonDelegableScopes[dispute.PermDecide]; !blocked {
 		t.Fatalf("%s is delegable to an API key. Allowing a destination deletes a row "+
 			"from the instance-wide blocklist, after which the key that deleted it may "+
 			"point links there — a credential widening its own reach (D18).",
-			dispute.PermReview)
+			dispute.PermDecide)
+	}
+	if _, blocked := auth.NonDelegableScopes[dispute.PermReview]; blocked {
+		t.Fatalf("%s is in NonDelegableScopes. D98 split the permission so that a key "+
+			"may read the queue and may not act on it; putting the reading half back "+
+			"makes the split decorative.", dispute.PermReview)
 	}
 
 	f := newDispute(t)
@@ -766,9 +813,43 @@ func TestTheReviewPermissionIsNotDelegable(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := keys.Create(f.ctx, f.owner, auth.CreateAPIKeyInput{
-		Name: "review-bot", Scopes: []string{dispute.PermReview},
+		Name: "decide-bot", Scopes: []string{dispute.PermDecide},
 	}); err == nil {
-		t.Fatal("a key was minted holding destinations.review")
+		t.Fatal("a key was minted holding destinations.decide")
+	}
+
+	created, err := keys.Create(f.ctx, f.owner, auth.CreateAPIKeyInput{
+		Name: "review-bot", Scopes: []string{dispute.PermReview},
+	})
+	if err != nil {
+		t.Fatalf("a key holding only the reading half was refused: %v", err)
+	}
+
+	// The key as a request actually presents it, so what is asserted is the
+	// identity the service authorizes rather than the row that was written.
+	bot, err := keys.Authenticate(f.ctx, created.Key)
+	if err != nil {
+		t.Fatalf("authenticate the review key: %v", err)
+	}
+	if !bot.IsAPIKey() {
+		t.Fatal("the resolved identity is not an API key; this test would then be " +
+			"asserting nothing about delegation")
+	}
+
+	f.blockHost("evil.example", link.SourceReview)
+	d, err := f.disputes.File(f.ctx, f.owner, "https://evil.example/x")
+	if err != nil {
+		t.Fatalf("File: %v", err)
+	}
+
+	if _, err := f.disputes.List(f.ctx, bot, dispute.Filter{}); err != nil {
+		t.Errorf("a key holding destinations.review cannot read the queue: %v", err)
+	}
+	if _, err := f.disputes.Allow(f.ctx, bot, d.ID); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("Allow for a key returned %v, want forbidden", err)
+	}
+	if _, err := f.disputes.Uphold(f.ctx, bot, d.ID); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("Uphold for a key returned %v, want forbidden", err)
 	}
 }
 

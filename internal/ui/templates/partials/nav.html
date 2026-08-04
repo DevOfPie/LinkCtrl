@@ -159,9 +159,13 @@
     {{/* The review queue joins the administrative entries rather than taking a
          fourth top-level slot, and for the same reason the other three did not:
          it is visited when something needs deciding, never while work is being
-         done. destinations.review is held by the owner role alone, so most
-         accounts — including every admin who arrived by invitation — see
-         nothing here. */}}
+         done.
+
+         destinations.review is held by no role at all since M45 (D98): it is an
+         instance-level grant, conferred on the account that claimed the instance
+         and on whoever that account appoints. So most accounts — including every
+         owner of every other organization, which is what F15 was — see nothing
+         here. */}}
     {{if .Identity.Can "destinations.review"}}
     <a href="/disputes" class="block px-3 py-2 text-sm {{if eq .Nav "disputes"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">Blocked destinations</a>
     {{end}}

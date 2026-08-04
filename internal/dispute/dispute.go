@@ -61,19 +61,46 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 )
 
-// PermReview guards reading the queue and deciding what is in it.
+// PermReview guards reading the queue: listing it, counting it, inspecting what
+// is in it.
+//
+// **Delegable to an API key**, and it was not until M45 (D98). Reading matches
+// neither limb of D18 — the queue discloses who filed a dispute and a defanged
+// host, never an address or a network prefix, and holding it widens nobody's
+// reach. What used to make it non-delegable was that one permission guarded both
+// halves, and the deciding half does widen reach; splitting them is what lets the
+// reading half be what it always was.
+//
+// Held instance-wide, by a person the principal appointed, or by the principal
+// itself. It is no longer granted to the owner *role*, and that is F15: on an
+// instance with more than one organization — one registration away under
+// LINKCTRL_SIGNUP_MODE=open — every owner read every dispute on the box.
+const PermReview = "destinations.review"
+
+// PermDecide guards acting on a dispute: allowing it or upholding it.
 //
 // Non-delegable to an API key, on D18's second limb: holding it lets a key widen
 // its own reach. An allow removes a host from the instance-wide low-confidence
 // list, after which every destination under that host becomes creatable —
 // including by the key that removed it. That is a key turning "may not link
 // there" into "may link there" by an action it takes itself, which is the shape
-// D18 names. The first limb does not match: the queue discloses who filed a
-// dispute, but never an address or a network prefix.
+// D18 names.
+//
+// This is also how D98's second constraint is built. *"API access is read-only
+// for disputes; a change requires a person"* is implemented as this scope sitting
+// in auth.NonDelegableScopes, **not** as a check on what kind of credential is
+// calling: the inherited Permissions rule says anything branching on credential
+// type outside that map and D43 is a defect. So the endpoints below authorize on
+// a permission like every other endpoint, and nothing in this package asks
+// whether the caller holds a session. It keeps *"every UI feature has API
+// support"* true as well — the decide endpoints exist, are documented and are
+// replayed by the contract test, and they refuse a key, exactly as apikeys.*
+// already does. A surface that exists and refuses is a different thing from a
+// surface that does not exist.
 //
 // auth.NonDelegableScopes is the only thing that enforces it, so reversing this
 // is deleting one map entry. See decisions.md.
-const PermReview = "destinations.review"
+const PermDecide = "destinations.decide"
 
 // PermFile guards filing one.
 //
@@ -397,8 +424,10 @@ func disputable(v link.Verdict) error {
 // Instance-wide, like the list it argues with. Scoping it to the reader's own
 // organization would hide rows the same reader is nonetheless deciding for,
 // because an allow removes an entry every organization on the instance is
-// refused by. The permission is what bounds who sees it, and it is granted to
-// the owner role alone.
+// refused by. The permission is what bounds who sees it — and since D98 that
+// permission is held instance-wide by named people rather than by every owner of
+// every organization, which is the difference between the queue being
+// instance-wide and its readership being accidental.
 func (s *Service) List(ctx context.Context, actor *auth.Identity, f Filter) (*domain.Page[Dispute], error) {
 	if !actor.Can(PermReview) {
 		return nil, fmt.Errorf("%w: reviewing disputes requires %s", domain.ErrForbidden, PermReview)
@@ -491,8 +520,8 @@ func (s *Service) Uphold(ctx context.Context, actor *auth.Identity, id uuid.UUID
 func (s *Service) decide(
 	ctx context.Context, actor *auth.Identity, id uuid.UUID, status string,
 ) (*Dispute, error) {
-	if !actor.Can(PermReview) {
-		return nil, fmt.Errorf("%w: deciding a dispute requires %s", domain.ErrForbidden, PermReview)
+	if !actor.Can(PermDecide) {
+		return nil, fmt.Errorf("%w: deciding a dispute requires %s", domain.ErrForbidden, PermDecide)
 	}
 
 	existing, err := s.q.GetDestinationDispute(ctx, id)
@@ -603,6 +632,15 @@ func (s *Service) entryToLift(ctx context.Context, d dbgen.DestinationDispute) (
 // tell the caller nothing happened when something did. The metadata names the
 // entry that was lifted, because that is the part of the decision the dispute row
 // does not carry.
+//
+// **Instance-wide** (F36). Allowing a dispute deletes a row from a blocklist
+// every organization on the instance is refused by, and upholding one decides
+// for the same population; recording that under whichever organization the
+// decider happened to be standing in named a tenant with no particular claim to
+// it and hid it from every tenant it changed. Since D98 the decider is the
+// instance principal or somebody it appointed, so the tenant it would have been
+// filed under is now, routinely, a personal organization that has nothing to do
+// with the decision.
 func (s *Service) record(
 	ctx context.Context, actor *auth.Identity, d dbgen.DestinationDispute, lifted string,
 ) {
@@ -632,7 +670,8 @@ func (s *Service) record(
 		meta["feed_verdict_overridden"] = true
 	}
 	err := s.audit.Record(ctx, actor, audit.Event{
-		Action: action, TargetType: "destination_dispute", TargetID: &id, Metadata: meta,
+		Action: action, TargetType: "destination_dispute", TargetID: &id,
+		Metadata: meta, InstanceWide: true,
 	})
 	if err != nil {
 		s.log.Warn("dispute decided but the audit record was not written",

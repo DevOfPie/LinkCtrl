@@ -199,6 +199,15 @@ func (s *Service) SetRootRedirect(ctx context.Context, actor *auth.Identity, raw
 				"from":     previous,
 				"to":       to,
 			},
+			// F36. `SetDefaultDomainRootRedirect` targets `WHERE is_default`, so
+			// this is unambiguously the instance's own hostname and not any
+			// tenant's — the row it writes to has a NULL organization_id, and the
+			// audit record now says the same thing the domain row does.
+			//
+			// The per-domain events at recordDomainEvent are deliberately *not*
+			// marked: a registered hostname belongs to an organization, and its
+			// record belongs there too.
+			InstanceWide: true,
 		}); err != nil {
 			s.log.Warn("root redirect changed but the audit record was not written",
 				slog.String("hostname", row.Hostname), slog.Any("error", err))
@@ -333,6 +342,12 @@ func (s *Service) SetBotBlocking(ctx context.Context, actor *auth.Identity, bloc
 				"from":     string(domain.DomainBots(before.BlockBots, before.BlockBotsEnforced)),
 				"to":       string(domain.DomainBots(row.BlockBots, row.BlockBotsEnforced)),
 			},
+			// F36. This write reaches every domain row on the box, so the change
+			// governs every link in every organization — and it was recorded in
+			// exactly one of them, the actor's, invisible to all the rest. The
+			// record now belongs to the instance and is read under
+			// audit.read.instance.
+			InstanceWide: true,
 		}); err != nil {
 			s.log.Warn("domain bot blocking changed but the audit record was not written",
 				slog.String("hostname", row.Hostname), slog.Any("error", err))
