@@ -145,6 +145,7 @@ file. Append a row when you append an entry.
 | [M44, what the key demo shows, and why no secret is on it](#2026-08-03--m44-what-the-key-demo-shows-and-why-no-secret-is-on-it) | D89 — three keys and four rows, because a rotation is a row rather than an edit; every token discarded, since a demo that kept one would publish a live credential; the rotation performed through the real path because `Rotate` refuses anything that is not a key; the maximum grace as a fact about `demo-update`'s cadence, asserted rather than trusted; the reset removing visitors' keys too |
 | [M44, the tenancy bound an organization-wide key needed](#2026-08-03--m44-the-tenancy-bound-an-organization-wide-key-needed) | D90 — the defect M44 created by making a NULL `workspace_id` issuable at all: the resolver filters on membership, so an owner belonging to two organizations would have their organization-wide key resolve into the *other* tenant, with `Authenticate` taking that organization's id as the key's own. Fixed in-spec, as a **bound** on the candidate set rather than a rung in the precedence, so a key still follows its owner's pinned default inside its own organization and every other caller resolves unchanged |
 | [M44.9, the pre-release review, and what refutation cost the findings](#2026-08-04--m449-the-pre-release-review-and-what-refutation-cost-the-findings) | 91 raw candidates from 17 independent readers, 78 put to adversarial verification, 55 confirmed as F76-F130; the amendment from the v2 to the v3 cache key; the three live verifications and what the 0.1.0 upgrade actually proved; why refutation moved tiers more often than it killed findings, and the straggler pass that refuted six of nine; the M40-times-everything cluster and the single-goroutine scheduler cluster; F29 found in the wrong section, and the four existing rows that want a line rather than a neighbour |
+| [M44.9's triage, six milestones reopened, and a dependency reversed](#2026-08-04--m449s-triage-six-milestones-reopened-and-a-dependency-reversed) | Which eleven rows became work and which milestone each reopens; why the owner took the wider option against the recommendation, and that the narrow set would have shipped two features that do not work; D91 reversing the punycode decision to add golang.org/x/net/idna, the two costs accepted with it and the homograph check it repairs; F85 approved but not a reopening; F29 moved to Closed and the four rows that gained evidence rather than neighbours |
 
 ---
 
@@ -11635,3 +11636,89 @@ existing rows want a line added rather than a new row beside them — F37 gains
 `Plan.md:504-506`, F45 gains the audit-enumeration and never-grantable-scope
 drifts that M42 and M43 widened, F61 gains the same, and F69's *"four trailing
 rows"* is now none.
+
+## 2026-08-04 — M44.9's triage, six milestones reopened, and a dependency reversed
+
+The [review](#2026-08-04--m449-the-pre-release-review-and-what-refutation-cost-the-findings)
+put fifty-five rows in front of the owner. This is what came back, written down
+before it is acted on because an answer given in prose evaporates and gets
+re-derived differently.
+
+### What was approved
+
+**All eleven critical and high rows become work now** — F76 through F86 — each
+reopening the milestone whose claim it falsifies rather than arriving as a
+successor, per [workflow.md](workflow.md). The remaining forty-four rows stay in
+[deferred-findings.md](deferred-findings.md) for M45's per-item review. Agreeing
+that a row is deferred is not approving it as work.
+
+| Row | Reopens | Because the claim it falsifies is |
+| --- | --- | --- |
+| F76 verify/rename race | [M40](phase-details/m40.md) | *"Only after `verified_at` is set does the host router resolve aliases on that hostname"* |
+| F84 re-verification starvation | [M40](phase-details/m40.md) | *"Re-verification runs on a cadence. The deleted-CNAME plan is implemented"* |
+| F77 Unicode host bypass | [M30](phase-details/m30.md) | *"no configuration, list entry, or future review path can accept a metadata or private address"*, and `docs/SECURITY.md:40` |
+| F78 HEAD serves an exhausted link | [M35](phase-details/m35.md) | *"exceeded serves 410"* |
+| F79 signature domain binding | [M35](phase-details/m35.md) | *"a signature minted for one hostname does not verify on another"* |
+| F80 signed URL host | [M35](phase-details/m35.md) | the documented signed-URL format |
+| F81 307 re-POSTs the password | [M35](phase-details/m35.md) | D53's *"the POST issues nothing"*, which is written as a 302 |
+| F82 webhook drain stalls the scheduler | [M42](phase-details/m42.md) | *"a backlog drains over several runs instead of holding the job for minutes"* |
+| F83 automation rules never evaluated | [M43](phase-details/m43.md) | *"the cap starves nobody"* |
+| F86 the egress promise | [M32](phase-details/m32.md) | *"Plan.md's no-destination-leaves-the-box promise is updated… rather than being quietly falsified"* |
+
+F85 — the unreachable webhook and automation pages — is approved as work but is
+**not** a reopening: neither m42.md nor m43.md requires a page, so no milestone's
+own claim is false. It commits on its own, as work smaller than a milestone.
+
+### Why the wider set, against the recommendation
+
+The recommendation put to the owner was narrower — F76, F77, F78, F84 and F85, on
+the grounds that they are the security-relevant set plus one cheap unblock, and
+that the rest are design work. The owner took the wider option, and the reason is
+worth recording because it inverts the recommendation's own argument: **the
+narrow set would have shipped 0.2.0 with two features that do not work at all.**
+F79 and F80 mean signed links are wholly non-functional on custom domains, and
+F83 means an automation rule past the hundredth silently never fires. Neither is
+a security defect and both are the product failing to do the thing it advertises,
+which is not a better outcome for being cheaper to defer.
+
+The cost is accepted: six reopenings, one of them adding a dependency, and the
+phase does not resume its plan until they land.
+
+### D91 — `golang.org/x/net/idna` is added, reversing the punycode decision
+
+F77 cannot be closed without full UTS-46 mapping, and this project deliberately
+kept `golang.org/x/net` out of go.mod when the homograph heuristic was written.
+That refusal was correct for what it was deciding — a *heuristic* over punycode
+labels does not need a mapping table. It is wrong for a *canonicaliser*, and the
+review established why with a measurement rather than an argument: three spellings
+that carry a label separator (U+3002, U+FF0E, U+FF61) and two that carry none at
+all (fullwidth digits, fullwidth Latin) both resolve to blocked hosts in a real
+client. A hand-rolled separator map closes the first three and misses the last
+two, which is a half-fix that reads as closed.
+
+Two consequences are accepted with it. **The stored value becomes the ToASCII
+form**, which is D46's own rule — what the tiers judged is what the visitor is
+handed — and it changes what is written to the database for any non-ASCII host.
+And the dependency is a real supply-chain addition to a project that has been
+deliberate about having almost none; it is the standard library's own vendored
+package, which is the narrowest version of that cost available.
+
+One thing it buys back: `isHomograph`'s `xn--` prefix test currently never fires
+on raw Unicode input, because nothing converts it first. ToASCII makes that check
+work as written, closing a second gap at no extra cost.
+
+### Two bookkeeping corrections, approved
+
+**F29 moves to Closed.** Its fix landed at `524b793` with D43 and the row was
+never moved, so it has been sitting in *Open* asserting a live major defect the
+tree refuses. That commit touched the same file to add F60, F61 and F62 and
+skipped the row it was closing. The file's standing rule is written against rows
+that vanish silently; this is the inverse, and it is worth naming because it is
+harder to notice — a stale row looks exactly like a real one.
+
+**Four rows gain evidence rather than neighbours.** F37 gains `Plan.md:504-506`,
+the *"one open finding, cosmetic, unreviewed"* sentence, which was filed as a
+release-blocker and refuted down to a line on an existing row. F45 and F61 gain
+the audit-action and never-grantable-scope enumerations that M42 and M43 widened.
+F69's *"four trailing rows"* is now none, every boundary row having been converted
+as its milestone landed.
