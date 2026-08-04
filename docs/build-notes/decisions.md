@@ -150,6 +150,8 @@ file. Append a row when you append an entry.
 | [M30, the same claim in a different alphabet](#2026-08-04--m30-the-same-claim-in-a-different-alphabet) | D93 — why a host written outside ASCII reached none of the four mechanisms the trailing dot walked past, and why that is one missing conversion rather than four bugs; UTS-46 ToASCII folded at D46's existing fold, mapping before the dot; the profile measured against `idna.Lookup`, which refuses three destinations this validator accepts; the ASCII skip and why it cannot let a spelling through; an unmappable host refused with an untiered code; the list entries folded by the same function, and the address rule moved after the fold; what D91 cost, and `isHomograph` working as designed for the first time |
 | [M35's reopening, two amendments made at acceptance](#2026-08-04--m35s-reopening-two-amendments-made-at-acceptance) | A1 — the reopening claimed the F79 fix invalidates every minted signature; the signer was never wrong, so nothing that works stops. The first M44.9 fix-trap that was itself wrong, and why that position produces them. A2 — the inherited rule's label moves from "Redirects are 302" to "never permanent", the assertion unchanged, because the verified-password POST now answers 303 |
 | [M44.9 lands, and what it leaves for M45](#2026-08-04--m449-lands-and-what-it-leaves-for-m45) | Every bullet discharged; eleven approved rows closed across six reopenings and one sub-milestone commit; why the row reads done while 110 findings stay open, on M32.9's precedent; the five rows the reopenings themselves found and why F135 is the one to read first; the fix-traps being worth more than the findings, and the one that was wrong; how scope held |
+| [M45, how a hundred and ten rows get reviewed](#2026-08-04--m45-how-a-hundred-and-ten-rows-get-reviewed) | Why per-item approval is bounded by volume rather than reinterpreted; groups never mix severities and any row the owner pulls out is answered alone; why a grouped deferral is cheap and a grouped approval is not; recorded before the triage so the method cannot be fitted to its outcome |
+| [M45's triage, and the widest option four times](#2026-08-04--m45s-triage-and-the-widest-option-four-times) | All eleven moderate security rows, the disclosure taught its second channel, the non-security set including the dispute family, and hygiene plus the comment sweep; **F15 and F31 are blocked on D38's missing instance-level principal and that choice is not made here**; why hygiene goes first, and the three rows that cannot be judged on their own terms |
 | [M35, which namespace a gate is keyed on](#2026-08-04--m35-which-namespace-a-gate-is-keyed-on) | D94 — three corrections and one amendment: a verified password answers **303** unconditionally and D53's *"answers the 302 itself"* is superseded, with 303 joining `REDIRECT_DEFAULT_STATUS`'s allowed set; the signature and the password bucket keyed on the domain the request arrived on rather than the boot constant; the signed URL minted on the link's own hostname, with an unreadable domain row an error rather than a fallback; HEAD reading the budget without spending it, and what that read costs; why the fix invalidates no signature that ever worked, against a constraint that expected it to; the fixture in which the defect was testable at all |
 | [M42, what one drain costs, and the fix that would have moved the cost rather than removed it](#2026-08-04--m42-what-one-drain-costs-and-the-fix-that-would-have-moved-the-cost-rather-than-removed-it) | D95 — a claimed batch is dialled together and `Drain` waits for it, so one drain costs one attempt and not `DrainBatch` of them; why the WaitGroup is what makes D77's lock trap inapplicable rather than survived; why a webhook goroutine of its own is not a fix, `pg_try_advisory_lock` being session-scoped, and would convert every other job's stall into a skip; what it does to F90 (nothing) and to F91 (unreachable, not fixed); what a receiver now sees |
 | [M43, the queue's own clock, and why the watermark could not be it](#2026-08-04--m43-the-queues-own-clock-and-why-the-watermark-could-not-be-it) | D96 — one column was carrying two facts, and ordering the due query on the firing watermark meant the hundred-and-first enabled rule was never evaluated at all; `last_checked_at` added by 03100 with the due index rebuilt on it; why advancing `last_fired_at` on a no-match run is the tempting fix and breaks `min_count`; one cursor statement a run rather than one a rule, and the three deliberate details in it — no `updated_at`, failed rules stamped too, `WithoutCancel` so a cut-off run keeps what it looked at; why a NULL cursor is the right thing for a new or resumed rule; the test's shape, and why its first assertion is that nothing happened |
@@ -12699,3 +12701,86 @@ was told to fix the class rather than the instance and did, deleting the list th
 caused it instead of adding the four entries it was missing — and proved the old
 guard could never have caught it by leaving that guard green under a sabotage that
 made the new one fail on all eleven routes.
+
+## 2026-08-04 — M45, how a hundred and ten rows get reviewed
+
+m45.md requires that *"every row in deferred-findings.md has been owner-reviewed"*
+and the file's own standing rule is that **approval is per item, not per batch**.
+M44.9 left a hundred and ten open rows, which is more than that rule was written
+against — Phase 1's equivalent queue was reviewed a row at a time and was a third
+the size.
+
+The owner's answer, on being given the choice: **triage by tier and cluster, then
+decide**, in the shape M44.9's own triage took. Each group is put with a
+recommendation, its cost, and what it leaves; the decision is per group rather
+than per row.
+
+The cost is named rather than glossed. A row that would have been considered
+individually may now be decided as part of a group, and that is a real departure
+from the per-item rule — so the rule is not being reinterpreted, it is being
+**bounded by volume, deliberately and in writing**. Two things keep it honest: no
+group mixes severities, and any row the owner pulls out of a group is answered on
+its own. A grouped *deferral* is cheap to revisit, because the row stays open and
+M45's successor reviews it again; a grouped *approval* is what needs the care,
+because it becomes work.
+
+Recorded before the triage rather than after it, because the alternative is
+deciding a hundred and ten dispositions and then describing the method that
+produced them, which is how a method gets written to fit its outcome.
+
+## 2026-08-04 — M45's triage, and the widest option four times
+
+The [inventory](#2026-08-04--m45-how-a-hundred-and-ten-rows-get-reviewed) put the
+hundred and ten open rows to the owner in four groups. The answer was the widest
+option in every one, and the pattern is worth naming rather than recorded four
+times: on M44.9's triage the owner also took the wider option against the
+recommendation, and the reasoning there — that a narrow set ships features which
+do not work — applies again here.
+
+### What was approved
+
+**The moderate security cluster, all eleven.** F15, F31, F60, F93, F94, F97, F92,
+F32, F34, F35, F36. The recommendation was seven, holding back the three whose
+root cause is a design question. It was not taken.
+
+**The disclosure learns the second channel.** F135's `/feeds` panel reads the
+workspace's webhooks as well as the feed setting, rather than being weakened to a
+sentence true everywhere. F134 follows from it. The recommendation, and taken:
+the alternative reworded the promise a third time instead of making it structural,
+and cost the instances where the strong claim is true the ability to say so.
+
+**The moderate non-security set, including the dispute family.** F87, F96, F88,
+F89, F133, and then F33, F95 and F114 — which the rows themselves say should land
+together rather than beside each other.
+
+**Hygiene, plus the cheap comment sweep.** The fourteen overlapping pairs merged,
+F91 re-derived, the nine widened severities restated, and the eight
+single-sentence rows where a comment asserts the opposite of its code — F8, F99,
+F122, F124, F125, F126, F127, F128.
+
+### The one thing this cannot decide, and will have to ask again
+
+**F15 and F31 are blocked on D38.** That entry records that this product has no
+instance-level principal, so *"the instance owner"* is not a thing the permission
+system can name — which is why every organization owner can read every dispute and
+lift a blocklist entry for everybody, and why `audit.read` held from one workspace
+reads the whole organization. Closing either means one of: introducing an
+instance-level principal, naming a moderator through configuration, or scoping the
+blocklist per organization and giving up the reasoning `01500` was built on.
+
+Each is a different product. The approval above is approval to *do the work*, and
+the work opens with a choice the owner has not been given yet, so it will be put
+when that group is reached rather than picked here. Recording it now so that a
+later reader does not find a design decision made silently inside a fix, which is
+the failure this log exists to prevent.
+
+### Why hygiene goes first
+
+Fourteen pairs overlap, and three of them cannot be judged on their own terms:
+F72's stated conclusion — *"it fails closed"* — is **false**, and only F88 says so;
+F95 removes F33's stated precondition; F97 converts F43's *"one-shot"* into
+self-renewing. Deciding a row against evidence a later row already corrected is
+how a queue produces confident wrong answers. And F91's mechanism no longer
+exists: M42's fix added `DeliveryConcurrency`, so the arithmetic the row reasons
+from — twenty rows at sixty seconds against a five-minute bound — describes a tree
+that has not existed since `539ba3d`.
