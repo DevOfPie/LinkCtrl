@@ -1224,14 +1224,45 @@ func schemeOf(baseURL string) string {
 // instance's own host would be a link the product told you to publish at the
 // wrong address.
 func (s *Service) shortURL(ctx context.Context, domainID uuid.UUID, alias string) string {
-	if host := s.hostnameFor(ctx, domainID); host != "" {
-		return s.linkScheme + "://" + host + "/" + alias
+	built, err := s.shortURLStrict(ctx, domainID, alias)
+	if err != nil {
+		// Described with the instance's own host rather than not at all — see
+		// hostnameFor. This is the fallback that is right for a *description* of a
+		// link and wrong for a capability minted against one, which is why Sign
+		// takes the strict form instead.
+		return s.baseURL + "/" + alias
 	}
-	return s.baseURL + "/" + alias
+	return built
 }
 
-// hostnameFor resolves a domain id to its hostname, or "" for the instance
-// default and for anything that cannot be read.
+// shortURLStrict is shortURL for the callers that must not be handed a guess.
+//
+// The difference is one case: a domain row that could not be read. shortURL
+// prints the instance's own host and carries on, because a list page describing
+// twenty-five links should not fail over one unreadable row. A signed URL is not
+// a description — it is a capability, addressed to a hostname — and printing the
+// wrong hostname there does not merely mislead: the default domain is shared
+// across workspaces and alias uniqueness is `(domain_id, alias)`, so the URL can
+// resolve a *different* workspace's link and send the recipient to a stranger's
+// destination. An unreadable row is an error here.
+func (s *Service) shortURLStrict(ctx context.Context, domainID uuid.UUID, alias string) (string, error) {
+	host, ok := s.hostnameFor(ctx, domainID)
+	if !ok {
+		return "", fmt.Errorf("resolve the hostname of domain %s", domainID)
+	}
+	if host == "" {
+		return s.baseURL + "/" + alias, nil
+	}
+	return s.linkScheme + "://" + host + "/" + alias, nil
+}
+
+// hostnameFor resolves a domain id to its hostname, and reports whether the
+// domain could be read at all. "" with ok is the instance default.
+//
+// **The second return is the whole point of the signature.** Before it, "" meant
+// both "this is the instance default, whose public name is LINK_BASE_URL" and
+// "the row could not be read" — one value for a correct answer and for no
+// answer, which every caller then had to treat as the correct one.
 //
 // Cached in the process, because it is consulted once per link on every list
 // page and the answer changes only when somebody renames a domain — which drops
@@ -1239,25 +1270,23 @@ func (s *Service) shortURL(ctx context.Context, domainID uuid.UUID, alias string
 // for the instance default deliberately: that domain's hostname is a placeholder
 // the resolver never reads (00700), and its public name is LINK_BASE_URL.
 //
-// A read failure returns "" and caches nothing, so the link is described with
-// the instance's own host rather than with no host at all. Printing the wrong
-// hostname would be worse than printing the default one only if the default were
-// also wrong, and it is the address every link had before this milestone.
-func (s *Service) hostnameFor(ctx context.Context, domainID uuid.UUID) string {
+// A read failure caches nothing and reports not-ok, and what each caller does
+// with that is the caller's decision rather than this function's.
+func (s *Service) hostnameFor(ctx context.Context, domainID uuid.UUID) (string, bool) {
 	if v, ok := s.hostnames.Load(domainID); ok {
 		host, _ := v.(string)
-		return host
+		return host, true
 	}
 	row, err := s.q.GetDomainByID(ctx, domainID)
 	if err != nil {
-		return ""
+		return "", false
 	}
 	host := ""
 	if !row.IsDefault {
 		host = strings.ToLower(row.Hostname)
 	}
 	s.hostnames.Store(domainID, host)
-	return host
+	return host, true
 }
 
 // ForgetHostnames drops the id-to-hostname cache.

@@ -171,7 +171,7 @@ rather than serving them as current, and reconnects.
 | --- | --- | --- |
 | `LINKCTRL_REDIRECT_TTL` | `24h` | How long a resolved link stays cached. Clamped down automatically for links that expire sooner. Also the staleness window if you run more than one replica — see [deployment.md](deployment.md#scaling-honestly). |
 | `LINKCTRL_REDIRECT_NEGATIVE_TTL` | `60s` | Caching of unknown aliases, which is most of what a public shortener is asked for. Capped at 5m by validation, and cleared when a matching link is created, so a probed-then-created alias is never stuck as a 404. |
-| `LINKCTRL_REDIRECT_DEFAULT_STATUS` | `302` | `302` or `307` only. `301`/`308` are refused: a permanent redirect cached in browsers and intermediaries cannot be recalled, and links here are editable by design. |
+| `LINKCTRL_REDIRECT_DEFAULT_STATUS` | `302` | `302`, `303` or `307`. `301`/`308` are refused: a permanent redirect cached in browsers and intermediaries cannot be recalled, and links here are editable by design. **It does not apply to a password submission**, which is answered `303` whatever this is set to — `307` preserves the method, so the browser would re-send the password body to the link's destination. |
 | `LINKCTRL_REDIRECT_LOG_SAMPLE` | `0` | Log one in N successful redirects; `0` disables. At 2,000 rps, logging every redirect produces more bytes than the redirects. |
 | `LINKCTRL_REDIRECT_TIMEOUT` | `250ms` | Bounds the Postgres fallback. A query still running after this has already missed the uncached target and is holding a connection from the small redirect pool while requests queue behind it. |
 | `LINKCTRL_REDIRECT_404_RATE_LIMIT` | `60` | Misses per address per minute. See [Rate limits](#rate-limits). `0` disables. |

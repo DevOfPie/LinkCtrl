@@ -357,8 +357,13 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//
 	// `Gated()` is false for every link on a default instance, so this is one
 	// boolean expression over fields already in hand and nothing else.
+	//
+	// `domainID` is handed over rather than read off the handler inside: the
+	// signature's MAC and the password bucket are both keyed on which namespace
+	// this alias was resolved in, and the boot default is the wrong answer for
+	// every request that arrived on a verified custom hostname.
 	if outcome == redirect.OutcomeRedirect && res.Snapshot.Gated() {
-		if g := h.passGates(w, r, res.Snapshot, canonical); g.answered {
+		if g := h.passGates(w, r, res.Snapshot, canonical, domainID); g.answered {
 			h.Metrics.ObserveRedirect(g.label, string(res.Source), time.Since(start))
 			return
 		}
@@ -402,7 +407,7 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// would be cached by browsers and intermediaries and keep sending traffic
 	// to the old destination long after an edit — with no way to recall it.
 	// no-store for the same reason.
-	h.Location(w, target, h.status())
+	h.Location(w, target, h.redirectStatus(r))
 	h.record(r, res.Snapshot, start, destID)
 
 	if h.LogSample > 0 && h.counter.Add(1)%h.LogSample == 0 {
@@ -531,6 +536,29 @@ func (h *RedirectHandler) status() int {
 		return http.StatusFound
 	}
 	return h.Status
+}
+
+// redirectStatus is the status this particular request is answered with.
+//
+// It is the instance's configured one for every request except the one that
+// arrived as a POST, and that exception is not a preference. A POST reaches this
+// line by exactly one route: a link password that verified. Everything else that
+// POSTs an alias is answered 405 above, so `r.Method == POST` here *is* the
+// password branch.
+//
+// **303, unconditionally, and not the configured status.** `REDIRECT_DEFAULT_STATUS`
+// admits 307, which RFC 9110 §15.4.8 forbids a user agent from changing the
+// method on — so a browser that had just POSTed `password=<secret>` to the
+// challenge form re-sent that body to the link's destination, a third-party host
+// the operator does not control. 303 is the one redirect status that *mandates*
+// a GET, so the body stops here whatever the instance is configured for. Not a
+// special case for 307: any future method-preserving status would be the same
+// disclosure, and this branch has no reason to forward a method at all.
+func (h *RedirectHandler) redirectStatus(r *http.Request) int {
+	if r.Method == http.MethodPost {
+		return http.StatusSeeOther
+	}
+	return h.status()
 }
 
 // probeStatus reports whether this address has spent its 404 allowance.

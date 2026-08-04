@@ -22,8 +22,8 @@ Most shorteners make you choose between a hosted product that owns your click
 data and a weekend script with no analytics. LinkCtrl aims at the third option:
 
 - **Links stay editable.** The destination changes; the short URL does not.
-  Redirects are always 302, because a 301 cached in browsers and intermediaries
-  cannot be recalled.
+  Redirects are never permanent — 302 by default — because a 301 cached in
+  browsers and intermediaries cannot be recalled.
 - **Analytics that cannot identify anybody.** No IP address is stored in any
   column. Visitors are counted with a daily-rotating HMAC that is deleted after
   two days — after which those counts cannot be linked to an address by anyone,

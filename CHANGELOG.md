@@ -70,6 +70,16 @@ migrations run at boot.
   it is preferred to one version applying another version's messages under
   different rules.
 
+- **`LINKCTRL_REDIRECT_DEFAULT_STATUS` accepts `303`, and never applies to a
+  password submission.** A correct link password is now answered `303` whatever
+  the instance is set to. On a `307` instance it used to be answered `307`, and
+  `307` forbids the browser from changing the method — so the browser re-sent the
+  password it had just submitted, as a POST body, to the link's destination: a
+  third-party host the link's owner chose and the operator does not control.
+  `303` is the one redirect status that mandates a `GET`, so the body stops here.
+  Nothing to do on upgrade, and `302` instances — the default — never had the
+  problem.
+
 ### Added
 
 - **An API key can now replace itself, unattended.** `POST /api/v1/api-keys/rotate`,
@@ -431,15 +441,20 @@ migrations run at boot.
     and lives in the database — it is **not** the approximate click total shown
     on the link's page, which is written in batches and can lose one. A HEAD
     request never spends a click, so a link checker cannot use up a one-time
-    link by asking whether it is alive. Raising a ceiling on a link that has
-    already stopped starts it working again.
+    link by asking whether it is alive — and it is refused all the same once
+    there is nothing left to spend, so a spent link answers 410 to HEAD as well
+    as to GET. Raising a ceiling on a link that has already stopped starts it
+    working again.
   - **A signature.** The plain short URL is refused with 403 and only a signed,
     unexpired one works. Signed URLs are minted from the link's page or with
     `POST /api/v1/links/{id}/sign`, carry an expiry of up to thirty days, and the
     expiry is inside the signature so it cannot be extended by editing the URL.
     The signature parameters are stripped before a link's query forwarding
     passes anything to the destination, so whoever runs the destination never
-    receives a URL they could replay.
+    receives a URL they could replay. A signed URL names the hostname the link
+    is published under — your own verified domain, when the link is on one — and
+    works only there: the hostname is inside the signature, so the same alias on
+    another of your hostnames is a different link and will not accept it.
 
 - **A link can divide its traffic between several destinations.** A link now
   carries a split test: a set of *arms*, each one a destination of its own, and

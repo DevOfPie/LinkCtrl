@@ -200,8 +200,16 @@ func (s *Service) Rotate(ctx context.Context, linkID, workspaceID uuid.UUID) (in
 	return position, nil
 }
 
-// Budget reports how much of a link's allowance has been spent, for the
-// dashboard. Never called on the redirect path.
+// Budget reports how much of a link's allowance has been spent, without
+// spending any of it.
+//
+// Two callers, and the second one is why this is worth a sentence. The
+// dashboard reads it to show a ceiling's remainder. The redirect path reads it
+// for **HEAD only** — a request asking whether the link is alive, which must be
+// answered 410 when the budget is gone and must not consume the budget in order
+// to find out. A GET never calls it: Consume answers the same question by
+// writing, and a read in front of that write would be a query on every gated
+// redirect for information the write already returns.
 func (s *Service) Budget(ctx context.Context, linkID uuid.UUID) (consumed int64, exhaustedAt *time.Time, err error) {
 	row, err := s.q.GetClickBudget(ctx, linkID)
 	if err != nil {

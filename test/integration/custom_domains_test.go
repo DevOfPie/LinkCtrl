@@ -20,9 +20,11 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/gate"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
+	"github.com/DevOfPie/LinkCtrl/internal/ratelimit"
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
@@ -109,6 +111,16 @@ type domainFixture struct {
 	pool   *pgxpool.Pool
 	hosts  *redirect.HostCache
 	zone   *stubZone
+	// gates and defaultDomain exist for the gate tests in gates_test.go, which
+	// need both namespaces at once: M35's reopening is about two gates that were
+	// keyed on the instance default while the link lived somewhere else, and
+	// nothing can see that without a second hostname.
+	gates         *gate.Service
+	defaultDomain uuid.UUID
+	// limiter is the password limiter, with a ceiling of one guess, so a single
+	// wrong password empties exactly one bucket and which bucket it was is
+	// readable afterwards.
+	limiter *ratelimit.Limiter
 }
 
 func newDomains(t *testing.T) *domainFixture {
@@ -125,11 +137,14 @@ func newDomains(t *testing.T) *domainFixture {
 		TTL: time.Hour, NegativeTTL: time.Minute,
 	})
 	hosts := redirect.NewHostCache(pool, nil)
+	gateSvc := gate.NewService(pool, gate.Config{Hasher: authSvc.Hasher()})
+	limiter := ratelimit.New(1, ratelimit.Options{})
 
 	rootRedirect := &httpx.RootRedirect{Status: http.StatusFound}
 	linkSvc := link.NewService(pool, link.Config{
 		Policy: link.DefaultDestinationPolicy(), BaseURL: cfg.LinkOrigin(), Cache: resolver,
 		SplitHosts: true, RootCache: rootRedirect,
+		Hasher: authSvc.Hasher(), Gates: gateSvc,
 		DNS: zone,
 		// Local only: one process, so the broadcast half has nothing to reach.
 		// The cross-replica half is asserted separately, against two caches.
@@ -163,6 +178,7 @@ func newDomains(t *testing.T) *domainFixture {
 		RootRedirect: rootRedirect,
 		Redirect: &httpx.RedirectHandler{
 			Resolver: resolver, DomainID: dom.ID, Status: http.StatusFound,
+			Gates: gateSvc, PasswordLimiter: limiter,
 		},
 		Web: &httpx.Web{UI: renderer, Config: cfg, Auth: authSvc, Links: linkSvc},
 	}))
@@ -177,7 +193,8 @@ func newDomains(t *testing.T) *domainFixture {
 
 	return &domainFixture{
 		t: t, server: srv, links: linkSvc, owner: owner, pool: pool,
-		hosts: hosts, zone: zone,
+		hosts: hosts, zone: zone, gates: gateSvc, defaultDomain: dom.ID,
+		limiter: limiter,
 		client: &http.Client{
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},

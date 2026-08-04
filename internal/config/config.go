@@ -773,15 +773,20 @@ func (c Config) Validate() error {
 		add("REDIRECT_NEGATIVE_TTL: must not exceed 5m, got %s; a longer value makes "+
 			"a newly created link appear broken", c.Redirect.NegativeTTL)
 	}
+	// 303 joined the set when the password gate was made to answer one
+	// unconditionally: it is a status this server emits, so an operator who wants
+	// every redirect to carry it is asking for something the tree already does on
+	// one branch. It is temporary, it is never cached as permanent, and it
+	// mandates a GET.
 	switch c.Redirect.DefaultStatus {
-	case 301, 302, 307, 308:
+	case 301, 302, 303, 307, 308:
 		if c.Redirect.DefaultStatus == 301 || c.Redirect.DefaultStatus == 308 {
 			add("REDIRECT_DEFAULT_STATUS: %d is a permanent redirect and will be cached "+
 				"by browsers and intermediaries, so later edits to a link will not take "+
-				"effect. Use 302 or 307.", c.Redirect.DefaultStatus)
+				"effect. Use 302, 303 or 307.", c.Redirect.DefaultStatus)
 		}
 	default:
-		add("REDIRECT_DEFAULT_STATUS: must be 302 or 307, got %d", c.Redirect.DefaultStatus)
+		add("REDIRECT_DEFAULT_STATUS: must be 302, 303 or 307, got %d", c.Redirect.DefaultStatus)
 	}
 
 	if c.DB.MinConns > c.DB.MaxConns {

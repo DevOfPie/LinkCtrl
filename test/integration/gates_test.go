@@ -19,6 +19,7 @@ import (
 
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
+	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/gate"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
@@ -60,6 +61,18 @@ type gateFixture struct {
 // make a test that submits several passwords flaky for a reason it is not about.
 func newGates(t *testing.T, passwordLimit int) *gateFixture {
 	t.Helper()
+	return newGatesWithStatus(t, passwordLimit, http.StatusFound)
+}
+
+// newGatesWithStatus is newGates on an instance configured for some other
+// redirect status.
+//
+// It exists for one test, and the test is F81: `REDIRECT_DEFAULT_STATUS` admits
+// 307, and until this reopening the password gate answered whatever it was set
+// to. Every other fixture in this suite pins 302, which is why nothing here saw
+// it.
+func newGatesWithStatus(t *testing.T, passwordLimit, status int) *gateFixture {
+	t.Helper()
 	pool := newDB(t)
 
 	cfg := config.Config{
@@ -68,7 +81,7 @@ func newGates(t *testing.T, passwordLimit int) *gateFixture {
 	cfg.Auth.SignupMode = config.SignupOpen
 	cfg.Auth.SessionAbsoluteTTL = 30 * 24 * time.Hour
 	cfg.Auth.SessionIdleTTL = 7 * 24 * time.Hour
-	cfg.Redirect.DefaultStatus = http.StatusFound
+	cfg.Redirect.DefaultStatus = status
 
 	authSvc := auth.NewService(pool, auth.ServiceConfig{
 		Params: fastParams,
@@ -98,7 +111,7 @@ func newGates(t *testing.T, passwordLimit int) *gateFixture {
 		Auth:   authSvc,
 		Links:  linkSvc,
 		Redirect: &httpx.RedirectHandler{
-			Resolver: resolver, DomainID: dom.ID, Status: http.StatusFound,
+			Resolver: resolver, DomainID: dom.ID, Status: status,
 			Gates: gateSvc, PasswordLimiter: limiter,
 		},
 	}))
@@ -281,10 +294,12 @@ func TestPasswordLinkChallengeAndVerification(t *testing.T) {
 		t.Errorf("a wrong password produced Location: %q", loc)
 	}
 
-	// The right one answers the redirect itself.
+	// The right one answers the redirect itself — as a 303, which is the one
+	// status that mandates a GET and therefore the one that keeps the password
+	// body from being re-sent to the destination (D94, amending D53's 302).
 	resp = f.submit("/"+alias, url.Values{"password": {password}})
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("correct password = %d, want 302", resp.StatusCode)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("correct password = %d, want 303", resp.StatusCode)
 	}
 	if got := resp.Header.Get("Location"); got != "https://example.com/secret" {
 		t.Errorf("Location = %q, want the destination", got)
@@ -390,7 +405,10 @@ func TestPasswordSubmitPerformsNoSessionLookup(t *testing.T) {
 	}{
 		{"challenge", http.MethodGet, nil, http.StatusOK},
 		{"wrong password", http.MethodPost, url.Values{"password": {"nope"}}, http.StatusOK},
-		{"correct password", http.MethodPost, url.Values{"password": {password}}, http.StatusFound},
+		// 303 rather than 302 since D94; the tripwire is about session lookups and
+		// does not care which redirect status, but a stale number here would read
+		// as an assertion that the status is 302.
+		{"correct password", http.MethodPost, url.Values{"password": {password}}, http.StatusSeeOther},
 	} {
 		var body *strings.Reader
 		if tc.form != nil {
@@ -575,6 +593,94 @@ func TestHeadDoesNotSpendAClick(t *testing.T) {
 	if resp := f.visit("/" + alias); resp.StatusCode != http.StatusFound {
 		t.Fatalf("the first real visit after a HEAD = %d, want 302; a HEAD must not "+
 			"spend the one click this link has", resp.StatusCode)
+	}
+}
+
+// TestHeadOnASpentLinkIsRefused is the other half of the sentence above, and
+// the half that was missing (F78).
+//
+// *Never spends a click* and *never checks whether there is one* are different
+// claims, and the code delivered the second while the milestone promised the
+// first. The consequence is not a nicety: an exhausted one-time link answered
+// 302 with its destination in `Location` to every HEAD, forever, and the click
+// recorder skips HEAD too, so the disclosure left nothing behind to notice.
+//
+// Repeated three times deliberately. A budget that HEAD consumed would also make
+// the first of these 410 — by destroying the link — so one request cannot tell
+// the fix from the outcome D53 refuses.
+func TestHeadOnASpentLinkIsRefused(t *testing.T) {
+	f := newGates(t, 0)
+	f.setupOwner()
+
+	alias, id := f.createGated(map[string]any{
+		"url": "https://example.com/secret-destination", "one_time": true,
+	})
+
+	if resp := f.visit("/" + alias); resp.StatusCode != http.StatusFound {
+		t.Fatalf("the first visit = %d, want 302", resp.StatusCode)
+	}
+	if resp := f.visit("/" + alias); resp.StatusCode != http.StatusGone {
+		t.Fatalf("the second visit = %d, want 410", resp.StatusCode)
+	}
+
+	for i := range 3 {
+		resp := f.raw(http.MethodHead, "/"+alias, nil)
+		if resp.StatusCode != http.StatusGone {
+			t.Fatalf("HEAD %d on a spent link = %d, want 410.\n"+
+				"A GET has already been told this link is gone; answering a HEAD "+
+				"anything else publishes the destination of a link nobody may "+
+				"follow, to whoever asks with the cheaper method.", i+1, resp.StatusCode)
+		}
+		if loc := resp.Header.Get("Location"); loc != "" {
+			t.Fatalf("HEAD %d carried Location: %q", i+1, loc)
+		}
+	}
+
+	// And it is still the non-consuming read D53 bought. Three HEADs against a
+	// budget of one would read as four consumed if any of them wrote.
+	consumed, _, err := f.gates.Budget(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if consumed != 1 {
+		t.Errorf("consumed = %d after one GET and three HEADs, want 1; HEAD must "+
+			"answer from the counter without adding to it", consumed)
+	}
+}
+
+// TestACorrectPasswordAnswersASeeOther is F81.
+//
+// On an instance configured for 307 the password POST used to be answered with
+// 307, and RFC 9110 §15.4.8 forbids a user agent changing the method — so the
+// browser re-sent `password=<secret>` as a POST body to the link's destination,
+// a third-party host the operator does not control. 303 is the one redirect
+// status that mandates a GET.
+func TestACorrectPasswordAnswersASeeOther(t *testing.T) {
+	f := newGatesWithStatus(t, 0, http.StatusTemporaryRedirect)
+	f.setupOwner()
+
+	// The instance really is configured for a method-preserving status, or the
+	// rest of this proves nothing.
+	open, _ := f.createGated(map[string]any{"url": "https://example.com/open"})
+	if resp := f.visit("/" + open); resp.StatusCode != http.StatusTemporaryRedirect {
+		t.Fatalf("an ordinary link = %d, want 307; this fixture is meant to be the "+
+			"307 instance", resp.StatusCode)
+	}
+
+	const password = "the-link-password"
+	alias, _ := f.createGated(map[string]any{
+		"url": "https://example.com/secret", "password": password,
+	})
+
+	resp := f.submit("/"+alias, url.Values{"password": {password}})
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("a correct password on a 307 instance = %d, want 303.\n"+
+			"307 preserves the method, so the browser re-POSTs the password body "+
+			"to the destination — a plaintext credential handed to whoever runs it.",
+			resp.StatusCode)
+	}
+	if got := resp.Header.Get("Location"); got != "https://example.com/secret" {
+		t.Errorf("Location = %q, want the destination", got)
 	}
 }
 
@@ -785,6 +891,196 @@ func (f *gateFixture) workspaceID() uuid.UUID {
 		f.t.Fatal(err)
 	}
 	return id
+}
+
+// --- the namespace a gate is keyed on (F79, F80) -----------------------------
+//
+// **These run on the custom-domain fixture, and that is the whole point.** Every
+// gate test above it wires `DomainID` from `ResolveDefaultDomain`, so the
+// instance default and the link's own domain are the same uuid and two gates
+// keyed on the wrong one of them read identically. A second hostname is the
+// cheapest arrangement in which they differ at all.
+
+// verifiedHost verifies a hostname and waits for this replica to know it.
+//
+// `verify` alone is not enough: the invalidator refreshes the host cache in a
+// goroutine, deliberately, so that a subscriber's read loop never blocks on
+// Postgres. Every test here asks the custom hostname for something immediately
+// afterwards, and a background reload that had not landed answers 404 from the
+// split-host router — a failure about scheduling, in a test about signatures.
+// The existing domain tests reload synchronously for the same reason.
+func verifiedHost(f *domainFixture, hostname string) *link.Domain {
+	f.t.Helper()
+	d := f.verify(f.register(hostname))
+	if err := f.hosts.Reload(f.t.Context()); err != nil {
+		f.t.Fatal(err)
+	}
+	return d
+}
+
+// gatedOn creates a link on a named domain, with gates.
+func gatedOn(f *domainFixture, domainID *uuid.UUID, alias, url string, in link.CreateInput) *domain.Link {
+	f.t.Helper()
+	in.URL, in.Alias, in.DomainID = url, alias, domainID
+	l, err := f.links.Create(f.t.Context(), f.owner, in)
+	if err != nil {
+		f.t.Fatalf("create %s: %v", alias, err)
+	}
+	return l
+}
+
+// postOn submits a form to one of the fixture's hostnames.
+func postOn(f *domainFixture, host, path string, form url.Values) *http.Response {
+	f.t.Helper()
+	req, err := http.NewRequestWithContext(f.t.Context(), http.MethodPost,
+		f.server.URL+path, strings.NewReader(form.Encode()))
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	req.Host = host
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := f.client.Do(req)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	f.t.Cleanup(func() { _ = resp.Body.Close() })
+	return resp
+}
+
+// TestASignedLinkWorksOnACustomHostname is F79 and F80 together, because they
+// are the two halves of one round trip: the URL that is minted, and the request
+// that is verified.
+//
+// Before this reopening the feature was **wholly non-functional** on a custom
+// hostname. `Sign` built the URL on the instance's own host, and the verifier
+// checked the MAC against the instance's own domain id while the signer had used
+// the link's — so the legitimate holder of a signature was answered 403 by a link
+// they had just been given a URL for, on a hostname that URL did not name.
+func TestASignedLinkWorksOnACustomHostname(t *testing.T) {
+	f := newDomains(t)
+	d := verifiedHost(f, customHost)
+	l := gatedOn(f, &d.ID, "embargo", "https://example.com/embargoed",
+		link.CreateInput{RequireSignature: true})
+
+	// The gate is on, or the 302 below would mean nothing.
+	if resp := f.get(customHost, "/embargo"); resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("an unsigned request = %d, want 403", resp.StatusCode)
+	}
+
+	signed, err := f.links.Sign(t.Context(), f.owner, l.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	parsed, err := url.Parse(signed.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Host != customHost {
+		t.Errorf("the signed URL is %q, on host %q, want %q.\n"+
+			"Alias uniqueness is (domain_id, alias) and the default domain is shared "+
+			"across workspaces, so a signed URL on the wrong host does not merely "+
+			"404 — where that alias exists there it resolves somebody else's link.",
+			signed.URL, parsed.Host, customHost)
+	}
+
+	resp := f.get(customHost, "/embargo?"+parsed.RawQuery)
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("a signature minted for this link = %d on the hostname it was minted "+
+			"for, want 302.\nThe domain id is inside the MAC; the verifier has to use "+
+			"the domain the request arrived on, not the one this process resolved at "+
+			"boot.", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Location"); got != "https://example.com/embargoed" {
+		t.Errorf("Location = %q, want the destination", got)
+	}
+}
+
+// TestASignatureDoesNotCrossHostnames is the property the domain id is in the
+// MAC to provide, asserted for the first time in the arrangement that can break
+// it.
+//
+// Two links, the same alias, two hostnames, one workspace — which is exactly
+// what per-domain alias uniqueness makes possible. A signature minted for one of
+// them verified against the *other* while the verifier read a boot constant,
+// because from its point of view the two requests were the same alias on the
+// same domain.
+func TestASignatureDoesNotCrossHostnames(t *testing.T) {
+	f := newDomains(t)
+
+	// The default-domain link first: once a workspace verifies a hostname, that
+	// hostname becomes the default for its new links (D71), so creating this one
+	// afterwards would quietly put both links on the same domain and the test
+	// would pass without proving anything.
+	onDefault := gatedOn(f, nil, "shared", "https://example.com/on-the-default-host",
+		link.CreateInput{RequireSignature: true})
+	d := verifiedHost(f, customHost)
+	gatedOn(f, &d.ID, "shared", "https://example.com/on-the-custom-host",
+		link.CreateInput{RequireSignature: true})
+
+	signed, err := f.links.Sign(t.Context(), f.owner, onDefault.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	parsed, err := url.Parse(signed.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Host != linkHost {
+		t.Fatalf("the signed URL is on %q, want the instance's own link host %q",
+			parsed.Host, linkHost)
+	}
+
+	// Where it was minted, it works.
+	resp := f.get(linkHost, "/shared?"+parsed.RawQuery)
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("the signature = %d on its own host, want 302", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Location"); got != "https://example.com/on-the-default-host" {
+		t.Errorf("Location = %q, want the link it was minted for", got)
+	}
+
+	// And nowhere else.
+	crossed := f.get(customHost, "/shared?"+parsed.RawQuery)
+	if crossed.StatusCode != http.StatusForbidden {
+		t.Errorf("a signature minted for %s/shared answered %d on %s, want 403.\n"+
+			"They are two links in two namespaces; a capability issued for one of "+
+			"them opening the other is what the domain id in the MAC exists to stop.",
+			linkHost, crossed.StatusCode, customHost)
+	}
+	if loc := crossed.Header.Get("Location"); loc != "" {
+		t.Errorf("the crossed request carried Location: %q — the other link's "+
+			"destination, handed to somebody holding a signature for a different link", loc)
+	}
+}
+
+// TestThePasswordBucketIsKeyedOnTheRequestsHostname is the second limb of F79.
+//
+// It fails safe rather than open — one shared bucket admits fewer guesses, not
+// more — and it is fixed here anyway because it is the same defect reading the
+// same boot constant, and a limb left behind is a comment that has quietly
+// stopped being true.
+func TestThePasswordBucketIsKeyedOnTheRequestsHostname(t *testing.T) {
+	f := newDomains(t)
+	d := verifiedHost(f, customHost)
+	gatedOn(f, &d.ID, "locked", "https://example.com/secret",
+		link.CreateInput{Password: "the-link-password"})
+
+	if resp := postOn(f, customHost, "/locked", url.Values{"password": {"wrong"}}); resp.StatusCode != http.StatusOK {
+		t.Fatalf("a wrong password = %d, want 200 with the retry page", resp.StatusCode)
+	}
+
+	// The fixture's ceiling is one guess, so exactly one bucket is now empty and
+	// which one it is says which domain the limiter was keyed on.
+	if ok, _ := f.limiter.AllowKey("pw:" + d.ID.String() + ":locked"); ok {
+		t.Errorf("the guess left %s's own bucket full; it was charged somewhere else",
+			customHost)
+	}
+	if ok, _ := f.limiter.AllowKey("pw:" + f.defaultDomain.String() + ":locked"); !ok {
+		t.Errorf("the guess was charged to the *instance default's* bucket for the " +
+			"alias `locked`.\nThe comment on this key says the same alias on two " +
+			"domains is two links; keyed on the domain resolved at boot it was one " +
+			"bucket shared by every hostname on the instance.")
+	}
 }
 
 // --- brute force (D54) -------------------------------------------------------

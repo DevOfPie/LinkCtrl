@@ -148,6 +148,8 @@ file. Append a row when you append an entry.
 | [M44.9's triage, six milestones reopened, and a dependency reversed](#2026-08-04--m449s-triage-six-milestones-reopened-and-a-dependency-reversed) | Which eleven rows became work and which milestone each reopens; why the owner took the wider option against the recommendation, and that the narrow set would have shipped two features that do not work; D91 reversing the punycode decision to add golang.org/x/net/idna, the two costs accepted with it and the homograph check it repairs; F85 approved but not a reopening; F29 moved to Closed and the four rows that gained evidence rather than neighbours |
 | [M40, what a verification may write, and what a pass may be delayed by](#2026-08-04--m40-what-a-verification-may-write-and-what-a-pass-may-be-delayed-by) | D92 — why the write that sets `verified_at` carries the hostname and token it proved rather than an id, and why neither a transaction nor `FOR UPDATE` closes the gap a rename commits into; the audit record stamped from the checked name so the log is not sourced from the thing it is evidence about; serving hostnames drawn before pending ones, and a per-workspace registration cap, because what may delay a hard stop must not be creatable at will |
 | [M30, the same claim in a different alphabet](#2026-08-04--m30-the-same-claim-in-a-different-alphabet) | D93 — why a host written outside ASCII reached none of the four mechanisms the trailing dot walked past, and why that is one missing conversion rather than four bugs; UTS-46 ToASCII folded at D46's existing fold, mapping before the dot; the profile measured against `idna.Lookup`, which refuses three destinations this validator accepts; the ASCII skip and why it cannot let a spelling through; an unmappable host refused with an untiered code; the list entries folded by the same function, and the address rule moved after the fold; what D91 cost, and `isHomograph` working as designed for the first time |
+| [M35's reopening, two amendments made at acceptance](#2026-08-04--m35s-reopening-two-amendments-made-at-acceptance) | A1 — the reopening claimed the F79 fix invalidates every minted signature; the signer was never wrong, so nothing that works stops. The first M44.9 fix-trap that was itself wrong, and why that position produces them. A2 — the inherited rule's label moves from "Redirects are 302" to "never permanent", the assertion unchanged, because the verified-password POST now answers 303 |
+| [M35, which namespace a gate is keyed on](#2026-08-04--m35-which-namespace-a-gate-is-keyed-on) | D94 — three corrections and one amendment: a verified password answers **303** unconditionally and D53's *"answers the 302 itself"* is superseded, with 303 joining `REDIRECT_DEFAULT_STATUS`'s allowed set; the signature and the password bucket keyed on the domain the request arrived on rather than the boot constant; the signed URL minted on the link's own hostname, with an unreadable domain row an error rather than a fallback; HEAD reading the budget without spending it, and what that read costs; why the fix invalidates no signature that ever worked, against a constraint that expected it to; the fixture in which the defect was testable at all |
 
 ---
 
@@ -11954,3 +11956,225 @@ away.
 the spelling it was stored with — the fold runs on write, already-accepted links
 are never re-checked, and that is *Not in Phase 2* rather than something this
 reopening quietly narrowed.
+
+---
+
+## 2026-08-04 — M35, which namespace a gate is keyed on
+
+[M35](phase-details/m35.md) shipped four gates. Four of its claims turned out
+false, the owner reopened it on [M44.9](phase-details/m44.9.md)'s triage, and
+this is **D94** — one decision number for three connected choices, because they
+are the same mistake made in three places plus one status code.
+
+Two of the four rows are the same defect. `redirect.go` has computed the
+request's real domain since [M40](phase-details/m40.md) — the instance default,
+or the verified custom hostname the request arrived on — and `passGates` was
+never given it, so the signature verifier and the per-alias password bucket both
+read `h.DomainID`, the constant this process resolved at boot. Alias uniqueness
+is `(domain_id, alias)`. Keying on the wrong one of the two is therefore not a
+near miss; it is a statement about a different link.
+
+### The status a verified password is answered with, and what it amends
+
+**303, unconditionally.** Not `REDIRECT_DEFAULT_STATUS`, which
+`config.go` permits to be **307**, and which `docs/configuration.md` advertises.
+
+RFC 9110 §15.4.8 forbids a user agent from changing the request method on a 307.
+`internal/httpx/static/password.html` is a `<form method="post">` with no
+`action`, so the body is `password=<secret>` addressed to the alias — and a 307
+told the browser to send that body again, to the `Location` it had just been
+handed, which is the link's destination: a third-party host the link's owner
+chose and the operator does not control. The feature was also simply broken
+there, because that destination answers 405 to a POST it never expected. Neither
+half is visible on a 302 instance, which is the default, which is why every
+fixture in the suite pinned 302 and nothing saw it.
+
+**This amends [D53](#2026-08-02--m35-the-one-post-the-redirect-tree-is-allowed),
+and the amendment is one clause of it.** D53 reads *"It verifies argon2id against
+Postgres and answers the **302** itself"*, and that is now 303. What D53 actually
+decided — one POST route on the redirect tree, no CSRF token, and the condition
+that the waiver is revisited if anything is ever made to persist — is untouched,
+because the waiver rests on the POST **issuing nothing to the browser**. A
+different status issues nothing either. It is amended rather than quietly
+contradicted because the number is written into the entry, into Plan.md's D53 row
+and into `docs/usage.md`, and a reader finding 303 in the code and 302 in three
+documents has no way to tell a decision from a regression.
+
+**Not a special case for 307.** The branch could have read *"if the configured
+status is 307, use 302"*, and that leaves the next method-preserving status to
+rediscover this. The password branch has no reason to forward a method at all, so
+it names the one status that mandates a GET and stops depending on configuration.
+
+**303 joins the allowed set** in `config.go` and in `docs/configuration.md`.
+It is a status this tree now emits, so refusing to let an operator configure it
+would be the validator disagreeing with the server; it is temporary, and unlike
+307 it cannot re-send a body.
+
+### Why HEAD had to start asking, and what that costs
+
+`docs/SECURITY.md` says *"HEAD never spends a click"*, and the code delivered
+something strictly stronger: HEAD skipped the budget gate entirely. `gatePassed`
+is `answered:false`, so the request fell through to the ordinary redirect write.
+An exhausted one-time link answered **302 with its destination in `Location`** to
+every HEAD, repeatably and forever, and `record()` skips HEAD too — so the
+disclosure left no click row behind to notice it by.
+
+**HEAD still consumes nothing, and that is not negotiable.** D53's reasoning
+names the outcome: a link checker that could burn a one-time link by asking
+whether it is alive destroys the feature. So the fix is the other half of the
+question — `gate.Service.Budget` is a non-consuming read that already existed for
+the dashboard, and the HEAD branch reads it and answers 410 when the budget is
+gone.
+
+**The predicate is `consumed >= limit`, not `exhausted_at != nil`.** The stamp is
+written by the click that reaches the ceiling, so a ceiling *lowered* afterwards
+leaves a spent link with no stamp — and `consumed >= limit` is the same
+comparison `ConsumeClickBudget` makes in its conflict clause, which is what makes
+HEAD and GET agree about the word "spent".
+
+**What it costs, said out loud.** One primary-key read, on a HEAD, to a link that
+carries a budget. A GET is unchanged: it performs exactly the one upsert it
+always did, and no read was put in front of it — that would have added a query to
+every gated redirect to buy an answer the upsert already returns, and it is the
+shape m35.md's reopening explicitly forbids. A link with no budget, which is
+every link on a default instance, reaches none of it.
+
+### The signed URL was built on the instance's own host
+
+`internal/link/gates.go` concatenated `s.baseURL` under a comment claiming it was
+*"built from the same base URL the short link is published under"*.
+`Service.shortURL` — the domain-aware helper, called everywhere else — was
+skipped only here, and its own doc names the failure.
+
+The consequence is worse than a broken link, and this is why it is a
+**high**-severity row rather than a cosmetic one. The default domain is shared
+across workspaces and alias uniqueness is `(domain_id, alias)`, so a signed URL
+minted for `go.acme.com/promo` and emitted as `links.example.com/promo` does not
+404 where that alias exists on the default domain — **it resolves a different
+workspace's link**, and the recipient is redirected to a stranger's destination.
+
+**`hostnameFor` returns two values now, and that is the whole fix.** It used to
+answer `""` both for *this is the instance default, whose public name is
+`LINK_BASE_URL`* and for *the row could not be read*, so every caller treated an
+absent answer as the correct one. `shortURL` keeps that behaviour deliberately —
+a list page describing twenty-five links should not fail over one unreadable row,
+and the instance's own host is the address every link had before custom domains
+existed. `Sign` takes `shortURLStrict` instead and errors, because a signature is
+not a description of a link; it is a capability addressed to a hostname, and
+guessing the hostname is how this went wrong in the first place.
+
+### What the fix does *not* invalidate, against what the reopening expected
+
+m35.md's constraint list says the domain fix *"invalidates every signature
+already minted"*. **It does not, and the difference is worth recording rather than
+inheriting.** `link.Sign` has always signed with `row.DomainID`, the link's own
+domain — the signer was correct and only the verifier was wrong. So:
+
+- A link on the **instance default**, reached on the default host: the request's
+  domain and the boot constant are the same uuid. Its signatures verify exactly
+  as they did.
+- A link on a **verified custom hostname**: its signatures never verified at all.
+  They begin working.
+
+Nothing that worked stops working. What changes is that something wholly
+non-functional starts, which is the opposite direction from the one the
+constraint warned about — and there was no minted signature anywhere that
+depended on the verifier's mistake, because a signature that depended on it was
+one nobody could have produced.
+
+### The limb that failed safe, fixed anyway
+
+The password bucket keyed `pw:<boot domain>:<alias>` rather than
+`pw:<request domain>:<alias>`, under a comment reading *"the same alias on two
+domains is two links"*. That limb fails **safe** — one shared bucket admits fewer
+guesses across two hostnames, not more — and it is fixed here because it is the
+same constant read in the same file for the same reason, and because a comment
+that has quietly stopped being true is how the next reader learns the wrong rule.
+m35.md required it: patching the signature alone would have left it with no test
+to catch it.
+
+### The tests, and the arrangement that was missing
+
+Three of the five new tests run on the **custom-domain fixture**, and that is the
+finding underneath the finding. Every gate test written for M35 wires `DomainID`
+from `ResolveDefaultDomain`, so the instance default and the link's own domain
+are the same value and a gate keyed on the wrong one of them reads identically.
+The defect was not under-tested; it was untestable in the only arrangement the
+suite had. `newDomains` gained a gate service and a password limiter so that two
+namespaces exist at once.
+
+`TestASignedLinkWorksOnACustomHostname` and `TestASignatureDoesNotCrossHostnames`
+are the two consequences of one omission, and both fail on a build without the
+fix — the first with 403 for the legitimate holder, the second with **302 and the
+other link's destination in `Location`**.
+`TestThePasswordBucketIsKeyedOnTheRequestsHostname` reads which of two buckets a
+single guess emptied, on a fixture with a ceiling of one.
+`TestHeadOnASpentLinkIsRefused` asks three times, deliberately: a budget that HEAD
+*consumed* would also make the first request 410, by destroying the link, so one
+request cannot tell the fix from the outcome D53 refuses. It then re-reads the
+counter, which must still say 1.
+`TestACorrectPasswordAnswersASeeOther` needed a fixture at 307, which is the
+configuration nothing in the suite had.
+
+One of them was flaky on the first three runs and the cause is worth keeping:
+`verify` refreshes the verified-hostname cache in a **goroutine**, on purpose, so
+that a subscriber's read loop never blocks on Postgres — so a test that asks the
+custom hostname for something immediately afterwards is racing a background
+reload and gets the split-host 404. `verifiedHost` reloads synchronously, as the
+existing domain tests already do.
+
+[F78](deferred-findings.md), [F79](deferred-findings.md),
+[F80](deferred-findings.md) and [F81](deferred-findings.md) are closed against
+M35.
+
+## 2026-08-04 — M35's reopening, two amendments made at acceptance
+
+Both were found by the worker building the milestone and both are corrections of
+fact rather than of what is asserted, so they were amended rather than put to the
+owner, per [phase-loop.md](phase-loop.md#amending-a-bullet). Each carries the text
+as it stood, as amended, and the tree fact that forced it.
+
+**A1 — M35's reopening section claimed a behaviour change that does not happen.**
+
+Stood: *"**F79: the fix invalidates every signature already minted.** That is
+correct and unavoidable — they were minted against the wrong key material."*
+Amended to: *"**F79: no signature that works today stops working.**"*
+
+Tree fact: `internal/link/gates.go:132` reads
+`gate.Sign(secret, row.DomainID, row.Alias, expires)` and always has — the **minting**
+side was never wrong. Only `redirect_gates.go` was, reading the boot-resolved
+default. So for a link on the default domain `row.DomainID` and `h.DomainID` are
+the same value and its signatures verified correctly before this fix and verify
+correctly after it; for a link on a custom domain no signature ever verified, so
+there is nothing there to invalidate. The claim came from M44.9's verifier, which
+named it as a fix-trap, and it was carried into the reopening section without being
+checked against the signer. Nobody could have decided it differently: it is what
+one line of code does.
+
+Worth keeping because of where the error came from. The fix-traps M44.9 produced
+were the most valuable thing in the review and this is the first one that was
+wrong — a verifier reasoning about a fix it did not write, which is exactly the
+position that produces a plausible mechanism nobody ran.
+
+**A2 — the inherited rule's label stopped describing the tree.**
+
+Stood: *"| Redirects are 302 | Never 301. Forever. |"*. Amended so the label reads
+*"Redirects are never permanent"* and the consequence names the one exception.
+
+Tree fact: `internal/httpx/redirect.go:557-559` now answers **303** for a POST,
+which is the verified-password branch and only that branch, because `:274` refuses
+every other POST to an alias. D94 records why, and F81 is the row that forced it.
+
+This is the inherited-rules table, which binds every milestone, so the distinction
+matters: **what the rule asserts is unchanged**. It has always been about
+permanence — a 301 or a 308 tells a crawler to stop asking, and this project's
+whole redirect design depends on being asked every time. A 303 is temporary, tells
+the browser to drop the method and body, and is the narrower answer for a branch
+that has no reason to forward either. The *label* said 302 and no longer described
+the tree; the consequence column is what carries the rule and it is intact.
+
+Amended rather than prompted because the owner approved F81's fix on M44.9's
+triage and 303 is the only status that does what the fix needs — but it is named
+here rather than left in a diff, because a silently edited inherited rule is the
+one amendment that would be invisible in exactly the file that exists to make
+scope visible.

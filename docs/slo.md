@@ -708,6 +708,112 @@ Twenty cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%, 100%,
 100%, 100%, 100%, 100%, 99.743%, 100%, 100%, 99.505%, 100%, **100%**, **100%**
 and **100%** under 20ms.
 
+### Re-measured for M35's reopening (2026-08-04)
+
+[M35](build-notes/phase-details/m35.md) was reopened on
+[M44.9](build-notes/phase-details/m44.9.md)'s triage for four defects in the
+gates, and three of the four are on the redirect path — so the inherited rule
+applies and this is a k6 run rather than a note. **Both columns were re-taken**,
+not only the SLO's own, because the milestone under repair is the one whose claim
+is about gates.
+
+**What actually changed on each path, so the numbers are read against something.**
+On the **ungated** path: one method comparison. `h.status()` became
+`h.redirectStatus(r)`, which tests `r.Method == http.MethodPost` before returning
+the configured status, because a verified link password must be answered `303`
+and not a `307` that would have the browser re-send the password body to the
+destination. Nothing else — every other change is behind `Snapshot.Gated()`, which
+is false for every link on a default instance. On the **gated** path: `passGates`
+takes the request's domain id as an argument, a value `ServeHTTP` already held in
+a local, so the signature and the password bucket stop keying on the constant
+resolved at boot. No query was added, and none was removed.
+
+| | Target | **Ungated** | **Every link click-limited** |
+| --- | --- | --- | --- |
+| Cached redirect, server-side | p99 < 20ms | **100% of 239,999 under 20ms**; **100% under 0.5ms** | 99.405% of 239,903 under 20ms; 99.028% under 10ms; 92.078% under 5ms; 37.232% under 2.5ms; **0% under 1ms** |
+| Cached redirect, generator-side | — | avg **92.76µs**, median 87.91µs, p(90) 109.48µs, p(95) 118.41µs, max 7.64ms, min 38.76µs | avg **3.52ms**, median 3.12ms, p(90) 4.78ms, p(95) 5.58ms, max 94.52ms |
+| Sustained rate | 2,000 rps for 2m | 2,000.0 rps, 239,999 requests, zero failures | 1,999.1 rps, 239,903 requests, zero failures, 99 dropped iterations |
+| Dataset | 100k links, 5M events | 100,000 links, 5,000,000 events, freshly seeded | same |
+| Cache mix | hits only | 239,999 memory, 0 redis, 0 database | 239,903 memory, 0 redis, 0 database |
+| Redirect pool | — | 0 acquire waits | 0 acquire waits |
+
+**The ungated column is the SLO and it did not move.** 92.76µs against
+[M41](#re-measured-for-m41-2026-08-03)'s 87.04µs and
+[M40](#re-measured-for-m40-2026-08-03)'s 87.44µs, on the same host and a dataset
+seeded the same way — a few microseconds, which is inside the run-to-run spread
+this document has recorded between identical configurations since its first
+section. 100% of requests under half a millisecond against a 20ms budget, which
+is where it has been for every ungated run on this host.
+
+**The gated column is the same durable-counter cost, measured a third time.**
+99.405% under 20ms here, against 99.743% for
+[M35](#re-measured-for-m35-2026-08-03)'s own gated run and 99.505% for
+[M36](#re-measured-for-m36-2026-08-03)'s sequential column — the same table, the
+same `INSERT … ON CONFLICT DO UPDATE`, the same 5,000 hot aliases taking about
+forty-eight updates each inside two minutes. Three measurements of one mechanism
+landing between 99.4% and 99.75% is the spread of that mechanism, not a
+regression in it, and the median is 3.12ms against M35's 3.38ms and M36's 3.09ms.
+It is also, again, the one column that could not hold the offered rate: 99
+dropped iterations and 1,999.1 rps.
+
+#### What this run did **not** measure, and why
+
+**The HEAD branch, which is the only new I/O in the reopening.** A HEAD to a link
+that carries a click budget now performs one primary-key read of
+`link_click_budget` — `gate.Service.Budget`, non-consuming — so that an exhausted
+link answers 410 instead of publishing its destination to whoever asks with the
+cheaper method. k6 sends GET, and the load script's checks are `is 302` and
+`has Location`, so nothing above exercises it. It is stated rather than measured
+because the shape is not in doubt and the comparison that would matter is not
+available: the branch replaces *no query at all* with one indexed read, on a
+method that previously did no database work on this path, and there is no
+configuration in which it is slower than the `Consume` upsert the same link's GET
+already pays — which the right-hand column above prices at 3.12ms. **A GET is
+unchanged**, and that is the part worth checking rather than asserting: no read
+was put in front of the upsert, so the gated column is comparable with the two
+earlier runs of the same configuration, and it is.
+
+**The custom-domain half of the signature fix.** Verifying it needs a verified
+custom hostname, which needs DNS this instance cannot publish for itself; it is
+covered by `TestASignedLinkWorksOnACustomHostname` and
+`TestASignatureDoesNotCrossHostnames` instead. What the load run does establish
+about it is that threading the domain id through `passGates` cost nothing
+visible, which is what passing a value already in hand should cost.
+
+**The password gate**, for the reason M35's own section gives: it is an argon2id
+derivation on a POST that k6 cannot drive against 5,000 aliases without 5,000
+passwords.
+
+Verified live on the same image, before this section was written, because a fix
+this document reports on should be shown working on the binary the figures came
+from rather than only in a test process:
+
+- `/f78live`, a one-time link, answered **302** with
+  `https://example.com/secret-destination` to the first GET, **410** to the
+  second, and **410 with no `Location`** to three successive `HEAD` requests. That
+  third answer is the whole of F78 — it was 302 with the destination, three times
+  over, on the build this reopening replaces.
+- `/f81live`, a password link, answered **200** to a GET, **200** to a wrong
+  password, and **303** to the right one — on an instance configured
+  `REDIRECT_DEFAULT_STATUS=302`, which is what makes it evidence that the status
+  is unconditional rather than inherited.
+- `/f80live`, a signature-gated link, answered **403** unsigned and **302** to the
+  URL `POST /api/v1/links/{id}/sign` minted, which named this instance's own link
+  host — the correct hostname for a link on the default domain, and the control
+  for the custom-domain case the tests cover.
+
+Taken on image `sha256:c7441cad0036…` (`linkctrl:test`, built 2026-08-04 from the
+M35-reopening working tree at `v0.1.0-83-g98cc6de-dirty`), rebuilt and recreated
+from the tree immediately before the runs, against a freshly seeded
+`make seed-slo` dataset. Both cache tiers were emptied and the container
+restarted before each column. Same host as
+[M35](#re-measured-for-m35-2026-08-03) onward.
+
+Twenty-two cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%,
+100%, 100%, 100%, 100%, 100%, 99.743%, 100%, 100%, 99.505%, 100%, 100%, 100%,
+100%, **100%** and **99.405%** under 20ms — the last of those being the gated
+configuration, which is a different path rather than a regression in this one.
+
 ## Reproducing it
 
 ```sh

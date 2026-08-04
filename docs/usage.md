@@ -89,7 +89,8 @@ else's browser probe their own network.
 ### Editing, archiving, deleting
 
 - **Editing the destination** is the point of the product: the short URL does not
-  change. Redirects are 302 precisely so an edit takes effect.
+  change. Redirects are never permanent — 302 by default — precisely so an edit
+  takes effect.
 - **Changing the alias** breaks anything already pointing at the old one, and
   frees it for reuse. The form says so.
 - **Archiving** stops redirecting but keeps the alias reserved and the analytics
@@ -654,7 +655,7 @@ SSRF the address refusals exist to prevent.
 | Active link | `302` with `Location`, `Cache-Control: private, no-store` |
 | Expired | `410 Gone` — distinct from 404 so crawlers and link checkers stop retrying |
 | Unknown, archived or disabled | `404` |
-| Password-protected, not yet answered | `200` with a small challenge page, `no-store` and `noindex`. Submitting the right password to the same URL answers the `302` directly. Not `401`: there is no authentication scheme being offered, and a `401` without one is a status no client can act on |
+| Password-protected, not yet answered | `200` with a small challenge page, `no-store` and `noindex`. Submitting the right password to the same URL answers the redirect directly, as a `303` — the one status that mandates a `GET`, so the password body stops at this server whatever `LINKCTRL_REDIRECT_DEFAULT_STATUS` is set to. Not `401`: there is no authentication scheme being offered, and a `401` without one is a status no client can act on |
 | Password-protected, wrong password | `200` with the same page and an error on it. Guesses are rate-limited per address **and** per link |
 | One-time or click-limited, budget spent | `410 Gone`, for the same reason an expired link is |
 | Signature required, and absent, wrong or expired | `403` with a fixed page. One answer for all four causes, so it cannot be asked which one applies |
@@ -700,7 +701,10 @@ Three things about it are worth knowing before switching it on:
   up.
 
 `HEAD` works, does not record a click, and **does not spend one either** — so a
-link checker cannot use up a one-time link by asking whether it is alive.
+link checker cannot use up a one-time link by asking whether it is alive. It is
+still refused when there is nothing left to spend: a link whose budget is gone
+answers `410` to `HEAD` exactly as it does to `GET`, because *not spending a
+click* was never meant to mean *not checking whether there is one*.
 
 ### Gated links
 
@@ -731,7 +735,11 @@ whoever passes a gate holds the destination URL afterwards.
 
   Up to thirty days. The expiry is inside the signature, so editing the URL does
   not extend it, and both parameters are stripped before query forwarding
-  reaches the destination. There is no revoke button — signatures expire, and
+  reaches the destination. The URL is minted on **the hostname the link is
+  published under**, which is the workspace's own verified hostname when it has
+  one, and the signature verifies only there: the domain is inside the MAC, so
+  the same alias on another hostname is a different link and does not accept it.
+  There is no revoke button — signatures expire, and
   invalidating every outstanding one for a workspace means clearing
   `workspaces.signing_secret`, which [SECURITY.md](SECURITY.md) documents.
 

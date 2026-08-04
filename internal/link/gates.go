@@ -134,9 +134,24 @@ func (s *Service) Sign(ctx context.Context, actor *auth.Identity, id uuid.UUID, 
 		return nil, err
 	}
 
-	// Built from the same base URL the short link is published under, so a
-	// signed URL and an unsigned one differ only by the query.
-	signed := s.baseURL + "/" + row.Alias + "?" + params.Encode()
+	// Built on the hostname this link is actually published under — the same
+	// helper `short_url` is built with, so a signed URL and an unsigned one
+	// really do differ only by the query. The comment here used to say that
+	// while the code concatenated `s.baseURL`, which is the instance's own host
+	// and not the link's: alias uniqueness is `(domain_id, alias)` and the
+	// default domain is shared across workspaces, so a signed URL for a link on
+	// go.acme.com did not merely 404 — where that alias also exists on the
+	// default domain it resolved a **different workspace's** link and sent the
+	// recipient to a stranger's destination.
+	//
+	// Strict, because this is the one call site where the fallback is the bug
+	// again. A hostname lookup that cannot answer must not quietly produce the
+	// instance's own host on a capability addressed to somebody.
+	base, err := s.shortURLStrict(ctx, row.DomainID, row.Alias)
+	if err != nil {
+		return nil, fmt.Errorf("assemble signed url: %w", err)
+	}
+	signed := base + "?" + params.Encode()
 	if _, perr := url.Parse(signed); perr != nil {
 		return nil, fmt.Errorf("assemble signed url: %w", perr)
 	}
