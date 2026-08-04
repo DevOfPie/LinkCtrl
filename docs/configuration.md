@@ -265,13 +265,13 @@ you a named feed rather than a boolean.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `LINKCTRL_FEED_URL` | *(empty)* | The endpoint, and the switch. Empty means no feed, no client, and no code path that sends a destination anywhere. **`https` only**: destinations are already going to somebody else's server and must not travel in clear as well. |
+| `LINKCTRL_FEED_URL` | *(empty)* | The endpoint, and the switch. Empty means no feed, no client, and no code path that sends a destination anywhere. **`https` only**: destinations are already going to somebody else's server and must not travel in clear as well. **No credential in the URL**: a username or password (`https://key:secret@feed.example/`) is refused at boot — Go would send it as Basic auth, so it would work, and `/feeds` shows every signed-in user this endpoint. Put it in `FEED_AUTH_TOKEN`. The scheme, host and path are what `/feeds` prints; a query string and a fragment are not, so a key in **the path** is the one place this cannot protect you. |
 | `LINKCTRL_FEED_NAME` | *(empty)* | Who the destinations go to, in words — "Google Safe Browsing", "urlscan.io". **Required once `FEED_URL` is set.** It is what `/feeds` prints, and an instance may not send destinations somewhere it cannot name. |
 | `LINKCTRL_FEED_METHOD` | `POST` | `POST` or `GET`. `POST` keeps the destination out of the feed's access-log query string. |
 | `LINKCTRL_FEED_PARAM` | `url` | The field carrying the destination: a JSON key on `POST`, a query parameter on `GET`. |
 | `LINKCTRL_FEED_VERDICT_FIELD` | `blocked` | Dotted path into the JSON response holding the verdict — `data.malicious` reads `{"data":{"malicious":true}}`. `true`, a non-zero number, or one of `yes`/`malicious`/`blocked`/`phishing`/`malware` means refuse; `false`, `no`, `clean`, `ok`, `harmless` and empty mean accept. Anything else is counted as an error and fails open. |
 | `LINKCTRL_FEED_AUTH_HEADER` | `Authorization` | Sent only when a token is set. |
-| `LINKCTRL_FEED_AUTH_TOKEN` | *(empty)* | The credential, verbatim — include `Bearer ` yourself if the feed wants it. `LINKCTRL_FEED_AUTH_TOKEN_FILE` works too, for mounted secrets. Never printed: it is redacted in logs and stripped from the endpoint shown on `/feeds`. |
+| `LINKCTRL_FEED_AUTH_TOKEN` | *(empty)* | The credential, verbatim — include `Bearer ` yourself if the feed wants it. `LINKCTRL_FEED_AUTH_TOKEN_FILE` works too, for mounted secrets. Never printed: it is redacted in logs, unset from the process environment once parsed, and it is a header rather than part of the URL, so nothing on `/feeds` or in a transport error can echo it. This is where a feed credential goes; `FEED_URL` refuses one. |
 | `LINKCTRL_FEED_TIMEOUT` | `2s` | Bounds one check end to end. Spent inside a form submission somebody is waiting on, so keep it small; validation refuses anything above `HTTP_REQUEST_TIMEOUT`. |
 
 One generic HTTP adapter, not a list of integrations. Point it at any endpoint
@@ -565,6 +565,13 @@ scheduler that maintains partitions. Three consequences worth knowing:
   the fifth the row is marked `failed` and kept, with the relay's error in
   `last_error`. Sent and failed rows are deleted 30 days later; pending rows
   never are.
+- **A finished row keeps the record and not the message.** `body` is emptied in
+  the same statement that marks a message sent or failed, and the database
+  refuses to hold a finished row that still has one. Two of the four templates
+  carry a single-use token — an invitation and an address verification — so a
+  kept body would be a redeemable credential sitting in the table for the
+  retention window above. Everything the query below reads is untouched; if you
+  want to know what a message *said*, read the template.
 
 To see what happened to a message:
 

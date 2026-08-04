@@ -41,7 +41,14 @@ CREATE TABLE pending_registrations (
     password_hash text        NOT NULL,
 
     -- SHA-256 of the token in the emailed link, exactly like invitations and
-    -- sessions. A database leak hands over no verifiable registrations.
+    -- sessions. A database leak hands over no verifiable registrations *from
+    -- this table* — the same qualifier invitations carries, and for the same
+    -- reason (finding F32): the token is also rendered into the mail body, which
+    -- since 03200 is blanked when the outbox row finishes. What a token pulled
+    -- out of a still-pending row buys is smaller here than for an invitation:
+    -- verification completes a registration and lands on the sign-in form, and
+    -- the password chosen at the signup form never reached storage in the clear,
+    -- so it creates an account the holder of the token cannot sign in as.
     token_hash    bytea       NOT NULL,
 
     created_at    timestamptz NOT NULL DEFAULT now(),

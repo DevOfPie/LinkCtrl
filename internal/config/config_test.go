@@ -302,6 +302,27 @@ func TestValidateIndividualRules(t *testing.T) {
 			"LINKCTRL_SMTP_HOST": "smtp.example.com", "LINKCTRL_SMTP_FROM": "l@example.com",
 			"LINKCTRL_SMTP_TIMEOUT": "0s",
 		}, "SMTP_TIMEOUT"},
+
+		// The feed. Refusing a credential written into FEED_URL is finding F35,
+		// and it is a refusal rather than a redaction on purpose: Go sends
+		// userinfo as Basic auth, so it works, and /feeds is shown to every
+		// signed-in user by design (D40). Both spellings, because the one with
+		// no password is the one a "just put the key in the URL" reading of an
+		// API's documentation produces.
+		{"a credential in the feed url", map[string]string{
+			"LINKCTRL_FEED_URL":  "https://apikey:SUPERSECRET@feed.example.com/v1/check",
+			"LINKCTRL_FEED_NAME": "Example Reputation",
+		}, "must not carry a username or password"},
+		{"a bare username in the feed url", map[string]string{
+			"LINKCTRL_FEED_URL":  "https://SUPERSECRET@feed.example.com/v1/check",
+			"LINKCTRL_FEED_NAME": "Example Reputation",
+		}, "must not carry a username or password"},
+		// The pre-existing rule, kept beside it: the two checks now share a
+		// branch, and a refactor that drops one would otherwise be invisible.
+		{"a feed url in clear", map[string]string{
+			"LINKCTRL_FEED_URL":  "http://feed.example.com/v1/check",
+			"LINKCTRL_FEED_NAME": "Example Reputation",
+		}, "must use https"},
 	}
 
 	for _, tc := range tests {

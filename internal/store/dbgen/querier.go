@@ -1293,6 +1293,12 @@ type Querier interface {
 	// Retry exhausted. Terminal, and deliberately not deleted — a row that says
 	// what was attempted and why it never arrived is the whole point of an outbox
 	// over an in-memory retry loop.
+	//
+	// Blanked for F32's reason, and the failed case is the one that needs it most: a
+	// message that never arrived is one whose token is still unspent, and this row
+	// would otherwise hold it for thirty days against an invitation that lives seven.
+	// The retry path deliberately does not blank — a row still being retried is
+	// pending, and it has to keep the message it is going to send.
 	MarkMailFailed(ctx context.Context, arg MarkMailFailedParams) error
 	//
 	// A failure that will be tried again. The error is kept verbatim: it is what an
@@ -1307,6 +1313,16 @@ type Querier interface {
 	MarkMailRetry(ctx context.Context, arg MarkMailRetryParams) error
 	//
 	// attempts is not touched: ClaimDueMail already spent it.
+	//
+	// The body is blanked here, in the same statement that marks the row sent
+	// (finding F32). Two of the templates this phase ships carry a single-use token
+	// in their body, and a delivered message is one whose token has reached the only
+	// person entitled to it — keeping a copy afterwards is keeping a redeemable
+	// credential in clear for the retention window. Folded into this UPDATE rather
+	// than done after it, so there is no crash window in which a row is sent and
+	// still carries the token, and so `mail_outbox_finished_body_scrubbed` cannot be
+	// passed by a caller that forgets. What an operator reads afterwards —
+	// recipient, subject, kind, attempts, last_error — is untouched.
 	MarkMailSent(ctx context.Context, id uuid.UUID) error
 	//
 	// Scoped by user_id as well as id, so someone else's notification is a
@@ -1447,6 +1463,10 @@ type Querier interface {
 	// what was attempted, not an archive: without this the table is the one thing
 	// in the schema that grows forever with no window and no metric, which is the
 	// shape D5 and M21 exist to avoid repeating.
+	//
+	// It is a retention window and not a secrecy control. The rows it deletes lost
+	// their bodies when they finished; this is what stops the record of *that* piling
+	// up. Lowering it would not shorten any credential's exposure.
 	PurgeFinishedMail(ctx context.Context, maxAgeDays int32) (int64, error)
 	//
 	// Delivered and abandoned rows past the retention window. The delivery log is a

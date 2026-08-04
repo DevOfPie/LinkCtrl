@@ -2,6 +2,7 @@ package feed
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -284,25 +285,149 @@ func TestAFeedThatMisbehavesIsAnErrorAndNeverARefusal(t *testing.T) {
 // TestDescribeNeverPrintsTheOperatorsCredential.
 //
 // The disclosure is shown to every signed-in account, and a feed URL commonly
-// carries an API key in its query string. Printing it would turn a page about
-// protecting users into the way an editor reads the operator's secret.
+// carries an API key. Printing it would turn a page about protecting users into
+// the way an editor reads the operator's secret.
+//
+// The userinfo rows are finding F35. The first version of this redaction cut
+// everything from the first "?" or "#", which is a denylist, and it returned
+// `https://apikey:SECRET@api.feed.example/v1/check` unchanged — while Go's
+// client turned that same userinfo into a Basic auth header, so the credential
+// both worked and was published to every signed-in user. The rewrite builds the
+// string from scheme, host and path instead of removing what it knows about,
+// which is why the table below can be extended with a spelling nobody has
+// thought of yet and still pass.
+//
+// What is deliberately *not* here: a case asserting the path is stripped. It is
+// kept — see Endpoint — and a credential written into a path segment is the
+// residue this fix does not reach, which config validation cannot detect either
+// and docs/configuration.md warns about instead.
 func TestDescribeNeverPrintsTheOperatorsCredential(t *testing.T) {
+	const want = "https://api.feed.example/v1/check"
+	cases := map[string]string{
+		"query string":       "https://api.feed.example/v1/check?key=SUPERSECRET&x=1",
+		"fragment":           "https://api.feed.example/v1/check#SUPERSECRET",
+		"userinfo pair":      "https://apikey:SUPERSECRET@api.feed.example/v1/check",
+		"userinfo bare":      "https://SUPERSECRET@api.feed.example/v1/check",
+		"userinfo and query": "https://apikey:SUPERSECRET@api.feed.example/v1/check?key=SUPERSECRET#SUPERSECRET",
+		"nothing to remove":  want,
+	}
+	for name, raw := range cases {
+		t.Run(name, func(t *testing.T) {
+			c, err := New(Config{
+				Name: "Example", URL: raw, Method: MethodPOST,
+				Param: "url", VerdictField: "blocked", Timeout: time.Second,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			d := c.Describe()
+			if !d.Enabled || d.Name != "Example" {
+				t.Fatalf("Describe = %+v", d)
+			}
+			if strings.Contains(d.Endpoint, "SUPERSECRET") {
+				t.Errorf("Endpoint = %q; the credential reached the disclosure", d.Endpoint)
+			}
+			if d.Endpoint != want {
+				t.Errorf("Endpoint = %q, want %q", d.Endpoint, want)
+			}
+			// Describe reads Endpoint, and the /feeds template and the JSON API
+			// both read Describe — so the two must not be able to disagree.
+			if c.Endpoint() != d.Endpoint {
+				t.Errorf("Endpoint() = %q but Describe reported %q", c.Endpoint(), d.Endpoint)
+			}
+		})
+	}
+
+	// A port is part of where destinations go and survives.
 	c, err := New(Config{
-		Name: "Example", URL: "https://feed.example/v1/check?key=SUPERSECRET&x=1",
+		Name: "Example", URL: "https://apikey:SUPERSECRET@api.feed.example:8443/v1/check",
 		Method: MethodPOST, Param: "url", VerdictField: "blocked", Timeout: time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := c.Describe()
-	if !d.Enabled || d.Name != "Example" {
-		t.Fatalf("Describe = %+v", d)
+	if got := c.Endpoint(); got != "https://api.feed.example:8443/v1/check" {
+		t.Errorf("Endpoint = %q; the port is part of the endpoint, not part of "+
+			"the credential", got)
 	}
-	if strings.Contains(d.Endpoint, "SUPERSECRET") || strings.Contains(d.Endpoint, "?") {
-		t.Errorf("Endpoint = %q, want the query string removed", d.Endpoint)
+}
+
+// failingTransport fails every request with a fixed cause.
+//
+// A stand-in for a refused connection, a DNS failure, a TLS error or the
+// timeout, all of which reach http.Client as the same thing and all of which
+// leave it wrapped in the *url.Error this test is about. Deterministic, and it
+// keeps the host in the assertion below from being satisfied by the cause's own
+// text rather than by the redaction.
+type failingTransport struct{ err error }
+
+func (f failingTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, f.err
+}
+
+// TestATransportFailureNamesTheEndpointAndNotTheCredential is finding F34.
+//
+// internal/link logs this error at WARN on every feed failure, and `*url.Error`
+// renders as `Post "<the whole configured URL>": <cause>` — so a routine
+// timeout on a two-second budget put a live third-party API key into the log
+// stream, which is where logs get shipped elsewhere and pasted into tickets.
+//
+// Both directions are asserted, because either one alone is the wrong fix.
+// Dropping the URL would satisfy the secrecy half and leave an operator unable
+// to tell which endpoint stopped answering; keeping it satisfies the debugging
+// half and is the bug. What the message has to carry is the same string the
+// disclosure page shows, and nothing else.
+func TestATransportFailureNamesTheEndpointAndNotTheCredential(t *testing.T) {
+	c, err := New(Config{
+		Name:   "Example Reputation",
+		URL:    "https://apiuser:SUPERSECRET123@feed.example.com/v1/check?apikey=SUPERSECRET123&mode=strict",
+		Method: MethodGET, Param: "url", VerdictField: "blocked",
+		Timeout:   time.Second,
+		Transport: failingTransport{err: errors.New("connect: connection refused")},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if d.Endpoint != "https://feed.example/v1/check" {
-		t.Errorf("Endpoint = %q", d.Endpoint)
+
+	// The destination is asserted by its host rather than whole: on GET it goes
+	// into the query percent-encoded, so comparing the raw string would pass
+	// against a message that still carries it.
+	const destHost = "someone-elses-destination.example"
+	r, err := c.Check(t.Context(), "https://"+destHost+"/private")
+	if err == nil || r != ResultError {
+		t.Fatalf("Check = %q, %v; want an error and no verdict", r, err)
+	}
+	msg := err.Error()
+
+	for _, secret := range []string{"SUPERSECRET123", "apiuser", "mode=strict"} {
+		if strings.Contains(msg, secret) {
+			t.Errorf("the error carries %q, and internal/link logs it at WARN:\n%s",
+				secret, msg)
+		}
+	}
+	// On GET the destination is a query parameter on the request URL, so the
+	// same replacement takes it out. That is not a second fix — it is the same
+	// one — but it is the reason the whole URL is replaced rather than filtered.
+	if strings.Contains(msg, destHost) {
+		t.Errorf("the error carries the user's destination:\n%s", msg)
+	}
+
+	// And the operator can still act on it: which endpoint, and what happened.
+	if !strings.Contains(msg, "feed.example.com/v1/check") {
+		t.Errorf("the error does not name the endpoint that failed, so nobody "+
+			"can tell which one to look at:\n%s", msg)
+	}
+	if !strings.Contains(msg, "connection refused") {
+		t.Errorf("the cause did not survive the redaction:\n%s", msg)
+	}
+	if !strings.Contains(msg, "Example Reputation") {
+		t.Errorf("the feed is no longer named:\n%s", msg)
+	}
+	// Nothing can errors.As its way back to the URL: *url.Error is replaced
+	// rather than wrapped, so there is no second route to the string above.
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		t.Errorf("the *url.Error survived, carrying %q", ue.URL)
 	}
 }
 

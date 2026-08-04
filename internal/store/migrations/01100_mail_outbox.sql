@@ -27,6 +27,10 @@ CREATE TABLE mail_outbox (
     -- row has to stay readable after the code that produced it is gone.
     recipient   text        NOT NULL,
     subject     text        NOT NULL,
+    -- Emptied when the row reaches 'sent' or 'failed', and constrained to be —
+    -- see 03200, which added both. Two templates carry a single-use token in
+    -- here, so a finished row that kept its body would be a redeemable
+    -- credential in clear (finding F32).
     body        text        NOT NULL,
     -- Which template produced it, for the operator reading the table. Not used
     -- to re-render.

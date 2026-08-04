@@ -915,14 +915,36 @@ func (c Config) Validate() error {
 	if c.Feed.Enabled() {
 		if u, err := url.Parse(c.Feed.URL); err != nil {
 			add("FEED_URL: not a valid URL: %v", err)
-		} else if u.Scheme != "https" {
-			// https only, and not narrowable by an operator who wants to test
-			// against a local endpoint. Destinations are being sent to somebody
-			// else's server; sending them in clear as well would make the
-			// disclosure's "sent to <third party>" quietly mean "and to whoever
-			// is on the path".
-			add("FEED_URL: must use https, got %q; destinations are sent to this "+
-				"endpoint and must not travel in clear", u.Scheme)
+		} else {
+			if u.Scheme != "https" {
+				// https only, and not narrowable by an operator who wants to test
+				// against a local endpoint. Destinations are being sent to somebody
+				// else's server; sending them in clear as well would make the
+				// disclosure's "sent to <third party>" quietly mean "and to whoever
+				// is on the path".
+				add("FEED_URL: must use https, got %q; destinations are sent to this "+
+					"endpoint and must not travel in clear", u.Scheme)
+			}
+			// A credential in the URL is refused rather than tolerated and
+			// redacted (finding F35). Go's client turns userinfo into a Basic
+			// auth header, so it *works* and the operator gets no signal that
+			// they have put a live credential somewhere every signed-in user
+			// reads — /feeds discloses the endpoint by design (D40), and until
+			// this release it printed userinfo verbatim.
+			//
+			// Refusing at boot rather than only stripping it at the disclosure
+			// is what keeps FEED_AUTH_TOKEN's discipline meaning something: that
+			// one is a Secret, unset from the environment after parsing, and
+			// available as a mounted file. A credential smuggled in through the
+			// URL gets none of that, so it is the URL that has to be refused.
+			if u.User != nil {
+				add("FEED_URL: must not carry a username or password in the URL. " +
+					"Go sends those as Basic auth, so it would work, and /feeds " +
+					"shows every signed-in user where destinations go — use " +
+					"FEED_AUTH_HEADER and FEED_AUTH_TOKEN, which are redacted, " +
+					"unset from the environment after parsing, and readable from " +
+					"a file")
+			}
 		}
 		if c.Feed.Name == "" {
 			add("FEED_NAME: is required once FEED_URL is set. It names the third " +

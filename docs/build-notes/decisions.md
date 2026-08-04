@@ -158,6 +158,7 @@ file. Append a row when you append an entry.
 | [M32, the promise restated as two channels](#2026-08-04--m32-the-promise-restated-as-two-channels) | F86 — why the fix is four documents and no code, and why removing `url` from the payload would break every receiver to make a README sentence true; the four wordings as they stood; the checked facts the replacement rests on — `webhooks.write` is owner and admin only and not delegable, there is no operator gate, and `automation.fired` carries no destination; why the refused-destination leg is the strongest of the four and what a half-fix drops; F134 widened at step 3.4 — `CHANGELOG.md:750` and `feed_test.go`'s three wordings taken in under the deferred-overlap rule with no assertion touched, the *Egress* row's count left open because re-deriving it is a decision; and F135, seven more sites a deliberate sweep found where two rounds of noticing had not, including the `/feeds` disclosure page this milestone itself shipped, which no rewording can make true |
 | [Mounting derived from registration](#2026-08-04--mounting-derived-from-registration-after-eleven-routes-shipped-unreachable) | D97 — F85: eleven of M42's and M43's routes were registered, reserved, linked from the nav and documented, and unreachable, because the root mux mounted from a hand-written slice that the only guard was also built from; why adding the four missing strings fixes the instance and not the class, and why the comment claiming the opposite is the reason nobody looked; `appMux` recording what it is handed so registering *is* mounting; the reduction rule chosen because it reproduces the old slice exactly plus the four, and the wider rule rejected; why the API subtree stays hand-mounted; `dashboardPatterns` deleted so the reserved guard reads registrations too, `registerAppRoutes` split out to make them enumerable, and `maximalDeps` filled by reflection because a literal would be the third list and would fail silently; and the sabotage whose control result is that the old guard stayed green |
 | [M45, four ways one membership rule was not read](#2026-08-04--m45-four-ways-one-membership-rule-was-not-read) | F93, F94, F97 and F60 — the first four approved rows of M45's moderate security cluster, fixed on their own terms rather than behind a shared abstraction; why `List` had to be refused alongside `Revoke` and why `invite.Roles` was reading the wrong rank; why F94's recipient set is a second *parameter* and not a second predicate, and what `DISTINCT` is for; F97's three limbs, and why F43's `CreateOrganization` door closes with no credential-type branch at all — the state it opened on is what was wrong; `apikey.revoked` added because *the person is the record* stops holding when the credential's owner is not present; D43's mechanism reused for F60 rather than `NonDelegableScopes`, and `KeyIssuableRoles` moved to `internal/auth` so one list bounds both doors; and the one residue left deliberately — the `/invites` nav entry that now leads to a 403 for a workspace-scoped admin, and what removing it would cost |
+| [M45, three places a secret was sitting still](#2026-08-04--m45-three-places-a-secret-was-sitting-still) | F32, F34 and F35 — one theme, three mechanisms, fixed separately; **F32's design fork decided in the open**: scrub at the terminal transition, with what a send-time reference and a shortened retention would each have cost, and why the scrub covers every kind and is a database constraint rather than a convention; the pending-row exposure that remains and the two migration comments corrected to admit it; `03200` bending the additive-DDL rule and why `mail_outbox` is the one table where that costs nothing; F34's URL **replaced** rather than removed, and the GET-method destination leak that closes with it; F35's denylist inverted to an allowlist plus a boot refusal, and the path-embedded credential named as residue; and the `net/url` import ban that turned out to guard nothing and to have caused both |
 
 ---
 
@@ -12941,3 +12942,157 @@ render for every admin, or a third query in `identityFor` on every authenticated
 request. Both are a per-request cost to remove a 403 from a rare and correct
 refusal — the actor genuinely may not use that page. Recorded here rather than
 done silently, so that whoever finds the nav rule half-true finds this too.
+
+---
+
+## 2026-08-04 — M45, three places a secret was sitting still
+
+F32, F34 and F35, the second group of [M45's
+triage](#2026-08-04--m45s-triage-and-the-widest-option-four-times). One theme —
+a credential somewhere it should not be — and three different mechanisms, so
+they are fixed on their own terms rather than behind one redaction helper. They
+land under **M45's own number**, like the group before them: m45.md's Findings
+bullet is this work, so no milestone reopens and no status row moves.
+
+Worth saying once, because it is the shape of all three: none of them was a
+missing idea. This tree already refuses to wrap a Postgres error because it
+would echo the DSN's password, already unwraps `*url.Error` in
+`internal/webhook` so a registered URL stays out of a stored message, already
+types `FEED_AUTH_TOKEN` as a `Secret` that is unset from the environment after
+parsing, and already stores every token as a SHA-256 hash. Each finding is that
+discipline not reaching one more place.
+
+### F32 — the option chosen, and what the other two cost
+
+The invitation table stores `SHA-256(token)` and the migration says so: *"a
+database leak hands over no redeemable invites"*. The outbox beside it stored
+the same token in clear, rendered into the message body, for the thirty days a
+finished row is kept. Reproduced end to end at M32.9: a token pulled out of
+`mail_outbox.body` by SQL alone hashed to `invitations.token_hash` and redeemed
+into an **admin** membership.
+
+The design tension is real and it does not go away. The token has to reach the
+recipient, so it has to be in the message; the outbox exists so that a message
+survives a restart, so the message has to be stored. Three ways out were
+available and **one is implemented**.
+
+**Chosen: scrub at the terminal transition.** `MarkMailSent` and
+`MarkMailFailed` set `body = ''` in the same statement that sets the status, and
+`03200` adds `CHECK (status = 'pending' OR body = '')` plus an `UPDATE` that
+erases the bodies already sitting in the table. The exposure becomes the
+delivery — one scheduler tick, thirty seconds — instead of the retention window.
+It costs the ability to read what a delivered message said, and that cost is
+smaller than it looks: `01100` states the outbox's inspectability property in its
+own words, as *"`last_error` and `attempts` are the record an operator reads"*,
+and neither is the body. Recipient, subject and kind survive too.
+
+**Not chosen: a reference resolved at send time.** Store the body with a
+placeholder and substitute the token when the message goes out. This is the
+option that sounds best and cannot be built: the token exists nowhere but in the
+recipient's link and as a hash, so *resolving* it at send time means storing the
+plaintext somewhere else — the same leak with more machinery — or encrypting it,
+which means a key, a rotation story and a recovery story this product does not
+have. It also inverts `01100`'s stated reason for storing rendered messages: a
+template change must not rewrite a mail somebody is already waiting for.
+
+**Not chosen: shorter retention for rows carrying a credential.** Cheapest, and
+it barely works. A window measured in days is being set against a token whose own
+TTL is seven days, so it removes a fraction of the exposure and reads like a fix.
+It also needs a per-kind *this one is sensitive* list, which defaults new
+templates to **not** sensitive — and that default is precisely how this finding
+came to exist. `docs/SECURITY.md` said *"the first mail this ships, the
+audit-growth warning, contains no secret"*, which was true when M26 wrote it and
+false the moment M27's `invitation.txt` and M29's `verification.txt` landed
+beside it. Nobody revisited the paragraph, because nothing made them.
+
+That is also why the scrub applies to **every** kind rather than to the two that
+carry a token, and why the guarantee is a database constraint rather than two
+queries that agree. A convention that has to be re-read when a template is added
+is the failure mode, not the fix.
+
+**What it does not close, stated rather than implied.** A *pending* row still
+holds its body, because it is the message about to be sent. On an instance whose
+relay is down, an invitation's token is readable from the database for as long as
+the invitation is redeemable — `INVITE_TTL`, seven days by default, 24 hours for
+a verification. `docs/SECURITY.md` and both migration comments now say that,
+where they previously said something stronger and untrue.
+
+**The additive-DDL rule is bent, and named.** `03200` erases data and narrows a
+column. The precedent is `02700`'s `DROP COLUMN` under D73 — it lands before
+0.2.0 — plus one thing that precedent did not have: `mail_outbox` was created by
+`01100` inside this same unreleased phase, so no released instance has a row for
+the `UPDATE` to reach. The `UPDATE` is the point rather than tidy-up. Fixing the
+writers protects mail sent after the upgrade; a token already delivered would
+otherwise sit there for up to thirty more days, which is longer than the token
+lives.
+
+### F34 — replaced, not removed, and why that direction matters
+
+`*url.Error` renders as `Post "<the whole URL>": dial tcp …`, and
+`internal/link` logs it at WARN on every transport-level feed failure. So the
+configured `FEED_URL`, API key in its query string, reached the log stream on a
+timeout — the ordinary case at the 2s default — which is where logs get shipped
+elsewhere and pasted into tickets.
+
+`internal/webhook` solves the same problem by dropping the URL entirely, and
+copying that here would have been wrong. There is exactly one feed, and an
+operator debugging it is entitled to know which endpoint stopped answering;
+returning `connect: connection refused` with nothing attached moves the cost from
+the secret to the operator. So the URL is **replaced** by `Endpoint()` — the
+string `/feeds` already publishes — rather than removed.
+
+Two things follow from replacing rather than filtering, and the second is the
+reason to prefer it. Whatever spelling the credential took, it is gone, because
+`Endpoint()` is the redaction and there is only one of them. And under
+`FEED_METHOD=GET` the *user's destination* goes too, since on that method it is a
+query parameter on the request URL — a second leak in the same log line, closed
+by the same mechanism rather than by a second fix.
+
+The `*url.Error` is not wrapped, only its cause is, so nothing downstream can
+`errors.As` its way back to the URL. Callers asking whether a failure was a
+timeout still get their answer from the cause.
+
+### F35 — a denylist is only as complete as the list
+
+`Endpoint()` cut everything from the first `?` or `#`. That is a denylist, and
+it missed `https://apikey:SECRET@feed.example/` — which Go's client sends as
+Basic auth, so the credential *worked*, and `/feeds` is ungated by design (D40),
+so it was published to every signed-in account and under open sign-ups to anybody
+who registers.
+
+The fix is the inversion rather than one more case. `Endpoint()` now parses and
+rebuilds from scheme, host and path, so a spelling nobody has thought of — or a
+field a future `net/url` adds — is excluded by default instead of needing to be
+remembered. The finding's own recommendation, refusing userinfo in config
+validation, is done as well and is the stronger half: it is a **boot refusal**,
+so the operator finds out at once, and it points at `FEED_AUTH_HEADER` and
+`FEED_AUTH_TOKEN`. That matters because `FEED_AUTH_TOKEN` is a `Secret`,
+`,unset`, and in `FileSecretVars`; a credential smuggled through the URL bypasses
+that entire discipline, so refusing the URL is what makes the discipline mean
+something. It is a breaking change for an instance that had one, and the
+CHANGELOG says so in those words.
+
+**The residue is the path, and it is deliberate.** `https://feed.example/v1/KEY/check`
+is not detectable — a key in a path segment is indistinguishable from a path —
+and it is still printed. Stripping the path would close it and would pay for that
+by gutting the disclosure: the path is most of what *"where your destinations
+go"* means. So the path is kept, and `docs/configuration.md`, `.env.example` and
+`docs/SECURITY.md` each tell the operator that the path is shown and that nothing
+can check it for them. Naming a residue is not the same as accepting it quietly.
+
+### The import ban that was not real
+
+`internal/feed` avoided `net/url`, and said why: importing it *"would put a
+`url.` symbol in a package whose entire job is to be the one place outbound HTTP
+is allowed — except that the scans guarding the rest of this feature read for
+exactly that shape"*. No such scan exists. The scan is `internal/dispute`'s
+`outboundHTTP`, it matches `http.`, `net.`, `httputil.`, `exec.` and `smtp.`
+symbols rather than `url.` ones, and it reads the review queue's files rather
+than this package's.
+
+Both fixes above want a real URL parser, and the reason to say this out loud is
+that the ban is what produced them: `Endpoint()`'s redaction was hand-rolled
+string surgery precisely because the standard parser was kept out, and it missed
+a case the standard parser handles by construction. `queryEscape` stays as it is
+regardless — it encodes a space as `%20` where `url.QueryEscape` writes `+`, and
+a comment correction does not get to change what goes on the wire.

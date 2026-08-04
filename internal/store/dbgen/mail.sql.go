@@ -127,7 +127,7 @@ func (q *Queries) EnqueueMail(ctx context.Context, arg EnqueueMailParams) error 
 
 const markMailFailed = `-- name: MarkMailFailed :exec
 UPDATE mail_outbox
-   SET status = 'failed', last_error = $1
+   SET status = 'failed', last_error = $1, body = ''
  WHERE id = $2
 `
 
@@ -139,6 +139,12 @@ type MarkMailFailedParams struct {
 // Retry exhausted. Terminal, and deliberately not deleted — a row that says
 // what was attempted and why it never arrived is the whole point of an outbox
 // over an in-memory retry loop.
+//
+// Blanked for F32's reason, and the failed case is the one that needs it most: a
+// message that never arrived is one whose token is still unspent, and this row
+// would otherwise hold it for thirty days against an invitation that lives seven.
+// The retry path deliberately does not blank — a row still being retried is
+// pending, and it has to keep the message it is going to send.
 func (q *Queries) MarkMailFailed(ctx context.Context, arg MarkMailFailedParams) error {
 	_, err := q.db.Exec(ctx, markMailFailed, arg.LastError, arg.ID)
 	return err
@@ -173,11 +179,21 @@ func (q *Queries) MarkMailRetry(ctx context.Context, arg MarkMailRetryParams) er
 
 const markMailSent = `-- name: MarkMailSent :exec
 UPDATE mail_outbox
-   SET status = 'sent', sent_at = now()
+   SET status = 'sent', sent_at = now(), body = ''
  WHERE id = $1
 `
 
 // attempts is not touched: ClaimDueMail already spent it.
+//
+// The body is blanked here, in the same statement that marks the row sent
+// (finding F32). Two of the templates this phase ships carry a single-use token
+// in their body, and a delivered message is one whose token has reached the only
+// person entitled to it — keeping a copy afterwards is keeping a redeemable
+// credential in clear for the retention window. Folded into this UPDATE rather
+// than done after it, so there is no crash window in which a row is sent and
+// still carries the token, and so `mail_outbox_finished_body_scrubbed` cannot be
+// passed by a caller that forgets. What an operator reads afterwards —
+// recipient, subject, kind, attempts, last_error — is untouched.
 func (q *Queries) MarkMailSent(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, markMailSent, id)
 	return err
@@ -193,6 +209,10 @@ DELETE FROM mail_outbox
 // what was attempted, not an archive: without this the table is the one thing
 // in the schema that grows forever with no window and no metric, which is the
 // shape D5 and M21 exist to avoid repeating.
+//
+// It is a retention window and not a secrecy control. The rows it deletes lost
+// their bodies when they finished; this is what stops the record of *that* piling
+// up. Lowering it would not shorten any credential's exposure.
 func (q *Queries) PurgeFinishedMail(ctx context.Context, maxAgeDays int32) (int64, error) {
 	result, err := q.db.Exec(ctx, purgeFinishedMail, maxAgeDays)
 	if err != nil {

@@ -353,6 +353,73 @@ func TestFailedDeliveryRetriesAndThenGivesUp(t *testing.T) {
 	}
 }
 
+// Finding F32, on the half a delivered message never reaches.
+//
+// A message that was never delivered is the case that needs the scrub most: its
+// token is by definition unspent, and a failed row is kept for thirty days
+// against an invitation that lives seven. So the abandoned row keeps the whole
+// record of what was attempted and none of what was going to be said.
+//
+// The second half is the part that cannot rot. F32 exists because a claim held
+// by convention — *"the first mail this ships contains no secret"* — stayed in
+// the documentation while two templates carrying a token landed beside it. So
+// the guarantee is a CHECK constraint rather than two queries that happen to
+// agree, and this asserts the database itself refuses the state, which is what
+// makes a future edit dropping the scrub fail loudly instead of quietly.
+func TestAnAbandonedMessageKeepsItsRecordAndNotItsContents(t *testing.T) {
+	f := newMailFixture(t, true)
+	f.sender.failWith = fmt.Errorf("mail: connect to smtp.example.com:587: connection refused")
+
+	if err := f.notify.WarnAuditGrowth(t.Context(), 10_000, 1_000); err != nil {
+		t.Fatal(err)
+	}
+	// While it is still being retried it keeps its body, because it is still
+	// going to be sent. That is the boundary, and asserting it here is what
+	// stops the fix drifting into "scrub on the first failure", which would
+	// deliver an empty message on the second attempt.
+	for attempt := 1; attempt <= mail.MaxAttempts; attempt++ {
+		if err := f.mail.Drain(t.Context()); err == nil {
+			t.Fatalf("attempt %d: Drain succeeded although every send failed", attempt)
+		}
+		rows := f.outbox(t)
+		if attempt < mail.MaxAttempts {
+			if rows[0].Body == "" {
+				t.Fatalf("the message was emptied on attempt %d of %d, with retries "+
+					"still to come; the next attempt would send nothing",
+					attempt, mail.MaxAttempts)
+			}
+			if _, err := f.pool.Exec(t.Context(),
+				`UPDATE mail_outbox SET next_attempt_at = now() - interval '1 hour'`); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	rows := f.outbox(t)
+	if len(rows) != 1 || rows[0].Status != "failed" {
+		t.Fatalf("after %d failures the outbox is %+v, want one failed row",
+			mail.MaxAttempts, rows)
+	}
+	if rows[0].Body != "" {
+		t.Errorf("an abandoned message kept its body: %q", rows[0].Body)
+	}
+	// Everything an operator reads when somebody says the mail never arrived.
+	if rows[0].Recipient == "" || rows[0].Subject == "" || rows[0].Kind == "" ||
+		!strings.Contains(rows[0].LastError, "connection refused") ||
+		rows[0].Attempts != mail.MaxAttempts {
+		t.Errorf("the record of the attempt was damaged by the scrub: %+v", rows[0])
+	}
+
+	// And the state cannot be reached by anything, including SQL that means well.
+	if _, err := f.pool.Exec(t.Context(),
+		`UPDATE mail_outbox SET body = 'the message, put back'`); err == nil {
+		t.Error("a finished row accepted a body; the guarantee is a convention " +
+			"again, and mail_outbox_finished_body_scrubbed is not doing its job")
+	} else if !strings.Contains(err.Error(), "mail_outbox_finished_body_scrubbed") {
+		t.Errorf("the write was refused by something other than the constraint: %v", err)
+	}
+}
+
 // The outbox is a record of what was attempted, not an archive.
 func TestFinishedMailIsPurgedAndPendingMailIsNot(t *testing.T) {
 	f := newMailFixture(t, true)

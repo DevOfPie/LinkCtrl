@@ -165,6 +165,26 @@ func (f *inviteFixture) redeem(t *testing.T, token, email, password string) (*in
 	})
 }
 
+// queuedMail is one outbox row, as the F32 assertions read it.
+type queuedMail struct {
+	subject, body, kind, status, lastError string
+	attempts                               int
+}
+
+// outboxRow reads the newest queued message for an address.
+func (f *inviteFixture) outboxRow(t *testing.T, recipient string) queuedMail {
+	t.Helper()
+	var r queuedMail
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT subject, body, kind, status, last_error, attempts
+		   FROM mail_outbox WHERE recipient = $1
+		  ORDER BY created_at DESC, id DESC LIMIT 1`, recipient).
+		Scan(&r.subject, &r.body, &r.kind, &r.status, &r.lastError, &r.attempts); err != nil {
+		t.Fatalf("no outbox row for %s: %v", recipient, err)
+	}
+	return r
+}
+
 // scalar runs a single-value query, for the assertions that are about rows
 // rather than about return values.
 func (f *inviteFixture) scalar(t *testing.T, sql string, args ...any) int64 {
@@ -306,6 +326,73 @@ func TestInvitationDeliveryWithAndWithoutAMailer(t *testing.T) {
 		// is a notification, not an invitation.
 		if !strings.Contains(sent[0].Body, c.URL) {
 			t.Errorf("the mail does not carry the invitation link:\n%s", sent[0].Body)
+		}
+	})
+
+	t.Run("and the delivered row keeps no token", func(t *testing.T) {
+		// Finding F32, at the milestone whose migration makes the claim: the
+		// invitation *table* stores only SHA-256(token), but until this release
+		// the outbox held the same token in clear, rendered into the message
+		// body, for the thirty days a finished row is kept. A token read out of
+		// that column by SQL alone hashed and redeemed, up to owner.
+		//
+		// Two halves, and the first is what makes the second mean anything. The
+		// pending row genuinely does carry the token — it has to, it is the
+		// message waiting to be sent — so this asserts the exposure exists and
+		// then asserts it ends at delivery rather than at retention.
+		f := newInviteFixture(t, inviteOptions{NewAccounts: true, WithMailer: true})
+		c := f.invited(t, "scrubbed@example.com", "editor")
+		token := tokenOf(t, c)
+
+		queued := f.outboxRow(t, "scrubbed@example.com")
+		if queued.status != "pending" {
+			t.Fatalf("a freshly queued row is %q", queued.status)
+		}
+		if !strings.Contains(queued.body, token) {
+			t.Fatalf("the queued mail does not carry the token, so this test is " +
+				"asserting nothing; the leak it closes was reading it from here")
+		}
+
+		if err := f.mail.Drain(t.Context()); err != nil {
+			t.Fatalf("drain: %v", err)
+		}
+
+		sent := f.outboxRow(t, "scrubbed@example.com")
+		if sent.status != "sent" {
+			t.Fatalf("after a successful drain the row is %q", sent.status)
+		}
+		// Every column the row still has, not only the one the finding named. A
+		// scrub that moved the token into last_error would pass a body-only
+		// check and leak exactly as much.
+		for column, value := range map[string]string{
+			"body": sent.body, "subject": sent.subject, "last_error": sent.lastError,
+		} {
+			if strings.Contains(value, token) {
+				t.Errorf("mail_outbox.%s still holds the invitation token after "+
+					"delivery: %q", column, value)
+			}
+		}
+		if sent.body != "" {
+			t.Errorf("body = %q after delivery, want it emptied", sent.body)
+		}
+		// What the outbox exists to tell an operator is untouched. The record of
+		// what was attempted is recipient, kind, attempts and last_error — 01100
+		// says so — and none of those is the message.
+		if sent.kind != "invitation" || sent.subject == "" || sent.attempts != 1 {
+			t.Errorf("the record of the attempt was damaged: %+v", sent)
+		}
+
+		// And the mail was really sent before the row was emptied, so this is a
+		// scrub and not a silent drop.
+		delivered := f.sender.delivered()
+		if len(delivered) != 1 || !strings.Contains(delivered[0].Body, c.URL) {
+			t.Fatalf("the relay received %d messages, and the link did not survive "+
+				"to the wire", len(delivered))
+		}
+		// The invitation itself is untouched: scrubbing the copy must not spend
+		// the credential the recipient is holding.
+		if _, err := f.redeem(t, token, "scrubbed@example.com", invitePassword); err != nil {
+			t.Fatalf("the delivered invitation no longer redeems: %v", err)
 		}
 	})
 

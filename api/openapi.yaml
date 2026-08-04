@@ -4791,9 +4791,13 @@ components:
         endpoint:
           type: string
           description: >
-            Where they are sent, with any query string removed — a feed URL
-            often carries the operator's API key in one, and this disclosure is
-            readable by every account on the instance.
+            Where they are sent: the scheme, host and path, and nothing else. A
+            feed URL often carries the operator's API key in its query string,
+            and this disclosure is readable by every account on the instance, so
+            the value is assembled from the parts that are safe to publish
+            rather than filtered. A query string, a fragment and URL userinfo
+            therefore never appear; a credential written into the path does, and
+            configuration validation refuses one written into the userinfo.
         method:
           type: string
           enum: [GET, POST]

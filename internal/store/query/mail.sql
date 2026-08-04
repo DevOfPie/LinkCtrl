@@ -43,8 +43,18 @@ RETURNING id, recipient, subject, body, kind, attempts;
 -- name: MarkMailSent :exec
 --
 -- attempts is not touched: ClaimDueMail already spent it.
+--
+-- The body is blanked here, in the same statement that marks the row sent
+-- (finding F32). Two of the templates this phase ships carry a single-use token
+-- in their body, and a delivered message is one whose token has reached the only
+-- person entitled to it — keeping a copy afterwards is keeping a redeemable
+-- credential in clear for the retention window. Folded into this UPDATE rather
+-- than done after it, so there is no crash window in which a row is sent and
+-- still carries the token, and so `mail_outbox_finished_body_scrubbed` cannot be
+-- passed by a caller that forgets. What an operator reads afterwards —
+-- recipient, subject, kind, attempts, last_error — is untouched.
 UPDATE mail_outbox
-   SET status = 'sent', sent_at = now()
+   SET status = 'sent', sent_at = now(), body = ''
  WHERE id = @id;
 
 -- name: MarkMailRetry :exec
@@ -68,8 +78,14 @@ UPDATE mail_outbox
 -- Retry exhausted. Terminal, and deliberately not deleted — a row that says
 -- what was attempted and why it never arrived is the whole point of an outbox
 -- over an in-memory retry loop.
+--
+-- Blanked for F32's reason, and the failed case is the one that needs it most: a
+-- message that never arrived is one whose token is still unspent, and this row
+-- would otherwise hold it for thirty days against an invitation that lives seven.
+-- The retry path deliberately does not blank — a row still being retried is
+-- pending, and it has to keep the message it is going to send.
 UPDATE mail_outbox
-   SET status = 'failed', last_error = @last_error
+   SET status = 'failed', last_error = @last_error, body = ''
  WHERE id = @id;
 
 -- name: CountPendingMail :one
@@ -81,6 +97,10 @@ SELECT count(*) FROM mail_outbox WHERE status = 'pending';
 -- what was attempted, not an archive: without this the table is the one thing
 -- in the schema that grows forever with no window and no metric, which is the
 -- shape D5 and M21 exist to avoid repeating.
+--
+-- It is a retention window and not a secrecy control. The rows it deletes lost
+-- their bodies when they finished; this is what stops the record of *that* piling
+-- up. Lowering it would not shorten any credential's exposure.
 DELETE FROM mail_outbox
  WHERE status <> 'pending'
    AND created_at < now() - make_interval(days => sqlc.arg(max_age_days)::int);

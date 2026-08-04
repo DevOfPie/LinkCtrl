@@ -247,6 +247,25 @@ product has no principal for (decision D40). Feed responses are treated as
 hostile input: bounded in size, redirects not followed, and an unreadable verdict
 counted as an error rather than guessed at.
 
+**Your feed credential belongs in `FEED_AUTH_TOKEN`, and a URL carrying one is
+refused at boot.** That variable is a secret: redacted wherever it is printed,
+removed from the process environment after parsing, and readable from a mounted
+file. A credential written into `FEED_URL` instead would get none of that — Go
+turns `https://key:secret@feed.example/` into a Basic auth header, so it works
+silently — and `/feeds` shows every signed-in account where destinations go.
+Configuration validation therefore refuses a `FEED_URL` with a username or
+password in it, beside the `https` check. What the disclosure prints is built up
+from the scheme, host and path rather than cut down from the whole URL, so a
+query string and a fragment never appear either. **A credential written into the
+path is the one this cannot see**: it is indistinguishable from a path, nothing
+refuses it, and `/feeds` will print it.
+
+Transport failures name the same redacted endpoint. A feed that times out — the
+common case on a two-second budget — used to be logged with the full configured
+URL, API key and all, and on `FEED_METHOD=GET` with the user's destination
+appended to it. The error now carries what `/feeds` carries and the cause, so a
+log stream shipped elsewhere is not where the credential ends up.
+
 **Blocked attempts are recorded, and the attempted URL is hostile input.** Every
 refusal writes a `destination.blocked` audit event carrying the tier, the rule,
 the surface and an `ip_prefix` — never an address. The attempted URL is stored as
@@ -282,11 +301,27 @@ filling the pending table or sending mail to addresses that did not ask for it.
 Leave `LINKCTRL_SIGNUP_MODE` at `closed` or `invite` unless public sign-up is
 something the instance actually wants.
 
-**Queued mail is readable by anyone who can read the database.** The outbox
-stores each message rendered — recipient, subject and body — so it survives a
-restart and so an operator can see what was attempted. Sent and failed rows are
-kept for 30 days. Nothing that must never touch storage should go in a mail; the
-first mail this ships, the audit-growth warning, contains no secret.
+**Queued mail is readable by anyone who can read the database, and two of the
+messages carry a credential until they are delivered.** The outbox stores each
+message rendered — recipient, subject and body — so it survives a restart and so
+an operator can see what was attempted. Two of the four templates contain a
+single-use token in that body, because that is how an invitation and an address
+verification reach the person they are for; the `invitations` and
+`pending_registrations` rows themselves keep only `SHA-256(token)`.
+
+**A row loses its body the moment it stops needing it.** Marking a message sent
+or failed empties `body` in the same statement, and the database refuses to hold
+a finished row that still has one, so the exposure is the delivery rather than
+the 30-day retention window that keeps the record of the attempt. What remains
+for an operator — recipient, subject, kind, attempts, `last_error` — is what the
+outbox exists to show.
+
+What that leaves, stated rather than implied: a message that has **not** been
+delivered still holds its token, because it is the message about to be sent. On
+an instance whose relay is down, an invitation's token is readable from the
+database for as long as that invitation is redeemable — `LINKCTRL_INVITE_TTL`,
+seven days by default, and 24 hours for an address verification. Shortening
+those shortens this. Nothing that must never touch storage should go in a mail.
 
 **Mail is not signed, and delivery is only as trustworthy as the relay.** There
 is no DKIM signing and no SPF or DMARC alignment done here — those belong to the

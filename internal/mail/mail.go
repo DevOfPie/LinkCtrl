@@ -9,6 +9,17 @@
 // The whole package is optional. An instance with no SMTP_HOST never builds a
 // Service, every consumer holds nil, and the outbox stays empty — which is the
 // claim that keeps the mailer optional rather than quietly required.
+//
+// # What a queued message is worth to somebody reading the database
+//
+// A rendered body is a credential while the message it renders carries one, and
+// two of the four templates do: an invitation and an address verification each
+// contain a single-use token whose only other copy in the schema is a SHA-256
+// hash. So a row's body is blanked in the same statement that marks it sent or
+// failed (finding F32), and the database refuses to hold a finished row that
+// still has one. Enqueue to delivery is the window, not the retention window,
+// and nothing here shortens it further: a message that has not been delivered
+// has to keep the message it is going to send.
 package mail
 
 import (
@@ -67,6 +78,11 @@ const (
 	// window it would be the one table in this schema that grows forever with
 	// nothing watching it, which is the shape D5 and M21 exist to stop
 	// repeating.
+	//
+	// It bounds the record and not a secret. A row that reaches this window lost
+	// its body when it finished, so lowering the number would shorten no
+	// credential's exposure — which is why F32 was fixed by scrubbing rather
+	// than by tightening this.
 	FinishedRetentionDays = 30
 )
 

@@ -774,8 +774,10 @@ migrations run at boot.
   as a click labelled `qr`, which is strictly more than the counter would have
   said. No instance has a non-zero value in it, so nothing is lost on upgrade.
 
-  This is the one non-additive schema change in this release, and it is stated
-  here rather than left to be found in a migration.
+  This is one of the two non-additive schema changes in this release, and both
+  are stated in this file rather than left to be found in a migration. The other
+  is the mail outbox erasing the bodies of already-delivered messages, under
+  *Fixed*.
 
 ### Changed
 
@@ -1115,6 +1117,56 @@ migrations run at boot.
   There is one now.
 
 ### Fixed
+
+- **A delivered invitation left its token readable in the database.** Mail is
+  queued rendered, and an invitation's message contains the single-use link — so
+  while the `invitations` row stored only a hash of the token, the outbox row
+  beside it held the token itself, in clear, for the thirty days a finished
+  message is kept. Anyone who could read the database could take a token out of
+  `mail_outbox.body` and redeem it, at whatever role the invitation carried,
+  including `owner`. The same applied to address-verification mail under open
+  sign-ups.
+
+  A message now loses its body in the same statement that marks it sent or
+  failed, and the database refuses to hold a finished row that still has one.
+  What an operator reads when somebody says the mail never arrived — recipient,
+  subject, kind, attempts and the last error — is untouched. **On upgrade, the
+  bodies of messages already delivered are erased**; if you were reading them for
+  anything, that stops working. Nothing else changes and no message in flight is
+  affected.
+
+  What remains, and it is in `docs/SECURITY.md` rather than implied: a message
+  that has **not** been delivered still holds its token, because it is the
+  message about to be sent. On an instance whose relay is down, that lasts as
+  long as the invitation is redeemable — `LINKCTRL_INVITE_TTL`, seven days by
+  default.
+
+- **A feed's API key was written to the log on every feed failure.** A reputation
+  feed that timed out, refused the connection or failed DNS was logged at `WARN`
+  with the whole configured URL in the message — including the credential in its
+  query string, and on `FEED_METHOD=GET` including the destination the user had
+  just typed. A two-second timeout is the ordinary case, so this reached the log
+  stream on a routine error path, which is where logs get shipped elsewhere and
+  pasted into tickets. The message now names the same endpoint `/feeds` shows —
+  scheme, host and path — and the cause, so an operator can still tell which feed
+  stopped answering. Nothing to do on upgrade beyond rotating a feed credential
+  that has been through a log you do not control.
+
+- **`/feeds` printed a feed credential written into the URL.** The disclosure
+  page strips a query string, but `https://apikey:secret@feed.example/` was shown
+  verbatim to every signed-in account — and under open sign-ups that is anybody
+  who registers. Go sends URL userinfo as Basic auth, so the credential worked
+  and nothing warned about it. Two changes: the endpoint on `/feeds` and on
+  `GET /api/v1/feeds` is now built from the scheme, host and path rather than by
+  removing the parts known to be secret; and **`LINKCTRL_FEED_URL` with a
+  username or password in it is refused at startup**, pointing at
+  `LINKCTRL_FEED_AUTH_HEADER` and `LINKCTRL_FEED_AUTH_TOKEN`, which are redacted,
+  unset from the environment after parsing and readable from a mounted file.
+
+  **This stops an instance booting if it had one.** Move the credential to
+  `FEED_AUTH_TOKEN` before upgrading, and rotate it — it has been on a page every
+  signed-in user could read. A key written into the **path** of `FEED_URL` is not
+  detectable and is still printed; `docs/configuration.md` says so.
 
 - **A workspace-scoped role reached the whole organization's invitations.**
   Somebody granted `admin` in one workspace could list every pending invitation

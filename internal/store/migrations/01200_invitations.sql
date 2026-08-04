@@ -32,7 +32,16 @@ CREATE TABLE invitations (
     role_id         uuid        NOT NULL REFERENCES roles(id),
 
     -- SHA-256 of the token, exactly like sessions.token_hash. A database leak
-    -- hands over no redeemable invites.
+    -- hands over no redeemable invites *from this table*.
+    --
+    -- That qualifier is finding F32, corrected in place rather than left as a
+    -- sentence a reader would have believed. The token also reaches mail_outbox,
+    -- rendered into the message body, because that is how it gets to the person
+    -- invited. Since 03200 the outbox blanks a body the moment the row reaches a
+    -- terminal state, so the plaintext lives from enqueue to delivery instead of
+    -- for the outbox's 30-day retention window — but "from enqueue to delivery"
+    -- is not "never", and an instance whose relay is down holds it for as long as
+    -- the invitation itself is redeemable. docs/SECURITY.md states that bound.
     token_hash      bytea       NOT NULL,
 
     -- Who sent it. Nullable so deleting a user does not delete the invitations

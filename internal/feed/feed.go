@@ -42,6 +42,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -179,17 +180,70 @@ func (c *Client) Name() string {
 // Endpoint is where destinations are sent, for the disclosure. Safe on a nil
 // client.
 //
-// The configured URL verbatim, minus anything after the path: a feed URL can
-// carry an API key in its query string, and the disclosure page is shown to
-// every signed-in user rather than to the operator alone.
+// Assembled from the parts of the configured URL that are safe to show —
+// scheme, host, path — rather than by removing the parts known not to be. That
+// inversion is finding F35. The first version cut everything from the first "?"
+// or "#", which is a denylist, and a denylist is only as complete as the list:
+// it missed `https://apikey:SECRET@feed.example/v1/check`, which Go's client
+// really does send as Basic auth, so the credential worked *and* was printed
+// verbatim to every signed-in user on /feeds. Building from an allowlist cannot
+// miss a spelling nobody thought of, including one a future net/url field
+// introduces.
+//
+// **The path is kept, deliberately.** It is most of what "where your
+// destinations go" means, and dropping it would pay for this fix with the
+// disclosure's precision. A credential written into a path segment is
+// indistinguishable from a path and survives this — which is why config
+// validation refuses userinfo outright rather than relying on the redaction
+// here, and why docs/configuration.md tells the operator that the path and the
+// host are shown.
 func (c *Client) Endpoint() string {
 	if c == nil {
 		return ""
 	}
-	if i := strings.IndexAny(c.cfg.URL, "?#"); i >= 0 {
-		return c.cfg.URL[:i]
+	u, err := url.Parse(c.cfg.URL)
+	if err != nil {
+		// Fail closed. Config validation parses the same string and refuses what
+		// will not parse, so a running instance never reaches this; if something
+		// ever does, a URL this cannot take apart is one it cannot promise to
+		// have redacted, and an empty disclosure is the honest answer.
+		return ""
 	}
-	return c.cfg.URL
+	safe := url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path, RawPath: u.RawPath}
+	return safe.String()
+}
+
+// transportError replaces the URL inside a transport failure with the one the
+// disclosure shows.
+//
+// `*url.Error` prints as `Post "https://feed.example/check?apikey=SECRET": dial
+// tcp ...`, and internal/link logs that whole string at WARN on every feed
+// failure — a DNS failure, a refused connection, a TLS error, or the timeout
+// that is the ordinary one at the 2s default. That put a live third-party
+// credential into the log stream on a routine error path, which is finding F34.
+//
+// Dropping the URL entirely, as internal/webhook's transportError does, would be
+// wrong here: there is one feed and the operator debugging it is entitled to
+// know which endpoint stopped answering. So the URL is *replaced* by Endpoint()
+// rather than removed. Two things follow. The credential goes, whether it was in
+// the query string or the userinfo, because Endpoint() is the redaction. And
+// under FEED_METHOD=GET the user's destination goes too, since on that method it
+// is a query parameter on the request URL — same mechanism, not a second fix.
+//
+// The `*url.Error` is not wrapped, only its inner error is: nothing downstream
+// can errors.As its way back to the URL. Callers that ask whether this was a
+// timeout still get their answer, because the cause is what carries that.
+//
+// Third spelling of one rule in this tree. internal/platform/postgres refuses to
+// wrap a connection error because it would echo the DSN's password;
+// internal/webhook unwraps for the registered URL; cmd/linkctrl logs Endpoint()
+// at boot rather than the configured string.
+func (c *Client) transportError(err error) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		return fmt.Errorf("%s %s: %w", ue.Op, c.Endpoint(), ue.Err)
+	}
+	return err
 }
 
 // Disclosure is what an instance tells the people using it about this feature.
@@ -208,9 +262,10 @@ type Disclosure struct {
 	Enabled bool `json:"enabled"`
 	// Name is the third party. Empty when disabled.
 	Name string `json:"third_party,omitempty"`
-	// Endpoint is where destinations are sent, with any query string removed —
-	// a feed URL often carries an API key in one, and this is shown to every
-	// signed-in user rather than to the operator alone.
+	// Endpoint is where destinations are sent: scheme, host and path, and
+	// nothing else. A feed URL often carries an API key in its query string or
+	// its userinfo, and this is shown to every signed-in user rather than to the
+	// operator alone. See Endpoint for why it is built up rather than cut down.
 	Endpoint string `json:"endpoint,omitempty"`
 	// Method is GET or POST.
 	Method string `json:"method,omitempty"`
@@ -253,7 +308,7 @@ func (c *Client) Check(ctx context.Context, destination string) (Result, error) 
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return ResultError, fmt.Errorf("feed %s: %w", c.cfg.Name, err)
+		return ResultError, fmt.Errorf("feed %s: %w", c.cfg.Name, c.transportError(err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -319,7 +374,10 @@ func (c *Client) request(ctx context.Context, destination string) (*http.Request
 		}
 	}
 	if err != nil {
-		return nil, fmt.Errorf("feed %s: build request: %w", c.cfg.Name, err)
+		// Through the same redaction as a transport failure: NewRequest reports a
+		// URL it could not parse as a *url.Error carrying that URL, which on GET
+		// is the configured endpoint with the destination appended to it.
+		return nil, fmt.Errorf("feed %s: build request: %w", c.cfg.Name, c.transportError(err))
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "LinkCtrl")
@@ -331,10 +389,19 @@ func (c *Client) request(ctx context.Context, destination string) (*http.Request
 
 // queryEscape percent-encodes a query component.
 //
-// net/url would do this, and importing it here would put a `url.` symbol in a
-// package whose entire job is to be the one place outbound HTTP is allowed —
-// which is fine, except that the scans guarding the rest of this feature read
-// for exactly that shape. Written out so the ban stays blunt everywhere else.
+// It used to say net/url was kept out of this file on purpose, because the scans
+// guarding this feature read for a `url.` symbol. That was wrong twice, and both
+// halves are worth correcting rather than deleting. No such scan exists:
+// internal/dispute's outboundHTTP regex is the one that guards egress, it names
+// http, net, httputil, exec and smtp symbols rather than url ones, and it reads
+// the review queue's files rather than this package's. And keeping net/url out
+// is what produced findings F34 and F35 — Endpoint's redaction was hand-rolled
+// string surgery, and it missed a spelling of a credential that the standard
+// parser handles by construction.
+//
+// This function stays as it is regardless, because it is not url.QueryEscape: a
+// space becomes %20 here and "+" there, and changing what goes on the wire is
+// not something a comment correction gets to do.
 func queryEscape(s string) string {
 	const hex = "0123456789ABCDEF"
 	const safe = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~"
