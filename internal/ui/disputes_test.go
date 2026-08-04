@@ -47,8 +47,9 @@ func renderDisputes(t *testing.T) string {
 // below passes because the page is empty. The live form has to be absent, or the
 // page re-fanged what the service made inert.
 var disputedStrings = []struct{ defanged, live string }{
+	{"login[.]evil[.]example", "login.evil.example"},
 	{"evil[.]example", "evil.example"},
-	{"https[:]//evil[.]example/promo%3Cscript%3E", "https://evil.example/promo"},
+	{"https[:]//login[.]evil[.]example/promo%3Cscript%3E", "https://login.evil.example/promo"},
 	{"xn--80ak6aa92e[.]com", "xn--80ak6aa92e.com"},
 	{"bit[.]ly", "bit.ly"},
 	{"phish[.]example", "phish.example"},
@@ -120,6 +121,75 @@ func TestTheQueueNeverRendersADisputedDestinationAsALink(t *testing.T) {
 					"one click this whole feature exists to make deliberate.", a)
 			}
 		}
+	}
+}
+
+// disputeCards splits the rendered queue into one string per dispute.
+//
+// Crude on purpose: the assertion below is that a *particular* card carries a
+// particular pair of values, and a whole-page Contains would pass on a page that
+// printed the entry against the wrong dispute.
+func disputeCards(body string) []string {
+	parts := strings.Split(body, `<li class="rounded-lg border`)
+	if len(parts) < 2 {
+		return nil
+	}
+	return parts[1:]
+}
+
+// cardFor returns the card carrying a dispute's decision endpoints.
+func cardFor(t *testing.T, body, id string) string {
+	t.Helper()
+	for _, c := range disputeCards(body) {
+		if strings.Contains(c, "/disputes/"+id+"/") {
+			return c
+		}
+	}
+	t.Fatalf("no card on the page belongs to dispute %s", id)
+	return ""
+}
+
+// TestTheQueueNamesTheEntryAllowWouldRemove is the rendering half of F33.
+//
+// The runtime list matches on label boundaries, so somebody refused at
+// login.evil.example was refused by the row that says evil.example — and that
+// row, which every workspace on the instance is refused by, is what Allow
+// deletes. Until M45 the page rendered the typed host and nothing else, so the
+// string the owner read was not the string the button acted on.
+//
+// Asserted per card rather than per page: the entry appearing *somewhere* in the
+// queue is not the claim. The claim is that the dispute offering Allow says what
+// Allow removes.
+func TestTheQueueNamesTheEntryAllowWouldRemove(t *testing.T) {
+	body := renderDisputes(t)
+
+	// The fixture's first item is the one whose entry is a parent of its host.
+	card := cardFor(t, body, "0198c9c5-0000-7000-8000-000000000030")
+	if !strings.Contains(card, "/allow") {
+		t.Fatal("the fixture's liftable dispute lost its Allow control; the rest of " +
+			"this test would pass on a card with no decision to describe")
+	}
+	if !strings.Contains(card, "login[.]evil[.]example") {
+		t.Error("the card does not render the host that was typed")
+	}
+	// `>evil[.]example</code>` and not a bare Contains: the typed host ends with
+	// the entry, so any looser match is satisfied by the value this test exists
+	// to say is not sufficient.
+	if !strings.Contains(card, "Blocklist entry") ||
+		!strings.Contains(card, ">evil[.]example</code>") {
+		t.Error("the card offers Allow without naming the blocklist entry Allow " +
+			"deletes. The entry is a parent of the host above it and is removed " +
+			"for every workspace on the instance; a queue that shows only the " +
+			"typed host asks the owner to approve a decision it has not described.")
+	}
+
+	// And a refusal with no row behind it must not claim one. The heuristic card
+	// draws no Allow at all, so an "entry" there would be a value describing a
+	// deletion that cannot happen.
+	computed := cardFor(t, body, "0198c9c5-0000-7000-8000-000000000031")
+	if strings.Contains(computed, "Blocklist entry") {
+		t.Error("a dispute whose rule is computed from the URL names a blocklist " +
+			"entry; there is no row behind it and none anybody may add")
 	}
 }
 

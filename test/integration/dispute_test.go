@@ -164,6 +164,16 @@ func (f *disputeFixture) blockedHosts() map[string]string {
 	return out
 }
 
+func (f *disputeFixture) openDisputeCount() int {
+	f.t.Helper()
+	var n int
+	if err := f.pool.QueryRow(f.ctx,
+		`SELECT count(*) FROM destination_disputes WHERE status = 'open'`).Scan(&n); err != nil {
+		f.t.Fatal(err)
+	}
+	return n
+}
+
 type disputeAuditEvent struct {
 	Action   string
 	IPPrefix *string
@@ -413,6 +423,114 @@ func TestAllowingLiftsTheEntryAndOpensTheDestination(t *testing.T) {
 	}
 }
 
+// TestTheEntryLiftedIsTheOneRecordedAtFiling is F33's decision-integrity half.
+//
+// The runtime list answers with the *longest* matching entry, so which row
+// refuses a destination is a function of what the list holds at the moment the
+// question is asked. Until M45 that question was asked twice — once when the
+// dispute was filed and again when somebody clicked Allow — and only the first
+// answer was ever shown to anybody.
+//
+// This is the gap between the two. A more specific entry lands while the dispute
+// sits in the queue; the owner reads a dispute that says one entry and clicks a
+// button that used to delete the other. Nothing in the old queue could have told
+// them, because the dispute row carried no field naming what would go.
+func TestTheEntryLiftedIsTheOneRecordedAtFiling(t *testing.T) {
+	f := newDispute(t)
+	editor := f.editor("editor@example.com")
+	f.blockHost("evil.example", link.SourceReview)
+
+	d, err := f.disputes.File(f.ctx, editor, "https://login.evil.example/x")
+	if err != nil {
+		t.Fatalf("File: %v", err)
+	}
+	// What the filer typed, and what actually refused them. Different values, and
+	// both on the row, because the queue renders the second on the Allow control.
+	if d.Host != "login[.]evil[.]example" {
+		t.Errorf("host_defanged = %q, want the host that was typed", d.Host)
+	}
+	if d.BlockedHost != "evil[.]example" {
+		t.Fatalf("blocked_host_defanged = %q, want the entry that refused it. Without "+
+			"it the queue shows one host while Allow acts on another.", d.BlockedHost)
+	}
+
+	// The list moves while the dispute waits. A longer entry now matches the same
+	// destination, and a decision re-derived here would delete this one instead.
+	f.blockHost("login.evil.example", link.SourceReview)
+
+	if _, err := f.disputes.Allow(f.ctx, f.owner, d.ID); err != nil {
+		t.Fatalf("Allow: %v", err)
+	}
+
+	blocked := f.blockedHosts()
+	if _, still := blocked["evil.example"]; still {
+		t.Error("the entry the dispute recorded is still listed; the decision acted " +
+			"on something else")
+	}
+	if _, gone := blocked["login.evil.example"]; !gone {
+		t.Error("allowing deleted an entry the dispute never named. The owner was " +
+			"shown one blocklist entry and a different one was removed — which is " +
+			"the whole defect, whichever of the two happens to be broader.")
+	}
+	// And the audit record names the entry that actually went, so the log agrees
+	// with what the queue said.
+	events := f.decisionEvents()
+	if len(events) != 1 {
+		t.Fatalf("got %d decision events, want 1", len(events))
+	}
+	if got := events[0].Meta["blocklist_entry_removed"]; got != "evil[.]example" {
+		t.Errorf("blocklist_entry_removed = %v, want the entry the dispute recorded", got)
+	}
+}
+
+// TestOneOpenDisputePerBlocklistEntry is F33's flood half, and the claim
+// 01600's index comment used to make and could not keep.
+//
+// One blocked row is one decision. Keyed on the typed host, that row admitted a
+// fresh open dispute — and a notification to every owner on the instance — for
+// every distinct subdomain somebody could type, which is unbounded. Keyed on the
+// entry, the second appeal is the same appeal.
+func TestOneOpenDisputePerBlocklistEntry(t *testing.T) {
+	f := newDispute(t)
+	editor := f.editor("editor@example.com")
+	f.blockHost("evil.example", link.SourceReview)
+
+	first, err := f.disputes.File(f.ctx, editor, "https://login.evil.example/x")
+	if err != nil {
+		t.Fatalf("File: %v", err)
+	}
+	if _, err := f.disputes.File(f.ctx, editor, "https://mail.evil.example/y"); !errors.Is(err, domain.ErrConflict) {
+		t.Errorf("a second open dispute about the same blocklist entry returned %v, "+
+			"want a conflict. Every subdomain of a listed host is the same decision "+
+			"and the same notification to every owner on the instance.", err)
+	}
+	if n := f.openDisputeCount(); n != 1 {
+		t.Errorf("%d open disputes, want 1", n)
+	}
+
+	// A decided dispute frees the entry, exactly as 01600's partial predicate
+	// intends: an entry upheld today and argued about again next month is a new
+	// question.
+	if _, err := f.disputes.Uphold(f.ctx, f.owner, first.ID); err != nil {
+		t.Fatalf("Uphold: %v", err)
+	}
+	if _, err := f.disputes.File(f.ctx, editor, "https://mail.evil.example/y"); err != nil {
+		t.Errorf("an entry whose dispute was decided cannot be disputed again: %v", err)
+	}
+
+	// A rule with no row behind it is bounded by the host and by nothing else,
+	// and that is a real limit rather than a claim: every one of them stores the
+	// same empty entry, so a shared bound would make one open homograph dispute
+	// lock out every other destination on the instance.
+	if _, err := f.disputes.File(f.ctx, editor, "https://a@one.example/x"); err != nil {
+		t.Fatalf("File a credentials refusal: %v", err)
+	}
+	if _, err := f.disputes.File(f.ctx, editor, "https://a@two.example/x"); err != nil {
+		t.Errorf("a second computed-rule dispute about a different host returned %v; "+
+			"they carry no blocklist entry and must not share one bound", err)
+	}
+}
+
 // TestUpholdingChangesNoListAndIsStillRecorded.
 func TestUpholdingChangesNoListAndIsStillRecorded(t *testing.T) {
 	f := newDispute(t)
@@ -477,6 +595,53 @@ func TestAllowRefusesWhatItCannotActuallyLift(t *testing.T) {
 		var status string
 		if err := f.pool.QueryRow(f.ctx,
 			`SELECT status FROM destination_disputes WHERE id = $1`, d.ID).Scan(&status); err != nil {
+			t.Fatal(err)
+		}
+		if status != dispute.StatusOpen {
+			t.Errorf("status = %q after a refused decision, want it still open", status)
+		}
+	})
+
+	t.Run("a dispute filed before the entry was recorded", func(t *testing.T) {
+		f := newDispute(t)
+		f.blockHost("evil.example", link.SourceReview)
+
+		// Written directly, because no build produces one any more: this is the
+		// shape 03300 inherited — a list-backed dispute carrying no entry, filed
+		// by a build that stored only the typed host.
+		id := uuid.Must(uuid.NewV7())
+		if _, err := f.pool.Exec(f.ctx, `
+			INSERT INTO destination_disputes
+			       (id, host, blocked_host, url_defanged, reason_code, created_by_label)
+			VALUES ($1, 'login.evil.example', '', 'https[:]//login[.]evil[.]example/x',
+			        'low_confidence.operator_blocklist', 'editor@example.com')`,
+			id); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := f.disputes.Allow(f.ctx, f.owner, id)
+		if !errors.Is(err, domain.ErrConflict) {
+			t.Fatalf("Allow returned %v, want a conflict", err)
+		}
+		// And the refusal has to say which conflict it is. The generic one —
+		// "nothing on the blocklist refuses that host any more" — is false here:
+		// evil.example is still listed and still refusing. An owner told that
+		// would go looking for an entry that is in front of them.
+		if !contains(err.Error(), "before the blocklist entry was recorded") {
+			t.Errorf("refusal reads %q. A dispute that names no entry and a "+
+				"destination nothing refuses any more are different states and "+
+				"cannot share a sentence.", err)
+		}
+		if _, still := f.blockedHosts()["evil.example"]; !still {
+			t.Error("allowing a dispute that names no entry deleted one anyway. " +
+				"Re-deriving it is exactly the behaviour the column replaced, and " +
+				"doing it once for old rows keeps the defect alive on every " +
+				"instance that has one.")
+		}
+		// Still open, so the owner can uphold it and close the queue.
+		var status string
+		if err := f.pool.QueryRow(f.ctx,
+			`SELECT status FROM destination_disputes WHERE id = $1`, id).Scan(&status); err != nil {
 			t.Fatal(err)
 		}
 		if status != dispute.StatusOpen {

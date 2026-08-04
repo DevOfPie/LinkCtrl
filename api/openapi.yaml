@@ -2298,8 +2298,15 @@ paths:
         * **High confidence** — the curated list compiled into the binary.
           Overruling it is meant to cost a rebuild, which a click is not.
 
-        A destination nothing refuses answers `422` with `not_blocked`, and a
-        host already waiting for review answers `409`.
+        A destination nothing refuses answers `422` with `not_blocked`.
+
+        `409` means the decision this would ask for is already queued. Two
+        things produce it: an open dispute about the same host, and an open
+        dispute about the same **blocklist entry** — so once somebody has
+        appealed the row that says `evil.example`, `login.evil.example` and
+        `mail.evil.example` are the same appeal and are refused as duplicates
+        rather than filed again. A refusal with no row behind it is bounded by
+        the host alone, because there is nothing else to count.
 
         Requires `links.create`: a dispute is the second half of an attempt the
         caller was already allowed to make, so it needs no grant of its own.
@@ -2392,6 +2399,12 @@ paths:
         Deletes one row from the runtime low-confidence blocklist and closes the
         dispute as `allowed`. The person who filed it is notified in-app, and
         the decision is an audit event.
+
+        **The row it deletes is `blocked_host_defanged`, not
+        `host_defanged`**, and the two differ whenever somebody was refused by
+        a subdomain of a listed entry. It is fixed when the dispute is filed, so
+        a more specific entry added in the meantime cannot retarget a decision
+        you made about the entry you were shown.
 
         **It reaches the runtime list and nothing else.** The curated list is a
         compiled file and the unappealable refusals have no row anywhere, so
@@ -5568,8 +5581,25 @@ components:
         host_defanged:
           type: string
           description: |
-            The destination's host, inert. `evil.example` reads
-            `evil[.]example`.
+            The destination's host **as it was typed**, inert. `evil.example`
+            reads `evil[.]example`.
+        blocked_host_defanged:
+          type: string
+          description: |
+            The `blocked_destinations` entry this dispute is about, inert —
+            the row `allow` deletes, recorded when the dispute was filed.
+
+            **It is often not `host_defanged`.** The runtime list matches on
+            label boundaries, so a refusal at `login.evil.example` comes from
+            the row that says `evil.example`, and that row is refused for every
+            workspace on the instance. Render this one, not the host, wherever
+            you offer the decision.
+
+            Absent when no row produced the refusal: a punycode homograph,
+            credentials before the host, and a reputation-feed verdict are all
+            computed on every judgement. For the first two `liftable` is
+            `false`; for a feed verdict the decision itself is the override and
+            nothing is deleted.
         destination_defanged:
           type: string
           description: |

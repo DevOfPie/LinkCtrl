@@ -108,19 +108,29 @@ const (
 // them — an allow deletes the matched row, that migration never re-asserts its
 // rows by design, and a demo run must not quietly retire a shortener from the
 // instance's blocklist.
+// The open one is deliberately a *subdomain* of the listed entry, and that is
+// the only thing on the demo that shows F33's repair: the queue renders
+// go[.]tinyurl[.]com as the host somebody typed and tinyurl[.]com as the
+// blocklist entry Allow would remove. Two hosts that are always equal would
+// render the same page whether or not the entry is recorded at all.
 const (
 	demoBlockedHost = "promo.tracker-demo.example"
 	demoBlockedURL  = "https://promo.tracker-demo.example/offer?utm_source=demo"
 
 	demoUpheldURL = "https://bit.ly/linkctrl-demo-upheld"
-	demoOpenURL   = "https://tinyurl.com/linkctrl-demo-open"
+	demoOpenURL   = "https://go.tinyurl.com/linkctrl-demo-open"
 )
 
 // demoDisputedHosts are the hosts whose disputes the reset removes. Kept beside
 // the URLs above so adding one cannot be done without teaching the reset about
 // it.
+//
+// These are the hosts as *typed*, because destination_disputes.host is what the
+// reset matches on. go.tinyurl.com rather than tinyurl.com for exactly that
+// reason: the row the dispute is about is the parent, and deleting by the parent
+// would leave the demo's own dispute behind on the next run.
 func demoDisputedHosts() []string {
-	return []string{demoBlockedHost, "bit.ly", "tinyurl.com"}
+	return []string{demoBlockedHost, "bit.ly", "go.tinyurl.com"}
 }
 
 // demoWorkspace2Catalogue is the second workspace's links.

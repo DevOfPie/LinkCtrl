@@ -1125,6 +1125,30 @@ migrations run at boot.
 
 ### Fixed
 
+- **The review queue now names the blocklist entry Allow deletes, and the entry
+  is fixed when the dispute is filed.** The runtime blocklist matches on label
+  boundaries, so somebody refused at `login.evil.example` was refused by the row
+  that says `evil.example` — and Allow deleted that row, for every workspace on
+  the instance, while the queue displayed only the host that was typed. Nothing
+  on the page or in the API said which entry would go. Worse, the entry was
+  worked out again at the moment of the click rather than at filing: a more
+  specific row added while the dispute waited silently retargeted a decision the
+  owner believed they were making about what they had been shown.
+
+  Each dispute now carries the entry it is about, `blocked_host_defanged` in the
+  API, rendered beside the host on `/disputes`. Existing disputes carry no entry
+  and Allow refuses them rather than guessing — uphold and file again. Upgrading
+  needs nothing.
+
+- **One blocked host is now one dispute, not one per subdomain of it.** The
+  "already waiting for review" bound counted the host as typed, so a single
+  listed entry admitted a fresh dispute — and a fresh notification to every
+  organization owner on the instance — for `login.`, `mail.`, `a.`, and any
+  other prefix somebody cared to type. It is counted per blocklist entry now. A
+  refusal with no entry behind it — a punycode homograph, credentials before the
+  host, a reputation-feed verdict — is still bounded by the host alone, because
+  there is no row to count instead.
+
 - **An A/B test on a password-protected link no longer sends everybody to the
   same arm.** A sequential split chooses its arm before the password is asked
   for, and the challenge page and the form that answers it are two requests — so

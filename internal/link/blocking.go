@@ -341,23 +341,35 @@ func HostCandidates(host string) []string {
 // database failure as "not blocked" — would mean the one tier an owner can
 // change stops working exactly when the instance is unhealthy, and a link
 // created in that window is a link nobody reviewed.
-func (s *Service) listedInDatabase(ctx context.Context, host string) (*Block, error) {
+//
+// It returns the matched row's host alongside the refusal, and that second
+// value is the whole of F33's repair. The candidate walk means the row that
+// refuses a destination is routinely a *parent* of the host that was typed, so
+// a consumer holding only the typed host cannot name what refused it without
+// re-running the walk against a list that has moved since. Naming it here, once,
+// at the moment the match happens, is what lets M31's queue record the row it is
+// deciding about rather than re-deriving one later.
+func (s *Service) listedInDatabase(ctx context.Context, host string) (*Block, string, error) {
 	candidates := HostCandidates(host)
 	if len(candidates) == 0 {
-		return nil, nil
+		return nil, "", nil
 	}
 	row, err := s.q.MatchBlockedDestination(ctx, candidates)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, nil
+		return nil, "", nil
 	case err != nil:
-		return nil, fmt.Errorf("match blocked destination: %w", err)
+		return nil, "", fmt.Errorf("match blocked destination: %w", err)
 	}
 	// The row's source decides the rule. Its reason is deliberately not returned
 	// to the caller: that is the operator's note to the owner reading the list,
 	// not an explanation owed to whoever typed the URL, and echoing it back would
 	// turn the refusal into a way to read the blocklist one probe at a time.
-	return blockForSource(row.Source), nil
+	//
+	// The host is not the reason and is safe to carry: it is a value the caller
+	// already supplied a suffix of, and the only consumer that renders it defangs
+	// it first.
+	return blockForSource(row.Source), row.Host, nil
 }
 
 // blockForSource is the refusal a matched row reports.
@@ -575,6 +587,20 @@ type Verdict struct {
 	// reason codes rather than as a Block, and Judge recovers the tier so that
 	// "which tier refused this" is one question with one answer.
 	Block *Block
+	// ListedHost is the blocked_destinations row that produced the refusal, or
+	// "" when no row did.
+	//
+	// It is not the same value as Host and the difference is the point: the
+	// runtime list matches on label boundaries, so blocking "evil.example"
+	// refuses "login.evil.example" and the row that refuses it is the parent.
+	// Only the two list-backed rules ever set this — a homograph, credentials in
+	// the URL and a feed verdict are all computed rather than held, and for those
+	// there is no row to name.
+	//
+	// M31's queue is the consumer: it records this at filing time so that a
+	// decision months later acts on the row the refusal actually matched, rather
+	// than on whatever the same walk would find in a list that has since changed.
+	ListedHost string
 	// Errs is the refusal as whoever typed the URL receives it. Its Field is
 	// unset; the surface that reports it decides which input to highlight.
 	// Empty exactly when Normalized is set.
@@ -622,9 +648,10 @@ func (s *Service) Judge(ctx context.Context, raw string) (Verdict, error) {
 	}
 	host := strings.ToLower(u.Hostname())
 
+	var listed string
 	block := highConfidence(host)
 	if block == nil {
-		block, err = s.listedInDatabase(ctx, host)
+		block, listed, err = s.listedInDatabase(ctx, host)
 		if err != nil {
 			return Verdict{}, err
 		}
@@ -641,8 +668,12 @@ func (s *Service) Judge(ctx context.Context, raw string) (Verdict, error) {
 	if block == nil {
 		return Verdict{Normalized: normalized, Host: host}, nil
 	}
+	// listed is set only on the branch that set block, so it can never describe a
+	// row that did not do the refusing: the heuristics and the feed run only when
+	// the list said nothing, and by then listed is still "".
 	return Verdict{
-		Host: host, Block: block, Errs: domain.ValidationErrors{block.Error("")},
+		Host: host, ListedHost: listed, Block: block,
+		Errs: domain.ValidationErrors{block.Error("")},
 	}, nil
 }
 

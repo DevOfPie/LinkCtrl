@@ -608,7 +608,10 @@ curl -sS -X POST "$BASE/api/v1/disputes" -b cookies.txt \
 
 `422` with a code of `not_disputable` means the refusal was unappealable or came
 from the compiled list, and no review changes either. `not_blocked` means nothing
-refuses that destination any more. `409` means the host is already waiting.
+refuses that destination any more. `409` means this decision is already queued —
+either about the same host, or about the same **blocklist entry**, so once
+somebody has appealed the row that says `evil.example`, `login.evil.example` is
+the same appeal rather than a second one.
 
 Whoever holds `destinations.review` — the **owner** role, and no API key — reads
 the queue with `GET /api/v1/disputes?open=true` and answers with
@@ -616,11 +619,20 @@ the queue with `GET /api/v1/disputes?open=true` and answers with
 blocklist entry; upholding changes nothing. Both are audit events and both notify
 the person who asked.
 
-Two allows are refused with `409` rather than doing nothing: a
+**The entry allowing deletes is `blocked_host_defanged`, not `host_defanged`.**
+The two differ whenever somebody was refused by a subdomain of a listed host: a
+refusal at `login.evil.example` comes from the row that says `evil.example`, and
+that row is what refuses every workspace on the instance. It is recorded when the
+dispute is filed, so an entry added while the dispute waits cannot change what
+allowing it removes. A refusal with no row behind it carries no
+`blocked_host_defanged` at all.
+
+Three allows are refused with `409` rather than doing nothing: a
 `punycode_homograph` or `url_credentials` refusal holds no entry to delete
-(`liftable` is `false` on those), and an entry that came from
+(`liftable` is `false` on those); an entry that came from
 `LINKCTRL_DESTINATION_BLOCKLIST` would come back at the next restart — take it
-out of the environment instead.
+out of the environment instead; and a dispute filed before 0.2.0 carries no
+recorded entry, so uphold it and file it again.
 
 A `feed_reputation` refusal is `liftable` and deletes nothing, which is the one
 allow that works that way. There is no blocklist row behind it — the verdict is

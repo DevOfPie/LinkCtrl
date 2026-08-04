@@ -32,7 +32,7 @@ UPDATE destination_disputes
        decided_by_label = $3,
        decided_at = now()
  WHERE id = $4 AND status = 'open'
-RETURNING id, host, url_defanged, reason_code, status, organization_id, workspace_id, created_by, created_by_label, created_at, decided_by, decided_by_label, decided_at
+RETURNING id, host, url_defanged, reason_code, status, organization_id, workspace_id, created_by, created_by_label, created_at, decided_by, decided_by_label, decided_at, blocked_host
 `
 
 type DecideDestinationDisputeParams struct {
@@ -70,6 +70,7 @@ func (q *Queries) DecideDestinationDispute(ctx context.Context, arg DecideDestin
 		&i.DecidedBy,
 		&i.DecidedByLabel,
 		&i.DecidedAt,
+		&i.BlockedHost,
 	)
 	return i, err
 }
@@ -81,9 +82,14 @@ DELETE FROM blocked_destinations WHERE host = lower($1::text)
 // Removes one host from the low-confidence runtime list.
 //
 // The only deletion in this program that is not a reconciliation, and the only
-// one an `allow` decision performs. Scoped to an exact host — the row that was
-// matched, which the caller has already read — so a decision about
-// 'login.evil.example' cannot take 'evil.example' off the list by accident.
+// one an `allow` decision performs. Scoped to an exact host — the row the
+// dispute recorded when it was filed and the queue displayed on the button — so
+// a decision about 'login.evil.example' cannot take 'evil.example' off the list
+// by accident. It can take it off deliberately, and routinely does: 'evil.example'
+// is what refused 'login.evil.example', and lifting anything else would leave the
+// destination refused. What 03300 changed is that the owner is now told which of
+// the two they are deciding about, and that the answer cannot move between the
+// filing and the click.
 //
 // It cannot reach the other two tiers, and there is nothing to scope against
 // them: the embedded list is a compiled file and the unappealable tier has no
@@ -97,8 +103,38 @@ func (q *Queries) DeleteBlockedDestination(ctx context.Context, host string) (in
 	return result.RowsAffected(), nil
 }
 
+const getBlockedDestination = `-- name: GetBlockedDestination :one
+SELECT host, source, reason FROM blocked_destinations
+ WHERE host = lower($1::text)
+`
+
+type GetBlockedDestinationRow struct {
+	Host   string
+	Source string
+	Reason string
+}
+
+// Reads one entry by its exact host.
+//
+// The decision path's read, and deliberately not MatchBlockedDestination: that
+// one walks a host and every parent of it and answers with the longest match,
+// which is the right question when *judging* a destination and the wrong one
+// when acting on a dispute. The dispute already names the row it is about —
+// destination_disputes.blocked_host, written when it was filed — so the only
+// thing left to ask is whether that row is still there and who owns it (03300).
+//
+// No rows means the entry has gone since the dispute was filed, which the caller
+// reports rather than papering over: an allow that deleted nothing must not be
+// recorded as one that did.
+func (q *Queries) GetBlockedDestination(ctx context.Context, host string) (GetBlockedDestinationRow, error) {
+	row := q.db.QueryRow(ctx, getBlockedDestination, host)
+	var i GetBlockedDestinationRow
+	err := row.Scan(&i.Host, &i.Source, &i.Reason)
+	return i, err
+}
+
 const getDestinationDispute = `-- name: GetDestinationDispute :one
-SELECT id, host, url_defanged, reason_code, status, organization_id, workspace_id, created_by, created_by_label, created_at, decided_by, decided_by_label, decided_at FROM destination_disputes WHERE id = $1
+SELECT id, host, url_defanged, reason_code, status, organization_id, workspace_id, created_by, created_by_label, created_at, decided_by, decided_by_label, decided_at, blocked_host FROM destination_disputes WHERE id = $1
 `
 
 func (q *Queries) GetDestinationDispute(ctx context.Context, id uuid.UUID) (DestinationDispute, error) {
@@ -118,6 +154,7 @@ func (q *Queries) GetDestinationDispute(ctx context.Context, id uuid.UUID) (Dest
 		&i.DecidedBy,
 		&i.DecidedByLabel,
 		&i.DecidedAt,
+		&i.BlockedHost,
 	)
 	return i, err
 }
@@ -156,18 +193,20 @@ func (q *Queries) HostHasAllowedDispute(ctx context.Context, host string) (bool,
 const insertDestinationDispute = `-- name: InsertDestinationDispute :one
 
 INSERT INTO destination_disputes (
-    id, host, url_defanged, reason_code,
+    id, host, blocked_host, url_defanged, reason_code,
     organization_id, workspace_id, created_by, created_by_label
 ) VALUES (
-    $1, lower($2::text), $3, $4,
-    $5, $6, $7, $8
+    $1, lower($2::text), lower($3::text),
+    $4, $5,
+    $6, $7, $8, $9
 )
-RETURNING id, host, url_defanged, reason_code, status, organization_id, workspace_id, created_by, created_by_label, created_at, decided_by, decided_by_label, decided_at
+RETURNING id, host, url_defanged, reason_code, status, organization_id, workspace_id, created_by, created_by_label, created_at, decided_by, decided_by_label, decided_at, blocked_host
 `
 
 type InsertDestinationDisputeParams struct {
 	ID             uuid.UUID
 	Host           string
+	BlockedHost    string
 	UrlDefanged    string
 	ReasonCode     string
 	OrganizationID *uuid.UUID
@@ -184,14 +223,22 @@ type InsertDestinationDisputeParams struct {
 // row for a visitor to resolve.
 // Files one dispute.
 //
-// The unique partial index on (host) WHERE status = 'open' is what makes a
-// second open dispute about the same host a constraint violation rather than a
-// duplicate row, so the "already under review" answer is decided by the database
-// and not by a check-then-insert that two requests can both pass.
+// Two unique partial indexes decide whether this is a duplicate, and both do it
+// in the database rather than in a check-then-insert two requests can both pass.
+// 01600's is on (host) WHERE status = 'open' — one open dispute per host as
+// typed. 03300's is on (blocked_host) WHERE status = 'open' AND blocked_host
+// <> ” — one open dispute per *blocklist row*, so a caller cannot put the same
+// decision in front of the owner once per subdomain of it.
+//
+// @blocked_host is the row the refusal matched, which is routinely a parent of
+// @host. Empty when the rule is computed from the URL rather than held on the
+// list, and the second index skips those: every one of them would carry the same
+// key, and one open homograph dispute must not lock out every other.
 func (q *Queries) InsertDestinationDispute(ctx context.Context, arg InsertDestinationDisputeParams) (DestinationDispute, error) {
 	row := q.db.QueryRow(ctx, insertDestinationDispute,
 		arg.ID,
 		arg.Host,
+		arg.BlockedHost,
 		arg.UrlDefanged,
 		arg.ReasonCode,
 		arg.OrganizationID,
@@ -214,12 +261,13 @@ func (q *Queries) InsertDestinationDispute(ctx context.Context, arg InsertDestin
 		&i.DecidedBy,
 		&i.DecidedByLabel,
 		&i.DecidedAt,
+		&i.BlockedHost,
 	)
 	return i, err
 }
 
 const listDestinationDisputes = `-- name: ListDestinationDisputes :many
-SELECT id, host, url_defanged, reason_code, status, organization_id, workspace_id, created_by, created_by_label, created_at, decided_by, decided_by_label, decided_at FROM destination_disputes
+SELECT id, host, url_defanged, reason_code, status, organization_id, workspace_id, created_by, created_by_label, created_at, decided_by, decided_by_label, decided_at, blocked_host FROM destination_disputes
  WHERE (NOT $1::boolean OR status = 'open')
    AND (
         $2::timestamptz IS NULL
@@ -273,6 +321,7 @@ func (q *Queries) ListDestinationDisputes(ctx context.Context, arg ListDestinati
 			&i.DecidedBy,
 			&i.DecidedByLabel,
 			&i.DecidedAt,
+			&i.BlockedHost,
 		); err != nil {
 			return nil, err
 		}

@@ -122,9 +122,19 @@ const (
 // the database. There is no free-text field at all — see the migration.
 type Dispute struct {
 	ID uuid.UUID `json:"id"`
-	// Host is the destination's host, defanged. Never rendered as a link, never
-	// handed to anything that fetches.
+	// Host is the destination's host as it was typed, defanged. Never rendered as
+	// a link, never handed to anything that fetches.
 	Host string `json:"host_defanged"`
+	// BlockedHost is the blocklist entry an allow would delete, defanged. Empty
+	// when no entry produced the refusal.
+	//
+	// It is a separate field from Host because it is routinely a different value:
+	// the list matches on label boundaries, so a dispute about
+	// login.evil.example is a dispute about the row that says evil.example. Every
+	// surface that offers Allow renders this rather than Host, which is the whole
+	// of F33 — a queue that shows one host while the button acts on another is
+	// asking somebody to approve a decision they have not been told.
+	BlockedHost string `json:"blocked_host_defanged,omitempty"`
 	// Destination is the attempted URL, defanged.
 	Destination string `json:"destination_defanged"`
 	// ReasonCode is M30's "<tier>.<rule>". Always a low_confidence code.
@@ -298,8 +308,17 @@ func (s *Service) File(ctx context.Context, actor *auth.Identity, rawURL string)
 
 	params := dbgen.InsertDestinationDisputeParams{
 		// v7, so the queue's keyset tiebreak on (created_at, id) is stable.
-		ID:          uuid.Must(uuid.NewV7()),
-		Host:        verdict.Host,
+		ID:   uuid.Must(uuid.NewV7()),
+		Host: verdict.Host,
+		// The row that refused it, taken from the judgement that just ran rather
+		// than re-derived when somebody decides. Empty for a rule computed from
+		// the URL, which has no row at all.
+		//
+		// Recorded now because the answer can change later: the walk that finds a
+		// matching entry answers with the longest match, so an entry added between
+		// the filing and the decision would silently retarget a decision the owner
+		// believes they are making about the host the queue showed them.
+		BlockedHost: verdict.ListedHost,
 		UrlDefanged: link.Defang(rawURL),
 		ReasonCode:  verdict.Block.Tier.Code(verdict.Block.Rule),
 		// Both forms of the filer, for the reason audit_logs keeps both: the id
@@ -322,8 +341,14 @@ func (s *Service) File(ctx context.Context, actor *auth.Identity, rawURL string)
 	row, err := s.q.InsertDestinationDispute(ctx, params)
 	if err != nil {
 		if isUniqueViolation(err) {
+			// Either index can raise this, and the message covers both without
+			// saying which — the honest reading of the second one is that the
+			// decision is queued rather than the destination, because an open
+			// dispute about the entry that refuses evil.example is the same
+			// decision as one about login.evil.example. Naming the queued dispute
+			// would tell a filer about a row they cannot read.
 			return nil, fmt.Errorf(
-				"%w: that destination is already waiting for review", domain.ErrConflict)
+				"%w: that refusal is already waiting for review", domain.ErrConflict)
 		}
 		return nil, fmt.Errorf("file dispute: %w", err)
 	}
@@ -434,11 +459,12 @@ func (s *Service) CountOpen(ctx context.Context, actor *auth.Identity) (int64, e
 
 // Allow removes the entry that refused the destination, and closes the dispute.
 //
-// The deletion is scoped to the row the low-confidence list actually matched,
-// found with the same label-boundary rule the refusal used. It can reach nothing
-// else: the embedded tier is a compiled file and the unappealable tier has no row
-// anywhere, so "acts only on the runtime low-confidence list" is a property of
-// there being nothing else to act on.
+// The deletion is scoped to the row the low-confidence list matched when the
+// dispute was filed, recorded on the dispute then and rendered on the control
+// that triggers this. It can reach nothing else: the embedded tier is a compiled
+// file and the unappealable tier has no row anywhere, so "acts only on the
+// runtime low-confidence list" is a property of there being nothing else to act
+// on.
 //
 // Two refusals it declines rather than pretending to lift:
 //
@@ -519,6 +545,14 @@ func (s *Service) decide(
 // one of liftedByDecision — the allow changes something real, just not a row.
 // For every other rule an empty string is a refusal, because a decision that
 // changes nothing must not be recorded as one that did.
+//
+// It reads the entry off the dispute and does not look for one. Until M45 it
+// re-ran link.HostCandidates against the list as it stood at decision time and
+// deleted the longest match, which meant the row that disappeared was whatever
+// the list happened to say when the button was clicked rather than the row the
+// filer was refused by and the owner was shown. Naming it at filing time is F33's
+// repair, and it is what makes DeleteBlockedDestination's scoping comment true as
+// written.
 func (s *Service) entryToLift(ctx context.Context, d dbgen.DestinationDispute) (string, error) {
 	if !liftableRules[d.ReasonCode] {
 		return "", fmt.Errorf(
@@ -532,15 +566,26 @@ func (s *Service) entryToLift(ctx context.Context, d dbgen.DestinationDispute) (
 		// the whole effect.
 		return "", nil
 	}
+	if d.BlockedHost == "" {
+		// A list-backed rule with no entry recorded is a dispute filed before
+		// 03300 existed. Refused rather than guessed at: re-deriving the entry is
+		// the behaviour this column was added to retire, and doing it once "just
+		// for old rows" would keep the defect alive on exactly the instances that
+		// have one. Upholding closes it, and re-filing writes the entry.
+		return "", fmt.Errorf(
+			"%w: this dispute was filed before the blocklist entry was recorded on it, "+
+				"so there is no entry it can be trusted to remove; uphold it and file it "+
+				"again", domain.ErrConflict)
+	}
 
-	row, err := s.q.MatchBlockedDestination(ctx, link.HostCandidates(d.Host))
+	row, err := s.q.GetBlockedDestination(ctx, d.BlockedHost)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return "", fmt.Errorf(
 			"%w: nothing on the blocklist refuses that host any more; uphold it to close "+
 				"the dispute", domain.ErrConflict)
 	case err != nil:
-		return "", fmt.Errorf("match blocked destination: %w", err)
+		return "", fmt.Errorf("read blocked destination: %w", err)
 	}
 	if row.Source == link.SourceEnv {
 		return "", fmt.Errorf(
@@ -699,8 +744,8 @@ func (s *Service) mailFiler(ctx context.Context, d dbgen.DestinationDispute, out
 func toDispute(r dbgen.DestinationDispute) *Dispute {
 	d := &Dispute{
 		ID: r.ID,
-		// Defanged on the way out. The column holds the plain host because that
-		// is the key a decision acts on, and every reader gets the inert form —
+		// Defanged on the way out. The columns hold the plain hosts because those
+		// are the keys a decision acts on, and every reader gets the inert form —
 		// including the JSON API, whose consumers are the ones nobody reviews.
 		Host:        link.Defang(r.Host),
 		Destination: r.UrlDefanged,
@@ -710,6 +755,11 @@ func toDispute(r dbgen.DestinationDispute) *Dispute {
 		CreatedAt:   r.CreatedAt,
 		DecidedAt:   r.DecidedAt,
 		Liftable:    liftableRules[r.ReasonCode],
+	}
+	// Empty stays empty rather than becoming a defanged nothing, so "no entry
+	// behind this refusal" reads the same on every surface.
+	if r.BlockedHost != "" {
+		d.BlockedHost = link.Defang(r.BlockedHost)
 	}
 	if r.DecidedByLabel != "" {
 		d.DecidedBy = r.DecidedByLabel

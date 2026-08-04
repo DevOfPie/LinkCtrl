@@ -162,6 +162,7 @@ file. Append a row when you append an entry.
 | [M45, two refusals that answered a question nobody asked them](#2026-08-04--m45-two-refusals-that-answered-a-question-nobody-asked-them) | F92 and F133 — unrelated rows, fixed on their own terms; **F92's two traps answered rather than half-answered**: both surfaces collapsed onto one shared string so the form's prose cannot leak what the status no longer does, and `DummyVerify` on the locked branch because equalising the status and not the work leaves the question answerable with a stopwatch; why `ErrAccountLocked` stays a distinct sentinel and the collapse belongs at the boundary; why the lockout is named *unconditionally* and why that sentence is not in `WriteError`; `account-locked` removed as a problem type and named as a client break; the fixture that had no lockout wired and would have passed by never locking one; **F133** — mail's `withLeadership` and skip-locked claim checked to be D95's constraint exactly, so the WaitGroup transfers whole; the one difference D95 does not cover, twenty sessions to *one* relay, and the tail cost accepted in the open; and why the eleven lines are spelled twice rather than shared |
 | [M45, a disclosure that reads both channels, and a count re-derived](#2026-08-04--m45-a-disclosure-that-reads-both-channels-and-a-count-re-derived) | F135 and F134 — the disclosure **learns** the second channel rather than being weakened, and why the weaker sentence was refused; why the page had no state to read and no wording could have been right; where the second read belongs and what it costs, said rather than assumed — a query because a registration is a row, on `link.Service` because the handler's route to it needs `webhooks.read` and this page is gated on nothing, and an error rather than a swallowed zero because a zero *is* the green panel; the predicate taken from the fan-out so the page asks *would anything have been queued*; the classification asserted total so an eighth event is a decision; four states, and why the scope of each claim is now part of the claim — a per-workspace read printed as an instance claim is the same defect inverted; a count and never a URL; the API field an **addition** by embedding; which assertions the two pinned tests kept and why the old string could not be; **F134 enumerated in a table** with what was excluded and why, the DNS query counted and the technicality that would have excluded it named; and the two sites F135 called defensible that the demo's own seeder falsifies |
 | [M45, four ways the redirect path was not the path it described](#2026-08-04--m45-four-ways-the-redirect-path-was-not-the-path-it-described) | F87, F96, F88 and F89 — every one of them on the redirect path, every one fixed where its own fix note said the obvious move would break something else; **F87 in the challenge branch and not by reordering the gates**, because the password challenge is a visit arriving in two parts rather than a refusal, and D57's *the distribution is unaffected* was true of every gate except the one that manufactures a second request; **F96 bounded inside `internal/gate` per call**, mirroring the resolver, because `http.TimeoutHandler` buffers and would swallow the very pages the gates write — and deliberately *not* detached with `WithoutCancel`, which is where the resolver's shape stops transferring; **F88 split into the two questions one function was answering**, `CanonicalHost` folding the DNS root dot for the routers and `HostOnly` dropping the port for the verified-hostname cache, with why stripping the port in the first would collapse a split-host deployment; **F89 propagated rather than widened**, because a per-hostname setter hands instance policy to `domains.write`, and the page moved to the link's own domain so the two surfaces agree by construction |
+| [M45, the queue showed one host and the button deleted another](#2026-08-04--m45-the-queue-showed-one-host-and-the-button-deleted-another) | F33, with F95 and F125 folded in — the dispute stored the host that was *typed* while `entryToLift` re-ran the candidate walk at decision time, so an owner approved a string the button did not act on and an entry added while the dispute waited could retarget the decision; why the repair is *store the entry at filing* rather than *render it at decision*; why `host` was not rewritten and 01600's index not replaced, and what the second partial index's `blocked_host <> ''` predicate is for; F125 true as written, with **accident** carrying the sentence; **F95's amplification explicitly not closed** — the multiplier is `EveryOwner`, which is F15's question, so the residue becomes F137 and 01600's comment shrinks to a claim the index can keep; and why F114 comes back as a prompt rather than a fix |
 
 ---
 
@@ -13658,3 +13659,131 @@ construction rather than by both happening to look at the default.
 `docs/slo.md` carries the run. Three of the four changes are on the redirect path
 and one of them adds a context wrap per gate query, so the inherited rule applies
 and this is a k6 measurement on the built image rather than a note.
+
+---
+
+## 2026-08-04 — M45, the queue showed one host and the button deleted another
+
+The dispute family from [M45](phase-details/m45.md)'s triage — [F33](deferred-findings.md),
+with F95 and F125 already folded into it by that milestone's queue hygiene, and
+F114 approved beside it. One repair, in the place all three rows pointed at.
+
+### What was actually wrong
+
+`destination_disputes.host` has been described since 01600 as *"the host the
+refusal actually matched rather than the one that was typed"*. No build has ever
+written that. `File` stored `verdict.Host`, the typed host, and `entryToLift`
+re-ran `link.HostCandidates` at **decision** time and deleted the longest match
+it found. Two consequences, and they are not the same defect wearing one row.
+
+**The queue described a decision it was not making.** A dispute rendered
+`login[.]evil[.]example`, and clicking Allow deleted `evil.example` — instance-wide,
+for every workspace — with nothing on the row, the page or the API naming the
+entry that would go. The verifier who found this called the decision-integrity
+half worth more than the flood, and that is right: an owner approving a
+moderation decision was reading a string the button did not act on.
+
+The sharper version is what re-deriving costs, and it is why the repair is *store
+it at filing* rather than *render it at decision*. The match answers with the
+longest listed entry, so the answer is a function of the list at the moment of
+the click. An entry added while a dispute waits silently retargets a decision the
+owner believes they are making about what they were shown.
+`TestTheEntryLiftedIsTheOneRecordedAtFiling` is that scenario exactly, and its
+sabotage — restoring the candidate walk in `entryToLift` — reproduces this row's
+evidence verbatim.
+
+**The bound at 01600:67-73 counted spellings, not decisions.** *"A caller who
+wants a thousand rows in front of the owner needs a thousand distinct blocked
+hosts"* was false by a prefix: one listed entry admitted one open dispute per
+subdomain of it, and each filing notifies every organization owner on the
+instance.
+
+### The repair, and the two things it is not
+
+`03300` adds `blocked_host`, written from the judgement that just ran —
+`link.Verdict` grew `ListedHost`, set in `listedInDatabase` where the match
+happens and nowhere else, so it cannot describe a row that did not do the
+refusing. `entryToLift` reads it and asks `GetBlockedDestination` for that exact
+host. `MatchBlockedDestination` now has one caller, which is the package that
+judges destinations, and `blocking.sql`'s comment about the caller passing every
+parent is true again.
+
+**It is not a rewrite of `host`.** Making the existing column mean the entry
+would have matched 01600's prose and needed the rows rewritten, and the queue
+would have lost what somebody actually typed — which is the other half of the
+same disclosure. Two columns, and 01600's comment corrected in place to say which
+is which. Correcting an applied migration's *comment* is what M45 has already
+done twice this week; the DDL is untouched.
+
+**It is not a replacement index.** `03300` adds a second partial unique index on
+`blocked_host` and leaves 01600's on `host` standing. The two are not redundant:
+for a list-backed refusal the first is subsumed by the second, and for a rule
+computed from the URL — a homograph, credentials before the host, a feed verdict
+— the entry is empty and 01600's is the only bound there is. The new index skips
+those rows (`blocked_host <> ''`) because every one of them carries the same key,
+and a shared bound would let one open homograph dispute lock out every unrelated
+destination on the instance. That predicate has its own sabotage.
+
+### F125 closes inside this, as its own note said it would
+
+`disputes.sql:93-95` claimed a decision about `login.evil.example` *"cannot take
+'evil.example' off the list by accident"*. The first clause was always true — the
+delete is a literal equality — and the trailing claim was not. It is true now,
+and the word carrying it is **accident**: `evil.example` still comes off, because
+it is what refused `login.evil.example` and lifting anything else would leave the
+destination refused. What changed is that the owner is told which of the two they
+are deciding, and that the answer cannot move between the filing and the click.
+Deleting the comment would have been the wrong repair, exactly as F125 warned.
+
+### F95's amplification is **not** closed, and this is the part to read
+
+F95 was merged into F33 on the strength of its own sentence — *"this should land
+with F33 rather than beside it"* — and its fix note ruled out the two obvious
+moves in advance: rate-limiting `POST /disputes` or capping the filer both leave
+the multiplier alone, because the multiplier is `notify.EveryOwner`, and
+narrowing `url_credentials` to fire only on already-suspect hosts changes what
+M30 refuses, which is a tier change rather than a queue fix.
+
+Both are still true, so what F33's repair actually bought is the *subdomain*
+multiplier and nothing else. `url_credentials` matches on `u.User != nil` with
+the host ignored: a filer needs no blocked host at all, stores an empty entry, is
+bounded only by 01600's index on the typed host, and each accepted filing still
+writes one notification per owner on the instance over a browser route with no
+rate limiter. The remaining lever is who a filing notifies, and that set is
+[F15](deferred-findings.md)'s question — the instance-wide reach of the queue,
+blocked on a design fork the owner has not been asked. **This work does not touch
+F15 and must not be read as narrowing it.**
+
+So the residue is recorded as **F137** rather than left inside a closed row, and
+01600's index comment now says what the index bounds instead of what it was hoped
+to bound. A comment repaired to a smaller true claim is the honest outcome when
+the larger one needs a decision nobody has taken.
+
+### F114 is not closed either, and is a prompt
+
+F114 — filing answers whether an open dispute exists — survives this repair. Its
+key moved from the typed host to the blocklist entry, which *reduces* the number
+of distinct questions the oracle can answer, and removes nothing. Its own fix
+note rules out both repairs: collapsing the conflict into the success answer
+breaks the honest second filer, and adding a tenancy column to the index removes
+the bound and the instance-wide semantics the service argues for. Deciding not to
+build for an approved row is the owner's, so the question is returned unanswered
+rather than settled here.
+
+### What was checked
+
+Eight sabotages, each red then counter-edited back: the entry stored as the typed
+host (both new tests); `entryToLift` back to the candidate walk (the decision
+deletes the wrong row, this row's evidence exactly); the new index made
+non-unique; its `blocked_host <> ''` predicate dropped (two unrelated credentials
+disputes collide); the template's entry block removed, then rendered
+unconditionally; the legacy-row guard removed — which is the one that failed to
+go red first time and was worth more than the others, because it showed the guard
+was load-bearing only for the *message*: without it a dispute carrying no entry is
+refused with *"nothing on the blocklist refuses that host any more"* while the
+entry sits in front of the owner, still listed. The assertion now names the
+sentence; and the demo's open dispute reverted to a host equal to its entry,
+which the new `demoCoverage` row catches.
+
+The demo's open dispute is `go.tinyurl.com` for that reason. Two hosts that are
+always equal render the same page whether or not the entry is recorded at all.

@@ -231,6 +231,7 @@ var queueSources = []string{
 	"internal/ui/templates/pages/disputes.html",
 	"internal/store/query/disputes.sql",
 	"internal/store/migrations/01600_destination_disputes.sql",
+	"internal/store/migrations/03300_dispute_matched_entry.sql",
 	// The outcome mail (M32, D1's addendum). A template is exactly where this
 	// gate has to keep looking: the browser is not the only client that fetches
 	// what it is shown, and a remote image in a message reporting a decision

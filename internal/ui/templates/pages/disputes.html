@@ -22,7 +22,15 @@
      Allow is drawn only when .Liftable. A punycode homograph or credentials in
      the URL are computed from the destination every time it is judged, so there
      is no blocklist row to remove and no row anybody may add — the honest
-     options for one of those are uphold, or a change to the rule. */}}
+     options for one of those are uphold, or a change to the rule.
+
+     .Host AND .BlockedHost ARE DIFFERENT VALUES AND BOTH ARE SHOWN. The list
+     matches on label boundaries, so somebody refused at login.evil.example was
+     refused by the row that says evil.example, and that row — instance-wide — is
+     what Allow deletes. Rendering only the first is what F33 was: a queue that
+     showed one host while the button acted on another. .BlockedHost is empty for
+     a rule with no row behind it, which is every rule Allow is not drawn for
+     plus a feed verdict, where the decision itself is the override. */}}
 {{define "content"}}
 <div class="mb-6 flex items-start justify-between gap-4">
   <div>
@@ -62,6 +70,20 @@
         {{/* Defanged, inert, and deliberately not a link. */}}
         <code class="mt-0.5 block select-all break-all font-mono text-sm text-ink">{{.Host}}</code>
 
+        {{if .BlockedHost}}
+        {{/* The row a decision acts on, which is a parent of the host above
+             whenever somebody was refused by a subdomain of a listed entry.
+             Shown for decided disputes too: it is the record of what went. */}}
+        <p class="mt-3 text-xs uppercase tracking-wide text-subtle">Blocklist entry</p>
+        <code class="mt-0.5 block select-all break-all font-mono text-sm text-ink">{{.BlockedHost}}</code>
+        {{if ne .BlockedHost .Host}}
+        <p class="mt-1 text-xs text-muted">
+          The refusal came from this entry, not from the host above. Allowing removes
+          it for every workspace on this instance.
+        </p>
+        {{end}}
+        {{end}}
+
         <p class="mt-3 text-xs uppercase tracking-wide text-subtle">Attempted destination</p>
         <code class="mt-0.5 block select-all break-all font-mono text-xs text-muted">{{.Destination}}</code>
 
@@ -81,9 +103,13 @@
       <div class="flex shrink-0 items-center gap-2">
         {{if eq .Status "open"}}
         {{if .Liftable}}
+        {{/* Both branches of the confirmation are literals in this template. The
+             entry itself is rendered in the body above rather than interpolated
+             here, so the row's values stay out of every attribute — which is
+             what the attribute scan in ui's tests is able to check. */}}
         <form method="post" action="/disputes/{{.ID}}/allow"
               hx-post="/disputes/{{.ID}}/allow"
-              hx-confirm="Allow this destination for every workspace on this instance? The refusal is removed for that host.">
+              hx-confirm="Allow this destination for every workspace on this instance? {{if .BlockedHost}}The blocklist entry shown on this dispute is deleted.{{else}}Nothing is deleted: the decision itself is the override.{{end}}">
           <button type="submit" class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Allow</button>
         </form>
         {{end}}

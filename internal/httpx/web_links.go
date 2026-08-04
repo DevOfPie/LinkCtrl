@@ -209,7 +209,12 @@ func (h *Web) loadLinksPage(w http.ResponseWriter, r *http.Request) (linksPageDa
 	case "filed":
 		data.Notice = "Sent for review. You will be notified when the instance owner decides."
 	case "duplicate":
-		data.Notice = "That destination is already waiting for review."
+		// Not "that destination", which stopped being true when the bound moved
+		// from the typed host to the blocklist entry: somebody appealing
+		// mail.evil.example is told this because login.evil.example is queued,
+		// and the two are one decision rather than one destination.
+		data.Notice = "That refusal is already waiting for review. Allowing it will " +
+			"clear this destination too."
 	case "refused":
 		data.Error = "That refusal cannot be appealed. Private addresses, non-web schemes " +
 			"and destinations on the curated list are refused for everyone, and no review changes that."

@@ -173,6 +173,14 @@ The queue's whole job is to show an administrator a URL a stranger chose, so:
   form obtainable through the API.
 - **The filer supplies no free text.** A dispute is a host and nothing else, so
   the stranger-controlled surface is one field wide and that field is inert.
+- **The queue names the entry the decision acts on, and it cannot move.** The
+  runtime list matches on label boundaries, so a refusal at `login.evil.example`
+  comes from the row that says `evil.example` — and that row is what allowing
+  deletes, for every workspace on the instance. Each dispute records the entry
+  when it is filed and the page renders it beside the host, so the string you
+  read is the string the button removes and a row added while the dispute waits
+  cannot retarget your decision. Disputes filed before 0.2.0 carry no entry and
+  refuse to be allowed at all.
 - **The unappealable and high-confidence tiers have no dispute path**, in either
   direction: filing one answers `422 not_disputable`, and a decision can only
   ever delete a `blocked_destinations` row.

@@ -134,6 +134,7 @@ type DestinationDispute struct {
 	DecidedBy      *uuid.UUID
 	DecidedByLabel string
 	DecidedAt      *time.Time
+	BlockedHost    string
 }
 
 type Domain struct {

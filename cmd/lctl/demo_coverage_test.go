@@ -198,6 +198,16 @@ func demoCoverage() []demoFeature {
 			Shows: "that looking and saying no is a recorded decision too",
 		},
 		{
+			Milestone: "M45", Feature: "A dispute whose blocklist entry is not its host",
+			Query: `SELECT count(*) FROM destination_disputes
+			         WHERE blocked_host <> '' AND blocked_host <> host`,
+			Min: 1,
+			Shows: "the queue naming the entry Allow deletes, which is a different " +
+				"host from the one that was typed whenever somebody is refused by " +
+				"a subdomain of a listed entry (F33). A demo where the two are " +
+				"always equal renders identically with the entry recorded or not",
+		},
+		{
 			Milestone: "M32", Feature: "No reputation feed verdict anywhere",
 			Query: `SELECT count(*) FROM destination_disputes
 			         WHERE reason_code = 'low_confidence.feed_reputation'`,

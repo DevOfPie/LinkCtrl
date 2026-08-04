@@ -367,14 +367,20 @@ func pageData(t *testing.T) map[string]any {
 		// link.Defang's output — because the test that reads this page asserts
 		// against the rendered HTML and a fixture holding a live URL would let
 		// the assertion pass for the wrong reason.
+		//
+		// The first item's Host and BlockedHost differ on purpose, and that is
+		// F33's shape: somebody typed login.evil.example and the row that refused
+		// them says evil.example, which is what Allow deletes. Making them equal
+		// here would let the queue render only one of the two and still pass.
 		"disputes": map[string]any{
 			"Title": "Blocked destinations", "Nav": "disputes", "Identity": owner(),
 			"OpenCount": int64(2), "OpenOnly": true,
 			"Items": []map[string]any{
 				{
 					"ID": "0198c9c5-0000-7000-8000-000000000030", "Status": "open",
-					"Host":        "evil[.]example",
-					"Destination": "https[:]//evil[.]example/promo%3Cscript%3E",
+					"Host":        "login[.]evil[.]example",
+					"BlockedHost": "evil[.]example",
+					"Destination": "https[:]//login[.]evil[.]example/promo%3Cscript%3E",
 					"ReasonCode":  "low_confidence.operator_blocklist",
 					"FiledBy":     "editor@example.com", "CreatedAt": now,
 					"Liftable": true, "DecidedAt": (*time.Time)(nil),
@@ -382,6 +388,7 @@ func pageData(t *testing.T) map[string]any {
 				{
 					"ID": "0198c9c5-0000-7000-8000-000000000031", "Status": "open",
 					"Host":        "xn--80ak6aa92e[.]com",
+					"BlockedHost": "",
 					"Destination": "https[:]//xn--80ak6aa92e[.]com/",
 					"ReasonCode":  "low_confidence.punycode_homograph",
 					"FiledBy":     "editor@example.com", "CreatedAt": now,
@@ -390,6 +397,7 @@ func pageData(t *testing.T) map[string]any {
 				{
 					"ID": "0198c9c5-0000-7000-8000-000000000032", "Status": "allowed",
 					"Host":        "bit[.]ly",
+					"BlockedHost": "bit[.]ly",
 					"Destination": "https[:]//bit[.]ly/abc",
 					"ReasonCode":  "low_confidence.shortener_chain",
 					"FiledBy":     "editor@example.com", "CreatedAt": now,
@@ -398,6 +406,7 @@ func pageData(t *testing.T) map[string]any {
 				{
 					"ID": "0198c9c5-0000-7000-8000-000000000033", "Status": "upheld",
 					"Host":        "phish[.]example",
+					"BlockedHost": "phish[.]example",
 					"Destination": "https[:]//phish[.]example/",
 					"ReasonCode":  "low_confidence.operator_blocklist",
 					"FiledBy":     "gone@example.com", "CreatedAt": now,

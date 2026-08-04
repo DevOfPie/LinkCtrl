@@ -24,10 +24,15 @@ CREATE TABLE destination_disputes (
     id uuid PRIMARY KEY,
 
     -- The destination host, lowercased and bare, exactly as blocked_destinations
-    -- stores one. This is what an `allow` decision removes from that list, so it
-    -- is the host the refusal actually matched rather than the one that was
-    -- typed: blocking 'evil.example' refuses 'login.evil.example', and a dispute
-    -- about the second is a dispute about the row that says the first.
+    -- stores one — the host that was **typed**.
+    --
+    -- Corrected 2026-08-04 (M45, finding F33). This comment used to claim the
+    -- opposite: that the column held "the host the refusal actually matched
+    -- rather than the one that was typed". No build ever wrote that. The service
+    -- has always stored the typed host here, and the row an `allow` removes is
+    -- named by destination_disputes.blocked_host, added by 03300 for exactly
+    -- this reason. Blocking 'evil.example' refuses 'login.evil.example': this
+    -- column says 'login.evil.example' and blocked_host says 'evil.example'.
     host text NOT NULL,
 
     -- The attempted destination, stored inert. Never a live URL, in this column
@@ -68,12 +73,20 @@ CREATE TABLE destination_disputes (
 --
 -- Instance-wide because the list it argues with is instance-wide (01500): the
 -- same host refused for one workspace is refused for all of them, so two open
--- disputes about it would be two people asking one question. It is also the
--- cheapest bound on somebody filling the queue — a caller who wants a thousand
--- rows in front of the owner needs a thousand distinct blocked hosts.
+-- disputes about it would be two people asking one question.
 --
 -- Partial, so a decided dispute does not block a later one. A host that is
 -- upheld today and re-listed after an argument can be disputed again.
+--
+-- Corrected 2026-08-04 (M45, finding F33). This comment used to add that the
+-- index was "the cheapest bound on somebody filling the queue — a caller who
+-- wants a thousand rows in front of the owner needs a thousand distinct blocked
+-- hosts". It never bounded that. Keyed on the typed host, one blocked row admits
+-- one open dispute per distinct subdomain of it; and `url_credentials` fires on
+-- userinfo with the host ignored, so a filer needs no blocked host at all, only
+-- distinct strings. 03300's index on blocked_host repairs the first half by
+-- counting rows instead of spellings. The second half is not a bound this table
+-- can express and is not claimed here any more.
 CREATE UNIQUE INDEX destination_disputes_open_host_idx
     ON destination_disputes (host) WHERE status = 'open';
 
