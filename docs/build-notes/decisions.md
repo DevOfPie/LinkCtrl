@@ -166,6 +166,7 @@ file. Append a row when you append an entry.
 | [M45, four ways the redirect path was not the path it described](#2026-08-04--m45-four-ways-the-redirect-path-was-not-the-path-it-described) | F87, F96, F88 and F89 — every one of them on the redirect path, every one fixed where its own fix note said the obvious move would break something else; **F87 in the challenge branch and not by reordering the gates**, because the password challenge is a visit arriving in two parts rather than a refusal, and D57's *the distribution is unaffected* was true of every gate except the one that manufactures a second request; **F96 bounded inside `internal/gate` per call**, mirroring the resolver, because `http.TimeoutHandler` buffers and would swallow the very pages the gates write — and deliberately *not* detached with `WithoutCancel`, which is where the resolver's shape stops transferring; **F88 split into the two questions one function was answering**, `CanonicalHost` folding the DNS root dot for the routers and `HostOnly` dropping the port for the verified-hostname cache, with why stripping the port in the first would collapse a split-host deployment; **F89 propagated rather than widened**, because a per-hostname setter hands instance policy to `domains.write`, and the page moved to the link's own domain so the two surfaces agree by construction |
 | [M45, the queue showed one host and the button deleted another](#2026-08-04--m45-the-queue-showed-one-host-and-the-button-deleted-another) | F33, with F95 and F125 folded in — the dispute stored the host that was *typed* while `entryToLift` re-ran the candidate walk at decision time, so an owner approved a string the button did not act on and an entry added while the dispute waited could retarget the decision; why the repair is *store the entry at filing* rather than *render it at decision*; why `host` was not rewritten and 01600's index not replaced, and what the second partial index's `blocked_host <> ''` predicate is for; F125 true as written, with **accident** carrying the sentence; **F95's amplification explicitly not closed** — the multiplier is `EveryOwner`, which is F15's question, so the residue becomes F137 and 01600's comment shrinks to a claim the index can keep; and why F114 comes back as a prompt rather than a fix |
 | [M45, seven comments that were confidently wrong](#2026-08-04--m45-seven-comments-that-were-confidently-wrong) | F8, F99, F122, F124, F126, F127 and F128 — the cheap comment sweep, no behaviour changed anywhere; why a conclusion whose reason was wrong keeps the conclusion; **F8's mechanism re-measured at the pinned go-redis rather than inherited** — `ContextTimeoutEnabled` is why a context bounds nothing, which becomes F138 rather than a fix; F99's placement kept and argued from the row lock instead of from the link class M36 falsified; F122's three wrong reasons for a behaviour D90 licenses, including the one that inverts for a NULL-workspace key; F124's `/64` as a floor and not a customer; F126's mechanism separated from the property it does have; F127's placement that is not serialization, with no lock added on purpose; and **F128's fork answered in the open** — the sentence narrowed rather than the work equalised, the row's count corrected from three doubled outcomes to four, and what equalising downward would have cost said rather than implied |
+| [M45, the demo flake was the random stream moving, not the minute](#2026-08-04--m45-the-demo-flake-was-the-random-stream-moving-not-the-minute) | D99 — F71 and F74: why a minute boundary was the trigger and not the cause, and what the shared PRNG was multiplying it by; the discard sitting inside a click's own draws, so a dropped click consumed three fewer than a kept one and re-rolled every link and day after it — which is where unequal, unbounded and negative deltas come from; the trigger measured on its own at one click per thirty-seven seconds; the two changes and why neither replaces the other; the history ending at the top of the hour and what that costs the demo; the generation split out so the property is asserted in five seconds rather than through a twenty-second integration test; the four alternatives refused, including freezing the test's clock and generating whole days; the hour-boundary residual priced rather than claimed away; and why F68 is not this |
 
 ---
 
@@ -14240,3 +14241,134 @@ is an account somebody loses access to, and the answer is the operator's databas
 rather than a CLI. Recorded as a deferred finding rather than built, because
 adding an operation that confers `instance.admin` is precisely what D98's
 delegation bound forbids, and any in-product recovery path is a variation on it.
+
+## 2026-08-04 — M45, the demo flake was the random stream moving, not the minute
+
+[F71](deferred-findings.md#closed) and [F74](deferred-findings.md#closed). The
+second row exists because it refused to be folded into the first, and that
+refusal is the only reason the cause was ever looked for.
+
+### What the evidence said, and what the recorded cause could not explain
+
+`TestDemoSeederShowsEveryFeatureItClaimsTo` seeds the demo three times and
+asserts the counts match. It failed roughly one run in three or four. Seven
+recorded deltas read 252, 152, 4, 67, 8, 127 and 21 clicks — every one different,
+one of them **negative**, and the failing assertion varying between the click
+history, the per-destination attribution, and the third limb that runs after the
+owner has been moved to another workspace. It reproduced on trees whose only
+change was a Markdown file.
+
+F71 attributed all of it to a minute boundary: today's clicks are generated at
+minute granularity, the ones landing after the current instant are discarded, and
+two runs seconds apart discard a different handful. That is true, and F71
+observed it accounting for eight rows. It cannot account for 252, it cannot
+produce a negative delta at all, and F74 said so rather than filing the
+observation under a cause that would then have looked confirmed.
+
+### The amplifier, which is four lines from the trigger
+
+`demoClicks` draws from **one** PRNG, seeded once from `--seed`, shared by every
+link and every day in the run. The discard was written inside the sequence of
+draws for a single click:
+
+```go
+at := day.Add(hour).Add(minute).Add(second)   // three draws
+if at.After(now) { continue }                 // ← here
+country := demoCountries[rng.IntN(...)]       // three more, skipped by the continue
+```
+
+A discarded click therefore consumed **three fewer draws** than a kept one — in
+both loops, the human and the bot. The stream is positional, so from the first
+discarded click onwards every subsequent draw was a different number: the
+`rng.Float64()` that sets each day's volume factor, the visitor index, the hour,
+the country, all of it. One click crossing the line re-rolled the traffic for
+every remaining link and every remaining day.
+
+That is the whole of the mystery. The deltas are unequal because the magnitude
+depends on *which* link the first flip happened on — a flip on the first
+catalogue entry re-rolls twenty links and a month each, a flip on the last
+re-rolls almost nothing. It goes negative because a re-roll is a fresh draw and
+not an addition. The failing assertion varies because the third run is the one
+furthest from the first in wall-clock time and so the likeliest to flip; the
+first two are separated only by one seeder run and the coverage queries.
+
+Measured directly: with the draws balanced and the discard left on the raw
+instant, thirty-seven seconds of clock changed the generated history by
+**exactly one click**. That number is what the trigger is worth on its own, and
+the gap between it and 252 is what the shared stream was multiplying it by.
+
+### D99 — a discarded click costs the same draws as a kept one, and the history ends at the top of the hour
+
+Two changes to `cmd/lctl/demo_data.go`, and they are not alternatives — each
+fixes something the other leaves standing.
+
+**Every draw for a click is taken before the click can be discarded.** This is
+the defect. A generator that consumes a variable number of draws per iteration
+has no stable output at all, and the fact that it produced a *plausible* month of
+traffic is what let it sit here since M39. After this, a discard costs one row
+and nothing else.
+
+**The discard compares against `now.Truncate(time.Hour)` rather than against
+`now`.** This is the design choice, and it is the one that could have gone
+another way. With it, every run inside the same clock hour generates the
+identical history — same clicks, same links, same instants — so the property the
+demo target depends on holds outright rather than probably. The cost is stated
+rather than hidden: **the demo loses its newest hour of traffic**, out of thirty
+days of it, and `last_click_at` on a busy link reads up to an hour old.
+
+The generation was split out of `demoClicks` into `demoClickRows` to make both
+assertable. That split is the point of it — a flake measured through a
+twenty-second integration test costs hundreds of runs to say anything about, and
+the two unit tests in `cmd/lctl/demo_clicks_test.go` cost five seconds and assert
+the property itself:
+
+- **the same within an hour** — the generator ignores everything below the hour;
+- **only ever gaining the window that passed** — an earlier history is a subset
+  of a later one, and every click the later one has extra falls inside the
+  elapsed window. This is the assertion that catches a moved stream, and it is
+  the one that would have caught this in the first place.
+
+Each was sabotage-verified against its own half, separately: restoring the
+discard above the draws fails the second test with a click lost from a *previous
+day*, and restoring the raw instant fails the first with the deltas that started
+all this.
+
+### What was refused
+
+**Weakening the coverage assertion.** It was never wrong. It says two runs must
+produce the same demo, and until today they did not.
+
+**Freezing the clock inside the test.** It would make the assertion exact and
+permanent, and it would stop measuring the thing that was broken — the seeder as
+`make demo-update` actually runs it. The flake was a real property of the
+command, not an artefact of the harness.
+
+**Generating only complete days.** It removes the boundary entirely and it makes
+the demo's charts open on an empty today, which is the exact "empty page where
+the feature would be" that [M33.5](phase-details/m33.5.md) exists to prevent.
+
+**Generating the whole of today.** Same determinism, and it writes click events
+in the future. A demo that says a link was last clicked in six hours is a state
+the product cannot reach, which is the one rule `lctl demo` has.
+
+### The residual, priced rather than claimed away
+
+Two runs on either side of an hour boundary still differ, by that hour's clicks
+and by nothing else — bounded, one-directional, and no longer amplified. The
+three seeder runs in the coverage test span about eight seconds of wall clock, so
+that window is roughly eight seconds in 3,600.
+
+Exact idempotency is not available while the demo shows a partial day: any
+dataset that ends at "now" changes as the clock moves, and all that can be chosen
+is the quantum. An hour was chosen because it is the coarsest quantum that costs
+the demo nothing anybody would notice.
+
+### Not F68
+
+[F68](deferred-findings.md#open) — `demoReset` scoping three statements by
+workspace and the rest by organization — is a real row and is untouched. It is
+not this. `demoActor` (D61) pins the actor to the organization's oldest live
+workspace *before* the reset runs, which is why the third limb's owner-switch
+does not reach the asymmetry; and `click_events` is truncated wholesale rather
+than by workspace, so the counts that moved were never workspace-scoped in the
+first place.

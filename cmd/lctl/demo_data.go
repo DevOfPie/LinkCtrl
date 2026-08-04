@@ -296,33 +296,42 @@ func demoAgent(vidx int) (device, browser, os string) {
 	return device, browser, os
 }
 
-// demoClicks writes the click history with COPY and returns how many rows it
-// wrote.
-func demoClicks(ctx context.Context, pool *pgxpool.Pool, workspaceID string,
-	cat []demoLink, ids map[int]uuid.UUID, opt demoOptions, now time.Time,
-) (int64, error) {
+// demoClickRow is one backfilled click, before it reaches the database.
+type demoClickRow struct {
+	linkID         uuid.UUID
+	at             time.Time
+	hash           []byte
+	country        string
+	device         string
+	browser        string
+	os             string
+	lang, referrer string
+	isBot          bool
+	latency        int32
+}
+
+// demoClickRows generates the click history.
+//
+// Pure, and separated from the COPY below for that reason: the history is the
+// one part of the demo that two runs can disagree about, so the property
+// `lctl demo --reset` has to have — run it again, get the same demo — is
+// asserted directly against this function rather than by seeding twice and
+// comparing row counts.
+func demoClickRows(cat []demoLink, ids map[int]uuid.UUID, opt demoOptions, now time.Time) []demoClickRow {
 	// Deterministic on purpose: two runs with the same --seed produce the same
 	// dataset, so a screenshot and a bug report describe the same instance.
 	rng := rand.New(rand.NewPCG(opt.prng, 0x9E3779B97F4A7C15)) //nolint:gosec // G404: demo data, determinism wanted
-	wsID, err := uuid.Parse(workspaceID)
-	if err != nil {
-		return 0, err
-	}
 
-	type row struct {
-		linkID         uuid.UUID
-		at             time.Time
-		hash           []byte
-		country        string
-		device         string
-		browser        string
-		os             string
-		lang, referrer string
-		isBot          bool
-		latency        int32
-	}
-	var rows []row
+	var rows []demoClickRow
 
+	// Today is only partly over, so some of the clicks generated for it land in
+	// the future and are not written. The cutoff for that is the top of the
+	// current hour rather than the instant itself, so that every run within the
+	// same hour drops exactly the same clicks and generates exactly the same
+	// history — which is what makes two runs minutes apart produce the same demo
+	// (F71, F74). The cost is that the newest hour of traffic is missing, out of
+	// thirty days of it.
+	cutoff := now.Truncate(time.Hour)
 	midnight := now.Truncate(24 * time.Hour)
 	for i, d := range cat {
 		if d.weight == 0 {
@@ -358,18 +367,26 @@ func demoClicks(ctx context.Context, pool *pgxpool.Pool, workspaceID string,
 					Add(time.Duration(demoHours[rng.IntN(len(demoHours))]) * time.Hour).
 					Add(time.Duration(rng.IntN(60)) * time.Minute).
 					Add(time.Duration(rng.IntN(60)) * time.Second)
-				if at.After(now) {
+				// Every draw for this click is made before the click can be
+				// discarded, so a discarded one costs the same draws as a kept
+				// one. Skipping them shifted the shared PRNG stream, and every
+				// link and day generated afterwards then differed — which is
+				// how dropping a single click changed the total by hundreds in
+				// either direction (F74).
+				country := demoCountries[rng.IntN(len(demoCountries))]
+				referrer := demoReferrers[rng.IntN(len(demoReferrers))]
+				latency := int32(200 + rng.IntN(2600)) //nolint:gosec // bounded
+				if at.After(cutoff) {
 					continue
 				}
-				country := demoCountries[rng.IntN(len(demoCountries))]
 				device, browser, os := demoAgent(vidx)
-				rows = append(rows, row{
+				rows = append(rows, demoClickRow{
 					linkID: linkID, at: at,
 					hash:    demoVisitorHash(day, vidx, false),
 					country: country, device: device, browser: browser, os: os,
 					lang:     demoLanguage(country),
-					referrer: demoReferrers[rng.IntN(len(demoReferrers))],
-					latency:  int32(200 + rng.IntN(2600)), //nolint:gosec // bounded
+					referrer: referrer,
+					latency:  latency,
 				})
 			}
 
@@ -382,25 +399,41 @@ func demoClicks(ctx context.Context, pool *pgxpool.Pool, workspaceID string,
 					Add(time.Duration(rng.IntN(24)) * time.Hour).
 					Add(time.Duration(rng.IntN(60)) * time.Minute).
 					Add(time.Duration(rng.IntN(60)) * time.Second)
-				if at.After(now) {
-					continue
-				}
+				// Drawn before the discard, for the reason above.
 				browser, os := "Other", "Other"
 				if rng.IntN(10) >= 8 {
 					browser, os = "Chrome", "Linux"
 				}
-				rows = append(rows, row{
+				country := demoCountries[rng.IntN(len(demoCountries))]
+				latency := int32(200 + rng.IntN(1800)) //nolint:gosec // bounded
+				if at.After(cutoff) {
+					continue
+				}
+				rows = append(rows, demoClickRow{
 					linkID: linkID, at: at,
 					hash:    demoVisitorHash(day, vidx, true),
-					country: demoCountries[rng.IntN(len(demoCountries))],
+					country: country,
 					device:  "bot", browser: browser, os: os,
 					// Crawlers send neither.
 					lang: "", referrer: "",
-					isBot: true, latency: int32(200 + rng.IntN(1800)), //nolint:gosec // bounded
+					isBot: true, latency: latency,
 				})
 			}
 		}
 	}
+	return rows
+}
+
+// demoClicks writes the click history with COPY and returns how many rows it
+// wrote.
+func demoClicks(ctx context.Context, pool *pgxpool.Pool, workspaceID string,
+	cat []demoLink, ids map[int]uuid.UUID, opt demoOptions, now time.Time,
+) (int64, error) {
+	wsID, err := uuid.Parse(workspaceID)
+	if err != nil {
+		return 0, err
+	}
+	rows := demoClickRows(cat, ids, opt, now)
 
 	copied, err := pool.CopyFrom(ctx,
 		pgx.Identifier{"click_events"},

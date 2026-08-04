@@ -309,7 +309,17 @@ notifications, the audit records, the disputes and the blocklist entry, all
 scoped to the demo organization — and truncates `click_events`, **all of them**,
 since a click row carries no marker saying it was seeded. Running it twice
 therefore produces the same demo, which is what makes `make demo-update` safe at
-every milestone. Like `seed`, it refuses to run when `APP_ENV=production` without
+every milestone.
+
+*The same* means the same and not nearly: the click history stops at the top of
+the current hour rather than at the instant the command ran, so two runs inside
+one hour generate the same clicks, on the same links, at the same instants. The
+newest hour of traffic is what that costs, out of thirty days of it, and it buys
+a command whose output does not depend on how long the previous run took. Two
+runs on either side of an hour boundary differ by that hour's clicks and by
+nothing else.
+
+Like `seed`, it refuses to run when `APP_ENV=production` without
 `--force`. `--seed N` fixes the PRNG so two runs produce the same dataset, and
 `--days`, `--volume` change how much history there is. `make demo` runs it with
 `--reset` against the development database.

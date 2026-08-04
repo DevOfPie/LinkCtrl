@@ -1496,6 +1496,19 @@ migrations run at boot.
   reachable before only by two accounts registering with the same display name;
   creating organizations by hand is what makes it ordinary.
 
+- **`lctl demo --reset` claimed running it twice produced the same demo, and
+  produced a different amount of click history each time.** The month of traffic
+  it backfills is anchored to the clock, and the clicks generated for the part of
+  today that has not happened yet are discarded — but discarding one used to
+  consume less of the seeder's random number stream than keeping it, so a single
+  click landing on the far side of that line re-rolled the traffic for every
+  remaining link and every remaining day. Two runs a few seconds apart could
+  differ by hundreds of clicks, in either direction. Two changes: the discard no
+  longer moves the stream, and the history now ends at the top of the current
+  hour rather than at the instant the command ran, so every run inside one hour
+  writes the same history. The demo loses its newest hour of traffic out of
+  thirty days, and gains being reproducible.
+
 ### Notes for operators
 
 - **`LINKCTRL_SIGNUP_MODE` keeps its meaning and gains a browser.** It was read

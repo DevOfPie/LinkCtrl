@@ -802,8 +802,11 @@ func TestDemoSeederShowsEveryFeatureItClaimsTo(t *testing.T) {
 		if counts[i] != again[i] {
 			t.Errorf("`lctl demo --reset` is not idempotent: %s (%s) counted %d "+
 				"on the first run and %d on the second. Running demo-update twice "+
-				"must produce the same demo; something the seeder writes has no "+
-				"matching line in demoResetPhase2.",
+				"must produce the same demo. Two causes, and the count says which: "+
+				"a count that only ever grows means something the seeder writes has "+
+				"no matching line in demoResetPhase2; a count that moves either way "+
+				"means the seeder writes something the clock decides, which is what "+
+				"cmd/lctl/demo_clicks_test.go exists to catch before it reaches here.",
 				feature.Feature, feature.Milestone, counts[i], again[i])
 		}
 	}
@@ -838,7 +841,9 @@ func TestDemoSeederShowsEveryFeatureItClaimsTo(t *testing.T) {
 				"switched workspace: %s (%s) counted %d on the first run and %d "+
 				"after the switch. Where the demo is written, and which rows the "+
 				"reset removes, must not depend on where somebody left the "+
-				"workspace switcher.",
+				"workspace switcher. This comparison spans all three runs, so it "+
+				"is also the one furthest apart in wall-clock time — read the fork "+
+				"in the error above before concluding the switch caused it.",
 				feature.Feature, feature.Milestone, counts[i], moved[i])
 		}
 	}
