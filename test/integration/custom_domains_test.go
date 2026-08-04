@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -48,9 +49,22 @@ const (
 type stubZone struct {
 	mu      sync.Mutex
 	records map[string]string
+	during  func()
 }
 
 func newStubZone() *stubZone { return &stubZone{records: map[string]string{}} }
+
+// interrupt runs fn while the next lookup is in flight, and once.
+//
+// This is the whole apparatus for the race tests: the gap a verification has to
+// survive is the one between reading a row and trusting what it said, and a DNS
+// lookup is what holds that gap open — seconds of it, against a nameserver the
+// registrant runs and can therefore make as slow as it likes.
+func (z *stubZone) interrupt(fn func()) {
+	z.mu.Lock()
+	z.during = fn
+	z.mu.Unlock()
+}
 
 func (z *stubZone) publish(name, value string) {
 	z.mu.Lock()
@@ -67,7 +81,15 @@ func (z *stubZone) withdraw(name string) {
 func (z *stubZone) LookupTXT(_ context.Context, name string) ([]string, error) {
 	z.mu.Lock()
 	v, ok := z.records[name]
+	during := z.during
+	z.during = nil
 	z.mu.Unlock()
+	// After the answer is read and before it is returned, holding no lock: the
+	// answer is about the name that was asked, whatever happens to the row that
+	// asked it.
+	if during != nil {
+		during()
+	}
 	if !ok {
 		// The shape a real resolver returns for a name that does not exist, so
 		// the message this produces is the one an operator would actually read.
@@ -538,6 +560,240 @@ func TestRenamingAHostnameUnverifiesIt(t *testing.T) {
 		if loc := resp.Header.Get("Location"); loc != "" {
 			t.Errorf("%s redirected to %q after the rename", host, loc)
 		}
+	}
+}
+
+// state reads what the row actually says.
+//
+// A test about a race cannot take the service's return value for it: the whole
+// failure being tested is one where the service returns a domain that looks
+// verified and the row underneath is a different name.
+func (f *domainFixture) state(id uuid.UUID) (hostname string, verified bool) {
+	f.t.Helper()
+	var at *time.Time
+	if err := f.pool.QueryRow(f.t.Context(),
+		`SELECT hostname, verified_at FROM domains WHERE id = $1`, id).
+		Scan(&hostname, &at); err != nil {
+		f.t.Fatal(err)
+	}
+	return hostname, at != nil
+}
+
+// verifiedEvents is every hostname the audit log claims was verified.
+func (f *domainFixture) verifiedEvents() []string {
+	f.t.Helper()
+	rows, err := f.pool.Query(f.t.Context(),
+		`SELECT metadata->>'hostname' FROM audit_logs WHERE action = $1`,
+		audit.ActionDomainVerified)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var h *string
+		if err := rows.Scan(&h); err != nil {
+			f.t.Fatal(err)
+		}
+		if h != nil {
+			out = append(out, *h)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		f.t.Fatal(err)
+	}
+	return out
+}
+
+// TestARenameCannotStealAVerificationInFlight is the reopened milestone's
+// security claim, on the on-demand path.
+//
+// The gate is *"only after `verified_at` is set"*, and what sets it used to be a
+// write addressed by id alone. Between reading the row and writing that column,
+// verification asks a nameserver the registrant controls about the hostname it
+// read — so the registrant chooses how long that gap lasts. A rename committed
+// inside it left the row carrying a name nobody had proved anything about, with
+// `verified_at` filled in by a check of the *old* name.
+//
+// The name renamed into is the instance's own link host here, because that is
+// what the finding established the reach to be: nothing refuses the instance's
+// own names, and a verified row carrying one repoints every alias lookup at the
+// attacker's domain. A test that renamed to a harmless third-party hostname
+// would pass on a build where the gate is closed and understate what it is a
+// gate on.
+func TestARenameCannotStealAVerificationInFlight(t *testing.T) {
+	f := newDomains(t)
+	d := f.register(customHost)
+	f.zone.publish(d.Verification.RecordName, d.Verification.RecordData)
+
+	f.zone.interrupt(func() {
+		if _, err := f.links.RenameDomain(t.Context(), f.owner, d.ID, linkHost); err != nil {
+			t.Errorf("the rename this test races against did not happen: %v", err)
+		}
+	})
+
+	out, err := f.links.VerifyDomain(t.Context(), f.owner, d.ID)
+	if err == nil {
+		t.Fatalf("verifying %s reported success for a row that had become %s: %+v",
+			customHost, linkHost, out)
+	}
+	var ve domain.ValidationErrors
+	if !errors.As(err, &ve) || ve[0].Code != "conflict" {
+		t.Errorf("the refusal was %v; a row that changed under the check is a conflict, "+
+			"not a server error and not a DNS failure", err)
+	}
+
+	hostname, verified := f.state(d.ID)
+	if hostname != linkHost {
+		t.Fatalf("the row holds %s, so this test raced nothing", hostname)
+	}
+	if verified {
+		t.Fatalf("%s is verified on the strength of a TXT record published for %s",
+			linkHost, customHost)
+	}
+	for _, h := range f.verifiedEvents() {
+		t.Errorf("the audit log records %s as verified; nothing was", h)
+	}
+}
+
+// TestTheJobCannotVerifyANameItDidNotCheck is the same claim on the leader's
+// path, which has the identical read-check-write shape and reaches every
+// registered hostname on the instance rather than one the caller owns.
+func TestTheJobCannotVerifyANameItDidNotCheck(t *testing.T) {
+	f := newDomains(t)
+	d := f.register(customHost)
+	f.zone.publish(d.Verification.RecordName, d.Verification.RecordData)
+
+	f.zone.interrupt(func() {
+		if _, err := f.links.RenameDomain(t.Context(), f.owner, d.ID, appHost); err != nil {
+			t.Errorf("the rename this test races against did not happen: %v", err)
+		}
+	})
+
+	sum, err := f.links.ReverifyDomains(t.Context(), time.Now(), 100)
+	if err != nil {
+		t.Fatalf("the pass failed rather than declining the write: %v", err)
+	}
+	if sum.Verified != 0 {
+		t.Errorf("the pass verified %d domains; the only check it ran was of a name the "+
+			"row no longer had", sum.Verified)
+	}
+
+	hostname, verified := f.state(d.ID)
+	if hostname != appHost {
+		t.Fatalf("the row holds %s, so this test raced nothing", hostname)
+	}
+	if verified {
+		t.Fatalf("%s — this instance's own dashboard host — is verified as a custom "+
+			"domain on somebody else's proof", appHost)
+	}
+	for _, h := range f.verifiedEvents() {
+		t.Errorf("the audit log records %s as verified; nothing was", h)
+	}
+}
+
+// TestServingHostnamesAreCheckedBeforePendingOnes is the other half of the
+// reopening: the cadence, and what it is a cadence *on*.
+//
+// Re-verification is the only thing that ever takes a lapsed hostname out of
+// service, and it walked one queue ordered by last check with NULLs first. A
+// rename writes that column back to NULL, so registrations can be kept at the
+// head of that queue for as long as somebody keeps renaming them — and a serving
+// hostname, which always carries a watermark, sorted behind all of them.
+//
+// The batch here is one, which is the whole test: under a single queue the pass
+// spends it on a pending row and the hostname whose DNS has gone keeps serving
+// for ever, while the summary reports a healthy pass.
+func TestServingHostnamesAreCheckedBeforePendingOnes(t *testing.T) {
+	f := newDomains(t)
+	served := f.verify(f.register(customHost))
+	if err := f.hosts.Reload(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	f.createOn(&served.ID, "live", "https://example.com/live")
+
+	// Registrations with no check against their name yet, which is what sorts
+	// first under NULLS FIRST — and what a rename manufactures on demand.
+	pending := make([]*link.Domain, 0, 3)
+	for i := range 3 {
+		pending = append(pending, f.register(fmt.Sprintf("pending%d.custom.test", i)))
+	}
+
+	// The deleted CNAME, on the hostname that is actually serving links.
+	f.zone.withdraw(domain.ChallengeRecordName(customHost))
+
+	now := time.Now()
+	sum, err := f.links.ReverifyDomains(t.Context(), now, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.Failing != 1 {
+		t.Fatalf("a one-row pass produced %+v; the row it spent itself on was a "+
+			"registration nobody is serving, so the hostname whose DNS has gone was "+
+			"never looked at", sum)
+	}
+
+	sum, err = f.links.ReverifyDomains(t.Context(), now.Add(link.DefaultVerifyGrace+time.Minute), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.Unverified != 1 {
+		t.Fatalf("the grace window elapsed and the pass produced %+v; the hard stop is "+
+			"what the cadence exists for", sum)
+	}
+	if err := f.hosts.Reload(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if resp := f.get(customHost, "/live"); resp.StatusCode != http.StatusNotFound {
+		t.Errorf("GET %s/live = %d after the window; serving did not stop",
+			customHost, resp.StatusCode)
+	}
+
+	// And the pending class is checked, not starved and above all not reaped: a
+	// hostname registered before its DNS cut-over fails every check until its
+	// owner publishes, which is somebody's migration in progress rather than an
+	// abandoned row.
+	if _, err := f.links.ReverifyDomains(t.Context(), now, 100); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range pending {
+		hostname, verified := f.state(p.ID)
+		if hostname != p.Hostname || verified {
+			t.Errorf("%s came back as %q verified=%v", p.Hostname, hostname, verified)
+		}
+		var checked *time.Time
+		if err := f.pool.QueryRow(t.Context(),
+			`SELECT verification_checked_at FROM domains WHERE id = $1`, p.ID).
+			Scan(&checked); err != nil {
+			t.Fatal(err)
+		}
+		if checked == nil {
+			t.Errorf("%s was never checked once there was room for it", p.Hostname)
+		}
+	}
+}
+
+// TestAWorkspaceCannotRegisterUnboundedHostnames.
+//
+// Registration is the cheapest write on this surface and the most expensive one
+// downstream: each row is a recurring DNS lookup the instance owes, aimed at a
+// nameserver the registrant chose and able to block for the whole lookup timeout.
+// Unbounded, one workspace decides how much re-verification the rest of the
+// instance gets — and needs no working hostnames to do it.
+func TestAWorkspaceCannotRegisterUnboundedHostnames(t *testing.T) {
+	f := newDomains(t)
+	for i := range domain.MaxDomainsPerWorkspace {
+		f.register(fmt.Sprintf("bulk%02d.custom.test", i))
+	}
+
+	_, err := f.links.RegisterDomain(t.Context(), f.owner, "one-too-many.custom.test")
+	var ve domain.ValidationErrors
+	if !errors.As(err, &ve) {
+		t.Fatalf("registering past the cap returned %v; a workspace can register "+
+			"hostnames without bound", err)
+	}
+	if ve[0].Code != "too_many" {
+		t.Errorf("the refusal was %q, which is not the cap", ve[0].Code)
 	}
 }
 

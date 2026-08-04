@@ -203,6 +203,12 @@ func (s *Service) Domains(ctx context.Context, actor *auth.Identity) ([]Domain, 
 // registering it controls the name, and nothing here pretends to: that is what
 // M40's verification is, and a hostname registered here is not a routing target
 // until it happens.
+//
+// **Bounded per workspace** (M40, reopened). Registration is the cheapest thing
+// on this surface and the most expensive one downstream: every row it writes
+// becomes a recurring DNS lookup the instance owes, so an unbounded surface let
+// one workspace decide how much re-verification everybody else got. See
+// domain.MaxDomainsPerWorkspace for the number and what it is bounding.
 func (s *Service) RegisterDomain(
 	ctx context.Context, actor *auth.Identity, rawHostname string,
 ) (*Domain, error) {
@@ -214,6 +220,22 @@ func (s *Service) RegisterDomain(
 	hostname, errs := domain.ValidateHostname(rawHostname)
 	if len(errs) > 0 {
 		return nil, errs
+	}
+	// The cap is checked before the name is looked up, because what it bounds is
+	// the registration and not the name: a workspace at its limit gets the same
+	// answer whether or not the hostname it typed is free.
+	count, err := s.q.CountWorkspaceDomains(ctx, &actor.WorkspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("count workspace domains: %w", err)
+	}
+	if count >= domain.MaxDomainsPerWorkspace {
+		return nil, domain.ValidationErrors{{
+			Field: "hostname", Code: "too_many",
+			Message: fmt.Sprintf("a workspace may have at most %d hostnames; every registered "+
+				"hostname is re-checked against DNS on a cadence, so this bounds the work one "+
+				"workspace can create for the whole instance. Remove one you no longer serve.",
+				domain.MaxDomainsPerWorkspace),
+		}}
 	}
 	if taken, err := s.hostnameTaken(ctx, hostname); err != nil {
 		return nil, err

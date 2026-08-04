@@ -26,6 +26,26 @@ func (q *Queries) CountLinksOnDomain(ctx context.Context, domainID uuid.UUID) (i
 	return count, err
 }
 
+const countWorkspaceDomains = `-- name: CountWorkspaceDomains :one
+SELECT count(*) FROM domains
+WHERE workspace_id = $1 AND deleted_at IS NULL
+`
+
+// How many hostnames this workspace has registered, which is what the
+// per-workspace cap is applied to (M40, reopened).
+//
+// Every undeleted row, verified or not, because what the cap bounds is the work
+// a registration creates: one outbound DNS lookup per hostname per pass, against
+// a nameserver the registrant chooses. An unverified hostname costs exactly the
+// same lookup as a verified one, so counting only the verified ones would bound
+// the wrong number.
+func (q *Queries) CountWorkspaceDomains(ctx context.Context, workspaceID *uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countWorkspaceDomains, workspaceID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createDomain = `-- name: CreateDomain :one
 
 INSERT INTO domains (id, organization_id, workspace_id, hostname, verification_token)
@@ -246,54 +266,102 @@ func (q *Queries) ListDomains(ctx context.Context, arg ListDomainsParams) ([]Lis
 	return items, nil
 }
 
-const listDomainsForVerification = `-- name: ListDomainsForVerification :many
-SELECT id, hostname, workspace_id, organization_id, verification_token,
-       verified_at, verification_failing_since, verification_checked_at
+const listPendingDomainsForVerification = `-- name: ListPendingDomainsForVerification :many
+SELECT id, hostname
 FROM domains
 WHERE deleted_at IS NULL
   AND NOT is_default
   AND verification_token IS NOT NULL
+  AND verified_at IS NULL
 ORDER BY verification_checked_at NULLS FIRST, id
 LIMIT $1
 `
 
-type ListDomainsForVerificationRow struct {
-	ID                       uuid.UUID
-	Hostname                 string
-	WorkspaceID              *uuid.UUID
-	OrganizationID           *uuid.UUID
-	VerificationToken        *string
-	VerifiedAt               *time.Time
-	VerificationFailingSince *time.Time
-	VerificationCheckedAt    *time.Time
+type ListPendingDomainsForVerificationRow struct {
+	ID       uuid.UUID
+	Hostname string
 }
 
-// The re-verification job's work list: every registered hostname, verified or
-// not, oldest check first.
+// Registered hostnames that are not being served, oldest check first.
 //
-// Unverified rows are included deliberately. Somebody who registers a hostname
-// and publishes the record should not have to come back and press a button —
-// the on-demand check exists for the person who does not want to wait, not
-// because waiting is the only other option.
-func (q *Queries) ListDomainsForVerification(ctx context.Context, rowLimit int32) ([]ListDomainsForVerificationRow, error) {
-	rows, err := q.db.Query(ctx, listDomainsForVerification, rowLimit)
+// Included deliberately, and second. Somebody who registers a hostname and
+// publishes the record should not have to come back and press a button — the
+// on-demand check exists for the person who does not want to wait, not because
+// waiting is the only other option. What they may now have to wait for is a pass
+// with room left after the serving class, which is the price of the serving class
+// never waiting for them.
+func (q *Queries) ListPendingDomainsForVerification(ctx context.Context, rowLimit int32) ([]ListPendingDomainsForVerificationRow, error) {
+	rows, err := q.db.Query(ctx, listPendingDomainsForVerification, rowLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListDomainsForVerificationRow{}
+	items := []ListPendingDomainsForVerificationRow{}
 	for rows.Next() {
-		var i ListDomainsForVerificationRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Hostname,
-			&i.WorkspaceID,
-			&i.OrganizationID,
-			&i.VerificationToken,
-			&i.VerifiedAt,
-			&i.VerificationFailingSince,
-			&i.VerificationCheckedAt,
-		); err != nil {
+		var i ListPendingDomainsForVerificationRow
+		if err := rows.Scan(&i.ID, &i.Hostname); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listServingDomainsForVerification = `-- name: ListServingDomainsForVerification :many
+
+SELECT id, hostname
+FROM domains
+WHERE deleted_at IS NULL
+  AND NOT is_default
+  AND verification_token IS NOT NULL
+  AND verified_at IS NOT NULL
+ORDER BY verification_checked_at NULLS FIRST, id
+LIMIT $1
+`
+
+type ListServingDomainsForVerificationRow struct {
+	ID       uuid.UUID
+	Hostname string
+}
+
+// The re-verification job's work list, in two classes (M40, reopened).
+//
+// **One queue could be starved, and the thing it starved was the hard stop.**
+// The job walked a single list ordered `verification_checked_at NULLS FIRST`,
+// which is the right order for one class and fatal across both: `RenameDomain`
+// writes that column back to NULL, so a workspace renaming its rows in a loop
+// kept them at the head of the queue for ever, while a *serving* hostname — which
+// always carries a watermark, because a check is what made it serve — sorted last
+// and was never reached. The only mechanism that takes a lapsed or hijacked
+// hostname out of service therefore stopped running instance-wide, while every
+// pass logged healthy counts.
+//
+// Splitting on `verified_at` closes it exactly, because a rename un-verifies:
+// churn can only ever crowd the *pending* class, and the class whose checks can
+// stop serving is drawn separately and walked first. Neither statement reads a
+// NULL `verification_checked_at` as anything but "not checked yet" — it is what a
+// live renamed row carries, and treating it as abandonment would delete the
+// registration of anybody mid-cut-over.
+// Hostnames this instance is serving, oldest check first.
+//
+// Walked first and given the whole budget it needs, because these are the rows
+// where a failing check has a consequence: the grace window runs against them and
+// `UnverifyDomain` ends it. A pass that runs out of time must run out of it on
+// the class where the cost of waiting is another hour of not-yet-serving, not on
+// the class where it is another hour of serving a name whose DNS is gone.
+func (q *Queries) ListServingDomainsForVerification(ctx context.Context, rowLimit int32) ([]ListServingDomainsForVerificationRow, error) {
+	rows, err := q.db.Query(ctx, listServingDomainsForVerification, rowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListServingDomainsForVerificationRow{}
+	for rows.Next() {
+		var i ListServingDomainsForVerificationRow
+		if err := rows.Scan(&i.ID, &i.Hostname); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -438,14 +506,41 @@ UPDATE domains
        verification_failing_since = NULL,
        verification_error         = NULL,
        updated_at                 = now()
- WHERE id = $1 AND deleted_at IS NULL
+ WHERE id = $1
+   AND hostname = $2
+   AND verification_token = $3
+   AND deleted_at IS NULL
 RETURNING id, organization_id, hostname, is_default, verified_at, ssl_status, created_at, updated_at, deleted_at, root_redirect_url, block_bots, block_bots_enforced, workspace_id, verification_token, verification_checked_at, verification_failing_since, verification_error
 `
 
-// A successful check. Sets verified_at only when it is not already set, so a
-// domain that has been serving for a month does not have its start date rewritten
-// every hour — the column answers "since when has this been served", and a
-// re-check is not a new answer.
+type MarkDomainVerifiedParams struct {
+	ID                uuid.UUID
+	Hostname          string
+	VerificationToken *string
+}
+
+// A successful check, written only onto the row that was actually checked.
+//
+// **The hostname and the token are in the predicate because they are what was
+// proved (M40, reopened).** Verification reads a row, resolves DNS against the
+// hostname it read — seconds, against a nameserver the registrant runs — and then
+// writes here. `RenameDomain` is concurrently reachable and clears `verified_at`;
+// an unconditional write landing after it would fill exactly that NULL through
+// the COALESCE below and start serving a name nobody proved, up to and including
+// one of the instance's own hosts. Predicating on `hostname` and
+// `verification_token` makes the late write affect **zero rows** instead, and the
+// caller treats that as the conflict it is.
+//
+// A transaction around the read and the write would not have closed this: the
+// rename commits in the gap between two separate transactions, so there is
+// nothing for it to serialise against. `FOR UPDATE` across the lookup would have,
+// by pinning a row lock for the DNS timeout inside a job that walks a batch —
+// which is a different outage.
+//
+// Sets verified_at only when it is not already set, so a domain that has been
+// serving for a month does not have its start date rewritten every hour — the
+// column answers "since when has this been served", and a re-check is not a new
+// answer.
 //
 // ssl_status moves to 'pending': the app never speaks ACME (decision D3), so the
 // most it can say is that it will now answer Caddy's on-demand ask for this
@@ -454,8 +549,8 @@ RETURNING id, organization_id, hostname, is_default, verified_at, ssl_status, cr
 //
 // The failing streak is cleared unconditionally, which is D70's "a successful
 // check at any point resets the count".
-func (q *Queries) MarkDomainVerified(ctx context.Context, id uuid.UUID) (Domain, error) {
-	row := q.db.QueryRow(ctx, markDomainVerified, id)
+func (q *Queries) MarkDomainVerified(ctx context.Context, arg MarkDomainVerifiedParams) (Domain, error) {
+	row := q.db.QueryRow(ctx, markDomainVerified, arg.ID, arg.Hostname, arg.VerificationToken)
 	var i Domain
 	err := row.Scan(
 		&i.ID,

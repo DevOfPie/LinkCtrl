@@ -335,12 +335,31 @@ Setting the interval to `0` switches the periodic pass off entirely and leaves
 verification on-demand only — which also means a hostname that stops verifying
 keeps serving indefinitely. Do that only if something else is watching.
 
+**A pass checks the hostnames you are serving first.**
+`LINKCTRL_DOMAIN_VERIFY_BATCH` bounds how many hostnames one pass looks at;
+serving hostnames are drawn first and take what they need of it, and
+registrations that are not yet served take what is left. The stop above can
+therefore be delayed only by other serving hostnames, never by a pile of
+registrations — anybody with an account can create those, and renaming one puts
+it back at the front of the queue. Raising the batch does not help with a slow
+nameserver and makes this worse: it is more lookups inside the same pass, each
+able to block for `LINKCTRL_DOMAIN_VERIFY_DNS_TIMEOUT`.
+
+**A workspace may register at most twenty-five hostnames.** Every registration is
+a recurring DNS lookup this instance owes, aimed at a nameserver the registrant
+chose, so the cap bounds the work one workspace can create for everyone else. It
+is a constant rather than a setting, and a workspace that reaches it is told to
+remove a hostname it no longer serves.
+
 Two changes take effect immediately and do not wait for the window, because
 neither is a failed check:
 
 - **Renaming a hostname un-verifies it.** The published record proves control of
   the old name and says nothing about the new one. A fresh token is minted, and
-  the domain serves nothing until the new record is published and checked.
+  the domain serves nothing until the new record is published and checked. A
+  rename that lands *while* a check is in flight makes that check verify nothing
+  and say so — it proved control of a name the row no longer carries, and the
+  remedy is to check again.
 - **Removing a hostname** stops it being served everywhere at once. Removal is
   refused while any link is on the domain, because every one of them would stop
   resolving.

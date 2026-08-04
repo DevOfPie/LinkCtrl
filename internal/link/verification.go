@@ -198,8 +198,11 @@ func (s *Service) VerifyDomain(ctx context.Context, actor *auth.Identity, id uui
 		}}
 	}
 
-	verified, err := s.q.MarkDomainVerified(ctx, row.ID)
+	verified, err := s.q.MarkDomainVerified(ctx, verifiedWrite(row))
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domainChangedUnderCheck(row.Hostname)
+		}
 		return nil, fmt.Errorf("mark domain verified: %w", err)
 	}
 	// Only when it *became* verified. Re-running the check on a domain that has
@@ -207,7 +210,13 @@ func (s *Service) VerifyDomain(ctx context.Context, actor *auth.Identity, id uui
 	// every time somebody presses the button would bury the event that matters.
 	if row.VerifiedAt == nil {
 		s.recordDomainEvent(ctx, actor, audit.ActionDomainVerified, verified.ID, map[string]any{
-			"hostname": verified.Hostname,
+			// The name that was **checked**, taken from the row the challenge was
+			// resolved against rather than from the row the write returned. They
+			// are the same name now, because the write refuses to land on any
+			// other — and the record is stamped from the checked one anyway, so
+			// that what the log claims was proved is what a lookup actually
+			// proved, whatever a later reader of this code does to the statement.
+			"hostname": row.Hostname,
 		})
 	}
 	s.invalidateHosts(ctx)
@@ -219,6 +228,37 @@ func (s *Service) VerifyDomain(ctx context.Context, actor *auth.Identity, id uui
 	out := domainFromRow(verified, links, true)
 	out.Verification = s.verificationOf(verified)
 	return out, nil
+}
+
+// verifiedWrite builds the conditional write from the row that was checked.
+//
+// **The row is the argument because the row is the proof.** Both call sites read
+// a domain, ask a nameserver about the hostname on it, and write back — and
+// between those two steps a rename can commit, clearing `verified_at` and giving
+// the row a name nobody has proved anything about. Passing the id alone let that
+// write land; passing the hostname and the token the check was made against makes
+// it affect zero rows instead. Built here rather than at each call site so the
+// two cannot drift into disagreeing about what was proved.
+func verifiedWrite(row dbgen.Domain) dbgen.MarkDomainVerifiedParams {
+	return dbgen.MarkDomainVerifiedParams{
+		ID: row.ID, Hostname: row.Hostname, VerificationToken: row.VerificationToken,
+	}
+}
+
+// domainChangedUnderCheck is what the on-demand path answers when the write found
+// no row to land on.
+//
+// A validation error rather than a 500, and rather than silence: nothing went
+// wrong, the domain changed while its DNS was being read, and the honest answer
+// is that this check proved nothing about whatever the row says now. Running it
+// again is the whole remedy.
+func domainChangedUnderCheck(hostname string) error {
+	return domain.ValidationErrors{{
+		Field: "hostname", Code: "conflict",
+		Message: fmt.Sprintf("%s changed while its DNS record was being checked, so nothing "+
+			"was verified: a check proves control of the hostname it read, and this row no "+
+			"longer carries that name. Check it again.", hostname),
+	}}
 }
 
 // checkChallenge asks DNS and reports whether the record is there, plus the
@@ -278,6 +318,10 @@ type DomainCheckSummary struct {
 //     expiry issues another warning is the silent persistence this milestone
 //     forbids, reached by a gentler route.
 //
+// Which hostnames a pass reaches, and in what order, is verificationWorkList's —
+// and it is a security property rather than a scheduling preference, because the
+// third outcome above is the only one this instance ever performs on its own.
+//
 // Errors are collected rather than returned on the first one: a nameserver that
 // is refusing queries for one customer must not stop the other customers' domains
 // being checked.
@@ -289,9 +333,9 @@ func (s *Service) ReverifyDomains(ctx context.Context, now time.Time, batch int3
 	if batch <= 0 {
 		batch = 200
 	}
-	rows, err := s.q.ListDomainsForVerification(ctx, batch)
+	rows, err := s.verificationWorkList(ctx, batch)
 	if err != nil {
-		return sum, fmt.Errorf("list domains for verification: %w", err)
+		return sum, err
 	}
 
 	changed := false
@@ -311,16 +355,31 @@ func (s *Service) ReverifyDomains(ctx context.Context, now time.Time, batch int3
 		sum.Checked++
 		ok, reason := s.checkChallenge(ctx, full)
 		if ok {
-			verified, err := s.q.MarkDomainVerified(ctx, full.ID)
+			verified, err := s.q.MarkDomainVerified(ctx, verifiedWrite(full))
 			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					// The row was renamed or removed while this lookup was in
+					// flight, so the check that just passed proved control of a
+					// name this row no longer has. Not an error to collect — a
+					// rename is something its owner is entitled to do at any
+					// moment — but logged, because the same shape is what an
+					// attempt to verify a name nobody holds looks like.
+					s.log.Warn("a domain changed while its verification was in flight; "+
+						"nothing was verified",
+						slog.String("hostname", full.Hostname),
+						slog.String("domain_id", full.ID.String()))
+					continue
+				}
 				errs = append(errs, fmt.Errorf("verify %s: %w", full.Hostname, err))
 				continue
 			}
 			if full.VerifiedAt == nil {
 				sum.Verified++
 				changed = true
+				// Stamped with the name the check was made against, for the
+				// reason VerifyDomain stamps it that way.
 				s.recordDomainEvent(ctx, systemActor(full), audit.ActionDomainVerified,
-					verified.ID, map[string]any{"hostname": verified.Hostname})
+					verified.ID, map[string]any{"hostname": full.Hostname})
 			} else if full.VerificationFailingSince != nil {
 				// It recovered inside the window. Not an audit event — nothing
 				// administrative happened — but the host cache carries a root
@@ -386,6 +445,65 @@ func (s *Service) ReverifyDomains(ctx context.Context, now time.Time, batch int3
 		s.invalidateHosts(ctx)
 	}
 	return sum, errors.Join(errs...)
+}
+
+// domainCheckTarget is one row on the pass's work list: which row, and the name
+// it carried when the list was drawn.
+//
+// The name is here for the log line and nothing else. What the check is made
+// against is re-read from the row a moment later, and what the write is
+// predicated on comes from that re-read — a list is a plan, not evidence.
+type domainCheckTarget struct {
+	ID       uuid.UUID
+	Hostname string
+}
+
+// verificationWorkList decides which hostnames this pass checks, and in what
+// order.
+//
+// **Serving hostnames first, and their class is drawn separately (M40,
+// reopened).** One queue ordered by last check looks fair and is not: a rename
+// writes `verification_checked_at` back to NULL, so a workspace renaming its
+// registrations in a loop held the head of that queue indefinitely, and a serving
+// hostname — which always carries a watermark, because a passing check is what
+// made it serve — sorted behind all of it and was never reached. What that
+// starved was not throughput. It was the only mechanism that ever stops serving a
+// hostname whose DNS has gone, and it stopped instance-wide while every pass
+// logged healthy counts.
+//
+// Two draws close it because a rename *un-verifies*: churn can only crowd the
+// pending class. The serving class is drawn first and takes what it needs of the
+// batch; the pending class takes what is left, so the total is the bound the
+// operator configured and not twice it. A pass that runs out of its deadline
+// therefore drops pending rows, where waiting another hour costs a hostname
+// another hour of not yet serving, rather than serving rows, where it costs
+// everyone another hour of a name being served on proof that has expired.
+//
+// Raising the batch was the other obvious move and it is strictly worse: more
+// rows inside the same ten minutes, each able to block for the DNS timeout, is
+// the same starvation with a longer queue.
+func (s *Service) verificationWorkList(ctx context.Context, batch int32) ([]domainCheckTarget, error) {
+	serving, err := s.q.ListServingDomainsForVerification(ctx, batch)
+	if err != nil {
+		return nil, fmt.Errorf("list serving domains for verification: %w", err)
+	}
+	out := make([]domainCheckTarget, 0, len(serving))
+	for _, r := range serving {
+		out = append(out, domainCheckTarget{ID: r.ID, Hostname: r.Hostname})
+	}
+
+	remaining := batch - int32(len(serving)) //nolint:gosec // G115: LIMIT batch bounds it
+	if remaining <= 0 {
+		return out, nil
+	}
+	pending, err := s.q.ListPendingDomainsForVerification(ctx, remaining)
+	if err != nil {
+		return nil, fmt.Errorf("list pending domains for verification: %w", err)
+	}
+	for _, r := range pending {
+		out = append(out, domainCheckTarget{ID: r.ID, Hostname: r.Hostname})
+	}
+	return out, nil
 }
 
 // systemActor attributes a job-driven change to the instance, in the log of the

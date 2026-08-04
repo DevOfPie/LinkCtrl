@@ -11722,3 +11722,89 @@ release-blocker and refuted down to a line on an existing row. F45 and F61 gain
 the audit-action and never-grantable-scope enumerations that M42 and M43 widened.
 F69's *"four trailing rows"* is now none, every boundary row having been converted
 as its milestone landed.
+
+## 2026-08-04 — M40, what a verification may write, and what a pass may be delayed by
+
+M40 is reopened on [F76](deferred-findings.md) and [F84](deferred-findings.md).
+Both falsify a bullet the milestone made about itself, so the correction carries
+M40's number rather than arriving as a successor.
+
+### D92 — the write is conditional on what was checked, and the pass is drawn in two classes
+
+**F76: the write.** Verification read a row, asked a nameserver about the
+hostname on that row, and wrote `verified_at` back by id. The registrant runs
+that nameserver, so the registrant chooses how long the gap between the read and
+the write lasts — and `PATCH /api/v1/domains/{domainID}` is reachable inside it.
+A rename committed in the gap cleared `verified_at`, and the late write filled
+exactly that NULL through its own `COALESCE`. The row then served a name nobody
+had proved anything about. Nothing in this tree refuses the instance's *own*
+names — D69 declined to check registrations against them, on the reasoning that
+no router matched a `Host` header against the table, which M40 itself changed —
+so the name renamed into could be the app host or the link host, for which DNS
+and certificates already exist.
+
+**`MarkDomainVerified` is now predicated on `hostname` and `verification_token`,
+and a zero-row result is a branch rather than an unnoticed success.** Three
+shapes were available and two of them are worse:
+
+| Shape | Why not |
+| --- | --- |
+| A transaction around the read and the write | Closes nothing. The rename commits *between* two separate transactions, so there is no conflict to serialise against — the second transaction simply sees the renamed row and writes to it. |
+| `SELECT … FOR UPDATE` held across the lookup | Works, and pins a row lock for `DOMAIN_VERIFY_DNS_TIMEOUT` inside a job that walks a whole batch. It trades a hijack for a lock convoy on a table the redirect path's cache reloads from. |
+| **A conditional write** | The predicate carries the proof: this row, this name, this token. A late write affects zero rows, and the caller answers a validation conflict rather than a 500 — nothing went wrong, and the remedy is to check again. |
+
+Applied at **both** call sites, because the on-demand path and the job have the
+identical shape and a fix at one of them would have left the other open.
+
+**The audit record now names the hostname that was checked**, taken from the row
+the challenge was resolved against rather than from the row the write returned.
+Under the conditional write these cannot differ; it is written that way anyway
+because the previous code consumed the returned row *only* for this, and so the
+log corroborated the hijack instead of catching it. A record that says what was
+proved should not depend on the statement above it still being correct.
+
+**F84: the pass.** Re-verification walked one list ordered
+`verification_checked_at NULLS FIRST`. `RenameDomain` writes that column back to
+NULL, so a workspace renaming its registrations in a loop held the head of the
+queue indefinitely, while a *serving* hostname — which always carries a
+watermark, because a passing check is what made it serve — sorted behind all of
+it and was never reached. What that starves is not throughput. It is the D70/D71
+hard stop, the only mechanism that ever takes a lapsed or hijacked hostname out
+of service, and it stopped instance-wide while every pass logged healthy counts.
+
+**Two draws, serving first, inside one batch.** The split is on `verified_at`,
+and it is exact because a rename *un-verifies*: churn can only ever crowd the
+pending class. The serving class takes what it needs of `DOMAIN_VERIFY_BATCH` and
+the pending class takes the remainder, so the configured number still bounds the
+whole pass rather than each half of it. A pass that runs out of its deadline
+therefore drops pending rows — where waiting costs a hostname another hour of not
+yet serving — instead of serving rows, where it costs everyone another hour of a
+name being served on proof that has expired.
+
+**And a workspace may register at most twenty-five hostnames**
+(`domain.MaxDomainsPerWorkspace`). The campaign and folder caps bound a page;
+this one bounds work the instance owes to somebody else's nameserver, and the
+hostnames need not resolve for that work to exist. Twenty-five is bounded below
+by a brand with a hostname per market plus the ones it is migrating between, and
+above by the share of one pass a single workspace should be able to consume:
+twenty-five unresponsive names cost about two minutes of a ten-minute pass. A
+constant rather than a setting, for the reason the other two caps are — a knob
+here would be raised to make a symptom go away.
+
+### What was deliberately not done
+
+- **The batch was not raised.** More rows inside the same ten minutes, each able
+  to block for the lookup timeout, is the same starvation with a longer queue.
+- **No concurrency was added to the lookups.** It would raise a ceiling; the
+  ordering creates a guarantee, and the guarantee is what the milestone claims.
+  Concurrency without the cap above would also turn the leader into an outbound
+  DNS amplifier any tenant could aim, which is a worse property than the one
+  being fixed.
+- **Nothing reaps a registration.** A hostname that fails every check is somebody
+  mid-cut-over, which `ReverifyDomains` already treats as a non-event, and a NULL
+  `verification_checked_at` is what a live renamed row carries — so neither age
+  nor an absent watermark is read anywhere as evidence of abandonment.
+- **`MarkDomainVerificationFailed` was left addressed by id.** It grants nothing:
+  a failure written onto a renamed row records a stale sentence and a watermark
+  on a row that is unverified either way. Recorded as a finding rather than fixed
+  here, because the reopening's scope is the write that starts serving.

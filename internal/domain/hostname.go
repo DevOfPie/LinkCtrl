@@ -28,6 +28,31 @@ const MaxHostnameLength = 253
 // MaxLabelLength bounds one dot-separated label, from the same RFC.
 const MaxLabelLength = 63
 
+// MaxDomainsPerWorkspace bounds how many hostnames one workspace may register.
+//
+// **Unlike the campaign and folder caps, this one bounds work rather than a
+// page.** Every registered hostname is a recurring outbound DNS lookup from
+// whichever replica holds the leader lock, aimed at a nameserver the registrant
+// chose, and each of those lookups can block for `DOMAIN_VERIFY_DNS_TIMEOUT`
+// against a pass with a fixed budget. Without a bound, one workspace can decide
+// how much of that budget exists for everybody else — and it does not even need
+// the hostnames to resolve, which is what makes an unbounded registration surface
+// an amplifier somebody can aim rather than a quota somebody can exceed.
+//
+// **Twenty-five, and the number is a judgement.** It is bounded below by what a
+// real tenant needs — a brand with a hostname per market, plus the ones it is
+// migrating between — and above by the share of one pass a single workspace
+// should be able to consume: at the default five-second timeout, twenty-five
+// wholly unresponsive hostnames cost about two minutes of a ten-minute pass. It
+// is deliberately not operator configuration, for the reason the campaign and
+// folder caps are not: a number nobody has needed to raise is a constant, and
+// making it a knob invites raising it to make a symptom go away.
+//
+// Registration is bounded and never reaped. A hostname that fails every check is
+// somebody's cut-over in progress, not an abandoned row, and nothing anywhere
+// treats a domain's age or its unchecked state as licence to remove it.
+const MaxDomainsPerWorkspace = 25
+
 // ValidateHostname normalizes and checks a hostname, returning the form to
 // store and every reason it cannot be stored.
 //

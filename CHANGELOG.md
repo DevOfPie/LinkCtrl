@@ -304,7 +304,17 @@ migrations run at boot.
   operator configuration (`LINKCTRL_DOMAIN_VERIFY_INTERVAL`,
   `LINKCTRL_DOMAIN_VERIFY_GRACE`); the runbook in `docs/deployment.md` states
   them and what changing them trades. **Renaming a hostname un-verifies it**: the
-  record you published proves control of the old name.
+  record you published proves control of the old name — and a rename that lands
+  while a check is running makes that check verify nothing and say so, because it
+  proved control of a name the row no longer carries.
+
+  Two bounds keep that stop reachable, and both are about the same thing: the
+  hourly pass is the only mechanism that ever takes a lapsed hostname out of
+  service, so nothing anybody can create at will may be allowed to delay it. A
+  pass checks the hostnames you are **serving** before the ones merely registered.
+  And **a workspace may register at most twenty-five hostnames** — every
+  registration is a recurring DNS lookup this instance owes to a nameserver
+  somebody else runs, whether or not the name resolves.
 
   **TLS stays your reverse proxy's.** This application never speaks ACME — no
   certificate authority is contacted and no account key is held. It answers

@@ -200,6 +200,15 @@ type Querier interface {
 	// that only ever gets compared against zero.
 	CountUsersByEmail(ctx context.Context, email string) (int64, error)
 	CountWebhooks(ctx context.Context, workspaceID uuid.UUID) (int64, error)
+	// How many hostnames this workspace has registered, which is what the
+	// per-workspace cap is applied to (M40, reopened).
+	//
+	// Every undeleted row, verified or not, because what the cap bounds is the work
+	// a registration creates: one outbound DNS lookup per hostname per pass, against
+	// a nameserver the registrant chooses. An unverified hostname costs exactly the
+	// same lookup as a verified one, so counting only the verified ones would bound
+	// the wrong number.
+	CountWorkspaceDomains(ctx context.Context, workspaceID *uuid.UUID) (int64, error)
 	// What D32 refuses a workspace deletion on.
 	//
 	// Soft-deleted links are excluded on purpose. `links`, `tags` and `folders` all
@@ -826,14 +835,6 @@ type Querier interface {
 	// on today, so it belongs at the top rather than wherever its placeholder name
 	// happens to sort.
 	ListDomains(ctx context.Context, arg ListDomainsParams) ([]ListDomainsRow, error)
-	// The re-verification job's work list: every registered hostname, verified or
-	// not, oldest check first.
-	//
-	// Unverified rows are included deliberately. Somebody who registers a hostname
-	// and publishes the record should not have to come back and press a button —
-	// the on-demand check exists for the person who does not want to wait, not
-	// because waiting is the only other option.
-	ListDomainsForVerification(ctx context.Context, rowLimit int32) ([]ListDomainsForVerificationRow, error)
 	// --- evaluation --------------------------------------------------------------
 	//
 	// The rules one run considers, oldest watermark first.
@@ -950,6 +951,15 @@ type Querier interface {
 	// as a list because M28 makes that untrue and a job that notified only the
 	// first organization would then be silently wrong for every other.
 	ListOrganizationIDs(ctx context.Context) ([]uuid.UUID, error)
+	// Registered hostnames that are not being served, oldest check first.
+	//
+	// Included deliberately, and second. Somebody who registers a hostname and
+	// publishes the record should not have to come back and press a button — the
+	// on-demand check exists for the person who does not want to wait, not because
+	// waiting is the only other option. What they may now have to wait for is a pass
+	// with room left after the serving class, which is the price of the serving class
+	// never waiting for them.
+	ListPendingDomainsForVerification(ctx context.Context, rowLimit int32) ([]ListPendingDomainsForVerificationRow, error)
 	// The scope vocabulary. Scopes are validated against the permissions table
 	// rather than a list in Go, so RBAC and API keys cannot drift apart.
 	ListPermissionSlugs(ctx context.Context) ([]string, error)
@@ -966,6 +976,32 @@ type Querier interface {
 	// belonging to another tenant returns no rows rather than a row the caller has
 	// to remember to reject.
 	ListRoutingRules(ctx context.Context, arg ListRoutingRulesParams) ([]ListRoutingRulesRow, error)
+	// The re-verification job's work list, in two classes (M40, reopened).
+	//
+	// **One queue could be starved, and the thing it starved was the hard stop.**
+	// The job walked a single list ordered `verification_checked_at NULLS FIRST`,
+	// which is the right order for one class and fatal across both: `RenameDomain`
+	// writes that column back to NULL, so a workspace renaming its rows in a loop
+	// kept them at the head of the queue for ever, while a *serving* hostname — which
+	// always carries a watermark, because a check is what made it serve — sorted last
+	// and was never reached. The only mechanism that takes a lapsed or hijacked
+	// hostname out of service therefore stopped running instance-wide, while every
+	// pass logged healthy counts.
+	//
+	// Splitting on `verified_at` closes it exactly, because a rename un-verifies:
+	// churn can only ever crowd the *pending* class, and the class whose checks can
+	// stop serving is drawn separately and walked first. Neither statement reads a
+	// NULL `verification_checked_at` as anything but "not checked yet" — it is what a
+	// live renamed row carries, and treating it as abandonment would delete the
+	// registration of anybody mid-cut-over.
+	// Hostnames this instance is serving, oldest check first.
+	//
+	// Walked first and given the whole budget it needs, because these are the rows
+	// where a failing check has a consequence: the grace window runs against them and
+	// `UnverifyDomain` ends it. A pass that runs out of time must run out of it on
+	// the class where the cost of waiting is another hour of not-yet-serving, not on
+	// the class where it is another hour of serving a name whose DNS is gone.
+	ListServingDomainsForVerification(ctx context.Context, rowLimit int32) ([]ListServingDomainsForVerificationRow, error)
 	// Counts l.id, not lt.link_id. The join onto links is what excludes trashed
 	// links, but counting the link_tags column ignored it: a LEFT JOIN keeps the
 	// link_tags row when its link is soft-deleted, so the count included trashed
@@ -1132,10 +1168,28 @@ type Querier interface {
 	// when the run began rather than sliding forward with every poll, which would
 	// make the window unreachable.
 	MarkDomainVerificationFailed(ctx context.Context, arg MarkDomainVerificationFailedParams) (Domain, error)
-	// A successful check. Sets verified_at only when it is not already set, so a
-	// domain that has been serving for a month does not have its start date rewritten
-	// every hour — the column answers "since when has this been served", and a
-	// re-check is not a new answer.
+	// A successful check, written only onto the row that was actually checked.
+	//
+	// **The hostname and the token are in the predicate because they are what was
+	// proved (M40, reopened).** Verification reads a row, resolves DNS against the
+	// hostname it read — seconds, against a nameserver the registrant runs — and then
+	// writes here. `RenameDomain` is concurrently reachable and clears `verified_at`;
+	// an unconditional write landing after it would fill exactly that NULL through
+	// the COALESCE below and start serving a name nobody proved, up to and including
+	// one of the instance's own hosts. Predicating on `hostname` and
+	// `verification_token` makes the late write affect **zero rows** instead, and the
+	// caller treats that as the conflict it is.
+	//
+	// A transaction around the read and the write would not have closed this: the
+	// rename commits in the gap between two separate transactions, so there is
+	// nothing for it to serialise against. `FOR UPDATE` across the lookup would have,
+	// by pinning a row lock for the DNS timeout inside a job that walks a batch —
+	// which is a different outage.
+	//
+	// Sets verified_at only when it is not already set, so a domain that has been
+	// serving for a month does not have its start date rewritten every hour — the
+	// column answers "since when has this been served", and a re-check is not a new
+	// answer.
 	//
 	// ssl_status moves to 'pending': the app never speaks ACME (decision D3), so the
 	// most it can say is that it will now answer Caddy's on-demand ask for this
@@ -1144,7 +1198,7 @@ type Querier interface {
 	//
 	// The failing streak is cleared unconditionally, which is D70's "a successful
 	// check at any point resets the count".
-	MarkDomainVerified(ctx context.Context, id uuid.UUID) (Domain, error)
+	MarkDomainVerified(ctx context.Context, arg MarkDomainVerifiedParams) (Domain, error)
 	// The single-use write. Conditional on the invite still being redeemable, so
 	// even without the lock above this could not be spent twice.
 	MarkInvitationRedeemed(ctx context.Context, arg MarkInvitationRedeemedParams) (int64, error)
