@@ -225,7 +225,9 @@ func (s *Service) EveryOwner(ctx context.Context) ([]Recipient, error) {
 	seen := make(map[uuid.UUID]struct{}, len(orgs))
 	var out []Recipient
 	for _, orgID := range orgs {
-		owners, err := s.OwnersOf(ctx, orgID)
+		// nil: a blocklist entry is not in a workspace, so this is the
+		// organization-wide owners of each organization and nobody else.
+		owners, err := s.OwnersOf(ctx, orgID, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -289,10 +291,27 @@ func (s *Service) Mail(ctx context.Context, to Recipient, template string, data 
 	return s.mailer.Enqueue(ctx, to.Email, template, full)
 }
 
-// OwnersOf lists the users to tell about something concerning the organization.
-func (s *Service) OwnersOf(ctx context.Context, orgID uuid.UUID) ([]Recipient, error) {
+// OwnersOf lists the users to tell about something concerning the organization,
+// or concerning one workspace in it.
+//
+// The workspace is a parameter and not an afterthought: "owner" is a role held
+// per membership, and a membership scoped to one workspace owns that workspace
+// and not the organization (D44). So an organization-wide owner hears about
+// everything, and a workspace-scoped owner hears about their own workspace and
+// nothing else. Passing nil is news that belongs to no workspace — the audit log
+// growing, the instance-wide blocklist — and reaches the organization-wide
+// owners alone.
+//
+// Callers that hold a workspace pass it. That is the whole correction: the query
+// used to ignore the distinction, and a workspace-scoped owner was told about
+// every hostname and every automation firing in workspaces they hold no
+// membership in.
+func (s *Service) OwnersOf(
+	ctx context.Context, orgID uuid.UUID, workspaceID *uuid.UUID,
+) ([]Recipient, error) {
 	rows, err := s.q.ListUsersWithRoleInOrg(ctx, dbgen.ListUsersWithRoleInOrgParams{
 		OrganizationID: orgID,
+		WorkspaceID:    workspaceID,
 		RoleSlug:       RoleOwner,
 	})
 	if err != nil {
@@ -568,7 +587,10 @@ func (s *Service) WarnAuditGrowth(ctx context.Context, size, threshold int64) er
 	since := time.Now().Add(-AuditGrowthReminderInterval)
 	var errs []error
 	for _, orgID := range orgs {
-		owners, err := s.OwnersOf(ctx, orgID)
+		// nil: the audit log is the organization's, not a workspace's, and the
+		// setting that bounds it is an instance one. Only somebody who owns the
+		// organization can act on this.
+		owners, err := s.OwnersOf(ctx, orgID, nil)
 		if err != nil {
 			errs = append(errs, err)
 			continue

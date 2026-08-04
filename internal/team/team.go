@@ -188,8 +188,27 @@ func mayManage(actorRank, targetRank, ownerRank int32) bool {
 // which is the case F27 escalated through: the identity's rank is borrowed from
 // a membership that does not reach the object being changed, so a bound read
 // from it is a bound on the wrong authority.
+//
+// It also carries the D43 cap, which is a *third* bound and a different question
+// again: not what the actor outranks, and not which scope carried it, but what
+// the actor **is**. D43 was written for the invitation door and enforced at the
+// one chokepoint every invitation funnels through; this is the same rule and the
+// same reasoning at the corresponding chokepoint for role assignment, because
+// ChangeRole and Grant reach admin on somebody already in the organization with
+// the same members.write and the same key. The mechanism is reused rather than
+// re-derived — auth.KeyIssuableRoles is one list, so a role added later is
+// bounded on both doors or on neither.
+//
+// Why this and not NonDelegableScopes, which would also have closed it: making
+// members.write non-delegable takes the whole permission off keys, and D28's
+// conclusion that a key may bring collaborators in survived F29 intact. What
+// F29 cost was the *rank* argument, not the delegation. The narrower mechanism
+// keeps a key able to do what a key is for and refuses the one outcome that
+// escapes the credential — an interactive admin holding apikeys.write,
+// audit.read and members.write, which no key may hold and which no revocation of
+// the key takes back.
 func (s *Service) resolveRole(
-	ctx context.Context, q *dbgen.Queries, here auth.Authority, slug string,
+	ctx context.Context, q *dbgen.Queries, actor *auth.Identity, here auth.Authority, slug string,
 ) (dbgen.GetBuiltinRoleBySlugRow, error) {
 	var role dbgen.GetBuiltinRoleBySlugRow
 	slug = strings.TrimSpace(slug)
@@ -211,6 +230,13 @@ func (s *Service) resolveRole(
 	if role.Rank < here.Rank {
 		return role, fmt.Errorf(
 			"%w: you cannot grant a role above your own (%s)", domain.ErrForbidden, here.Role)
+	}
+	if actor.IsAPIKey() {
+		if _, ok := auth.KeyIssuableRoles[slug]; !ok {
+			return role, fmt.Errorf(
+				"%w: a role assigned with an API key may be editor or viewer, not %s",
+				domain.ErrForbidden, slug)
+		}
 	}
 	return role, nil
 }
@@ -240,7 +266,9 @@ type Role struct {
 //
 // Read from the seeded rows rather than listed in Go, so a control cannot offer
 // something resolveRole will then refuse. The same shape internal/invite's
-// Roles has, for the same reason.
+// Roles has, for the same reason — and the D43 cap is applied here for that
+// reason too: a key offered admin in this list and refused it on the write would
+// make the sentence above false.
 func (s *Service) Roles(ctx context.Context, actor *auth.Identity) ([]Role, error) {
 	if !actor.Can(PermMembersWrite) {
 		return nil, fmt.Errorf("%w: assigning a role requires %s", domain.ErrForbidden, PermMembersWrite)
@@ -253,6 +281,11 @@ func (s *Service) Roles(ctx context.Context, actor *auth.Identity) ([]Role, erro
 	for _, r := range rows {
 		if r.Rank < actor.RoleRank {
 			continue
+		}
+		if actor.IsAPIKey() {
+			if _, ok := auth.KeyIssuableRoles[r.Slug]; !ok {
+				continue
+			}
 		}
 		out = append(out, Role{Slug: r.Slug, Name: r.Name, Description: r.Description, Rank: r.Rank})
 	}

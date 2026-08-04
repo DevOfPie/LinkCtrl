@@ -142,7 +142,7 @@ func (s *Service) ChangeRole(
 		return err
 	}
 
-	role, err := s.resolveRole(ctx, q, here, roleSlug)
+	role, err := s.resolveRole(ctx, q, actor, here, roleSlug)
 	if err != nil {
 		return err
 	}
@@ -339,7 +339,7 @@ func (s *Service) Grant(ctx context.Context, actor *auth.Identity, in GrantInput
 			domain.ErrForbidden, ws.Name, PermMembersWrite)
 	}
 
-	role, err := s.resolveRole(ctx, q, here, in.Role)
+	role, err := s.resolveRole(ctx, q, actor, here, in.Role)
 	if err != nil {
 		return nil, err
 	}

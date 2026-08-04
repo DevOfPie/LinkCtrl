@@ -1116,6 +1116,57 @@ migrations run at boot.
 
 ### Fixed
 
+- **A workspace-scoped role reached the whole organization's invitations.**
+  Somebody granted `admin` in one workspace could list every pending invitation
+  in the organization — each invitee's address, the role they were offered and
+  who offered it — and revoke any of them. Revocation cannot be undone and that
+  actor could not issue a replacement, so it was a way to stop an owner staffing
+  their own organization. Issuing an invitation already required an
+  organization-wide membership; listing, revoking and the role list now do too.
+  Nothing needs to be done on upgrade. If you granted somebody a role scoped to
+  one workspace, they will now get a permission error on `/invites` where the
+  page used to open.
+
+- **A workspace-scoped owner was told about every other workspace in the
+  organization.** Custom-domain warnings carry the hostname and automation
+  notifications carry the link aliases a rule matched, and both went to everybody
+  holding `owner` anywhere in the organization — including workspaces the
+  recipient holds no membership in and cannot open. Recipients are now the
+  organization-wide owners plus the owners of the workspace the news is about, so
+  a workspace-scoped owner still hears everything about their own workspace and
+  nothing about anyone else's. Notifications already delivered are untouched.
+
+- **An API key kept working after its owner was removed from the organization.**
+  The credential still authenticated, still carried the organization's tenancy,
+  could create an organization it had no scope for, and could rotate itself into
+  a fresh key indefinitely — so an administrator who removed somebody could not
+  actually stop the credentials they left behind. A key whose owner holds no
+  membership covering it now fails authentication outright, and rotation re-checks
+  the same thing under its own lock. **This can break a working integration**: a
+  key whose owner has since left, or whose owner's role was narrowed to a
+  different workspace, stops authenticating on upgrade rather than continuing with
+  no permissions. Reissue it from an account that is still a member.
+
+- **Nobody but a key's own owner could revoke it.** `DELETE /api/v1/api-keys/{id}`
+  and the revoke button only ever matched your own keys, so a credential that had
+  to be stopped — leaked, or belonging to somebody unreachable — had no answer but
+  its owner's cooperation. `apikeys.write` held through an organization-wide
+  membership now revokes any key issued into that organization, and writes an
+  `apikey.revoked` audit record naming whose key it was. Revoking your own key is
+  unchanged and still writes no record. A key you may not act on still answers
+  404 rather than 403.
+
+- **An API key holding `members.write` could promote an existing member to
+  `admin`.** The cap that stops a key *inviting* somebody at `admin` did not
+  cover assigning a role to somebody already in the organization, so the same key
+  reached the same outcome through the members page instead of through an
+  invitation — and the resulting account holds `apikeys.read`, `apikeys.write`
+  and `audit.read`, none of which a key may hold, in a principal that revoking
+  the key does not take back. A role assigned with an API key is now capped at
+  `editor`, on both the change-role and the workspace-grant paths, and the role
+  list a key is offered matches. A signed-in administrator promotes exactly as
+  before.
+
 - **The webhooks and automation pages returned "Link not found".** Both are
   linked from the sidebar, both are documented in `docs/usage.md`, and both
   answered 404 for everybody on every deployment shape, as did all nine of their

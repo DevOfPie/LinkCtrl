@@ -208,11 +208,25 @@ const (
 	// prefix it became. Somebody reading "which credential has been alive in this
 	// organization since March" reconstructs it from these records.
 	//
-	// Minting and revoking are not here, and their absence is not an oversight:
-	// both require an interactive session, so the person is the record, and M21
-	// scoped this log to what an operator needs after an incident rather than to
-	// everything that happens.
+	// Minting is not here, and its absence is not an oversight: it requires an
+	// interactive session, so the person is the record, and M21 scoped this log
+	// to what an operator needs after an incident rather than to everything that
+	// happens.
 	ActionAPIKeyRotated = "apikey.rotated"
+
+	// One administrator revoking somebody *else's* key.
+	//
+	// Revoking used to be absent for the reason minting still is — the only
+	// person who could revoke a key was the person holding it, so the session
+	// was the record. That stopped being true when an organization-wide
+	// apikeys.write gained a revoke path over any key in the organization, which
+	// it needed because an orphaned or leaked credential otherwise had no
+	// answer but its owner's cooperation.
+	//
+	// Only that arm is recorded. Somebody revoking their own key is still the
+	// person being the record; here the credential's owner was not present, may
+	// not know, and "who stopped it" is the question afterwards.
+	ActionAPIKeyRevoked = "apikey.revoked"
 )
 
 // Event is one thing that happened.
@@ -390,6 +404,28 @@ func (s *Service) RecordAPIKeyRotation(
 			"scopes":           ev.Scopes,
 			"scopes_narrowed":  ev.ScopesNarrowed,
 			"org_wide":         ev.OrgWide,
+		},
+	})
+}
+
+// RecordAPIKeyRevocation satisfies auth.APIKeyAuditor, and is on this side of
+// the same seam RecordAPIKeyRotation is.
+//
+// The owner is in the metadata rather than only in the target, because the
+// target is the key and the question this record answers is whose credential
+// stopped working. The actor — the administrator — comes from the identity, as
+// it does for every record.
+func (s *Service) RecordAPIKeyRevocation(
+	ctx context.Context, actor *auth.Identity, ev auth.APIKeyRevocation,
+) error {
+	keyID := ev.KeyID
+	return s.Record(ctx, actor, Event{
+		Action:     ActionAPIKeyRevoked,
+		TargetType: "api_key",
+		TargetID:   &keyID,
+		Metadata: map[string]any{
+			"prefix":   ev.Prefix,
+			"owner_id": ev.OwnerID.String(),
 		},
 	})
 }

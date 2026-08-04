@@ -91,6 +91,20 @@ type Organization struct {
 //
 // Read inside the transaction rather than before it so the count and the writes
 // that invalidate it cannot be separated by a concurrent redemption.
+//
+// **No credential-type check, and that is deliberate rather than an omission.**
+// An API key used to be able to walk through this door: its owner could be
+// removed from the organization, the key would still authenticate, and the count
+// it then read was zero — so a key scoped to links.read alone could create an
+// organization and own it, which is a bypass of orgs.create rather than ordinary
+// use of it. The answer is not a requireSessionActor here. Branching on
+// credential type outside NonDelegableScopes and D43 is itself a defect, and one
+// more branch would leave the *state* the door opens on intact. The state is
+// what was wrong: an authenticated key now always has a live membership in the
+// organization it was issued into, because Authenticate refuses one whose owner
+// does not, so the count a key reads here is never zero. A key holding
+// orgs.create still creates organizations, which is what D36 and its test say it
+// may do.
 func (s *Service) CreateOrganization(
 	ctx context.Context, actor *auth.Identity, name string,
 ) (*Organization, error) {

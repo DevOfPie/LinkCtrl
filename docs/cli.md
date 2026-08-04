@@ -156,6 +156,14 @@ revoked 019fb19b-6fa9-7932-9de0-81810c2db7b2
 
 Revocation takes effect on the key's next request; nothing about keys is cached.
 
+`--user` is the account to act as, not necessarily the key's owner. Its own keys
+always, and — when that account holds `apikeys.write` through an
+organization-wide membership — any key issued into its organization, which is how
+a credential gets stopped when the person holding it cannot be reached. Revoking
+somebody else's writes an `apikey.revoked` audit record; revoking your own does
+not. A key that account may not act on reports not-found rather than refusing, so
+an id cannot be probed.
+
 ### `version`
 
 ```sh

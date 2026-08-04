@@ -64,7 +64,13 @@ func newTeamFixture(t *testing.T) *teamFixture {
 	if err != nil {
 		t.Fatalf("register owner: %v", err)
 	}
-	keySvc, err := auth.NewAPIKeyService(pool, authSvc, auth.APIKeyConfig{Pepper: testPepper})
+	// The auditor is wired as main.go wires it. Two key operations write a
+	// record — rotation, and one administrator revoking somebody else's key —
+	// and a fixture without a recorder would let the test that reads either one
+	// pass by never producing it.
+	keySvc, err := auth.NewAPIKeyService(pool, authSvc, auth.APIKeyConfig{
+		Pepper: testPepper, Auditor: audit.NewService(pool),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -704,6 +710,304 @@ func TestAWorkspaceScopedOwnerDoesNotOwnTheOrganization(t *testing.T) {
 		 WHERE m.organization_id = $1 AND m.workspace_id IS NULL AND r.slug = 'owner'`,
 		f.owner.OrgID); n != 1 {
 		t.Errorf("the organization has %d organization-wide owners, want 1", n)
+	}
+}
+
+// Issuing was the one invitation verb M28's reopening reached. Listing, the
+// role list and revoking kept the old reading, and revoking is the irreversible
+// one: a revoked invitation cannot be un-revoked and Create refuses this actor a
+// replacement, so a workspace-scoped admin could stop an owner staffing their own
+// organization.
+func TestAWorkspaceScopedRoleCannotReachTheOrganizationsInvitations(t *testing.T) {
+	e := newEscalation(t)
+
+	created, err := e.invites.Create(t.Context(), e.owner, invite.CreateInput{
+		Email: "outsider@example.com", Role: "admin",
+	})
+	if err != nil {
+		t.Fatalf("the owner could not invite: %v", err)
+	}
+	// The premise, asserted rather than assumed: she really does hold
+	// members.write here, so what refuses her below is scope.
+	if !e.alice.Can(invite.PermWrite) {
+		t.Fatal("the premise did not hold: alice does not hold members.write in Marketing")
+	}
+
+	if _, err := e.invites.List(t.Context(), e.alice); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("a workspace-scoped admin listed the organization's invitations: %v", err)
+	}
+	if _, err := e.invites.Roles(t.Context(), e.alice); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("a workspace-scoped admin was offered the roles to invite at: %v", err)
+	}
+	if err := e.invites.Revoke(t.Context(), e.alice, created.ID); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("a workspace-scoped admin revoked an organization-wide invitation: %v", err)
+	}
+	// The row, because revocation cannot be undone: a refusal that writes anyway
+	// satisfies every assertion above.
+	if n := e.count(t,
+		`SELECT count(*) FROM invitations WHERE id = $1 AND revoked_at IS NULL`,
+		created.ID); n != 1 {
+		t.Fatal("the invitation was revoked by an actor the service refused")
+	}
+
+	// The owner reaches all three, so this bounds where the authority came from
+	// rather than the operation.
+	if _, err := e.invites.List(t.Context(), e.owner); err != nil {
+		t.Errorf("the owner could not list invitations: %v", err)
+	}
+	if _, err := e.invites.Roles(t.Context(), e.owner); err != nil {
+		t.Errorf("the owner was not offered the roles to invite at: %v", err)
+	}
+	if err := e.invites.Revoke(t.Context(), e.owner, created.ID); err != nil {
+		t.Errorf("the owner could not revoke the invitation they issued: %v", err)
+	}
+}
+
+// The role list read its ceiling from the identity, which is the borrowed rank
+// F27 escalated through, one function over: an organization-wide admin who was
+// granted owner in one workspace resolves at rank 10 there, and was offered
+// owner by a form whose own comment promises it cannot offer what the ceiling
+// will refuse.
+func TestInvitationRolesAreOfferedAtTheOrganizationWideRank(t *testing.T) {
+	f := newTeamFixture(t)
+	carol := f.member(t, "carol@example.com", "admin")
+
+	marketing, err := f.team.CreateWorkspace(t.Context(), f.owner, "Marketing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.team.Grant(t.Context(), f.owner, team.GrantInput{
+		UserID: carol.UserID, WorkspaceID: marketing.ID, Role: "owner",
+	}); err != nil {
+		t.Fatalf("an owner could not grant owner scoped to one workspace: %v", err)
+	}
+
+	inMarketing := f.identityIn(t, "carol@example.com", marketing.ID)
+	if inMarketing.RoleRank != 10 {
+		t.Fatalf("the premise did not hold: carol resolves at rank %d in Marketing, want 10",
+			inMarketing.RoleRank)
+	}
+
+	roles, err := f.invites.Roles(t.Context(), inMarketing)
+	if err != nil {
+		t.Fatalf("an organization-wide admin was refused the role list: %v", err)
+	}
+	var offered []string
+	for _, r := range roles {
+		offered = append(offered, r.Slug)
+		if r.Slug == "owner" {
+			t.Error("the form offers owner to an admin, on a rank borrowed from one workspace")
+		}
+	}
+	if len(offered) == 0 {
+		t.Fatal("no roles were offered at all; the ceiling was read from nothing")
+	}
+	// And the write agrees with the form, which is the property the form's
+	// comment claims.
+	if _, err := f.invites.Create(t.Context(), inMarketing, invite.CreateInput{
+		Email: "outsider@example.com", Role: "owner",
+	}); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("an admin invited an organization-wide owner: %v", err)
+	}
+}
+
+// D43 bounded the invitation door and left the one beside it open: promoting
+// somebody already in the organization reaches admin with the same key and the
+// same permission, and the account that results holds apikeys.write, audit.read
+// and members.write — scopes no key may hold, in a principal no revocation of
+// the key takes back.
+func TestAKeyCannotAssignARoleAboveEditor(t *testing.T) {
+	f := newTeamFixture(t)
+	editor := f.member(t, "editor@example.com", "editor")
+	row := f.membershipOf(t, f.owner, "editor@example.com")
+
+	created, err := f.keys.Create(t.Context(), f.owner, auth.CreateAPIKeyInput{
+		Name: "ci", Scopes: []string{team.PermMembersWrite},
+	})
+	if err != nil {
+		t.Fatalf("mint a key with members.write: %v", err)
+	}
+	key, err := f.keys.Authenticate(t.Context(), created.Key)
+	if err != nil {
+		t.Fatalf("authenticate the key: %v", err)
+	}
+	// The premise: the key holds the permission, so what refuses it below is
+	// what the key would produce and not what it may do.
+	if !key.Can(team.PermMembersWrite) {
+		t.Fatal("the premise did not hold: the key does not hold members.write")
+	}
+
+	for _, role := range []string{"admin", "owner"} {
+		if err := f.team.ChangeRole(t.Context(), key, row, role); !errors.Is(err, domain.ErrForbidden) {
+			t.Errorf("a key promoted a member to %s: %v", role, err)
+		}
+	}
+	if got := f.identity(t, "editor@example.com").Role; got != "editor" {
+		t.Fatalf("the editor is now %q; a refused promotion wrote anyway", got)
+	}
+
+	// Grant, the other door into the same roles, and the one a fix aimed at the
+	// dropdown alone would leave open.
+	support, err := f.team.CreateWorkspace(t.Context(), f.owner, "Support")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.team.Grant(t.Context(), key, team.GrantInput{
+		UserID: editor.UserID, WorkspaceID: support.ID, Role: "admin",
+	}); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("a key granted admin in a workspace: %v", err)
+	}
+	if n := f.count(t,
+		`SELECT count(*) FROM memberships m JOIN roles r ON r.id = m.role_id
+		  WHERE m.workspace_id = $1 AND r.slug = 'admin'`, support.ID); n != 0 {
+		t.Fatal("a refused grant wrote an admin membership")
+	}
+
+	// Not a blanket refusal. D28 concluded a key may bring collaborators in and
+	// that conclusion stands; what F29 cost was the rank argument, not the
+	// delegation.
+	if err := f.team.ChangeRole(t.Context(), key, row, "viewer"); err != nil {
+		t.Errorf("a key could not re-role a member to viewer: %v", err)
+	}
+	if _, err := f.team.Grant(t.Context(), key, team.GrantInput{
+		UserID: editor.UserID, WorkspaceID: support.ID, Role: "editor",
+	}); err != nil {
+		t.Errorf("a key could not grant editor in a workspace: %v", err)
+	}
+
+	// The control agrees with the write, which is what the role list promises.
+	roles, err := f.team.Roles(t.Context(), key)
+	if err != nil {
+		t.Fatalf("the key was refused the role list: %v", err)
+	}
+	for _, r := range roles {
+		if r.Slug == "admin" || r.Slug == "owner" {
+			t.Errorf("the role list offers %s to a key, which the write refuses", r.Slug)
+		}
+	}
+	if len(roles) == 0 {
+		t.Error("a key holding members.write is offered no role at all")
+	}
+
+	// A session still promotes, so this is a bound on the credential rather than
+	// on the operation.
+	if err := f.team.ChangeRole(t.Context(), f.owner, row, "admin"); err != nil {
+		t.Errorf("an owner signed in could not promote a member: %v", err)
+	}
+}
+
+// A workspace-scoped owner was told about every other workspace in the
+// organization: M40's domain warnings carrying the hostname, M43's automation
+// notifications carrying matched link aliases, for workspaces
+// ListWorkspacesForUser would never list for them.
+//
+// The recipient set is two arms and not one predicate. Silencing everybody
+// scoped to a workspace would silence them about their **own** workspace, which
+// is what both producers mean by passing a workspace id at all.
+func TestAWorkspaceScopedOwnerHearsAboutTheirOwnWorkspaceAndNoOther(t *testing.T) {
+	f := newTeamFixture(t)
+	notifier := notify.NewService(f.pool)
+	carol := f.member(t, "carol@example.com", "viewer")
+
+	marketing, err := f.team.CreateWorkspace(t.Context(), f.owner, "Marketing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	support, err := f.team.CreateWorkspace(t.Context(), f.owner, "Support")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The grant the finding turns on, and it is an ordinary supported one: an
+	// organization-wide owner may hand out owner scoped to a single workspace,
+	// because resolveRole refuses only a rank *above* the actor's own.
+	if _, err := f.team.Grant(t.Context(), f.owner, team.GrantInput{
+		UserID: carol.UserID, WorkspaceID: marketing.ID, Role: "owner",
+	}); err != nil {
+		t.Fatalf("an owner could not grant owner scoped to one workspace: %v", err)
+	}
+
+	unread := func(who *auth.Identity) int64 {
+		t.Helper()
+		n, err := notifier.Unread(t.Context(), who)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	carolEverywhere := f.identity(t, "carol@example.com")
+	// Deltas, not totals: redemption already told the owner that carol accepted
+	// their invitation, and a test that counted absolutes would be asserting on
+	// that too.
+	ownerBase, carolBase := unread(f.owner), unread(carolEverywhere)
+
+	// Support is not hers. The hostname and the aliases in these two belong to a
+	// workspace she holds no membership in.
+	other := support.ID
+	if err := notifier.WarnDomainUnverified(t.Context(), f.owner.OrgID, &other,
+		"links.acme.example", "no TXT record"); err != nil {
+		t.Fatal(err)
+	}
+	if err := notifier.AutomationFired(t.Context(), f.owner.OrgID, support.ID,
+		uuid.Must(uuid.NewV7()), "Archive stale", "no_clicks", 2,
+		[]string{"acme-launch", "acme-pricing"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := unread(carolEverywhere) - carolBase; n != 0 {
+		t.Errorf("a workspace-scoped owner received %d notifications about a workspace "+
+			"they hold no membership in", n)
+	}
+	if n := unread(f.owner) - ownerBase; n != 2 {
+		t.Errorf("the organization-wide owner received %d of the 2 notifications", n)
+	}
+
+	// Marketing is hers, and this is the half a single predicate would have
+	// broken.
+	mine := marketing.ID
+	if err := notifier.WarnDomainUnverified(t.Context(), f.owner.OrgID, &mine,
+		"links.marketing.example", "no TXT record"); err != nil {
+		t.Fatal(err)
+	}
+	if err := notifier.AutomationFired(t.Context(), f.owner.OrgID, marketing.ID,
+		uuid.Must(uuid.NewV7()), "Archive stale", "no_clicks", 1,
+		[]string{"mkt-launch"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := unread(carolEverywhere) - carolBase; n != 2 {
+		t.Errorf("the owner of Marketing received %d of the 2 notifications about "+
+			"Marketing; passing a workspace id is how a producer says whose news this is", n)
+	}
+
+	// News that belongs to no workspace reaches the organization-wide owners
+	// alone, which is the case the second arm must not widen.
+	if err := notifier.WarnAuditGrowth(t.Context(), 10_000, 1_000); err != nil {
+		t.Fatal(err)
+	}
+	if n := unread(carolEverywhere) - carolBase; n != 2 {
+		t.Errorf("a workspace-scoped owner was told the organization's audit log is "+
+			"growing (%d received, want the 2 they already had); the setting that bounds "+
+			"it is not theirs to change", n)
+	}
+	if n := unread(f.owner) - ownerBase; n != 5 {
+		t.Errorf("the organization-wide owner received %d, want 5", n)
+	}
+
+	// One person holding both an organization-wide owner membership and one
+	// scoped to this workspace is one recipient, not two: the arms overlap and a
+	// recipient list is a set.
+	if _, err := f.team.Grant(t.Context(), f.owner, team.GrantInput{
+		UserID: f.owner.UserID, WorkspaceID: marketing.ID, Role: "owner",
+	}); err != nil {
+		t.Fatalf("an owner could not grant themselves a scoped role: %v", err)
+	}
+	before := unread(f.owner)
+	if err := notifier.AutomationFired(t.Context(), f.owner.OrgID, marketing.ID,
+		uuid.Must(uuid.NewV7()), "Archive stale", "no_clicks", 1,
+		[]string{"mkt-second"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := unread(f.owner) - before; n != 1 {
+		t.Errorf("an owner holding both an organization-wide and a workspace-scoped "+
+			"membership received %d copies of one notification", n)
 	}
 }
 

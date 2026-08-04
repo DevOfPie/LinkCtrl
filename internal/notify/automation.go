@@ -27,8 +27,11 @@ const KindAutomationFired = "automation.fired"
 
 // AutomationFired tells a workspace's owners that one of its rules ran.
 //
-// Addressed to the organization's owners, which is who OwnersOf answers with —
-// the same recipients the audit-growth warning and the domain warnings reach.
+// Addressed to the owners this workspace has, which is who OwnersOf answers
+// with: the organization-wide ones, plus anybody holding owner scoped to this
+// workspace. A rule is a workspace object and its firing names the links it
+// matched, so an owner scoped to a *different* workspace is not a recipient —
+// they hold no membership through which those links are theirs to read.
 // The notification carries the owning workspace so it appears in that
 // workspace's inbox rather than wherever the reader happens to be standing.
 //
@@ -40,7 +43,8 @@ func (s *Service) AutomationFired(
 	ctx context.Context, orgID uuid.UUID, workspaceID uuid.UUID,
 	ruleID uuid.UUID, ruleName, trigger string, matched int, subjects []string,
 ) error {
-	owners, err := s.OwnersOf(ctx, orgID)
+	ws := workspaceID
+	owners, err := s.OwnersOf(ctx, orgID, &ws)
 	if err != nil {
 		return fmt.Errorf("notify: owners of %s: %w", orgID, err)
 	}
@@ -51,7 +55,6 @@ func (s *Service) AutomationFired(
 		body += " " + summarize(subjects, matched)
 	}
 
-	ws := workspaceID
 	var errs []error
 	for _, owner := range owners {
 		if err := s.Notify(ctx, owner.UserID, Event{

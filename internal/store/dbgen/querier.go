@@ -523,6 +523,20 @@ type Querier interface {
 	// grace_expires_at comes back for the same reason revoked_at does: a rotated
 	// predecessor stops verifying when its window closes, and that refusal is
 	// decided here rather than by the housekeeping job that later writes revoked_at.
+	//
+	// owner_is_member is the membership the key leans on, asked here so that
+	// authentication stays one round trip. A key acts *as its owner*, and an owner
+	// with no membership covering the key's scope has no authority for it to act
+	// with — so the credential is invalid rather than merely powerless. The
+	// predicate matches GetUserPermissions exactly: an organization-wide membership
+	// covers every workspace, a workspace-scoped one covers its own, and an
+	// organization-wide key is covered only by an organization-wide membership,
+	// because NULL = NULL is not true.
+	//
+	// Returned as a column rather than joined into the WHERE clause for the reason
+	// revoked and expired keys are returned rather than filtered: the caller decides
+	// what each state means, and a refusal a reader can see beside the others is
+	// worth more than a row that silently fails to exist.
 	GetAPIKeyByPrefix(ctx context.Context, prefix string) (GetAPIKeyByPrefixRow, error)
 	// The predecessor, locked, so two rotations of one key serialize instead of
 	// racing.
@@ -531,6 +545,14 @@ type Querier interface {
 	// should be told "this key has already been rotated" by the check that follows,
 	// which is a sentence somebody can act on, not have its transaction rolled back
 	// by a unique-index violation on a column it never named.
+	//
+	// owner_is_member and owner_status come back for the reason revoked_at does:
+	// they are re-read here, under the lock, so a membership removed or an account
+	// deactivated between authentication and this statement wins. Without them a
+	// removal racing a rotation leaves behind a successor the removal was meant to
+	// kill, on a chain that can rotate again. A soft-deleted account reads
+	// 'deleted' rather than NULL, so the one comparison at the call site covers it
+	// and no branch depends on a scan of an absent row.
 	GetAPIKeyForRotation(ctx context.Context, id uuid.UUID) (GetAPIKeyForRotationRow, error)
 	GetAutomationRule(ctx context.Context, arg GetAutomationRuleParams) (AutomationRule, error)
 	GetBuiltinRoleBySlug(ctx context.Context, slug string) (GetBuiltinRoleBySlugRow, error)
@@ -1051,6 +1073,30 @@ type Querier interface {
 	//
 	// Who to tell about something that concerns the organization rather than a
 	// person. Active users only: a deactivated account cannot sign in to read it.
+	//
+	// **Scoped, because a membership is** (D44). The sentence LockOrganizationOwners
+	// states in members.sql applies here word for word: a workspace-scoped owner
+	// membership grants ownership of one workspace, not of the organization. So the
+	// recipients are the organization-wide rows, plus — when the news belongs to a
+	// workspace — the rows scoped to *that* workspace, because news about their
+	// workspace is theirs to hear.
+	//
+	// Two arms rather than one predicate, and that is the whole correction. Adding
+	// `m.workspace_id IS NULL` alone is the smaller diff and the wrong recipient
+	// set: it silences a workspace-scoped owner about their own workspace, which is
+	// exactly what a caller passing a workspace id means to tell them about. A NULL
+	// @workspace_id is news that belongs to no workspace, and the second arm
+	// matches nothing then, which is what the organization-wide callers want.
+	//
+	// r.organization_id IS NULL for the reason LockOrganizationOwners carries it:
+	// 'owner' names a built-in role, and a tenant's custom role of the same slug is
+	// a different role.
+	//
+	// DISTINCT because the arms overlap. One person may hold both an
+	// organization-wide owner membership and an owner membership scoped to this
+	// workspace — that pair is precisely how the defect was reachable — and a
+	// recipient list naming them twice would write two inbox rows and send two
+	// mails.
 	//
 	// The address comes back with the id because both deliveries address the same
 	// person: the inbox row is keyed by user, the mail by address, and looking the
@@ -1607,6 +1653,22 @@ type Querier interface {
 	// still reports one row, so a repeated call is a success rather than a 404
 	// while a genuinely unknown id is still distinguishable.
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (int64, error)
+	// The administrator's revoke, keyed on the organization instead of on the
+	// owner.
+	//
+	// RevokeAPIKey above is a person disabling their own credential and is the
+	// normal path. This one exists because there was otherwise no path at all: a key
+	// belonging to somebody else could be *seen* — the rotation records are
+	// organization-scoped — and not stopped, so an administrator holding an incident
+	// had to wait for its owner. Scoped by organization rather than by workspace
+	// because a key is issued into an organization and its id is what an audit
+	// record hands the reader.
+	//
+	// Returns the owner and the prefix rather than a row count, because this write
+	// is audited and the record has to name whose credential was stopped. No row
+	// means an id from another organization or none at all, and both answer the same
+	// way at the call site.
+	RevokeAPIKeyInOrganization(ctx context.Context, arg RevokeAPIKeyInOrganizationParams) (RevokeAPIKeyInOrganizationRow, error)
 	// Used on password change. Anyone who had the old password must be logged out,
 	// which is the entire point of changing it.
 	// keep_session is optional: pass NULL to revoke everything, or the current

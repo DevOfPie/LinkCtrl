@@ -41,10 +41,11 @@ const (
 // WarnDomainFailing tells a workspace's owners that its hostname is failing, and
 // when serving stops if nothing changes.
 //
-// Addressed to the organization's owners, which is who OwnersOf answers with —
-// the same recipients the audit-growth warning reaches. The notification carries
-// the owning workspace so it appears in that workspace's inbox rather than
-// wherever the reader happens to be standing.
+// Addressed to the owners this hostname's workspace has, which is who OwnersOf
+// answers with — a wider set than the audit-growth warning reaches, because that
+// one belongs to no workspace.
+// The notification carries the owning workspace so it appears in that
+// workspace's inbox rather than wherever the reader happens to be standing.
 //
 // The deadline is in the body as a time and in the jsonb as a timestamp, because
 // the sentence has to be readable now and the value has to be renderable later
@@ -81,7 +82,16 @@ func (s *Service) WarnDomainUnverified(
 		map[string]any{"hostname": hostname, "reason": reason})
 }
 
-// warnDomain is the shared delivery: every owner of the organization.
+// warnDomain is the shared delivery: the owners a domain in this workspace is
+// news for.
+//
+// The workspace goes to OwnersOf rather than only onto the notification,
+// because it decides *who hears* and not only where the row files itself. A
+// hostname belongs to a workspace, so the organization's owners hear about it
+// and so do that workspace's own owners — and an owner scoped to some other
+// workspace does not, having no membership through which the hostname is
+// theirs. A registration held at organization level passes nil and reaches the
+// organization-wide owners alone.
 //
 // A failure to write one inbox row does not stop the others — an owner whose
 // row failed has heard nothing, and the point of notifying several people is
@@ -90,7 +100,7 @@ func (s *Service) warnDomain(
 	ctx context.Context, orgID uuid.UUID, workspaceID *uuid.UUID,
 	kind, title, body string, data map[string]any,
 ) error {
-	owners, err := s.OwnersOf(ctx, orgID)
+	owners, err := s.OwnersOf(ctx, orgID, workspaceID)
 	if err != nil {
 		return fmt.Errorf("notify: owners of %s: %w", orgID, err)
 	}

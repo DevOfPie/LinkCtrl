@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/postgres"
 )
@@ -75,9 +76,13 @@ func withKeyService(ctx context.Context, email string,
 	// Discard the log: the service only logs background usage flushing, which
 	// the CLI never runs, and a stray record would corrupt output being piped
 	// into something.
+	// The auditor is wired for the reason main.go wires it: revoking somebody
+	// else's key writes a record, and a CLI that quietly skipped it would make
+	// the shell the one way to stop a credential without leaving a trail.
 	keys, err := auth.NewAPIKeyService(pools.App, authSvc, auth.APIKeyConfig{
-		Pepper: []byte(cfg.APIKeyPepper.Reveal()),
-		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Pepper:  []byte(cfg.APIKeyPepper.Reveal()),
+		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Auditor: audit.NewService(pools.App),
 	})
 	if err != nil {
 		return err
@@ -169,7 +174,7 @@ func apikeyList(args []string) error {
 func apikeyRevoke(args []string) error {
 	fs := flag.NewFlagSet("apikey revoke", flag.ContinueOnError)
 	var (
-		email = fs.String("user", "", "email address that owns the key")
+		email = fs.String("user", "", "email address to act as: the key's owner, or an administrator holding apikeys.write across the organization")
 		id    = fs.String("id", "", "key id, as shown by lctl apikey list")
 	)
 	if err := fs.Parse(args); err != nil {

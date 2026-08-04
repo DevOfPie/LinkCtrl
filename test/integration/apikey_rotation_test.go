@@ -3,12 +3,14 @@
 package integration
 
 import (
+	"errors"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 )
 
@@ -469,5 +471,65 @@ func TestOrgWideKeyNeedsAnOrganizationWideMembership(t *testing.T) {
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Errorf("a workspace-scoped role was refused a workspace key (%d)", resp.StatusCode)
+	}
+}
+
+// The removal that lands between authenticating and rotating.
+//
+// Authentication now refuses a key whose owner holds no membership, so the
+// ordinary path is closed — but a rotation authenticated a moment earlier is
+// still in flight, and the identity it carries was resolved while the membership
+// stood. This is the same reason revocation is re-checked under the lock: a
+// removal that loses this race would mint the one credential it could not
+// reach, because the successor is a new row nobody is watching and it can rotate
+// again.
+//
+// Driven at the service, which is the only way to hold an identity across the
+// removal: over HTTP the two are one request and authentication answers first.
+func TestRotationRefusesAnIdentityWhoseMembershipWentAwayMidFlight(t *testing.T) {
+	f := newTeamFixture(t)
+
+	created, err := f.keys.Create(t.Context(), f.owner, auth.CreateAPIKeyInput{
+		Name: "mid-flight", Scopes: []string{"links.read"},
+	})
+	if err != nil {
+		t.Fatalf("mint a key: %v", err)
+	}
+	key, err := f.keys.Authenticate(t.Context(), created.Key)
+	if err != nil {
+		t.Fatalf("authenticate the key: %v", err)
+	}
+
+	if _, err := f.pool.Exec(t.Context(),
+		`DELETE FROM memberships WHERE user_id = $1`, f.owner.UserID); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := f.keys.Rotate(t.Context(), key, auth.RotateAPIKeyInput{}); !errors.Is(err, auth.ErrAPIKeyInvalid) {
+		t.Errorf("a key rotated on an identity whose membership had gone: %v", err)
+	}
+	if n := f.count(t, `SELECT count(*) FROM api_keys WHERE successor_id IS NOT NULL`); n != 0 {
+		t.Error("a refused rotation wrote a successor anyway")
+	}
+
+	// The same for a deactivated account, which the lock re-reads beside the
+	// membership.
+	f2 := newTeamFixture(t)
+	created2, err := f2.keys.Create(t.Context(), f2.owner, auth.CreateAPIKeyInput{
+		Name: "deactivated", Scopes: []string{"links.read"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	key2, err := f2.keys.Authenticate(t.Context(), created2.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f2.pool.Exec(t.Context(),
+		`UPDATE users SET status = 'suspended' WHERE id = $1`, f2.owner.UserID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f2.keys.Rotate(t.Context(), key2, auth.RotateAPIKeyInput{}); !errors.Is(err, auth.ErrAPIKeyInvalid) {
+		t.Errorf("a key rotated on an identity whose account had been suspended: %v", err)
 	}
 }

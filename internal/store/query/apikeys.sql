@@ -16,10 +16,30 @@ RETURNING *;
 -- grace_expires_at comes back for the same reason revoked_at does: a rotated
 -- predecessor stops verifying when its window closes, and that refusal is
 -- decided here rather than by the housekeeping job that later writes revoked_at.
+--
+-- owner_is_member is the membership the key leans on, asked here so that
+-- authentication stays one round trip. A key acts *as its owner*, and an owner
+-- with no membership covering the key's scope has no authority for it to act
+-- with — so the credential is invalid rather than merely powerless. The
+-- predicate matches GetUserPermissions exactly: an organization-wide membership
+-- covers every workspace, a workspace-scoped one covers its own, and an
+-- organization-wide key is covered only by an organization-wide membership,
+-- because NULL = NULL is not true.
+--
+-- Returned as a column rather than joined into the WHERE clause for the reason
+-- revoked and expired keys are returned rather than filtered: the caller decides
+-- what each state means, and a refusal a reader can see beside the others is
+-- worth more than a row that silently fails to exist.
 SELECT
     k.id, k.user_id, k.organization_id, k.workspace_id,
     k.key_hash, k.scopes, k.expires_at, k.revoked_at, k.grace_expires_at,
-    u.email, u.name AS user_name, u.status
+    u.email, u.name AS user_name, u.status,
+    EXISTS (
+        SELECT 1 FROM memberships m
+         WHERE m.user_id = k.user_id
+           AND m.organization_id = k.organization_id
+           AND (m.workspace_id IS NULL OR m.workspace_id = k.workspace_id)
+    ) AS owner_is_member
 FROM api_keys k
 JOIN users u ON u.id = k.user_id
 WHERE k.prefix = $1
@@ -48,11 +68,27 @@ ORDER BY created_at DESC;
 -- should be told "this key has already been rotated" by the check that follows,
 -- which is a sentence somebody can act on, not have its transaction rolled back
 -- by a unique-index violation on a column it never named.
-SELECT id, user_id, organization_id, workspace_id, name, prefix, scopes,
-       expires_at, revoked_at, rotated_at, grace_expires_at, successor_id,
-       created_at
-FROM api_keys
-WHERE id = $1
+--
+-- owner_is_member and owner_status come back for the reason revoked_at does:
+-- they are re-read here, under the lock, so a membership removed or an account
+-- deactivated between authentication and this statement wins. Without them a
+-- removal racing a rotation leaves behind a successor the removal was meant to
+-- kill, on a chain that can rotate again. A soft-deleted account reads
+-- 'deleted' rather than NULL, so the one comparison at the call site covers it
+-- and no branch depends on a scan of an absent row.
+SELECT k.id, k.user_id, k.organization_id, k.workspace_id, k.name, k.prefix,
+       k.scopes, k.expires_at, k.revoked_at, k.rotated_at, k.grace_expires_at,
+       k.successor_id, k.created_at,
+       EXISTS (
+           SELECT 1 FROM memberships m
+            WHERE m.user_id = k.user_id
+              AND m.organization_id = k.organization_id
+              AND (m.workspace_id IS NULL OR m.workspace_id = k.workspace_id)
+       ) AS owner_is_member,
+       COALESCE((SELECT u.status FROM users u
+                  WHERE u.id = k.user_id AND u.deleted_at IS NULL), 'deleted') AS owner_status
+FROM api_keys k
+WHERE k.id = $1
 FOR UPDATE;
 
 -- name: MarkAPIKeyRotated :execrows
@@ -90,6 +126,28 @@ UPDATE api_keys
    SET revoked_at = COALESCE(revoked_at, now())
  WHERE id = $1
    AND user_id = $2;
+
+-- name: RevokeAPIKeyInOrganization :one
+-- The administrator's revoke, keyed on the organization instead of on the
+-- owner.
+--
+-- RevokeAPIKey above is a person disabling their own credential and is the
+-- normal path. This one exists because there was otherwise no path at all: a key
+-- belonging to somebody else could be *seen* — the rotation records are
+-- organization-scoped — and not stopped, so an administrator holding an incident
+-- had to wait for its owner. Scoped by organization rather than by workspace
+-- because a key is issued into an organization and its id is what an audit
+-- record hands the reader.
+--
+-- Returns the owner and the prefix rather than a row count, because this write
+-- is audited and the record has to name whose credential was stopped. No row
+-- means an id from another organization or none at all, and both answer the same
+-- way at the call site.
+UPDATE api_keys
+   SET revoked_at = COALESCE(revoked_at, now())
+ WHERE id = $1
+   AND organization_id = $2
+RETURNING user_id, prefix;
 
 -- name: TouchAPIKeys :exec
 -- Batch write of last_used_at, from the coalescing tracker rather than from the

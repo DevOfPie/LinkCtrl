@@ -53,26 +53,13 @@ import (
 // Delegable to an API key, and that is a recorded conclusion rather than an
 // omission (D28, applying D18): a key may bring collaborators in. What makes it
 // safe is not D28's rank ceiling — that argument was wrong, and F29 is what it
-// cost — but KeyIssuableRoles below, which bounds what a key-issued invitation
-// can produce. auth.NonDelegableScopes governs what a key may *hold*; D43
-// governs what it may *make*, and this permission needs both.
+// cost — but auth.KeyIssuableRoles, which bounds the role a key may put somebody
+// at. auth.NonDelegableScopes governs what a key may *hold*; D43 governs what it
+// may *make*, and this permission needs both. The two live side by side in
+// internal/auth, because this permission is not the only door D43 has to cover:
+// team.ChangeRole and team.Grant assign the same roles to somebody already
+// admitted.
 const PermWrite = "members.write"
-
-// KeyIssuableRoles are the roles an invitation issued with an API key may
-// carry (D43). Absolute, not relative to whoever created the key.
-//
-// Named rather than ranked, deliberately. A relative ceiling — one rank below
-// the issuer — is the fix this looks like and it closes nothing: admin holds
-// every permission except org.delete (00700_seed.sql), so a key an owner
-// created could still mint apikeys.write, audit.read and members.write. The
-// boundary is between admin and editor because of what those two roles *hold*,
-// which is not a property of where a rank sorts, so a role added later is
-// refused here until somebody decides otherwise rather than admitted by
-// arithmetic.
-var KeyIssuableRoles = map[string]struct{}{
-	"editor": {},
-	"viewer": {},
-}
 
 // TokenBytes is the entropy in an invitation token, matching a session token.
 // Well beyond guessing range, and short enough that the resulting link fits in
@@ -234,6 +221,46 @@ func NewService(pool *pgxpool.Pool, cfg Config) (*Service, error) {
 	}, nil
 }
 
+// orgWideAuthority is the gate every invitation verb passes, and the authority
+// the ones with a rank bound then read from.
+//
+// An invitation is D44's canonical organization-wide object: what redemption
+// writes is a membership with no workspace_id, so the invitation belongs to the
+// organization and not to any corner of it. Reaching one — issuing, listing,
+// choosing a role for, revoking — therefore takes members.write carried by an
+// organization-wide membership. `Can` is the wrong question and is checked first
+// only so that somebody holding the permission nowhere gets the plain refusal:
+// it answers from the union of every membership matching the workspace being
+// acted in (D31), which lends a workspace-scoped admin's reach to an
+// organization-wide object.
+//
+// One helper rather than the check written four times, because the four had
+// drifted: Create was corrected under M28's reopening and the other three kept
+// the old reading, which is how a workspace-scoped admin came to be able to list
+// every pending invitee and irreversibly revoke an owner's invitation of a
+// co-owner. `doing` names the verb so the refusal still says which one was
+// refused.
+func (s *Service) orgWideAuthority(
+	ctx context.Context, actor *auth.Identity, doing string,
+) (auth.Authority, error) {
+	none := auth.Authority{Rank: auth.NoRoleRank}
+	if !actor.Can(PermWrite) {
+		return none, fmt.Errorf("%w: %s requires %s", domain.ErrForbidden, doing, PermWrite)
+	}
+	authority, err := auth.LoadMembershipAuthority(ctx, s.q, actor.UserID, actor.OrgID, PermWrite)
+	if err != nil {
+		return none, err
+	}
+	orgWide := authority.In(nil)
+	if !orgWide.Granted {
+		return none, fmt.Errorf(
+			"%w: an invitation belongs to the whole organization, so %s requires %s from an "+
+				"organization-wide membership; yours reaches one workspace",
+			domain.ErrForbidden, doing, PermWrite)
+	}
+	return orgWide, nil
+}
+
 // CreateInput describes a new invitation.
 type CreateInput struct {
 	Email string
@@ -253,19 +280,9 @@ type CreateInput struct {
 // organization-wide member with it would hand out reach they do not have
 // (F27).
 func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInput) (*Created, error) {
-	if !actor.Can(PermWrite) {
-		return nil, fmt.Errorf("%w: inviting a member requires %s", domain.ErrForbidden, PermWrite)
-	}
-	authority, err := auth.LoadMembershipAuthority(ctx, s.q, actor.UserID, actor.OrgID, PermWrite)
+	orgWide, err := s.orgWideAuthority(ctx, actor, "issuing one")
 	if err != nil {
 		return nil, err
-	}
-	orgWide := authority.In(nil)
-	if !orgWide.Granted {
-		return nil, fmt.Errorf(
-			"%w: an invitation admits somebody to the whole organization, so issuing one "+
-				"requires %s from an organization-wide membership; yours reaches one workspace",
-			domain.ErrForbidden, PermWrite)
 	}
 
 	email := auth.NormalizeEmail(in.Email)
@@ -316,7 +333,7 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 	// carries, so nothing has to be remembered about the credential that issued
 	// it and no column exists to forget.
 	if actor.IsAPIKey() {
-		if _, ok := KeyIssuableRoles[role.Slug]; !ok {
+		if _, ok := auth.KeyIssuableRoles[role.Slug]; !ok {
 			return nil, fmt.Errorf(
 				"%w: an invitation issued with an API key may carry editor or viewer, not %s",
 				domain.ErrForbidden, role.Slug)
@@ -431,9 +448,16 @@ func (s *Service) orgName(ctx context.Context, orgID uuid.UUID) string {
 }
 
 // List returns the organization's invitations, newest first.
+//
+// Gated on the same organization-wide authority Create is, and not merely
+// because symmetry is tidy. Every row discloses an invitee's address, the role
+// they were offered and who offered it, for an object nobody scoped to one
+// workspace has any reach over. Refusing the page whole is also the only honest
+// shape: gating Revoke alone would draw a list of rows whose only button answers
+// 403.
 func (s *Service) List(ctx context.Context, actor *auth.Identity) ([]Invitation, error) {
-	if !actor.Can(PermWrite) {
-		return nil, fmt.Errorf("%w: listing invitations requires %s", domain.ErrForbidden, PermWrite)
+	if _, err := s.orgWideAuthority(ctx, actor, "listing invitations"); err != nil {
+		return nil, err
 	}
 	rows, err := s.q.ListInvitations(ctx, actor.OrgID)
 	if err != nil {
@@ -472,9 +496,20 @@ type Role struct {
 // roles have one definition and a form cannot offer something the ceiling check
 // will then refuse. An actor whose role did not resolve carries auth.NoRoleRank
 // and is offered nothing, which is the direction this fails in.
+//
+// The rank is read from the organization-wide authority, exactly as Create's
+// ceiling is. Reading it from the identity was the same mistake one step
+// earlier: the identity's rank can be borrowed from a workspace-scoped
+// membership, so an organization-wide viewer who is an admin in one workspace
+// was offered admin here and refused it at the ceiling.
+//
+// The D43 cap is applied for the same reason — the list is what a control
+// renders, and offering a key a role Create will refuse is the same disagreement
+// in the other direction.
 func (s *Service) Roles(ctx context.Context, actor *auth.Identity) ([]Role, error) {
-	if !actor.Can(PermWrite) {
-		return nil, fmt.Errorf("%w: inviting a member requires %s", domain.ErrForbidden, PermWrite)
+	orgWide, err := s.orgWideAuthority(ctx, actor, "choosing an invitation's role")
+	if err != nil {
+		return nil, err
 	}
 	rows, err := s.q.ListBuiltinRoles(ctx)
 	if err != nil {
@@ -482,8 +517,13 @@ func (s *Service) Roles(ctx context.Context, actor *auth.Identity) ([]Role, erro
 	}
 	out := make([]Role, 0, len(rows))
 	for _, r := range rows {
-		if r.Rank < actor.RoleRank {
+		if r.Rank < orgWide.Rank {
 			continue
+		}
+		if actor.IsAPIKey() {
+			if _, ok := auth.KeyIssuableRoles[r.Slug]; !ok {
+				continue
+			}
 		}
 		out = append(out, Role{Slug: r.Slug, Name: r.Name, Description: r.Description, Rank: r.Rank})
 	}
@@ -496,9 +536,14 @@ func (s *Service) Roles(ctx context.Context, actor *auth.Identity) ([]Role, erro
 // that never existed, so ids cannot be probed. So does an invitation that was
 // already revoked or already redeemed: a redeemed invite has produced a member,
 // and reporting "revoked" for it would claim something that did not happen.
+//
+// The organization-wide gate matters most here of the four, because this verb
+// is the irreversible one. A revoked invitation cannot be un-revoked and Create
+// refuses a workspace-scoped actor a replacement, so without it somebody with
+// reach over one workspace could stop an owner staffing their own organization.
 func (s *Service) Revoke(ctx context.Context, actor *auth.Identity, id uuid.UUID) error {
-	if !actor.Can(PermWrite) {
-		return fmt.Errorf("%w: revoking an invitation requires %s", domain.ErrForbidden, PermWrite)
+	if _, err := s.orgWideAuthority(ctx, actor, "revoking an invitation"); err != nil {
+		return err
 	}
 	n, err := s.q.RevokeInvitation(ctx, dbgen.RevokeInvitationParams{
 		ID: id, OrganizationID: actor.OrgID,

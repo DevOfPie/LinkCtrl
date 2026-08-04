@@ -116,6 +116,17 @@ type APIKeyRotation struct {
 	OrgWide        bool
 }
 
+// APIKeyRevocation is one administrator stopping somebody else's key.
+//
+// Only the prefix, never the token: the prefix is the public half by
+// construction — stored, indexed, and printed in the key list — and the secret
+// is not in the row this is built from.
+type APIKeyRevocation struct {
+	KeyID   uuid.UUID
+	Prefix  string
+	OwnerID uuid.UUID
+}
+
 // APIKeyAuditor records key-lifecycle events.
 //
 // Declared here as an interface rather than taken as an *audit.Service, because
@@ -124,6 +135,7 @@ type APIKeyRotation struct {
 // *audit.Service satisfies it.
 type APIKeyAuditor interface {
 	RecordAPIKeyRotation(ctx context.Context, actor *Identity, ev APIKeyRotation) error
+	RecordAPIKeyRevocation(ctx context.Context, actor *Identity, ev APIKeyRevocation) error
 }
 
 // ErrAPIKeyAlreadyRotated is the refusal a second rotation of one key gets.
@@ -187,10 +199,18 @@ func (s *APIKeyService) Rotate(ctx context.Context, actor *Identity, in RotateAP
 	// Re-checked under the lock. Authentication passed a moment ago, but a
 	// revocation landing between then and here must win — otherwise revoking a
 	// key racing its own rotation leaves a successor nobody revoked.
+	//
+	// The owner's membership and account status are re-read for the same reason
+	// and are not redundant with the check Authenticate makes. Removing somebody
+	// from an organization is how an administrator stops their credentials, and a
+	// removal that lands mid-rotation would otherwise mint the one key the
+	// removal could not reach: the successor is a new row, so it is not the key
+	// anybody was watching, and it can rotate again.
 	now := time.Now()
 	if pred.RevokedAt != nil ||
 		(pred.ExpiresAt != nil && !pred.ExpiresAt.After(now)) ||
-		(pred.GraceExpiresAt != nil && !pred.GraceExpiresAt.After(now)) {
+		(pred.GraceExpiresAt != nil && !pred.GraceExpiresAt.After(now)) ||
+		!pred.OwnerIsMember || pred.OwnerStatus != "active" {
 		return nil, ErrAPIKeyInvalid
 	}
 

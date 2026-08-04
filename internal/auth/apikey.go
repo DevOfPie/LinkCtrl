@@ -193,6 +193,37 @@ var NonDelegableScopes = map[string]struct{}{
 	"automation.write":    {},
 }
 
+// KeyIssuableRoles are the roles an API key may put somebody into (D43).
+// Absolute, not relative to whoever created the key.
+//
+// The second of the two mechanisms that may branch on credential type, and it
+// sits beside the first so that a reader meets both at once. NonDelegableScopes
+// above governs what a key may **hold**. This governs what a key may **make**
+// with one it legitimately holds, and members.write is the permission that needs
+// both: a key holding it does not itself gain anything, but the interactive
+// principal it produces is not a credential — nothing revokes that principal
+// when the key is revoked, and requireSessionActor cannot tell it from an
+// account somebody registered.
+//
+// Named rather than ranked, deliberately. A relative ceiling — one rank below
+// the issuer — is the fix this looks like and it closes nothing: admin holds
+// every permission except org.delete (00700_seed.sql), so a key an owner created
+// could still produce an admin holding apikeys.write, audit.read and
+// members.write. The boundary is between admin and editor because of what those
+// two roles *hold*, which is not a property of where a rank sorts, so a role
+// added later is refused here until somebody decides otherwise rather than
+// admitted by arithmetic.
+//
+// **Every way a key can put somebody at a role passes through this**, which is
+// what D43 originally missed: it bounded the invitation and left role assignment
+// on an existing membership — team.ChangeRole and team.Grant — reaching admin
+// with the same key and the same permission. Reaching admin by promotion rather
+// than by admission is one axis over, not a different defect.
+var KeyIssuableRoles = map[string]struct{}{
+	"editor": {},
+	"viewer": {},
+}
+
 // APIKeyInfo is a key as its owner sees it. The secret is absent by
 // construction: it is never stored, so it cannot be listed.
 type APIKeyInfo struct {
@@ -255,9 +286,10 @@ type APIKeyConfig struct {
 	// long ago, which is why MinRotationGrace sits an order of magnitude above
 	// it.
 	UsageFlushInterval time.Duration
-	// Auditor records rotations. Optional — a nil one means the rotation still
-	// happens and is logged as unrecorded, which is the same trade every other
-	// service makes with its audit writer.
+	// Auditor records rotations, and one administrator revoking somebody else's
+	// key. Optional — a nil one means the operation still happens and is logged
+	// as unrecorded, which is the same trade every other service makes with its
+	// audit writer.
 	Auditor APIKeyAuditor
 	Logger  *slog.Logger
 }
@@ -486,6 +518,15 @@ func (s *APIKeyService) List(ctx context.Context, actor *Identity) ([]APIKeyInfo
 // Immediately in the literal sense: nothing about a key is cached, so the next
 // request presenting it fails. That is the reason revocation is checked in the
 // verification query rather than kept in a cache alongside the hash.
+//
+// Two revokes behind one id, tried in that order. Own key first, which is the
+// ordinary path and needs no authority beyond apikeys.write. Somebody else's
+// second, and only for an actor holding apikeys.write from an
+// organization-wide membership — a key belongs to the organization it was
+// issued into, so reaching one is an organization-wide act and a
+// workspace-scoped admin does not reach it (D44). It exists because there was
+// otherwise no answer at all to a key that had to be stopped and whose owner
+// would not stop it.
 func (s *APIKeyService) Revoke(ctx context.Context, actor *Identity, id uuid.UUID) error {
 	if err := requireSessionActor(actor, "revoking an API key"); err != nil {
 		return err
@@ -498,10 +539,57 @@ func (s *APIKeyService) Revoke(ctx context.Context, actor *Identity, id uuid.UUI
 	if err != nil {
 		return fmt.Errorf("revoke api key: %w", err)
 	}
-	if n == 0 {
-		// Also the answer for someone else's key: "not found" rather than
-		// "forbidden", so ids cannot be probed for existence.
+	if n > 0 {
+		return nil
+	}
+	return s.revokeInOrganization(ctx, actor, id)
+}
+
+// revokeInOrganization is the administrator's arm of Revoke: an id that is not
+// the actor's own key.
+//
+// Every refusal here is ErrNotFound, and that is the same property the
+// single-arm version had — an id must not be probeable for existence by
+// somebody who may not act on it. An actor without organization-wide authority
+// therefore cannot tell "somebody else's key" from "no such key", which is what
+// they could tell before.
+//
+// Audited, unlike revoking your own key, and the asymmetry is the point. The
+// vocabulary's own note says minting and revoking need no record because they
+// require an interactive session and "the person is the record" — true while the
+// only person who could revoke a key was its owner. This arm breaks that
+// premise: the credential's owner was not present, may not know, and the
+// question afterwards is who stopped it.
+func (s *APIKeyService) revokeInOrganization(
+	ctx context.Context, actor *Identity, id uuid.UUID,
+) error {
+	authority, err := LoadMembershipAuthority(ctx, s.q, actor.UserID, actor.OrgID, PermAPIKeysWrite)
+	if err != nil {
+		return err
+	}
+	if !authority.In(nil).Granted {
 		return domain.ErrNotFound
+	}
+
+	row, err := s.q.RevokeAPIKeyInOrganization(ctx, dbgen.RevokeAPIKeyInOrganizationParams{
+		ID: id, OrganizationID: actor.OrgID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		}
+		return fmt.Errorf("revoke api key in organization: %w", err)
+	}
+
+	if s.auditor != nil {
+		// The write already happened. A log that could not be written is worth
+		// saying loudly and is not worth un-revoking a credential somebody
+		// decided to stop.
+		if err := s.auditor.RecordAPIKeyRevocation(ctx, actor, APIKeyRevocation{
+			KeyID: id, Prefix: row.Prefix, OwnerID: row.UserID,
+		}); err != nil {
+			s.log.Error("record api key revocation", "err", err, "key_id", id)
+		}
 	}
 	return nil
 }
@@ -542,6 +630,28 @@ func (s *APIKeyService) Authenticate(ctx context.Context, token string) (*Identi
 		(row.ExpiresAt != nil && !row.ExpiresAt.After(now)) ||
 		(row.GraceExpiresAt != nil && !row.GraceExpiresAt.After(now)) ||
 		row.Status != "active" {
+		return nil, ErrAPIKeyInvalid
+	}
+	// The membership the key acts through, checked on the way in rather than
+	// discovered to be missing afterwards.
+	//
+	// A key is its owner acting as themselves with a narrower set of scopes, so
+	// an owner with no membership covering the key's scope leaves it acting as
+	// nobody. Without this the credential still authenticated: it resolved to an
+	// identity carrying the organization and a workspace, with an empty
+	// permission set, which is a state team_test.go's "an orphaned identity
+	// carries neither org nor workspace" already forbids on the session path. An
+	// empty permission set is not the same as no credential, and the difference
+	// was reachable — CreateOrganization opens its own door for an actor with no
+	// memberships at all (D36), and rotation renewed the key indefinitely with
+	// the row's stored scopes, so a removed member kept a self-renewing chain
+	// nobody could stop.
+	//
+	// The refusal is deliberately ErrAPIKeyInvalid and not a permission error.
+	// The comment on resolveWorkspace's organization-wide branch has said since
+	// M44 that "answering 'invalid' is honest for both" about exactly this state;
+	// it was simply applied on the one branch Create can never produce.
+	if !row.OwnerIsMember {
 		return nil, ErrAPIKeyInvalid
 	}
 

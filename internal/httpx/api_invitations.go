@@ -13,7 +13,7 @@ import (
 // redeem exactly as a person can.
 //
 // Three of the four need `members.write`, which is delegable (D28) under a cap
-// on what a key may issue at (D43, invite.KeyIssuableRoles). The cap and not the
+// on what a key may issue at (D43, auth.KeyIssuableRoles). The cap and not the
 // rank ceiling is what keeps D18's second limb from applying, because redemption
 // needs no credential at all — it is how somebody who has none acquires one, and
 // that is precisely why an unbounded key-issued invitation was a way for a key

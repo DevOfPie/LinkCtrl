@@ -243,18 +243,21 @@ func (q *Queries) ListUnreadNotificationPreview(ctx context.Context, arg ListUnr
 }
 
 const listUsersWithRoleInOrg = `-- name: ListUsersWithRoleInOrg :many
-SELECT u.id, u.email, u.name
+SELECT DISTINCT u.id, u.email, u.name
   FROM memberships m
   JOIN roles r ON r.id = m.role_id
   JOIN users u ON u.id = m.user_id
  WHERE m.organization_id = $1
-   AND r.slug = $2
+   AND (m.workspace_id IS NULL OR m.workspace_id = $2)
+   AND r.slug = $3
+   AND r.organization_id IS NULL
    AND u.status = 'active'
  ORDER BY u.id
 `
 
 type ListUsersWithRoleInOrgParams struct {
 	OrganizationID uuid.UUID
+	WorkspaceID    *uuid.UUID
 	RoleSlug       string
 }
 
@@ -267,11 +270,35 @@ type ListUsersWithRoleInOrgRow struct {
 // Who to tell about something that concerns the organization rather than a
 // person. Active users only: a deactivated account cannot sign in to read it.
 //
+// **Scoped, because a membership is** (D44). The sentence LockOrganizationOwners
+// states in members.sql applies here word for word: a workspace-scoped owner
+// membership grants ownership of one workspace, not of the organization. So the
+// recipients are the organization-wide rows, plus — when the news belongs to a
+// workspace — the rows scoped to *that* workspace, because news about their
+// workspace is theirs to hear.
+//
+// Two arms rather than one predicate, and that is the whole correction. Adding
+// `m.workspace_id IS NULL` alone is the smaller diff and the wrong recipient
+// set: it silences a workspace-scoped owner about their own workspace, which is
+// exactly what a caller passing a workspace id means to tell them about. A NULL
+// @workspace_id is news that belongs to no workspace, and the second arm
+// matches nothing then, which is what the organization-wide callers want.
+//
+// r.organization_id IS NULL for the reason LockOrganizationOwners carries it:
+// 'owner' names a built-in role, and a tenant's custom role of the same slug is
+// a different role.
+//
+// DISTINCT because the arms overlap. One person may hold both an
+// organization-wide owner membership and an owner membership scoped to this
+// workspace — that pair is precisely how the defect was reachable — and a
+// recipient list naming them twice would write two inbox rows and send two
+// mails.
+//
 // The address comes back with the id because both deliveries address the same
 // person: the inbox row is keyed by user, the mail by address, and looking the
 // second one up separately would mean a query per recipient.
 func (q *Queries) ListUsersWithRoleInOrg(ctx context.Context, arg ListUsersWithRoleInOrgParams) ([]ListUsersWithRoleInOrgRow, error) {
-	rows, err := q.db.Query(ctx, listUsersWithRoleInOrg, arg.OrganizationID, arg.RoleSlug)
+	rows, err := q.db.Query(ctx, listUsersWithRoleInOrg, arg.OrganizationID, arg.WorkspaceID, arg.RoleSlug)
 	if err != nil {
 		return nil, err
 	}

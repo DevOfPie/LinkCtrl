@@ -2154,7 +2154,14 @@ paths:
       summary: Revoke an API key
       description: |
         Takes effect on the key's next request; nothing about keys is cached.
-        Someone else's key returns 404, not 403, so ids cannot be probed.
+
+        Your own key, or — holding `apikeys.write` from an organization-wide
+        membership — any key issued into your organization, which is how an
+        administrator stops a credential whose owner will not. Revoking
+        somebody else's writes an `apikey.revoked` audit record; revoking your
+        own does not, because you are the record.
+
+        A key you may not act on returns 404, not 403, so ids cannot be probed.
       parameters:
         - name: id
           in: path

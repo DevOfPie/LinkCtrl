@@ -157,6 +157,7 @@ file. Append a row when you append an entry.
 | [M43, the queue's own clock, and why the watermark could not be it](#2026-08-04--m43-the-queues-own-clock-and-why-the-watermark-could-not-be-it) | D96 — one column was carrying two facts, and ordering the due query on the firing watermark meant the hundred-and-first enabled rule was never evaluated at all; `last_checked_at` added by 03100 with the due index rebuilt on it; why advancing `last_fired_at` on a no-match run is the tempting fix and breaks `min_count`; one cursor statement a run rather than one a rule, and the three deliberate details in it — no `updated_at`, failed rules stamped too, `WithoutCancel` so a cut-off run keeps what it looked at; why a NULL cursor is the right thing for a new or resumed rule; the test's shape, and why its first assertion is that nothing happened |
 | [M32, the promise restated as two channels](#2026-08-04--m32-the-promise-restated-as-two-channels) | F86 — why the fix is four documents and no code, and why removing `url` from the payload would break every receiver to make a README sentence true; the four wordings as they stood; the checked facts the replacement rests on — `webhooks.write` is owner and admin only and not delegable, there is no operator gate, and `automation.fired` carries no destination; why the refused-destination leg is the strongest of the four and what a half-fix drops; F134 widened at step 3.4 — `CHANGELOG.md:750` and `feed_test.go`'s three wordings taken in under the deferred-overlap rule with no assertion touched, the *Egress* row's count left open because re-deriving it is a decision; and F135, seven more sites a deliberate sweep found where two rounds of noticing had not, including the `/feeds` disclosure page this milestone itself shipped, which no rewording can make true |
 | [Mounting derived from registration](#2026-08-04--mounting-derived-from-registration-after-eleven-routes-shipped-unreachable) | D97 — F85: eleven of M42's and M43's routes were registered, reserved, linked from the nav and documented, and unreachable, because the root mux mounted from a hand-written slice that the only guard was also built from; why adding the four missing strings fixes the instance and not the class, and why the comment claiming the opposite is the reason nobody looked; `appMux` recording what it is handed so registering *is* mounting; the reduction rule chosen because it reproduces the old slice exactly plus the four, and the wider rule rejected; why the API subtree stays hand-mounted; `dashboardPatterns` deleted so the reserved guard reads registrations too, `registerAppRoutes` split out to make them enumerable, and `maximalDeps` filled by reflection because a literal would be the third list and would fail silently; and the sabotage whose control result is that the old guard stayed green |
+| [M45, four ways one membership rule was not read](#2026-08-04--m45-four-ways-one-membership-rule-was-not-read) | F93, F94, F97 and F60 — the first four approved rows of M45's moderate security cluster, fixed on their own terms rather than behind a shared abstraction; why `List` had to be refused alongside `Revoke` and why `invite.Roles` was reading the wrong rank; why F94's recipient set is a second *parameter* and not a second predicate, and what `DISTINCT` is for; F97's three limbs, and why F43's `CreateOrganization` door closes with no credential-type branch at all — the state it opened on is what was wrong; `apikey.revoked` added because *the person is the record* stops holding when the credential's owner is not present; D43's mechanism reused for F60 rather than `NonDelegableScopes`, and `KeyIssuableRoles` moved to `internal/auth` so one list bounds both doors; and the one residue left deliberately — the `/invites` nav entry that now leads to a 403 for a workspace-scoped admin, and what removing it would cost |
 
 ---
 
@@ -12784,3 +12785,159 @@ how a queue produces confident wrong answers. And F91's mechanism no longer
 exists: M42's fix added `DeliveryConcurrency`, so the arithmetic the row reasons
 from — twenty rows at sixty seconds against a five-minute bound — describes a tree
 that has not existed since `539ba3d`.
+
+---
+
+## 2026-08-04 — M45, four ways one membership rule was not read
+
+The first four rows of the moderate security cluster the owner approved on
+[M45's triage](#2026-08-04--m45s-triage-and-the-widest-option-four-times): F93,
+F94, F97 and F60. They share a theme and are not one defect. Each is D44's
+sentence — *a workspace-scoped membership grants authority over its own
+workspace, not over the organization* — or D43's — *a key is bounded by what it
+may produce, not only by what it may hold* — arriving at a call site that had not
+read it. They were fixed separately and deliberately: an abstraction spanning
+four packages to make four unrelated call sites look alike would have been a
+fifth thing to get wrong, and nothing about a notification recipient set is the
+same shape as an API key's authentication path.
+
+All four land under **M45's own number**. m45.md's Findings bullet is exactly
+this work, so no milestone is reopened and no status row moves — which is what
+keeps a `done` row from asserting something untrue while its correction sits
+under a different number.
+
+### F93 — the three invitation verbs M28's reopening did not reach
+
+`Create` was corrected under F27 and gained `authority.In(nil)`. `List`, `Roles`
+and `Revoke`, in the same file, kept `actor.Can(members.write)` — which answers
+from the union of every membership matching the workspace being acted in (D31)
+and therefore says yes to a workspace-scoped admin. So that actor read every
+pending invitee's address, the role they were offered and who offered it, and
+could irreversibly revoke any of them.
+
+**`Revoke` alone was not the fix, and the row said so in advance.** Gating the
+write while leaving the read draws a page of rows whose only button answers 403 —
+worse than refusing, because it tells somebody they may act and then refuses. So
+`List` refuses whole and the page 403s honestly.
+
+The four now share one helper, `orgWideAuthority`. That is a within-file
+consolidation and not the shared abstraction rejected above: the four had drifted
+from each other precisely because the check was written out four times, and one
+of the four being corrected did not correct the rest.
+
+`Roles` carried a second defect the row named separately: its ceiling read
+`actor.RoleRank`, which is the identity's rank and can be borrowed from a
+workspace-scoped membership. An organization-wide admin granted `owner` in one
+workspace resolves at rank 10 there and was offered `owner` by a form whose own
+comment promises it cannot offer what the ceiling will refuse. It now reads
+`orgWide.Rank`, and applies D43's cap as well, for the same reason: a list that
+offers what the write refuses is the same bug pointing the other way.
+
+### F94 — a second parameter, not a second predicate
+
+`ListUsersWithRoleInOrg` filtered on organization and role slug alone, so
+everybody holding `owner` anywhere in the organization received M40's domain
+warnings carrying the hostname and M43's automation notifications carrying
+matched link aliases — for workspaces `ListWorkspacesForUser` would never list
+for them. Its correct sibling, `LockOrganizationOwners`, states the rule directly
+above itself in SQL and has since M28.
+
+**The tempting fix is wrong and the row is why this entry can say so.** Adding
+`m.workspace_id IS NULL` alone silences a workspace-scoped owner about their
+*own* workspace — and telling them about their own workspace is exactly what both
+producers mean by passing a workspace id at all. The recipient set is two arms:
+the organization-wide rows always, plus the rows scoped to *that* workspace. So
+`OwnersOf` gained a `*uuid.UUID` and the query gained `sqlc.narg(workspace_id)`;
+a NULL means news belonging to no workspace and matches the first arm only, which
+is what `EveryOwner` and `WarnAuditGrowth` want.
+
+`r.organization_id IS NULL` was added for the reason the sibling carries it —
+`owner` names a built-in role and a tenant's custom role of the same slug is a
+different role — and `DISTINCT` because the arms overlap: one person may hold
+both memberships, and that pair is precisely how the defect was reachable, so
+without it the fix would have sent them two of everything.
+
+### F97 — three limbs, and a door that closes by removing its precondition
+
+The row folded F43 in, and the fix note named three things a partial answer
+leaves open. All three are done.
+
+**Authentication.** `GetAPIKeyByPrefix` now returns `owner_is_member`, an
+`EXISTS` over the membership covering the key's scope, with the same predicate
+`GetUserPermissions` uses — so an organization-wide key needs an
+organization-wide membership, because `NULL = NULL` is not true. `Authenticate`
+answers `ErrAPIKeyInvalid` on it. That is not a new judgement: the comment on
+`resolveWorkspace`'s organization-wide branch has prescribed exactly this since
+M44 — *"Answering 'invalid' is honest for both"* — and was applied only on the
+branch `Create` can never produce.
+
+**F43's own door needed no credential-type branch.** `CreateOrganization` skips
+`orgs.create` for an actor with no memberships (D36), and a removed member had
+none, so a key scoped to `links.read` alone could create an organization and own
+it. The obvious fix is a `requireSessionActor` there, and it is the wrong one
+twice over: the milestone rule every Phase 2 milestone inherits says branching on
+credential type outside `NonDelegableScopes` and D43 is itself a defect, and a
+branch would leave the *state* the door opens on intact. The state was the
+problem. An authenticated key now always has a live membership, so the count is
+never zero for one and the door is unreachable — recorded at that call site, so
+the next reader does not add the branch.
+
+**Rotation re-checks under its lock.** Not redundant with authentication, for the
+reason revocation is already re-checked there: a removal landing between the two
+would otherwise mint the one credential it could not reach, since the successor
+is a new row nobody is watching and it can rotate again. The account's status is
+re-read beside it, coalesced to `'deleted'` rather than left NULL so one
+comparison covers a soft-deleted owner and no branch depends on scanning an
+absent row.
+
+**And a revoke path, which needed a new statement.** There was none: `RevokeAPIKey`
+keys on `user_id`, so only a key's own owner could stop it. `RevokeAPIKeyInOrganization`
+keys on the organization, is reached from `Revoke` when the id is not the actor's
+own, and is gated on `apikeys.write` from an organization-wide membership (D44) —
+a key is issued into an organization, so reaching one is an organization-wide
+act. Every refusal is not-found, keeping the property the single-armed version
+had: an id is not probeable by somebody who may not act on it.
+
+That arm is audited and the vocabulary gained `apikey.revoked` for it. The
+existing note explaining why revocation was absent is the reason it now cannot
+be: *both require an interactive session, so the person is the record* — true
+while the only person who could revoke a key was its owner, and false the moment
+an administrator can. Revoking your own key is still unrecorded, because there
+the sentence still holds.
+
+### F60 — D43's shape, D43's mechanism
+
+An API key holding `members.write` promoted an existing member to `admin`
+through `ChangeRole` or `Grant`. Same outcome as F29, one axis over: reaching
+`admin` by promotion rather than by admission. The resulting account holds
+`apikeys.read`, `apikeys.write` and `audit.read` — none of which a key may hold —
+in an interactive principal that revoking the key does not take back.
+
+**Which mechanism, and why.** `NonDelegableScopes` would also have closed it, by
+taking `members.write` off keys entirely. Not taken: D28's conclusion that a key
+may bring collaborators in survived F29 intact — what F29 cost was the *rank*
+argument, not the delegation — and the wider mechanism would remove a capability
+to fix an outcome. D43 is the narrower one and it is the right shape: it bounds
+what a key may **produce** with a permission it legitimately holds.
+
+The mechanism was reused rather than re-derived. `KeyIssuableRoles` moved from
+`internal/invite` to `internal/auth`, beside `NonDelegableScopes`, because
+`internal/team` importing `internal/invite` for one map runs the dependency the
+wrong way and a second copy of the list is two lists that must agree. One list
+now bounds both doors, so a role added later is refused on both or on neither.
+Enforcement is at `resolveRole` — the chokepoint `ChangeRole` and `Grant` both
+pass through, which is the same shape D43 used at `invite.Create`.
+
+### The residue, named rather than left
+
+**`/invites` stays in the nav for a workspace-scoped admin, and now leads to a
+403.** `nav.html` states its own rule — *"Each is gated on exactly what the page
+behind it requires: a menu entry that leads to a 403 is worse than no entry"* —
+and F93 made `members.write` necessary but no longer sufficient for that page.
+
+It was not fixed, and the cost of fixing it is why. The nav renders on every
+page from `shell`, so gating it correctly means either an authority load per page
+render for every admin, or a third query in `identityFor` on every authenticated
+request. Both are a per-request cost to remove a 403 from a rare and correct
+refusal — the actor genuinely may not use that page. Recorded here rather than
+done silently, so that whoever finds the nav rule half-true finds this too.
