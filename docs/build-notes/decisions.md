@@ -151,6 +151,7 @@ file. Append a row when you append an entry.
 | [M35's reopening, two amendments made at acceptance](#2026-08-04--m35s-reopening-two-amendments-made-at-acceptance) | A1 — the reopening claimed the F79 fix invalidates every minted signature; the signer was never wrong, so nothing that works stops. The first M44.9 fix-trap that was itself wrong, and why that position produces them. A2 — the inherited rule's label moves from "Redirects are 302" to "never permanent", the assertion unchanged, because the verified-password POST now answers 303 |
 | [M35, which namespace a gate is keyed on](#2026-08-04--m35-which-namespace-a-gate-is-keyed-on) | D94 — three corrections and one amendment: a verified password answers **303** unconditionally and D53's *"answers the 302 itself"* is superseded, with 303 joining `REDIRECT_DEFAULT_STATUS`'s allowed set; the signature and the password bucket keyed on the domain the request arrived on rather than the boot constant; the signed URL minted on the link's own hostname, with an unreadable domain row an error rather than a fallback; HEAD reading the budget without spending it, and what that read costs; why the fix invalidates no signature that ever worked, against a constraint that expected it to; the fixture in which the defect was testable at all |
 | [M42, what one drain costs, and the fix that would have moved the cost rather than removed it](#2026-08-04--m42-what-one-drain-costs-and-the-fix-that-would-have-moved-the-cost-rather-than-removed-it) | D95 — a claimed batch is dialled together and `Drain` waits for it, so one drain costs one attempt and not `DrainBatch` of them; why the WaitGroup is what makes D77's lock trap inapplicable rather than survived; why a webhook goroutine of its own is not a fix, `pg_try_advisory_lock` being session-scoped, and would convert every other job's stall into a skip; what it does to F90 (nothing) and to F91 (unreachable, not fixed); what a receiver now sees |
+| [M43, the queue's own clock, and why the watermark could not be it](#2026-08-04--m43-the-queues-own-clock-and-why-the-watermark-could-not-be-it) | D96 — one column was carrying two facts, and ordering the due query on the firing watermark meant the hundred-and-first enabled rule was never evaluated at all; `last_checked_at` added by 03100 with the due index rebuilt on it; why advancing `last_fired_at` on a no-match run is the tempting fix and breaks `min_count`; one cursor statement a run rather than one a rule, and the three deliberate details in it — no `updated_at`, failed rules stamped too, `WithoutCancel` so a cut-off run keeps what it looked at; why a NULL cursor is the right thing for a new or resumed rule; the test's shape, and why its first assertion is that nothing happened |
 
 ---
 
@@ -12257,3 +12258,93 @@ until `DrainBatch` of them are in flight together and records the high-water mar
 so a drain that delivers in turn cannot reach the count however fast the machine
 is. Run against the shipped tree first, where it reported a peak of one and took
 8.08 seconds for twenty rows a concurrent drain finishes in about one.
+
+## 2026-08-04 — M43, the queue's own clock, and why the watermark could not be it
+
+M43 is reopened on [F83](deferred-findings.md). The claim it falsifies is written
+in three places and worded almost identically in each — `automation.sql`'s
+*"ordered so the cap starves nobody: the rules a capped run skipped hold the
+oldest watermarks on the next run and go first"*, the same sentence beside
+`AutomationRulesPerRun`, and the log line that reports the cap biting. All three
+were false, and the failure they hid is total rather than partial: on an instance
+holding more than a hundred enabled rules, the hundred-and-first was never
+evaluated on any run, ever. **D96.**
+
+**The mechanism, because it is not obvious from the ordering alone.**
+`ListDueAutomationRules` sorted on `last_fired_at`, and that column has exactly two
+writers: `ClaimAutomationRule`, which runs only when a rule actually fires, and the
+disabled→enabled re-arm. The evaluator returns *before* the claim whenever the
+match set is under the rule's threshold, and the default threshold is one — so
+every run that matched nothing left the watermark exactly where it was. Idle is
+precisely what keeps a watermark old, so the hundred oldest were not a rotating
+set but a fixed one, and nothing about a starved rule was visible: it shows as
+enabled, its `last_fired_at` never moves, and no log line names it. A hundred rules
+is five workspaces at the documented per-workspace cap of twenty.
+
+**One column was carrying two facts.** *When did this rule last fire* bounds every
+match window; *when was this rule last looked at* decides whose turn it is. They
+coincide only on an instance where every rule fires on every pass. Migration 03100
+separates them: `automation_rules.last_checked_at`, additive DDL, with the due
+index rebuilt on the new column under the same name — the old ordering has no
+reader left, and an index nothing walks is write cost on every firing.
+
+**The one-line alternative was refused before it was written**, and m43.md's
+reopening named it as a prohibition rather than leaving it to judgement: advancing
+`last_fired_at` on a no-match run would have fixed the ordering with no schema
+change at all, and it discards the subjects already inside the window. `min_count`
+counts *across* runs precisely because the watermark stands still until the rule
+fires; "tell me after five refusals" stops working on any instance where refusals
+arrive one at a time, which is every instance. `TestAThresholdAccumulatesRatherThanDiscards`
+already held that claim and was verified to fail against this exact change before
+the fix was written.
+
+**The cursor advances once per run, not once per rule.** `MarkAutomationRulesChecked`
+is a single `UPDATE ... WHERE id = ANY($ids)` over the rules the pass reached, so
+the fairness property costs one statement however large the batch was: the per-run
+bound m43.md's Risks demand goes from 100 × (1 + 3 + 25) = 2,900 statements to
+2,901. The alternative shape — stamping each rule as it is evaluated — buys nothing
+and turns a bound with one term into a bound with a hundred.
+
+**Three details in that statement are deliberate, and each is a way it could have
+been got wrong.**
+
+- It writes `last_checked_at` and nothing else. Not `last_fired_at`, per the
+  prohibition above; not `updated_at`, which would make every rule on the instance
+  look edited once a minute in a column a person reads.
+- Rules whose evaluation **failed** are stamped too. A rule with a hand-edited
+  `actions` column errors on every pass, and leaving its cursor where it was would
+  park it at the head of the queue permanently — F83 again, with a different cause.
+- The advance runs on `context.WithoutCancel` with a five-second bound of its own.
+  A run cut short by the job timeout has still looked at the rules it reached, and
+  dropping that fact is how the fixed front of the queue reassembles itself: every
+  following run would start at the same rule and be cut off at the same one. What
+  the cancellation *does* still do is stop the loop, so rules the pass never
+  reached are not in the list and keep their older cursor — which is the fairness
+  property working in the one case that used to defeat it.
+
+**What a new or resumed rule gets.** `last_checked_at` is left NULL at creation and
+`NULLS FIRST` sorts it to the front, so a rule somebody just wrote is evaluated on
+the next tick rather than after a rotation. A rule disabled for a month keeps its
+old value and therefore goes early when it is switched back on — the right
+direction for a column that answers "who has waited longest". Neither is a special
+case in Go; both fall out of the ordering.
+
+**The test is `TestARuleBeyondTheRunCapIsStillEvaluated`, and its shape is the
+claim.** A hundred filler rules with chosen low ids and nothing to match, in a
+workspace holding no links; the rule under test created through the service, so its
+v7 id sorts last, holding the only subject on the instance. The first run is
+asserted to produce **nothing** — without that, the test would pass on a tree where
+the cap never bit, which is the one thing it exists to rule out — and the second run
+is asserted to produce exactly one notification. It also asserts both columns
+directly after the first run: every filler stamped as looked at, and not one
+watermark moved. Verified by sabotage three ways: ordering restored to
+`last_fired_at` (second-run notification lost), the cursor advance removed (no rule
+stamped), and the advance widened to write `last_fired_at` as well (the threshold
+test fails alongside it).
+
+**What was deliberately not done.** The column is not surfaced on the page, in the
+API's `evaluation` block or on `domain.AutomationRule`. F83's severity notes that
+nothing distinguishes a starved rule from one whose trigger has not matched, and
+that is true and now unreachable rather than displayed: there are no starved rules
+to distinguish. Publishing the scheduler's bookkeeping is a product decision with an
+API surface attached, and it was not this reopening's to take.

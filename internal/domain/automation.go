@@ -197,20 +197,33 @@ func IsAutomationAction(name string) bool {
 //	AutomationRulesPerRun x (1 match query
 //	                         + MaxAutomationActions actions
 //	                         + AutomationMatchesPerRule archive statements)
+//	+ 1 cursor advance
 //
-// which at the values below is 100 x (1 + 3 + 25) = 2,900 statements, against a
-// one-minute clock and a two-minute job timeout. The **expected** case is 100
-// indexed range scans that return nothing, because the watermark means a rule
-// only ever looks at what happened since it last fired.
+// which at the values below is 100 x (1 + 3 + 25) + 1 = 2,901 statements, against
+// a one-minute clock and a two-minute job timeout. The **expected** case is 100
+// indexed range scans that return nothing plus that one update, because the
+// watermark means a rule only ever looks at what happened since it last fired.
+//
+// The `+ 1` is the whole cost of the fairness property below: one statement a
+// run, whatever the batch did, rather than one per rule.
 const (
 	// MaxAutomationRulesPerWorkspace bounds the list. Twenty, matching
 	// MaxWebhooksPerWorkspace: a workspace wanting more standing instructions
 	// than that wants a workflow engine.
 	MaxAutomationRulesPerWorkspace = 20
 	// AutomationRulesPerRun bounds how many enabled rules one run considers,
-	// across every workspace on the instance. Rules are taken oldest-watermark
-	// first, so a run that hits this cap starves nobody: the rules it skipped
-	// have the oldest watermarks on the next run and go first.
+	// across every workspace on the instance. Rules are taken **least recently
+	// looked at** first — `last_checked_at`, which a run advances for every rule
+	// it reached, whether that rule fired, matched nothing or failed — so a run
+	// that hits this cap starves nobody: the rules it skipped keep the older
+	// cursor and go first next time.
+	//
+	// Ordering on `last_fired_at` instead is what F83 was, and it is worth
+	// naming because the two columns look interchangeable and are not. The
+	// watermark moves only on a firing, and idle is precisely what keeps it old,
+	// so the hundred oldest were a fixed set and the hundred-and-first enabled
+	// rule on an instance — five workspaces at MaxAutomationRulesPerWorkspace —
+	// was never evaluated on any run.
 	AutomationRulesPerRun = 100
 	// AutomationMatchesPerRule bounds how many subjects one rule sees in one
 	// run. A rule that matches more is truncated, logged, and its watermark
@@ -287,6 +300,14 @@ type AutomationRule struct {
 	// on a rule created today would mean "every link that ever expired", and a
 	// rule re-enabled after a month would otherwise fire for the whole backlog
 	// the moment somebody flipped the switch.
+	//
+	// **It is not the scheduler's cursor**, and conflating the two is F83. Which
+	// rules a run looks at is ordered by `last_checked_at` — a separate column
+	// (03100), not carried on this struct because nothing outside the evaluator
+	// reads it. A run that matched nothing leaves this value exactly where it
+	// was, on purpose, so that sub-threshold matches accumulate; a column that
+	// stands still whenever a rule is idle cannot also be the thing that decides
+	// whose turn it is.
 	LastFiredAt *time.Time `json:"last_fired_at"`
 }
 

@@ -186,6 +186,14 @@ migrations run at boot.
   subjects per rule, logs when either cap bites, and defers the remainder to the
   next run rather than dropping it; `/api/v1/automation` reports all of it.
 
+  **Which 100 rotates.** An instance may hold more enabled rules than one run
+  considers, and the run takes the ones it has looked at least recently — not the
+  ones that fired least recently, which is a different set and one that does not
+  drain: a rule whose trigger has not matched has not fired, so ordering on
+  firings would park every idle rule at the front and leave anything past the
+  hundredth unevaluated for good. The scheduler keeps its own timestamp for this,
+  separate from the `last_fired_at` a rule shows you.
+
   Every rule change is an audit event, and so is every firing — the firing record
   names the rule rather than a person, which is what makes an automated archive
   answerable. `linkctrl_automation_firings_total{trigger,outcome}` counts them.

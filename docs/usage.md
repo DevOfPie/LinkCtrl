@@ -1442,6 +1442,12 @@ The page calls the column *last fired or armed*, because it is both: a rule that
 has never matched anything and a rule that fired a moment ago carry the same kind
 of value.
 
+It is **not** a record of when the rule was last examined. A rule below its
+threshold, or one whose trigger simply has not matched, is looked at every minute
+and this value does not move — deliberately, since that is what lets matches
+accumulate. What decides whose turn it is on a busy instance is a separate thing
+the scheduler keeps for itself; see *What one run costs* below.
+
 Rules also cannot set each other off. Nothing an action produces is anything a
 trigger watches for — which is why the `webhook` action emits only
 `automation.fired`, and why archiving a link never moves its expiry.
@@ -1461,16 +1467,24 @@ a higher one would be a rule that saves and never fires.
 | Bound | Value |
 | --- | --- |
 | How often the scheduler evaluates | every minute |
-| Rules considered in one run, across the instance | 100, oldest watermark first |
+| Rules considered in one run, across the instance | 100, least recently looked at first |
 | Subjects one rule handles in one run | 25 |
 | Actions on one rule | 3 |
 | Rules in one workspace | 20 |
 
 A run that hits either cap says so in the log and **loses nothing**: the rules it
-did not reach hold the oldest watermarks next time and go first, and a rule that
-matched more than 25 subjects picks up the remainder on the next run. All of it is
-in the `evaluation` block of `GET /api/v1/automation`, so a client never has to
-guess.
+did not reach are the ones the next run starts with, and a rule that matched more
+than 25 subjects picks up the remainder on the next run. All of it is in the
+`evaluation` block of `GET /api/v1/automation`, so a client never has to guess.
+
+The first of those turns on a fact worth stating plainly, because the obvious
+reading of it is wrong. A rule's turn is decided by when the scheduler last
+**looked at** it, not by when it last **fired** — two different things, kept in
+two different places. A rule that matches nothing has not fired, and a queue
+ordered by firings would leave every idle rule permanently at the front and
+whatever sat past the hundredth never evaluated at all. So an instance holding
+more than 100 enabled rules evaluates all of them, a hundred a minute, in
+rotation — five workspaces at the twenty-rule cap is where that starts to matter.
 
 ### What it records
 

@@ -533,6 +533,148 @@ func TestAThresholdAccumulatesRatherThanDiscards(t *testing.T) {
 	}
 }
 
+// TestARuleBeyondTheRunCapIsStillEvaluated is the reopening's claim, and F83's
+// refutation.
+//
+// One run considers domain.AutomationRulesPerRun rules and an instance may hold
+// more, so *which* hundred is a fairness question rather than a detail. It used
+// to be answered by `last_fired_at`, which moves only when a rule **fires** — and
+// idle is exactly what keeps a watermark old, so the hundred oldest were a fixed
+// set and the hundred-and-first enabled rule was never evaluated on any run,
+// ever. The cursor is its own column now, advanced for every rule a run reached.
+//
+// The shape carries the claim. The rule under test is the last by id, the only
+// one with a subject, and the first run is asserted to produce **nothing**:
+// without that assertion the test would also pass on a tree where the cap never
+// bit, which is the one thing it exists to rule out.
+func TestARuleBeyondTheRunCapIsStillEvaluated(t *testing.T) {
+	f := newAutomation(t)
+
+	// A hundred rules with nothing to match, in a workspace holding no links.
+	fillers, fillersArmed := f.fillerRules(domain.AutomationRulesPerRun)
+
+	// The rule under test, in the fixture's own workspace, where the subject is.
+	// Its id comes from CreateAutomationRule and is a v7, so it sorts after every
+	// filler id and is exactly one place past the cap.
+	rule := f.rule("the hundred and first", domain.TriggerLinkExpired, 1, domain.ActionNotify)
+	armed := f.watermark(rule.ID)
+	f.advance(time.Minute)
+	f.expiredLink("subject-past-the-cap", time.Second)
+
+	f.evaluate()
+	if got := f.counts().Notifications; got != 0 {
+		t.Fatalf("%d notifications on the first run, want 0. The rule under test was "+
+			"reached, so the per-run cap is not biting and every assertion below "+
+			"would pass without the thing they are here to check.", got)
+	}
+
+	// The fillers matched nothing, and the two columns record different things
+	// about that: all of them were *looked at*, and none of them *fired*.
+	if got := f.checkedCount(fillers); got != len(fillers) {
+		t.Fatalf("%d of %d rules carry a cursor after a run that looked at all of "+
+			"them, want all. A rule the scheduler evaluated and did not stamp keeps "+
+			"its place at the head of the queue forever.", got, len(fillers))
+	}
+	if got := f.firedSince(fillers, fillersArmed); got != 0 {
+		t.Fatalf("%d rules that matched nothing had their watermark moved, want 0. "+
+			"`last_fired_at` is the threshold accumulator: advancing it on a "+
+			"no-match run discards the subjects already inside the window, and "+
+			"min_count stops working the day that happens.", got)
+	}
+
+	// Nothing new has happened between the two runs. The only difference is
+	// whose turn it is.
+	f.advance(time.Minute)
+	f.evaluate()
+
+	if got := f.counts().Notifications; got != 1 {
+		t.Fatalf("%d notifications after a second run, want 1. The rule past the cap "+
+			"was not reached on that run either, which is F83: the hundred rules "+
+			"ahead of it hold their places permanently, because a rule that matches "+
+			"nothing never moves the column the queue is ordered by.", got)
+	}
+	if got := f.watermark(rule.ID); !got.After(armed) {
+		t.Errorf("the rule fired and its watermark is still %s", got)
+	}
+}
+
+// fillerRules writes n enabled rules with nothing to match, in a workspace of
+// their own, and returns their ids and the instant they were armed at.
+//
+// Written with statements rather than through the service, for two reasons that
+// both matter. The service caps a workspace at MaxAutomationRulesPerWorkspace
+// and the bound under test is the instance-wide one; and the ids are *chosen*,
+// because the due query breaks ties on id and the claim being tested is about
+// which rules sit at the front of the queue. A generated id would leave that to
+// chance.
+func (f *automationFixture) fillerRules(n int) ([]uuid.UUID, time.Time) {
+	f.t.Helper()
+
+	var ws uuid.UUID
+	if err := f.pool.QueryRow(f.t.Context(), `
+		INSERT INTO workspaces (id, organization_id, name, slug)
+		VALUES ($1, $2, 'Filler', 'filler') RETURNING id`,
+		uuid.Must(uuid.NewV7()), f.owner.OrgID).Scan(&ws); err != nil {
+		f.t.Fatalf("create the filler workspace: %v", err)
+	}
+
+	armed := f.clock()
+	rows, err := f.pool.Query(f.t.Context(), `
+		INSERT INTO automation_rules
+		       (id, workspace_id, name, trigger, trigger_config, actions, enabled, last_fired_at)
+		SELECT ('00000000-0000-7000-8000-' || lpad(i::text, 12, '0'))::uuid, $1,
+		       'filler ' || i, $2, '{"min_count":1}'::jsonb, '["notify"]'::jsonb, true, $3
+		  FROM generate_series(1, $4) AS i
+		RETURNING id`, ws, domain.TriggerLinkExpired, armed, n)
+	if err != nil {
+		f.t.Fatalf("write the filler rules: %v", err)
+	}
+	defer rows.Close()
+
+	ids := make([]uuid.UUID, 0, n)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			f.t.Fatalf("read a filler rule id: %v", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		f.t.Fatalf("read the filler rule ids: %v", err)
+	}
+	if len(ids) != n {
+		f.t.Fatalf("wrote %d filler rules, want %d", len(ids), n)
+	}
+	return ids, armed
+}
+
+// checkedCount is how many of these rules the scheduler has stamped as looked at.
+func (f *automationFixture) checkedCount(ids []uuid.UUID) int {
+	f.t.Helper()
+	var n int
+	if err := f.pool.QueryRow(f.t.Context(), `
+		SELECT count(*) FROM automation_rules
+		 WHERE id = ANY($1::uuid[]) AND last_checked_at IS NOT NULL`, ids).Scan(&n); err != nil {
+		f.t.Fatalf("count checked rules: %v", err)
+	}
+	return n
+}
+
+// firedSince is how many of these rules moved their watermark past `at`.
+//
+// Strictly after, rather than "not equal to the value written", so the assertion
+// does not turn on how a timestamp round-trips through the driver.
+func (f *automationFixture) firedSince(ids []uuid.UUID, at time.Time) int {
+	f.t.Helper()
+	var n int
+	if err := f.pool.QueryRow(f.t.Context(), `
+		SELECT count(*) FROM automation_rules
+		 WHERE id = ANY($1::uuid[]) AND last_fired_at > $2`, ids, at).Scan(&n); err != nil {
+		f.t.Fatalf("count fired rules: %v", err)
+	}
+	return n
+}
+
 // TestTheMaxClicksTriggerFires covers M35's half of the vocabulary.
 //
 // The subject is `link_click_budget.exhausted_at`, which the gate stamps in the

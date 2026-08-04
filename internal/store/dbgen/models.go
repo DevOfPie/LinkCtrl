@@ -61,6 +61,7 @@ type AutomationRule struct {
 	LastFiredAt   *time.Time
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+	LastCheckedAt *time.Time
 }
 
 type BlockedDestination struct {

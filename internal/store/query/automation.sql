@@ -5,7 +5,7 @@
 -- API; the evaluation half is reached only by the scheduler and deliberately
 -- carries no workspace parameter in its first query — a run that filtered by
 -- tenant would evaluate in tenant order, and the fairness this needs is
--- oldest-watermark-first across the instance.
+-- least-recently-looked-at first across the instance.
 --
 -- **`last_fired_at` is a watermark, not a diagnostic.** Every match query below
 -- takes a half-open window `(@after, @until]`, and `@after` is that watermark.
@@ -13,28 +13,42 @@
 -- the watermark moves past it, and no later run can see it again. Removing the
 -- advance turns every rule into a runaway that fires on the same subject on
 -- every tick.
+--
+-- **`last_checked_at` is the scheduler's cursor, and it is a different fact.**
+-- When a rule was last *looked at*, whether or not it fired. It orders the due
+-- query and bounds no window; the watermark bounds every window and orders
+-- nothing. Ordering on the watermark is what F83 was — it moves only when a rule
+-- fires, so an idle rule held the head of the queue permanently and the
+-- hundred-and-first enabled rule on an instance was never evaluated at all
+-- (03100).
 
 -- name: CreateAutomationRule :one
 --
 -- `last_fired_at` is set at creation rather than left NULL. A NULL watermark on
 -- a rule created today would mean "every link that ever expired", so the first
 -- run of a brand-new rule would fire for the entire history of the workspace.
+--
+-- `last_checked_at` is left NULL and travels back with the row, as it does in
+-- every statement below. NULL sorts first in the due query, so a rule somebody
+-- just wrote is looked at on the next tick instead of waiting for its turn — and
+-- carrying the column in the projection is what keeps these four statements
+-- returning the table's own row type rather than four near-identical structs.
 INSERT INTO automation_rules
     (id, workspace_id, name, trigger, trigger_config, actions, enabled, last_fired_at)
 VALUES (@id, @workspace_id, @name, @trigger, @trigger_config, @actions, @enabled, @last_fired_at)
 RETURNING id, workspace_id, name, trigger, trigger_config, actions, enabled,
-          last_fired_at, created_at, updated_at;
+          last_fired_at, created_at, updated_at, last_checked_at;
 
 -- name: ListAutomationRules :many
 SELECT id, workspace_id, name, trigger, trigger_config, actions, enabled,
-       last_fired_at, created_at, updated_at
+       last_fired_at, created_at, updated_at, last_checked_at
   FROM automation_rules
  WHERE workspace_id = @workspace_id
  ORDER BY created_at, id;
 
 -- name: GetAutomationRule :one
 SELECT id, workspace_id, name, trigger, trigger_config, actions, enabled,
-       last_fired_at, created_at, updated_at
+       last_fired_at, created_at, updated_at, last_checked_at
   FROM automation_rules
  WHERE id = @id AND workspace_id = @workspace_id;
 
@@ -66,7 +80,7 @@ UPDATE automation_rules
        updated_at     = now()
  WHERE id = sqlc.arg(id) AND workspace_id = sqlc.arg(workspace_id)
 RETURNING id, workspace_id, name, trigger, trigger_config, actions, enabled,
-          last_fired_at, created_at, updated_at;
+          last_fired_at, created_at, updated_at, last_checked_at;
 
 -- name: DeleteAutomationRule :execrows
 DELETE FROM automation_rules WHERE id = @id AND workspace_id = @workspace_id;
@@ -75,23 +89,54 @@ DELETE FROM automation_rules WHERE id = @id AND workspace_id = @workspace_id;
 
 -- name: ListDueAutomationRules :many
 --
--- The rules one run considers, oldest watermark first.
+-- The rules one run considers, least recently looked at first.
 --
 -- Bounded by the caller at domain.AutomationRulesPerRun, and ordered so the cap
--- starves nobody: the rules a capped run skipped hold the oldest watermarks on
--- the next run and go first. A cap without this order would evaluate whichever
--- workspace happened to sort first, forever.
+-- starves nobody — which is a claim this statement can now make, because
+-- `last_checked_at` moves for **every** rule a run reached and not only for the
+-- ones that fired. The rules a capped run skipped keep the older cursor and go
+-- first next time. A cap without this order would evaluate whichever workspace
+-- happened to sort first, forever.
+--
+-- **Ordering on `last_fired_at` is what F83 was**, and the difference is not
+-- cosmetic: that column moves only on a firing, idle is exactly what keeps it
+-- old, and so the hundred oldest were a fixed set and rule 101 was never
+-- evaluated on any run. The two columns are separate facts and 03100 separates
+-- them.
 --
 -- The organization is joined in here rather than fetched per rule, because every
 -- rule that fires with a `notify` action needs it and N+1 lookups to assemble a
--- batch is the wrong shape. Walks automation_rules_due_idx (02900).
+-- batch is the wrong shape. Walks automation_rules_due_idx, as rebuilt by 03100.
 SELECT r.id, r.workspace_id, w.organization_id, r.name, r.trigger,
        r.trigger_config, r.actions, r.last_fired_at, r.created_at
   FROM automation_rules r
   JOIN workspaces w ON w.id = r.workspace_id
  WHERE r.enabled AND w.deleted_at IS NULL
- ORDER BY r.last_fired_at NULLS FIRST, r.id
+ ORDER BY r.last_checked_at NULLS FIRST, r.id
  LIMIT sqlc.arg(row_limit);
+
+-- name: MarkAutomationRulesChecked :exec
+--
+-- The cursor advance, for the rules one run actually looked at.
+--
+-- One statement per run rather than one per rule, so the whole of the fairness
+-- mechanism costs a single indexed update however many rules were considered —
+-- the per-run bound m43.md asks for is a product of four constants plus this.
+--
+-- **It writes `last_checked_at` and nothing else.** Not `last_fired_at`: a rule
+-- that matched nothing, or matched less than its threshold, has not fired, and
+-- moving its watermark would discard the subjects already inside its window.
+-- Not `updated_at` either — this is the scheduler's bookkeeping rather than an
+-- edit somebody made, and touching it would make every rule on the instance look
+-- edited once a minute.
+--
+-- Rules whose evaluation *failed* are in the list on purpose. A rule with a
+-- corrupt `actions` column errors on every pass; leaving its cursor where it was
+-- would park it at the head of the queue forever, which is F83 again with a
+-- different cause.
+UPDATE automation_rules
+   SET last_checked_at = sqlc.arg(checked_at)
+ WHERE id = ANY(sqlc.arg(ids)::uuid[]);
 
 -- name: ClaimAutomationRule :execrows
 --

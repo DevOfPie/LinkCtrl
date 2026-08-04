@@ -13,10 +13,21 @@
 // internal/domain.** A run reads at most domain.AutomationRulesPerRun rules; each
 // rule runs one indexed range query bounded at domain.AutomationMatchesPerRule;
 // each rule runs at most domain.MaxAutomationActions actions, of which only the
-// archive is per-subject. The arithmetic is written out beside those constants
-// rather than left for a reader to assemble, because m43.md's Risks say the
-// bound is the thing that has to be true and a bound nobody can state is not
-// one.
+// archive is per-subject; and one further statement closes the run by advancing
+// the cursor over every rule it looked at. The arithmetic is written out beside
+// those constants rather than left for a reader to assemble, because m43.md's
+// Risks say the bound is the thing that has to be true and a bound nobody can
+// state is not one.
+//
+// **Every rule comes round, and the column that makes that true is not the
+// watermark.** The cap means a run sees a hundred rules and an instance may hold
+// more, so which hundred is a fairness question rather than a detail.
+// `last_checked_at` answers it: the due query orders on it, and Evaluate advances
+// it for every rule the pass reached — fired, matched nothing, or failed. The
+// watermark cannot do that job, because it moves only on a firing and idle is
+// exactly what keeps it old: ordering on it left the hundred oldest a fixed set,
+// with rule 101 never evaluated on any run, which is F83 and what migration
+// 03100 separates.
 //
 // **A rule cannot trigger itself, and the mechanism is the watermark.** Every
 // match query reads the half-open window `(last_fired_at, now]`, and the claim
@@ -58,6 +69,16 @@ import (
 // somebody reads, not a wall of aliases; the count travels beside the list so a
 // truncated list never reads as a complete one.
 const SubjectsShown = 5
+
+// checkpointTimeout bounds the one statement that ends a run.
+//
+// Its own bound because it is written on a context that has deliberately
+// outlived the run's — see markChecked — and an unbounded write on a context
+// nothing can cancel is a job that never returns. Five seconds is generous for a
+// single indexed update of at most AutomationRulesPerRun rows and is a fifth of
+// the interval, so a run that spent its whole budget still ends inside the next
+// tick.
+const checkpointTimeout = 5 * time.Second
 
 // Archiver is internal/link's archive, as this package needs it.
 //
@@ -147,26 +168,63 @@ func (s *Service) Evaluate(ctx context.Context) error {
 		return fmt.Errorf("automation: list due rules: %w", err)
 	}
 	if len(rules) == domain.AutomationRulesPerRun {
-		// The first bound biting, said out loud. It is not an error — the
-		// ordering means the rules this run skipped go first next time — but an
-		// instance permanently at the cap is one where every rule is evaluated
-		// less often than the clock suggests, and that is worth being able to
-		// see rather than infer.
+		// The first bound biting, said out loud. It is not an error — the rules
+		// this run skipped keep the older cursor and go first next time, which
+		// the advance below is what earns — but an instance permanently at the
+		// cap is one where every rule is evaluated less often than the clock
+		// suggests, and that is worth being able to see rather than infer.
 		s.log.Info("automation evaluation hit its per-run rule cap",
 			slog.Int("rules", len(rules)),
 			slog.Int("cap", domain.AutomationRulesPerRun))
 	}
 
 	var errs []error
+	// The rules this pass actually reached. Only these have their cursor moved:
+	// a run cut off part-way must leave the rules it never looked at at the head
+	// of the queue, or a run that times out at the same rule every time becomes
+	// the starvation this column exists to end.
+	looked := make([]uuid.UUID, 0, len(rules))
 	for _, rule := range rules {
 		if ctx.Err() != nil {
 			break
 		}
+		// Recorded before the evaluation rather than after it, because a rule
+		// that errors has still been looked at. One that fails on every pass —
+		// a hand-edited row, a trigger outside the vocabulary — would otherwise
+		// hold its place at the head of the queue forever, which is the defect
+		// this column was added for wearing a different hat.
+		looked = append(looked, rule.ID)
 		if err := s.evaluateRule(ctx, rule, now); err != nil {
 			errs = append(errs, err)
 		}
 	}
+	if err := s.markChecked(ctx, looked, now); err != nil {
+		errs = append(errs, err)
+	}
 	return errors.Join(errs...)
+}
+
+// markChecked advances the scheduler's cursor over the rules a run looked at.
+//
+// **On a context that survives this run's cancellation**, bounded on its own.
+// The job's deadline is what cuts a slow pass short, and a pass that was cut
+// short has still looked at the rules it reached; losing that fact is how the
+// fixed front of the queue would quietly reassemble itself, since every
+// following run would start at the same rule and be cut off at the same one.
+// The write is one indexed update of ids already read, so there is nothing here
+// that a cancelled run should be protected from finishing.
+func (s *Service) markChecked(ctx context.Context, ids []uuid.UUID, at time.Time) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), checkpointTimeout)
+	defer cancel()
+	if err := s.q.MarkAutomationRulesChecked(ctx, dbgen.MarkAutomationRulesCheckedParams{
+		CheckedAt: &at, Ids: ids,
+	}); err != nil {
+		return fmt.Errorf("automation: mark %d rules checked: %w", len(ids), err)
+	}
+	return nil
 }
 
 // subject is one thing a trigger matched.
