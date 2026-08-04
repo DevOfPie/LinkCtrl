@@ -146,6 +146,8 @@ file. Append a row when you append an entry.
 | [M44, the tenancy bound an organization-wide key needed](#2026-08-03--m44-the-tenancy-bound-an-organization-wide-key-needed) | D90 — the defect M44 created by making a NULL `workspace_id` issuable at all: the resolver filters on membership, so an owner belonging to two organizations would have their organization-wide key resolve into the *other* tenant, with `Authenticate` taking that organization's id as the key's own. Fixed in-spec, as a **bound** on the candidate set rather than a rung in the precedence, so a key still follows its owner's pinned default inside its own organization and every other caller resolves unchanged |
 | [M44.9, the pre-release review, and what refutation cost the findings](#2026-08-04--m449-the-pre-release-review-and-what-refutation-cost-the-findings) | 91 raw candidates from 17 independent readers, 78 put to adversarial verification, 55 confirmed as F76-F130; the amendment from the v2 to the v3 cache key; the three live verifications and what the 0.1.0 upgrade actually proved; why refutation moved tiers more often than it killed findings, and the straggler pass that refuted six of nine; the M40-times-everything cluster and the single-goroutine scheduler cluster; F29 found in the wrong section, and the four existing rows that want a line rather than a neighbour |
 | [M44.9's triage, six milestones reopened, and a dependency reversed](#2026-08-04--m449s-triage-six-milestones-reopened-and-a-dependency-reversed) | Which eleven rows became work and which milestone each reopens; why the owner took the wider option against the recommendation, and that the narrow set would have shipped two features that do not work; D91 reversing the punycode decision to add golang.org/x/net/idna, the two costs accepted with it and the homograph check it repairs; F85 approved but not a reopening; F29 moved to Closed and the four rows that gained evidence rather than neighbours |
+| [M40, what a verification may write, and what a pass may be delayed by](#2026-08-04--m40-what-a-verification-may-write-and-what-a-pass-may-be-delayed-by) | D92 — why the write that sets `verified_at` carries the hostname and token it proved rather than an id, and why neither a transaction nor `FOR UPDATE` closes the gap a rename commits into; the audit record stamped from the checked name so the log is not sourced from the thing it is evidence about; serving hostnames drawn before pending ones, and a per-workspace registration cap, because what may delay a hard stop must not be creatable at will |
+| [M30, the same claim in a different alphabet](#2026-08-04--m30-the-same-claim-in-a-different-alphabet) | D93 — why a host written outside ASCII reached none of the four mechanisms the trailing dot walked past, and why that is one missing conversion rather than four bugs; UTS-46 ToASCII folded at D46's existing fold, mapping before the dot; the profile measured against `idna.Lookup`, which refuses three destinations this validator accepts; the ASCII skip and why it cannot let a spelling through; an unmappable host refused with an untiered code; the list entries folded by the same function, and the address rule moved after the fold; what D91 cost, and `isHomograph` working as designed for the first time |
 
 ---
 
@@ -11808,3 +11810,147 @@ here would be raised to make a symptom go away.
   a failure written onto a renamed row records a stale sentence and a watermark
   on a row that is unverified either way. Recorded as a finding rather than fixed
   here, because the reopening's scope is the write that starts serving.
+
+## 2026-08-04 — M30, the same claim in a different alphabet
+
+M30 is reopened a second time, on [F77](deferred-findings.md), by the same bullet
+the trailing dot falsified and a different mechanism. The correction carries M30's
+number rather than arriving as a successor, so the trail for one claim stays in
+one place.
+
+**What was false, measured rather than argued.** The bullet says *no
+configuration, list entry, or future review path can accept a metadata or private
+address*, and `docs/SECURITY.md` said *"a name cannot be spelled past a check that
+would otherwise refuse it"*. Both held only for hosts spelled in ASCII. On the
+current build, `POST /api/v1/links` accepted and stored `169。254。169。254` with
+U+3002 separators, `１６９.２５４.１６９.２５４` in fullwidth digits, `ｌｏｃａｌｈｏｓｔ`,
+`metadata。google。internal` and `127。0。0。1`, while the control
+`http://169.254.169.254/` answered 422 — and no `destination.blocked` row was
+written for any of them, so nothing recorded the attempt.
+
+**Why every tier missed it, and why that is one cause and not four.**
+`destination.go` folded a host by lowercasing it and trimming ASCII dots, and
+that was the whole of canonicalization. `looksNumeric` finds the last label with
+`strings.LastIndexByte(host, '.')`, which finds nothing in a host whose
+separators are U+3002, so the entire host became "the last label" and the digit
+scan exited on the first character. The `localhost` test is an equality. The
+embedded list is an exact-match map. And `isHomograph` returns early unless a
+label already starts `xn--`, so the one tier built for lookalikes never examined
+a raw Unicode host at all. Four mechanisms, one missing conversion — which is the
+same sentence [D46](#2026-08-02--m30-reopened-one-character-and-the-four-checks-it-walked-past)
+wrote about the trailing dot, and the reason the fix goes in the same place.
+
+**It reaches this server, not only a visitor's browser.** The review's first
+reading was that Go's client performs no IDNA and M42's webhooks were therefore
+immune. That was disproved by measurement: `net/http`'s `canonicalAddr` calls the
+standard library's own vendored `golang.org/x/net/idna`, and a dial probe showed
+the stored form connecting to `169.254.169.254:80`. The private-address line
+still holds, because `guardDial` judges the **resolved address** — but the
+Postgres blocklist, the embedded list and the homograph tier are all name-based,
+so this instance could be made to POST a signed workspace payload to a host its
+operator had blocked.
+
+### D93 — one fold, a browser's profile, and a refusal for what is not a name
+
+**UTS-46 ToASCII, in `canonicalHost`, at the fold D46 already put in
+`ValidateDestination`.** Not a second normalization step and not one per tier:
+the shape that produced both of this milestone's reopenings is a rule several
+places have to keep, and the count of places is what decides how long it stays
+kept. Every tier reads its host off the URL that function returns, so the trailing
+dot and the alphabet are now the same fold, in the same order — mapping first,
+dot second, because `169。254。169。254。` ends in a separator that is not a dot
+until ToASCII has made it one.
+
+**The profile is WHATWG's `domain to ASCII` with `beStrict` false, and not
+`idna.Lookup`.** This is the choice most likely to be quietly undone later, so it
+is written down with its evidence. `Lookup` is the library's recommended profile
+and sets `UseSTD3ASCIIRules` and `CheckHyphens`; measured against it,
+`my_host.example`, `under_score.example.com` and the real
+`r3---sn-apo3qvuoxuxbt-j5pe.googlevideo.com` are all errors, and all three are
+destinations this validator accepts today. Closing a hole by refusing ordinary
+destinations is how a check becomes a thing operators route around, which is the
+same argument that keeps the embedded tier confined to exact matches. WHATWG's
+settings are also the ones that matter on the merits: the threat is a spelling a
+*browser* resolves to a blocked name, so the browser's own conversion is the
+conversion to judge by.
+
+**An all-ASCII host skips the mapping**, which is what `net/http`'s own
+`idnaASCII` does. It is not an optimization. With STD3 rules off, the mapping's
+only effect on an ASCII host is the case fold already done a line earlier, and
+everything else the profile would do to one is a *rejection* rather than a
+different spelling — so skipping cannot let a second spelling through, and it is
+what keeps a broken `xn--` label, which is unresolvable rather than dangerous and
+which `punycode_test.go` names by hand, from becoming a refusal nothing asked
+for.
+
+**A host UTS-46 cannot map is refused, with `invalid` and not a tier code.**
+Refusing is the only direction that fails closed, because the raw spelling is
+exactly the value the tiers cannot read; passing it through is F77 restated. The
+code is deliberately untiered: a disallowed rune, a right-to-left override or a
+broken A-label is not a name, which is the same kind of thing as a URL that will
+not parse, and an `unappealable.*` code would claim a judgement about where the
+destination points that nothing here made. `blocking.go` already argues the
+general form of this about minting reason codes no documentation explains.
+
+**The list entries fold through the identical function.** This is the half the
+fix could have broken while closing F77, and it is worth naming because it looks
+like scope creep and is the opposite. Once a destination is stored and judged as
+`xn--mnchen-3ya.example`, an environment entry left as the operator typed it is a
+line that refuses nothing forever — the same sentence F77 falsified, freshly
+re-broken by its own fix. `LINKCTRL_DESTINATION_BLOCKLIST` and
+`blocked_hosts.txt` therefore go through `canonicalHost` too, and in
+`checkListEntry` the fold runs *before* the address rule: `looksNumeric` splits on
+ASCII dots, so `１６９.２５４.１６９.２５４` as an entry has a non-numeric last label and
+would otherwise walk straight past the rule that keeps addresses out of a list
+that cannot honour them. The shape rules stay on the entry as written, because
+the fold trims a trailing dot and asking afterwards would never see one.
+
+**An entry that cannot be folded stops the instance from starting.** `cmd/linkctrl`
+already treats a seeding failure as fatal and says why — an instance whose
+refusals do not match its configuration is worse than one that does not start —
+and a line somebody added that silently refuses nothing is precisely that state.
+
+### What this cost, and what it bought back
+
+`golang.org/x/net/idna` enters go.mod under [D91](#2026-08-04--m449s-triage-six-milestones-reopened-and-a-dependency-reversed),
+answered by the owner before this reopening began, so nothing here re-litigates
+it. Two consequences were accepted with it and both are now visible in the tree.
+The stored value for a non-ASCII destination changes: `https://müller.de/preise`
+is stored as `https://xn--mller-kva.de/preise`, which is D46's own rule about the
+value the tiers judged being the value a visitor is handed. And the hand-written
+punycode decoder stays rather than being replaced by the new dependency — it
+answers *false* on malformed input, which is what a heuristic needs and not what
+a validator gives, and it is pinned by RFC 3492's test vectors.
+
+What it bought back is `isHomograph`. Its `xn--` prefix test was written against
+a form nothing produced, so until now a registered `аpple.com` in Cyrillic
+reached the tier built for lookalikes and was waved through. It arrives as
+`xn--pple-43d.com` and is caught. m30.md said in advance to expect this check to
+start firing on input it had never seen, and that a refusal it produces now is in
+spec; nothing in the suite turned red from it.
+
+### Why the test that guarded this claim did not see it, again
+
+`TestUnappealableTierHasNoOverrideSwitch` walks a struct. `TestATrailingDotDoesNotDefeatAnyTier`
+was written when that was found insufficient and feeds *hosts* — and every host
+it feeds is ASCII, so a promise about what could be accepted was guarded by a
+suite that had never asked the question in another alphabet.
+`TestAUnicodeSpellingDoesNotDefeatAnyTier` pairs each spelling with its ASCII
+control, exactly as the dot test pairs its own, because asserting only that the
+Unicode form is refused passes just as happily on a fix that refuses every
+non-ASCII host — and that fix kills `müller.de`, which is the thing the accepted
+half exists to prevent. Two of its cases were written first in a shape that
+survived the sabotage run — `①⑥⑨.254.169.254` still has an ASCII last label of
+`254`, and `ａｐｐ.localhost` still ends `.localhost` — and were rewritten until
+they failed without the fold. A case that cannot fail is not a case.
+
+The suite also pins the profile: `my_host.example`, `under_score.example.com` and
+`r3---sn-apo3qvuoxuxbt-j5pe.googlevideo.com` are asserted **accepted**, so
+swapping in `idna.Lookup` turns a test red rather than turning real destinations
+away.
+
+[F77](deferred-findings.md) is closed against M30. Filed in its place:
+[F132](deferred-findings.md), that a destination stored by an earlier build keeps
+the spelling it was stored with — the fold runs on write, already-accepted links
+are never re-checked, and that is *Not in Phase 2* rather than something this
+reopening quietly narrowed.

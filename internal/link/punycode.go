@@ -14,11 +14,23 @@ import (
 // nothing before this point can see them, and a browser shows the reader the
 // spelling the attacker chose.
 //
-// Implemented here rather than pulled in, because the only thing needed from an
-// IDNA library is the punycode decoder, and adding a dependency to a repository
-// that has kept its go.mod short is a decision the owner should make for a
-// better reason than sixty lines. The decoder is RFC 3492 and is pinned by the
-// specification's own test vectors.
+// The decoder below was written here rather than pulled in, because the only
+// thing this heuristic needs from an IDNA library is the punycode decoder and a
+// dependency was not worth sixty lines. D91 has since put golang.org/x/net/idna
+// in go.mod for a different job — canonicalizing a host so that every tier sees
+// one spelling of it (F77) — and this decoder stays anyway. Not out of
+// attachment: it reports false on malformed input, which is the answer this
+// heuristic needs and not the answer a validator gives, and it is pinned by RFC
+// 3492's own test vectors, which is a stronger contract than "whatever the
+// library did last release" for a check whose output is a refusal.
+//
+// What did change is when this runs at all. Until F77 the host reaching it was
+// whatever somebody typed, so the xn-- prefix test below only ever fired on a
+// host already written in punycode and a raw Unicode homograph walked past the
+// one tier built for lookalikes. The host is now the ToASCII form, so a
+// registered "аpple.com" arrives here as "xn--pple-43d.com" and is caught —
+// which is this check working as designed for the first time rather than a new
+// one.
 //
 // Low confidence on purpose. This refuses names that are genuinely spelled to
 // imitate an ASCII name and it will sometimes be wrong, so the instance owner

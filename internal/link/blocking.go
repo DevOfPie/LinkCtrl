@@ -178,15 +178,17 @@ func parseHostList(raw, name string) map[string]struct{} {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		if err := checkListEntry(line); err != nil {
+		host, err := checkListEntry(line)
+		if err != nil {
 			panic(fmt.Sprintf("link: %s entry %q: %v", name, line, err))
 		}
-		out[line] = struct{}{}
+		out[host] = struct{}{}
 	}
 	return out
 }
 
-// checkListEntry refuses an entry these lists cannot honour.
+// checkListEntry refuses an entry these lists cannot honour, and returns the
+// entry in the alphabet the tier will actually be asked about.
 //
 // The address rule is the one worth stating: an IP literal is refused here
 // because addresses are the unappealable tier's business and nothing else's.
@@ -194,24 +196,47 @@ func parseHostList(raw, name string) map[string]struct{} {
 // deleting the line makes the address acceptable, which it does not — and the
 // day somebody acts on that belief is the day the tier boundary stops being
 // legible.
-func checkListEntry(entry string) error {
+//
+// The canonicalization is why this returns a host rather than only an error, and
+// it is the half F77 makes necessary. A list is a set of names compared against
+// a destination's name, so an entry and a destination that fold differently can
+// never meet: with the validator now storing "xn--mnchen-3ya.example", an entry
+// left as "münchen.example" is a line an operator believes is refusing something
+// and which matches nothing forever. Same fold, same function, so the two sides
+// cannot drift.
+//
+// The shape rules run on the entry as written and the numeric rule runs on the
+// folded form, which is not tidiness: looksNumeric splits on ASCII dots, so
+// "１６９.２５４.１６９.２５４" as an entry has a non-numeric last label to it and would
+// walk straight past the address rule this function exists to enforce. The dot
+// rules go first for the mirror-image reason — the fold trims a trailing dot, so
+// asking afterwards would never see one.
+func checkListEntry(entry string) (string, error) {
 	switch {
 	case strings.ContainsAny(entry, "/:@?# "):
-		return errors.New("must be a bare host, with no scheme, port, path or credentials")
+		return "", errors.New("must be a bare host, with no scheme, port, path or credentials")
 	case strings.Contains(entry, "*"):
-		return errors.New("wildcards are not supported; this tier matches exact hosts only")
+		return "", errors.New("wildcards are not supported; this tier matches exact hosts only")
 	case strings.HasPrefix(entry, "."), strings.HasSuffix(entry, "."):
-		return errors.New("must not start or end with a dot; suffix matching is the low-confidence tier's")
-	case looksNumeric(entry):
-		return errors.New("addresses belong to the unappealable tier and cannot be listed here")
+		return "", errors.New("must not start or end with a dot; suffix matching is the low-confidence tier's")
 	}
-	return nil
+	host, err := canonicalHost(entry)
+	if err != nil {
+		return "", err
+	}
+	if looksNumeric(host) {
+		return "", errors.New("addresses belong to the unappealable tier and cannot be listed here")
+	}
+	return host, nil
 }
 
 // highConfidence reports the embedded tier's verdict on a host.
 //
-// Exact equality, deliberately: no suffix walk, no wildcard, no normalization
-// beyond the case folding ValidateDestination already did. Confining the
+// Exact equality, deliberately: no suffix walk, no wildcard, and no
+// normalization of its own — the case fold and the UTS-46 fold are
+// ValidateDestination's, done once for every tier, and the entries went through
+// the same one at init. A tier that normalized for itself is the shape both of
+// M30's reopenings are about. Confining the
 // expensive tier to exact matches is what keeps a false positive there from
 // costing a rebuild often enough that operators route around the feature.
 func highConfidence(host string) *Block {
@@ -716,11 +741,21 @@ func (s *Service) recordBlocked(
 // quietly reversing a decision somebody made is the one failure this
 // reconciliation must not have. That scoping is the whole job of the source
 // column, and it is why the seed has one of its own rather than borrowing 'env'.
+// Entries are folded through canonicalHost, the same fold a destination gets, so
+// that "münchen.example" in the variable and a link to https://münchen.example/
+// are the same string by the time the database compares them. An entry that
+// cannot be folded is a hard error rather than a row nothing will ever match: the
+// caller in cmd/linkctrl treats a seeding failure as fatal and says why — an
+// instance whose refusals do not match its configuration is worse than one that
+// does not start — and a line an operator added and which silently refuses
+// nothing is exactly that state.
 func (s *Service) SeedBlocklist(ctx context.Context, hosts []string) error {
 	keep := make([]string, 0, len(hosts))
-	for _, h := range hosts {
-		h = strings.ToLower(strings.TrimSpace(h))
-		h = strings.TrimSuffix(h, ".")
+	for _, raw := range hosts {
+		h, err := canonicalHost(strings.TrimSpace(raw))
+		if err != nil {
+			return fmt.Errorf("seed blocklist entry %q: %w", raw, err)
+		}
 		if h == "" {
 			continue
 		}

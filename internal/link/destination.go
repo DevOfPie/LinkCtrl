@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 
+	"golang.org/x/net/idna"
+
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 )
 
@@ -112,39 +114,33 @@ func ValidateDestination(raw string, p DestinationPolicy) (string, error) {
 	}
 	u.Scheme = scheme
 
-	// Lowercase the host so the blocklist and reporting are consistent; leave
-	// the path alone, since paths are case-sensitive.
-	//
-	// The trailing dot goes at the same time, and this is the only place in the
-	// program that takes one off a destination. "169.254.169.254." is the same
-	// address, "localhost." is the same name and "metadata.google.internal." is
-	// the same listed host — a browser and a resolver read them that way — but
-	// netip.ParseAddr refuses the dotted spelling, looksNumeric read an empty
-	// last label as evidence of a name, the localhost test is an equality and
-	// the embedded list is an exact-match map. One character therefore walked
-	// past four unrelated checks and two whole tiers at once (F26). Only the
-	// Postgres tier was safe, because HostCandidates trims for itself.
+	// Fold the host into the one spelling every tier below is asked about. This
+	// is the only place in the program that canonicalizes a destination's host,
+	// and canonicalHost is the whole of what that means.
 	//
 	// Folded here, before any tier looks, and nowhere else. Every tier reads its
 	// host off the URL this function returns, so one fold covers all of them;
-	// the shape that produced the defect was a normalization each tier did for
-	// itself, which is a rule three places have to keep and only two did.
-	//
-	// Canonicalized, never refused. A trailing dot is a fully qualified name and
-	// an ordinary thing to type, which is why the accepted-destinations test
-	// requires https://example.com./ to keep working — it is now stored without
-	// the dot, so what the tiers judged is what a visitor is sent to.
-	//
-	// TrimRight rather than one TrimSuffix: "127.0.0.1.." also has an empty last
-	// label, and trimming a single dot would leave one behind for looksNumeric
-	// to misread exactly as before.
+	// the shape that produced both of M30's reopenings was a normalization each
+	// tier did for itself, which is a rule three places have to keep and only
+	// two did.
 	//
 	// Hostname() strips the brackets from an IPv6 authority and Port() returns
 	// "" when there is no ":port" suffix, so the no-port branch has to put the
 	// brackets back itself. Without that, https://[2606:4700:4700::1111]/ is
 	// stored and served as https://2606:4700:4700::1111/, which no client can
 	// follow and which re-parses as a different host entirely.
-	lowerHost := strings.TrimRight(strings.ToLower(u.Hostname()), ".")
+	lowerHost, hostErr := canonicalHost(u.Hostname())
+	if hostErr != nil {
+		// Refused rather than passed through raw, which is the only direction
+		// that fails closed: the raw spelling is exactly the value the tiers
+		// cannot read, so accepting it here would re-open F77 for every host
+		// UTS-46 declines to map. See canonicalHost for why this is not a tier
+		// refusal and carries no reason code naming one.
+		return "", append(errs, domain.FieldError{
+			Field: "url", Code: "invalid",
+			Message: "destination host is not a usable name",
+		})
+	}
 	if lowerHost == "" {
 		return "", append(errs, domain.FieldError{
 			Field: "url", Code: "no_host", Message: "destination must include a host",
@@ -196,6 +192,103 @@ func ValidateDestination(raw string, p DestinationPolicy) (string, error) {
 	}
 
 	return u.String(), nil
+}
+
+// hostProfile is the UTS-46 mapping a host is judged through.
+//
+// The settings are WHATWG's own "domain to ASCII" with beStrict false, which is
+// what a browser applies to a host before it resolves one — deliberately, since
+// the thing being defended against is a spelling that a browser resolves to a
+// blocked name and this program's tiers do not see. idna.Lookup was the obvious
+// choice and is the wrong one: it sets UseSTD3ASCIIRules and CheckHyphens, so it
+// refuses "my_host.example", "under_score.example.com" and the real
+// "r3---sn-apo3qvuoxuxbt-j5pe.googlevideo.com", all three of which this
+// validator accepts today. A canonicalizer that refuses ordinary destinations is
+// a canonicalizer operators route around.
+//
+// Non-transitional, so "ß" stays "ß" rather than folding to "ss" — the same
+// choice net/http made in Go 1.18 (golang/go#47510) and the one every current
+// browser makes.
+var hostProfile = idna.New(
+	idna.MapForLookup(),
+	idna.StrictDomainName(false),
+	idna.CheckHyphens(false),
+	idna.BidiRule(),
+	idna.Transitional(false),
+)
+
+// canonicalHost folds a URL's host into the single spelling every tier reads.
+//
+// Two mechanisms, in this order, and the order is load-bearing.
+//
+// **UTS-46 ToASCII**, because a host written outside ASCII reaches none of the
+// checks below it (F77). "169。254。169。254" separated by U+3002 has no ASCII dot
+// in it at all, so looksNumeric's strings.LastIndexByte finds nothing and reads
+// the entire host as one label; "ｌｏｃａｌｈｏｓｔ" in fullwidth Latin is not equal to
+// "localhost" and the localhost test is an equality; "metadata。google。internal"
+// is not the map key "metadata.google.internal"; and isHomograph returns early
+// unless a label already starts "xn--", so the one tier built for lookalikes
+// never examined a raw Unicode host. Five spellings, one missing conversion.
+//
+// A hand-written map of the separators would have been the tempting fix and is
+// the one that reads as complete without being it: U+3002, U+FF0E and U+FF61
+// cover three of those five, and the fullwidth-digit and fullwidth-Latin
+// spellings carry no separator to map. Only the real mapping table catches
+// "１６９.２５４.１６９.２５４", and it also catches "①⑥⑨.la", "𝟏𝟔𝟗" and a soft hyphen
+// hiding inside an otherwise ordinary name — shapes nobody would have thought to
+// enumerate. That is what D91 bought.
+//
+// **The trailing dot, after the mapping and not before** (F26). "169.254.169.254."
+// is the same address, "localhost." the same name and "metadata.google.internal."
+// the same listed host — a browser and a resolver read them that way — but
+// netip.ParseAddr refuses the dotted spelling, looksNumeric read an empty last
+// label as evidence of a name, the localhost test is an equality and the
+// embedded list is an exact-match map. Trimming has to come second because
+// "169。254。169。254。" ends in a separator that is not a dot until ToASCII has
+// made it one. TrimRight rather than one TrimSuffix: "127.0.0.1.." also has an
+// empty last label, and trimming a single dot leaves one behind.
+//
+// **Canonicalized, never refused**, for both mechanisms. A trailing dot is a
+// fully qualified name and "müller.de" and "テスト.example" are ordinary names; a
+// fix that refused either would close the hole by breaking the product, and the
+// accepted-destinations tests exist to say so. What is stored is the ToASCII
+// form, so the value a visitor's browser is handed is the value the tiers judged
+// rather than a spelling they never saw.
+//
+// An all-ASCII host skips the mapping entirely, which is what net/http's own
+// idnaASCII does. It is not an optimization and it is not a hole: with
+// UseSTD3ASCIIRules off, the mapping's only effect on ASCII is the case folding
+// already done above, and everything else the profile would do to such a host is
+// a *rejection* rather than a different spelling. Skipping it is what keeps an
+// invalid "xn--" label — which is unresolvable rather than dangerous, and which
+// punycode_test.go names — from becoming a refusal this milestone never asked
+// for.
+//
+// The error is deliberately not a tier refusal. A host UTS-46 declines to map is
+// not a name at all — a disallowed rune, a bidi violation, a broken A-label —
+// which is the same kind of thing as a URL that will not parse, and reporting it
+// as unappealable.* would claim a judgement about the destination that nothing
+// here made. blocking.go makes the same argument about minting reason codes from
+// values no documentation explains.
+func canonicalHost(host string) (string, error) {
+	host = strings.ToLower(host)
+	if isASCII(host) {
+		return strings.TrimRight(host, "."), nil
+	}
+	ascii, err := hostProfile.ToASCII(host)
+	if err != nil {
+		return "", fmt.Errorf("canonicalize host %q: %w", host, err)
+	}
+	return strings.TrimRight(strings.ToLower(ascii), "."), nil
+}
+
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			return false
+		}
+	}
+	return true
 }
 
 // looksNumeric reports whether a host is written as a number rather than as a

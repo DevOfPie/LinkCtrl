@@ -322,6 +322,118 @@ func TestATrailingDotIsRefusedAndRecorded(t *testing.T) {
 	}
 }
 
+// The same claim in a different alphabet, and the same consequence (F77).
+//
+// The unit tests hold the tiers. What only a database shows is what made this
+// worth a second reopening rather than a note: each of these five spellings was
+// **accepted** on a live instance and stored, so nothing was refused and
+// therefore **nothing was written** — the audit log said the instance had never
+// been asked for the metadata endpoint while a link pointing at it sat in the
+// table, exactly as in F26 and one alphabet over.
+func TestAUnicodeHostIsRefusedAndRecorded(t *testing.T) {
+	spelled := map[string]string{
+		"http://169。254。169。254/latest/meta-data/":            "unappealable.private_address",
+		"http://１６９.２５４.１６９.２５４/":                             "unappealable.private_address",
+		"http://ｌｏｃａｌｈｏｓｔ/":                                   "unappealable.private_address",
+		"http://127。0。0。1/admin":                              "unappealable.private_address",
+		"http://metadata。google。internal/computeMetadata/v1/": "high_confidence.embedded_host",
+	}
+
+	for raw, wantCode := range spelled {
+		for _, surface := range []string{"link.create", "link.update"} {
+			t.Run(surface+"/"+raw, func(t *testing.T) {
+				f := newBlocking(t)
+
+				var err error
+				if surface == "link.create" {
+					_, err = f.links.Create(f.ctx, f.owner, link.CreateInput{URL: raw})
+				} else {
+					created, cerr := f.links.Create(f.ctx, f.owner,
+						link.CreateInput{URL: "https://good.example/"})
+					if cerr != nil {
+						t.Fatalf("create a link to edit: %v", cerr)
+					}
+					_, err = f.links.Update(f.ctx, f.owner, created.ID, link.UpdateInput{URL: &raw})
+				}
+				if got := codeOf(t, err); got != wantCode {
+					t.Fatalf("refusal code = %q, want %q", got, wantCode)
+				}
+
+				events := f.blockEvents()
+				if len(events) != 1 {
+					t.Fatalf("%d destination.blocked records, want exactly 1: a refusal "+
+						"nobody records is a probe nobody can see", len(events))
+				}
+				if got := events[0].Meta["code"]; got != wantCode {
+					t.Errorf("audit code = %v, want %q", got, wantCode)
+				}
+				// The evidence is what was typed, not what the fold made of it, and
+				// Defang escapes every non-ASCII byte — which is the point on this
+				// input above all, since the whole attack is a host that renders as
+				// something it is not.
+				if got := events[0].Meta["url_defanged"]; got != link.Defang(raw) {
+					t.Errorf("evidence = %v, want the defanged attempt %q", got, link.Defang(raw))
+				}
+			})
+		}
+	}
+
+	// The accepted case, end to end. An internationalized name is an ordinary
+	// name, and what is stored is the ToASCII form — so the value the redirect
+	// hands a visitor verbatim is the value every tier judged.
+	f := newBlocking(t)
+	created, err := f.links.Create(f.ctx, f.owner, link.CreateInput{URL: "https://müller.de/preise"})
+	if err != nil {
+		t.Fatalf("refused https://müller.de/preise: %v. Refusing non-ASCII hosts "+
+			"closes the hole by breaking the product", err)
+	}
+	if created.URL != "https://xn--mller-kva.de/preise" {
+		t.Errorf("stored %q, want %q: storing the percent-encoded original re-opens "+
+			"this immediately", created.URL, "https://xn--mller-kva.de/preise")
+	}
+	if events := f.blockEvents(); len(events) != 0 {
+		t.Errorf("%d blocked records for an accepted destination", len(events))
+	}
+}
+
+// The operator's own list has to land in the same alphabet the destinations do.
+//
+// This is the half the fix could have broken while closing F77: once a
+// destination is stored and judged as "xn--mnchen-3ya.example", an environment
+// entry left as the operator typed it is a line that refuses nothing forever —
+// the same sentence F77 falsified, freshly re-broken by its own fix. One fold,
+// both sides.
+func TestTheEnvironmentBlocklistIsFoldedLikeADestination(t *testing.T) {
+	f := newBlocking(t)
+
+	if err := f.links.SeedBlocklist(f.ctx, []string{"münchen.example", "ＥＸＡＭＰＬＥ.test"}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	rows := f.rowsExcludingSeed()
+	if rows["xn--mnchen-3ya.example"] != "env" {
+		t.Fatalf("rows after seeding = %v, want the entry stored as the ToASCII form; "+
+			"an entry and a destination that fold differently can never meet", rows)
+	}
+	if rows["example.test"] != "env" {
+		t.Errorf("rows after seeding = %v, want the fullwidth entry folded to "+
+			"example.test", rows)
+	}
+
+	// And the refusal actually happens, which is the only thing the operator
+	// asked for. Typed in their alphabet, and in the one it folds to.
+	for _, raw := range []string{
+		"https://münchen.example/angebot",
+		"https://xn--mnchen-3ya.example/angebot",
+		"https://shop.münchen.example/", // a child, by the same label-boundary rule
+		"https://ＥＸＡＭＰＬＥ.test/",
+	} {
+		_, err := f.links.Create(f.ctx, f.owner, link.CreateInput{URL: raw})
+		if got := codeOf(t, err); got != "low_confidence.operator_blocklist" {
+			t.Errorf("creating %q gave %q, want low_confidence.operator_blocklist", raw, got)
+		}
+	}
+}
+
 // A destination nothing objects to is still accepted, and writes no record. The
 // counterpart matters as much as the refusals: a check that refused everything
 // would pass every test above.

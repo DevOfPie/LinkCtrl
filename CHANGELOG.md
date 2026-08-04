@@ -624,11 +624,20 @@ migrations run at boot.
   any kind. A curated list compiled into the binary is the middle tier; changing
   it costs a rebuild, on purpose. Heuristics and a `blocked_destinations` table
   are the bottom tier, meant to be changed without one. The host is canonicalized
-  once, before any tier sees it: lowercased, and a trailing dot folded away, so
-  `169.254.169.254.` and `169.254.169.254` are one address to all three tiers and
-  what gets stored is what they judged. A trailing dot is a fully qualified name
-  and is accepted, not refused — `https://example.com./x` is stored as
-  `https://example.com/x`.
+  once, before any tier sees it: lowercased, a trailing dot folded away, and a
+  host written outside ASCII converted to the same `xn--` form a browser resolves
+  it to. So `169.254.169.254.`, `169。254。169。254` with ideographic full stops,
+  `１６９.２５４.１６９.２５４` in fullwidth digits and `169.254.169.254` are one address to
+  all three tiers, and what gets stored is what they judged. **Both foldings
+  convert rather than refuse**, because a trailing dot is a fully qualified name
+  and `müller.de` is an ordinary one: `https://example.com./x` is stored as
+  `https://example.com/x`, and `https://müller.de/preise` as
+  `https://xn--mller-kva.de/preise`. **This changes what is stored for a
+  destination whose host is not ASCII** — links created before this version keep
+  the spelling they were created with, since accepted destinations are never
+  re-checked, and re-saving one converts it. A host that is not a usable name in
+  any spelling — a right-to-left override, a broken `xn--` label — is refused as
+  malformed, with the untiered code `invalid`.
 - **Three low-confidence rules, all of them appealable.** A host spelled to
   imitate another in punycode (`аpple.com` with a Cyrillic а), credentials before
   the host (`https://paypal.com@evil.example/`), and a destination that is itself

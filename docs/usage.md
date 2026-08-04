@@ -583,6 +583,14 @@ The codes that are not tiered — `required`, `too_long`, `invalid`, `no_scheme`
 `no_host` — are unchanged. Those are malformed input rather than a refusal, and
 they are not recorded as blocked attempts.
 
+A host is compared against every tier in the form a browser would resolve it to,
+so an internationalized destination is **converted** and not refused:
+`https://müller.de/preise` is accepted and stored as
+`https://xn--mller-kva.de/preise`, which is the value the response returns and
+the value a visitor is sent to. A host that is not a usable name in any
+spelling — a right-to-left override in it, a broken `xn--` label — comes back as
+`invalid`, in the untiered group above.
+
 #### Appealing one
 
 Only the `low_confidence.*` tier can be appealed. `POST /api/v1/disputes` with

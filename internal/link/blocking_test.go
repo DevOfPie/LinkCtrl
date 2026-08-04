@@ -166,6 +166,158 @@ func TestATrailingDotDoesNotDefeatAnyTier(t *testing.T) {
 	}
 }
 
+// The same claim again, in a different alphabet (F77).
+//
+// TestATrailingDotDoesNotDefeatAnyTier above feeds hosts, which is what the
+// struct-shape walk could not do, and it is still not enough: every host it feeds
+// is ASCII. A host written outside ASCII reached none of these checks — U+3002 is
+// not the dot looksNumeric splits on, fullwidth Latin is not equal to
+// "localhost", "metadata。google。internal" is not the map key, and isHomograph
+// returns early unless a label already starts "xn--". Five spellings were
+// accepted and stored on a live instance while the ASCII control was refused.
+//
+// Each spelling is paired with its ASCII control for the reason the dot test
+// pairs its own: asserting only that the Unicode form is refused would pass on a
+// fix that refuses every non-ASCII host, and that fix kills müller.de, which the
+// accepted half below exists to prevent.
+func TestAUnicodeSpellingDoesNotDefeatAnyTier(t *testing.T) {
+	p := DefaultDestinationPolicy()
+
+	for _, tc := range []struct{ spelled, plain string }{
+		// The three separators that are not U+002E.
+		{"http://169。254。169。254/latest/meta-data/", "http://169.254.169.254/latest/meta-data/"},
+		{"http://169．254．169．254/", "http://169.254.169.254/"},
+		{"http://169｡254｡169｡254/", "http://169.254.169.254/"},
+		// And the spellings that carry no separator at all, which is why a
+		// hand-written map of the three above would have read as a fix without
+		// being one.
+		{"http://１６９.２５４.１６９.２５４/", "http://169.254.169.254/"},
+		{"http://①⑥⑨。２５４。１６９。２５４/", "http://169.254.169.254/"},
+		{"http://ｌｏｃａｌｈｏｓｔ/", "http://localhost/"},
+		{"http://ａｐｐ。ｌｏｃａｌｈｏｓｔ/", "http://app.localhost/"},
+		{"http://127。0。0。1/admin", "http://127.0.0.1/admin"},
+		// The obfuscated numeric forms, in the alphabet that hid them from the
+		// last-label scan.
+		{"http://０x7f000001/", "http://0x7f000001/"},
+		{"http://２１３０７０６４３３/", "http://2130706433/"},
+		// A separator that is also the trailing label, so the fold has to run
+		// before the dot is trimmed and not after.
+		{"http://169。254。169。254。/", "http://169.254.169.254/"},
+	} {
+		t.Run(tc.spelled, func(t *testing.T) {
+			_, err := ValidateDestination(tc.spelled, p)
+			if err == nil {
+				t.Fatalf("accepted %q; %q is refused, and a browser resolves them "+
+					"to the same host", tc.spelled, tc.plain)
+			}
+			_, plainErr := ValidateDestination(tc.plain, p)
+			if plainErr == nil {
+				t.Fatalf("the control %q was accepted; this test proves nothing", tc.plain)
+			}
+			if got, want := codesOf(t, err), codesOf(t, plainErr); got != want {
+				t.Errorf("refused %q with code %q and %q with %q; the same host must "+
+					"reach the same tier however it is spelled", tc.spelled, got, tc.plain, want)
+			}
+		})
+	}
+
+	// The high-confidence tier, reached the way Judge reaches it — off the URL the
+	// validator returned — because folding is the validator's job and a tier that
+	// normalized for itself is the shape both of this milestone's reopenings are
+	// about.
+	const listed = "metadata.google.internal"
+	if _, ok := embeddedHosts[listed]; !ok {
+		t.Skipf("%s is not on the list; nothing to assert about matching it", listed)
+	}
+	_, host := parseForTest(t, "https://metadata。google。internal/computeMetadata/v1/")
+	if host != listed {
+		t.Fatalf("the validator produced host %q, want %q: every tier below reads "+
+			"this value, so a separator surviving here survives all of them", host, listed)
+	}
+	if highConfidence(host) == nil {
+		t.Errorf("the U+3002 spelling was accepted by the embedded tier; that host " +
+			"is on the list, and the list is meant to cost a rebuild to overrule")
+	}
+	if !reflect.DeepEqual(HostCandidates(host), HostCandidates(listed)) {
+		t.Errorf("candidates for %q differ from %q", host, listed)
+	}
+
+	// The homograph tier, which is the one built for exactly this attack and which
+	// had never been shown one. Its prefix test reads "xn--", so until the host was
+	// converted a raw Cyrillic spelling walked past the check written for it.
+	u, host := parseForTest(t, "https://аpple.com/")
+	if host != "xn--pple-43d.com" {
+		t.Fatalf("аpple.com folded to %q, want the punycode form: isHomograph reads "+
+			"an xn-- prefix and sees nothing without it", host)
+	}
+	if b := lowConfidenceHeuristics(u, host); b == nil || b.Rule != RulePunycodeHomograph {
+		t.Errorf("a Cyrillic imitation of apple.com was not caught by the homograph " +
+			"heuristic; that check exists for this input and had never received it")
+	}
+
+	// Canonicalized, never refused. An internationalized name is an ordinary name,
+	// and what is stored is the ToASCII form — so the host a visitor's browser
+	// resolves is the host the tiers judged, and nothing but the host moved.
+	for raw, want := range map[string]string{
+		"https://müller.de/":       "https://xn--mller-kva.de/",
+		"https://テスト.example/path": "https://xn--zckzah.example/path",
+		// Only the host moves. The path is escaped and the query is left exactly
+		// as url.URL.String() has always rendered them, which is the evidence
+		// that the fold is a host fold and not a rewrite of the destination.
+		"https://müller.de/café?q=ü": "https://xn--mller-kva.de/caf%C3%A9?q=ü",
+		"https://example.com/":       "https://example.com/",
+	} {
+		got, err := ValidateDestination(raw, p)
+		if err != nil {
+			t.Errorf("rejected %q: %v. Refusing non-ASCII hosts closes the hole by "+
+				"breaking the product", raw, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("normalized %q to %q, want %q", raw, got, want)
+		}
+	}
+
+	// The profile is WHATWG's, not idna.Lookup's, and that is a choice a future
+	// reader could undo without noticing. These three are refused by Lookup — it
+	// sets UseSTD3ASCIIRules and CheckHyphens — and are accepted here, so swapping
+	// the profile turns this red instead of turning real destinations away.
+	for _, raw := range []string{
+		"https://my_host.example/",
+		"https://under_score.example.com/",
+		"https://r3---sn-apo3qvuoxuxbt-j5pe.googlevideo.com/videoplayback",
+	} {
+		if _, err := ValidateDestination(raw, p); err != nil {
+			t.Errorf("rejected %q: %v. A canonicalizer that refuses ordinary "+
+				"destinations is one operators route around", raw, err)
+		}
+	}
+
+	// A host UTS-46 declines to map is refused rather than passed through raw,
+	// which is the only direction that fails closed — the raw spelling is exactly
+	// the value the tiers cannot read. It is not a tier refusal: nothing here
+	// judged the destination, the name simply is not one.
+	for _, raw := range []string{
+		// A right-to-left override, disallowed outright. Written escaped because
+		// a raw one in this file would render the surrounding source backwards,
+		// which is the display attack it is here to represent.
+		"http://exa\u202emple.com/",
+		// A zero-width joiner, refused by the ContextJ rules the profile keeps.
+		"http://exa\u200dmple.com/",
+	} {
+		err := func() error { _, err := ValidateDestination(raw, p); return err }()
+		if err == nil {
+			t.Errorf("accepted %q, whose host UTS-46 refuses to map; passing the raw "+
+				"spelling through is what F77 was", raw)
+			continue
+		}
+		if got := codesOf(t, err); got != "invalid" {
+			t.Errorf("refused %q with code %q, want %q: an unmappable host is a "+
+				"malformed name, not a verdict about where it points", raw, got, "invalid")
+		}
+	}
+}
+
 // The other half of the same claim: the two appealable tiers can only ever add
 // refusals. Neither the embedded list nor the heuristics has a return value that
 // means "allowed", so no entry anybody adds to either — and no row M31's review
@@ -231,18 +383,45 @@ func TestEmbeddedListRefusesEntriesItCannotHonour(t *testing.T) {
 		"an address":        "169.254.169.254",
 		"an obfuscated one": "2852039166",
 		"a hex-written one": "0xa9fea9fe",
+		// The same address rule, asked in the alphabet F77 was found in. The
+		// numeric test splits on ASCII dots, so this entry has a last label of
+		// "２５４" and reads as a name until it has been folded — which is why the
+		// fold happens before the address rule and not after it.
+		"an address in fullwidth digits": "１６９.２５４.１６９.２５４",
+		"an address separated by U+3002": "169。254。169。254",
 	}
 	for name, entry := range bad {
 		t.Run(name, func(t *testing.T) {
-			if err := checkListEntry(entry); err == nil {
+			if _, err := checkListEntry(entry); err == nil {
 				t.Errorf("accepted list entry %q", entry)
 			}
 		})
 	}
 	// The shapes that must keep working, or the list cannot hold what it is for.
 	for _, entry := range []string{"metadata", "metadata.goog", "kubernetes.default.svc", "instance-data"} {
-		if err := checkListEntry(entry); err != nil {
+		if _, err := checkListEntry(entry); err != nil {
 			t.Errorf("rejected legitimate entry %q: %v", entry, err)
+		}
+	}
+
+	// An entry an operator writes in their own script has to land in the alphabet
+	// the tier is asked about, or it is a line that refuses nothing forever. The
+	// destination side now stores the ToASCII form, so the list side has to
+	// produce it too — one fold, both sides, or they cannot meet.
+	for entry, want := range map[string]string{
+		"münchen.example":          "xn--mnchen-3ya.example",
+		"テスト.example":              "xn--zckzah.example",
+		"ＥＸＡＭＰＬＥ.example":          "example.example",
+		"metadata。google。internal": "metadata.google.internal",
+	} {
+		got, err := checkListEntry(entry)
+		if err != nil {
+			t.Errorf("rejected an ordinary internationalized entry %q: %v", entry, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("entry %q folded to %q, want %q: an entry and a destination "+
+				"that fold differently can never match", entry, got, want)
 		}
 	}
 }
