@@ -127,10 +127,18 @@ func (s *Service) Workspaces(ctx context.Context, actor *Identity) ([]Workspace,
 // there too. Half of that would be a switcher that either forgets on sign-in or
 // does not take effect until one.
 //
-// Requires a session, like changing a password does. An API key acts in the
-// workspace its own row names, so a key switching would change nothing about
-// its own requests while quietly repointing where its owner lands — a side
-// effect on somebody else's browser, from a credential that cannot see it.
+// Requires a session, like changing a password does, and for two reasons rather
+// than one. Half of what it does needs a session id: SetSessionWorkspace moves
+// the caller's own session, and a key has none to move. The other half writes
+// users.last_workspace_id, which is a property of the person — a key doing that
+// would repoint where its owner's next sign-in lands, a side effect on somebody
+// else's browser from a credential that cannot see it.
+//
+// What is *not* a reason is that a key would leave its own requests alone. A
+// workspace-scoped key acts where its row says, but an organization-wide one
+// (M44) names no workspace and comes through resolveWorkspace above like a
+// login, so last_workspace_id decides for it too whenever its owner has pinned
+// no default.
 func (s *Service) SwitchWorkspace(ctx context.Context, actor *Identity, workspaceID uuid.UUID) error {
 	if err := requireSessionActor(actor, "switching workspace"); err != nil {
 		return err

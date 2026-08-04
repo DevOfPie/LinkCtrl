@@ -509,10 +509,19 @@ func run(cfg config.Config, _ io.Writer) error {
 	}
 
 	// The gates (M35). On the application pool rather than the redirect pool,
-	// and that is not an oversight: every one of its queries is either a
-	// management read or a write that only a *gated* link performs, so putting
-	// them on the small pool the redirect path guards for itself would let a
-	// burst of password submissions starve ordinary redirects.
+	// and that is not an oversight. Most of what this service does is reached
+	// only by a link Gated() is true for — the password hash, the click budget,
+	// the signing secret — but not all of it, and the exception is the reason to
+	// keep it here rather than an argument for moving it: M36 hung the
+	// sequential split's Rotate off the same service, and a split link is not
+	// gated, so this pool is on the redirect path for that link class on every
+	// hit. Both durable-counter writes go to link_click_budget, one row per
+	// link, so concurrent requests for the same link serialise on its lock —
+	// docs/slo.md measures the sequential column at a 3.1ms median with k6
+	// unable to hold the offered rate. On the small pool the redirect path
+	// guards for itself, a burst of password submissions or one hot split would
+	// hold connections for milliseconds at a time and stall every ordinary
+	// redirect behind them.
 	//
 	// REDIRECT_TIMEOUT is handed over as the per-query budget (F96). It is the
 	// same number the resolver takes for its own fallback query, and it is the

@@ -35,8 +35,12 @@ CREATE TABLE click_events (
     workspace_id  uuid        NOT NULL,
     occurred_at   timestamptz NOT NULL,
 
-    -- HMAC(salt_of_the_day, ip || user_agent || workspace_id). Per-workspace
-    -- salting means the same person is not correlatable across workspaces.
+    -- HMAC(salt_of_the_day, ip || user_agent || workspace_id). The workspace is
+    -- in the message, not in the key: analytics_salts is one row per day, shared
+    -- by every workspace on the instance. That is still what stops the same
+    -- person being correlated across two of them — the derived hashes differ, so
+    -- one workspace's analytics cannot be joined against another's — while the
+    -- salt does the other job, making a day's hashes irreversible once purged.
     visitor_hash  bytea,
     -- Dormant. Intended as "first time this visitor_hash was seen for this link
     -- today", for Phase 2's new-versus-returning split. Nothing computes it and

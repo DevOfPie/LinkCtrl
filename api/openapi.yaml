@@ -3240,9 +3240,13 @@ paths:
         A workspace you are not a member of answers `404`, the same as one that
         does not exist, so ids cannot be probed.
 
-        **Requires a session, not an API key.** A key acts in the workspace its
-        own row names, so switching would change nothing about its requests
-        while repointing where its owner lands.
+        **Requires a session, not an API key.** Half of what this does is move
+        the calling session, and a key has none; the other half is remembering
+        the choice against your account, which a key doing it would repoint for
+        your next sign-in. Note that an organization-wide key is *not* insulated
+        from the result: it names no workspace of its own and resolves one per
+        request the way a sign-in does, so a switch you make in a browser moves
+        its requests too unless you have pinned a default.
       parameters:
         - name: id
           in: path

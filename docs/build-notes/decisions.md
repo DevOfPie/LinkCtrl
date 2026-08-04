@@ -163,6 +163,7 @@ file. Append a row when you append an entry.
 | [M45, a disclosure that reads both channels, and a count re-derived](#2026-08-04--m45-a-disclosure-that-reads-both-channels-and-a-count-re-derived) | F135 and F134 — the disclosure **learns** the second channel rather than being weakened, and why the weaker sentence was refused; why the page had no state to read and no wording could have been right; where the second read belongs and what it costs, said rather than assumed — a query because a registration is a row, on `link.Service` because the handler's route to it needs `webhooks.read` and this page is gated on nothing, and an error rather than a swallowed zero because a zero *is* the green panel; the predicate taken from the fan-out so the page asks *would anything have been queued*; the classification asserted total so an eighth event is a decision; four states, and why the scope of each claim is now part of the claim — a per-workspace read printed as an instance claim is the same defect inverted; a count and never a URL; the API field an **addition** by embedding; which assertions the two pinned tests kept and why the old string could not be; **F134 enumerated in a table** with what was excluded and why, the DNS query counted and the technicality that would have excluded it named; and the two sites F135 called defensible that the demo's own seeder falsifies |
 | [M45, four ways the redirect path was not the path it described](#2026-08-04--m45-four-ways-the-redirect-path-was-not-the-path-it-described) | F87, F96, F88 and F89 — every one of them on the redirect path, every one fixed where its own fix note said the obvious move would break something else; **F87 in the challenge branch and not by reordering the gates**, because the password challenge is a visit arriving in two parts rather than a refusal, and D57's *the distribution is unaffected* was true of every gate except the one that manufactures a second request; **F96 bounded inside `internal/gate` per call**, mirroring the resolver, because `http.TimeoutHandler` buffers and would swallow the very pages the gates write — and deliberately *not* detached with `WithoutCancel`, which is where the resolver's shape stops transferring; **F88 split into the two questions one function was answering**, `CanonicalHost` folding the DNS root dot for the routers and `HostOnly` dropping the port for the verified-hostname cache, with why stripping the port in the first would collapse a split-host deployment; **F89 propagated rather than widened**, because a per-hostname setter hands instance policy to `domains.write`, and the page moved to the link's own domain so the two surfaces agree by construction |
 | [M45, the queue showed one host and the button deleted another](#2026-08-04--m45-the-queue-showed-one-host-and-the-button-deleted-another) | F33, with F95 and F125 folded in — the dispute stored the host that was *typed* while `entryToLift` re-ran the candidate walk at decision time, so an owner approved a string the button did not act on and an entry added while the dispute waited could retarget the decision; why the repair is *store the entry at filing* rather than *render it at decision*; why `host` was not rewritten and 01600's index not replaced, and what the second partial index's `blocked_host <> ''` predicate is for; F125 true as written, with **accident** carrying the sentence; **F95's amplification explicitly not closed** — the multiplier is `EveryOwner`, which is F15's question, so the residue becomes F137 and 01600's comment shrinks to a claim the index can keep; and why F114 comes back as a prompt rather than a fix |
+| [M45, seven comments that were confidently wrong](#2026-08-04--m45-seven-comments-that-were-confidently-wrong) | F8, F99, F122, F124, F126, F127 and F128 — the cheap comment sweep, no behaviour changed anywhere; why a conclusion whose reason was wrong keeps the conclusion; **F8's mechanism re-measured at the pinned go-redis rather than inherited** — `ContextTimeoutEnabled` is why a context bounds nothing, which becomes F138 rather than a fix; F99's placement kept and argued from the row lock instead of from the link class M36 falsified; F122's three wrong reasons for a behaviour D90 licenses, including the one that inverts for a NULL-workspace key; F124's `/64` as a floor and not a customer; F126's mechanism separated from the property it does have; F127's placement that is not serialization, with no lock added on purpose; and **F128's fork answered in the open** — the sentence narrowed rather than the work equalised, the row's count corrected from three doubled outcomes to four, and what equalising downward would have cost said rather than implied |
 
 ---
 
@@ -13787,3 +13788,205 @@ which the new `demoCoverage` row catches.
 
 The demo's open dispute is `go.tinyurl.com` for that reason. Two hosts that are
 always equal render the same page whether or not the entry is recorded at all.
+
+## 2026-08-04 — M45, seven comments that were confidently wrong
+
+The cheap comment sweep from [M45's
+triage](#2026-08-04--m45s-triage-and-the-widest-option-four-times) — F8, F99,
+F122, F124, F126, F127 and F128. F125 is the eighth of that set and closed
+inside F33's repair. Every one of them lands under **M45's own number**: m45.md's
+Findings bullet is this work, so no milestone is reopened.
+
+Nothing here changes behaviour. That is the whole shape of the group, and it is
+also its hazard: the failure mode of correcting a confident wrong sentence is
+writing a new confident sentence that is also wrong. So the rule applied
+throughout was to read the code and re-derive the fact rather than paraphrase
+the row, which is itself a summary — and it paid twice, at F8 and at F128, where
+the row's own account of the tree turned out to be incomplete.
+
+**Where a conclusion was right and only its reason was wrong, the conclusion
+stayed.** Five of the seven are that shape. Deleting the paragraph would have
+been cheaper and would have cost the next reader the reason the code is the way
+it is, which is the thing these comments exist to carry.
+
+### F8 — the reason, re-measured rather than copied
+
+`take`'s doc blamed a stalled Redis on connection establishment. The row said
+the real bound is the client's own `ReadTimeout`, and it is right, but it could
+not say *why* — so the mechanism was measured again at the pinned go-redis
+**v9.21.0** rather than inherited.
+
+A command carrying a 50ms context, against a listener that accepts and never
+answers, cost **401ms** with `ReadTimeout` 400ms — on a connection established
+beforehand and then left to go quiet as well as on one still being made. A bare
+dial under the same 50ms context cost 50ms. That reproduces the row exactly and
+kills *connection establishment* as the explanation.
+
+The cause is one line of the library: `baseClient.context` hands the socket
+deadline `context.Background()` unless `Options.ContextTimeoutEnabled` is set,
+and `internal/platform/redis` does not set it. Setting it in the probe brought
+the same stall to 50ms, which is the control that makes the claim a measurement
+rather than a reading. The comment now says that, points at
+`internal/platform/redis` — whose own comment has carried the corrected
+measurement since M26.6 — and keeps the conclusion, which was never in doubt:
+the deadline is enforced from outside the call.
+
+F2's *multiple seconds* is deliberately not carried forward. That number is
+[F2](deferred-findings.md)'s own Closed cell corrected to 215ms through the
+shipped client, and a comment that quotes a superseded measurement is the defect
+this row is about.
+
+**The option is a finding, not a fix taken here.** `ContextTimeoutEnabled` would
+make every context in the tree bound its own Redis call, which is what
+`shared.go`'s goroutine and D26's budget hand-build. Turning it on changes the
+client the redirect path uses and owes M26.6's measurements again, and it would
+also bound calls that carry `context.Background()` on purpose. So it is **F138**,
+open.
+
+### F99 — the placement kept, the argument replaced
+
+The gate service sits on the application pool because *"every one of its queries
+is either a management read or a write that only a **gated** link performs"*.
+M36 falsified that by hanging `Rotate` off the same service: a sequential split
+is not gated (`Gated()` is password, signature, one-time, max-clicks), so the
+application pool is on the redirect path for a link class the sentence excludes.
+
+The placement is still right, and the row's own fix note says why moving it
+would be worse. The comment now argues from the cost rather than from the
+excluded class: both durable-counter writes land on one row of
+`link_click_budget` and serialise on its lock, and `docs/slo.md` measures the
+sequential column at 3.1ms median with k6 unable to hold the offered rate. On
+the small pool the redirect path guards for itself, that stalls *every* redirect
+rather than only gated ones — which is a stronger argument for the same
+placement than the false one it replaces.
+
+Half of this row was already discharged by M45's redirect group, which bounded
+the call with `REDIRECT_TIMEOUT` (F96). That paragraph is untouched.
+
+### F122 — one behaviour, three wrong reasons
+
+D90 licenses what an organization-wide key does: it is resolved the same way a
+login is and follows the person it acts as, pinned default included, within its
+own organization. The behaviour is not the finding. Three comments explaining it
+are.
+
+`internal/auth/apikey.go` said *"No session id: a key is not a browser, and a
+switch made in one must not move a key's requests"*. Passing no session id kills
+rung 1 of the precedence and nothing else. `SwitchWorkspace` writes twice, and
+its second write is `users.last_workspace_id` — rung 3, and the rung that
+answers for every owner who has not pinned a default. So a switch made in a
+browser *does* move an organization-wide key's requests, which is D90 working as
+written rather than a leak.
+
+`internal/auth/workspace.go`'s session requirement stands on two true reasons,
+and the comment now gives both: `SetSessionWorkspace` needs a session id a key
+has not got, and the other write is the person's, so a key doing it would
+repoint where its owner's next sign-in lands. The clause that inverts — *a key
+would change nothing about its own requests* — is stated as false rather than
+deleted, because the reader who assumes it is the reader who filed this row.
+
+`docs/cli.md` said `--org-wide` issues a key *"valid in every workspace of the
+organization"*, unqualified. There is no per-request workspace selector
+anywhere; each request resolves exactly one workspace. The line now says that,
+which is what `docs/SECURITY.md` and `docs/usage.md` already said in product
+voice — this was one document out of step with two.
+
+**The row listed three sites and the tree holds nine**, which is the reason to
+sweep for a sentence rather than fix the line numbers a row hands you. The two
+sentences split cleanly and are treated differently. *A key acts in the
+workspace its own row names* is flatly false since M44, and its four other
+sites — the handler comment on the very endpoint this is about,
+`docs/usage.md`, this phase's CHANGELOG entry for the switcher, and the OpenAPI
+description of `POST /workspaces/{id}/switch` — are corrected here, because
+leaving four copies of the sentence you just called false is not a repair.
+*Valid in every workspace of the organization* is incomplete rather than false —
+the reach really is not confined to one workspace — so its five remaining
+short-form sites are **F139**, open, one of them a published contract
+description that is worth wording deliberately rather than in passing.
+
+### F124 — a floor is not a customer
+
+`/64` stands. It is the standard subnet and coarsening it commits the error F57
+ruled out on the v4 side, where a wider key lets one abusive host throttle its
+neighbours. What was wrong is *"a /64 **or larger**"*: the fold does not reach a
+site delegated a shorter prefix, and a /56 or a /48 keeps one bucket per /64
+inside it — 256 or 65536 of them.
+
+Both comments now say what the fold achieves and what it does not, and name the
+reason coarsening is refused rather than leaving it to be rediscovered.
+`docs/configuration.md` gains the qualifier it had dropped, because an operator
+tuning a limit is exactly the reader that omission costs: the number they set
+applies that many times over to one subscriber.
+
+### F126 — the mechanism, not the property
+
+The migration comment credited *per-workspace salting*, and `analytics_salts` is
+one row per day with no workspace column. The privacy property is real and the
+formula on the same line was already right — the workspace is in the *message*,
+so the derived hashes differ and one workspace's analytics cannot be joined
+against another's. The salt does the other job: purging it makes a day's hashes
+irreversible.
+
+The comment now separates the two rather than conflating them, matching
+`internal/analytics/visitor.go` and the correction this log already recorded.
+Editing an applied migration's comment follows the precedent this milestone set
+twice already.
+
+### F127 — placement is not serialization
+
+*"Read inside the transaction … so the count and the writes that invalidate it
+cannot be separated by a concurrent redemption"*. A count cannot be locked. At
+read committed each statement takes its own snapshot, so a redemption committing
+after the read is invisible to it and two calls racing can both see zero —
+exactly the check-then-act `organizations.sql`'s own preamble warns about and
+`LockOrganizations` avoids with `FOR UPDATE`.
+
+**No lock was added**, which is this row's disposition rather than an omission:
+the one operation a zero-membership account can reach gives that account an
+owner membership, so losing the race costs one more organization the account
+legitimately owns. The comment now says what the placement buys, what it does
+not, and why the race is left open. [F67](deferred-findings.md) — the same class
+where the losing state is one a validation exists to forbid — stays open and
+unmerged, as M45's hygiene pass decided.
+
+### F128 — the sentence narrowed, and why not the work
+
+*"Every refusal in Redeem … spends the same argon2 work"*, stated three times:
+the package doc, `Redeem`'s doc, and `refuse`'s own comment — which is not the
+set the row enumerated, and is not the whole set either. `docs/SECURITY.md`
+makes the same claim to the reader most likely to act on it, and CHANGELOG now
+records the correction. A row scoped to one Go file does not make the sentence
+true in a document that repeats it.
+
+**The row's count was still short.** It named three doubled outcomes; there are
+four. `refuse("account was created concurrently")` is reached after
+`createUser`'s own `Hash`, so it costs two runs like the other three. One run:
+no such token, not pending, address mismatch, a closed instance with no account,
+an unusable account, a wrong password. Two: the account created concurrently,
+already a member, the membership insert losing a race, the invitation spent
+concurrently.
+
+The choice was equalise the work or narrow the sentence, and the sentence was
+narrowed.
+
+What the doubled paths have in common is the reason: each needs a **correct**
+password for the invited address, or is the losing half of two redemptions
+racing. Somebody who can provoke one can sign in as that account and read its
+memberships, so nothing is disclosed to anybody who could not already ask
+directly. The property D27 bought — nothing answers *does this address have an
+account* — is intact, and it is the branches a stranger reaches that had to be
+equal, which they are.
+
+**What equalising would have cost.** The only equalisation available is
+downward: track that a real argon2 run has happened and make `refuse` skip its
+dummy. That inverts the safe default. Today `refuse` unconditionally spends
+work, and a new refusal path added later is protected by construction; with the
+flag, a path that sets it wrongly re-opens the enumeration oracle silently. It
+also converts a comment fix into a behaviour change on the redemption path,
+which owes a timing test and a sabotage, to buy a property observable only by
+somebody holding the credential. F92 equalised in the *other* direction earlier
+in this milestone, adding a dummy to the locked branch, and that asymmetry is
+the point: adding work fails closed, removing it fails open.
+
+The alternative is recorded rather than merely rejected, because the next reader
+of `refuse` will have the same idea.

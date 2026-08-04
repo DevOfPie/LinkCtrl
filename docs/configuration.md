@@ -384,8 +384,12 @@ your traffic shares one bucket and the limit applies to the whole world at once.
 Setting `TRUSTED_PROXIES` is a correctness requirement once a limit is on, not
 just an analytics nicety.
 
-**IPv6 is keyed by /64, not by address.** A single host is routinely handed a /64,
-so per-address keying would let one machine present unlimited identities.
+**IPv6 is keyed by /64, not by address.** A single host is routinely handed a
+whole /64, so per-address keying would let one machine present unlimited
+identities. The /64 is a floor and not a customer: a site delegated a /56 or a
+/48 still gets one bucket per /64 inside it, so the limit applies that many times
+over to one subscriber. That is deliberate — keying any coarser would let one
+abusive host throttle its neighbours.
 
 **Per instance, unless the limit is shared.** The limiter is in memory, so the
 404-probe limit costs no Redis round trip on the redirect path and depends on

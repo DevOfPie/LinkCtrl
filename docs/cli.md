@@ -128,8 +128,13 @@ expires. Scopes must be permissions that user's role grants —
 `--scopes apikeys.write` is refused, because a key that can mint keys makes
 revoking a leaked one meaningless.
 
-`--org-wide` issues a key valid in every workspace of the organization instead of
-only the one that user is acting in. It is refused unless that user holds
+`--org-wide` issues a key that is not pinned to one workspace, instead of one
+fixed to the workspace that user is acting in. It does not act in all of them at
+once: there is no per-request workspace selector, so each request resolves a
+single workspace the way a sign-in does — the workspace that user pinned as their
+default, otherwise the one they used last — bounded to the organization the key
+was issued in. Such a key therefore follows its owner's current choice, including
+a switch they make in a browser. It is refused unless that user holds
 `apikeys.write` through an **organization-wide** membership — the flag asks, it
 does not grant, which is the point of the CLI acting as a named user.
 

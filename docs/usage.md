@@ -1092,9 +1092,12 @@ curl -H "Authorization: Bearer $LINKCTRL_KEY" https://links.example.com/api/v1/w
 nothing carries it while the account follows last-used. Switching
 (`POST /api/v1/workspaces/{id}/switch`) and pinning
 (`PUT /api/v1/workspaces/default`, with `null` to go back to last-used) require
-a signed-in session and answer `403` for an API key: a key acts in the workspace
-its own row names, so switching would change nothing about its own requests
-while repointing where you land.
+a signed-in session and answer `403` for an API key: switching moves the calling
+session, which a key has not got, and remembering the choice would repoint where
+*you* land next. It is not that a key would be unaffected — an organization-wide
+one names no workspace and resolves one per request the way a sign-in does, so a
+switch you make in a browser moves its requests too unless you have pinned a
+default.
 
 ## The link domain
 

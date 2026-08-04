@@ -89,8 +89,16 @@ type Organization struct {
 // The zero-membership account is therefore not a role beside RBAC; it is the
 // empty case RBAC has no row for.
 //
-// Read inside the transaction rather than before it so the count and the writes
-// that invalidate it cannot be separated by a concurrent redemption.
+// Read inside the transaction because everything this call does is, and not
+// because that serializes it. A count cannot be locked — the check-then-act
+// organizations.sql warns about in its own preamble, and which LockOrganizations
+// avoids by selecting the rows a decision is made on FOR UPDATE. At read
+// committed each statement takes its own snapshot, so a redemption committing
+// after this read is invisible to it and two calls racing can both see zero.
+// The race is left open rather than closed, on the paragraph above: the one
+// operation a zero-membership account can reach gives that account an owner
+// membership, so losing it costs one more organization the account legitimately
+// owns and nothing else.
 //
 // **No credential-type check, and that is deliberate rather than an omission.**
 // An API key used to be able to walk through this door: its owner could be

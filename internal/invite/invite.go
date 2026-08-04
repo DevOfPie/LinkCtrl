@@ -7,8 +7,9 @@
 // compares the redeeming account's address against the address invited, so a
 // link forwarded into a group chat cannot add a stranger. That comparison is a
 // new place that could answer "does this address have an account", so every
-// refusal in Redeem is the same refusal, spends the same argon2 work, and says
-// nothing about which check failed. The reason is logged, never returned.
+// refusal in Redeem is the same refusal, spends argon2 work before returning,
+// and says nothing about which check failed. The reason is logged, never
+// returned. What that work is and is not equal across is Redeem's own doc.
 //
 // **It may carry any role at or below the inviter's own rank** (D28), and no
 // more than editor when an API key issued it (D43). Those are two axes, not one
@@ -605,11 +606,25 @@ type RedeemInput struct {
 
 // Redeem turns an invitation into a membership.
 //
-// Every failure is ErrNotRedeemable, with the same argon2 cost spent, so
+// Every failure is ErrNotRedeemable and spends argon2 work on the way out, so
 // nothing here answers "does this address have an account" — not by status
 // code, not by message, not by how long it took. The two validation errors it
 // can return are about the submitted values alone and reveal nothing: an
 // address that is not an address, and a password below the length floor.
+//
+// The cost is equal where that question can be asked, and is not equal
+// everywhere (F128). One run: no invitation with that token, an invitation that
+// is not pending, an address that does not match it, a closed instance with no
+// account, an unusable account, and a wrong password. **Two** runs: the account
+// was created concurrently, the address is already a member, the membership
+// insert lost a race, and the invitation was spent concurrently — each reached
+// after a real verification or after createUser's hash, with refuse spending a
+// dummy on top of it. Every one of those needs a *correct* password for the
+// invited address, or is the losing half of two redemptions racing. Somebody who
+// can provoke the doubled path can already sign in as that account and read its
+// memberships, so the imbalance is stated here rather than equalised: making
+// refuse conditional on work already done would trade a comment that is wrong in
+// letter for an enumeration oracle whenever the condition is.
 //
 // One transaction, and single-use is the database's to enforce: the invitation
 // row is locked on the way in, and the write that spends it is conditional on
@@ -636,8 +651,11 @@ func (s *Service) Redeem(ctx context.Context, in RedeemInput) (*Redeemed, error)
 	}
 
 	// refuse spends the work a real verification would and returns the one
-	// error. Called on every path that fails after the token was looked up, so
-	// the timing of a refusal does not say which check produced it.
+	// error. Called on every path that fails after the token was looked up, so a
+	// refusal that would otherwise return in microseconds costs what verifying a
+	// real password costs — which is the pair that has to be equal. The paths
+	// where this lands on top of a real run instead of standing in for one are
+	// enumerated in Redeem's doc.
 	refuse := func(why string, args ...any) error {
 		s.hasher.DummyVerify(in.Password)
 		s.log.Debug("invitation refused: "+why, args...)

@@ -35,8 +35,9 @@ func (a *WorkspaceAPI) List(w http.ResponseWriter, r *http.Request) {
 // Switch moves the calling session into a workspace.
 //
 // 204 rather than the new identity: the caller already knows what it asked
-// for, and the next request resolves the change anyway. Refused for an API
-// key, which acts in the workspace its own row names.
+// for, and the next request resolves the change anyway. Refused for an API key,
+// for the two reasons SwitchWorkspace gives — neither of which is that a key
+// would be unaffected by the result.
 func (a *WorkspaceAPI) Switch(w http.ResponseWriter, r *http.Request) {
 	id, err := pathUUID(r, "id")
 	if err != nil {

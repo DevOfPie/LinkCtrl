@@ -140,11 +140,17 @@ var takeSHA = goredis.NewScript(takeScript)
 //
 // The Redis call runs in its own goroutine and is abandoned on timeout rather
 // than merely cancelled. That is not belt and braces: a stalled Redis — one
-// that accepts a connection and never answers — does not honour the context
-// deadline go-redis is handed when it has to establish a connection, measured
-// at multiple seconds elsewhere in this codebase (deferred finding F2). On the
-// invalidation path that was slow; here it would be a login endpoint hanging on
-// an optional dependency, so the deadline is enforced from outside the call.
+// that accepts a connection and never answers — runs to the client's own
+// ReadTimeout whatever context it was handed. go-redis applies a caller's
+// deadline to the socket only when Options.ContextTimeoutEnabled is set, and
+// internal/platform/redis does not set it, so the context handed to Run below
+// does not shorten a stalled read however short it is; that package's comment
+// carries the measurements. Establishing the
+// connection has nothing to do with it — a read that stalls on an already-open
+// connection behaves the same, and a dial on its own does honour its deadline.
+// The invalidation path multiplied that same bound by a retry loop until M26.6
+// bounded the loop (F2); here it would be a login endpoint hanging on an
+// optional dependency, so the deadline is enforced from outside the call.
 //
 // An abandoned call may still land and spend a token that the local fallback
 // also spent. Over-counting by a token during a Redis stall is the harmless

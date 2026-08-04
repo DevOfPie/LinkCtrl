@@ -664,8 +664,15 @@ func (s *APIKeyService) Authenticate(ctx context.Context, token string) (*Identi
 		// permitted since 00500. Resolved the same way a login is, so the key
 		// follows the person it acts as, including their pinned default.
 		//
-		// No session id: a key is not a browser, and a switch made in one must
-		// not move a key's requests.
+		// No session id, because there is no session. That kills rung 1 of the
+		// precedence, which is a property of one browser, and it does nothing
+		// more: it does not insulate the key from the switcher. SwitchWorkspace's
+		// other write is users.last_workspace_id — rung 3, and the rung that
+		// answers for every owner who has not pinned a default — so a switch made
+		// in a browser does move an organization-wide key's requests. That is
+		// D90's *resolved the same way a login is* working as written rather than
+		// a leak: what the key follows is the person, and where the person is
+		// acting is part of that.
 		//
 		// **Bounded to the key's own organization**, and that bound is
 		// load-bearing rather than tidy. The precedence filters on membership

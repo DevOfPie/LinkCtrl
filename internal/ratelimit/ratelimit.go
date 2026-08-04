@@ -10,10 +10,14 @@
 // numbers are per-instance. The consequence is stated rather than hidden: with
 // N replicas the effective limit is N times the configured one.
 //
-// IPv6 is keyed by /64, not by address. A single host is routinely handed a /64
-// or larger, so a per-address key would let one machine present an effectively
+// IPv6 is keyed by /64, not by address. A single host is routinely handed a
+// whole /64, so a per-address key would let one machine present an effectively
 // unlimited number of identities — defeating the limit and growing the table
-// without bound while doing it.
+// without bound while doing it. /64 is a floor rather than the whole answer: a
+// site delegated a shorter prefix, /56 or /48, holds 256 or 65536 distinct /64s
+// and gets a bucket for each. Keying coarser than /64 would close that at the
+// price F57 ruled out on the v4 side, where a wider key lets one abusive host
+// throttle its neighbours.
 //
 // It fails open. When the key table is full and a sweep cannot free room, the
 // request is allowed and a counter increments. A limiter is abuse mitigation,
@@ -317,7 +321,9 @@ func (l *Limiter) Overflows() int64 {
 // The IPv6 case is the one that matters. Handing out /64s to single hosts is
 // normal, so per-address keying would let one machine rotate through more
 // identities than the table could ever hold — the limit would silently stop
-// applying to precisely the client working hardest to evade it.
+// applying to precisely the client working hardest to evade it. It does not
+// follow that a /64 is one customer: a site delegated a /56 or a /48 keeps a
+// key per /64 inside it, which the package comment explains is deliberate.
 func Key(addr netip.Addr) string {
 	if !addr.IsValid() {
 		return invalidKey

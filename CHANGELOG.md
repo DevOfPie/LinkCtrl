@@ -1081,8 +1081,11 @@ migrations run at boot.
   in one place for every credential, with a switch that moves the browser that
   asked and is remembered for the next sign-in. `POST
   /api/v1/workspaces/{id}/switch` and `PUT /api/v1/workspaces/default` are the
-  API half; both need a signed-in session, because a key acts in the workspace
-  its own row names and must not repoint where its owner lands.
+  API half; both need a signed-in session: switching moves the calling session,
+  which a key has not got, and remembering the choice must not repoint where the
+  key's owner lands. It does not follow that a key is unaffected by a switch —
+  the organization-wide keys added later in this series resolve a workspace per
+  request, so one made in a browser moves theirs too unless a default is pinned.
 - **Where a new sign-in starts** follows the workspace you used last. An
   *Account* setting pins one instead, and offers **Last-Used** as its first
   option — the derived behaviour stays the default, and the override is there
@@ -1124,6 +1127,33 @@ migrations run at boot.
   There is one now.
 
 ### Fixed
+
+- **`docs/configuration.md` said the IPv6 rate limit is keyed by /64 and left
+  out what that means for a subscriber holding more than one.** A single host is
+  routinely handed a whole /64, which is why the key is not the address — but a
+  site delegated a /56 or a /48 holds 256 or 65536 distinct /64s and gets a
+  bucket for each, so the number you configure applies that many times over to
+  one customer. The document now says so, and says why the key is not made
+  coarser: it would let one abusive host throttle its neighbours. The keying
+  itself is unchanged.
+
+- **`docs/cli.md` described `--org-wide` as issuing a key "valid in every
+  workspace of the organization", which reads as a key acting in all of them at
+  once.** There is no per-request workspace selector: such a key resolves a
+  single workspace per request the way a sign-in does — your pinned default,
+  otherwise the workspace you used last — bounded to the organization the key
+  was issued in, which is what `docs/SECURITY.md` and `docs/usage.md` already
+  said. So a key like this follows the switch you make in a browser. Behaviour
+  is unchanged; the flag's description is.
+
+- **`docs/SECURITY.md` said every invitation-redemption failure costs the same
+  argon2 work, and four of them cost twice as much.** The property that matters
+  is intact — nothing tells you whether an address has an account here, because
+  every failure a stranger can reach costs exactly one hash. The four that cost
+  two are reached only after a correct password for the invited address was
+  verified, or by the losing half of two simultaneous redemptions, and anybody
+  in that position can sign in as the account and read its memberships anyway.
+  The claim now says which is which rather than overstating it.
 
 - **The review queue now names the blocklist entry Allow deletes, and the entry
   is fixed when the dispute is filed.** The runtime blocklist matches on label
