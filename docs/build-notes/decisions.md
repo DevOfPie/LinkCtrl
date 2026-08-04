@@ -149,6 +149,7 @@ file. Append a row when you append an entry.
 | [M40, what a verification may write, and what a pass may be delayed by](#2026-08-04--m40-what-a-verification-may-write-and-what-a-pass-may-be-delayed-by) | D92 — why the write that sets `verified_at` carries the hostname and token it proved rather than an id, and why neither a transaction nor `FOR UPDATE` closes the gap a rename commits into; the audit record stamped from the checked name so the log is not sourced from the thing it is evidence about; serving hostnames drawn before pending ones, and a per-workspace registration cap, because what may delay a hard stop must not be creatable at will |
 | [M30, the same claim in a different alphabet](#2026-08-04--m30-the-same-claim-in-a-different-alphabet) | D93 — why a host written outside ASCII reached none of the four mechanisms the trailing dot walked past, and why that is one missing conversion rather than four bugs; UTS-46 ToASCII folded at D46's existing fold, mapping before the dot; the profile measured against `idna.Lookup`, which refuses three destinations this validator accepts; the ASCII skip and why it cannot let a spelling through; an unmappable host refused with an untiered code; the list entries folded by the same function, and the address rule moved after the fold; what D91 cost, and `isHomograph` working as designed for the first time |
 | [M35's reopening, two amendments made at acceptance](#2026-08-04--m35s-reopening-two-amendments-made-at-acceptance) | A1 — the reopening claimed the F79 fix invalidates every minted signature; the signer was never wrong, so nothing that works stops. The first M44.9 fix-trap that was itself wrong, and why that position produces them. A2 — the inherited rule's label moves from "Redirects are 302" to "never permanent", the assertion unchanged, because the verified-password POST now answers 303 |
+| [M44.9 lands, and what it leaves for M45](#2026-08-04--m449-lands-and-what-it-leaves-for-m45) | Every bullet discharged; eleven approved rows closed across six reopenings and one sub-milestone commit; why the row reads done while 110 findings stay open, on M32.9's precedent; the five rows the reopenings themselves found and why F135 is the one to read first; the fix-traps being worth more than the findings, and the one that was wrong; how scope held |
 | [M35, which namespace a gate is keyed on](#2026-08-04--m35-which-namespace-a-gate-is-keyed-on) | D94 — three corrections and one amendment: a verified password answers **303** unconditionally and D53's *"answers the 302 itself"* is superseded, with 303 joining `REDIRECT_DEFAULT_STATUS`'s allowed set; the signature and the password bucket keyed on the domain the request arrived on rather than the boot constant; the signed URL minted on the link's own hostname, with an unreadable domain row an error rather than a fallback; HEAD reading the budget without spending it, and what that read costs; why the fix invalidates no signature that ever worked, against a constraint that expected it to; the fixture in which the defect was testable at all |
 | [M42, what one drain costs, and the fix that would have moved the cost rather than removed it](#2026-08-04--m42-what-one-drain-costs-and-the-fix-that-would-have-moved-the-cost-rather-than-removed-it) | D95 — a claimed batch is dialled together and `Drain` waits for it, so one drain costs one attempt and not `DrainBatch` of them; why the WaitGroup is what makes D77's lock trap inapplicable rather than survived; why a webhook goroutine of its own is not a fix, `pg_try_advisory_lock` being session-scoped, and would convert every other job's stall into a skip; what it does to F90 (nothing) and to F91 (unreachable, not fixed); what a receiver now sees |
 | [M43, the queue's own clock, and why the watermark could not be it](#2026-08-04--m43-the-queues-own-clock-and-why-the-watermark-could-not-be-it) | D96 — one column was carrying two facts, and ordering the due query on the firing watermark meant the hundred-and-first enabled rule was never evaluated at all; `last_checked_at` added by 03100 with the due index rebuilt on it; why advancing `last_fired_at` on a no-match run is the tempting fix and breaks `min_count`; one cursor statement a run rather than one a rule, and the three deliberate details in it — no `updated_at`, failed rules stamped too, `WithoutCancel` so a cut-off run keeps what it looked at; why a NULL cursor is the right thing for a new or resumed rule; the test's shape, and why its first assertion is that nothing happened |
@@ -12639,3 +12640,62 @@ rather than argued, that the old one never could have caught this and that
 that symbol no longer exists. The row is not edited and stays open: its finding
 is unchanged, and the source it wants is now `(*appMux).mounts()`, which is a
 better one than it asked for.
+
+## 2026-08-04 — M44.9 lands, and what it leaves for M45
+
+Every bullet in [m44.9.md](phase-details/m44.9.md) is discharged. The phase was
+re-read against its own claims by readers who had not built it; M32.9's five
+reopenings were confirmed fixed rather than assumed, each against the trap its
+triage recorded; the review covered its dimensions independently and put every
+candidate to something trying to refute it; the three live verifications were
+performed on a build of the tree rather than reasoned about; and the review's own
+output is recorded, above.
+
+**Eleven rows were approved and all eleven are closed**, across six reopenings and
+one commit of work smaller than a milestone: M40 (F76, F84), M30 (F77), M35 (F78,
+F79, F80, F81), M42 (F82), M43 (F83), M32 (F86), and F85 on its own. Each ran the
+full gate table, and the three that touched behaviour a person can observe were
+verified live; M35's, which touched the redirect path, re-measured the SLO on its
+built image at 100% of 239,999 cached redirects under 20ms.
+
+The row reads `done` while a hundred and ten findings it produced are still open,
+and that is correct rather than awkward for the reason
+[M32.9](#2026-08-01--m329s-triage-and-five-milestones-reopened) recorded when it
+landed the same way: the review is what was built, and the findings are what it
+built.
+
+### What the reopenings themselves found
+
+Five rows exist because fixing something is the best way to look at it, and they
+are worth reading as a group — each is the fixed defect's neighbour rather than
+its remainder. F131: the failure path of the verification write is still addressed
+by id alone. F132: M30's fold runs on write, so rows stored by an earlier build
+keep the spelling they were stored with. F133: `internal/mail` has F82's exact
+shape, on the same goroutine, one line earlier in the same case. F134: the count
+in SECURITY.md's *Egress* row has to be re-derived rather than edited. F135 is the
+one to read first — the `/feeds` disclosure page tells every signed-in user, in a
+green panel, that no destination leaves this instance, and it cannot be reworded
+true because the disclosure holds no data about the workspace's webhooks to
+condition on.
+
+### Two things M45 should not have to rediscover
+
+**The fix-traps were worth more than the findings.** Every confirmed row carries
+one, and they were established by verifiers attacking a claim rather than by
+finders making it. Several would have cost a rewrite: moving the rotation to the
+redirect pool would have stalled every redirect rather than isolating one, making
+`HEAD` consume the budget would have destroyed the feature the fix protects, and
+advancing the automation watermark on a no-match run would have silently broken
+`min_count`. One of them was itself wrong — recorded in
+[M35's amendments](#2026-08-04--m35s-reopening-two-amendments-made-at-acceptance)
+— which is the honest bound on how far a verifier's reasoning about an unwritten
+fix can be trusted.
+
+**Scope held, and it took saying no twice.** M32's first worker found three more
+false sentences than its row named and reported them rather than fixing them; two
+were then brought in deliberately, under the deferred-overlap rule and named in
+the commit, and the third stayed out because it needs a judgement. F85's worker
+was told to fix the class rather than the instance and did, deleting the list that
+caused it instead of adding the four entries it was missing — and proved the old
+guard could never have caught it by leaving that guard green under a sabotage that
+made the new one fail on all eleven routes.

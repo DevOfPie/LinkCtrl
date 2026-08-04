@@ -52,7 +52,7 @@ milestone, is in [workflow.md](../workflow.md).
 | [M42](m42.md) | Webhooks | M30 | done |
 | [M43](m43.md) | Automation rules | M22 M35 M42 | done |
 | [M44](m44.md) | API keys: rotation and scope choice | M21 | done |
-| [M44.9](m44.9.md) | **Pre-release adversarial review** | M21–M44 | in progress |
+| [M44.9](m44.9.md) | **Pre-release adversarial review** | M21–M44 | done |
 | [M45](m45.md) | Deferred findings, documentation pass, 0.2.0 | all | not started |
 
 New milestone files start from [_template.md](_template.md).
