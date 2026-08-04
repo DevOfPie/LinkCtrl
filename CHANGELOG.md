@@ -747,8 +747,11 @@ migrations run at boot.
   principal, so instance-wide settings are not changed from the dashboard.
 - **A feed is a low-confidence signal and never a dependency.** It is asked
   **last**, only about destinations every built-in check already accepted — so a
-  destination your own rules refuse is never sent anywhere, and those rules
-  answer identically with a feed on, off, or failing. A refusal it produces is
+  destination your own rules refuse never reaches the feed, and those rules
+  answer identically with a feed on, off, or failing. That is a bound on the
+  feed and not on the instance: the refusal is itself a `destination.blocked`
+  event, and a workspace that has subscribed a webhook to it receives the
+  refused destination, defanged. A refusal it produces is
   `low_confidence.feed_reputation`, appealable like any other, and an owner
   allowing it also stops that host being sent again. A feed that times out,
   errors, or answers something unreadable accepts the destination and increments

@@ -152,6 +152,7 @@ file. Append a row when you append an entry.
 | [M35, which namespace a gate is keyed on](#2026-08-04--m35-which-namespace-a-gate-is-keyed-on) | D94 — three corrections and one amendment: a verified password answers **303** unconditionally and D53's *"answers the 302 itself"* is superseded, with 303 joining `REDIRECT_DEFAULT_STATUS`'s allowed set; the signature and the password bucket keyed on the domain the request arrived on rather than the boot constant; the signed URL minted on the link's own hostname, with an unreadable domain row an error rather than a fallback; HEAD reading the budget without spending it, and what that read costs; why the fix invalidates no signature that ever worked, against a constraint that expected it to; the fixture in which the defect was testable at all |
 | [M42, what one drain costs, and the fix that would have moved the cost rather than removed it](#2026-08-04--m42-what-one-drain-costs-and-the-fix-that-would-have-moved-the-cost-rather-than-removed-it) | D95 — a claimed batch is dialled together and `Drain` waits for it, so one drain costs one attempt and not `DrainBatch` of them; why the WaitGroup is what makes D77's lock trap inapplicable rather than survived; why a webhook goroutine of its own is not a fix, `pg_try_advisory_lock` being session-scoped, and would convert every other job's stall into a skip; what it does to F90 (nothing) and to F91 (unreachable, not fixed); what a receiver now sees |
 | [M43, the queue's own clock, and why the watermark could not be it](#2026-08-04--m43-the-queues-own-clock-and-why-the-watermark-could-not-be-it) | D96 — one column was carrying two facts, and ordering the due query on the firing watermark meant the hundred-and-first enabled rule was never evaluated at all; `last_checked_at` added by 03100 with the due index rebuilt on it; why advancing `last_fired_at` on a no-match run is the tempting fix and breaks `min_count`; one cursor statement a run rather than one a rule, and the three deliberate details in it — no `updated_at`, failed rules stamped too, `WithoutCancel` so a cut-off run keeps what it looked at; why a NULL cursor is the right thing for a new or resumed rule; the test's shape, and why its first assertion is that nothing happened |
+| [M32, the promise restated as two channels](#2026-08-04--m32-the-promise-restated-as-two-channels) | F86 — why the fix is four documents and no code, and why removing `url` from the payload would break every receiver to make a README sentence true; the four wordings as they stood; the checked facts the replacement rests on — `webhooks.write` is owner and admin only and not delegable, there is no operator gate, and `automation.fired` carries no destination; why the refused-destination leg is the strongest of the four and what a half-fix drops; F134 widened at step 3.4 — `CHANGELOG.md:750` and `feed_test.go`'s three wordings taken in under the deferred-overlap rule with no assertion touched, the *Egress* row's count left open because re-deriving it is a decision; and F135, seven more sites a deliberate sweep found where two rounds of noticing had not, including the `/feeds` disclosure page this milestone itself shipped, which no rewording can make true |
 
 ---
 
@@ -12348,3 +12349,163 @@ nothing distinguishes a starved rule from one whose trigger has not matched, and
 that is true and now unreachable rather than displayed: there are no starved rules
 to distinguish. Publishing the scheduler's bookkeeping is a product decision with an
 API surface attached, and it was not this reopening's to take.
+
+## 2026-08-04 — M32, the promise restated as two channels
+
+M32's own definition of done required that *"Plan.md's no-destination-leaves-the-box
+promise is updated to state the opt-in exception precisely, rather than being
+quietly falsified."* It was updated for the feed, on the day the feed shipped, and
+then quietly falsified by [M42](phase-details/m42.md) ten milestones later. That is
+[F86](deferred-findings.md), and it is why this milestone was reopened rather than
+succeeded: a `done` row asserting something untrue is the outcome reopening exists
+to avoid, and the row asserting it was this one.
+
+Nothing here is a code change, and that is the first decision rather than the
+absence of one.
+
+### The payload was not touched, and would have been the wrong fix
+
+The obvious way to make four sentences true is to stop sending `l.URL`. It was
+refused before it was weighed, because `internal/link/webhook.go:366-372` declares
+that map a **published interface** in as many words — *"a struct that grows a field
+on some later milestone would change every payload in the world without anybody
+deciding to"* — and `docs/usage.md:1269` prints `url` inside the documented example
+payload. Removing it would break every receiver that parses it in order to make a
+summary sentence in a README true. The wrong claim was the wrong claim; the
+capability was disclosed the whole time, at `docs/SECURITY.md:60` and in
+`docs/usage.md`'s event table.
+
+So this reopening changes four documents and no behaviour at all.
+
+### What was false was the count, not the disclosure
+
+Each of the four sites says, in its own wording, that the reputation feed is the
+only way a destination leaves this instance:
+
+| Site | As it stood |
+| --- | --- |
+| `Plan.md:215-217` | *"no destination is sent anywhere unless the operator sets `LINKCTRL_FEED_URL`, and the shipped default is unset"* |
+| `docs/SECURITY.md:207-208` | `FEED_URL` unset *"is the whole of the promise that no destination leaves the box"* |
+| `docs/SECURITY.md:215-216` | *"The feed is asked **last**, so a destination any built-in tier refuses is never sent anywhere"* |
+| `README.md:151` | *"One thing can leave the box, and only if you turn it on"* |
+
+All four now name **two channels**, and the shape of the replacement is the same in
+each: which one is the operator's, which one is not, and what each carries.
+
+The facts the new wording rests on were each checked rather than inferred.
+`webhooks.write` is held by the **owner and admin roles only**
+(`internal/store/migrations/02800_webhooks.sql:103-117`) and is **not delegable to
+an API key** (`internal/auth/apikey.go:192`), so *"a workspace member"* — F86's own
+phrasing — was too wide and the docs say administrator. There is no operator gate
+of any kind: `internal/config/config.go:958-960` states it outright, *"there is no
+switch: webhooks are a workspace feature rather than an operator one."* `emitLink`
+puts the raw destination in all five link-lifecycle payloads
+(`internal/link/webhook.go:379-386`) and `emitBlocked` puts `url_defanged` on
+`destination.blocked` (`:403-409`). The seventh event carries **no** destination:
+`automation.fired`'s subject labels are aliases, or a defanged host for the blocked
+trigger (`internal/automation/automation.go:319`, `:334`, `:353`), which is why
+SECURITY.md enumerates all seven rather than the six that carry something — an
+enumeration a reader cannot tell is complete is the vagueness this reopening was
+told to avoid.
+
+**The replacement's own absolute was checked before it was written, and it did not
+survive intact.** *Nothing else in the product sends a destination anywhere* is the
+kind of sentence this reopening exists to delete, so it was tested rather than
+asserted: `internal/dispute/dispute.go:688-693` queues the dispute-outcome mail D1
+added, and its payload carries `link.Defang(d.Host)`. That is a host rather than a
+URL, defanged, going to the address that filed the dispute about it, and only with
+a mailer configured — but it is a destination fragment leaving the instance by a
+third route, and an unqualified *nothing else* would have shipped a fresh
+over-promise inside the fix for the old one. Plan.md and README.md name it. The
+in-app path was checked too and is not a route out: `notify.Service.Notify`
+(`internal/notify/notify.go:152-181`) writes a row and never mails, so
+`automation.fired`'s subject labels stay inside the instance.
+
+### The refused-destination leg is the one a half-fix drops
+
+m32.md named it in advance, and it is worth recording why it is the strongest of
+the four rather than the fourth of four. `SECURITY.md:215-216` does not merely
+under-count the channels; it makes a specific promise about the case a reader most
+wants promised — *a destination we refused is not handed to anybody* — and that
+promise is contradicted by the refusal itself. A block emits `destination.blocked`,
+and a workspace subscribed to it receives the destination that was refused,
+defanged. The feed bound is real and unchanged; what was wrong is that it was
+written as a bound on the instance.
+
+Both halves are now stated together, in all four sites, in the same sentence: the
+feed never receives it, and a webhook does.
+
+### Three more sites, two of them taken and one left as a row
+
+F86 named four. There are seven. `docs/SECURITY.md:73` — the *Egress* row — says
+*"**Two** outbound connections are possible and both are off until an operator
+configures them"* and *"Nothing else in the product opens a socket outwards"*, both
+falsified by `internal/webhook/client.go`; it contradicts `docs/SECURITY.md:60` on
+the same page, which is exactly the `README.md:151`-versus-`:87` shape F86 records,
+in the file a security-conscious reader trusts most. `CHANGELOG.md:750` carries
+*"a destination your own rules refuse is never sent anywhere"* — word for word the
+claim above, inside M32's **own** `[Unreleased]` entry. And
+`test/integration/feed_test.go:360-366` comments and fails with *"must never leave
+the box"* where the assertion under it covers the feed alone.
+
+They were reported rather than fixed, because the reopening as written enumerated
+four sites and the loop rejects work no bullet asked for. **Two were then taken
+into this milestone at step 3.4**, by amending m32.md rather than by a worker's
+judgement, under [phase-loop.md](phase-loop.md#1-validate)'s deferred-overlap
+rule — an open finding that would make *this* milestone's claim false is in spec.
+Both qualify by being this milestone's own sentence in other words, which is also
+why a fifth phrasing would have been its own defect:
+
+- `CHANGELOG.md:750` now reads *"a destination your own rules refuse never reaches
+  the feed"*, carrying the same second half as the other four sites: the refusal is
+  itself a `destination.blocked` event, and a workspace that subscribed a webhook
+  to it receives the refused destination defanged. It is in `[Unreleased]`, so no
+  published changelog is being rewritten — and a false sentence inside the entry
+  for the very feature being corrected is the one place it could not stay.
+- `test/integration/feed_test.go` made the claim in **three** places, all of them
+  words: the failure message at `:366` (*"must never leave the box"*, now *"must
+  never reach the feed"*), the comment above it, and the doc comment of the same
+  test at `:291-293`, which asserted the same thing about the same `greedy.sawHost`
+  loop and which F134 had not counted. Correcting two of the three would have left
+  the file contradicting itself, so all three moved together. **No assertion was
+  touched**: m32.md's instruction was that the test is right and its words are not,
+  and the words were the only thing wrong — `greedy.sawHost` was always a correct
+  statement about the feed and never about the instance.
+
+The third is [F134](deferred-findings.md), and it stays open. It is the one that is
+not a wording fix: its number has to be re-derived, and the question underneath
+it — whether the hourly DNS query the domain-verification job makes to a
+registrant-chosen nameserver is a fourth outbound connection or not a "connection"
+in that row's sense — is a decision about what the row promises, not an edit.
+Widening to it would have been scheduling, and scheduling is the owner's.
+
+### Seven was also an undercount, and the worst site is the page this milestone shipped
+
+Both previous counts were arrived at by noticing sentences while working on
+something else. Closing the six took a deliberate sweep instead — `grep -rn
+"leaves this instance\|sent anywhere\|nothing leaves\|leave the box"` over the tree
+outside `docs/build-notes/` — and it returned **seven** more, one for every site
+the two rounds of noticing had found between them. They are
+[F135](deferred-findings.md) and none of them is in this diff.
+
+One of them matters more than any site either F86 or F134 named.
+`internal/ui/templates/pages/feeds.html:106` renders *"No destination leaves this
+instance"* in a green panel, to every signed-in user, on any instance with no feed
+configured, and `:109-113` presses further: *"Nothing you point a link at is sent
+anywhere: every check this instance makes about a destination is made here."* A
+workspace with a webhook registered makes both false. That page is **this
+milestone's own deliverable** — m32.md's *Risks* says the disclosure wording is the
+deliverable as much as the code is, and D40 made the page the mechanism — so the
+milestone that exists to keep this promise precise is also the milestone that
+shipped the least precise statement of it, on the one surface a user actually
+reads.
+
+It is a row and not a diff for a reason stronger than scope. The page cannot be
+made true by rewording alone: `Service.FeedDisclosure`
+(`internal/link/service.go:224-234`) reads the feed checker and knows nothing about
+the workspace's webhooks, so there is no data to condition the panel on. Either the
+sentence weakens for everybody, including the instances where it is true, or the
+disclosure learns about a second channel it was never designed to describe. Both
+are product decisions, `test/integration/feed_test.go:503` and
+`internal/ui/feeds_test.go:132` pin the string either way, and this reopening had
+already been widened once.

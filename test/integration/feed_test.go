@@ -290,7 +290,9 @@ func TestNoDestinationLeavesAnInstanceWithNoFeed(t *testing.T) {
 //
 // The erroring feed is also proof of something the other two columns cannot
 // show: the unappealable and high-confidence refusals never reached it at all,
-// because a destination refused above the feed is never sent anywhere.
+// because the feed is asked last. What that bounds is the feed and not the
+// instance — the refusal emits `destination.blocked`, and a workspace with a
+// webhook subscribed to it receives the refused destination, defanged.
 func TestEveryBuiltInTierAnswersTheSameWithAFeedOnOffOrErroring(t *testing.T) {
 	// One destination per tier, and the code each must answer with whatever the
 	// feed is doing.
@@ -357,13 +359,16 @@ func TestEveryBuiltInTierAnswersTheSameWithAFeedOnOffOrErroring(t *testing.T) {
 			t.Errorf("[feed on] %s → %q, want %q", tc.name, withGreedy[tc.name], want)
 		}
 	}
-	// The destinations the built-in tiers refused were never sent anywhere,
-	// which is the stronger form of "the feed is not the mechanism".
+	// The destinations the built-in tiers refused never reached the feed, which
+	// is the stronger form of "the feed is not the mechanism". It bounds the
+	// feed and not the instance: the same refusal emits `destination.blocked`,
+	// which carries that destination, defanged, to any webhook a workspace
+	// administrator subscribed to it.
 	for _, host := range []string{"169.254.169.254", "127.0.0.1", "metadata.google.internal",
 		"bit.ly", "listed.example", "xn--80ak6aa92e.com"} {
 		if greedy.sawHost(host) {
 			t.Errorf("%s was sent to the feed, but a built-in tier had already refused it; "+
-				"a destination refused locally must never leave the box", host)
+				"a destination refused locally must never reach the feed", host)
 		}
 	}
 }

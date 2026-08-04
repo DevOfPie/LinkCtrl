@@ -210,19 +210,35 @@ Four constraints the implementation inherits rather than chooses:
   promises. Off by default, disclosed plainly when on, and never the mechanism the
   built-in tiers depend on.
 
-  [M32](docs/build-notes/phase-details/m32.md) shipped that exception, so the
-  promise is now stated precisely rather than left to be read as absolute. What
-  is true of every instance: **no destination is sent anywhere unless the
-  operator sets `LINKCTRL_FEED_URL`, and the shipped default is unset.** What is
-  true once they do: the destination — and nothing else, no account, no
-  workspace, no instance name — is sent to the named feed on every link create,
-  link update, root-redirect change and dispute filing. Never when a visitor
-  follows a link, and existing links are not re-checked in the background.
+  [M32](docs/build-notes/phase-details/m32.md) shipped that exception and
+  [M42](docs/build-notes/phase-details/m42.md) added a second one, so the promise
+  is stated as **two named channels** rather than as one. No other part of the
+  product sends a destination anywhere; the nearest thing to a third is the
+  dispute-outcome email, which needs a mailer and carries the disputed *host*,
+  defanged, to the address that filed the dispute. Both channels are silent on a
+  fresh instance, and only one of them is the operator's to keep that way.
 
-  Four bounds hold whatever the operator configures. The feed is asked **last**,
-  only about destinations every built-in tier already accepted, so no built-in
-  refusal is ever sent out and none of them changes answer with a feed on, off or
-  erroring. A feed that does not answer **fails open** to those tiers and
+  **The reputation feed is the operator's.** No destination reaches it unless the
+  operator sets `LINKCTRL_FEED_URL`, and the shipped default is unset. Once they
+  do: the destination — and nothing else, no account, no workspace, no instance
+  name — is sent to the named feed on every link create, link update,
+  root-redirect change and dispute filing. Never when a visitor follows a link,
+  and existing links are not re-checked in the background.
+
+  **Outbound webhooks are a workspace administrator's**, and no operator setting
+  reaches them: anybody holding `webhooks.write` — the owner and admin roles,
+  never an API key — registers a URL of their own choosing and this instance POSTs
+  that workspace's events to it. The five link-lifecycle events carry the link's
+  destination **as typed** in `data.url`, and `destination.blocked` carries the
+  attempted destination **defanged**. It reaches one workspace's own links and no
+  further, and the only lever over it is who holds `webhooks.write`.
+
+  Four bounds hold the feed whatever the operator configures. It is asked
+  **last**, only about destinations every built-in tier already accepted, so no
+  built-in refusal ever reaches the feed and none of them changes answer with a
+  feed on, off or erroring — a bound on the feed and not on the instance, because
+  that refusal is itself a `destination.blocked` event a subscribed webhook
+  receives. A feed that does not answer **fails open** to those tiers and
   increments `linkctrl_destination_feed_checks_total{result="error"}`. Its
   verdicts are low-confidence: disputable, and the instance owner can overrule one
   from the review queue, which also stops that host being sent again. And the

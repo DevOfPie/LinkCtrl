@@ -204,17 +204,37 @@ that permits a destination. Overruling one of those is a code change. On an
 instance where untrusted people can create links, assume they will.
 
 **Reputation feeds, if you switch one on, send your users' destinations to a
-third party.** `LINKCTRL_FEED_URL` is unset by default and that is the whole of
-the promise that no destination leaves the box; setting it is the exception, and
-it is one you are making on behalf of people who are not you. What then leaves is
-the destination URL and nothing else — no account, no address, no workspace, no
-instance name — over `https`, to the endpoint you named, when a link is created
-or edited, when the root redirect is set, and when a refusal is disputed. Never
-on the redirect path, and existing links are not re-checked.
+third party.** `LINKCTRL_FEED_URL` is unset by default; setting it is the
+exception, and it is one you are making on behalf of people who are not you. What
+then leaves is the destination URL and nothing else — no account, no address, no
+workspace, no instance name — over `https`, to the endpoint you named, when a
+link is created or edited, when the root redirect is set, and when a refusal is
+disputed. Never on the redirect path, and existing links are not re-checked.
 
-Four bounds hold. The feed is asked **last**, so a destination any built-in tier
-refuses is never sent anywhere and no built-in answer changes with a feed on, off
-or erroring. A feed that does not answer **fails open** and increments
+**A feed is not the only way a destination leaves this instance — it is the only
+way you decide.** Outbound webhooks are the second channel, and they are a
+workspace's feature rather than an operator's: no environment variable turns them
+off, and anybody holding `webhooks.write` — the owner and admin roles, never an
+API key — registers a URL of their own choosing and receives their workspace's
+events at it. `link.created`, `link.updated`, `link.archived`, `link.restored`
+and `link.deleted` carry the link's destination **as typed**, in `data.url`;
+`destination.blocked` carries the attempted destination **defanged**; and
+`automation.fired` carries, as a subject label, an alias or a defanged host and
+never a destination in full. That is all seven events, so the list is what leaves
+and not an example of it. The reach is one workspace's own links and no further,
+the URL itself is checked twice before anything is sent to it (*Outbound
+webhooks*, above), and every registration is audited — but the lever you hold
+over it is who has `webhooks.write`, not a setting. Size that the way you would size the feed: an
+admin registering a webhook is deciding, on behalf of everybody who creates a
+link in that workspace, that their destinations go to a host of that admin's
+choosing.
+
+Four bounds hold the feed. It is asked **last**, so a destination any built-in
+tier refuses never reaches it and no built-in answer changes with a feed on, off
+or erroring — which bounds the feed and not the instance, because that refusal is
+itself a `destination.blocked` event, and a workspace with a webhook subscribed
+to it receives the refused destination, defanged. A feed that does not answer
+**fails open** and increments
 `linkctrl_destination_feed_checks_total{result="error"}` — which means a feed
 that silently stopped working looks exactly like no feed at all, so alert on that
 counter if you depend on one. Its verdicts are **low confidence**: disputable,
