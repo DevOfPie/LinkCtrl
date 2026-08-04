@@ -1188,3 +1188,78 @@ func seedBareLink(t *testing.T, pool *pgxpool.Pool, authSvc *auth.Service) (link
 	}
 	return linkID, workspaceID
 }
+
+// TestAGateQueryIsBoundedByItsOwnBudget is F96.
+//
+// Every query in `internal/gate` runs on the redirect path and none of them was
+// bounded by anything. `RequestTimeout` wraps the application handler only; the
+// redirect tree is mounted bare on purpose, because `http.TimeoutHandler` buffers
+// the response and would break the `Location` write and swallow the pages this
+// file asserts. There is no `statement_timeout` in this tree and the pool sets
+// only connect and lifetime limits. So a gate query that could not proceed held a
+// connection for as long as Postgres would let it, while requests queued behind
+// it — the inverse of the two-pool separation the redirect path exists to have.
+//
+// Driven with a table lock rather than with a slow query, because the thing being
+// asserted is that the *caller* gives up, and a lock is the one way to make a
+// fast query take arbitrarily long without changing it.
+func TestAGateQueryIsBoundedByItsOwnBudget(t *testing.T) {
+	pool := newDB(t)
+	const budget = 200 * time.Millisecond
+	svc := gate.NewService(pool, gate.Config{DBTimeout: budget})
+
+	tx, err := pool.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if _, err := tx.Exec(t.Context(),
+		`LOCK TABLE link_click_budget IN ACCESS EXCLUSIVE MODE`); err != nil {
+		t.Fatalf("lock the budget table: %v", err)
+	}
+
+	start := time.Now()
+	_, err = svc.Consume(t.Context(), uuid.New(), uuid.New(), 1)
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatal("Consume succeeded against a locked table")
+	}
+	// Generous, because this asserts that something gave up rather than how
+	// quickly: an unbounded call waits for the transaction above, which this test
+	// only ends by returning.
+	if elapsed > 10*budget {
+		t.Errorf("Consume took %v against a budget of %v; the gate's queries are "+
+			"not bounded by anything", elapsed, budget)
+	}
+}
+
+// TestAClientGoingAwayDoesNotSpendAClick is the half of F96's bound that had to
+// be got right rather than merely applied.
+//
+// The resolver detaches its query from the request with `context.WithoutCancel`,
+// because a singleflight leader's result is shared with every waiter and one
+// abandoned tab must not fail the rest. Nothing in the gate service is shared, and
+// copying that shape onto `Consume` would mean a visitor who hit Stop had still
+// spent a one-time link's only click — on a redirect nobody received.
+func TestAClientGoingAwayDoesNotSpendAClick(t *testing.T) {
+	f := newGates(t, 0)
+	f.setupOwner()
+	alias, id := f.createGated(map[string]any{
+		"url": "https://example.com/once", "alias": "gonequick", "one_time": true,
+	})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := f.gates.Consume(ctx, id, f.workspaceID(), 1); err == nil {
+		t.Error("Consume spent a click for a caller whose context had already been " +
+			"cancelled; the budget's bound is detached from the request")
+	}
+
+	// The proof is not the error, it is that the link is still followable.
+	resp := f.visit("/" + alias)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("the one-time link answered %d after a cancelled consume, want 302 — "+
+			"its only click was spent by a request that went nowhere", resp.StatusCode)
+	}
+}

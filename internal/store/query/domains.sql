@@ -22,8 +22,20 @@
 -- verification attempt, so the page that tells somebody which DNS record to
 -- publish can do it the moment they register — the alternative is a page that
 -- asks them to come back.
-INSERT INTO domains (id, organization_id, workspace_id, hostname, verification_token)
-VALUES ($1, $2, $3, $4, $5)
+-- **The bot policy is inherited from the instance default (F89).** It is
+-- instance-wide, and a hostname registered after the operator turned blocking on
+-- would otherwise start at the column defaults and reopen the hole propagating
+-- the setting closes. Read from the default row rather than passed in, so there
+-- is no argument a caller can get wrong and no second place the two settings can
+-- disagree. Both subqueries read the same row; if the seeded default were ever
+-- missing they COALESCE to false together, which is a state the CHECK accepts.
+INSERT INTO domains (id, organization_id, workspace_id, hostname, verification_token,
+                     block_bots, block_bots_enforced)
+VALUES ($1, $2, $3, $4, $5,
+        COALESCE((SELECT block_bots
+                    FROM domains WHERE is_default AND deleted_at IS NULL), false),
+        COALESCE((SELECT block_bots_enforced
+                    FROM domains WHERE is_default AND deleted_at IS NULL), false))
 RETURNING *;
 
 -- name: GetDomainByID :one
@@ -133,8 +145,9 @@ SELECT count(*) FROM links WHERE domain_id = $1 AND deleted_at IS NULL;
 -- serves through the ordinary link host, and including it here would give one
 -- hostname two routes into the redirect tree.
 --
--- Hostnames are lowered here rather than at lookup, so the map is keyed the way
--- config.CanonicalHost spells a Host header.
+-- Hostnames are lowered here as well as at lookup. `HostCache.Reload` runs each
+-- one through `config.HostOnly`, which is what a Host header is spelled with, so
+-- the two sides cannot disagree even if this SELECT stops lowering.
 SELECT id, lower(hostname) AS hostname, root_redirect_url, ssl_status
 FROM domains
 WHERE verified_at IS NOT NULL

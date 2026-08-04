@@ -814,6 +814,98 @@ Twenty-two cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%,
 100%, **100%** and **99.405%** under 20ms — the last of those being the gated
 configuration, which is a different path rather than a regression in this one.
 
+### Re-measured for M45's redirect findings (2026-08-04)
+
+Four findings from [M45](build-notes/phase-details/m45.md)'s triage — F87, F96,
+F88 and F89 — and three of them touch the redirect path, so the inherited rule
+applies and this is a k6 run rather than a note. **Both columns were re-taken**,
+because the one change that adds instructions to a hot call adds them to a gated
+one.
+
+**What actually changed on each path, so the numbers are read against
+something.** On the **ungated** path: nothing at all. `challengePending` is one
+boolean expression and it is only reached from inside `split`, which is only
+reached by a link that carries arms; `config.CanonicalHost` gained a
+`TrimSuffix`, and it runs once per request in the host router rather than per
+alias. On the **gated** path: every `internal/gate` query is now wrapped in
+`context.WithTimeout` at `REDIRECT_TIMEOUT` — one allocation and one timer per
+call, on calls that were already making a database round trip. No query was added
+and none was removed.
+
+| | Target | **Ungated** | **Every link click-limited** |
+| --- | --- | --- | --- |
+| Cached redirect, server-side | p99 < 20ms | **100% of 239,999 under 20ms**; 239,998 of them under 0.5ms | 99.826% of 240,001 under 20ms; 99.513% under 10ms; 92.895% under 5ms; 39.350% under 2.5ms; **0% under 1ms** |
+| Cached redirect, generator-side | — | avg **87.33µs**, median 83.64µs, p(90) 104.93µs, p(95) 113.17µs, max 6.49ms, min 37.17µs | avg **3.24ms**, median 3.11ms, p(90) 4.70ms, p(95) 5.55ms, max 48.51ms, min 1.14ms |
+| Sustained rate | 2,000 rps for 2m | 2,000.0 rps, 239,999 requests, zero failures, no dropped iterations | 1,999.9 rps, 240,001 requests, zero failures, no dropped iterations |
+| Dataset | 100k links, 5M events | 100,000 links, 5,000,000 events, freshly seeded | same |
+| Cache mix | hits only | 239,999 memory, 0 redis, 0 database | 240,001 memory, 0 redis, 0 database |
+| Redirect pool | — | 0 acquire waits | 0 acquire waits |
+
+**The ungated column is the SLO and it did not move.** 87.33µs against
+[M41](#re-measured-for-m41-2026-08-03)'s 87.04µs,
+[M40](#re-measured-for-m40-2026-08-03)'s 87.44µs and
+[M35's reopening](#re-measured-for-m35s-reopening-2026-08-04)'s 92.76µs, on the
+same host and a dataset seeded the same way — inside the run-to-run spread this
+document has recorded between identical configurations since its first section.
+
+**The gated column is the fourth measurement of the durable-counter cost, and it
+is the best of the four.** 99.826% under 20ms here, against 99.743% for
+[M35](#re-measured-for-m35-2026-08-03)'s own gated run, 99.505% for
+[M36](#re-measured-for-m36-2026-08-03)'s sequential column and 99.405% for M35's
+reopening — the same table, the same `INSERT … ON CONFLICT DO UPDATE`, the same
+5,000 hot aliases. The median is 3.11ms against 3.38ms, 3.09ms and 3.12ms. It is
+also the first gated run to hold the offered rate: zero dropped iterations
+against the reopening's 99. **That is not evidence the timeout made anything
+faster** — four measurements of one mechanism landing between 99.4% and 99.83% is
+the spread of that mechanism — and the honest reading is that a per-call
+`WithTimeout` on a query already costing three milliseconds does not show up.
+
+#### What this run verified live, and what it could not
+
+**F96's bound, on the built image, because a deadline that has never been reached
+is a deadline nobody has seen work.** `ld1` was given a click budget, then
+`link_click_budget` was locked `ACCESS EXCLUSIVE` in a transaction held open for
+twelve seconds. During the lock the link answered **503 in 251ms**, twice, against
+`REDIRECT_TIMEOUT=250ms`; unblocked it answers 302 in 2–9ms. On the build this
+replaces, that request would have waited out the lock holding a connection from
+the pool. The 503 rather than a 410 is `budgetGate`'s deliberate direction: a
+database that cannot answer must not retire a live link.
+
+**F87, on the same image.** `/f87live` — a two-arm sequential split behind a
+password — answered **200** to the first GET, **303 to `…/arm1`** to the POST that
+verified the password, **200** to the second GET and **303 to `…/arm2`** to its
+POST, with `link_click_budget.rotation` at **2** after two visits. Every one of
+those four values is what the fix produced: before it, both visits were served
+`arm2`, `arm1` was unreachable at any point in the link's life, and the rotation
+read 4.
+
+**F88 and F89's custom-domain halves were not verified live**, for the reason
+M35's reopening gives about its own: both need a *verified* custom hostname, which
+needs a DNS TXT record this instance cannot publish for itself. They are covered
+by `TestAHostSpellingThatDoesNotFoldStillReachesItsOwnHostname` — which builds a
+**single-host** fixture for the purpose, because that is the deployment where the
+failure is open rather than closed — `TestAConfiguredHostnameFoldsItsTrailingDot`,
+`TestBotBlockingReachesEveryHostname` and
+`TestAHostnameRegisteredAfterEnforcementInheritsIt`, all sabotage-verified.
+
+**The password gate itself**, for the reason M35's own section gives: it is an
+argon2id derivation on a POST that k6 cannot drive against 5,000 aliases without
+5,000 passwords. F87's live check above is one visit, not a load measurement, and
+what it establishes is the ordering rather than the cost.
+
+Taken on image `sha256:8a1188da3a43…` (`linkctrl:test`, built 2026-08-04 from the
+M45 group-5 working tree at `v0.1.0-95-g2e0a661-dirty`), rebuilt and recreated
+from the tree immediately before the runs, against a freshly seeded
+`make seed-slo` dataset. Both cache tiers were emptied and the container restarted
+before each column. Same host as
+[M35](#re-measured-for-m35-2026-08-03) onward.
+
+Twenty-four cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%,
+100%, 100%, 100%, 100%, 100%, 99.743%, 100%, 100%, 99.505%, 100%, 100%, 100%,
+100%, 100%, 99.405%, **100%** and **99.826%** under 20ms — the last of those being
+the gated configuration, which is a different path rather than a regression in
+this one.
+
 ## Reproducing it
 
 ```sh

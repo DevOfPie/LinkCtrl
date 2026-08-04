@@ -19,6 +19,7 @@ import (
 
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
+	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/gate"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
@@ -125,8 +126,46 @@ type domainFixture struct {
 
 func newDomains(t *testing.T) *domainFixture {
 	t.Helper()
+	return newDomainsOn(t, splitConfig(t))
+}
+
+// newDomainsSingleHost wires the same tree on a deployment where the dashboard
+// and short links share one hostname.
+//
+// **The fall-through arm is what differs and it is the whole of F88.** On a
+// split-host instance a Host header that matches neither configured name reaches
+// the ops mux and gets a 404; on a single-host instance it reaches the combined
+// mux — the dashboard, the API, and aliases resolved against the *instance
+// default* domain. So a verified hostname that misses the host cache fails closed
+// on one deployment and wide open on the other, and only this fixture can show
+// the second.
+func newDomainsSingleHost(t *testing.T) *domainFixture {
+	t.Helper()
+	for k, v := range map[string]string{
+		"LINKCTRL_APP_ENV":        "development",
+		"LINKCTRL_BASE_URL":       "http://" + linkHost,
+		"LINKCTRL_APP_BASE_URL":   "",
+		"LINKCTRL_LINK_BASE_URL":  "",
+		"LINKCTRL_API_KEY_PEPPER": strings.Repeat("p", 48),
+		"LINKCTRL_DATABASE_URL":   "postgres://u:p@127.0.0.1:5432/linkctrl?sslmode=disable",
+		"LINKCTRL_SECURE_COOKIES": "false",
+		"LINKCTRL_SIGNUP_MODE":    "open",
+	} {
+		t.Setenv(k, v)
+	}
+	cfg, err := config.Parse()
+	if err != nil {
+		t.Fatalf("parse single-host configuration: %v", err)
+	}
+	if cfg.SplitHosts() {
+		t.Fatal("configuration registered as split-host; the rest of this test proves nothing")
+	}
+	return newDomainsOn(t, cfg)
+}
+
+func newDomainsOn(t *testing.T, cfg config.Config) *domainFixture {
+	t.Helper()
 	pool := newDB(t)
-	cfg := splitConfig(t)
 	zone := newStubZone()
 
 	authSvc := auth.NewService(pool, auth.ServiceConfig{
@@ -143,7 +182,7 @@ func newDomains(t *testing.T) *domainFixture {
 	rootRedirect := &httpx.RootRedirect{Status: http.StatusFound}
 	linkSvc := link.NewService(pool, link.Config{
 		Policy: link.DefaultDestinationPolicy(), BaseURL: cfg.LinkOrigin(), Cache: resolver,
-		SplitHosts: true, RootCache: rootRedirect,
+		SplitHosts: cfg.SplitHosts(), RootCache: rootRedirect,
 		Hasher: authSvc.Hasher(), Gates: gateSvc,
 		DNS: zone,
 		// Local only: one process, so the broadcast half has nothing to reach.
@@ -216,6 +255,26 @@ func (f *domainFixture) get(host, path string) *http.Response {
 	return resp
 }
 
+// statusAs asks a host for a path as a particular client, which for these tests
+// means with or without a user agent Classify reads as a bot.
+func (f *domainFixture) statusAs(host, path, ua string) int {
+	f.t.Helper()
+	req, err := http.NewRequestWithContext(f.t.Context(), http.MethodGet, f.server.URL+path, nil)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	req.Host = host
+	if ua != "" {
+		req.Header.Set("User-Agent", ua)
+	}
+	resp, err := f.client.Do(req)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	return resp.StatusCode
+}
+
 // register adds a hostname and returns it, unverified.
 func (f *domainFixture) register(hostname string) *link.Domain {
 	f.t.Helper()
@@ -255,6 +314,166 @@ func (f *domainFixture) createOn(domainID *uuid.UUID, alias, url string) *domain
 		f.t.Fatalf("create %s: %v", alias, err)
 	}
 	return l
+}
+
+// TestAHostSpellingThatDoesNotFoldStillReachesItsOwnHostname is F88, on the
+// deployment where the failure is open rather than closed.
+//
+// A `Host` header that names a verified hostname in a spelling the cache did not
+// fold missed it and fell through — and on a single-host instance the thing
+// behind the fall-through is `registerOps + registerApp + registerRedirect`. So
+// the customer's own hostname answered with the dashboard, the API, and aliases
+// resolved against the **instance default** domain: another workspace's link,
+// served on a name its owner verified.
+//
+// Two spellings, because they miss for two different reasons and a fix for one
+// is not a fix for the other. The trailing dot is the fully qualified name and
+// `CanonicalHost` never trimmed it. A non-default port survives `CanonicalHost`
+// on purpose — `SplitHosts()` compares two configured origins through it — so the
+// verified-hostname cache needs `HostOnly`, which is the same normalization with
+// the port dropped as well.
+func TestAHostSpellingThatDoesNotFoldStillReachesItsOwnHostname(t *testing.T) {
+	f := newDomainsSingleHost(t)
+	d := f.verify(f.register(customHost))
+	if err := f.hosts.Reload(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	// The same alias on both namespaces, so a request answered by the wrong tree
+	// is answered with a destination rather than a 404 — which is what makes
+	// "serves the default domain's aliases" observable instead of inferred.
+	f.createOn(&d.ID, "promo", "https://example.com/the-customers")
+	// The instance default named explicitly: a nil domain resolves to the
+	// *workspace's* default, which D71 makes the hostname just verified above.
+	f.createOn(&f.defaultDomain, "promo", "https://example.com/the-instances")
+
+	for _, spelling := range []string{
+		customHost,
+		customHost + ".",
+		customHost + ":8080",
+		customHost + ".:8080",
+		strings.ToUpper(customHost) + ".",
+	} {
+		t.Run(spelling, func(t *testing.T) {
+			resp := f.get(spelling, "/promo")
+			if resp.StatusCode != http.StatusFound {
+				t.Fatalf("GET %s/promo = %d, want 302", spelling, resp.StatusCode)
+			}
+			if got := resp.Header.Get("Location"); got != "https://example.com/the-customers" {
+				t.Errorf("Host %q resolved /promo to %q; the instance default's alias "+
+					"answered on a customer's verified hostname", spelling, got)
+			}
+
+			// And the management surface is still not offered a second origin.
+			// A customer's hostname serves links and nothing else, whichever way
+			// the name is spelled.
+			if resp := f.get(spelling, "/links"); resp.StatusCode != http.StatusNotFound {
+				t.Errorf("Host %q served /links with %d; a customer's hostname must "+
+					"not serve the dashboard", spelling, resp.StatusCode)
+			}
+		})
+	}
+}
+
+// TestAConfiguredHostnameFoldsItsTrailingDot is the other half of F88, and it is
+// F72's own case: on a split-host instance the miss lands on the ops mux, so the
+// fully qualified spelling of the instance's *own* link host was answered 404.
+func TestAConfiguredHostnameFoldsItsTrailingDot(t *testing.T) {
+	f := newDomains(t)
+	f.createOn(&f.defaultDomain, "folded", "https://example.com/folded")
+
+	for _, spelling := range []string{linkHost, linkHost + "."} {
+		resp := f.get(spelling, "/folded")
+		if resp.StatusCode != http.StatusFound {
+			t.Fatalf("GET %s/folded = %d, want 302 — the fully qualified spelling "+
+				"of the configured link host reached the ops mux", spelling, resp.StatusCode)
+		}
+		if got := resp.Header.Get("Location"); got != "https://example.com/folded" {
+			t.Errorf("Host %q resolved /folded to %q", spelling, got)
+		}
+	}
+}
+
+// TestBotBlockingReachesEveryHostname is F89.
+//
+// The operator's bot policy is instance-wide — Plan.md says so, and the domain
+// settings page and the audit record both say "every link on the instance". It
+// was written to the `is_default` row alone, and `ResolveAliasForRedirect` reads
+// the policy from the link's *own* domain, so no link on a verified custom
+// hostname was ever blocked whatever the operator set. D71 makes a workspace's
+// verified hostname the default for its new links, so the hole opened without
+// anybody choosing it.
+func TestBotBlockingReachesEveryHostname(t *testing.T) {
+	f := newDomains(t)
+	d := f.verify(f.register(customHost))
+	if err := f.hosts.Reload(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	f.createOn(&d.ID, "crawled", "https://example.com/custom")
+	f.createOn(&f.defaultDomain, "crawled", "https://example.com/default")
+
+	// Enforced, which is the strongest form: no link may opt out of it.
+	if _, err := f.links.SetBotBlocking(t.Context(), f.owner, true, true); err != nil {
+		t.Fatalf("enforce bot blocking: %v", err)
+	}
+
+	for _, host := range []string{customHost, linkHost} {
+		if got := f.statusAs(host, "/crawled", botUA); got != http.StatusForbidden {
+			t.Errorf("a bot got %d from %s/crawled after blocking was enforced "+
+				"instance-wide, want 403", got, host)
+		}
+		if got := f.statusAs(host, "/crawled", humanUA); got != http.StatusFound {
+			t.Errorf("an ordinary visitor got %d from %s/crawled, want 302", got, host)
+		}
+	}
+
+	// And off again, on every hostname — which also asserts the invalidation,
+	// because the answer above is cached in a snapshot that carries the policy.
+	if _, err := f.links.SetBotBlocking(t.Context(), f.owner, false, false); err != nil {
+		t.Fatalf("turn bot blocking off: %v", err)
+	}
+	for _, host := range []string{customHost, linkHost} {
+		if got := f.statusAs(host, "/crawled", botUA); got != http.StatusFound {
+			t.Errorf("a bot got %d from %s/crawled after blocking was turned off, "+
+				"want 302 — the cached snapshot still carries the old policy", got, host)
+		}
+	}
+}
+
+// TestAHostnameRegisteredAfterEnforcementInheritsIt is the other way the hole
+// reopens: propagating the setting to the rows that exist says nothing about the
+// rows registered next, and registering a hostname is a workspace's own act.
+func TestAHostnameRegisteredAfterEnforcementInheritsIt(t *testing.T) {
+	f := newDomains(t)
+	if _, err := f.links.SetBotBlocking(t.Context(), f.owner, true, true); err != nil {
+		t.Fatalf("enforce bot blocking: %v", err)
+	}
+
+	d := f.verify(f.register(customHost))
+	if err := f.hosts.Reload(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	f.createOn(&d.ID, "late", "https://example.com/late")
+
+	if got := f.statusAs(customHost, "/late", botUA); got != http.StatusForbidden {
+		t.Errorf("a bot got %d from a hostname registered after blocking was "+
+			"enforced, want 403", got)
+	}
+
+	// The API's own refusal reads the same row, so the two surfaces must agree
+	// that this link cannot opt out.
+	l := f.createOn(&d.ID, "late-two", "https://example.com/late-two")
+	off := domain.BotAllow
+	_, err := f.links.Update(t.Context(), f.owner, l.ID, link.UpdateInput{BotBlocking: &off})
+	var ve domain.ValidationErrors
+	if !errors.As(err, &ve) {
+		t.Fatalf("PATCH bot_blocking=off on an enforced custom hostname returned %v, "+
+			"want a refusal", err)
+	}
+	if !strings.Contains(ve[0].Message, customHost) {
+		t.Errorf("the refusal named %q rather than the hostname the link is served "+
+			"on", ve[0].Message)
+	}
 }
 
 // TestAnUnverifiedHostServesNothing is the milestone's whole security claim.

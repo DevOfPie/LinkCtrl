@@ -634,22 +634,74 @@ func (c Config) SplitHosts() bool {
 }
 
 // CanonicalHost normalizes a Host header or a URL host for comparison:
-// lowercased, with an explicit default HTTP(S) port removed.
+// lowercased, with the DNS root dot folded and an explicit default HTTP(S) port
+// removed.
 //
 // The port matters because the two sides of the comparison come from different
 // places. The configured value is written by an operator ("manage.example.com")
 // and the request value is written by a proxy, which may or may not append
 // ":443". Comparing them raw makes the router's behavior depend on that choice.
+//
+// **A non-default port is kept, deliberately.** SplitHosts compares the app and
+// link hosts through this function, and an instance that serves the dashboard and
+// short links on one name and two ports is split-host — stripping the port
+// unconditionally would collapse it to single-host and take the two trees down to
+// one. HostOnly is the spelling for the other question.
+//
+// **The trailing dot is folded, and it was not (F72, F88).** "lnk.example.com."
+// is the fully qualified spelling of "lnk.example.com" and names the same host;
+// only storage folded it. `domain.ValidateHostname` drops it before a hostname is
+// written and the unique index is on `lower(hostname)`, so a stored name can
+// never carry one — which made the mismatch entirely request-side, and made every
+// tier that reads a Host header miss together: the split-host router answered its
+// ops-only 404, and the single-host mux served a customer's verified hostname the
+// dashboard, the API and the *default* domain's aliases. It is reachable over
+// HTTPS because SNI carries no trailing dot (RFC 6066), so the handshake completes
+// on the certificate for the folded name and Go passes r.Host through unchanged.
 func CanonicalHost(host string) string {
 	host = strings.ToLower(strings.TrimSpace(host))
 	h, port, err := net.SplitHostPort(host)
 	if err != nil {
-		return host
+		// No port, so the whole string is the host and the dot is at its end.
+		return strings.TrimSuffix(host, ".")
 	}
+	h = strings.TrimSuffix(h, ".")
 	if port != "80" && port != "443" {
-		return host
+		// JoinHostPort re-adds the brackets an IPv6 literal needs.
+		return net.JoinHostPort(h, port)
 	}
 	// SplitHostPort strips the brackets an IPv6 literal needs to stay parseable.
+	if strings.Contains(h, ":") {
+		return "[" + h + "]"
+	}
+	return h
+}
+
+// HostOnly is CanonicalHost with any port removed as well.
+//
+// **The two are different questions and F88 is what happens when one function
+// answers both.** CanonicalHost asks "is this the host this instance was
+// configured with", where the port is part of the configured value and dropping
+// it would merge two deployments into one. HostOnly asks "is this a verified
+// custom hostname", where there is no port to compare against: `domains.hostname`
+// is stored bare, it is validated bare, and the hostname is served on whichever
+// port this instance happens to listen on. Keying the verified-host cache through
+// CanonicalHost meant `Host: go.customer.example:8080` missed a hostname this
+// instance is verified to serve, fell through to the tree behind it, and — on a
+// single-host deployment — was answered by the dashboard, the API and the default
+// domain's aliases.
+//
+// It is deliberately *wider* than CanonicalHost rather than differently spelled:
+// every host CanonicalHost matches, this matches too. That direction is the safe
+// one. The narrower spelling is what fails silently, because a name normalized
+// out of the set stops being served while every page goes on saying it is
+// verified.
+func HostOnly(host string) string {
+	host = CanonicalHost(host)
+	h, _, err := net.SplitHostPort(host)
+	if err != nil {
+		return host
+	}
 	if strings.Contains(h, ":") {
 		return "[" + h + "]"
 	}

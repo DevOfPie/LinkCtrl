@@ -24,6 +24,17 @@ func TestCanonicalHostNormalizesForComparison(t *testing.T) {
 		{"ipv6 with non-default port", "[::1]:8080", "[::1]:8080"},
 		{"bare ipv6", "[::1]", "[::1]"},
 		{"empty", "", ""},
+		// F72, F88. The fully qualified spelling names the same host, and
+		// storage already folds it — `domain.ValidateHostname` drops the dot and
+		// the unique index is on `lower(hostname)` — so a stored name can never
+		// carry one and the mismatch was entirely request-side. Reachable over
+		// HTTPS because SNI carries no trailing dot (RFC 6066).
+		{"trailing dot", "lnk.example.com.", "lnk.example.com"},
+		{"trailing dot and default port", "lnk.example.com.:443", "lnk.example.com"},
+		// The half a lone TrimSuffix on the whole string would miss, because the
+		// dot is not at the end of the string when a port follows it.
+		{"trailing dot and non-default port", "lnk.example.com.:8080", "lnk.example.com:8080"},
+		{"trailing dot and case", "LNK.Example.COM.", "lnk.example.com"},
 	}
 
 	for _, tc := range cases {
@@ -32,6 +43,50 @@ func TestCanonicalHostNormalizesForComparison(t *testing.T) {
 				t.Errorf("CanonicalHost(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
+	}
+}
+
+// HostOnly answers the other question, and F88 is what happened while one
+// function answered both: the verified-hostname cache was keyed through
+// CanonicalHost, which keeps a non-default port, so a Host header carrying one
+// missed a hostname this instance is verified to serve.
+func TestHostOnlyDropsEveryPort(t *testing.T) {
+	cases := []struct {
+		name, in, want string
+	}{
+		{"no port", "go.customer.example", "go.customer.example"},
+		{"default https port", "go.customer.example:443", "go.customer.example"},
+		{"non-default port", "go.customer.example:8080", "go.customer.example"},
+		{"trailing dot", "go.customer.example.", "go.customer.example"},
+		{"trailing dot and non-default port", "go.customer.example.:8080", "go.customer.example"},
+		{"uppercase and port", "GO.Customer.Example:8443", "go.customer.example"},
+		{"ipv6 with non-default port", "[::1]:8080", "[::1]"},
+		{"bare ipv6", "[::1]", "[::1]"},
+		{"empty", "", ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := HostOnly(tc.in); got != tc.want {
+				t.Errorf("HostOnly(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// The two must not diverge in the direction that fails silently: every host
+// CanonicalHost matches, HostOnly must match too. The reverse is the point of
+// having two functions — CanonicalHost keeps the port SplitHosts compares.
+func TestHostOnlyIsWiderThanCanonicalHost(t *testing.T) {
+	for _, in := range []string{
+		"lnk.example.com", "LNK.example.com.", "lnk.example.com:443",
+		"lnk.example.com:8080", "[::1]:443", "[::1]:8080", "",
+	} {
+		if got, want := HostOnly(in), HostOnly(CanonicalHost(in)); got != want {
+			t.Errorf("HostOnly(%q) = %q but HostOnly(CanonicalHost(%q)) = %q; "+
+				"a host one of them folds and the other does not is a host served "+
+				"by one router and not the other", in, got, in, want)
+		}
 	}
 }
 

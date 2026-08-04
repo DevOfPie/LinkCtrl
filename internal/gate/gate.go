@@ -41,6 +41,9 @@ type Service struct {
 	keys   map[uuid.UUID]cachedSecret
 	keyTTL time.Duration
 	now    func() time.Time
+
+	// dbTimeout bounds every query below. See DefaultDBTimeout.
+	dbTimeout time.Duration
 }
 
 type cachedSecret struct {
@@ -58,12 +61,40 @@ type cachedSecret struct {
 // rely on having happened.
 const DefaultSecretTTL = time.Minute
 
+// DefaultDBTimeout bounds one gate query when the caller configures nothing.
+//
+// **Every query in this file is on the redirect path, and until F96 none of them
+// was bounded by anything.** `RequestTimeout` wraps the application handler only;
+// the redirect tree is mounted bare, deliberately, because `http.TimeoutHandler`
+// buffers the response and would break the `Location` write and swallow the
+// challenge page. There is no `statement_timeout` anywhere in this tree, and the
+// pool sets connect and lifetime limits rather than per-query ones. So a query
+// that stalled ran for as long as Postgres let it, holding a connection while
+// requests queued behind it.
+//
+// The bound is per call and it lives here rather than around the handler, which
+// is the shape `redirect.Resolver` already uses one package over — for the reason
+// stated there: a query still running after the budget is not going to produce a
+// useful answer, it is going to hold a connection while more requests queue. The
+// number matches `REDIRECT_TIMEOUT`, which the resolver takes for the same path,
+// and `Config.DBTimeout` is how the process passes it in.
+//
+// **None of these bounds detaches from the request context**, and that is the
+// half worth stating. `Consume` writes: a client that disconnects mid-consume
+// must not have spent a one-time link's only click on a redirect nobody
+// received, so the cancellation has to reach Postgres. The resolver detaches
+// because its result is shared by every waiter on a singleflight; nothing here is
+// shared with anyone.
+const DefaultDBTimeout = 250 * time.Millisecond
+
 type Config struct {
 	// Hasher verifies link passwords. Required for the password gate; a nil
 	// Hasher makes every password check fail closed rather than pass.
 	Hasher *auth.Hasher
 	// SecretTTL overrides DefaultSecretTTL.
 	SecretTTL time.Duration
+	// DBTimeout overrides DefaultDBTimeout. The process passes REDIRECT_TIMEOUT.
+	DBTimeout time.Duration
 	// Now overrides the clock, for tests.
 	Now func() time.Time
 }
@@ -72,16 +103,31 @@ func NewService(pool *pgxpool.Pool, cfg Config) *Service {
 	if cfg.SecretTTL <= 0 {
 		cfg.SecretTTL = DefaultSecretTTL
 	}
+	if cfg.DBTimeout <= 0 {
+		cfg.DBTimeout = DefaultDBTimeout
+	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
 	return &Service{
-		q:      dbgen.New(pool),
-		hasher: cfg.Hasher,
-		keys:   make(map[uuid.UUID]cachedSecret),
-		keyTTL: cfg.SecretTTL,
-		now:    cfg.Now,
+		q:         dbgen.New(pool),
+		hasher:    cfg.Hasher,
+		keys:      make(map[uuid.UUID]cachedSecret),
+		keyTTL:    cfg.SecretTTL,
+		now:       cfg.Now,
+		dbTimeout: cfg.DBTimeout,
 	}
+}
+
+// bounded returns ctx with this service's query budget applied.
+//
+// One helper rather than five spellings, so a query added later is bounded by
+// having been written at all — the failure F96 recorded is a call that nobody
+// remembered to wrap, and five copies of the same two lines is how that happens
+// again. `context.WithTimeout` and never `context.WithoutCancel`: see
+// DefaultDBTimeout.
+func (s *Service) bounded(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, s.dbTimeout)
 }
 
 // --- password ---------------------------------------------------------------
@@ -104,6 +150,8 @@ func (s *Service) VerifyPassword(ctx context.Context, linkID uuid.UUID, password
 	if s.hasher == nil {
 		return false, errors.New("gate: no hasher configured")
 	}
+	ctx, cancel := s.bounded(ctx)
+	defer cancel()
 	hash, err := s.q.GetLinkPasswordHash(ctx, linkID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -165,6 +213,8 @@ func ClickLimit(oneTime bool, maxClicks *int64) (int64, bool) {
 // budget that miscounts either sends somebody to a destination they should not
 // see or destroys a link that was fine.
 func (s *Service) Consume(ctx context.Context, linkID, workspaceID uuid.UUID, limit int64) (bool, error) {
+	ctx, cancel := s.bounded(ctx)
+	defer cancel()
 	if _, err := s.q.ConsumeClickBudget(ctx, dbgen.ConsumeClickBudgetParams{
 		LinkID: linkID, WorkspaceID: workspaceID, ClickLimit: limit,
 	}); err != nil {
@@ -191,6 +241,8 @@ func (s *Service) Consume(ctx context.Context, linkID, workspaceID uuid.UUID, li
 // alternative — choosing an arm anyway — would make the order approximate, which
 // is the one property D8 refused.
 func (s *Service) Rotate(ctx context.Context, linkID, workspaceID uuid.UUID) (int64, error) {
+	ctx, cancel := s.bounded(ctx)
+	defer cancel()
 	position, err := s.q.NextVariantRotation(ctx, dbgen.NextVariantRotationParams{
 		LinkID: linkID, WorkspaceID: workspaceID,
 	})
@@ -211,6 +263,8 @@ func (s *Service) Rotate(ctx context.Context, linkID, workspaceID uuid.UUID) (in
 // writing, and a read in front of that write would be a query on every gated
 // redirect for information the write already returns.
 func (s *Service) Budget(ctx context.Context, linkID uuid.UUID) (consumed int64, exhaustedAt *time.Time, err error) {
+	ctx, cancel := s.bounded(ctx)
+	defer cancel()
 	row, err := s.q.GetClickBudget(ctx, linkID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -244,7 +298,9 @@ func (s *Service) Secret(ctx context.Context, workspaceID uuid.UUID) ([]byte, er
 		return entry.secret, nil
 	}
 
-	secret, err := s.q.GetWorkspaceSigningSecret(ctx, workspaceID)
+	qctx, cancel := s.bounded(ctx)
+	defer cancel()
+	secret, err := s.q.GetWorkspaceSigningSecret(qctx, workspaceID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("read signing secret: %w", err)
 	}
@@ -266,6 +322,12 @@ func (s *Service) cacheSecret(workspaceID uuid.UUID, secret []byte, now time.Tim
 // Lazy rather than at workspace creation, so the column stays NULL for every
 // workspace that never signs anything and the presence of a secret is itself a
 // statement that somebody asked for one.
+//
+// **Not bounded by DBTimeout, and it is the only method here that is not.** This
+// is the one call on the management path — minting a key is `links.update`
+// through the API — so it is already inside `RequestTimeout`, and applying the
+// redirect path's budget to it would give a dashboard write a 250ms ceiling it
+// never had.
 func (s *Service) EnsureSecret(ctx context.Context, workspaceID uuid.UUID) ([]byte, error) {
 	candidate, err := NewSecret()
 	if err != nil {

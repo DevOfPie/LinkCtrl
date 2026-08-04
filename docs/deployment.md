@@ -242,6 +242,13 @@ no dashboard, and never a redirect to your own hostname. **That gap is the whole
 point**: without it, anybody who pointed a hostname at your address could serve
 short links on it.
 
+Afterwards, the header is matched by the hostname alone: `go.customer.example`,
+`go.customer.example.` and `go.customer.example:8443` all name the same verified
+hostname and are served identically. That is not true of `BASE_URL`,
+`APP_BASE_URL` and `LINK_BASE_URL` — a non-default port there is part of the
+hostname you configured, so a deployment may serve the dashboard and short links
+on one name and two ports and they stay two trees.
+
 ### Your half: on-demand TLS
 
 Caddy asks LinkCtrl before obtaining a certificate for a name it was not

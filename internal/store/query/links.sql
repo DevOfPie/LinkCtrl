@@ -419,13 +419,34 @@ UPDATE domains
  WHERE is_default AND deleted_at IS NULL
 RETURNING id, hostname, root_redirect_url, block_bots, block_bots_enforced;
 
--- name: SetDefaultDomainBotBlocking :one
+-- name: SetBotBlockingForEveryDomain :many
 -- Both switches at once, because they are one setting with two halves and the
--- CHECK in 01800 refuses the combination that writing them separately would
--- pass through on the way.
-UPDATE domains
-   SET block_bots          = sqlc.arg(block_bots)::boolean,
-       block_bots_enforced = sqlc.arg(block_bots_enforced)::boolean,
-       updated_at          = now()
- WHERE is_default AND deleted_at IS NULL
-RETURNING id, hostname, root_redirect_url, block_bots, block_bots_enforced;
+-- CHECK in 01800 refuses the combination that writing them separately would pass
+-- through on the way. That applies row by row, so a propagation that touched one
+-- column would be refused by the constraint on the way out.
+--
+-- **Every undeleted domain, not only the default (F89).** This was
+-- `WHERE is_default` until M45, which was the whole truth while the instance
+-- default was the only domain there was. M40 added verified custom hostnames and
+-- `ResolveAliasForRedirect` reads the policy from the link's *own* domain row, so
+-- an operator who turned blocking on — even enforced — got no blocking on any
+-- link served on a custom hostname, and any workspace could open that hole for
+-- itself by registering one. Plan.md's "the domain's setting is instance-wide" is
+-- the claim being restored, and this is what makes it true.
+--
+-- **Every updated row comes back, not just the default**, because each one is a
+-- cache invalidation the caller owes: a snapshot carries its domain's policy so
+-- the redirect path needs no second lookup, so every cached alias under every
+-- domain touched here is now wrong. The default is marked rather than sorted for,
+-- since it is the row the settings surfaces read and the hostname they name.
+WITH updated AS (
+    UPDATE domains
+       SET block_bots          = sqlc.arg(block_bots)::boolean,
+           block_bots_enforced = sqlc.arg(block_bots_enforced)::boolean,
+           updated_at          = now()
+     WHERE deleted_at IS NULL
+    RETURNING id, hostname, root_redirect_url, block_bots, block_bots_enforced, is_default
+)
+SELECT id, hostname, root_redirect_url, block_bots, block_bots_enforced, is_default
+FROM updated
+ORDER BY is_default DESC, hostname;

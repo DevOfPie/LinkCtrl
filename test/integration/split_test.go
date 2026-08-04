@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
@@ -207,6 +209,88 @@ func TestSequentialSplitIsStrict(t *testing.T) {
 	if consumed != 0 {
 		t.Errorf("consumed = %d; a rotation must not spend a link's click budget", consumed)
 	}
+}
+
+// TestASequentialSplitBehindAPasswordAdvancesOncePerVisit is F87.
+//
+// The password gate is the only gate that manufactures a guaranteed second
+// request: the challenge exists to be posted back, so one visit arrives as two.
+// While the split ran ahead of it unconditionally, each visit consumed two
+// positions and served the second — so at any even arm count half the arms were
+// served to nobody, and at **two** arms `arms[0]` was served to nobody, ever.
+//
+// Two arms deliberately, which is the count that makes the failure total rather
+// than partial. `TestSequentialSplitIsStrict` uses three, an odd count that masks
+// it: at N=3 the served positions cycle 2, 4, 6 → arms 1, 0, 2, which visits
+// every arm and only gets the order wrong.
+func TestASequentialSplitBehindAPasswordAdvancesOncePerVisit(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("rota-pw", "https://example.com/control")
+
+	urls := []string{"https://example.com/one", "https://example.com/two"}
+	for _, u := range urls {
+		f.addVariant(id, link.CreateVariantInput{
+			Kind: domain.RuleKindSequential, URL: u, Enabled: true,
+		})
+	}
+	const password = "the-link-password"
+	pw := password
+	if _, err := f.links.Update(t.Context(), f.owner, id, link.UpdateInput{Password: &pw}); err != nil {
+		t.Fatalf("put a password on the link: %v", err)
+	}
+
+	// Two visits, each of them a challenge and then the POST that answers it.
+	// The arms must come out in order, starting with the first.
+	for i, want := range urls {
+		resp := f.get("/rota-pw", nil)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("visit %d: the challenge answered %d, want 200", i, resp.StatusCode)
+		}
+		if loc := resp.Header.Get("Location"); loc != "" {
+			t.Fatalf("visit %d: the challenge carried Location %q", i, loc)
+		}
+
+		// The rotation has not moved yet. Asserted between the two halves rather
+		// than only at the end, because a fix that advanced twice and then
+		// rewound would satisfy an end-state check and still hand two visitors
+		// the same arm under concurrency.
+		if got := rotationOf(t, f, id); got != int64(i) {
+			t.Fatalf("visit %d: the rotation is %d after the challenge alone, want %d — "+
+				"a request that is going to be answered with the challenge must not "+
+				"choose an arm", i, got, i)
+		}
+
+		resp = f.postForm("/rota-pw", url.Values{"password": {password}})
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusSeeOther {
+			t.Fatalf("visit %d: the verified password answered %d, want 303", i, resp.StatusCode)
+		}
+		if got := resp.Header.Get("Location"); got != want {
+			t.Errorf("visit %d went to %q, want %q", i, got, want)
+		}
+	}
+
+	if got := rotationOf(t, f, id); got != 2 {
+		t.Errorf("rotation = %d after two visits, want 2", got)
+	}
+}
+
+// rotationOf reads a link's durable rotation counter, which is 0 before the
+// first arm is chosen because the row does not exist yet.
+func rotationOf(t *testing.T, f *ruleFixture, id uuid.UUID) int64 {
+	t.Helper()
+	var rotation int64
+	err := f.pool.QueryRow(t.Context(),
+		`SELECT rotation FROM link_click_budget WHERE link_id = $1`, id).Scan(&rotation)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0
+	}
+	if err != nil {
+		t.Fatalf("read the rotation counter: %v", err)
+	}
+	return rotation
 }
 
 // TestSequentialAndAClickBudgetDoNotShareACounter is the concrete failure the

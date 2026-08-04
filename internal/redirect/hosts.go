@@ -103,18 +103,33 @@ func NewHostCache(pool *pgxpool.Pool, log *slog.Logger) *HostCache {
 // This is on the redirect path and it is a read lock plus a map lookup. It never
 // queries, never falls back, and never consults Redis.
 //
-// Keyed through config.CanonicalHost rather than through a local copy of the
-// same three operations, and that is not tidiness. The split-host router matches
-// its own two hostnames with exactly that function; a second spelling here would
-// mean a Host header that matches one router and not the other, and the
-// direction that fails silently is the dangerous one — a name normalized
-// differently stops being served while every page goes on saying it is
-// verified.
+// Keyed through config.HostOnly rather than through a local copy of the same
+// operations, and that is not tidiness — it is the same rule this comment always
+// stated, applied to the right function. A second *spelling* here would mean a
+// Host header that matches one router and not the other, and the direction that
+// fails silently is the dangerous one: a name normalized differently stops being
+// served while every page goes on saying it is verified.
+//
+// **It was config.CanonicalHost until F88, and that was the narrower question.**
+// CanonicalHost keeps a non-default port because SplitHosts compares two
+// configured origins through it, so `Host: go.customer.example:8080` did not
+// match a `domains.hostname` that is stored, validated and served bare — it fell
+// through to the tree behind this one, which on a single-host deployment is the
+// dashboard, the API and the default domain's aliases. HostOnly is the same
+// normalization with the port dropped as well, which is the only spelling that
+// answers "is this a verified hostname".
+//
+// The collision that widening could create is worth naming and is not new: a
+// verified hostname equal to one of this instance's own is served by this router
+// before either of them, at any port spelling rather than only at the configured
+// one. Reaching it still means publishing a DNS TXT record under the operator's
+// own name, which is the whole of M40's verification, so the precondition is
+// unchanged and only the set of Host spellings it covers is.
 func (c *HostCache) Lookup(host string) (VerifiedDomain, bool) {
 	if c == nil || !c.ready.Load() {
 		return VerifiedDomain{}, false
 	}
-	name := config.CanonicalHost(host)
+	name := config.HostOnly(host)
 	if name == "" {
 		return VerifiedDomain{}, false
 	}
@@ -143,7 +158,12 @@ func (c *HostCache) Reload(ctx context.Context) error {
 		if r.RootRedirectUrl != nil {
 			d.RootRedirectURL = *r.RootRedirectUrl
 		}
-		next[r.Hostname] = d
+		// Keyed through the same function Lookup asks with, rather than through
+		// the stored spelling. The two agree today — hostnames are stored lowered
+		// and dot-free — and the point is that they cannot stop agreeing, which
+		// is the failure F88 was: two spellings of one name, one of them never
+		// reached.
+		next[config.HostOnly(r.Hostname)] = d
 	}
 
 	c.mu.Lock()
@@ -191,7 +211,7 @@ func (c *HostCache) MarkTLSActive(host string) {
 	if c == nil {
 		return
 	}
-	name := config.CanonicalHost(host)
+	name := config.HostOnly(host)
 	c.mu.Lock()
 	if d, ok := c.hosts[name]; ok && d.SSLStatus != sslStatusActive {
 		d.SSLStatus = sslStatusActive

@@ -55,6 +55,10 @@ func (h *RedirectHandler) split(r *http.Request, snap *redirect.Snapshot, alias 
 	if len(arms) == 0 {
 		return splitPassed
 	}
+	// The one request that must not choose an arm (F87). See challengePending.
+	if challengePending(snap, r) {
+		return splitPassed
+	}
 	switch kind {
 	case domain.RuleKindWeighted:
 		return weightedPick(arms, snap.Weights(arms))
@@ -111,14 +115,18 @@ func weightedPick(arms []redirect.Choice, weights []int32) splitOutcome {
 // the rotation rather than restarting it, which is the honest behaviour: there is
 // no correct answer to "who was next" once the list has changed underneath.
 //
-// **A request that is later refused still consumed its position.** The rotation
-// happens where the destination is decided, which is before the deep-link join
-// and before the gates, so a visitor who gets a 404 or fails a password check has
-// advanced the counter. That does not skew the split — whether a gate passes is
-// independent of which arm came up — and the alternative is deciding the
-// destination twice, or moving the gates ahead of the join and spending a
-// one-time link's click on a request that was about to 404 anyway. M35's
-// ordering is the stronger constraint and it wins.
+// **A request that is later refused still consumed its position, with one
+// exception.** The rotation happens where the destination is decided, which is
+// before the deep-link join and before the gates, so a visitor who gets a 404 or
+// submits a wrong password has advanced the counter. That does not skew the
+// split — whether a gate *passes* is independent of which arm came up — and the
+// alternative is deciding the destination twice, or moving the gates ahead of the
+// join and spending a one-time link's click on a request that was about to 404
+// anyway. M35's ordering is the stronger constraint and it wins.
+//
+// The exception is the password challenge, and it is the exception because it is
+// not a refusal at all: it is the first half of a request that arrives in two
+// parts. See challengePending.
 //
 // A failure is a 503 and never a guess. Falling back to an arbitrary arm would
 // make the rotation "approximately sequential", which is the thing D8 named as a

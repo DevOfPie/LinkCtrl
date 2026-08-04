@@ -92,6 +92,10 @@ func newRulesOn(
 	linkSvc := link.NewService(pool, link.Config{
 		Policy: link.DefaultDestinationPolicy(), BaseURL: cfg.BaseURL,
 		Cache: resolver, Audit: audit.NewService(pool),
+		// A link password is hashed here and verified by the gate service
+		// below. Wired because a split and a password can be on one link, and
+		// F87 is what happens when they are.
+		Hasher: authSvc.Hasher(),
 	})
 
 	salts := analytics.NewSaltCache(pool)

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
@@ -61,6 +62,53 @@ func (s *Service) DomainSettings(ctx context.Context, actor *auth.Identity) (*Do
 		out.RootRedirectURL = *row.RootRedirectUrl
 	}
 	return out, nil
+}
+
+// LinkDomainBots is the bot policy of the domain one link is served on, and the
+// hostname to name when explaining it.
+type LinkDomainBots struct {
+	Hostname          string
+	BlockBots         bool
+	BlockBotsEnforced bool
+}
+
+// LinkDomainBots reads the bot policy that applies to one link.
+//
+// **The link's own domain, which is not always the instance default (F89).** The
+// link detail page read `DomainSettings` for every link, which is the default
+// domain's row whatever hostname the link is served on: on a link served from a
+// verified custom hostname (M40) the page disabled a control the API would have
+// accepted and named the wrong hostname in the sentence explaining why. The API's
+// own guard has always read the right row — `Update` asks
+// `GetDomainBotSettings(existing.DomainID)` before refusing an `off` the domain
+// enforces — so this is the page being brought to where the API already was, and
+// m32.5.md's "asserted by test at both surfaces" becomes true again.
+//
+// Guarded by links.read and scoped to the actor's workspace, because a hostname
+// is a thing worth not leaking: reading it through a link id must not answer for
+// a link the caller cannot see.
+func (s *Service) LinkDomainBots(
+	ctx context.Context, actor *auth.Identity, linkID uuid.UUID,
+) (*LinkDomainBots, error) {
+	if !actor.Can(PermRead) {
+		return nil, fmt.Errorf("%w: reading domain settings requires %s", domain.ErrForbidden, PermRead)
+	}
+	l, err := s.q.GetLink(ctx, dbgen.GetLinkParams{ID: linkID, WorkspaceID: actor.WorkspaceID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, fmt.Errorf("load link: %w", err)
+	}
+	row, err := s.q.GetDomainBotSettings(ctx, l.DomainID)
+	if err != nil {
+		return nil, fmt.Errorf("read domain bot settings: %w", err)
+	}
+	return &LinkDomainBots{
+		Hostname:          row.Hostname,
+		BlockBots:         row.BlockBots,
+		BlockBotsEnforced: row.BlockBotsEnforced,
+	}, nil
 }
 
 // SetRootRedirect points the link domain's root somewhere, or clears it.
@@ -176,13 +224,30 @@ func (s *Service) SetRootRedirect(ctx context.Context, actor *auth.Identity, raw
 	return out, nil
 }
 
-// SetBotBlocking turns bot blocking on or off for the whole link domain, and
-// decides whether a link may overrule it.
+// SetBotBlocking turns bot blocking on or off for every link on the instance,
+// and decides whether a link may overrule it.
 //
 // Guarded by domains.write rather than links.update, and the reason is the same
 // one the root redirect has: one hostname serves every workspace on this
 // instance, so this is not a setting about some links. Enforcing it decides for
 // all of them, including links whose owners deliberately turned blocking off.
+//
+// **It reaches every domain row, not only the default (F89).** The redirect path
+// reads the policy from the link's own domain — `ResolveAliasForRedirect` joins
+// on `l.domain_id` — so while this wrote only the `is_default` row, a link served
+// on a verified custom hostname (M40) was never blocked whatever the operator
+// set, and D71 makes a workspace's own hostname the default for its new links, so
+// the hole opened without anybody choosing it. `SetBotBlockingForEveryDomain` is
+// the writer and `CreateDomain` inherits the current answer, which together are
+// what the word *instance-wide* has always claimed.
+//
+// Widening the setter to take a domain id instead was the other way to close it
+// and it is the wrong one: the guard here is `domains.write`, which F70 records
+// as reaching every organization's owner and admin on a multi-organization
+// instance, so a per-hostname policy would let a workspace switch off an
+// enforcement the operator set — a wider hole than the one being closed. Per-
+// domain settings are D69's parked question and they need the instance-level
+// principal D38 does not have.
 //
 // Unlike the root redirect it is NOT refused on a single-host deployment. That
 // refusal exists because "/" belongs to the dashboard there and honouring the
@@ -225,11 +290,27 @@ func (s *Service) SetBotBlocking(ctx context.Context, actor *auth.Identity, bloc
 		return nil, fmt.Errorf("read domain settings: %w", err)
 	}
 
-	row, err := s.q.SetDefaultDomainBotBlocking(ctx, dbgen.SetDefaultDomainBotBlockingParams{
+	rows, err := s.q.SetBotBlockingForEveryDomain(ctx, dbgen.SetBotBlockingForEveryDomainParams{
 		BlockBots: block, BlockBotsEnforced: enforced,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("set domain bot blocking: %w", err)
+	}
+	// The instance default is what every settings surface reads and names, so it
+	// is what this returns and what the audit record is about. Its absence is not
+	// a state this instance has — 00700 seeds the row and `defaultDomainID` above
+	// has already read it — so it is reported rather than papered over with a
+	// zero value that would tell the caller their change did not happen.
+	var row dbgen.SetBotBlockingForEveryDomainRow
+	found := false
+	for _, r := range rows {
+		if r.IsDefault {
+			row, found = r, true
+			break
+		}
+	}
+	if !found {
+		return nil, errors.New("set domain bot blocking: the instance default domain was not updated")
 	}
 
 	changed := before.BlockBots != row.BlockBots ||
@@ -258,17 +339,26 @@ func (s *Service) SetBotBlocking(ctx context.Context, actor *auth.Identity, bloc
 		}
 	}
 
-	// Every link on this domain just got a different answer, and every cached
+	// Every link on every domain just got a different answer, and every cached
 	// snapshot carries the old one. This is the expensive invalidation and it is
 	// the direct price of the redirect path needing no second lookup; see
 	// redirect.Resolver.InvalidateDomain.
 	//
+	// One per domain, because the cache is keyed by domain and there is no
+	// wildcard sweep — which is also the cost of the write having been widened
+	// (F89): an instance with n registered hostnames pays n sweeps on this form
+	// submission instead of one, each bounded by domainSweepBudget. It is bounded
+	// work on an operator action that happens about as often as somebody changes
+	// their mind about crawlers, and the alternative is links that keep applying
+	// the previous policy until their TTL expires.
+	//
 	// Unconditional rather than skipped when nothing changed. A no-op write that
 	// left a stale cache in place would be indistinguishable from a change that
-	// did not take effect, and this runs at most as often as somebody submits
-	// the form.
+	// did not take effect.
 	if s.cache != nil {
-		s.cache.InvalidateDomain(ctx, row.ID)
+		for _, r := range rows {
+			s.cache.InvalidateDomain(ctx, r.ID)
+		}
 	}
 
 	out := &DomainSettings{

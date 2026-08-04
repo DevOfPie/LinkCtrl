@@ -588,11 +588,19 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 	// rendering as an ordinary select: this is one page's explanatory text, not
 	// a reason to replace the page, and the service refuses an unhonourable
 	// value on submit regardless of what was rendered.
-	if settings, serr := h.Links.DomainSettings(r.Context(), actor); serr == nil {
-		policy := domain.DomainBots(settings.BlockBots, settings.BlockBotsEnforced)
+	//
+	// **This link's domain, not the instance default (F89).** It read
+	// `DomainSettings` — the default row — for every link, so a link on a
+	// verified custom hostname had its control disabled or enabled by another
+	// hostname's policy and the sentence beneath it named a hostname the link is
+	// not served on. `LinkDomainBots` reads the same row the API's own refusal
+	// reads, which is what makes the two surfaces agree by construction rather
+	// than by both happening to look at the default.
+	if bots, serr := h.Links.LinkDomainBots(r.Context(), actor, id); serr == nil {
+		policy := domain.DomainBots(bots.BlockBots, bots.BlockBotsEnforced)
 		data.BotsEnforced = domain.BotPolicyLocked(policy)
-		data.BotDomainOn = settings.BlockBots
-		data.BotHost = settings.Hostname
+		data.BotDomainOn = bots.BlockBots
+		data.BotHost = bots.Hostname
 	}
 
 	// The link's routing rules. A read failure leaves the section empty rather

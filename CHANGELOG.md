@@ -1125,6 +1125,57 @@ migrations run at boot.
 
 ### Fixed
 
+- **An A/B test on a password-protected link no longer sends everybody to the
+  same arm.** A sequential split chooses its arm before the password is asked
+  for, and the challenge page and the form that answers it are two requests — so
+  every visit advanced the rotation twice and served the second position. At an
+  even number of arms half of them received no traffic at all, and at two arms
+  the first arm was never served to anybody. The click history recorded the arm
+  that was actually served, so the reports agreed with the skew rather than
+  exposing it. A request that is about to be shown the password page now chooses
+  no arm, and one visit advances the rotation once. Weighted splits, and
+  sequential splits on links without a password, are unaffected; a *wrong*
+  password still spends a position, as any refusal does.
+
+- **The redirect path now has a database deadline.** Password verification,
+  signature-key reads, click-budget writes and a sequential split's rotation all
+  ran with no time limit of any kind: a query that could not proceed held a
+  connection for as long as PostgreSQL would let it, while other requests queued
+  behind it. Each of those calls is now bounded by `REDIRECT_TIMEOUT`, the same
+  setting that already bounded the redirect's own lookup — no new configuration,
+  and no change on any instance where these queries were already fast. The bound
+  follows the visitor: somebody who closes the tab mid-request does not spend a
+  one-time link's only click.
+
+- **A hostname spelled with a trailing dot, or with an explicit port, now reaches
+  the hostname it names.** `Host: go.example.com.` is the fully qualified
+  spelling of `go.example.com` and `Host: go.example.com:8080` names the same
+  host on a non-default port; neither matched a verified custom domain. On a
+  deployment serving the dashboard and short links on one hostname the
+  consequence was serious: the request fell through to the instance's own tree,
+  so a customer's verified hostname answered with the dashboard, the API, and
+  short links belonging to the instance's default domain. On a split-hostname
+  deployment the same spelling of a *configured* hostname was answered with the
+  operational 404. Both are folded now. A non-default port is still significant
+  when matching the instance's own hostnames, because a deployment may serve the
+  dashboard and short links on one name and two ports.
+
+- **Bot blocking now applies to links on custom domains.** Turning blocking on —
+  even *enforced* — wrote the setting to the instance's default domain alone,
+  while a link is served under the policy of the domain it is on. Since a
+  workspace's own verified hostname becomes the default for its new links, every
+  link created there was unprotected, and neither surface said so. The setting
+  now reaches every registered hostname, and a hostname registered afterwards
+  inherits it, which is what "instance-wide" has always meant on this page. There
+  is still no per-hostname bot policy, deliberately: `domains.write` is not
+  narrow enough to hold one.
+
+  A link's own page also read the **default** domain's policy for every link, so
+  a link on a custom hostname could have its bot control disabled by another
+  domain's setting, with the explanation naming a hostname the link is not served
+  on — while the API would have accepted the change the page refused. The page
+  now reads the domain the link is actually served on.
+
 - **`/feeds` no longer tells you nothing leaves when your own webhooks are
   receiving your destinations.** With no reputation feed configured, that page
   put *"No destination leaves this instance"* in a green panel for every

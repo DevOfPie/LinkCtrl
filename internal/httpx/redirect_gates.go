@@ -109,6 +109,40 @@ func (h *RedirectHandler) passGates(
 	return h.budgetGate(w, r, snap, alias)
 }
 
+// challengePending reports whether this request is going to be answered with the
+// password challenge rather than with a destination.
+//
+// **It exists so that a split does not advance twice for one visit (F87), and
+// the password gate is the only gate that needs it.** Every other refusal on
+// this path ends the visit: an unsigned request, a wrong password, a spent
+// budget and an unforwardable deep link each answer once and are not followed by
+// a second request the server can predict. The challenge is not a refusal — it
+// is the first half of a visit that arrives in two parts, because the page it
+// serves exists to be posted back. A sequential split therefore consumed two
+// positions per visitor and served the second of them, which at any even arm
+// count meant half the arms were served to nobody and at two arms meant `arms[0]`
+// was served to nobody, ever.
+//
+// Asked here, and answered before the destination is chosen, because the fix
+// cannot be to move `h.split` after `passGates`: the gates run after the
+// destination is known on purpose (D53, and the ordering note above passGates),
+// so that an unforwardable deep link is a 404 before the budget gate can spend a
+// one-time link's only click on it. Moving the split instead of skipping it would
+// buy this at that price.
+//
+// A GET to a link that carries both a password and a split is therefore priced
+// exactly as a GET to a link that carries a password alone — no arm chosen, no
+// rotation written, no arithmetic — and the arm is chosen by the POST that is
+// actually going to be redirected. The one thing this changes for that first
+// request is which URL `forwardable` is asked about: the link's own destination
+// rather than an arm's. That answer does not depend on which of them it is —
+// `ForwardPath` is the link's, and `appendPath` fails on the *remainder*, not on
+// the target — and it is discarded either way, because a challenged request
+// writes no `Location`.
+func challengePending(snap *redirect.Snapshot, r *http.Request) bool {
+	return snap != nil && snap.HasPassword && r.Method != http.MethodPost
+}
+
 // signatureGate refuses a request that does not carry a valid, unexpired HMAC
 // for this alias.
 //

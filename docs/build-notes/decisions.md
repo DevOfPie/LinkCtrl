@@ -161,6 +161,7 @@ file. Append a row when you append an entry.
 | [M45, three places a secret was sitting still](#2026-08-04--m45-three-places-a-secret-was-sitting-still) | F32, F34 and F35 — one theme, three mechanisms, fixed separately; **F32's design fork decided in the open**: scrub at the terminal transition, with what a send-time reference and a shortened retention would each have cost, and why the scrub covers every kind and is a database constraint rather than a convention; the pending-row exposure that remains and the two migration comments corrected to admit it; `03200` bending the additive-DDL rule and why `mail_outbox` is the one table where that costs nothing; F34's URL **replaced** rather than removed, and the GET-method destination leak that closes with it; F35's denylist inverted to an allowlist plus a boot refusal, and the path-embedded credential named as residue; and the `net/url` import ban that turned out to guard nothing and to have caused both |
 | [M45, two refusals that answered a question nobody asked them](#2026-08-04--m45-two-refusals-that-answered-a-question-nobody-asked-them) | F92 and F133 — unrelated rows, fixed on their own terms; **F92's two traps answered rather than half-answered**: both surfaces collapsed onto one shared string so the form's prose cannot leak what the status no longer does, and `DummyVerify` on the locked branch because equalising the status and not the work leaves the question answerable with a stopwatch; why `ErrAccountLocked` stays a distinct sentinel and the collapse belongs at the boundary; why the lockout is named *unconditionally* and why that sentence is not in `WriteError`; `account-locked` removed as a problem type and named as a client break; the fixture that had no lockout wired and would have passed by never locking one; **F133** — mail's `withLeadership` and skip-locked claim checked to be D95's constraint exactly, so the WaitGroup transfers whole; the one difference D95 does not cover, twenty sessions to *one* relay, and the tail cost accepted in the open; and why the eleven lines are spelled twice rather than shared |
 | [M45, a disclosure that reads both channels, and a count re-derived](#2026-08-04--m45-a-disclosure-that-reads-both-channels-and-a-count-re-derived) | F135 and F134 — the disclosure **learns** the second channel rather than being weakened, and why the weaker sentence was refused; why the page had no state to read and no wording could have been right; where the second read belongs and what it costs, said rather than assumed — a query because a registration is a row, on `link.Service` because the handler's route to it needs `webhooks.read` and this page is gated on nothing, and an error rather than a swallowed zero because a zero *is* the green panel; the predicate taken from the fan-out so the page asks *would anything have been queued*; the classification asserted total so an eighth event is a decision; four states, and why the scope of each claim is now part of the claim — a per-workspace read printed as an instance claim is the same defect inverted; a count and never a URL; the API field an **addition** by embedding; which assertions the two pinned tests kept and why the old string could not be; **F134 enumerated in a table** with what was excluded and why, the DNS query counted and the technicality that would have excluded it named; and the two sites F135 called defensible that the demo's own seeder falsifies |
+| [M45, four ways the redirect path was not the path it described](#2026-08-04--m45-four-ways-the-redirect-path-was-not-the-path-it-described) | F87, F96, F88 and F89 — every one of them on the redirect path, every one fixed where its own fix note said the obvious move would break something else; **F87 in the challenge branch and not by reordering the gates**, because the password challenge is a visit arriving in two parts rather than a refusal, and D57's *the distribution is unaffected* was true of every gate except the one that manufactures a second request; **F96 bounded inside `internal/gate` per call**, mirroring the resolver, because `http.TimeoutHandler` buffers and would swallow the very pages the gates write — and deliberately *not* detached with `WithoutCancel`, which is where the resolver's shape stops transferring; **F88 split into the two questions one function was answering**, `CanonicalHost` folding the DNS root dot for the routers and `HostOnly` dropping the port for the verified-hostname cache, with why stripping the port in the first would collapse a split-host deployment; **F89 propagated rather than widened**, because a per-hostname setter hands instance policy to `domains.write`, and the page moved to the link's own domain so the two surfaces agree by construction |
 
 ---
 
@@ -13473,3 +13474,187 @@ interface and M32's entry already refused that trade: removing `url` would break
 every receiver in the world to make a sentence in a green panel true. The page
 was wrong, the capability was disclosed the whole time, and it is the page that
 moved.
+
+
+## 2026-08-04 — M45, four ways the redirect path was not the path it described
+
+Four approved rows from [M45](phase-details/m45.md)'s triage, grouped because
+they share one surface: [F87](deferred-findings.md), F96, F88 and F89 are all on
+the path a visitor takes, and three of the four are defects in something a
+document already claimed rather than in something nobody had thought about.
+
+Each row arrived with a fix note naming what a reasonable first attempt gets
+wrong. All four notes were right, and this entry is mostly about what they
+stopped.
+
+### F87 — the one gate that is not a refusal
+
+A sequential split on a password-gated link advanced its rotation **twice per
+visit**. `redirect.go` chooses the destination before it runs the gates, so the
+challenge GET consumed a position and was answered with the form; the verifying
+POST is deliberately exempt from the method filter, reached the same line, and
+consumed a second. The arm served was always `(2k-1) mod N` — at two arms
+`arms[1]` every time, and `arms[0]` served to nobody, ever.
+
+D57 says the opposite in three places: *"the distribution is unaffected — whether
+a gate passes is independent of which arm came up."* That sentence is true of a
+refusal. It is false here, and the reason is worth keeping: **the password
+challenge is not a refusal.** It is the first half of a visit that arrives in two
+parts, because the page it serves exists to be posted back. Every other refusal
+on this path — unsigned, wrong password, spent budget, unforwardable deep link —
+ends the visit and is not followed by a second request the server can predict.
+
+The obvious fix is to move `h.split` after `passGates`, and it breaks something
+load-bearing. The gates run *after* the destination is known on purpose: a deep
+link this alias cannot forward is a 404, and it must not spend a one-time link's
+single click on its way to being refused. Reordering buys F87 at that price.
+
+So the request that is going to be challenged does not choose an arm at all.
+`challengePending` is one comparison over the snapshot and the method, asked
+before the split rather than after it, and it makes a GET to a link carrying both
+a password and a split cost exactly what a GET to a password link costs. The one
+thing it changes for that request is which URL `forwardable` is asked about — the
+link's own destination rather than an arm's — and the answer does not depend on
+which of them it is, because `ForwardPath` is the link's and `appendPath` fails on
+the *remainder*.
+
+A wrong password still spends a position, and that is D57's case rather than this
+one: a wrong guess is a refusal, it is not guaranteed, and it is not correlated
+with the arm.
+
+**Two arms in the test, deliberately.** `TestSequentialSplitIsStrict` uses three,
+and at N=3 the served positions cycle 2, 4, 6 → arms 1, 0, 2 — every arm visited,
+only the order wrong. An odd count masks this; an even one makes it total.
+
+### F96 — a path with no deadline on it at all
+
+`RequestTimeout` wraps `appHandler`. `registerRedirect` is mounted bare, and
+until now that meant M35's three gate calls and M36's rotation took the request
+context and nothing bounded them: no `statement_timeout` anywhere in the tree,
+and the pool sets connect and lifetime limits rather than per-query ones. The
+contrast was one file over and entirely deliberate — `redirect.Resolver` wraps its
+own fallback query in a budget and explains why.
+
+**Wrapping `registerRedirect` in `RequestTimeout` is the obvious move and it is
+wrong twice.** It applies a dashboard budget to a 20ms path, and
+`http.TimeoutHandler` buffers the response — which would break the `Location`
+write and swallow the challenge and refusal pages the gates exist to serve.
+
+So the bound is per call, inside `internal/gate`, mirroring the resolver. One
+helper rather than five spellings, because the failure being fixed is a call
+nobody remembered to wrap and five copies is how that happens again.
+`REDIRECT_TIMEOUT` is handed in as the budget: it is the number the resolver
+already takes for the same path, so this adds no knob.
+
+**`WithoutCancel` is where the resolver's shape stops transferring, and the row
+said so before the code did.** The resolver detaches because a singleflight
+leader's result is shared with every waiter, so one abandoned tab must not fail
+the rest. Nothing in the gate service is shared. Copying the detachment onto
+`Consume` would mean a visitor who hit Stop had still spent a one-time link's only
+click — on a redirect nobody received. The sabotage produced exactly that: a 410
+on a link that had never been followed.
+
+`EnsureSecret` is the one method left unbounded, and for the opposite reason: it
+is the management-path call, already inside `RequestTimeout`, and the redirect
+budget is not a ceiling a dashboard write should acquire.
+
+### F88 — one function answering two questions
+
+`config.CanonicalHost` lowercases and strips `:80`/`:443`. It never folded the
+DNS root dot, and it keeps a non-default port on purpose. Both properties were
+right for one caller and wrong for another, and the two rows this merges —
+F88 and F72 — are the same gap seen from each side.
+
+**The trailing dot is a straightforward miss.** `lnk.example.com.` is the fully
+qualified spelling of the same host. Storage already folded it —
+`domain.ValidateHostname` drops it and the unique index is on `lower(hostname)` —
+so a stored name can never carry one and the mismatch was entirely request-side.
+Commit `6f95079` folded it for *destinations* and not for the `Host` header. It is
+reachable over HTTPS because SNI carries no trailing dot (RFC 6066), so the
+handshake completes on the certificate for the folded name and Go hands `r.Host`
+through unchanged.
+
+**The port is not a miss, and this is where F72's severity argument fails.** F72
+filed the gap as Minor on the strength of *"it fails closed (a 404, never a wrong
+host's links)"*. That holds on a split-host deployment, where an unmatched Host
+reaches the ops mux. On a **single host** the fall-through is
+`registerOps + registerApp + registerRedirect`, and a verified custom hostname
+that misses the cache is therefore answered with the dashboard, the API, and
+aliases resolved against the *instance default* domain — another workspace's
+link, served on a name its owner verified. That is not failing closed, and only
+the merged row knows it.
+
+`strings.TrimSuffix` closes the dot and leaves the port limb open. Stripping the
+port in `CanonicalHost` closes the port limb and breaks `SplitHosts()`, which
+compares two configured origins through that function — an instance serving the
+dashboard and short links on one name and two ports would collapse to single-host
+and lose the two trees the split exists to keep apart.
+
+So there are two functions, because there were always two questions.
+`CanonicalHost` asks *is this the host this instance was configured with*, where
+the port is part of the configured value. `HostOnly` asks *is this a verified
+custom hostname*, where there is no port to compare against: `domains.hostname` is
+stored bare, validated bare, and served on whatever port the listener uses. The
+verified-host cache keys through `HostOnly`, on both sides — `Reload` runs the
+stored name through it too, so the two spellings cannot drift, which is the
+failure being fixed one level up.
+
+`HostOnly` is deliberately *wider* than `CanonicalHost` rather than differently
+spelled, and a test pins that direction. The narrow spelling is the one that fails
+silently: a name normalized out of the set stops being served while every page
+goes on saying it is verified.
+
+**The collision widening could create is named rather than discovered later.** A
+verified hostname equal to one of this instance's own is now matched at any port
+spelling rather than only at the configured one. Reaching that state still means
+publishing a DNS TXT record under the operator's own name, which is the whole of
+M40's verification, so the precondition is unchanged and only the set of `Host`
+spellings it covers is.
+
+### F89 — instance-wide, except where it was not
+
+Bot blocking has one writer and it wrote `WHERE is_default`. That was the whole
+truth while the instance default was the only domain there was. M40 added
+verified custom hostnames, `ResolveAliasForRedirect` reads the policy from the
+link's **own** domain row, and D71 makes a workspace's verified hostname the
+default for its new links — so an operator who enforced blocking got none of it on
+any custom-domain link, and any workspace opened that hole for itself by
+registering a hostname. `Plan.md`'s *"the domain's setting is instance-wide"* is
+the claim that had stopped being true.
+
+**Widening the setter to take a domain id is the obvious fix and it is a wider
+hole than the one it closes.** The guard is `domains.write`, which
+[F70](deferred-findings.md) records as reaching every organization's owner and
+admin on a multi-organization instance. A per-hostname policy under that guard
+lets a workspace switch off an enforcement the operator set. Per-domain settings
+are D69's parked question — it deferred them to M40, which did not build them —
+and answering it needs the instance-level principal D38 does not have.
+
+So the setting propagates instead of being widened. `SetBotBlockingForEveryDomain`
+writes every undeleted row, and `CreateDomain` inherits the current answer, which
+together are what *instance-wide* has always claimed. Both columns are written
+together in both places, because `01800`'s CHECK refuses *enforced without
+blocking* **per row** — a propagation that touched one column would be refused on
+its way out.
+
+Two costs, stated rather than found later. The setter returns every row it
+touched, because each one is a cache invalidation the caller owes: a snapshot
+carries its domain's policy so the redirect path needs no second lookup, so an
+instance with *n* hostnames pays *n* sweeps on this form submission instead of
+one. And a hostname registered while the default row is somehow absent inherits
+`false, false` — a state the CHECK accepts, and one 00700 makes unreachable.
+
+**The page was the other half.** The link detail page read `DomainSettings` — the
+default row — for every link, so a link on a custom hostname had its control
+enabled or disabled by another domain's policy and the sentence beneath it named
+a hostname the link is not served on, while `PATCH /api/v1/links/{id}` read the
+right row and would have accepted what the page refused. m32.5.md says the two
+surfaces are *"asserted by test at both surfaces"*, and they had stopped agreeing.
+`LinkDomainBots` reads the same row the API's refusal reads, so they now agree by
+construction rather than by both happening to look at the default.
+
+### What was measured
+
+`docs/slo.md` carries the run. Three of the four changes are on the redirect path
+and one of them adds a context wrap per gate query, so the inherited rule applies
+and this is a k6 measurement on the built image rather than a note.

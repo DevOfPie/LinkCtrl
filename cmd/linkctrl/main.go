@@ -513,7 +513,16 @@ func run(cfg config.Config, _ io.Writer) error {
 	// management read or a write that only a *gated* link performs, so putting
 	// them on the small pool the redirect path guards for itself would let a
 	// burst of password submissions starve ordinary redirects.
-	gateSvc := gate.NewService(pools.App, gate.Config{Hasher: authSvc.Hasher()})
+	//
+	// REDIRECT_TIMEOUT is handed over as the per-query budget (F96). It is the
+	// same number the resolver takes for its own fallback query, and it is the
+	// right one for the same reason: these calls are reached from the redirect
+	// tree, and nothing else bounds them — RequestTimeout wraps the application
+	// handler and not that one.
+	gateSvc := gate.NewService(pools.App, gate.Config{
+		Hasher:    authSvc.Hasher(),
+		DBTimeout: cfg.Redirect.Timeout,
+	})
 
 	// Outbound webhooks (M42). Built before the link service, because the link
 	// service holds it as the thing it hands events to.

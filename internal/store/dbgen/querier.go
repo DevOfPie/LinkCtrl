@@ -315,6 +315,13 @@ type Querier interface {
 	// verification attempt, so the page that tells somebody which DNS record to
 	// publish can do it the moment they register — the alternative is a page that
 	// asks them to come back.
+	// **The bot policy is inherited from the instance default (F89).** It is
+	// instance-wide, and a hostname registered after the operator turned blocking on
+	// would otherwise start at the column defaults and reopen the hole propagating
+	// the setting closes. Read from the default row rather than passed in, so there
+	// is no argument a caller can get wrong and no second place the two settings can
+	// disagree. Both subqueries read the same row; if the seeded default were ever
+	// missing they COALESCE to false together, which is a state the CHECK accepts.
 	CreateDomain(ctx context.Context, arg CreateDomainParams) (Domain, error)
 	// Folders (M38).
 	//
@@ -1150,8 +1157,9 @@ type Querier interface {
 	// serves through the ordinary link host, and including it here would give one
 	// hostname two routes into the redirect tree.
 	//
-	// Hostnames are lowered here rather than at lookup, so the map is keyed the way
-	// config.CanonicalHost spells a Host header.
+	// Hostnames are lowered here as well as at lookup. `HostCache.Reload` runs each
+	// one through `config.HostOnly`, which is what a Host header is spelled with, so
+	// the two sides cannot disagree even if this SELECT stops lowering.
 	ListVerifiedDomains(ctx context.Context) ([]ListVerifiedDomainsRow, error)
 	//
 	// One webhook's recent attempts, newest first, for the panel and the API. Bounded
@@ -1788,9 +1796,25 @@ type Querier interface {
 	RollupWorkspaceDaily(ctx context.Context, arg RollupWorkspaceDailyParams) error
 	RotateWebhookSecret(ctx context.Context, arg RotateWebhookSecretParams) error
 	// Both switches at once, because they are one setting with two halves and the
-	// CHECK in 01800 refuses the combination that writing them separately would
-	// pass through on the way.
-	SetDefaultDomainBotBlocking(ctx context.Context, arg SetDefaultDomainBotBlockingParams) (SetDefaultDomainBotBlockingRow, error)
+	// CHECK in 01800 refuses the combination that writing them separately would pass
+	// through on the way. That applies row by row, so a propagation that touched one
+	// column would be refused by the constraint on the way out.
+	//
+	// **Every undeleted domain, not only the default (F89).** This was
+	// `WHERE is_default` until M45, which was the whole truth while the instance
+	// default was the only domain there was. M40 added verified custom hostnames and
+	// `ResolveAliasForRedirect` reads the policy from the link's *own* domain row, so
+	// an operator who turned blocking on — even enforced — got no blocking on any
+	// link served on a custom hostname, and any workspace could open that hole for
+	// itself by registering one. Plan.md's "the domain's setting is instance-wide" is
+	// the claim being restored, and this is what makes it true.
+	//
+	// **Every updated row comes back, not just the default**, because each one is a
+	// cache invalidation the caller owes: a snapshot carries its domain's policy so
+	// the redirect path needs no second lookup, so every cached alias under every
+	// domain touched here is now wrong. The default is marked rather than sorted for,
+	// since it is the row the settings surfaces read and the hostname they name.
+	SetBotBlockingForEveryDomain(ctx context.Context, arg SetBotBlockingForEveryDomainParams) ([]SetBotBlockingForEveryDomainRow, error)
 	// NULL clears it, which restores the 404 the root answered before anyone set
 	// anything.
 	SetDefaultDomainRootRedirect(ctx context.Context, rootRedirectUrl *string) (SetDefaultDomainRootRedirectRow, error)
