@@ -144,6 +144,7 @@ file. Append a row when you append an entry.
 | [M44, how wide a key reaches, and why no permission was minted for it](#2026-08-03--m44-how-wide-a-key-reaches-and-why-no-permission-was-minted-for-it) | D88 — the workspace choice 00500's column and `apikey.go`'s comment both promised: opt-in, defaulting to the shipped single-workspace behaviour, gated on `MembershipAuthority.In(nil)` rather than `Can` because F27's shape is exactly a workspace-scoped role issuing organization-wide reach; why an `apikeys.org_scope` permission would have looked like a gate and enforced nothing |
 | [M44, what the key demo shows, and why no secret is on it](#2026-08-03--m44-what-the-key-demo-shows-and-why-no-secret-is-on-it) | D89 — three keys and four rows, because a rotation is a row rather than an edit; every token discarded, since a demo that kept one would publish a live credential; the rotation performed through the real path because `Rotate` refuses anything that is not a key; the maximum grace as a fact about `demo-update`'s cadence, asserted rather than trusted; the reset removing visitors' keys too |
 | [M44, the tenancy bound an organization-wide key needed](#2026-08-03--m44-the-tenancy-bound-an-organization-wide-key-needed) | D90 — the defect M44 created by making a NULL `workspace_id` issuable at all: the resolver filters on membership, so an owner belonging to two organizations would have their organization-wide key resolve into the *other* tenant, with `Authenticate` taking that organization's id as the key's own. Fixed in-spec, as a **bound** on the candidate set rather than a rung in the precedence, so a key still follows its owner's pinned default inside its own organization and every other caller resolves unchanged |
+| [M44.9, the pre-release review, and what refutation cost the findings](#2026-08-04--m449-the-pre-release-review-and-what-refutation-cost-the-findings) | 91 raw candidates from 17 independent readers, 78 put to adversarial verification, 55 confirmed as F76-F130; the amendment from the v2 to the v3 cache key; the three live verifications and what the 0.1.0 upgrade actually proved; why refutation moved tiers more often than it killed findings, and the straggler pass that refuted six of nine; the M40-times-everything cluster and the single-goroutine scheduler cluster; F29 found in the wrong section, and the four existing rows that want a line rather than a neighbour |
 
 ---
 
@@ -11380,3 +11381,257 @@ cross-organization case beside it as an assertion of the bound. Correcting the
 setup of a test whose premise the product never had is not the same as editing a
 test to make a change pass, and the difference is that the original claim survives
 in the file rather than being quietly dropped.
+## 2026-08-04 — M44.9, the pre-release review, and what refutation cost the findings
+
+m44.9.md requires that the review's own output be recorded — what was checked,
+what was found, what was refuted — so a later reader can tell coverage from luck.
+This is that record.
+
+Headline: **91 raw candidates from 17 independent readers → 10 adversarial
+verification batches → N refuted, N narrowed or corrected downward, N confirmed.**
+Three findings were reproduced against a running instance rather than argued, and
+one of those is the review's most serious result.
+
+### One amendment, a fact
+
+Per [phase-loop.md](phase-loop.md#amending-a-bullet), carrying the bullet as it
+stood, as amended, and the tree fact that forced it.
+
+**Stood:** *"an upgrade from 0.1.0 to this build, confirming migrations are
+additive, the **v2 cache key** cold-starts without error, and no configuration
+became silently required"*.
+**Amended:** *"… the **v3 cache key** cold-starts without error …"*.
+**Tree fact:** `internal/redirect/resolver.go:56` reads
+`const CacheKeyVersion = "v3"`, and `internal/redirect/snapshot.go:66` records the
+history in the same breath — *"bumped CacheKeyVersion — to v2 and then to v3."*
+M36 made the second bump. A fact, not an assertion: the thing being asserted — that
+the current cache key cold-starts on upgrade without error — is unchanged, and
+nobody could have decided the version number differently.
+
+### The mechanism, and why it is the same departure M32.9 made
+
+phase-loop.md says a review is not delegated, and that governs **ownership**:
+validation, the amendment above, triage, the prompt to the owner, this entry and
+the commit were the orchestrator's and stayed there. m44.9.md separately requires
+independence — *"Multi-dimension and adversarially verified, exactly as M32.9
+specifies"* — and M32.9's own record settles that independent readers are the
+mechanism the milestone demands rather than a hand-off.
+
+Seventeen readers: ten auditing milestone groups against their own bullets, six
+sweeping dimensions across the whole M21–M44 range, and one confirming M32.9's
+closed rows are actually fixed rather than assumed. The dimensions were tenancy
+isolation, security, privacy, documentation truth, correctness at the seams
+between milestones, and the redirect hot path — the last of which M32.9 could not
+have run, because the engine did not exist.
+
+**One dimension is new and it exists because a M32.9 conclusion expired.** M32.9
+downgraded the trailing-dot bypass from SSRF to a stored open redirect on the
+explicit ground that *"LinkCtrl never makes a server-side request to a destination
+— the only two `http.Client`s in the tree are the opt-in feed and the container
+healthcheck"*. M42 ships outbound HTTP whose target a user chooses. That ground is
+gone, so the review re-ran the question rather than inheriting the answer. The
+result is recorded below and it is not what was expected.
+
+### What was verified live, because reading code against its own intent is not using it
+
+m44.9.md requires three things be checked against a running instance. All three
+were, on a test instance rebuilt from the commit under review.
+
+**A fresh instance, set up from scratch.** `POST /api/v1/auth/setup` claimed it
+`201` and answered `404` forever after. On the shipped default (`closed`), both
+D7 surfaces refused: registration `403 signup-closed`, and invitation redemption
+`404 invitation-not-redeemable` — the deliberately indistinguishable refusal, not
+a distinguishable one. Switched to `invite`, redemption created the account, the
+same token replayed `404`, and the invited editor resolved eight permissions,
+could not create an organization (`403`) and saw its organization's workspaces.
+Fourteen of sixteen dashboard pages answered `200`. The other two are a finding.
+
+**An upgrade from 0.1.0.** A worktree at `v0.1.0` migrated a dropped database with
+that release's own binary — eight migrations, newest `800` — and seeded it through
+0.1.0 code: 200 links, 2,000 click events, an organization, a workspace, a user and
+a membership. The build under review then applied **22 migrations, 900 through
+3000, with no error on a populated database**, which is the check that matters:
+a non-additive column lands on empty schemas without complaint. Afterwards the
+data was intact, Redis was flushed, and `/ld0` — a link created by 0.1.0 — answered
+`302` and minted `lc:a:v3:<domain>:ld0`. No `ERROR`, `FATAL` or panic at boot, on
+the same environment file 0.1.0 had used, so nothing became silently required.
+
+**The SLO, re-measured on the final build.** 240,001 requests at 2,000.000177/s
+for two minutes, zero failures: **100% under 20ms, and 240,000 of 240,001 under
+0.5ms**, cache mix 240,001 memory / 0 redis / 0 database, zero redirect-pool
+acquire waits. This is the twenty-first cached run this document records and among
+the tightest. It also closes a gap: M42, M43 and M44 had landed with no slo.md
+entry and no note saying they do not touch the redirect path.
+
+### What refutation was worth
+
+This is the part worth keeping, because it is the argument for spending it.
+
+**Refuted outright.** A verification token disclosed to read-only members was
+refuted because the organization-owned domain row it needs cannot be constructed:
+`RegisterDomain` is the only writer and always sets both owner columns, and
+`domains.workspace_id` is `ON DELETE CASCADE`, so deleting a workspace removes the
+row rather than promoting it. A member list said to leak workspace names was
+refuted because `ListWorkspacesForUser` already matches
+`m.workspace_id IS NULL OR = w.id`, so every organization-wide member — viewers
+included — could already read every workspace's name: the delta was zero. A claim
+that `lctl seed` would surprise somebody with a five-million-row insert was refuted
+by the two paragraphs of `docs/cli.md` that state the defaults and the ninety
+seconds before a reader could reach the surprise. And m30.md's *"all three
+`ValidateDestination` call sites"* was refuted as self-scoped — the sentence reads
+*"that exists when this ships"*, and the bullet immediately after it requires every
+later milestone adding a surface to declare the dependency, which is exactly what
+the ten declared surfaces did.
+
+**Refuted as already recorded.** Two findings restated rows the file already holds:
+a full IPv4 address used as a Redis rate-limit key is F57, whose row already
+states both of the counter-arguments the finder re-derived, and a salt outliving
+its own deletion is F59 — which additionally has the *stronger* form, because the
+DELETE's winner keeps the salt too, so the finding reproduced on the
+single-replica default rather than only on a replica that lost a race.
+
+**Corrected against the finder, and this is where the value is.** The
+account-enumeration finding against `POST /api/v1/auth/register` was filed at
+critical severity on the strength of a Plan.md sentence claiming one open finding
+where there are sixty-two — and the verifier found no gate reads that sentence,
+that the same sentence names deferred-findings.md as the authority, and that it
+sits inside a section F37 already convicts. It is a line to add to an existing
+row, not a release-blocker. A claim that F10 had regressed was refuted twice over:
+F10's actual defect was `docs/usage.md` omitting `audit.read`, and that file still
+names it, so the fix held; and the finder's account of *why* it regressed was
+backwards, because the documentation gate does cover `docs/SECURITY.md`, which is
+the most wrong of the three files. A rotation finding claimed no administrator can
+see a key's lineage — but `RecordAPIKeyRotation` writes an organization-scoped
+audit row, so they can; what they cannot do is revoke it, which is the narrower
+and true finding.
+
+**Corrected in the finder's favour, or beyond it.** The domain verification race
+was filed as a hostname hijack. The verifier established something worse: nothing
+in the tree refuses the instance's *own* names, and `customHostRouter` sits in
+front of both router branches — so the row renamed mid-flight can be the
+instance's app host, which hides the dashboard and the API behind the custom mux,
+or its link host, which repoints every alias lookup at the attacker's domain id.
+The audit record does not catch it either, because `MarkDomainVerified`'s
+`RETURNING` row is consumed only to stamp the log, so the trail corroborates the
+hijack. That is the review's most serious result and it was not the one filed.
+
+The Unicode-host finding was filed with the note that Go's HTTP client performs no
+IDNA, so M42's webhooks were immune. **That is false**, and the verifier proved it
+rather than asserting it: `net/http`'s `canonicalAddr` calls the standard
+library's vendored `golang.org/x/net/idna`, and a dial probe showed the stored
+`http://169%E3%80%82254%E3%80%82169%E3%80%82254/` connecting to
+`169.254.169.254:80`. The private-address line still holds, because the webhook
+dialer judges the resolved address rather than the name — but the Postgres
+blocklist, the shortener list and the homograph tier are all name-based, so this
+server can be made to POST signed workspace payloads to a host the operator
+blocked.
+
+**Refuted in part, which changed what the fix is.** The rotation counter being
+spent by requests that never became clicks is two claims, and only one survives:
+a deep link the alias cannot forward spending its position is D57, recorded, and
+argued at three sites. HEAD doing the same is not, and falsifies two absolutes in
+the same decision entry. The per-alias password bucket is likewise D54's chosen
+mechanism and arguing it is re-litigation — but the verifier found a limb nobody
+filed, that the limiter runs before `ParseForm`, so a *correct* password also
+spends a token.
+
+### M32.9's rows, confirmed rather than assumed
+
+m44.9.md requires the previous review's findings be confirmed as actually fixed.
+All five approved reopenings hold, and each avoided the trap the triage recorded
+against it:
+
+| Row | Reopened | Verdict |
+| --- | --- | --- |
+| F26 trailing dot | M30 | **Fixed**, all nine spellings, all three tiers. Canonicalises rather than rejects, and `TrimRight` rather than `TrimSuffix` closes the double-dot case the finding did not name |
+| F27 workspace authority | M28 | **Fixed** at the *read of authority* rather than at `Grant`, which is what the trap required. Five tests now drive a workspace-scoped identity as the actor |
+| F28 alias reservation | M28.5 | **Fixed at both doors**, `DeleteWorkspace` included |
+| F29 key to interactive account | M27 | **Fixed** on every invitation path, via D43's named-role cap |
+| F30 stalled subscriber | M23 | **Fixed**, and it avoided both traps — no `Channel()`, and no flush on a merely-quiet connection |
+
+Two things that are not clean. **F10 is not fixed and the row is misleading in the
+other direction**: the review that closed it was right, the fix held, and the
+enumeration that is now stale is a different one in different files, so the row
+should not be reopened but the drift belongs in F45's family. And **F29 is a
+bookkeeping error**: the fix landed at `524b793` with D43, the row was never moved
+to *Closed*, and it has been sitting in *Open* asserting a live major defect the
+tree refuses. That is worth more than it looks — the file's own standing rule is
+that nothing leaves a tracker silently, and this is the inverse failure, something
+that stayed when it should have left.
+
+One escalation M32.9's verifiers found remains live and is correctly tracked: an
+orphaned API key still reaches `POST /api/v1/organizations`, because
+`CreateOrganization` bypasses its permission at zero memberships. It is F43, open
+and unreviewed — never among the five approved — so this is the process working
+rather than a miss. It is named here because M44's rotation has landed since, and
+this review found that rotation makes F43's "one-shot" wording false.
+
+### The shape of what was found
+
+Two clusters and a spine.
+
+**The first cluster is `M40 × everything`.** Four of the confirmed findings are the
+same shape: a milestone that shipped before custom domains existed reads
+`h.DomainID`, the instance default resolved once at boot, where it now needs the
+request's domain. M35's signature verifier does it, M35's signed-URL builder does
+it, the per-alias password limiter does it, and M32.5's bot policy has no
+per-domain writer at all while its page reads the default domain's settings for
+every link. None of these is a defect in M40 and none is a defect in M35 or M32.5;
+each is correct against the tree it was written for. That is precisely the class
+[M32.9](#2026-08-01--m329-the-second-pass-and-what-refutation-cost-the-findings)
+could not see, because the second milestone had not been built.
+
+**The second cluster is the scheduler.** M42's delivery drain, M43's rule
+evaluation and M40's re-verification pass all run from one goroutine on one
+`select`, and each of the three has a bound that assumes it is alone: twenty
+sequential deliveries at up to ten seconds each, a hundred rules ordered by a
+watermark that only advances when a rule fires, and five hundred domains at five
+seconds apiece inside a ten-minute budget. Individually each is defensible.
+Together they are a queue any single tenant can hold.
+
+The spine is narrower and older: **the redirect tree has no request deadline.**
+Every milestone that added a database call to it — M35's gates, M36's rotation —
+inherited a path where the resolver bounds its own query and nothing bounds
+anything else.
+
+### The numbers, and what they cost
+
+**91 raw candidates → 78 distinct put to adversarial verification → 12 refuted
+outright, 9 refuted as restatements of rows the file already holds, 18 narrowed or
+corrected downward, 55 confirmed and filed as F76–F130.**
+
+Refutation moved a finding's tier more often than it killed one, and that is the
+result worth recording. Three findings arrived at critical or high and left at
+minor or cosmetic; three arrived lower and left higher; one — the domain
+verification race — left with a different impact class entirely. A review that had
+skipped this pass would have put a release-blocker in front of the owner over a
+Plan.md sentence no gate reads, and would have missed that the same race reaches
+the instance's own hostname.
+
+The straggler pass is worth naming separately. Nine candidates that no batch had
+covered were sent to a final verifier, and **six of the nine were refuted** — the
+highest refutation rate of any batch. They were the low-severity residue, exactly
+the population most likely to be waved through, and waving them through would have
+put six rows in front of the owner that the tree does not support.
+
+Three findings were reproduced against a running instance rather than argued: the
+`HEAD` disclosure on an exhausted one-time link, the Unicode-host acceptance, and
+the unreachable webhook and automation pages. Each is stronger evidence than any
+reader's reading, and two of the three were filed by readers who could not have
+known whether they reproduced.
+
+### What this entry does not do
+
+Nothing here is scheduled. Every row is in
+[deferred-findings.md](deferred-findings.md) awaiting owner review, and the triage
+is a prompt rather than a decision this loop made — including the rows that
+falsify a shipped milestone's own claim, because reopening is scheduling and
+scheduling is the owner's.
+
+Two bookkeeping matters are raised there rather than acted on. **F29 is in the
+wrong section**: its fix landed at `524b793` with D43, the row was never moved to
+*Closed*, and it has been asserting a live major defect the tree refuses. And four
+existing rows want a line added rather than a new row beside them — F37 gains
+`Plan.md:504-506`, F45 gains the audit-enumeration and never-grantable-scope
+drifts that M42 and M43 widened, F61 gains the same, and F69's *"four trailing
+rows"* is now none.
