@@ -458,6 +458,115 @@ func TestOpenRegistrationCreatesNothingUntilTheAddressIsProven(t *testing.T) {
 	}
 }
 
+// Registration cannot be asked whether an address already has an account.
+//
+// Until 0.2.0 it could: a taken address answered 409 and a free one answered
+// 202, on an endpoint that is unauthenticated whenever the mode is `open`, so
+// a leaked address list could be tested for membership against this instance.
+// M27 already spends argon2 work so redemption cannot be asked the same
+// question (D27), which is what made the disagreement worth closing rather
+// than documenting.
+//
+// The assertion is deliberately about the *response* and not about the mail: an
+// oracle is anything the caller can tell apart, so the status and the body are
+// compared directly rather than checked against expectations one at a time.
+// What differs is what lands in the outbox, and that reaches the address rather
+// than whoever typed it.
+func TestRegistrationCannotBeAskedWhetherAnAddressIsTaken(t *testing.T) {
+	f := newSignupFixture(t, signupOptions{Mode: signup.Open, WithMailer: true})
+
+	// owner@example.com is the account the fixture registers. free@example.com
+	// has never been seen.
+	takenStatus, takenBody := f.postJSON("/api/v1/auth/register", map[string]string{
+		"email": "owner@example.com", "name": "Somebody", "password": signupPassword,
+	})
+	freeStatus, freeBody := f.postJSON("/api/v1/auth/register", map[string]string{
+		"email": "free@example.com", "name": "Somebody", "password": signupPassword,
+	})
+
+	if takenStatus != http.StatusAccepted {
+		t.Errorf("a taken address answered %d, want 202 — the same as a free one\n%s",
+			takenStatus, takenBody)
+	}
+	if takenStatus != freeStatus {
+		t.Errorf("taken answered %d and free answered %d; the difference is the oracle",
+			takenStatus, freeStatus)
+	}
+	// Two fields must differ and carry nothing: the address is the caller's own
+	// input echoed back, and the expiry is a clock reading. Everything else is
+	// compared literally, which is how the fractional-second precision was
+	// caught — the taken branch returned Go's nanosecond clock while the free
+	// one returned a value Postgres had truncated to a microsecond, so the
+	// digit count answered the question the status code no longer did.
+	normalize := func(body, email string) string {
+		out := strings.Replace(body, email, "<address>", 1)
+		if i := strings.Index(out, `"expires_at":"`); i >= 0 {
+			j := strings.Index(out[i+14:], `"`)
+			if j >= 0 {
+				out = out[:i+14] + "<when>" + out[i+14+j:]
+			}
+		}
+		return out
+	}
+	takenShape := normalize(takenBody, "owner@example.com")
+	freeShape := normalize(freeBody, "free@example.com")
+	if takenShape != freeShape {
+		t.Errorf("the bodies differ beyond the address and the clock, which is the "+
+			"oracle moved rather than closed:\ntaken: %s\nfree:  %s", takenShape, freeShape)
+	}
+	if strings.Contains(takenShape, "@") {
+		t.Errorf("the taken body still carries an address after normalization: %s", takenShape)
+	}
+
+	// Nothing is written for the taken address. A pending registration would
+	// supersede whatever the real owner had outstanding, so a stranger could
+	// invalidate their link by typing their address into the form.
+	if n := f.scalar(
+		`SELECT count(*) FROM pending_registrations WHERE email = 'owner@example.com'`); n != 0 {
+		t.Errorf("%d pending registrations for an address that already has an account, want 0", n)
+	}
+	if n := f.scalar(
+		`SELECT count(*) FROM pending_registrations WHERE email = 'free@example.com'`); n != 1 {
+		t.Errorf("%d pending registrations for the free address, want 1", n)
+	}
+
+	// The answer went to the address instead, and it is not the verification
+	// mail — sending that would be worse than the 409, because it would put a
+	// working link to somebody else's account in the post.
+	if n := f.scalar(
+		`SELECT count(*) FROM mail_outbox WHERE recipient = 'owner@example.com' AND kind = $1`,
+		signup.MailKindExists); n != 1 {
+		t.Errorf("%d account-exists messages queued for the taken address, want 1", n)
+	}
+	if n := f.scalar(
+		`SELECT count(*) FROM mail_outbox WHERE recipient = 'owner@example.com' AND kind = $1`,
+		signup.MailKind); n != 0 {
+		t.Errorf("%d verification messages queued for an address that already has an "+
+			"account; that link would create nothing and says the wrong thing", n)
+	}
+}
+
+// An address the pattern accepts and the mailer cannot parse is refused before
+// anything is written, rather than committing a row and then answering 500 with
+// a status the API does not declare (F53).
+func TestAnUnsendableAddressIsRefusedRatherThanCommitted(t *testing.T) {
+	f := newSignupFixture(t, signupOptions{Mode: signup.Open, WithMailer: true})
+
+	// Every one of these matches auth's deliberately permissive pattern and is
+	// rejected by net/mail.ParseAddress, which is the parser the mailer uses.
+	for _, addr := range []string{"a<b@c.de", "a,b@c.de", "user@exa(mple.com", `a"b@c.de`} {
+		status, body := f.postJSON("/api/v1/auth/register", map[string]string{
+			"email": addr, "name": "Somebody", "password": signupPassword,
+		})
+		if status != http.StatusUnprocessableEntity {
+			t.Errorf("register %q answered %d, want 422\n%s", addr, status, body)
+		}
+	}
+	if n := f.scalar(`SELECT count(*) FROM pending_registrations`); n != 0 {
+		t.Errorf("%d pending registrations committed for addresses nothing can send to", n)
+	}
+}
+
 // Closing sign-ups closes the ones already in flight. A link lives for a day,
 // and an operator can lower LINKCTRL_SIGNUP_MODE and restart inside that window
 // — so verification asks the mode again rather than trusting that it was open

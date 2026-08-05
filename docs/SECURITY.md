@@ -354,6 +354,19 @@ the instance audit log (D98), and its scopes are enumerated rather than implied 
 the signup mode is deliberately not one of them, so changing the mode still
 requires whoever can edit the environment and restart the process.
 
+**Registration cannot be asked whether an address already has an account, since
+0.2.0.** It could until then: a taken address answered `409` and a free one
+`202`, on an endpoint that is unauthenticated whenever the effective mode is
+`open`, so a leaked address list could be tested for membership against the
+instance. Both answers are now the same status, the same body and the same
+argon2 cost — the hash is computed before the address is looked up, so the
+timing does not restore the difference the status code stopped carrying — and
+the person who owns the address is told by mail that somebody tried to register
+it. Nothing is written for a taken address either, so a stranger cannot
+invalidate the real owner's outstanding verification link by typing their
+address into the form. This is the same stance redemption has held since M27
+(D27); the two surfaces used to disagree.
+
 **Open sign-ups have no CAPTCHA and no proof-of-work.** Registration shares the
 sign-in rate limit per address, and confirming an address by email is what stops
 an account existing for one nobody controls. Neither stops a distributed run from

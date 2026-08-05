@@ -22,6 +22,22 @@ migrations run at boot.
 
 ### Changed
 
+- **Registering an address that already has an account now answers `202` and
+  sends mail, where it used to answer `409`.** On an instance with `open`
+  sign-ups that status code was an unauthenticated way to ask whether an address
+  is registered here, which is a question a leaked address list can be tested
+  against. Both answers now cost the same and return the same body, and the
+  owner of the address gets a message saying somebody tried to register it —
+  which reaches the person concerned rather than whoever typed the address in.
+  **If you have an integration that treated `409` as "already registered", it
+  will now see `202`**; nothing was created, exactly as the body says.
+
+- **An email address that this product would accept and then fail to send to is
+  now refused when it is typed.** Nine forms — `a<b@c.de` and `a,b@c.de` among
+  them — passed the address pattern and were rejected by the mail parser, so a
+  registration committed a row and then answered `500`. They now answer `422`
+  like any other invalid address, on registration and on invitations alike.
+
 - **`GET /api/v1/workspaces` answered with an API key now lists only the
   organization that key was issued for.** It used to list every workspace the
   key's owner belongs to, in every organization — names, slugs and identifiers

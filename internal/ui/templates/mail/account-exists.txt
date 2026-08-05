@@ -1,0 +1,18 @@
+Subject: You already have a LinkCtrl account
+
+Hello,
+
+Somebody filled in the sign-up form on this LinkCtrl instance with your address
+({{.Email}}). You already have an account here, so nothing was created and
+nothing was changed.
+
+If that was you, sign in with the password you already use. There is no
+password reset in this product, so if you cannot remember it, the operator of
+this instance is the only person who can help.
+
+If it was not you, you can ignore this. Somebody typed your address into a
+sign-up form and learned nothing: the form answers the same way whether or not
+an address is registered, which is why this message exists.
+
+--
+LinkCtrl

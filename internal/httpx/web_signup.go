@@ -98,10 +98,13 @@ func (h *Web) SignupSubmit(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, domain.ErrValidation):
 			data.FieldErrors, data.Error = fieldErrors(err)
 			h.render(w, r, http.StatusUnprocessableEntity, "signup", data)
-		case errors.Is(err, auth.ErrEmailTaken):
-			data.Error = "That email address is already registered. Sign in instead, " +
-				"or use the password reset if you have forgotten it."
-			h.render(w, r, http.StatusConflict, "signup", data)
+		// No ErrEmailTaken branch, deliberately. Register does not return it any
+		// more: a taken address gets the same 202 and the same page as a free
+		// one, and the answer goes to the address by mail (F13). A branch here
+		// would be unreachable, and an unreachable branch asserting the opposite
+		// of the behaviour is what the next reader would believe. The text it
+		// used to render also offered a password reset, which this product has
+		// never had (F141).
 		case errors.Is(err, signup.ErrClosed):
 			h.errorPage(w, r, http.StatusForbidden, "Sign-ups are closed",
 				"This instance does not accept public registration.")

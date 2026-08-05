@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/mail"
 	"net/netip"
 	"regexp"
 	"strings"
@@ -159,9 +160,31 @@ func NormalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
 
+// ValidateEmail is the gate on every path that writes an address: creating the
+// first account, issuing an invitation, and starting a registration. It is not
+// on the login path, where the address is compared and never sent to.
+//
+// The regex above is permissive on purpose, and the second check is what stops
+// permissive becoming unsendable. `net/mail.ParseAddress` is the parser the
+// mailer itself uses, so an address that passes the pattern and fails the parser
+// is one this product will accept, store, and then fail to send to — which is
+// what F53 was: nine forms including `a<b@c.de`, `a,b@c.de` and
+// `user@exa(mple.com` matched the pattern, committed a `pending_registrations`
+// row, and then answered 500 from the enqueue, a status the API does not
+// declare. Checking here rather than in signup closes it for invitations too,
+// which reach the same enqueue through a different door.
+//
+// Strictly a narrowing: every address the parser accepts and the pattern does
+// not — `Barry Gibbs <bg@example.com>` is the shape — is still refused, because
+// the pattern runs first and because a display-name form is not the address
+// somebody typed.
 func ValidateEmail(email string) error {
 	e := NormalizeEmail(email)
 	if e == "" || len(e) > 320 || !emailPattern.MatchString(e) {
+		return ErrInvalidEmail
+	}
+	parsed, err := mail.ParseAddress(e)
+	if err != nil || parsed.Address != e {
 		return ErrInvalidEmail
 	}
 	return nil

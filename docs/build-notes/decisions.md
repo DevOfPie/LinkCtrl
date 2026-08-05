@@ -174,6 +174,7 @@ file. Append a row when you append an entry.
 | [M45, three rows that end without a mechanism](#2026-08-05--m45-three-rows-that-end-without-a-mechanism) | F132 declined because the population a repair would walk is empty — no server was ever built from 0.1.0 — and why that disqualifies the command by arithmetic rather than by the argument it rested on, which stays untried; the row's second reason falsified by a line in its own diff; the residue widened to F26's trailing dot and checked against `v0.1.0`; why the population is stated as what it requires and not as a reassurance. F141 recorded in Plan.md and README and deliberately left open, and why a passing mention inside somebody else's feature is not the same as a list entry. F142: m32.md's bullet is not amended because a reopening section is where what became false already lives, and a Done-means bullet is the record of what was true at ship; the test renamed with no assertion moved; a wording row's site list short by one for the second time |
 | [M45's third triage, and a rule that changed the recommendation](#2026-08-05--m45s-third-triage-and-a-rule-that-changed-the-recommendation) | The last sixty-six rows, in eight groups by tier and cluster; sixty-five approved, F90 carried. Why the carry is not cheapness — the row has no repair, only a choice of fairness model, and a phase close is where that choice goes wrong. **The standing rule of 2026-08-04 shows up as a disappearance**: written under it, the recommendation was the widest option three times of four and was taken all four, where the two earlier triages recorded the owner correcting a narrower one. F17's second limb reviewed for the first time; F44 closed as a record rather than a build; F57, F58, F113 and F117 the same, each on its own fix note. **F108 and F46 reopen M38 and M24.5** rather than landing here, per workflow.md's reopening rule. The two questions deliberately left: F70's D38, whose ground D98 moved, and F18, which is F17's mechanical cause and is put where the alternative's cost is visible. And the scale — twenty-odd commits — stated in the prompt rather than discovered after the answer |
 | [M45, a bound the write half had and the read half did not](#2026-08-05--m45-a-bound-the-write-half-had-and-the-read-half-did-not) | F103 and F104, closed together because F103's fix is the thing F104's rule forbade. The organization bound M44 put on what a key may *act* on, applied to what it may *read* — and why the filter is in the service rather than in the query the browser switcher shares. Both halves asserted in one fixture, because a filter that took the session with it would be the worse defect. **The census corrected F104's count from seven sites to ten**, and the four it missed are all D43's cap — which the rule licensed but described as invitations-only while the tree also caps role assignment on an existing membership. One of the ten is not authorization at all. The inherited Permissions rule amended, owner-answered, from two mechanisms to four; the recommendation was a rule stated as a test rather than a list, declined with its drift cost named, and the prediction left on the record |
+| [M45, two questions registration was answering](#2026-08-05--m45-two-questions-registration-was-answering) | F13 and F53. Why the registration oracle was defensible until M29 put a browser form in front of it, and the three things closing it took rather than one — the hash moved above the lookup so timing does not restore what the status code stopped carrying, nothing written for a taken address so a stranger cannot invalidate the owner's outstanding link, and a fourth mail template that deliberately carries no verification link. **The test compares whole bodies and that is what caught the residue**: Go's nanosecond clock against Postgres's microsecond, three extra digits on one answer only — an argument for asserting *indistinguishable* rather than a list of properties. F53 fixed in the shared validator rather than in signup, because invitations reach the same enqueue; the narrowing checked in both directions. And the unreachable branch deleted rather than left asserting the opposite of the code beside it |
 
 ---
 
@@ -15130,3 +15131,100 @@ browser. `requireSessionActor`'s doc comment is corrected instead, and it now
 separates the three callers in `apikey.go` — defence in depth behind a
 non-delegable permission — from the two in `workspace.go`, where it is the only
 enforcement there is, because neither operation checks a permission at all.
+
+## 2026-08-05 — M45, two questions registration was answering
+
+[F13](deferred-findings.md) and [F53](deferred-findings.md). One surface, two
+ways of answering something it should not: a status code that told a stranger
+whether an address is registered, and a 500 for input the same endpoint had just
+accepted.
+
+### The oracle, and why it was defensible until it was not
+
+`POST /auth/register` answered `409` for a taken address and `202` for a free
+one. That was not an oversight and the behaviour predates Phase 2 — but until
+[M29](phase-details/m29.md) the endpoint was API-only, so asking it took a
+credential. A browser sign-up form is what makes it a surface a stranger reaches,
+and rate limiting slows a sweep of a leaked address list without removing the
+signal.
+
+The product had already decided this was worth not disclosing. D27 spends argon2
+work on every invitation redemption specifically so redemption cannot be asked
+whether an address is registered. Two surfaces, one question, opposite answers.
+
+Both branches now return `202`, the same body, and the same work. Three things
+were needed rather than one:
+
+**The hash moves above the lookup.** Argon2 is this request by two orders of
+magnitude. Branching before it would have made a taken address measurably faster
+and handed back the oracle the status code stopped carrying.
+
+**Nothing is written for a taken address.** This closes something the row did not
+name: a pending registration supersedes whatever was outstanding for that
+address, so writing one would have let a stranger invalidate the real owner's
+verification link by typing their address into a form.
+
+**The answer goes to the address.** A fourth mail template, `account-exists`,
+says somebody tried to register and that nothing changed. That is where the
+answer belongs — the address reaches the person who owns it, and a status code
+reaches whoever typed it. It deliberately does not carry a verification link:
+mailing one would be worse than the 409, because it would put a working route
+into somebody else's account in the post.
+
+### What the test found, which is the part worth keeping
+
+`TestRegistrationCannotBeAskedWhetherAnAddressIsTaken` compares the two response
+bodies **whole**, with only the echoed address and the clock reading normalized
+out, rather than checking a list of properties one at a time. An oracle is
+anything the caller can tell apart, so the assertion is *indistinguishable* and
+not *has the fields I thought of*.
+
+It failed on the first run, and not on the status code:
+
+```
+taken: …"expires_at":"2026-08-06T03:56:20.516732356Z"…
+free:  …"expires_at":"2026-08-06T03:56:20.532069Z"…
+```
+
+The free branch's expiry has been through Postgres, which stores `timestamptz`
+to a microsecond. The taken branch's came from Go's nanosecond clock. Three extra
+digits, present on exactly one of the two answers, and the fractional part alone
+would have answered the question the status code no longer did. The value is
+truncated to a microsecond to match.
+
+A property-by-property assertion would have passed. That is the argument for
+comparing the whole thing whenever the claim is *these are indistinguishable*,
+and it is worth more than the defect it caught.
+
+### F53, fixed wider than it was filed
+
+The row scopes itself to `signup.Register` and proposes running the address
+through `net/mail.ParseAddress` before the transaction commits. The check went
+into `auth.ValidateEmail` instead, which is the shared gate on every path that
+*writes* an address — the first account, an invitation, a registration — and not
+on the login path, where an address is compared and never sent to.
+
+That is wider than the row asked for and it is the same defect rather than
+adjacent scope: invitations reach the identical `Enqueue`, and would have
+produced the identical undeclared 500 through a different door. Fixing one caller
+of a shared validator would have left a row for the second one.
+
+Strictly a narrowing, checked rather than assumed. Nine forms match the
+deliberately permissive pattern and fail the parser — `a<b@c.de`, `a,b@c.de`,
+`user@exa(mple.com` among them — and the one shape the parser accepts and the
+pattern does not, `Barry Gibbs <bg@example.com>`, is still refused, because the
+pattern runs first and because the check additionally requires the parse to
+return exactly the address given.
+
+### The unreachable branch that was deleted rather than left
+
+`web_signup.go`'s `ErrEmailTaken` case is gone. `Register` cannot return it any
+more, so the branch would have been dead code asserting the opposite of the
+behaviour beside it — which is the class of defect this milestone has spent
+eleven rows closing. Its text also told people to *"use the password reset if you
+have forgotten it"*, which this product has never had; [F141](deferred-findings.md)
+is the row about that, and it is still open.
+
+The `ErrEmailTaken` branch in the **verify** handler stays. `Verify` still returns
+it for the race where an address is claimed between registering and confirming,
+and whoever holds that token owns the address anyway.

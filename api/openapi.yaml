@@ -194,12 +194,24 @@ paths:
 
         Because verification is by email, `open` requires a configured mailer.
         With none, the effective mode is `invite` and this endpoint refuses.
+
+        **An address that already has an account gets the same `202`.** It used
+        to answer `409`, which made this endpoint an oracle for whether an
+        address is registered — reachable by anybody, since the endpoint is
+        unauthenticated whenever the mode is `open`. Both answers now cost the
+        same argon2 work and return the same body, and the person who owns the
+        address is told by mail that somebody tried to register it. Nothing is
+        written for a taken address, so a stranger cannot invalidate an
+        outstanding verification link either.
       security: []
       requestBody:
         $ref: "#/components/requestBodies/Credentials"
       responses:
         "202":
-          description: Verification sent; no account exists yet
+          description: >-
+            Verification sent; no account exists yet. Also the answer when the
+            address already has an account, in which case the mail says so and
+            the response does not.
           content:
             application/json:
               schema:
@@ -210,8 +222,6 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-        "409":
-          $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/Validation"
         "429":

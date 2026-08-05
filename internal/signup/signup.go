@@ -91,6 +91,12 @@ const TokenBytes = 32
 // MailKind names the mail template, which is also the outbox's `kind` column.
 const MailKind = "verification"
 
+// MailKindExists is what a registration attempt on an address that already has
+// an account sends instead. It exists so the *response* does not have to say
+// so: the mail reaches the address, and only its owner reads it, where a status
+// code reaches whoever typed the address into the form (F13).
+const MailKindExists = "account-exists"
+
 // Errors this package returns that a caller distinguishes.
 var (
 	// ErrClosed is registration refused because the effective mode is not
@@ -229,18 +235,11 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*Registered, 
 		}}
 	}
 
-	// Refused rather than quietly queued. The API has answered 409 for a taken
-	// address since Phase 1 and the form needs to say something a person can act
-	// on; pretending otherwise would mean sending a verification link that
-	// cannot complete.
-	taken, err := s.q.CountUsersByEmail(ctx, email)
-	if err != nil {
-		return nil, fmt.Errorf("check address: %w", err)
-	}
-	if taken > 0 {
-		return nil, ErrEmailTaken
-	}
-
+	// Hashed before the address is looked up, and that order is the point.
+	// Argon2 is the expensive part of this request by two orders of magnitude,
+	// so branching before it would make a taken address measurably faster than
+	// a free one and hand back the oracle the answer below removes. D27 spends
+	// the same work on redemption for the same reason.
 	hash, err := s.hasher.Hash(in.Password)
 	if err != nil {
 		return nil, err
@@ -250,6 +249,49 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*Registered, 
 		return nil, err
 	}
 	name := strings.TrimSpace(in.Name)
+
+	// A taken address gets mail, not a refusal.
+	//
+	// This endpoint answered 409 for a taken address from Phase 1 until 0.2.0,
+	// and until M29 that was defensible: it was API-only, so asking it whether
+	// an address is registered took a credential. A browser sign-up form is
+	// what makes it a surface a stranger reaches, and rate limiting slows a
+	// sweep of a leaked address list without removing the signal. M27 already
+	// spends argon2 work so that redemption cannot be asked the same question
+	// (D27), so the product had two surfaces disagreeing about whether this is
+	// worth not disclosing.
+	//
+	// Both branches now answer 202 with the same body, cost the same argon2
+	// work, and put one message in the outbox. The person who owns the address
+	// is told what happened by mail — which is where the answer belongs,
+	// because it reaches the address rather than whoever typed it. Nothing is
+	// written: there is no pending registration to supersede, and creating one
+	// would let a stranger invalidate the real owner's outstanding link.
+	taken, err := s.q.CountUsersByEmail(ctx, email)
+	if err != nil {
+		return nil, fmt.Errorf("check address: %w", err)
+	}
+	if taken > 0 {
+		if err := s.cfg.Mail.Enqueue(ctx, email, MailKindExists, map[string]string{
+			"Email": email,
+		}); err != nil {
+			return nil, fmt.Errorf("queue account-exists mail: %w", err)
+		}
+		// The window quoted to the caller is the one a real registration would
+		// have had. Returning a zero time, or omitting the field, would
+		// reintroduce the distinction the mail was sent to remove.
+		//
+		// Truncated to microseconds because the other branch's value has been
+		// through Postgres, which stores `timestamptz` to a microsecond. Go's
+		// clock is nanosecond, so an untruncated value serializes with three
+		// more digits and the fractional part alone answers the question the
+		// status code no longer does. The test compares whole bodies for
+		// exactly this reason — it found this.
+		return &Registered{
+			Email:     email,
+			ExpiresAt: time.Now().Add(VerificationTTL).Truncate(time.Microsecond),
+		}, nil
+	}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
