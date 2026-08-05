@@ -189,6 +189,7 @@ file. Append a row when you append an entry.
 | [A command that chooses a loop](#2026-08-05--a-command-that-chooses-a-loop-and-the-backlog-that-had-nothing-consuming-it) | W11, widened by the owner. `/work-on-phase` becomes `/work phase`, routing moves into its own file, and the process backlog gets a loop that consumes it. Why the kind is the last token, why an unknown target prompts instead of matching the nearest, why `--revalidate` touches routing only, and why the workflow loop is the third thing in this repository that is not delegated. Also what the command cannot do: cross-repository dispatch resolves nothing, and the reason is that the only globally visible place to put a command is untracked |
 | [Two stops, one of which was only ever a sentence](#2026-08-05--two-stops-one-of-which-was-only-ever-a-sentence) | W9. `/stop` exists. Why it takes no arguments and refuses rather than interprets, why it reconciles the note against the tree instead of against a worker's report, and why it rewrites nothing when no loop is running. The checkpoint stop stays a phrase here and is W10's |
 | [The second stop becomes a flag](#2026-08-05--the-second-stop-becomes-a-flag-and-the-one-case-where-the-two-stops-disagree) | W10. Why a flag rather than a second command, why the checkpoint needed no redefining despite the note asking, and the one case where the two stops genuinely diverge — with nothing in flight, the immediate stop writes nothing and the deferred stop is already satisfied |
+| [Describing the commands to a reader who is not here](#2026-08-05--describing-the-commands-to-a-reader-who-is-not-here) | W12. A second description of the same five commands, which is a duplication and is admitted as one. Why the contract fields are *what it may decide* and *what it must not do* rather than a list of steps, why the page is the authority on nothing, why *not a command* is a section, and the three things an agent reached outside this harness needs — the last of which excludes any agent that cannot stop and wait |
 
 ---
 
@@ -16211,3 +16212,57 @@ With no loop running they diverge, and the command says so rather than treating
   no worker spawned is at a checkpoint by definition, so the deferred stop is an
   immediate one — and the report names which it became, because silently
   becoming the other stop is the substitution this whole design refuses.
+
+---
+
+## 2026-08-05 — Describing the commands to a reader who is not here
+
+W12, off the *Proposed* table. The row asked for the command surface documented
+for agents, *in a form that is as model-agnostic as possible*. Carries no
+milestone number.
+
+### The duplication is real and is not hidden
+
+[commands.md](commands.md) describes the same five commands their own files
+describe. That is a second copy, and this repository's own rule about copies is
+that they drift and no reader can tell which is current.
+
+It is accepted here for one reason and bounded by one rule. The reason: the
+files under `.claude/commands/` are addressed to a specific harness — a leading
+slash, a `$ARGUMENTS` placeholder, front matter with a `description` — and none
+of that is load-bearing to what the commands actually oblige. An agent reached
+some other way needs the obligations without the invocation mechanism. The rule:
+**the command file is the authority on its own behaviour and this page is the
+authority on nothing.** A disagreement between them is a defect in the page, not
+a conflict to resolve, so the page can never win a drift.
+
+### The fields are what may be decided and what must not be done
+
+Not a list of steps. Steps are what the command files already carry, and copying
+them is where the drift would start; the second copy would go stale the first
+time a step changed.
+
+*Decides* and *Must not* are stable across rewordings because they are the
+command's actual boundary. `/note` decides **nothing**, and that is the whole
+character of the command — a capture that costs anything is one the owner learns
+not to use. `/preview-decisions` must not fix what it finds, because silently
+correcting a plan defect means the loop later validates against a plan somebody
+quietly edited. Those two sentences survive any rewrite of either file's steps.
+
+### What is deliberately not a command
+
+Written because absence reads as oversight, and because each omission is a
+decision this repository has already taken elsewhere: approving work is the
+owner's, merging and tagging reach outside the repository, and fixing an
+out-of-scope defect is a tracker row rather than an invocation. An agent reading
+only the five contracts would eventually propose the missing sixth.
+
+### The exclusion at the end is the load-bearing one
+
+Three things an agent needs to hold these contracts: the invocation must be
+identifiable, arguments are positional and untyped, and **prompting must be
+possible and blocking**. Every contract has at least one path that stops and
+waits for the owner. An agent that cannot stop and wait should run none of them
+rather than run them with the prompts elided — which is the *ask, never assume*
+rule stated as a precondition rather than as an instruction, because an
+instruction is exactly what such an agent would be unable to follow.

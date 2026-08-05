@@ -15,6 +15,9 @@ any work. It is short, and it is the operating contract.
 | `/preview-decisions` | Ask the questions the loop has not reached yet | [upcoming-decisions.md](docs/build-notes/upcoming-decisions.md) |
 | Anything else | — | [workflow.md](docs/build-notes/workflow.md) |
 
+Every command's contract, stated for a reader outside this harness, is
+[commands.md](docs/build-notes/commands.md).
+
 Scope is [Plan.md](Plan.md); definitions of done are
 [docs/build-notes/phase-details/](docs/build-notes/phase-details/), one file per
 milestone — read only the one being built. Rationale is append-only in

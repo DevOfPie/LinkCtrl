@@ -35,6 +35,7 @@ append-only and records which.
 | [workflow.md](workflow.md) | The gates. What must pass before anything lands | Every task |
 | [work-loop.md](work-loop.md) | Routing. Which target, which kind, which loop — and the loop over process changes | `/work` is invoked |
 | [phase-loop.md](phase-loop.md) | The sequence. Who does what, in what order, and when to stop | Building a phase |
+| [commands.md](commands.md) | Every command's contract, stated without assuming this harness | Reaching an agent some other way |
 | [planning.md](planning.md) | How a requested feature becomes planned work | A feature is asked for |
 | [phase-details/](phase-details/) | One definition of done per milestone, plus the status table | Building one milestone |
 | [decisions.md](decisions.md) | Why. Append-only; a later entry corrects an earlier one, nothing is edited | Wondering why something is the way it is |
