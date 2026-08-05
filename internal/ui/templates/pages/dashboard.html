@@ -6,7 +6,7 @@
 
 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
   <div class="rounded-lg border border-line bg-raised p-4">
-    <p class="text-sm text-muted">Clicks</p>
+    <p class="text-sm text-muted">Clicks <span class="cursor-help text-subtle" title="Human clicks over the last 30 days. Bots are counted in their own tile, and the per-link totals under Recent links are all-time and include them — so those numbers are larger, by design.">ⓘ</span></p>
     <p class="mt-1 text-2xl font-semibold tabular-nums">{{fmtInt .Overview.Totals.Clicks}}</p>
   </div>
   <div class="rounded-lg border border-line bg-raised p-4">
@@ -31,6 +31,7 @@
 <div class="mt-6 rounded-lg border border-line bg-raised p-6">
   <div class="mb-4 flex items-baseline justify-between">
     <h2 class="text-sm font-medium text-ink">Recent links</h2>
+    <span class="ml-2 grow text-xs text-subtle">all time, bots included</span>
     <a href="/links" class="text-sm font-medium text-accent-ink hover:underline">All links →</a>
   </div>
   {{if .Recent}}
@@ -42,7 +43,7 @@
         <p class="truncate text-xs text-muted">{{truncate .URL 80}}</p>
       </div>
       <div class="shrink-0 text-right text-sm">
-        <p class="tabular-nums">{{fmtInt .ClickCount}} clicks</p>
+        <p class="tabular-nums" title="Every hit this link has ever taken, bots included. The Clicks tile above counts the last 30 days and counts bots separately, so the two figures differ by design.">{{fmtInt .ClickCount}} clicks</p>
         <p class="text-xs text-subtle">{{reltime .LastClickAt}}</p>
       </div>
     </li>

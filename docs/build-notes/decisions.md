@@ -17370,3 +17370,31 @@ resolved, and the asymmetry it describes is live until the model lands: a
 `204`-versus-`404` existence oracle against key ids a caller would have to guess.
 Closing it on the strength of a plan would be the tracker losing a defect to a
 promise.
+
+## 2026-08-05 — M45, two right numbers and the silence between them
+
+[F24](deferred-findings.md). The dashboard shows a link's clicks twice: the
+*Clicks* tile reads `workspace_click_daily`, and each row under *Recent links*
+reads `links.click_count`. Seven human clicks and two bot clicks on one link
+render as 7 and 9 on the same page.
+
+Neither number is wrong, and the fix is not to make them equal. The tile is what
+the page is about — human clicks over the last thirty days — and the per-link
+total is what the links page sorts by and what an owner means by "how much
+traffic has this link had". Collapsing them would lose one of the two answers.
+
+**The two differ on two axes, not the one the row names.** Bots, which is what
+was filed; and the window, lifetime against thirty days, which was not. Labelling
+only the bot half would have left a reader with a smaller unexplained gap and
+more confidence in it, which is worse than the gap.
+
+So both are labelled: *all time, bots included* beside the *Recent links*
+heading, the full reason in each count's title, and a marker on the *Clicks* tile
+saying bots are counted separately and the per-link totals are larger by design.
+No number moved.
+
+This is [F107](deferred-findings.md)'s answer applied to the same shape of
+problem, decided the same way in the same milestone: two defensible figures
+rendered next to each other, where the defect is the silence between them rather
+than either figure. Worth noting the pair, because the instinct in both cases was
+to change a number, and in both cases the number was right.
