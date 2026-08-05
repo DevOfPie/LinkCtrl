@@ -120,10 +120,33 @@ type Snapshot struct {
 	// Adding them did NOT bump CacheKeyVersion, and that is a claim worth being
 	// explicit about. Both are omitempty, so an entry written by the previous
 	// build decodes with the zero values — inherit and off — which is exactly
-	// "no blocking". On any instance holding such an entry the columns did not
-	// exist a moment ago, so nobody can have switched blocking on yet, and the
-	// stale reading cannot differ from the true one. A field whose absence had
-	// meant something else would have needed the bump and a cold cache.
+	// "no blocking".
+	//
+	// **The reason originally given for that being safe was wrong** (F41). It
+	// read: on any instance holding such an entry the columns did not exist a
+	// moment ago, so nobody can have switched blocking on yet. That assumes the
+	// old build stops before the new one starts. Migrations run at boot before
+	// the listener opens (docs/releasing.md), so a rolling restart has both
+	// builds serving at once: the new one switches blocking on, the old one goes
+	// on writing bot-less entries under the same key, and a bot is answered 302
+	// for up to REDIRECT_TTL. Reproduced at the Redis layer — three 302s to a
+	// bot against a link whose row said block_bots. SetBotBlocking's
+	// unconditional InvalidateDomain sweeps entries written *before* blocking is
+	// switched on, which is why only the concurrent-write case survives.
+	//
+	// **What actually makes it safe is arithmetic, not reasoning.** 0.1.0 is the
+	// only release that exists and it keys on v1; this build keys on v3, so no
+	// entry any released build ever wrote is one this build can read. M32.5, M34
+	// and M36 all land inside the same unreleased minor. The residue is empty
+	// because there is nowhere for it to be, exactly as F132's was.
+	//
+	// **The rule for next time, which is what this comment is really for.** A
+	// new omitempty field may skip the bump only when the zero value means the
+	// same thing to a visitor as the true value would — not when nobody has had
+	// time to configure it yet, because two builds serving at once is a state a
+	// rolling restart produces on purpose. If the stale reading is a control the
+	// owner configured being silently absent, bump it and pay for the cold
+	// cache; that is the argument v2 and v3 were both bumped on.
 	BotPolicy       domain.BotPolicy       `json:"bb,omitempty"`
 	DomainBotPolicy domain.DomainBotPolicy `json:"db,omitempty"`
 

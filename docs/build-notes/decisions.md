@@ -177,6 +177,7 @@ file. Append a row when you append an entry.
 | [M45, two questions registration was answering](#2026-08-05--m45-two-questions-registration-was-answering) | F13 and F53. Why the registration oracle was defensible until M29 put a browser form in front of it, and the three things closing it took rather than one — the hash moved above the lookup so timing does not restore what the status code stopped carrying, nothing written for a taken address so a stranger cannot invalidate the owner's outstanding link, and a fourth mail template that deliberately carries no verification link. **The test compares whole bodies and that is what caught the residue**: Go's nanosecond clock against Postgres's microsecond, three extra digits on one answer only — an argument for asserting *indistinguishable* rather than a list of properties. F53 fixed in the shared validator rather than in signup, because invitations reach the same enqueue; the narrowing checked in both directions. And the unreachable branch deleted rather than left asserting the opposite of the code beside it |
 | [M45, three calls the redirect tree was not bounding](#2026-08-05--m45-three-calls-the-redirect-tree-was-not-bounding) | F48, F101 and F129 — one class at three sites, and why it is the redirect tree that has it: `RequestTimeout` lives in `appHandler`, which the tree is deliberately outside, so everything the chain would supply is supplied by hand. F48's pool crossing needed a new loader taking a queries handle, because the read's whole dependency was the handle and the crossing existed only through the service it hung off; the singleflight matters because M23's flush makes the miss fleet-simultaneous by design. **The scan was wrong before the code was**: written strictly it flagged two correct variable-form sites, so the rule was narrowed to the shape both defects had and the blind spot is named in the test rather than papered over — a guard with a false positive gets an exception and then stops being read. And why `/tls-check` keeps the application pool: the bound was the defect, the pool is right |
 | [M45, a stalled cache paid for twice, and a sentence that was never true of every link](#2026-08-05--m45-a-stalled-cache-paid-for-twice-and-a-sentence-that-was-never-true-of-every-link) | F9 and F98 — kept apart by the queue hygiene, worked together because they convict the same two sentences. F9's second timeout bought nothing, and the suppression is on the resolver rather than threaded through the call because `store` runs inside a singleflight whose leader may be a different request; window is `DBTimeout`, and it is **deliberately not a circuit breaker** — reads are how the cache recovers. Timing test at 400ms so the margin cannot be closed by a scheduler. **F98 closes as prose because every code fix is worse than the defect**: async answers after the destination is chosen, skipping silently stops a shipped rule matching. And why `docs/slo.md` needed nothing — the measurement was right and the sentence beside it was wrong, which is the opposite of the usual failure |
+| [M45, an accessor nobody retrofitted and a reason that was never the reason](#2026-08-05--m45-an-accessor-nobody-retrofitted-and-a-reason-that-was-never-the-reason) | F65 and F41. **The fix for F65 is not the accessor, because the accessor already existed** — M35 added `log()` and the two calls that predated it went round it, so the guard is a scan for `.Logger.<method>(…)` and the accessor's own comment had been claiming the property nothing enforced. F41: the conclusion holds and the stated reason is false — a rolling restart has both builds serving at once, which the *"nobody can have switched blocking on yet"* clause assumes away, and the row reproduced three 302s to a bot. **No bump, by arithmetic**: 0.1.0 keys on v1, this build on v3, and every bump since lands in the same unreleased minor, so the residue is empty for F132's reason. The comment now carries the rule instead of the excuse |
 
 ---
 
@@ -15389,3 +15390,64 @@ code and is fixed, F98 was prose and is corrected. Merging them would have hidde
 that one of the two had no code fix available — which is the more useful fact for
 anyone who reads this later and wonders why the returning-visitor lookup is still
 there.
+
+## 2026-08-05 — M45, an accessor nobody retrofitted and a reason that was never the reason
+
+[F65](deferred-findings.md) and [F41](deferred-findings.md). Both are the
+redirect path believing something about itself that stopped being true, and
+neither needed the fix its row implied.
+
+### F65: the accessor existed and the old calls went round it
+
+`RedirectHandler.log()` was added by M35 because the gate code logs on branches a
+fixture actually takes, and a nil `*slog.Logger` panics inside
+`slog.(*Logger).Enabled`. The two pre-existing calls beside it — the 503 branch
+taken when `Resolver.Resolve` fails, and the sampled success line — kept
+dereferencing the field. Three lines to fix.
+
+What is worth recording is that the fix is not the accessor, because the accessor
+was already there. A nil-tolerant helper protects nothing if the next call site
+does not use it, and the two that did not were the two that predated it. So the
+guard is a scan of the package's `redirect*.go` files for `.Logger.<method>(…)`,
+and the accessor's own comment already claimed this property — *"a nil-tolerant
+accessor rather than a guard at each call site, so a log line added later cannot
+reintroduce the panic"* — while nothing enforced it.
+
+Production always sets `Logger`, so no amount of running the product finds this.
+It is reachable from a fixture or an embedder of `httpx`, and it lands on the
+branch that runs when Postgres is already unwell, which is the branch that must
+degrade rather than fail.
+
+### F41: the conclusion held, the reason did not
+
+M32.5 added two bot-policy fields to the cached snapshot without bumping
+`CacheKeyVersion`, and justified it in the struct's own comment: both fields are
+`omitempty`, an older entry decodes as *inherit* and *off*, and *"on any instance
+holding such an entry the columns did not exist a moment ago, so nobody can have
+switched blocking on yet"*.
+
+That last clause is false, and the row reproduced it: migrations run at boot
+before the listener opens, so a rolling restart has the old and new builds
+serving **concurrently**. The new one can switch blocking on while the old one
+goes on writing bot-less entries under the same key, and a bot gets 302 for up to
+`REDIRECT_TTL`. Three 302s against a link whose row said `block_bots`.
+
+**No bump, and the reason is arithmetic rather than argument.** 0.1.0 is the only
+release that exists and it keys on `v1`. This build keys on `v3`. M32.5, M34 and
+M36 all land inside the same unreleased minor, so no entry any released build
+ever wrote is one this build can read — the residue is empty because there is
+nowhere for it to be. That is [F132](deferred-findings.md)'s shape exactly: the
+argument stays untried and the population is what disqualifies the work.
+
+The surviving case is a rolling restart between two *unreleased* commits, which
+is a development-time concern and not a shipped one.
+
+**What the comment carries now is the rule, which is the part that mattered.**
+Left as it stood, its reasoning would have licensed the same decision the next
+time somebody adds an `omitempty` field — and next time there will be a released
+build on the other side of the restart. The rule is: skip the bump only when the
+zero value means the same thing *to a visitor* as the true value would, never
+because nobody has had time to configure it yet. If the stale reading is a
+control the owner configured being silently absent, bump it and pay for the cold
+cache. That is the argument v2 and v3 were both bumped on, stated once where the
+next person will meet it.

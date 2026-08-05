@@ -227,7 +227,7 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			//
 			// Not charged to the probe limit either: the failure is ours, and
 			// throttling someone for it would turn a database blip into a block.
-			h.Logger.Error("redirect resolution failed",
+			h.log().Error("redirect resolution failed",
 				slog.String("alias", canonical), slog.Any("error", err))
 			h.Metrics.ObserveRedirect("error", "none", time.Since(start))
 			h.unavailable(w, r)
@@ -411,7 +411,7 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.record(r, res.Snapshot, start, destID)
 
 	if h.LogSample > 0 && h.counter.Add(1)%h.LogSample == 0 {
-		h.Logger.Info("redirect",
+		h.log().Info("redirect",
 			slog.String("alias", canonical),
 			slog.String("source", string(res.Source)),
 			slog.Int64("duration_us", time.Since(start).Microseconds()),
