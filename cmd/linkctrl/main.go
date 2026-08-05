@@ -792,7 +792,7 @@ func run(cfg config.Config, _ io.Writer) error {
 
 	roller := analytics.NewRoller(pools.App, log)
 	jobs := newJobRunner(pools.App, salts, roller, log, metrics, notifySvc, mailSvc, signupSvc,
-		linkSvc, webhookSvc, automationSvc, cfg.Domains,
+		linkSvc, webhookSvc, automationSvc, hostCache, cfg.Domains,
 		cfg.Analytics.RetentionDays, cfg.Audit.RetentionDays, cfg.Audit.SizeWarnBytes)
 	jobs.start(ctx)
 	defer jobs.stop()

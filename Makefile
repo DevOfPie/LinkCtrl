@@ -144,7 +144,7 @@ test: ## Unit tests with the race detector
 .PHONY: test-integration
 test-integration: require-db-password guard-test-integration require-stack ## Integration tests (needs Postgres and Redis)
 	@TEST_DATABASE_URL="$(DEV_DATABASE_URL)" LINKCTRL_REDIS_URL="$(DEV_REDIS_URL)" \
-		go test -race -tags=integration ./test/integration/... ./cmd/lctl/...
+		go test -race -tags=integration ./test/integration/... ./cmd/lctl/... ./cmd/linkctrl/...
 
 .PHONY: cover
 cover: test ## Open the coverage report

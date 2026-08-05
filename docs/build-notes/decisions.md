@@ -17162,3 +17162,60 @@ without being any.
 The finder also read the instance-wide open-dispute slot as unreclaimable. It is
 not — `decide` loads and writes by id with no organization predicate, so any
 holder of `destinations.review` can free the host. Nothing was built for it.
+
+## 2026-08-05 — M45, the backstop pub/sub cannot be, and the package with no tests
+
+[F73](deferred-findings.md). The verified-hostname set is invalidated over Redis
+pub/sub. Pub/sub is at-most-once, so a published message that is simply lost
+while the subscription stays healthy is never noticed — `Subscriber.establish`
+reloads on connect and reconnect and `Run` bounds silence and probes rather than
+trusting it, but all of that catches silence a replica *notices*, and a dropped
+message on a healthy connection looks exactly like nothing happening. On an
+instance with no Redis there is no subscriber at all, so the only reload sites
+were boot and the subscriber itself: a second replica never reloaded.
+
+It fails in the direction that matters — continuing to serve a hostname whose
+verification is gone, which is precisely the staleness M40 exists to bound.
+
+### The job takes no leadership, and that is the fix
+
+Every other job on this clock runs under the advisory lock, because every other
+job writes shared state and three replicas doing it would be three times the
+work. This one reads into memory that is **not** shared. A leader reloading its
+own copy leaves the other replicas serving whatever they last knew, which is the
+defect rather than a fix for it. It is the only unleadered job there and the
+comment beside it says so, because the next person to tidy this file will
+otherwise "fix" the inconsistency.
+
+`Reload` rather than `Refresh`: a timer has no burst to collapse, and running
+inline means a slow query delays the next tick instead of overlapping with it. A
+failure is logged and dropped — the replica keeps the set it has, the same
+direction every other failure in this cache takes, and the next tick retries.
+
+### `cmd/linkctrl` had no tests, and that is part of why this shipped
+
+The claim being fixed is a *wiring* claim: that a job exists, runs on a clock,
+and does not take leadership. None of that is observable from
+`test/integration`, which cannot import package main — so the package holding
+the entire scheduler had no test of any kind, and `make test-integration` did
+not name it.
+
+`cmd/linkctrl/jobs_test.go` is the first, and the integration target and its
+Taskfile mirror now cover the package. The test drives the no-Redis limb, which
+is the harsher of the two and needs no timing to reproduce: unverify a hostname
+with nothing published, then run the job, and require the replica to stop
+serving it.
+
+That gap is worth naming beyond this row. A package can be excluded from a test
+target by being written after it, and nothing fails when that happens — the
+target keeps passing, over less.
+
+### What an operator now reads
+
+Four claims were corrected rather than one, because the fix changes what the
+interval means. `operations.md` gains the job row; `configuration.md` says
+`DOMAIN_VERIFY_INTERVAL` drives both halves and what `0` costs now; and
+`SECURITY.md`'s *the hostname back to the operational 404 on every replica* names
+the two mechanisms carrying it, having previously rested on the weaker one alone.
+The `mail` row in `operations.md` was corrected in passing: it still asserted
+F52's false half.

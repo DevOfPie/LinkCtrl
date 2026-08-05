@@ -19,6 +19,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/mail"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
+	"github.com/DevOfPie/LinkCtrl/internal/redirect"
 	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
@@ -68,6 +69,13 @@ type jobRunner struct {
 	// verification on-demand only.
 	domainVerifyInterval time.Duration
 	domainVerifyBatch    int32
+	// hosts is this replica's verified-hostname set, reloaded on a timer.
+	//
+	// **Not under leadership, unlike every other job on this clock.** The set is
+	// in-process and every replica holds its own, so a reload the leader
+	// performs does nothing for the other three. Nil skips the job, which is
+	// what a runner built without a host cache gets (F73).
+	hosts *redirect.HostCache
 	// webhooks drains the outbound delivery queue (M42). Nil skips the job
 	// entirely, which is what a runner built without one gets.
 	webhooks *webhook.Service
@@ -90,7 +98,8 @@ const advisoryLockKey int64 = 0x6c63_6a6f_6273_0001
 func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analytics.Roller,
 	log *slog.Logger, metrics *observability.Metrics, notifier *notify.Service,
 	mailer *mail.Service, signups *signup.Service, links *link.Service,
-	webhooks *webhook.Service, automations *automation.Service, domains config.DomainsConfig,
+	webhooks *webhook.Service, automations *automation.Service, hosts *redirect.HostCache,
+	domains config.DomainsConfig,
 	analyticsRetentionDays, auditRetentionDays int, auditSizeWarnBytes int64,
 ) *jobRunner {
 	batch := domains.VerifyBatch
@@ -112,6 +121,7 @@ func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analyt
 		domainVerifyBatch:    int32(batch),
 		webhooks:             webhooks,
 		automation:           automations,
+		hosts:                hosts,
 		done:                 make(chan struct{}),
 	}
 }
@@ -161,6 +171,13 @@ func (j *jobRunner) start(parent context.Context) {
 			domainInterval = time.Hour
 		}
 		domains := time.NewTicker(domainInterval)
+		// The verified-hostname set, on the same clock and for the same reason
+		// the pass uses it: the number an operator tunes for "how quickly does a
+		// hostname change take effect" should mean one thing. Its own ticker
+		// rather than a second case on `domains`, because that one is
+		// leader-only and this one must run everywhere (F73).
+		hostReload := time.NewTicker(domainInterval)
+		defer hostReload.Stop()
 		defer rollup.Stop()
 		defer dimension.Stop()
 		defer hourly.Stop()
@@ -228,6 +245,8 @@ func (j *jobRunner) start(parent context.Context) {
 				j.runMaintenance(ctx)
 			case <-domains.C:
 				j.runDomainVerification(ctx)
+			case <-hostReload.C:
+				j.runHostReload(ctx)
 			case <-automations.C:
 				j.runAutomation(ctx)
 			}
@@ -423,6 +442,39 @@ func (j *jobRunner) runDomainVerification(ctx context.Context) {
 		}
 		return err
 	})
+}
+
+// runHostReload re-reads this replica's verified-hostname set.
+//
+// It is the backstop pub/sub cannot be. Redis pub/sub is at-most-once, so a
+// published invalidation that is simply lost while the subscription stays
+// healthy is never noticed: `Subscriber.establish` reloads on connect and
+// reconnect, and `Run` bounds silence and probes rather than trusting it, but
+// all of that catches silence the replica *notices*. A dropped message on a
+// healthy connection looks like nothing happening. And on an instance with no
+// Redis at all there is no subscriber, so before this the only reload sites
+// were boot and the subscriber itself — a second replica never reloaded (F73).
+//
+// **No leadership**, which is the whole point and the opposite of every other
+// job on this clock. The set lives in each process; a leader reloading its own
+// copy leaves every other replica serving whatever it last knew, which is the
+// staleness this closes.
+//
+// Reload rather than Refresh: this is a timer with nothing behind it, not a
+// burst of invalidations to collapse, and doing it inline means a slow query
+// delays the next tick rather than overlapping with it. A failure is logged and
+// dropped — the replica keeps the set it has, which is the same direction every
+// other failure in this cache takes, and the next tick tries again.
+func (j *jobRunner) runHostReload(ctx context.Context) {
+	if j.hosts == nil || j.domainVerifyInterval <= 0 {
+		return
+	}
+	runCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	if err := j.hosts.Reload(runCtx); err != nil {
+		j.log.Warn("could not reload the verified-hostname set", slog.Any("error", err))
+	}
 }
 
 // runAutomation evaluates the workspaces' standing instructions (M43).
