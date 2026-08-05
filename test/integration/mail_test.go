@@ -82,6 +82,11 @@ func newMailFixture(t *testing.T, withMailer bool) *mailFixture {
 		t.Fatalf("register owner: %v", err)
 	}
 
+	// First account on the instance, so it holds the instance principal the way
+	// a real first-run setup leaves it. The audit-growth warning goes there
+	// since M45 rather than to every organization's owners (F49).
+	grantInstanceScope(t, pool, owner.UserID, auth.PermInstanceAdmin)
+
 	f := &mailFixture{pool: pool, notify: notify.NewService(pool), owner: owner}
 	if !withMailer {
 		return f

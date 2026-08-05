@@ -41,6 +41,13 @@ func newNotify(t *testing.T) *notifyFixture {
 		t.Fatalf("register owner: %v", err)
 	}
 
+	// The fixture's owner is the instance's first account, so it holds the
+	// instance principal exactly as a real first-run setup leaves it. The
+	// audit-growth warning goes to that principal rather than to every
+	// organization's owners since M45 (F49), so without this the warning has
+	// nobody to reach.
+	grantInstanceScope(t, pool, owner.UserID, auth.PermInstanceAdmin)
+
 	return &notifyFixture{t: t, pool: pool, svc: notify.NewService(pool), owner: owner}
 }
 
@@ -402,9 +409,21 @@ func TestAuditGrowthWarningDoesNotRepeatOnEveryRun(t *testing.T) {
 	}
 }
 
-// Only owners hear about it. An editor cannot act on the retention setting, so
-// telling them is noise in the inbox of somebody who cannot help.
-func TestAuditGrowthWarningGoesToOwnersOnly(t *testing.T) {
+// Only the instance principal hears about it (F49).
+//
+// The rule this package applies everywhere else is *tell the people who can
+// act*, and `audit_logs` is one table for the whole instance whose only bound is
+// `LINKCTRL_AUDIT_RETENTION_DAYS` — an environment variable with no dashboard
+// control, no API and no non-config consumer. So the person who can act is
+// whoever administers the deployment, and nobody else.
+//
+// It used to go to every organization's owners. That was the same rule applied
+// when an instance had one organization whose owner *was* the operator; M28 made
+// those different people and M29 made owner mean anybody who registered, so
+// under open signup the warning reached every account on the instance, weekly,
+// carrying a number none of them could act on. The three parties below are the
+// three the old behaviour could not tell apart.
+func TestAuditGrowthWarningGoesToTheInstancePrincipalOnly(t *testing.T) {
 	f := newNotify(t)
 
 	authSvc := auth.NewService(f.pool, auth.ServiceConfig{
@@ -426,13 +445,29 @@ func TestAuditGrowthWarningGoesToOwnersOnly(t *testing.T) {
 		 WHERE user_id = $1`, editor.UserID, f.owner.OrgID); err != nil {
 		t.Fatal(err)
 	}
+	// A second tenant's owner, which is what M29's open signup produces on
+	// every registration. They can act on nothing here and the old behaviour
+	// mailed them weekly.
+	elsewhere, err := authSvc.Register(t.Context(), auth.RegisterInput{
+		Email: "elsewhere@example.com", Name: "Elsewhere", Password: "a-sufficiently-long-password",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	grantInstanceScope(t, f.pool, f.owner.UserID, auth.PermInstanceAdmin)
 
 	if err := f.svc.WarnAuditGrowth(t.Context(), 10_000, 1_000); err != nil {
 		t.Fatal(err)
 	}
 
 	if n, _ := f.svc.Unread(t.Context(), f.owner); n != 1 {
-		t.Errorf("the owner has %d notifications, want 1", n)
+		t.Errorf("the instance principal has %d notifications, want 1", n)
+	}
+	if n, _ := f.svc.Unread(t.Context(), elsewhere); n != 0 {
+		t.Errorf("another organization's owner was told the instance's audit log "+
+			"is growing; they cannot change LINKCTRL_AUDIT_RETENTION_DAYS and the "+
+			"byte count is not theirs (%d received)", n)
 	}
 	if n, _ := f.svc.Unread(t.Context(), editor); n != 0 {
 		t.Errorf("an editor was told about the audit log growing; they cannot "+

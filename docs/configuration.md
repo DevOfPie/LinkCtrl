@@ -545,7 +545,7 @@ partition, refreshed hourly on every replica. The alert recipe is in
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `LINKCTRL_AUDIT_SIZE_WARN_BYTES` | `5368709120` | 5 GiB. Once the audit partitions pass this, every organization owner gets an in-app notification, at most one a week each — and the same warning by email if a [mailer](#mail) is configured. **On by default**, unlike the retention window. `0` disables it. |
+| `LINKCTRL_AUDIT_SIZE_WARN_BYTES` | `5368709120` | 5 GiB. Once the audit partitions pass this, **the instance principal** gets an in-app notification, at most one a week — and the same warning by email if a [mailer](#mail) is configured. **On by default**, unlike the retention window. `0` disables it. |
 
 The asymmetry is deliberate. Retention defaults to inaction because acting
 unasked destroys data; the warning defaults to acting because inaction is what
@@ -641,7 +641,7 @@ Four things, and every one of them degrades to a mail-free behaviour rather than
 failing:
 
 - **The audit-growth warning.** Once `audit_logs` passes
-  `AUDIT_SIZE_WARN_BYTES`, every organization owner gets the in-app
+  `AUDIT_SIZE_WARN_BYTES`, the instance principal gets the in-app
   notification, and the same warning by email.
 - **Invitations.** With no mailer the invitation is still created and the link
   is shown to whoever made it, to be passed on by hand.

@@ -1040,8 +1040,17 @@ func TestAWorkspaceScopedOwnerHearsAboutTheirOwnWorkspaceAndNoOther(t *testing.T
 			"Marketing; passing a workspace id is how a producer says whose news this is", n)
 	}
 
-	// News that belongs to no workspace reaches the organization-wide owners
-	// alone, which is the case the second arm must not widen.
+	// News that belongs to no workspace, which is the case the second arm must
+	// not widen. The audit-growth warning is the vehicle rather than the
+	// subject: what is being asserted below is D102's predicate — a
+	// notification with no workspace is visible from every workspace — and the
+	// warning is simply the only producer that writes one.
+	//
+	// The grant is why it still arrives. Since M45 that warning goes to the
+	// instance principal rather than to every organization's owners (F49), so
+	// without it this fixture's owner would receive nothing and the predicate
+	// below would be asserted against an empty inbox.
+	grantInstanceScope(t, f.pool, f.owner.UserID, auth.PermInstanceAdmin)
 	if err := notifier.WarnAuditGrowth(t.Context(), 10_000, 1_000); err != nil {
 		t.Fatal(err)
 	}

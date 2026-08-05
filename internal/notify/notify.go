@@ -586,8 +586,8 @@ func decodeCursor(s string) (cursor, error) {
 // ignorable while somebody plans the work, short enough not to fall out of mind.
 const AuditGrowthReminderInterval = 7 * 24 * time.Hour
 
-// WarnAuditGrowth tells every organization's owners that the audit log has
-// passed its size threshold, at most once per reminder interval each.
+// WarnAuditGrowth tells the instance principal that the audit log has passed its
+// size threshold, at most once per reminder interval.
 //
 // Lives here rather than in the job runner because it is policy, not
 // scheduling: what counts as "too big", who hears about it, and how often are
@@ -598,58 +598,74 @@ const AuditGrowthReminderInterval = 7 * 24 * time.Hour
 // who has already decided and does not want reminding. That is the only way to
 // switch it off, and it is deliberately not the default: keep-forever is safe
 // only if the instance nobody configured is the one that gets warned (D19).
+//
+// # Who hears it, and why it stopped being everybody
+//
+// `audit_logs` is one table for the whole instance — the size has no
+// organization predicate and could not have one — and the only thing that bounds
+// it is `LINKCTRL_AUDIT_RETENTION_DAYS`, an environment variable with no
+// dashboard control, no API and no non-config consumer. So the person who can
+// act on this warning is whoever administers the deployment.
+//
+// This used to mail every organization's owners. The justification was the rule
+// this package applies everywhere else — tell the people who can act — and it was
+// true when written, because an instance had one organization and its owner was
+// the operator. [M28](../../docs/build-notes/phase-details/m28.md) made owner and
+// operator different people, [M29](../../docs/build-notes/phase-details/m29.md)
+// made owner mean anybody who registered, and the recipient list was never
+// revisited: under `SIGNUP_MODE=open` the warning went to every account on the
+// instance, weekly, carrying an operational number none of them could act on.
+// The codebase argued against itself about it — D19 and this package's own tests
+// say telling somebody who cannot act is noise in their inbox (F49).
+//
+// The instance principal (D98) is the recipient the rule always implied and
+// which did not exist to name until M45. An instance whose principal grant has
+// been revoked hears nothing, and that is correct rather than a gap: the warning
+// has no one it could usefully reach, and fanning back out to every tenant would
+// be the defect again.
 func (s *Service) WarnAuditGrowth(ctx context.Context, size, threshold int64) error {
 	if threshold <= 0 || size < threshold {
 		return nil
 	}
 
-	orgs, err := s.q.ListOrganizationIDs(ctx)
+	holders, err := s.q.ListInstanceGrantHolders(ctx, auth.PermInstanceAdmin)
 	if err != nil {
-		return fmt.Errorf("notify: list organizations: %w", err)
+		return fmt.Errorf("notify: list instance principals: %w", err)
 	}
 
 	since := time.Now().Add(-AuditGrowthReminderInterval)
 	var errs []error
-	for _, orgID := range orgs {
-		// nil: the audit log is the organization's, not a workspace's, and the
-		// setting that bounds it is an instance one. Only somebody who owns the
-		// organization can act on this.
-		owners, err := s.OwnersOf(ctx, orgID, nil)
+	for _, h := range holders {
+		owner := Recipient{UserID: h.ID, Email: h.Email, Name: h.Name}
+		recent, err := s.NotifiedSince(ctx, owner.UserID, KindAuditGrowth, since)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		for _, owner := range owners {
-			recent, err := s.NotifiedSince(ctx, owner.UserID, KindAuditGrowth, since)
-			if err != nil {
-				errs = append(errs, err)
-				continue
-			}
-			if recent {
-				continue
-			}
-			if err := s.Notify(ctx, owner.UserID, Event{
-				Kind:  KindAuditGrowth,
-				Title: "The audit log has passed its size threshold",
-				Body: fmt.Sprintf(
-					"audit_logs now uses %s on disk, past the %s threshold. Audit "+
-						"history is kept forever until LINKCTRL_AUDIT_RETENTION_DAYS is "+
-						"set, so it will keep growing.",
-					HumanBytes(size), HumanBytes(threshold)),
-				// The numbers go in the jsonb as well as into the sentence, so a
-				// later UI can render them without parsing English back out.
-				Data: map[string]any{"bytes": size, "threshold": threshold},
-			}); err != nil {
-				// The mail is the addition, not the delivery. If the inbox row
-				// could not be written, the recipient has heard nothing at all
-				// and the re-notify guard has nothing to suppress the next run
-				// with, so sending a mail here would produce one every hour.
-				errs = append(errs, err)
-				continue
-			}
-			if err := s.mailAuditGrowth(ctx, owner, size, threshold); err != nil {
-				errs = append(errs, err)
-			}
+		if recent {
+			continue
+		}
+		if err := s.Notify(ctx, owner.UserID, Event{
+			Kind:  KindAuditGrowth,
+			Title: "The audit log has passed its size threshold",
+			Body: fmt.Sprintf(
+				"audit_logs now uses %s on disk, past the %s threshold. Audit "+
+					"history is kept forever until LINKCTRL_AUDIT_RETENTION_DAYS is "+
+					"set, so it will keep growing.",
+				HumanBytes(size), HumanBytes(threshold)),
+			// The numbers go in the jsonb as well as into the sentence, so a
+			// later UI can render them without parsing English back out.
+			Data: map[string]any{"bytes": size, "threshold": threshold},
+		}); err != nil {
+			// The mail is the addition, not the delivery. If the inbox row
+			// could not be written, the recipient has heard nothing at all
+			// and the re-notify guard has nothing to suppress the next run
+			// with, so sending a mail here would produce one every hour.
+			errs = append(errs, err)
+			continue
+		}
+		if err := s.mailAuditGrowth(ctx, owner, size, threshold); err != nil {
+			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)

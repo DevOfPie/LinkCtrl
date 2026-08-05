@@ -17452,3 +17452,54 @@ and pay the growth, this is the one commit to revert.
 
 `docs/SECURITY.md`'s audit row says the same in operator terms, beside the
 existing note about what else is deliberately not recorded.
+
+## 2026-08-05 — M45, the warning that went to everybody who could not act
+
+[F49](deferred-findings.md). The audit-growth warning mailed and notified the
+owners of **every organization on the instance**, weekly, with a shared
+`audit_logs` byte count. Under `SIGNUP_MODE=open` every registrant is an owner,
+so the recipient set was every account.
+
+### The rule was right and the recipient list had stopped matching it
+
+This package applies one rule everywhere: tell the people who can act. D19 and
+the package's own tests state it — *an editor cannot change the retention
+setting, so telling them is noise in the inbox of somebody who cannot act on
+it*. Applied honestly, that excludes owners too: `AUDIT_RETENTION_DAYS` is an
+environment variable with no dashboard control, no API and no non-config
+consumer.
+
+It was true when written, because an instance had one organization and its owner
+*was* the operator. M28 made owner and operator different people; M29 made owner
+mean anybody who registered. Nobody revisited the recipient list, so the code
+ended up arguing against itself — a passing test asserting a rule the same file
+no longer followed.
+
+### The fix the row could not name
+
+The row proposed three fixes and observed that none of them named an instance
+principal, "so this is separable from D38/F15". That was accurate when filed and
+is no longer: D98 shipped the principal, and it is exactly the recipient the rule
+implies. The row's own options were all worse workarounds for a thing that now
+exists.
+
+Worth noting as a pattern: a finding's proposed fixes are a snapshot of what the
+tree could express when it was written, and a queue held long enough will
+accumulate rows whose best answer arrived after them. Re-reading the tree at
+triage is what catches it.
+
+### Silence when there is no principal is correct
+
+An instance whose principal grant has been revoked now hears nothing about audit
+growth. That is the right failure: there is no one the warning could usefully
+reach, and falling back to every tenant's owners would be reinstating the defect
+as an error path.
+
+### Both halves sabotaged
+
+A test asserting only *the principal hears it* would pass against the original
+behaviour, which also delivered to the principal — among everybody else. So the
+second tenant's owner is in the test, and restoring the fan-out fails it.
+`TestAWorkspaceScopedOwnerHearsAboutTheirOwnWorkspaceAndNoOther` needed a grant
+rather than a rewrite: it uses this warning as a *vehicle* for D102's
+no-workspace-visibility predicate, not as its subject.
