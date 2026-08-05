@@ -4855,21 +4855,42 @@ components:
     DestinationSplit:
       type: object
       additionalProperties: false
-      required: [destination_id, url, weight, is_primary, clicks, unique_visitors, share]
+      required: [destination_id, url, weight, is_primary, clicks, unique_visitors, visitors_known, share]
       properties:
         destination_id: { type: string, format: uuid }
         url: { type: string }
         weight: { type: integer, format: int32 }
         is_primary:
           type: boolean
-          description: The link's own destination, where every unattributed click went.
+          description: >
+            The link's own destination. Its clicks are a remainder rather than a
+            reading — a click that went there carries no destination id, so the
+            per-destination rollup has no row for it — which is why this is the
+            only row that can be `approximate`.
         removed:
           type: boolean
           description: >
             Clicks attributed to a destination that has since been deleted. They
             are reported rather than dropped.
+        approximate:
+          type: boolean
+          description: >
+            This row's clicks include traffic the per-destination rollup has not
+            attributed yet. Only ever the link's own destination, and only while
+            something has been attributed elsewhere: the totals recompute every
+            60 seconds and the per-destination breakdown every 15 minutes, so
+            between them this row holds its own clicks plus any split-arm clicks
+            of the last quarter-hour. Absent means the figure is settled.
         clicks: { type: integer, format: int64 }
         unique_visitors: { type: integer, format: int64 }
+        visitors_known:
+          type: boolean
+          description: >
+            Whether unique_visitors is a measurement. False on the link's own
+            destination, always: unique visitors are counted per destination by
+            the rollup, and this is the row the rollup does not write, so its
+            unique_visitors is 0 because nothing counted rather than because
+            nobody came.
         share:
           type: number
           format: double

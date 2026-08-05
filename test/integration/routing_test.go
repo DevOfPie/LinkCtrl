@@ -496,6 +496,117 @@ func TestTheRuleCeilingHoldsAgainstConcurrentCreates(t *testing.T) {
 	}
 }
 
+// TestTheRemainderRowSaysWhatItIs covers F107, which shipped because nothing
+// asserted the shape of the per-destination breakdown at all.
+//
+// The link's own destination has no rollup row to read: a click that went there
+// carries the zero uuid, and the destination rollup filters
+// `destination_id IS NOT NULL`. Its figure is a remainder — the 60-second totals
+// minus what the 15-minute destination rollup has attributed — so between those
+// two cadences it holds the primary's real clicks *plus* every split-arm click
+// of the last quarter-hour, and that was rendered as positive attribution to a
+// named destination. Its unique-visitor count read 0 permanently, because a
+// count the rollup never writes was indistinguishable from a measured zero.
+//
+// Rollup rows are written directly. What is under test is how the reader
+// presents two rollups that disagree, and producing that disagreement through
+// the real jobs would mean racing their clocks.
+func TestTheRemainderRowSaysWhatItIs(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	ctx := t.Context()
+	reader := analytics.NewReader(f.pool)
+	linkID := f.createLink("remainder", "https://example.com/primary")
+	wsID := f.owner.WorkspaceID
+	day := time.Now().UTC().Truncate(24 * time.Hour)
+	from, to := day.AddDate(0, 0, -1), day.AddDate(0, 0, 1)
+
+	armID := uuid.Must(uuid.NewV7())
+	if _, err := f.pool.Exec(ctx, `
+		INSERT INTO destinations (id, link_id, workspace_id, url, url_host, position, weight)
+		VALUES ($1, $2, $3, 'https://example.com/arm', 'example.com', 1, 50)`,
+		armID, linkID, wsID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ten clicks in the totals; the destination rollup has caught four of them.
+	if _, err := f.pool.Exec(ctx, `
+		INSERT INTO link_click_daily (link_id, workspace_id, day, clicks, unique_visitors)
+		VALUES ($1, $2, $3, 10, 9)
+		ON CONFLICT (link_id, day) DO UPDATE SET clicks = 10, unique_visitors = 9`,
+		linkID, wsID, day); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(ctx, `
+		INSERT INTO link_dimension_daily (link_id, workspace_id, day, dimension, value, clicks, unique_visitors)
+		VALUES ($1, $2, $3, 'destination', $4, 4, 3)`,
+		linkID, wsID, day, armID.String()); err != nil {
+		t.Fatal(err)
+	}
+
+	stats, err := reader.LinkStats(ctx, f.owner, linkID, from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var arm, primary *analytics.DestinationSplit
+	for i := range stats.Destinations {
+		if stats.Destinations[i].IsPrimary {
+			primary = &stats.Destinations[i]
+		} else {
+			arm = &stats.Destinations[i]
+		}
+	}
+	if arm == nil || primary == nil {
+		t.Fatalf("expected an arm row and a primary row, got %+v", stats.Destinations)
+	}
+
+	// The arm is read from the rollup, so both of its numbers are measurements.
+	if arm.Clicks != 4 || !arm.VisitorsKnown || arm.UniqueVisitors != 3 {
+		t.Errorf("arm row = %+v, want 4 clicks and 3 known visitors", arm)
+	}
+	if arm.Approximate {
+		t.Error("the arm row is marked approximate; it is read from the rollup, not derived")
+	}
+
+	// The primary is a remainder, and now says so.
+	if primary.Clicks != 6 {
+		t.Errorf("primary clicks = %d, want the remaining 6", primary.Clicks)
+	}
+	if !primary.Approximate {
+		t.Error("the primary row is not marked approximate while the destination " +
+			"rollup is behind; those six clicks are its own plus whatever the " +
+			"arms have not been credited with yet")
+	}
+	if primary.VisitorsKnown {
+		t.Errorf("the primary row claims %d known visitors; unique visitors are "+
+			"counted per destination and this is the row the rollup does not write",
+			primary.UniqueVisitors)
+	}
+
+	// A link running no split test. The remainder is then genuinely all its own,
+	// so marking it approximate would put a caveat on every ordinary link on the
+	// instance — which is why the flag is conditioned on something having been
+	// attributed elsewhere.
+	plainID := f.createLink("plain-remainder", "https://example.com/plain")
+	if _, err := f.pool.Exec(ctx, `
+		INSERT INTO link_click_daily (link_id, workspace_id, day, clicks, unique_visitors)
+		VALUES ($1, $2, $3, 5, 5)
+		ON CONFLICT (link_id, day) DO UPDATE SET clicks = 5, unique_visitors = 5`,
+		plainID, wsID, day); err != nil {
+		t.Fatal(err)
+	}
+	plain, err := reader.LinkStats(ctx, f.owner, plainID, from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range plain.Destinations {
+		if d.Approximate {
+			t.Error("a link running no split test has an approximate row; every " +
+				"ordinary link on the instance would carry that caveat")
+		}
+	}
+}
+
 // A visitor matching no rule goes where the link points, which is the state
 // every link on the instance is in.
 func TestNoMatchingRuleFallsBackToTheLinksOwnDestination(t *testing.T) {

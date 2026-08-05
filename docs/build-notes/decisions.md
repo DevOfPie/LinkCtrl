@@ -17261,3 +17261,57 @@ counted through rows the delete had removed, and here an existing test written
 for this exact scenario is blind to it because a *different* fix runs first.
 The pattern worth extracting: when a fix closes a path, the test that proves it
 stops being able to see the thing at the end of the path.
+
+## 2026-08-05 — M45, a remainder that was being read as an attribution
+
+[F107](deferred-findings.md). Owner-directed on 2026-08-05: *keep the row, mark
+it approximate*, chosen over splitting the remainder into a row of its own and
+over fixing the visitor count alone.
+
+### What the row actually is
+
+A click on the link's own destination carries the zero uuid, and the
+per-destination rollup filters `destination_id IS NOT NULL`. So the primary has
+no rollup row to read, and its figure is a remainder: the 60-second totals minus
+what the 15-minute destination rollup has attributed. That is the design rather
+than an accident, and it is worth writing down because it rules out the repair
+anybody reaches for first — there is no double-count and no missing row to add.
+
+Two things were wrong with rendering it. The totals and the breakdown ran on one
+clock at M36, when the clamp's comment said the two figures "can leave the totals
+a few clicks apart"; M37 moved the breakdown to fifteen minutes and left the
+sentence behind. A quarter-hour of split-arm traffic then landed on one named
+destination as positive attribution, worst case 100%/0% for a test viewed inside
+its first fifteen minutes. And the row's unique-visitor count read `0` — not
+during the lag, but permanently, because a count the rollup never writes was
+indistinguishable from a measured zero.
+
+### Approximate only when something else was attributed
+
+`attributed > 0` is the condition, and it is what keeps the caveat off every
+ordinary link on the instance. A link running no split test has a remainder that
+genuinely is its own clicks; marking that approximate would be a warning about
+nothing, on the majority of links, which is how a caveat stops being read.
+
+### Two fields rather than a pointer
+
+`UniqueVisitors` plus `VisitorsKnown`, because this crosses into a template and a
+nil pointer there is a silent empty string. The distinction being drawn is
+between *nobody came* and *nobody counted*, and those had been the same value
+since M36.
+
+### The schema was asserting the defect
+
+`additionalProperties: false` meant the new fields had to be declared, which is
+the gate working. `is_primary`'s description said *the link's own destination,
+where every unattributed click went* — an accurate description of the behaviour
+being corrected, written into the contract. It now says why that row is the only
+one that can be approximate.
+
+### Nothing asserted the breakdown's shape
+
+No test anywhere read `DestinationSplit`, which is why this shipped. The new one
+writes both rollups directly and at odds with each other: producing that
+disagreement through the real jobs would mean racing a 60-second ticker against
+a 15-minute one, and the thing under test is how the reader presents two rollups
+that disagree, not whether they can be made to.
