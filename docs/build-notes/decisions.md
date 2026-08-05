@@ -172,6 +172,7 @@ file. Append a row when you append an entry.
 | [M45, two bounds that were nothing but a number somebody typed](#2026-08-04--m45-two-bounds-that-were-nothing-but-a-number-somebody-typed) | F137 and F138 — one shape in two subsystems, a value that reads like a bound and is not; **F137's multiplier was the recipient list**, so rate-limiting the route or capping the filer would have left it, and `EveryOwner` was the pre-D98 approximation of "everybody who could act" rather than carelessness; the review half and not the decide half, `EveryOwner` deleted rather than kept beside its replacement, and no fallback for an empty set; what is left after it and why bounding the filing count is a separate change; **F138's option walked call site by call site** — it can only shorten a call, `RedisTimeout` *is* `REDIS_READ_TIMEOUT` so almost every site sees the same number, and the one behaviour that changes is a caller with less than the ceiling left; why the pub/sub path never needed it; and why **neither hand-built defence is removed** — the limiter's timer bounds what the caller waits and the invalidate budget bounds a loop, both measured rather than argued |
 | [M45, an operator's recovery, and three wordings that were short](#2026-08-05--m45-an-operators-recovery-and-three-wordings-that-were-short) | F140, F131, F136 and F139 — why an `lctl` command is not the in-product path D98 forbids, and the three things built rather than asserted: it **moves and cannot add**, checked before the commit; it takes no actor because the authority is the shell, which is the trust `Register` already spends on `/setup`; and the absence of a permission check is held by a tree-wide scan rather than by discipline. Why the audit actor is `system` and why the production guard reads oddly and is still right. F131 as M40's predicate on the path that starts nothing, and the queue-position cost the row understated. F136 and F139 as two enumerations that were both short, the site left for an orchestrator's amendment (F142), and the three F139 sites read and left. And F132, unanswered: its second reason was false when written |
 | [M45, three rows that end without a mechanism](#2026-08-05--m45-three-rows-that-end-without-a-mechanism) | F132 declined because the population a repair would walk is empty — no server was ever built from 0.1.0 — and why that disqualifies the command by arithmetic rather than by the argument it rested on, which stays untried; the row's second reason falsified by a line in its own diff; the residue widened to F26's trailing dot and checked against `v0.1.0`; why the population is stated as what it requires and not as a reassurance. F141 recorded in Plan.md and README and deliberately left open, and why a passing mention inside somebody else's feature is not the same as a list entry. F142: m32.md's bullet is not amended because a reopening section is where what became false already lives, and a Done-means bullet is the record of what was true at ship; the test renamed with no assertion moved; a wording row's site list short by one for the second time |
+| [M45's third triage, and a rule that changed the recommendation](#2026-08-05--m45s-third-triage-and-a-rule-that-changed-the-recommendation) | The last sixty-six rows, in eight groups by tier and cluster; sixty-five approved, F90 carried. Why the carry is not cheapness — the row has no repair, only a choice of fairness model, and a phase close is where that choice goes wrong. **The standing rule of 2026-08-04 shows up as a disappearance**: written under it, the recommendation was the widest option three times of four and was taken all four, where the two earlier triages recorded the owner correcting a narrower one. F17's second limb reviewed for the first time; F44 closed as a record rather than a build; F57, F58, F113 and F117 the same, each on its own fix note. **F108 and F46 reopen M38 and M24.5** rather than landing here, per workflow.md's reopening rule. The two questions deliberately left: F70's D38, whose ground D98 moved, and F18, which is F17's mechanical cause and is put where the alternative's cost is visible. And the scale — twenty-odd commits — stated in the prompt rather than discovered after the answer |
 
 ---
 
@@ -14904,3 +14905,117 @@ in the output a failure prints, where a reader meets it under the worst possible
 conditions. The lesson is cheap and worth keeping: **a wording finding's site
 list is a starting point, and the message strings inside a test are the part
 everybody's grep forgets.**
+
+## 2026-08-05 — M45's third triage, and a rule that changed the recommendation
+
+The last of the deferred queue. Seventy rows are open; four already carry a
+review — [F1](deferred-findings.md) approved and scheduled here, F17, F18 and F19
+deferred on 2026-08-01, [F141](deferred-findings.md) reviewed on 2026-08-05 and
+deliberately left open. The remaining **sixty-six were put to the owner in eight
+groups**, by the method recorded before the first triage: group by tier and
+cluster, decide per group, no group mixes severities, and any row pulled out of a
+group is answered on its own.
+
+Sixty-five are approved as work. One is carried.
+
+### The rule worked, which is the part worth recording
+
+Both earlier triages recorded the same pattern: the recommendation led with the
+narrower option and the owner took the wider one, three times in a row. That is
+what produced the standing rule of 2026-08-04 — *a recorded abuse path is in a
+fix milestone's scope by default, and carrying one needs a stated reason rather
+than a default of cheapness.*
+
+This triage was written under that rule, and the recommendation was the widest
+option in three groups of four. The answer took the recommendation in all four.
+Nothing about the owner's preferences changed between 2026-08-04 and today; what
+changed is that the recommendation stopped being the cheap one, so agreeing with
+it stopped costing the owner the correction. A rule that removes a bad default
+shows up as a *disappearance* — of the divergence, not of the reasoning — and it
+would be invisible without this note.
+
+### The one carried row
+
+**[F90](deferred-findings.md)** — the webhook delivery queue is instance-wide,
+arrival-ordered and uncapped, so one workspace's ordinary traffic delays every
+other tenant's integrations. It is carried out of Phase 2 with a *Known
+limitations* row in [Plan.md](../../Plan.md), and the reason is **not** that it is
+expensive. It is that the row has no repair. Its own fix note disposes of both
+obvious mechanisms — `DISTINCT ON (workspace_id)` reintroduces the tenant-ordered
+delivery the query file refuses *and* cannot sit under `FOR UPDATE SKIP LOCKED`,
+and a per-workspace pending cap silently drops events Plan.md already says nothing
+recovers. What is left is choosing a fairness model for a queue, which is a design
+decision, and a phase-close is the worst place in this project's calendar to take
+one: it is the point where the pressure is to finish.
+
+The carry is therefore an admission with a shape — the defect is real, the
+limitation is published, and the work is a Phase 3 design item rather than a
+forgotten row.
+
+### What each group bought, and what it left
+
+**Tier 1, moderate and above.** F37 and F38 fold into M45's own documentation
+pass, which already owns them. F73 gets the periodic reload that closes both of
+its limbs — a lost pub/sub message on a healthy subscription, and an instance with
+no Redis where a second replica never reloads at all. F21 is approved, and the
+owner directed its shape on 2026-08-02; what it still waits on is the question in
+[upcoming-decisions.md](upcoming-decisions.md) about what a browser without
+JavaScript gets once the separate button is gone.
+
+**Tier 2, minor to moderate.** Seven rows, including **F17's second limb, which
+had never been reviewed at all** — the 2026-08-01 deferral predates it, and the
+limb arrived by absorbing F112 during this milestone's queue hygiene. The row is
+now approved whole, which supersedes that deferral rather than sitting beside it.
+**F44 closes as a record and not as a build**: the finding is that erasure is
+described by five sites and implemented by none, and the fix for that is to say so
+the way F141 said it, not to write a GDPR subsystem inside a phase close.
+
+**Tiers 3 to 6, thirty-nine minor rows in four clusters.** The abuse-path cluster
+is in scope by the standing rule rather than by argument. Two of these rows do not
+land in M45 at all: **[F108](deferred-findings.md) falsifies m38.md's *"A folder
+can never become its own descendant"*** and **[F46](deferred-findings.md)
+falsifies m24.5.md's *"Every token pair meets WCAG AA contrast … in both
+themes"***, and workflow.md's reopening rule says a defect that makes a shipped
+milestone's claim false reopens that milestone rather than arriving as somebody
+else's work. So M38 and M24.5 reopen when those rows are reached, and each keeps
+its own number.
+
+**Tiers 7 and 8, fifteen low and cosmetic rows.** Eleven are code. Four —
+[F57](deferred-findings.md), [F58](deferred-findings.md),
+[F113](deferred-findings.md) and [F117](deferred-findings.md) — close as recorded
+limitations, each on the strength of its own fix note: keyed hashing is the only
+coherent fix for an address in a Redis key, calling `checkListEntry` on the
+operator's blocklist would reject IP-literal entries that work today, a reaper on
+unverified hostname claims breaks the pre-DNS-cut-over case the code protects, and
+`canAdminister`'s latent limb guards a state no shipped path can construct.
+
+### The two questions this triage does not answer
+
+Both are named now so that neither is answered quietly inside a fix, which is the
+failure this log exists to prevent.
+
+**[F70](deferred-findings.md) is blocked on D38**, the same missing instance-level
+principal that blocked F15 and F31 on the first triage. `domains.write` is a role
+permission, so on a multi-organization instance every organization's owner can
+repoint the root of the instance default domain. D98 and `lctl instance principal
+move` have moved the ground under D38 since it was written — there is now an
+instance principal, and a way to move it — so the question returns in a different
+shape rather than staying refused, and it is put when that row is reached.
+
+**F18 was not re-put, and F17 was.** They were deferred together on 2026-08-01 as
+*"the natural pair for M45's documentation pass"*, and F18 is the mechanical cause
+of F17: the audit vocabulary lives in two packages, so anyone enumerating it from
+`internal/audit` is short by two. Fixing the enumeration while leaving the split
+is the state that produced the enumeration. Putting F18 belongs with the work on
+F17 rather than here, because that is where the cost of the alternative is
+visible.
+
+### The scale, stated before the answer and not after
+
+Sixty-five rows at this milestone's demonstrated cadence — roughly three per
+commit — is on the order of twenty commits, before M45's own remaining bullets:
+`docs/data-model.md`, the comment-truth sweep, the full documentation pass,
+`make doc-cost` and the judgement it forces, F1, `make release-check`, live
+verification, the tag and the PR. That number was in the prompt rather than
+discovered afterwards, because an approval given without it is an approval to
+something else.
