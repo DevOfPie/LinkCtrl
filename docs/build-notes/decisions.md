@@ -16771,3 +16771,85 @@ indistinguishable from a measurement that checked nothing.
 One machine, one disk, whatever else was running. The numbers are evidence about
 this box. The transferable part is the shape — which check gives first, and that
 it is not the one the SLO is stated over.
+
+## 2026-08-05 — A target that says where the run stops, not what it builds
+
+Prompted by the owner typing `/work M45` on 2026-08-05, mid-M45. Under the parse
+rule the single token is the *kind*, and `M45` is not a kind — so nothing was
+entered and the prompt fired, offering the three outcomes
+[work-loop.md](work-loop.md#an-unknown-target) allows. The owner chose *a real
+target this table does not know*, left the command's structure to the
+orchestrator, and named the intent: **run the phase loop until the specified
+milestone is complete.** Carries no milestone number; nothing was built.
+
+W26 in [workflow-changes.md](workflow-changes.md).
+
+### Bounding, not selecting — which is what made it addable at all
+
+The first reading of "run until M45 is complete" is a *narrowing*: the loop is
+pointed at one milestone and does that one. That reading is unbuildable without
+tearing up [phase-loop.md](phase-loop.md#4-repeat-or-stop), whose contract is
+*until the phase ends* and whose stop table is declared exhaustive. A target that
+selected work would contradict the loop it routes to, and the route table would
+then be making a promise the loop refuses — the exact drift work-loop.md's
+closing section exists to prevent.
+
+The second reading costs one row. The loop resumes as it always does, takes the
+next un-`done` row in the status table's order, and gains one stop condition:
+*the milestone just landed is the run's target*. Nothing else moves.
+
+The property that makes it safe is worth stating as an invariant, because it is
+what a future kind of target will be checked against: **a milestone target can
+only stop a run sooner.** It never starts a row it would not have started, never
+skips one it would have, and weakens no existing condition. An addition that can
+only subtract iterations cannot invalidate a table of reasons to stop — so §4
+gained a row, not an exception, and first-to-fire wins between them.
+
+### Why it cannot skip ahead, said out loud
+
+The obvious convenience — jump to the named milestone — is refused. The status
+table's order and its *Depends on* column are the only things that decide what is
+next, and a target that jumped would build a milestone whose dependencies are
+un-`done`. The failure mode is not a slower run; it is a milestone that passes
+its own definition of done against a tree that does not yet hold what it assumed.
+Waiting is cheaper than that, every time.
+
+It also means `/work M45 phase` and `/work phase` are the same instruction
+whenever M45 is the phase's last row, which is true today. The target earns its
+keep on the rows before the last one, and on the run nobody is watching.
+
+### Three resolutions that are not judgement calls
+
+Each is settled against the status table before the loop is entered, because each
+was otherwise a place to guess:
+
+**Already `done` → enter nothing, and say so.** The run being asked for has
+already happened. The tempting alternative is to treat it as *reopen and redo*,
+and that is wrong for a reason the repository already settled elsewhere:
+reopening is scheduling, and scheduling is the owner's. A command that reopened a
+shipped milestone because its number was typed would be deciding that.
+
+**Another phase → prompt.** *Never cross a phase boundary* is one of the loop's
+five overriding rules. A target naming a row outside the current phase is asking
+for precisely the thing that rule forbids, so it cannot be resolved by routing;
+it is put to the owner.
+
+**Absent from the table → the unknown-target prompt, unchanged.** `M99` is not a
+new case. It is the case that produced this entry.
+
+### The bound rides the `Stop:` line, and no new mechanism
+
+A bound that lives only in the invoking turn is lost to the first crash,
+compaction or `/stop`, and the run silently overruns into work nobody asked for.
+`.current-task.md` already carries exactly one line for a stop that has to
+survive that — `Stop:`, read at 3.9 before the rest is reset, written by the
+orchestrator alone. The milestone target writes there. A second mechanism for the
+same job would have been a second thing to keep true.
+
+### Cost
+
+`work-loop.md` +2246 bytes, `phase-loop.md` +340, `commands.md` +164,
+`.claude/commands/work.md` +341 — **+3091** total, none of it paid for by a
+deletion. Only the `phase-loop.md` share is on the resume path; `work-loop.md` is
+read when `/work` is invoked and not on a resume, which is where the bulk landed
+deliberately. M45's doc-cost judgement inherits the number.

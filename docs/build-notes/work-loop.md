@@ -25,6 +25,7 @@ them is a bug: report it, do not pick.
 /work <kind>                     this repository, that kind
 /work <target> <kind>            that target, that kind
 /work <target> <target> <kind>   nested — each target narrows the one before it
+/work <milestone> phase          the phase loop, stopping when that milestone lands
 /work … --revalidate             re-derive the route and prompt before entering
 ```
 
@@ -56,9 +57,9 @@ An unknown kind is handled exactly like an [unknown target](#an-unknown-target).
 ## Targets
 
 A target names **where** the work is, not what it is. Targets nest, outermost
-first, each narrowing the one before it. Today this repository has one level —
-the repository itself — and the nesting rule is written for the level above it,
-which is [cross-repository dispatch](#what-this-cannot-do-yet).
+first, each narrowing the one before it. Two levels exist — the repository, and
+a milestone inside it — and the nesting rule is written for the level above
+both, which is [cross-repository dispatch](#what-this-cannot-do-yet).
 
 ### Route table
 
@@ -68,6 +69,41 @@ absent from it is unknown, whatever it looks like.
 | Target | Is | Kinds |
 | --- | --- | --- |
 | `linkctrl` | This repository | `phase`, `workflow` |
+| `M<n>` | A milestone, spelled as [phase-details/README.md](phase-details/README.md)'s status table spells it — `M45`, `M24.5` | `phase` |
+
+### A milestone target
+
+`/work M45 phase`. Nested form `/work linkctrl M45 phase` is the same
+instruction, the same way `/work phase` and `/work linkctrl phase` are.
+
+**It bounds the loop; it does not choose the work.** The phase loop resumes and
+iterates exactly as it always does — [step 0](phase-loop.md#0-resume) reads the
+note, [step 1](phase-loop.md#1-validate) takes the next un-`done` row in the
+status table's order. One stop condition is added: the run ends when the named
+milestone lands.
+
+That is a ceiling and never a floor. A milestone target can only stop a run
+**sooner** than it would otherwise stop. It never skips a row ordered before the
+named one, never starts one ordered after it, and weakens no other condition —
+so [phase-loop.md](phase-loop.md#4-repeat-or-stop)'s exhaustive table gains a row
+rather than an exception, and whichever condition fires first wins.
+
+Skipping is the thing it deliberately cannot do. The status table's order and its
+*Depends on* column are what decide which milestone is next; a target that jumped
+straight to its milestone would build one whose dependencies are un-`done`, which
+is a worse outcome than the wait it was trying to avoid.
+
+Resolved against the status table **before** the loop is entered:
+
+| The named row | Then |
+| --- | --- |
+| Un-`done`, this phase | Route. The bound is written to the note's `Stop:` line, which is what carries it across a resume |
+| Already `done` | Enter nothing, and report that. The run being asked for has already happened; re-running it is [reopening](phase-details/README.md), which is scheduling and therefore the owner's |
+| A row in another phase | **Prompt.** *Never cross a phase boundary* is one of [phase-loop.md](phase-loop.md#the-loop)'s five overriding rules, and this target asks for exactly that |
+| Absent from the table | An [unknown target](#an-unknown-target), handled unchanged |
+
+Milestone targets take `phase` and nothing else. The workflow loop runs over
+process rows, which no milestone owns.
 
 ### An unknown target
 

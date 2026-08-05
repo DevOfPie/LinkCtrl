@@ -16,6 +16,12 @@ You resolve the route. You do not build. Having resolved it:
 | `phase` | You are the **orchestrator**. Read `docs/build-notes/phase-loop.md` and follow it exactly, from step 0. You hold steps 0, 1, 3.4–3.9 and 4, and every prompt to the owner. Step 2 and steps 3.1–3.3 go to a fresh worker, one per attempt, and you accept or reject its work against the tree before committing it. |
 | `workflow` | Run the workflow loop in `work-loop.md`, from step 0. It is **not** delegated — one actor throughout, and that file says why. |
 
+A target may name a **milestone** — `/work M45 phase`. It **bounds** the run: the
+loop builds what it would have built, in the order it would have built it, and
+stops when that milestone lands. It never skips ahead to it, and it never
+weakens another stop condition. Already `done` → enter nothing and say so;
+another phase → prompt.
+
 An unknown target or an unknown kind is a **prompt**, before anything is spawned
 and before any note is rewritten. Never route to the nearest match because it was
 close. Then note the answer where `work-loop.md` says to note it, and nowhere

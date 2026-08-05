@@ -60,7 +60,8 @@ and merges.
 
 **Given.** A list of targets, then a kind, then optional flags. The kind is the
 last token; everything before it is a target. No arguments at all is a valid
-invocation and means *report, enter nothing*.
+invocation and means *report, enter nothing*. A target may name a **milestone**,
+which bounds where the loop stops rather than choosing what it builds.
 
 **Decides.** Which route the arguments name. Nothing else — every decision past
 that point belongs to the loop it hands off to.
@@ -72,9 +73,9 @@ boundary.
 **Authority.** [work-loop.md](work-loop.md), which carries the route table.
 Once a loop is entered, that loop's file.
 
-**Produces.** A loop that runs until one of that loop's stop conditions fires,
-and — where a target was unknown and the owner named a real one — a row appended
-to the route table.
+**Produces.** A loop that runs until one of that loop's stop conditions fires —
+one more of them when a milestone target bounded the run — and, where a target
+was unknown and the owner named a real one, a row appended to the route table.
 
 ### `stop`
 

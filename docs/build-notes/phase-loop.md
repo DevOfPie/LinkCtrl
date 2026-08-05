@@ -292,6 +292,7 @@ continue:
 | The same gap survived two workers | Same |
 | The owner said stop work | [Stop work](#stop-work) |
 | The owner asked to stop at the checkpoint, and 3.9 just finished | [Stopping at the checkpoint](#stopping-at-the-checkpoint) — the `Stop:` line in the note is what carries it |
+| The milestone just landed is the run's **milestone target** | [work-loop.md](work-loop.md#a-milestone-target) — `/work M45 phase` bounds the run at that row. Same `Stop:` line, same reason |
 | The next milestone is an `X.9` review **and this run has already landed one** | [A review gets its own session](#a-review-gets-its-own-session) |
 
 **That table is exhaustive.** Landing a milestone is not an event; it is one
@@ -446,6 +447,7 @@ Done:    writer; actor_label + ip_prefix asserted by test; root-redirect event
 Next:    GET /api/v1/audit — keyset pagination, audit.read gate
 Blocked: none        # or the prompt, verbatim, and that it is unanswered
 Stop:    none        # or: at the checkpoint — owner asked <date>
+                     # or: after M45 — milestone target, /work M45 phase
 
 Cost too much to re-derive:
 - audit.read seed follows the 00800 insert-and-grant pattern
@@ -457,9 +459,10 @@ rewrites the note at every step boundary; the orchestrator reconciles it against
 the tree at each handoff, and step 3.9 resets it.
 
 `Stop:` is the one line step 3.9 reads before resetting the rest, and it is why
-a [deferred stop](#stopping-at-the-checkpoint) survives a crash. It is the
-orchestrator's alone — a worker never writes it, because a worker never learns
-of one.
+a [deferred stop](#stopping-at-the-checkpoint) — or a
+[milestone target](work-loop.md#a-milestone-target)'s bound — survives a crash.
+It is the orchestrator's alone: a worker never writes it, because a worker never
+learns of one.
 
 *Cost too much to re-derive* carries weight it did not before: a worker starts
 with no memory of the last milestone, so what a worker would otherwise
