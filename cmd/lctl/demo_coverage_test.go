@@ -853,14 +853,21 @@ func TestDemoSeederShowsEveryFeatureItClaimsTo(t *testing.T) {
 	// state: somebody signs in and uses the workspace switcher M25 built, or a
 	// run fails between the seeder moving the owner into the second workspace
 	// and moving them back. Either leaves the account's preference pointing
-	// somewhere else, and demoReset scopes its link, tag and destination deletes
-	// to whatever workspace the actor resolved into.
+	// somewhere else.
 	//
 	// That is not a hypothetical: it is what broke `make demo-update` at M36.
-	// The reset committed, removed everything scoped to the organization, and
-	// removed nothing scoped to the workspace — then the very first catalogue
-	// link collided with the copy of itself the reset had walked past, because
-	// alias uniqueness is per domain rather than per workspace.
+	// demoReset scoped its link, tag and destination deletes to whatever
+	// workspace the actor resolved into, while everything else in the same
+	// transaction was scoped to the organization. The reset committed, removed
+	// everything organization-scoped and nothing workspace-scoped — then the very
+	// first catalogue link collided with the copy of itself the reset had walked
+	// past, because alias uniqueness is per domain rather than per workspace.
+	//
+	// M36 closed the path by restoring the owner's workspace; M45 closed the
+	// asymmetry, so every statement in demoReset is now organization-scoped
+	// (F68). This run is what holds both: it reaches the state from the outside,
+	// the way a person clicking the switcher does, which no amount of restoring
+	// inside the seeder can prevent.
 	switchOwnerAwayFromTheCatalogue(t, pool, ownerID, orgID)
 
 	third := runDemoSeed(t, ctx, pool, cfg, owner.Email)
@@ -881,6 +888,93 @@ func TestDemoSeederShowsEveryFeatureItClaimsTo(t *testing.T) {
 				feature.Feature, feature.Milestone, counts[i], moved[i])
 		}
 	}
+}
+
+// TestDemoResetClearsTheCatalogueFromAnyWorkspaceInTheOrganization is F68's
+// asymmetry as a claim, and it has to call demoReset directly to be one.
+//
+// The three statements that removed links, tags and destinations were scoped to
+// `actor.WorkspaceID`, while the rollups, the click events and everything in
+// demoResetPhase2 in the same transaction were scoped to the organization. An
+// actor resolving into any other workspace of the organization therefore
+// committed a half-reset — links left standing, their analytics wiped — and
+// reported success.
+//
+// The seeder-level test above cannot reach this. M36 closed the reachable path
+// by restoring the owner's workspace before the reset runs, so by the time
+// demoReset is called the actor is always back in the catalogue's workspace and
+// a workspace-scoped delete is indistinguishable from an organization-scoped
+// one. Narrowing the statement back to one workspace leaves that test green,
+// which is how the asymmetry survived M36 in the first place.
+//
+// So this drives the unit rather than the seeder, with an actor pointed at the
+// second workspace: the state M36 prevents the seeder from producing, and which
+// nothing prevents a future caller from passing in.
+func TestDemoResetClearsTheCatalogueFromAnyWorkspaceInTheOrganization(t *testing.T) {
+	ctx := context.Background()
+	pool := newDemoDB(t)
+	cfg := demoTestConfig()
+	owner := claimDemoInstance(t, pool, cfg)
+	runDemoSeed(t, ctx, pool, cfg, owner.Email)
+	orgID, ownerID := demoScope(t, pool, owner.Email)
+
+	before := demoCatalogueLinks(t, pool, orgID)
+	if before == 0 {
+		t.Fatal("the seeded demo has no catalogue links; the assertion below would prove nothing")
+	}
+
+	// The second workspace — not the one the catalogue is in, which is exactly
+	// what an actor who used the workspace switcher resolves into.
+	var elsewhere uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		SELECT w.id FROM workspaces w
+		 WHERE w.organization_id = $1 AND w.deleted_at IS NULL
+		 ORDER BY w.created_at DESC, w.id DESC LIMIT 1`, orgID).Scan(&elsewhere); err != nil {
+		t.Fatal(err)
+	}
+	var catalogueWorkspace uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		SELECT w.id FROM workspaces w
+		 WHERE w.organization_id = $1 AND w.deleted_at IS NULL
+		 ORDER BY w.created_at, w.id LIMIT 1`, orgID).Scan(&catalogueWorkspace); err != nil {
+		t.Fatal(err)
+	}
+	if elsewhere == catalogueWorkspace {
+		t.Fatal("the demo has only one workspace; this test needs the second one")
+	}
+
+	actor := &auth.Identity{UserID: ownerID, OrgID: orgID, WorkspaceID: elsewhere}
+	if err := demoReset(ctx, pool, actor, demoCatalogue()); err != nil {
+		t.Fatalf("reset from another workspace: %v", err)
+	}
+
+	if after := demoCatalogueLinks(t, pool, orgID); after != 0 {
+		t.Errorf("%d catalogue links survived a reset run from another workspace in "+
+			"the same organization, out of %d. Every statement in demoReset has to "+
+			"agree about its scope: the ones that removed the analytics already "+
+			"used the organization, so a workspace-scoped link delete leaves a "+
+			"half-reset that commits and reports success.", after, before)
+	}
+}
+
+// demoCatalogueLinks counts the catalogue's links anywhere in the organization,
+// which is the scope the reset is supposed to cover.
+func demoCatalogueLinks(t *testing.T, pool *pgxpool.Pool, orgID uuid.UUID) int {
+	t.Helper()
+	aliases := make([]string, 0)
+	for _, d := range demoCatalogue() {
+		if d.alias != "" {
+			aliases = append(aliases, d.alias)
+		}
+	}
+	var n int
+	if err := pool.QueryRow(context.Background(), `
+		SELECT count(*) FROM links
+		 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)
+		   AND alias = ANY($2::text[])`, orgID, aliases).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
 }
 
 // switchOwnerAwayFromTheCatalogue points the owner's last-used workspace at the

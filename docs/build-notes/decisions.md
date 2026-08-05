@@ -17219,3 +17219,45 @@ interval means. `operations.md` gains the job row; `configuration.md` says
 the two mechanisms carrying it, having previously rested on the weaker one alone.
 The `mail` row in `operations.md` was corrected in passing: it still asserted
 F52's false half.
+
+## 2026-08-05 — M45, the half-reset that commits, and a test that could not see it
+
+[F68](deferred-findings.md). `demoReset` removed links, tags and destinations
+scoped to `actor.WorkspaceID`, while the rollups, the click events and every
+statement in `demoResetPhase2` — in the same transaction — were scoped to the
+organization. An actor resolving into any other workspace of that organization
+committed a half-reset: links left standing, their analytics wiped, success
+reported.
+
+M36 met this as a live failure and closed the *path* by restoring the owner's
+workspace before the reset runs. It did not close the asymmetry, which is what
+makes this a defect waiting for the next caller rather than a fixed one.
+
+### The scope that wins is the one everything else already used
+
+Three statements moved to the organization rather than the other seven moving to
+a workspace. The demo has had two workspaces since M36, the analytics deletes
+had already concluded the organization was the right scope, and a reset whose
+statements disagree about what they are resetting is the whole defect.
+
+### The seeder test could not catch it, which is why it survived
+
+`TestDemoSeederShowsEveryFeatureItClaimsTo` has a third run *specifically* for
+this — the owner switched away from the catalogue, reaching the state from the
+outside the way somebody clicking the switcher does. It still cannot see the
+asymmetry, because M36's restore puts the actor back in the catalogue's
+workspace before `demoReset` is called. At that point a workspace-scoped delete
+and an organization-scoped one do the same thing. Narrowing the statement back
+leaves that test green.
+
+So the new test drives `demoReset` **directly**, with an actor pointed at the
+second workspace: the state M36 stops the seeder producing, and which nothing
+stops a future caller passing in. Against the original scoping, all nineteen
+catalogue links survive.
+
+That is the third time this milestone that the obvious test for a defect passes
+against it — F67 had two designs fail, F106's natural assertion would have
+counted through rows the delete had removed, and here an existing test written
+for this exact scenario is blind to it because a *different* fix runs first.
+The pattern worth extracting: when a fix closes a path, the test that proves it
+stops being able to see the thing at the end of the path.

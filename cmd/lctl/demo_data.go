@@ -39,7 +39,6 @@ type pgxExecutor interface {
 // Every row the Phase 2 seeding writes is removed here too, in demoResetPhase2.
 // That is what makes `make demo-update` idempotent: run twice, the same demo.
 func demoReset(ctx context.Context, pool *pgxpool.Pool, actor *auth.Identity, cat []demoLink) error {
-	workspaceID := actor.WorkspaceID.String()
 	aliases := make([]string, 0, len(cat))
 	for _, d := range cat {
 		if d.alias != "" {
@@ -52,25 +51,44 @@ func demoReset(ctx context.Context, pool *pgxpool.Pool, actor *auth.Identity, ca
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	// **Every statement here is scoped to the organization**, and that uniformity
+	// is the point rather than a widening.
+	//
+	// These three used to be scoped to `actor.WorkspaceID` while the rollups
+	// below, the click events and everything in demoResetPhase2 were scoped to
+	// the organization. An actor resolving into any *other* workspace of the same
+	// organization therefore committed a half-reset — the links left standing,
+	// their analytics wiped — and reported success. M36 removed the reachable
+	// path to that state; it did not remove the asymmetry, which is what makes it
+	// a defect waiting for the demo to gain a third workspace (F68).
+	//
+	// The organization is the right scope on its own terms: the demo has two
+	// workspaces already, the catalogue is seeded across them, and every other
+	// statement in this function had already reached that conclusion.
+	//
 	// Generated-alias links have no stable name to match on, so they are found
 	// by their destination instead.
 	const del = `
 		DELETE FROM links
-		 WHERE workspace_id = $1
+		 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)
 		   AND (alias = ANY($2::text[])
 		        OR primary_url IN ('https://example.com/whitepaper/short-links.pdf',
 		                           'https://example.com/webinars/replay'))`
 	if _, err := tx.Exec(ctx, `DELETE FROM link_tags WHERE link_id IN (
-			SELECT id FROM links WHERE workspace_id = $1 AND alias = ANY($2::text[]))`,
-		workspaceID, aliases); err != nil {
+			SELECT id FROM links
+			 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)
+			   AND alias = ANY($2::text[]))`,
+		actor.OrgID, aliases); err != nil {
 		return fmt.Errorf("reset tags: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM destinations WHERE link_id IN (
-			SELECT id FROM links WHERE workspace_id = $1 AND alias = ANY($2::text[]))`,
-		workspaceID, aliases); err != nil {
+			SELECT id FROM links
+			 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)
+			   AND alias = ANY($2::text[]))`,
+		actor.OrgID, aliases); err != nil {
 		return fmt.Errorf("reset destinations: %w", err)
 	}
-	if _, err := tx.Exec(ctx, del, workspaceID, aliases); err != nil {
+	if _, err := tx.Exec(ctx, del, actor.OrgID, aliases); err != nil {
 		return fmt.Errorf("reset links: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM reserved_aliases WHERE alias = ANY($1::text[])`,
