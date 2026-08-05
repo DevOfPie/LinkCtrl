@@ -6,13 +6,20 @@ measure, script and revoke — not a row you create once and hope about.
 Runs as one Go binary with Postgres and Redis beside it. No Node in the image,
 no SaaS dependency, no telemetry leaving the box.
 
-> **Status: Phase 1 complete, released as 0.1.0.** All twenty-one milestones
-> are built, tested and exercised end to end; every configuration setting takes
-> effect, and the redirect latency target is measured, not aspirational. See
-> [CHANGELOG.md](CHANGELOG.md) for what is in it. What is deferred to Phase 2 is
-> listed plainly in
-> [Not built yet](#not-built-yet). Check that list before deploying anything you
-> care about.
+> **Status: Phase 2 complete and unreleased. 0.1.0 is the latest tag.**
+> Everything described below is built, tested and exercised end to end, and the
+> redirect latency target is measured rather than aspirational — but most of it
+> is **not in 0.1.0**, which shipped Phase 1 only. Until 0.2.0 is tagged, running
+> a released version gets you the smaller product the `[0.1.0]` section of
+> [CHANGELOG.md](CHANGELOG.md) describes; running `main` gets you this page.
+> [Not built yet](#not-built-yet) is the list of what is still missing from
+> either, and it is the one to read before deploying anything you care about.
+>
+> *(This block said "Phase 1 complete, released as 0.1.0" while the table below
+> described a dozen Phase 2 features in the present tense, and pointed at a
+> changelog section that states their absence — a reader who followed the Quick
+> start and pinned the tag as instructed got an instance with none of what this
+> page had just sold them.)*
 
 ---
 
@@ -62,8 +69,11 @@ docker compose up -d --wait
 ```
 
 That runs `latest`. For anything you care about, pin a version — set
-`LINKCTRL_TAG=0.1.0` in `.env` — so that a later `pull` is a decision rather than a
-surprise. Releases also publish static binaries for linux, macOS and Windows if you
+`LINKCTRL_TAG` in `.env` to the release you mean — so that a later `pull` is a
+decision rather than a surprise. **The latest tag is `0.1.0`, which is Phase 1
+only**: pinning it gets you a working shortener without the organizations,
+custom domains, routing rules, split tests, gated links, webhooks or automation
+this page describes. Releases also publish static binaries for linux, macOS and Windows if you
 would rather not use Docker; see [docs/releasing.md](docs/releasing.md).
 
 Open <http://localhost:8080>. The first visit lands on a setup form that creates

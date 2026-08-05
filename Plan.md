@@ -460,9 +460,18 @@ caveat with the data.
 
 ## Build status
 
-As of 2026-07-31. 21 of 21 milestones, all of them in 0.1.0, tagged `v0.1.0` on
-`main` and released. Phase 2 is planned and unstarted:
-[Phase 2 build plan](#phase-2-build-plan).
+**Phase 1: 21 of 21 milestones, all of them in 0.1.0, tagged `v0.1.0` on `main`
+and released on 2026-07-31.**
+
+**Phase 2: complete and unreleased**, every milestone through
+[M45](docs/build-notes/phase-details/m45.md) built. Status per milestone lives in
+[phase-details/README.md](docs/build-notes/phase-details/README.md) and nowhere
+else; the plan below is the scope contract rather than a progress report.
+
+*(This paragraph read "Phase 2 is planned and unstarted, as of 2026-07-31" for
+the whole of Phase 2 — a dated snapshot that nine milestones overtook on the day
+it was stamped, which is why the milestone counts moved out of it and into the
+one file that owns them. F37.)*
 
 The first eighteen were then re-reviewed: a six-dimension audit with adversarial
 verification confirmed 30 findings — among them a missing purge job that
@@ -528,7 +537,10 @@ because they are what the implementations are still held to.
 
 Moved to [deferred-findings.md](docs/build-notes/deferred-findings.md), which
 carries the queue, the rules for what lands in it, and the review state of each
-row. One open finding, cosmetic, unreviewed.
+row. **That file is the authority on how many there are and what state each is
+in**, and this sentence deliberately no longer repeats a count: it said "one
+open finding, cosmetic, unreviewed" against a queue that had grown past sixty
+and been triaged three times (F37).
 
 #### Previously unassigned, now scheduled
 
@@ -551,12 +563,12 @@ reclassified rather than quietly skipped.
 33 milestones, M21–M45, continuing Phase 1's numbering. Fractional numbers
 insert without renumbering the work either side (Phase 1's M0.5 precedent):
 `X.9` is reserved for scheduled reviews, `X.1`–`X.8` for scope added after the
-plan was finalised — so far five: dark mode at M24.5, the dashboard header at
-M26.5, the Redis stall bound at M26.6 and bot blocking at M32.5, all
-2026-07-31; then organization deletion at M28.5 and the demo's own data at M33.5, both
-2026-08-01. The numbering
-rules are in [planning.md](docs/build-notes/planning.md). One milestone per
-commit.
+plan was finalised. **Six were inserted**: dark mode at M24.5, the dashboard
+header at M26.5, the Redis stall bound at M26.6 and bot blocking at M32.5, all
+2026-07-31; then organization deletion at M28.5 and the demo's own data at M33.5,
+both 2026-08-01. (This said *five* and listed six from the moment the sixth was
+added — F37.) The numbering rules are in
+[planning.md](docs/build-notes/planning.md). One milestone per commit.
 
 **Definitions of done live in
 [`docs/build-notes/phase-details/`](docs/build-notes/phase-details/), one file per
@@ -849,7 +861,10 @@ The *why* for each is in decisions.md.
 
 ## Known limitations
 
-Deliberately accepted in Phase 1.
+Deliberately accepted, and **not only in Phase 1** — most of the rows below rest
+on Phase 2 decisions and were added as those milestones landed. The caption said
+"in Phase 1" until 0.2.0, which made a reader date every row here to a phase that
+produced a minority of them (F37).
 
 | Limitation | Consequence |
 | --- | --- |
