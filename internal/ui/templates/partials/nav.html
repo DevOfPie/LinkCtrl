@@ -14,9 +14,23 @@
      until a second membership exists, which is the milestone's promise that the
      switcher costs today's users nothing.
 
-     A plain form: a select and a button, no JavaScript. An auto-submitting
-     select needs a change handler, and the CSP forbids inline script for good
-     reasons that a convenience does not outweigh.
+     The select switches on change and there is no button (D103, F21). The old
+     comment here claimed a plain form "with no JavaScript" was forced, because
+     an auto-submitting select needs a change handler and the CSP forbids inline
+     script. The premise was wrong: htmx is already served on every page from
+     layout.html under script-src 'self', already does exactly this on the links
+     page, and needs no inline script — so the CSP never forbade this and the
+     two-step control was defending a constraint that did not exist.
+
+     No <noscript> fallback. The owner settled the stance instead (D103): the
+     dashboard requires JavaScript, and that is written down rather than
+     defended in markup nobody looks at twice. The redirect tree is a different
+     claim and stays scriptless.
+
+     hx-include carries the hidden `next`, and the handler answers through
+     seeOther, which turns an htmx request into HX-Redirect — a full navigation
+     rather than this partial swapped into a fragment. So the switch behaves
+     identically whichever way it was submitted.
 
      The path travels on the form so switching leaves you on the page you were
      reading, looking at the other workspace's version of it. */}}
@@ -25,13 +39,12 @@
 <form method="post" action="/workspace/switch" class="flex items-center gap-1">
   <input type="hidden" name="next" value="{{.Path}}">
   <select name="workspace_id" aria-label="Workspace"
+          hx-post="/workspace/switch" hx-trigger="change" hx-include="closest form"
           class="rounded-md border border-line-strong bg-raised px-2 py-1 text-sm text-ink focus:border-accent focus:outline-none">
     {{range .Workspaces}}
     <option value="{{.ID}}"{{if .Current}} selected{{end}}>{{.OrganizationName}} · {{.Name}}</option>
     {{end}}
   </select>
-  <button type="submit"
-          class="rounded-md px-2 py-1 text-sm text-muted hover:bg-sunken hover:text-ink">Switch</button>
 </form>
 {{end}}
 {{end}}

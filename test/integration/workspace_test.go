@@ -728,6 +728,32 @@ func TestWebWorkspaceSwitcher(t *testing.T) {
 		t.Error("the switcher does not offer the second workspace")
 	}
 
+	// The control is one step, not two (D103, F21). Picking a workspace used to
+	// do nothing until Switch was pressed, and any navigation discarded the
+	// choice silently — a control that looks like it works and does not.
+	//
+	// Asserted on the markup, because the behaviour past this point is htmx's
+	// and the browser's rather than ours: what this tree is responsible for is
+	// emitting a select that submits on change and no second control to press.
+	switcher := page[strings.Index(page, `action="/workspace/switch"`):]
+	switcher = switcher[:strings.Index(switcher, "</form>")]
+	for _, want := range []string{`hx-post="/workspace/switch"`, `hx-trigger="change"`, `hx-include="closest form"`} {
+		if !strings.Contains(switcher, want) {
+			t.Errorf("the switcher select is missing %s, so picking a workspace does "+
+				"nothing until something else is pressed", want)
+		}
+	}
+	if strings.Contains(switcher, "<button") {
+		t.Error("the switcher still renders a button; the directive was that a " +
+			"separate button to switch cannot stay, and a redundant control is the " +
+			"affordance problem F21 is about")
+	}
+	// hx-include carries this, and without it the switch loses the page it was
+	// made from and lands on the dashboard instead.
+	if !strings.Contains(switcher, `name="next"`) {
+		t.Error("the switcher no longer carries the path it was submitted from")
+	}
+
 	// Switching returns to the page it was posted from.
 	f.wantRedirect(f.postForm("/workspace/switch", url.Values{
 		"workspace_id": {second.String()}, "next": {"/links"},
