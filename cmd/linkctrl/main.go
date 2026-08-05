@@ -610,7 +610,16 @@ func run(cfg config.Config, _ io.Writer) error {
 		Events: webhookSvc,
 		Log:    log,
 	})
-	rootRedirect.Load = linkSvc.LoadRootRedirect
+	// On the **redirect** pool, not the application one. This is the only path
+	// on the redirect tree that reads Postgres during a request, and the pool
+	// above it exists so a slow analytics query cannot leave a redirect waiting
+	// for a connection. It read through linkSvc — an application-pool service —
+	// until F48, which is the guarantee stated at the pool's own construction
+	// being quietly untrue for one URL.
+	rootRedirectQ := dbgen.New(pools.Redirect)
+	rootRedirect.Load = func(ctx context.Context) (string, error) {
+		return link.LoadRootRedirectWith(ctx, rootRedirectQ)
+	}
 	// A rename changes the hostname a short URL is built from, and that string is
 	// cached per process. The same signal that reloads the verified set drops it,
 	// so a rename on one replica reaches the URLs every other one prints.

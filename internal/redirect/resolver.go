@@ -254,7 +254,14 @@ func (r *Resolver) fromRedis(ctx context.Context, k string, now time.Time) *Snap
 		// A corrupt or older-format payload is treated as a miss rather than
 		// an error, and dropped so it stops costing a decode on every request.
 		r.log.Warn("discarding undecodable cache entry", slog.String("key", k))
-		_ = r.redis.Del(context.WithoutCancel(rctx), k).Err()
+		// WithoutCancel *and* a timeout, like every other detached call in this
+		// file. Stripping cancellation without adding a deadline leaves the call
+		// bounded by nothing, and D26 leaves go-redis's MaxRetries at its
+		// default on the stated ground that every Redis call site here carries
+		// one — this was the single site where that was not true (F101).
+		dctx, cancel := context.WithTimeout(context.WithoutCancel(rctx), r.opts.RedisTimeout)
+		_ = r.redis.Del(dctx, k).Err()
+		cancel()
 		return nil
 	}
 

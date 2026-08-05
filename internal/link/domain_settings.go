@@ -391,18 +391,32 @@ func (s *Service) SetBotBlocking(ctx context.Context, actor *auth.Identity, bloc
 // LoadRootRedirect reads the current value for the redirect path. Unexported
 // callers only: the hot path uses it through a cache.
 func (s *Service) LoadRootRedirect(ctx context.Context) (string, error) {
-	id, err := s.defaultDomainID(ctx)
+	return LoadRootRedirectWith(ctx, s.q)
+}
+
+// LoadRootRedirectWith is the same read with the caller choosing the pool.
+//
+// It exists so the redirect tree can refill its root cache from the **redirect**
+// pool. `main.go` states the guarantee that pool exists for — *"so a slow
+// analytics query on the application pool cannot leave a redirect waiting to
+// acquire a connection"* — and until F48 the one redirect-tree path that reads
+// Postgres on a request acquired from the application pool instead, because the
+// only loader available was a method on a service built on it. Two plain reads
+// with no transaction and no service state, so the queries handle is the whole
+// dependency.
+func LoadRootRedirectWith(ctx context.Context, q *dbgen.Queries) (string, error) {
+	row, err := q.ResolveDefaultDomain(ctx)
+	if err != nil {
+		return "", fmt.Errorf("resolve default domain: %w", err)
+	}
+	settings, err := q.GetDefaultDomainSettings(ctx, row.ID)
 	if err != nil {
 		return "", err
 	}
-	row, err := s.q.GetDefaultDomainSettings(ctx, id)
-	if err != nil {
-		return "", err
-	}
-	if row.RootRedirectUrl == nil {
+	if settings.RootRedirectUrl == nil {
 		return "", nil
 	}
-	return *row.RootRedirectUrl, nil
+	return *settings.RootRedirectUrl, nil
 }
 
 // defaultDomainID names the instance default, which the settings queries used to

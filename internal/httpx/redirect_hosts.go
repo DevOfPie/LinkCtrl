@@ -3,6 +3,7 @@ package httpx
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
 )
@@ -128,6 +129,25 @@ type TLSAsk struct {
 	// Nil records nothing, which leaves the column at `pending` and costs
 	// nothing else.
 	Activate func(ctx context.Context, d redirect.VerifiedDomain)
+	// ActivateTimeout bounds that write. Zero means DefaultActivateTimeout.
+	ActivateTimeout time.Duration
+}
+
+// DefaultActivateTimeout bounds the /tls-check write.
+//
+// This route is mounted by registerOps on four muxes, none of which pass through
+// appHandler, which is where RequestTimeout lives — and neither pool sets a
+// statement_timeout. Detaching the request context without adding a deadline
+// therefore left the write bounded by nothing at all, on an unauthenticated
+// endpoint (F129). Every other detached context on the redirect tree pairs the
+// two calls; this was the exception.
+const DefaultActivateTimeout = 5 * time.Second
+
+func (h *TLSAsk) activateTimeout() time.Duration {
+	if h.ActivateTimeout <= 0 {
+		return DefaultActivateTimeout
+	}
+	return h.ActivateTimeout
 }
 
 func (h *TLSAsk) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -153,7 +173,10 @@ func (h *TLSAsk) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// per handshake — the endpoint is public and a statement it could run on
 		// every request would be a write amplifier anybody can pull.
 		h.Hosts.MarkTLSActive(d.Hostname)
-		h.Activate(context.WithoutCancel(r.Context()), d)
+		actx, cancel := context.WithTimeout(
+			context.WithoutCancel(r.Context()), h.activateTimeout())
+		h.Activate(actx, d)
+		cancel()
 	}
 	w.WriteHeader(http.StatusOK)
 	if r.Method != http.MethodHead {

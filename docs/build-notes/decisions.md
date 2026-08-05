@@ -175,6 +175,7 @@ file. Append a row when you append an entry.
 | [M45's third triage, and a rule that changed the recommendation](#2026-08-05--m45s-third-triage-and-a-rule-that-changed-the-recommendation) | The last sixty-six rows, in eight groups by tier and cluster; sixty-five approved, F90 carried. Why the carry is not cheapness — the row has no repair, only a choice of fairness model, and a phase close is where that choice goes wrong. **The standing rule of 2026-08-04 shows up as a disappearance**: written under it, the recommendation was the widest option three times of four and was taken all four, where the two earlier triages recorded the owner correcting a narrower one. F17's second limb reviewed for the first time; F44 closed as a record rather than a build; F57, F58, F113 and F117 the same, each on its own fix note. **F108 and F46 reopen M38 and M24.5** rather than landing here, per workflow.md's reopening rule. The two questions deliberately left: F70's D38, whose ground D98 moved, and F18, which is F17's mechanical cause and is put where the alternative's cost is visible. And the scale — twenty-odd commits — stated in the prompt rather than discovered after the answer |
 | [M45, a bound the write half had and the read half did not](#2026-08-05--m45-a-bound-the-write-half-had-and-the-read-half-did-not) | F103 and F104, closed together because F103's fix is the thing F104's rule forbade. The organization bound M44 put on what a key may *act* on, applied to what it may *read* — and why the filter is in the service rather than in the query the browser switcher shares. Both halves asserted in one fixture, because a filter that took the session with it would be the worse defect. **The census corrected F104's count from seven sites to ten**, and the four it missed are all D43's cap — which the rule licensed but described as invitations-only while the tree also caps role assignment on an existing membership. One of the ten is not authorization at all. The inherited Permissions rule amended, owner-answered, from two mechanisms to four; the recommendation was a rule stated as a test rather than a list, declined with its drift cost named, and the prediction left on the record |
 | [M45, two questions registration was answering](#2026-08-05--m45-two-questions-registration-was-answering) | F13 and F53. Why the registration oracle was defensible until M29 put a browser form in front of it, and the three things closing it took rather than one — the hash moved above the lookup so timing does not restore what the status code stopped carrying, nothing written for a taken address so a stranger cannot invalidate the owner's outstanding link, and a fourth mail template that deliberately carries no verification link. **The test compares whole bodies and that is what caught the residue**: Go's nanosecond clock against Postgres's microsecond, three extra digits on one answer only — an argument for asserting *indistinguishable* rather than a list of properties. F53 fixed in the shared validator rather than in signup, because invitations reach the same enqueue; the narrowing checked in both directions. And the unreachable branch deleted rather than left asserting the opposite of the code beside it |
+| [M45, three calls the redirect tree was not bounding](#2026-08-05--m45-three-calls-the-redirect-tree-was-not-bounding) | F48, F101 and F129 — one class at three sites, and why it is the redirect tree that has it: `RequestTimeout` lives in `appHandler`, which the tree is deliberately outside, so everything the chain would supply is supplied by hand. F48's pool crossing needed a new loader taking a queries handle, because the read's whole dependency was the handle and the crossing existed only through the service it hung off; the singleflight matters because M23's flush makes the miss fleet-simultaneous by design. **The scan was wrong before the code was**: written strictly it flagged two correct variable-form sites, so the rule was narrowed to the shape both defects had and the blind spot is named in the test rather than papered over — a guard with a false positive gets an exception and then stops being read. And why `/tls-check` keeps the application pool: the bound was the defect, the pool is right |
 
 ---
 
@@ -15228,3 +15229,81 @@ is the row about that, and it is still open.
 The `ErrEmailTaken` branch in the **verify** handler stays. `Verify` still returns
 it for the race where an address is claimed between registering and confirming,
 and whoever holds that token owns the address anyway.
+
+## 2026-08-05 — M45, three calls the redirect tree was not bounding
+
+[F48](deferred-findings.md), [F101](deferred-findings.md) and
+[F129](deferred-findings.md). One class at three sites: a call on the redirect
+tree with nothing deciding how long it may take. F129's own evidence calls itself
+*"F48's crossing"*, so they are closed together rather than in sequence.
+
+### Why the redirect tree is where this happens
+
+`RequestTimeout` lives in `appHandler`. The redirect tree is deliberately outside
+it — that is the *redirect tree stays minimal* rule, and it is why an alias
+resolve does no session lookup and renders no template. The cost of being outside
+the middleware chain is that everything the chain would have supplied has to be
+supplied by hand, and three places had not been.
+
+`context.WithoutCancel` is the other half. It strips the **deadline** as well as
+the cancellation, which is the part that is easy to forget, and detaching from a
+request without adding a deadline leaves a goroutine that outlives the client
+with nothing to stop it.
+
+### F48, and the half that needed a new function
+
+Three absences: no timeout, no singleflight, and a read on the **application**
+pool from the redirect tree.
+
+The first two are local. The refill now holds its own mutex — separate from the
+one guarding the fields, so a slow load cannot block cache *hits* — re-checks
+under it, and carries `DefaultRootLoadTimeout`.
+
+The pool crossing is the one the row calls the half that matters, and it needed
+`link.LoadRootRedirectWith`: the same two statements with the caller choosing the
+queries handle. `main.go` builds the loader on `pools.Redirect` now. The read has
+no transaction and no service state, so the handle was the whole dependency — the
+crossing existed only because the only loader available was a method on a service
+constructed on `pools.App`, and `main.go:278-280` states the guarantee that
+arrangement was quietly breaking: *"so a slow analytics query on the application
+pool cannot leave a redirect waiting to acquire a connection"*.
+
+The singleflight is worth more than its cost suggests. M23's subscriber calls
+`InvalidateRoot` from `flush()` on **every** re-establishment including the
+first, so a miss here is fleet-simultaneous by design rather than by bad luck.
+
+### The test that was wrong before the code was
+
+`TestNoDetachedContextIsHandedStraightToACall` scans `internal/httpx` and
+`internal/redirect` for a detached context handed straight to a call. Written
+first as *every `WithoutCancel` must sit inside a `WithTimeout`*, it immediately
+flagged two more sites than F101 knew about — and **both were correct**:
+`hosts.go`'s `Refresh` assigns `base` and passes it to `Reload`, which
+re-detaches and applies `hostLoadTimeout` itself; `invalidation.go` assigns
+`base` and bounds it inside the goroutine that uses it.
+
+The comment in the first draft said nothing in the tree used the variable form.
+Two things did. The rule was narrowed to the shape both real defects actually
+had — a `WithoutCancel` passed **directly** as an argument to a call that is not
+`WithTimeout` or `WithDeadline` — and the two variable-form sites are named in
+the test's own doc comment along with why each is fine.
+
+That is the more useful outcome than silencing them. A guard with a false
+positive gets an exception added and then stops being read, and the honest
+version of this one says what it cannot see: it does not follow a detached
+context through a variable, because doing that properly needs dataflow. Naming
+the blind spot is what [F130](deferred-findings.md) is about one level up — a
+mechanism believed to work with nothing that fails if it stops.
+
+It also carries a zero-check. If the scan ever matches nothing at all it fails,
+because a scan that has stopped finding its own subject reads exactly like a tree
+with no defects in it.
+
+### What was not changed
+
+`/tls-check` still writes on the application pool. F129 mentions the crossing it
+shares with F48, and it is right about the fact and wrong about the remedy: this
+is a write to domain state triggered by a TLS handshake, not a read on the
+serving path, and the redirect pool is small precisely so that reads which must
+be fast are not queued behind writes. The bound was the defect; the pool is
+correct.
