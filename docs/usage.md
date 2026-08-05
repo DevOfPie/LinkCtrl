@@ -1106,7 +1106,11 @@ curl -H "Authorization: Bearer $LINKCTRL_KEY" https://links.example.com/api/v1/w
 ```
 
 `current` marks the one this request is acting in; `default` marks the pin, and
-nothing carries it while the account follows last-used. Switching
+nothing carries it while the account follows last-used. **The list a key gets is
+its own organization's**, where the list a browser gets spans every organization
+you belong to: crossing them is what the switcher is for, and a key cannot act
+outside the one it was issued for, so it is not told what the others are called.
+Switching
 (`POST /api/v1/workspaces/{id}/switch`) and pinning
 (`PUT /api/v1/workspaces/default`, with `null` to go back to last-used) require
 a signed-in session and answer `403` for an API key: switching moves the calling

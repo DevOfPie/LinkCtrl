@@ -541,6 +541,88 @@ func TestAPIKeysFollowTheirOwnerButCannotSwitch(t *testing.T) {
 	}
 }
 
+// TestAKeyIsToldOnlyAboutItsOwnOrganization asserts the read half of the bound
+// M44 spent an organization_id parameter to put on the write half.
+//
+// The switcher's job is to cross organizations, so a browser sees every one its
+// owner belongs to and must keep doing so. A key was never issued for the
+// others: it cannot act there, and until F103 it could still read their names,
+// slugs and identifiers out of GET /api/v1/workspaces. The two halves are
+// asserted together here because the fix is a filter on credential type, and a
+// filter that took the session with it would be a worse defect than the
+// disclosure it closed.
+func TestAKeyIsToldOnlyAboutItsOwnOrganization(t *testing.T) {
+	pool := newDB(t)
+	svc := newService(pool)
+	ctx := context.Background()
+
+	keys, err := auth.NewAPIKeyService(pool, svc, auth.APIKeyConfig{Pepper: testPepper})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	id, err := svc.Register(ctx, auth.RegisterInput{Email: "twoorgs@example.com", Password: wsPassword})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := svc.Login(ctx, auth.LoginInput{Email: "twoorgs@example.com", Password: wsPassword})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The key is issued here, before the second organization exists, so nothing
+	// about its creation could have named the tenant it must not see.
+	key, err := keys.Create(ctx, res.Identity, auth.CreateAPIKeyInput{
+		Name: "reader", Scopes: []string{"links.read"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	addOrgWithWorkspace(t, pool, id.UserID, "Elsewhere Ltd", "Their Space")
+
+	names := func(list []auth.Workspace) map[string]bool {
+		seen := make(map[string]bool, len(list))
+		for _, w := range list {
+			seen[w.Name] = true
+		}
+		return seen
+	}
+
+	session, err := svc.Workspaces(ctx, res.Identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := names(session); !got["Their Space"] {
+		t.Errorf("the owner's own session was not offered the second organization's "+
+			"workspace; the switcher exists to cross organizations and has stopped "+
+			"being able to (saw %v)", got)
+	}
+
+	keyed, err := keys.Authenticate(ctx, key.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, err := svc.Workspaces(ctx, keyed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := names(list); got["Their Space"] {
+		t.Errorf("a key issued in one organization was told the name of a workspace in "+
+			"another one its owner belongs to, which it cannot act in (saw %v)", got)
+	}
+	for _, w := range list {
+		if w.OrganizationID != keyed.OrgID {
+			t.Errorf("workspace %q reported organization %s, want the key's own %s",
+				w.Name, w.OrganizationID, keyed.OrgID)
+		}
+	}
+	if len(list) == 0 {
+		t.Error("the key was told about no workspace at all, which is the filter " +
+			"having removed its own organization along with the other one")
+	}
+}
+
 // TestWebWorkspaceSwitcher drives the dashboard the way a person does: the
 // header control appears once there is somewhere to go, moves the browser, and
 // leaves them on the page they were reading.

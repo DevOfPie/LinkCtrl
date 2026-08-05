@@ -173,6 +173,7 @@ file. Append a row when you append an entry.
 | [M45, an operator's recovery, and three wordings that were short](#2026-08-05--m45-an-operators-recovery-and-three-wordings-that-were-short) | F140, F131, F136 and F139 — why an `lctl` command is not the in-product path D98 forbids, and the three things built rather than asserted: it **moves and cannot add**, checked before the commit; it takes no actor because the authority is the shell, which is the trust `Register` already spends on `/setup`; and the absence of a permission check is held by a tree-wide scan rather than by discipline. Why the audit actor is `system` and why the production guard reads oddly and is still right. F131 as M40's predicate on the path that starts nothing, and the queue-position cost the row understated. F136 and F139 as two enumerations that were both short, the site left for an orchestrator's amendment (F142), and the three F139 sites read and left. And F132, unanswered: its second reason was false when written |
 | [M45, three rows that end without a mechanism](#2026-08-05--m45-three-rows-that-end-without-a-mechanism) | F132 declined because the population a repair would walk is empty — no server was ever built from 0.1.0 — and why that disqualifies the command by arithmetic rather than by the argument it rested on, which stays untried; the row's second reason falsified by a line in its own diff; the residue widened to F26's trailing dot and checked against `v0.1.0`; why the population is stated as what it requires and not as a reassurance. F141 recorded in Plan.md and README and deliberately left open, and why a passing mention inside somebody else's feature is not the same as a list entry. F142: m32.md's bullet is not amended because a reopening section is where what became false already lives, and a Done-means bullet is the record of what was true at ship; the test renamed with no assertion moved; a wording row's site list short by one for the second time |
 | [M45's third triage, and a rule that changed the recommendation](#2026-08-05--m45s-third-triage-and-a-rule-that-changed-the-recommendation) | The last sixty-six rows, in eight groups by tier and cluster; sixty-five approved, F90 carried. Why the carry is not cheapness — the row has no repair, only a choice of fairness model, and a phase close is where that choice goes wrong. **The standing rule of 2026-08-04 shows up as a disappearance**: written under it, the recommendation was the widest option three times of four and was taken all four, where the two earlier triages recorded the owner correcting a narrower one. F17's second limb reviewed for the first time; F44 closed as a record rather than a build; F57, F58, F113 and F117 the same, each on its own fix note. **F108 and F46 reopen M38 and M24.5** rather than landing here, per workflow.md's reopening rule. The two questions deliberately left: F70's D38, whose ground D98 moved, and F18, which is F17's mechanical cause and is put where the alternative's cost is visible. And the scale — twenty-odd commits — stated in the prompt rather than discovered after the answer |
+| [M45, a bound the write half had and the read half did not](#2026-08-05--m45-a-bound-the-write-half-had-and-the-read-half-did-not) | F103 and F104, closed together because F103's fix is the thing F104's rule forbade. The organization bound M44 put on what a key may *act* on, applied to what it may *read* — and why the filter is in the service rather than in the query the browser switcher shares. Both halves asserted in one fixture, because a filter that took the session with it would be the worse defect. **The census corrected F104's count from seven sites to ten**, and the four it missed are all D43's cap — which the rule licensed but described as invitations-only while the tree also caps role assignment on an existing membership. One of the ten is not authorization at all. The inherited Permissions rule amended, owner-answered, from two mechanisms to four; the recommendation was a rule stated as a test rather than a list, declined with its drift cost named, and the prediction left on the record |
 
 ---
 
@@ -15019,3 +15020,113 @@ commit — is on the order of twenty commits, before M45's own remaining bullets
 verification, the tag and the PR. That number was in the prompt rather than
 discovered afterwards, because an approval given without it is an approval to
 something else.
+
+## 2026-08-05 — M45, a bound the write half had and the read half did not
+
+[F103](deferred-findings.md) and [F104](deferred-findings.md), closed together
+because F103's fix is the thing F104's rule forbade.
+
+### The disclosure
+
+`GET /api/v1/workspaces` answered an API key with every workspace its owner
+belongs to, in every organization, carrying each one's name, slug and identifier.
+M44 spent an `organization_id` parameter specifically so a key could not *act* in
+a tenant it was never issued for — *"the key would then act in a tenant it was
+never issued for"* — and the same bound was simply absent from the read.
+
+The route's own comment argued the gap into existence, which is why it is worth
+quoting rather than deleting: *"there is no permission for it because it exposes
+nothing but the caller's own memberships, which is the same reason the
+notification inbox has none."* That is true of a person. A person's memberships
+are their own business and the switcher exists to show them all. It is not true
+of a credential: the key's holder need not be the owner, and what it exposed was
+the shape of tenancies the key cannot touch.
+
+The filter is in `auth.Service.Workspaces` and not in `ListWorkspacesForUser`,
+because that query serves the browser switcher too and the switcher's whole job
+is to cross organizations. A predicate in the query would have closed the
+disclosure by breaking the feature, which the row's own fix note predicted.
+`TestAKeyIsToldOnlyAboutItsOwnOrganization` therefore asserts **both** halves in
+one fixture — the session is still offered the second organization, the key is
+not — because a filter that took the session with it would be a worse defect than
+the one it closed. Shown red by disabling the filter: *saw map[Default:true
+Their Space:true]*.
+
+The key in that test is created **before** the second organization exists, so
+nothing about its issuance could have named the tenant it must not see.
+
+### The rule that said this was a defect
+
+F104 found seven sites branching on credential type, every one correct, against
+an inherited rule saying only two mechanisms may. The census run for this work
+found **ten**, and the four it missed are the interesting ones:
+`internal/team/team.go:234` and `:285`, `internal/invite/invite.go:336` and
+`:524`. All four are D43's cap — which the rule *does* license, but describes as
+capping *"the role a key-issued invitation may carry"*, while the tree also caps
+role assignment against an existing membership through `team.ChangeRole` and
+`team.Grant`. `internal/auth/apikey.go:245-247` says so in as many words: that
+extension is what D43 originally missed. So the rule was not only short a
+mechanism, it under-described one it already had.
+
+An eleventh site is F103's own filter, and one of the ten is not authorization at
+all: `internal/httpx/web.go:417`'s `Logout` skips the session teardown for a key
+because a key has no session to end. A nil-guard wearing the shape of a rule.
+
+### The inherited rule this amends
+
+As it stood:
+
+> `NonDelegableScopes` is the only mechanism for *whether a key may hold a
+> permission at all*. A second and narrower mechanism exists for what a key may
+> *produce* with one it legitimately holds: D43 caps the role a key-issued
+> invitation may carry, because a key that manufactures an interactive principal
+> has stepped around the map rather than through it. Anything branching on
+> credential type outside those two is still a defect.
+
+As amended:
+
+> `NonDelegableScopes` is the only mechanism for *whether a key may hold a
+> permission at all*. Three narrower ones govern what a key may do with the
+> permissions it legitimately holds, and each exists because the permission map
+> cannot express *this credential is not the person*: what a key may *produce* —
+> D43 caps the role a key-issued invitation may carry, and the same cap sits on
+> role assignment against an existing membership (`team.ChangeRole`,
+> `team.Grant`) …; what a key may *see* — a key's reads are bounded to the
+> organization it was issued for where a session's are not … (F103); and whether
+> the *session or the key is the authority* — `requireSessionActor` refuses
+> operations whose subject is the person … and rotation refuses the inverse …
+> (D87). Anything branching on credential type outside those four is still a
+> defect.
+
+The tree fact that forced it: eleven sites branch on credential type and every
+one is licensed by something already written down — D43 for four of them, D87 for
+rotation's inverse, `docs/usage.md:345-349` for password change, and the M25 entry
+for the switch. The rule was written about scope maps, and a map of scope names
+cannot express *this credential is not the person*, which is the property all
+three of the added mechanisms turn on.
+
+### The option not taken, and its cost
+
+The recommendation was to state the rule as a **test** rather than a list —
+*branching on credential type is a defect when it stands in for a permission the
+map should have carried* — on the ground that this enumeration has now drifted
+twice and a closed set goes stale every time a site is added.
+
+The owner took the enumerated form, with that cost stated in the prompt. The
+reasoning against the recommendation is sound and is recorded here rather than
+left implicit: a list is checkable by grep and a test is not, and this rule exists
+because somebody once branched on credential type without noticing they had. A
+rule that requires judgement to apply protects nothing from the reader who is not
+exercising judgement. The prediction the recommendation made stands on the record
+— it will drift a third time — and if it does, this entry is where the next
+reader finds that the alternative was offered and declined on purpose.
+
+### What was not changed
+
+Not one call site. F104's own fix note said *"fix the sentence, not the calls"*,
+and it is right: deleting `requireSessionActor` from `workspace.go` to satisfy the
+rule as written would have handed a leaked key the ability to move its owner's
+browser. `requireSessionActor`'s doc comment is corrected instead, and it now
+separates the three callers in `apikey.go` — defence in depth behind a
+non-delegable permission — from the two in `workspace.go`, where it is the only
+enforcement there is, because neither operation checks a permission at all.

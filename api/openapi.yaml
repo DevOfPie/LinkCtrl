@@ -3234,6 +3234,11 @@ paths:
         Your own memberships, so there is no permission for it — the same
         reasoning as the notification inbox.
 
+        **An API key sees only the organization it was issued for.** A session
+        sees every organization you belong to, because moving between them is
+        what the switcher is for; a key was issued for one and cannot act
+        outside it, so it is not told the names of the others.
+
         `current` marks the workspace this request is acting in. `default`
         marks the one pinned as where new sessions start; when nothing is
         pinned no entry carries it, and sign-in follows the workspace you used

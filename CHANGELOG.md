@@ -22,6 +22,16 @@ migrations run at boot.
 
 ### Changed
 
+- **`GET /api/v1/workspaces` answered with an API key now lists only the
+  organization that key was issued for.** It used to list every workspace the
+  key's owner belongs to, in every organization — names, slugs and identifiers
+  for tenancies the key cannot act in, since a key is bound to the organization
+  it was created in and always has been. A signed-in browser is unaffected and
+  still sees all of them, because moving between organizations is exactly what
+  the workspace switcher is for. **If an integration was relying on that
+  endpoint to enumerate its owner's other organizations, it will now see one**;
+  issue a key in each organization you need to reach.
+
 - **A disputed destination now notifies the people who review disputes, instead
   of every organization owner on the instance.** Filing a dispute costs only the
   permission that would have let you create the link, and a refusal computed from

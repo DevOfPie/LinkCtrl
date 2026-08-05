@@ -832,10 +832,19 @@ func isNonDelegable(scope string) bool {
 
 // requireSessionActor refuses an operation attempted with an API key.
 //
-// Defence in depth: apikeys.* is already non-delegable, so no key holds the
-// permission these operations check. This makes the rule explicit at the point
-// it matters, and gives the caller a message that explains itself rather than
-// "missing permission apikeys.write" on a credential that can never have it.
+// For the three callers in this file it is defence in depth: apikeys.* is
+// non-delegable, so no key holds the permission they go on to check, and this
+// makes the rule explicit at the point it matters while giving the caller a
+// message that explains itself rather than "missing permission apikeys.write"
+// on a credential that can never have it.
+//
+// For the two in workspace.go it is the **only** enforcement, and the
+// difference is worth stating rather than leaving to be discovered.
+// SwitchWorkspace and SetDefaultWorkspace check no permission at all, because
+// neither is an authority over anything an organization owns — they move the
+// caller's own session and write an account preference. There is no permission
+// to be non-delegable, so nothing stands behind this call: delete it and a
+// leaked key repoints where its owner's next sign-in lands (F104).
 func requireSessionActor(actor *Identity, action string) error {
 	if actor == nil {
 		return domain.ErrUnauthorized
