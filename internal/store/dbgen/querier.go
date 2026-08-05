@@ -1425,6 +1425,27 @@ type Querier interface {
 	// the target is inside this set, so it is already locked by the time anything
 	// else touches it.
 	LockOrganizations(ctx context.Context) ([]uuid.UUID, error)
+	//
+	// Every folder in a workspace, locked, for a decision made over the whole tree.
+	//
+	// `MoveFolder`'s refusals are computed in Go from a tree read a moment earlier —
+	// *is the new parent inside the subtree being moved* cannot be written as a
+	// column check — so the read and the write have to be one transaction or two
+	// concurrent moves each decide against a tree the other is changing. Moving A
+	// under B while B moves under A passes both checks and produces the cycle M38
+	// says can never exist (F108).
+	//
+	// The whole workspace rather than the two rows involved, because the predicate
+	// is over the whole tree: a cycle can run through folders neither move names.
+	// Workspaces are small enough for that to be one indexed read.
+	//
+	// `ORDER BY id` is load-bearing rather than cosmetic, and it is
+	// `LockOrganizations`' reasoning: two transactions taking the same set of row
+	// locks in different orders deadlock, and a fixed order makes it a wait instead.
+	//
+	// Returns ids alone. The caller reads the tree it decides on through
+	// ListFolders inside the same transaction; this exists for its lock.
+	LockWorkspaceFolders(ctx context.Context, workspaceID uuid.UUID) ([]uuid.UUID, error)
 	// Closes the predecessor: names its successor and sets the far edge of the
 	// grace window.
 	//

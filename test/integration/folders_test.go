@@ -3,11 +3,13 @@
 package integration
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -265,6 +267,101 @@ func TestTheDepthCapIsEnforcedOnCreateAndOnMove(t *testing.T) {
 	}
 	if _, err := f.links.MoveFolder(t.Context(), f.owner, leaf.ID, &penultimate); err != nil {
 		t.Errorf("a single folder was refused the last permitted level: %v", err)
+	}
+}
+
+// TestTwoConcurrentMovesCannotBuildACycle is F108, and it reopens
+// [M38](../../docs/build-notes/phase-details/m38.md)'s own claim that a folder
+// can never become its own descendant.
+//
+// MoveRefusal answers "is the new parent inside the subtree being moved", a
+// question about the whole tree that cannot be written as a column check. It was
+// computed from a tree read on its own connection and then written outside that
+// read, so two moves a few milliseconds apart each passed a check the other
+// invalidated: A under B while B moves under A satisfies both and detaches the
+// pair from the root, reachable from nothing.
+//
+// **The test drives the mechanism, not the race.** F67 established that racing
+// goroutines cannot reach a window of tens of microseconds, and that merely
+// holding a row proves nothing when the write blocks on it anyway. What
+// discriminates is moving the tree *under* a request already parked on the lock:
+// the parked move read a tree in which its destination was legal, and resumes
+// against one in which it is not. Re-reading refuses it; not re-reading writes
+// the cycle.
+func TestTwoConcurrentMovesCannotBuildACycle(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	ctx := t.Context()
+
+	a, err := f.links.CreateFolder(ctx, f.owner, link.CreateFolderInput{Name: "A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := f.links.CreateFolder(ctx, f.owner, link.CreateFolderInput{Name: "B"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Hold the workspace's folders exactly as MoveFolder's own lock does.
+	holder, err := f.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := holder.Exec(ctx,
+		`SELECT id FROM folders WHERE workspace_id = $1 AND deleted_at IS NULL
+		  ORDER BY id FOR UPDATE`, f.owner.WorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Move A under B, parked on that lock. At the moment it was issued this is
+	// legal: B is not inside A.
+	parked := make(chan error, 1)
+	go func() {
+		_, err := f.links.MoveFolder(context.Background(), f.owner, a.ID, &b.ID)
+		parked <- err
+	}()
+	select {
+	case err := <-parked:
+		t.Fatalf("the move did not park on the held lock; it returned %v", err)
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	// Now move B under A from the holding transaction, and release. The parked
+	// move resumes against a tree where its destination is inside its own
+	// subtree.
+	if _, err := holder.Exec(ctx,
+		`UPDATE folders SET parent_id = $2 WHERE id = $1`, b.ID, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := holder.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	var ve domain.ValidationErrors
+	if err := <-parked; !errors.As(err, &ve) {
+		t.Errorf("a move that waited while its destination moved into its own "+
+			"subtree answered %v; want the cycle refusal, which needs the tree "+
+			"re-read inside the transaction that writes", err)
+	}
+
+	// And no cycle exists: walking up from either folder reaches the root.
+	for _, start := range []uuid.UUID{a.ID, b.ID} {
+		var depth int
+		if err := f.pool.QueryRow(ctx, `
+			WITH RECURSIVE up(id, parent_id, n) AS (
+			    SELECT id, parent_id, 0 FROM folders WHERE id = $1
+			    UNION ALL
+			    SELECT f.id, f.parent_id, up.n + 1
+			      FROM folders f JOIN up ON f.id = up.parent_id
+			     WHERE up.n < 50
+			)
+			SELECT max(n) FROM up`, start).Scan(&depth); err != nil {
+			t.Fatal(err)
+		}
+		if depth >= 50 {
+			t.Errorf("walking up from %s ran to the recursion bound: the folder is "+
+				"its own descendant, which is what M38 says cannot happen", start)
+		}
 	}
 }
 

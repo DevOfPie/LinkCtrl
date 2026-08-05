@@ -17547,3 +17547,43 @@ The first implementation set the scope fields on the default-domain path and not
 on the named-domain path, so a workspace's own hostname produced the shared
 warning. The private case is in the test precisely because the fix is a branch,
 and a branch with only its common side asserted is a branch with no coverage.
+
+## 2026-08-05 — M38 reopened, and a test shape that transferred
+
+[F108](deferred-findings.md). Two concurrent folder moves could each pass the
+check the other invalidated, producing the cycle
+[M38](phase-details/m38.md) says can never exist. Reopened rather than fixed
+inside M45: it is that milestone's own claim, and the rule keeps the correction
+under the number that made it.
+
+### The claim was true of one move
+
+`MoveRefusal` answers *is the new parent inside the subtree being moved*. That is
+a question about the whole tree — it cannot be a column check — and it was
+computed from a tree read on its own connection and acted on outside that read. A
+under B while B moves under A satisfies both checks, and the pair detaches from
+the root: reachable from nothing, and unfixable through the UI, because every
+move of either one is now refused by the very check that let it happen.
+
+The cycle test the bullet names exercises one caller. Nothing exercised two, and
+the bullet is now annotated to say which it covered rather than deleted.
+
+### Locking the workspace, not the pair
+
+A cycle can run through folders neither move names, so the two rows involved are
+not the decision's inputs — the tree is. `ORDER BY id` is the deadlock argument
+`LockOrganizations` already wrote down, and this is its third use in the
+milestone.
+
+### The test shape transferred, and that is the point
+
+[F67](deferred-findings.md) spent three designs establishing what does not work
+for a read-check-write: racing goroutines cannot reach a window of tens of
+microseconds, and holding the parent row proves nothing when the write blocks on
+that row regardless. Both dead ends were written down rather than quietly
+replaced, and the payoff is here — this test was written correctly the first
+time, by moving the tree **under** a move already parked on the lock.
+
+The two rows were deliberately never merged, and that held up: same class, but a
+different file, a different invariant and a different fix, with no single edit
+closing both. What they shared was not the fix. It was how to prove it.

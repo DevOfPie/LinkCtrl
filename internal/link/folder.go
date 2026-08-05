@@ -63,7 +63,16 @@ func (s *Service) Folders(ctx context.Context, actor *auth.Identity) (domain.Fol
 // loadFolderTree reads the workspace's folders and assembles them, for callers
 // that have already authorized.
 func (s *Service) loadFolderTree(ctx context.Context, workspaceID uuid.UUID) (domain.FolderTree, error) {
-	rows, err := s.q.ListFolders(ctx, workspaceID)
+	return s.loadFolderTreeWith(ctx, s.q, workspaceID)
+}
+
+// loadFolderTreeWith is loadFolderTree against a caller-supplied handle, so the
+// tree a move decides on can be read inside the transaction holding its lock
+// (F108).
+func (s *Service) loadFolderTreeWith(
+	ctx context.Context, q *dbgen.Queries, workspaceID uuid.UUID,
+) (domain.FolderTree, error) {
+	rows, err := q.ListFolders(ctx, workspaceID)
 	if err != nil {
 		return domain.FolderTree{}, fmt.Errorf("list folders: %w", err)
 	}
@@ -194,7 +203,29 @@ func (s *Service) MoveFolder(
 		return nil, fmt.Errorf("%w: moving folders requires %s", domain.ErrForbidden, PermUpdate)
 	}
 
-	tree, err := s.loadFolderTree(ctx, actor.WorkspaceID)
+	// The read, the decision and the write in one transaction, over a locked
+	// tree (F108). MoveRefusal answers "is the new parent inside the subtree
+	// being moved", which is a question about the whole tree and cannot be
+	// written as a column check — so decided against a tree read on its own
+	// connection, two concurrent moves each pass a check the other invalidates.
+	// A under B while B moves under A satisfies both and produces the cycle M38
+	// says can never exist.
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+
+	// The whole workspace, in a fixed id order. The whole workspace because a
+	// cycle can run through folders neither move names; the fixed order because
+	// two transactions taking the same locks in different orders deadlock where
+	// a shared order makes them queue.
+	if _, err := q.LockWorkspaceFolders(ctx, actor.WorkspaceID); err != nil {
+		return nil, fmt.Errorf("lock folders: %w", err)
+	}
+
+	tree, err := s.loadFolderTreeWith(ctx, q, actor.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +240,7 @@ func (s *Service) MoveFolder(
 		return nil, domain.ValidationErrors{*refusal}
 	}
 
-	row, err := s.q.MoveFolder(ctx, dbgen.MoveFolderParams{
+	row, err := q.MoveFolder(ctx, dbgen.MoveFolderParams{
 		ID: id, WorkspaceID: actor.WorkspaceID, ParentID: parentID,
 	})
 	if err != nil {
@@ -220,6 +251,9 @@ func (s *Service) MoveFolder(
 			return nil, domain.ValidationErrors{folderNameTaken(current.Name)}
 		}
 		return nil, fmt.Errorf("move folder: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
 	}
 	return folderFromRow(row, tree.Depth(parentID)+1, current.LinkCount), nil
 }
