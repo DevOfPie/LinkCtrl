@@ -125,6 +125,14 @@ validates, accepts and commits, and a worker per milestone that builds and stops
 before the commit. The workflow loop is **not** delegated, and
 [work-loop.md](work-loop.md#the-workflow-loop) says why.
 
+### The loop is being stopped
+
+`/stop`, or the phrase it replaces. [phase-loop.md](phase-loop.md#stop-work) is
+still the contract and the command adds nothing to it beyond being invokable. It
+takes no arguments; given any, it stops **nothing** and says so.
+
+Stopping at the checkpoint remains a phrase and not a command.
+
 ### Before completing a commit
 
 All must pass. Failure means the commit does not happen.

@@ -187,6 +187,7 @@ file. Append a row when you append an entry.
 | [M45, five rows that close by being written down](#2026-08-05--m45-five-rows-that-close-by-being-written-down) | F44, F57, F58, F113 and F117 — recorded rather than built, each on its own fix note and for five **different** reasons, which is the point of the entry: F44's repair is a feature and belongs in Plan.md first; F57's only coherent fix is keyed hashing, so the actionable half is telling operators of managed Redis to disable persistence; F58's obvious fix refuses IP literals that work today, trading a silent no-op for a silent regression; F113's reaper would delete the pre-DNS-cut-over case the code exists to protect; F117's state is unconstructible and the repair takes a correct limb with it. **Each records the fix considered and rejected**, which is what separates a recorded limitation from a row somebody stopped caring about — and none is closed for cheapness |
 | [M45, building D102, and a test that had been measuring two things at once](#2026-08-05--m45-building-d102-and-a-test-that-had-been-measuring-two-things-at-once) | F105. Both halves of the predicate in all three queries, because a filter in two of them leaves the bell counting rows the page will not show, and the count's predicate has to match the partial index character for character. **The interesting part is a test that broke on the difference rather than on a defect**: it measured *who was notified* by counting what they could see, which were the same number until D102 made them two questions. Fixed by saying where the reader is standing and asserting per workspace — the summed version produced 6 where 5 was expected, because organization-level news is visible from both, and that is the sum being the wrong instrument rather than an off-by-one. The result asserts the IS NULL half from a workspace the notification says nothing about, which the old shape could not state |
 | [A command that chooses a loop](#2026-08-05--a-command-that-chooses-a-loop-and-the-backlog-that-had-nothing-consuming-it) | W11, widened by the owner. `/work-on-phase` becomes `/work phase`, routing moves into its own file, and the process backlog gets a loop that consumes it. Why the kind is the last token, why an unknown target prompts instead of matching the nearest, why `--revalidate` touches routing only, and why the workflow loop is the third thing in this repository that is not delegated. Also what the command cannot do: cross-repository dispatch resolves nothing, and the reason is that the only globally visible place to put a command is untracked |
+| [Two stops, one of which was only ever a sentence](#2026-08-05--two-stops-one-of-which-was-only-ever-a-sentence) | W9. `/stop` exists. Why it takes no arguments and refuses rather than interprets, why it reconciles the note against the tree instead of against a worker's report, and why it rewrites nothing when no loop is running. The checkpoint stop stays a phrase here and is W10's |
 
 ---
 
@@ -16115,3 +16116,48 @@ where a globally visible command is versioned.
 The nesting grammar is written now regardless, and that is the deliberate part:
 the parse rule is the thing a second repository would otherwise invent
 differently.
+
+---
+
+## 2026-08-05 — Two stops, one of which was only ever a sentence
+
+W9, off the *Proposed* table. Carries no milestone number: nothing was being
+built.
+
+The row's evidence was a discoverability gap rather than a missing capability.
+[phase-loop.md](phase-loop.md#stop-work) has documented both stops for a phase —
+*stop work* and *stop at the checkpoint* — and both worked, because an actor
+reading that file knows what the owner's words mean. What did not exist was any
+way to find them without reading it. `.claude/commands/` listed four entries and
+none of them was how you make the loop end.
+
+### It takes no arguments, and refuses rather than interprets
+
+The obvious design is one command that reads its argument and picks a stop. That
+is W10 and it is the next commit. This one is deliberately the narrow version,
+and the reason the narrow version refuses arguments instead of ignoring them is
+the failure it would otherwise have: an owner typing the checkpoint form at a
+command that only stops immediately would get the immediate stop, silently, and
+lose whatever the unit in flight had not finished. The two stops differ exactly
+in what they cost, so guessing between them is the one thing this command must
+not do.
+
+### The note is reconciled against the tree
+
+Step 2 rewrites `.current-task.md` from `git status --short` and `git log -1`,
+not from what a worker reported. This is phase-loop.md's rule and it is repeated
+in the command because the command is where it gets skipped: a worker stopped
+mid-tool-call cannot write the note, and the report it never sent is the thing
+most naturally trusted in its place.
+
+### Nothing running means nothing written
+
+A `.current-task.md` reconciled by a command that stopped nothing is a note
+asserting an interruption that did not happen, and the next resume reads it as
+one. So the no-loop case reports and writes nothing at all — which is not the
+same as the deferred stop's no-loop case, where being already at a checkpoint
+makes the deferred stop an immediate one. That distinction arrives with W10.
+
+Nothing is committed, pushed, or reverted, and uncommitted work stays in the
+tree. Removing it is the owner's call, and a stop command that tidied up would
+be destroying the evidence of where the run got to.
