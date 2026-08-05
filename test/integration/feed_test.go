@@ -229,7 +229,17 @@ func (f *feedFixture) scrape() string {
 	return string(b)
 }
 
-// TestNoDestinationLeavesAnInstanceWithNoFeed is the milestone's first bullet.
+// TestAnInstanceWithNoFeedSendsNothingToAFeed is the milestone's first bullet,
+// narrowed to the channel this file is about.
+//
+// That bullet says *zero destination URLs leave the instance*, and this test was
+// named after it word for word until M45 (F142). The claim it makes is the
+// narrower one the header above already states: nothing reaches a **feed**. It
+// is not, and never was, an assertion that nothing leaves — this fixture
+// registers no webhook, and `internal/link`'s emitLink hands the raw destination
+// to the webhook queue on an instance with no feed at all, which no operator
+// setting turns off. M32's own bullet is left as it shipped, because its
+// reopening section is where what became false is recorded; only the name moved.
 //
 // A feed is listening and answering the whole time; what makes this a real
 // assertion rather than a tautology is that the *same server* is proven
@@ -240,7 +250,7 @@ func (f *feedFixture) scrape() string {
 // update, the root-redirect setting, and filing a dispute. The last one matters
 // most, because it is the one that re-judges a URL somebody has already been
 // refused for, and it is the surface a reader would forget.
-func TestNoDestinationLeavesAnInstanceWithNoFeed(t *testing.T) {
+func TestAnInstanceWithNoFeedSendsNothingToAFeed(t *testing.T) {
 	tp := newThirdParty(t)
 
 	// The default instance: no feed, and therefore no client at all.
@@ -276,7 +286,7 @@ func TestNoDestinationLeavesAnInstanceWithNoFeed(t *testing.T) {
 	}
 
 	if sent := tp.received(); len(sent) != 0 {
-		t.Fatalf("an instance with no feed sent %d request(s) to a third party: %q",
+		t.Fatalf("an instance with no feed sent %d request(s) to a feed: %q",
 			len(sent), sent)
 	}
 

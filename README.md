@@ -310,6 +310,15 @@ Known limitations and deferred work, so nobody discovers them in production:
 - **The signup mode is the operator's alone.** There is no runtime toggle: it is
   an `.env` edit and a restart. An owner who wants to let somebody in without
   one sends an invitation.
+- **There is no account recovery, and a mailer does not add one.** If somebody
+  forgets their password, they cannot get back in by themselves: there is no
+  *forgot password* link, no reset email, and nothing to switch on — the
+  mechanism does not exist, so configuring SMTP changes nothing here. Changing a
+  password requires being signed in already. The way back is you, with database
+  access, replacing the stored hash on their behalf. The one exception is the
+  account that administers the instance itself: `lctl instance principal move`
+  hands that role to another account from a shell, which repairs who administers
+  the box rather than the password that was lost.
 - **You can only manage members below your own role.** An admin manages editors
   and viewers, never another admin and never themselves — so an admin who wants
   to step down asks an owner. Owners are the exception and manage every role

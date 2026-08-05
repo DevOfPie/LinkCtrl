@@ -171,6 +171,7 @@ file. Append a row when you append an entry.
 | [M45, the demo flake was the random stream moving, not the minute](#2026-08-04--m45-the-demo-flake-was-the-random-stream-moving-not-the-minute) | D99 — F71 and F74: why a minute boundary was the trigger and not the cause, and what the shared PRNG was multiplying it by; the discard sitting inside a click's own draws, so a dropped click consumed three fewer than a kept one and re-rolled every link and day after it — which is where unequal, unbounded and negative deltas come from; the trigger measured on its own at one click per thirty-seven seconds; the two changes and why neither replaces the other; the history ending at the top of the hour and what that costs the demo; the generation split out so the property is asserted in five seconds rather than through a twenty-second integration test; the four alternatives refused, including freezing the test's clock and generating whole days; the hour-boundary residual priced rather than claimed away; and why F68 is not this |
 | [M45, two bounds that were nothing but a number somebody typed](#2026-08-04--m45-two-bounds-that-were-nothing-but-a-number-somebody-typed) | F137 and F138 — one shape in two subsystems, a value that reads like a bound and is not; **F137's multiplier was the recipient list**, so rate-limiting the route or capping the filer would have left it, and `EveryOwner` was the pre-D98 approximation of "everybody who could act" rather than carelessness; the review half and not the decide half, `EveryOwner` deleted rather than kept beside its replacement, and no fallback for an empty set; what is left after it and why bounding the filing count is a separate change; **F138's option walked call site by call site** — it can only shorten a call, `RedisTimeout` *is* `REDIS_READ_TIMEOUT` so almost every site sees the same number, and the one behaviour that changes is a caller with less than the ceiling left; why the pub/sub path never needed it; and why **neither hand-built defence is removed** — the limiter's timer bounds what the caller waits and the invalidate budget bounds a loop, both measured rather than argued |
 | [M45, an operator's recovery, and three wordings that were short](#2026-08-05--m45-an-operators-recovery-and-three-wordings-that-were-short) | F140, F131, F136 and F139 — why an `lctl` command is not the in-product path D98 forbids, and the three things built rather than asserted: it **moves and cannot add**, checked before the commit; it takes no actor because the authority is the shell, which is the trust `Register` already spends on `/setup`; and the absence of a permission check is held by a tree-wide scan rather than by discipline. Why the audit actor is `system` and why the production guard reads oddly and is still right. F131 as M40's predicate on the path that starts nothing, and the queue-position cost the row understated. F136 and F139 as two enumerations that were both short, the site left for an orchestrator's amendment (F142), and the three F139 sites read and left. And F132, unanswered: its second reason was false when written |
+| [M45, three rows that end without a mechanism](#2026-08-05--m45-three-rows-that-end-without-a-mechanism) | F132 declined because the population a repair would walk is empty — no server was ever built from 0.1.0 — and why that disqualifies the command by arithmetic rather than by the argument it rested on, which stays untried; the row's second reason falsified by a line in its own diff; the residue widened to F26's trailing dot and checked against `v0.1.0`; why the population is stated as what it requires and not as a reassurance. F141 recorded in Plan.md and README and deliberately left open, and why a passing mention inside somebody else's feature is not the same as a list entry. F142: m32.md's bullet is not amended because a reopening section is where what became false already lives, and a Done-means bullet is the record of what was true at ship; the test renamed with no assertion moved; a wording row's site list short by one for the second time |
 
 ---
 
@@ -14768,3 +14769,138 @@ under-recorded. What it asks for cannot be built without deciding what happens t
 a stored link whose folded destination the tiers would now refuse, and Plan.md
 puts that decision out of Phase 2 in two places while calling it *a separate job
 and a separate decision*. The prompt is in the note, unanswered.
+
+## 2026-08-05 — M45, three rows that end without a mechanism
+
+F132, F141 and F142: one declined, one documented, one renamed. **Nothing was
+built for any of them**, and each is here because in a row that ends without code
+the reason is the only thing left to lose.
+
+### F132: the repair was disqualified by arithmetic, not by argument
+
+The entry above left this a prompt with four options and a recommendation —
+option 1, a one-time `lctl` command that folds stored destination hosts and
+quarantines what the unappealable tier would now refuse. The owner answered with
+a fact rather than a preference: **no server has ever been built using 0.1.0.**
+
+That settles it without touching the argument. 0.2.0 is the first release of this
+product ever deployed, so every instance in existence begins with
+[D46](#2026-08-02--m30-reopened-one-character-and-the-four-checks-it-walked-past)'s
+trailing-dot trim and
+[D93](#2026-08-04--m30-the-same-claim-in-a-different-alphabet)'s
+UTS-46 mapping already in place, holds no pre-fold spelling, and would give the
+command nothing to walk. An operator surface for zero rows is ceremony, and this
+one came with the power to archive a tenant's link on an instance whose operator
+never asked for it.
+
+The line the recommendation rested on — that acting on the *unappealable* tier
+re-evaluates no policy that can move, and is therefore not the deferred re-check
+job wearing a narrower predicate — is neither accepted nor rejected here. It was
+never tested, because the population made testing it unnecessary. Anyone reaching
+for it again should know it is untried rather than approved.
+
+**Declined, and the third disposition is [F114](deferred-findings.md)'s**,
+reached by a different road. F114 was declined because every proposed repair cost
+more than the defect. F132 is declined because the defect's population is empty.
+Both leave a row in *Closed* with its evidence intact, which is the point of
+having a third disposition at all.
+
+**What was built instead is the record**, and two corrections went into it.
+
+*The row's second reason was false, and its own diff is what falsifies it.* The
+entry above already said `Plan.md`'s limitation was added by `98cc6de`, F77's own
+closing commit. It is sharper than that: `git log -S`, run on the limitation's
+own sentence and on the string `F132`, returns `98cc6de` for both and nothing
+else. The commit that recorded the residue **is** the commit that filed the row
+claiming nothing recorded it. Neither string has moved since. The clause was not
+stale, it was contradicted by a line added beside it.
+
+*The residue is two spellings, not one.* The row names only the UTS-46 case, and
+F26's trailing dot runs on write for exactly the same reason D93's mapping does —
+both live inside `canonicalHost`, which for a destination is reached from
+`ValidateDestination` and nowhere else. Checked rather than assumed:
+`git show v0.1.0:internal/link/destination.go` has no `idna`, no `canonicalHost`
+and no `TrimRight` on the host, and its `looksNumeric` answers **false** on an
+empty last label — *"a trailing dot: a fully-qualified name, not a number"* — so
+`169.254.169.254.` was accepted by 0.1.0 alongside `169。254。169。254`, and
+`netip.ParseAddr` refuses the dotted form so nothing else caught it either.
+
+`Plan.md`'s limitation now names both folds, both spellings, the cloud metadata
+endpoint the browser resolves them to, and the reason this is a stored **open
+redirect rather than SSRF** — nothing in this product fetches a destination
+server-side, which F26's verification established and which is what keeps the
+severity where it is.
+
+*And the population is stated as what it requires, not as a reassurance.* The
+honest sentence is that holding one of these rows takes an instance created
+before the fold **and** then given such a host, and that no instance answering
+that description is accountable to this project. Not that nobody is affected:
+`v0.1.0` is a public tag with a published release — `88de5ee`, out on
+2026-07-31 — so a claim about the world is not one this repository is in a
+position to make. What it can account for, it accounts for.
+
+### F141: recorded, and deliberately not scheduled
+
+There is no account recovery in this product. The owner chose to write that down
+and schedule nothing, and the row **stays open** — documented is not resolved.
+
+It went to the two lists a reader actually consults: Plan.md's *Not in Phase 2*
+and README's *Not built yet*. Both say the concrete thing rather than the
+abstract one, because *no account recovery* is a phrase people read past. A
+forgotten password cannot be recovered by the person who forgot it. **A mailer
+does not change that** — there is no mechanism to enable, which is the specific
+belief the row was filed to kill. The only password write is
+`POST /account/password`, behind a session, so it serves somebody who can already
+sign in. The route back is the operator, with database access, replacing an
+argon2 hash on somebody else's behalf. One case has a command instead and only
+one: `lctl instance principal move` repairs *who administers the box*, not the
+password that was lost.
+
+The fact was not entirely absent from the tree before this — `CHANGELOG.md` and
+`docs/SECURITY.md` both mention that this product has no password reset. Both
+sentences were added yesterday by `1293667`, F140's own commit, and both sit
+inside a passage explaining why the principal move exists. So the absence was
+recorded as a premise of somebody else's feature and nowhere as a fact about the
+product, which is precisely the gap two list entries close and a passing mention
+does not.
+
+Of the three things the row says make it worse than an absent feature, exactly
+one has stopped being true — *Plan.md does not list it*. The parts to build it
+still exist unused, and it still compounds F140. That is why the row is not
+closed.
+
+### F142: the milestone's bullet stays; the test named after it moves
+
+M32's first bullet says *zero destination URLs leave the instance*, and
+`test/integration/feed_test.go` carried that sentence as a function name.
+[F135](deferred-findings.md) corrected the claim everywhere else
+and left the name; [F136](deferred-findings.md) corrected
+`internal/link`'s copy of it and filed this row rather than reaching for the
+bullet, because the two looked like one change or neither.
+
+They are not one change. **m32.md is not amended.** That milestone already has a
+*Reopened 2026-08-04* section recording what became false about its own promise,
+which is what a reopening section is for; the *Done means* bullet is the record
+of what was true when M32 shipped, and rewriting it to today's truth deletes the
+history the reopening exists to preserve. This is therefore neither of
+[the two kinds of wrongness](phase-loop.md#amending-a-bullet) an amendment
+handles — the bullet is not wrong about a fact, and it is not asserting something
+the tree contradicts about M32-as-shipped. Nothing moved under it that m32.md
+does not already say moved.
+
+That frees the name, which was the only thing left over-claiming. It is now
+`TestAnInstanceWithNoFeedSendsNothingToAFeed` — the file header's own *to a feed
+rather than anywhere* narrowing, since F135, finally said by the function that
+asserts it. **No assertion moved**: same fixture, same four judged surfaces, same
+dispute filing, same control half, same count. The doc comment states the
+narrowing instead of leaving a reader to infer it, and names
+`internal/link/webhook.go:375`'s `emitLink` as the reason *nothing reaches a
+feed* and *nothing leaves* are different claims.
+
+One site the row did not enumerate turned up, which is now twice running that a
+wording row's list was one short — F136's was too. It is the `t.Fatalf` guarding
+the zero: *sent N request(s) to a third party*, the instance-wide framing sitting
+in the output a failure prints, where a reader meets it under the worst possible
+conditions. The lesson is cheap and worth keeping: **a wording finding's site
+list is a starting point, and the message strings inside a test are the part
+everybody's grep forgets.**
