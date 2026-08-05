@@ -344,8 +344,9 @@ and `invitations` ([M27](docs/build-notes/phase-details/m27.md)). Neither is a n
 entity — one is a delivery queue, the other a grant with a lifetime — and both are
 typed rather than dormant jsonb because the feature reading them shipped with them.
 
-ERD and per-entity implementation status: `docs/data-model.md`
-*(not yet written — scheduled in [M45](docs/build-notes/phase-details/m45.md))*.
+ERD and per-entity implementation status: [docs/data-model.md](docs/data-model.md),
+written at [M45](docs/build-notes/phase-details/m45.md) after being referenced
+from here and from `00600_phase2_dormant.sql` since Phase 1.
 
 Rules:
 
