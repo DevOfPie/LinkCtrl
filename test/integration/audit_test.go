@@ -174,13 +174,23 @@ func TestChangingTheRootRedirectIsAudited(t *testing.T) {
 		Audit: f.svc,
 	})
 
+	// The instance default's settings are the principal's since D100, and this
+	// fixture registers an ordinary account rather than claiming the instance
+	// through setup. Granting the one permission is what makes the actor
+	// plausible; the subject of this test is the audit record, not the guard.
+	grantInstanceScope(t, f.pool, f.owner.UserID, auth.PermDomainsWriteInstance)
+	owner, err := newService(f.pool).IdentityForEmail(t.Context(), "owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	ctx := auth.WithClientIP(t.Context(), netip.MustParseAddr("198.51.100.9"))
-	if _, err := links.SetRootRedirect(ctx, f.owner, "https://example.com/first"); err != nil {
+	if _, err := links.SetRootRedirect(ctx, owner, "https://example.com/first"); err != nil {
 		t.Fatalf("SetRootRedirect: %v", err)
 	}
 	// A second change, so the "from" of the second record proves the previous
 	// value was captured before the write rather than after it.
-	if _, err := links.SetRootRedirect(ctx, f.owner, "https://example.com/second"); err != nil {
+	if _, err := links.SetRootRedirect(ctx, owner, "https://example.com/second"); err != nil {
 		t.Fatalf("second SetRootRedirect: %v", err)
 	}
 
@@ -232,7 +242,14 @@ func TestARefusedAuditWriteDoesNotFailTheChange(t *testing.T) {
 		Audit:      failingRecorder{},
 	})
 
-	settings, err := links.SetRootRedirect(t.Context(), f.owner, "https://example.com/home")
+	// The instance permission, for D100's reason — see the audited test above.
+	grantInstanceScope(t, f.pool, f.owner.UserID, auth.PermDomainsWriteInstance)
+	owner, err := newService(f.pool).IdentityForEmail(t.Context(), "owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	settings, err := links.SetRootRedirect(t.Context(), owner, "https://example.com/home")
 	if err != nil {
 		t.Fatalf("SetRootRedirect failed because its audit record could not be "+
 			"written: %v", err)

@@ -977,7 +977,16 @@ paths:
       operationId: updateDomain
       summary: Change the link domain's settings
       description: >
-        Requires the `domains.write` permission. Send whichever settings are
+        Requires the `domains.write.instance` permission, held by the instance
+        principal. This hostname is not any tenant's — it is the one every
+        workspace's links are served on until it registers its own — and until
+        0.2.0 the guard was `domains.write`, which the owner and admin roles
+        hold, so on an instance with more than one organization every owner
+        could repoint it. A workspace's own registered hostnames are
+        administered through `/domains` and still use `domains.write`.
+
+
+        Send whichever settings are
         being changed; an omitted field is left alone, and a body with none of
         them is refused with `422`. A body carrying both settings applies them in
         order — root redirect first, then bot blocking — and stops at the first

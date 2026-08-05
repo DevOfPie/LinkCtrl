@@ -99,8 +99,11 @@ Worth understanding before choosing:
   alias called `login` created in the meantime would break the dashboard.
 - **The link host's root answers `404` until you point it somewhere.** Someone
   who trims a short link back to the bare domain lands there. Set a destination
-  on the *Account* page or with `PATCH /api/v1/domain`; it needs the
-  `domains.write` permission, which the owner and admin roles hold. The
+  on the *Account* page or with `PATCH /api/v1/domain`; **since 0.2.0 it needs
+  the `domains.write.instance` permission, which only the instance principal
+  holds** — this hostname is not any tenant's, it is the one every workspace's
+  links are served on until it registers its own, and until 0.2.0 every
+  organization's owner and admin could repoint it. The
   destination is validated exactly as a link's is, and clearing it restores the
   `404`. There is no default page: an instance that says nothing about itself is
   a legitimate choice.

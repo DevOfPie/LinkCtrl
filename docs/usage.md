@@ -1139,9 +1139,12 @@ curl -sS -X PATCH .../api/v1/domain \
 
 Send `""` to clear it and go back to answering `404`.
 
-Three things worth knowing. It needs the **`domains.write`** permission, which
-owner and admin hold and editor does not: this is not one link, it is where
-every stray visitor to the whole domain ends up. The destination is validated
+Three things worth knowing. **Since 0.2.0 it needs the
+`domains.write.instance` permission, which the instance principal holds and
+nobody else does unless the operator says so** — this is not one link and it is
+not one tenant's hostname either, it is where every stray visitor to the whole
+domain ends up. It used to need `domains.write`, which owner and admin hold, so
+on an instance with more than one organization every owner could repoint it. The destination is validated
 exactly as a link's is, so `http` and `https` only and no private, loopback or
 cloud-metadata addresses — a root redirect is the easiest thing on the instance
 to reach, needing no link and no alias. And the redirect is a `302` that
@@ -1155,8 +1158,12 @@ before the form: a registered hostname is stored unverified, and a hostname
 pointed at this instance gets the same `404` it got before you registered it
 until the DNS check passes.
 
-*Domains*, in the header's identity menu, is the page. It needs the
-**`domains.write`** permission — owner and admin hold it, editor does not.
+*Domains*, in the header's identity menu, is the page. Registering, renaming and
+removing **your workspace's own** hostnames needs the **`domains.write`**
+permission — owner and admin hold it, editor does not. The instance default
+domain is not administered here at all: it cannot be renamed or removed by
+anybody, and its root redirect and bot policy are the instance principal's
+(`domains.write.instance`).
 
 ```sh
 curl -sS -X POST .../api/v1/domains \

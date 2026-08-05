@@ -68,6 +68,23 @@ type demoFeature struct {
 // reach.
 const demoWorkspaces = `SELECT id FROM workspaces WHERE organization_id = $1`
 
+// quotedScopes renders a slug list as a SQL IN body.
+//
+// Deliberately not a hand-written string in the row above: the set it renders is
+// auth.InstancePrincipalScopes, and a copy of it written here would be short by
+// one the moment a scope is added — exactly what happened when D100 added
+// domains.write.instance to the four this assertion used to name. The slugs are
+// compile-time constants in this repository, so quoting is a formality rather
+// than an injection defence, and it is done anyway because a helper that builds
+// SQL should not depend on that staying true.
+func quotedScopes(scopes []string) string {
+	out := make([]string, 0, len(scopes))
+	for _, s := range scopes {
+		out = append(out, "'"+strings.ReplaceAll(s, "'", "''")+"'")
+	}
+	return strings.Join(out, ", ")
+}
+
 func demoCoverage() []demoFeature {
 	return []demoFeature{
 		{
@@ -753,11 +770,16 @@ func demoCoverage() []demoFeature {
 			// that registers on a public instance holds it, which is the finding
 			// this milestone closed and the one shape most likely to come back by
 			// accident.
+			//
+			// The slug list is built from auth.InstancePrincipalScopes rather
+			// than written here, because a hand-written copy is short by one the
+			// moment a scope is added — which happened at D100, when
+			// domains.write.instance joined the four this row used to name. A
+			// guard that enumerates by hand is the thing it is guarding against.
 			Milestone: "M45", Feature: "No organization role carries instance-wide reach",
 			Query: `SELECT count(*) FROM role_permissions rp
 			          JOIN permissions p ON p.id = rp.permission_id
-			         WHERE p.slug IN ('instance.admin', 'destinations.review',
-			                          'destinations.decide', 'audit.read.instance')`,
+			         WHERE p.slug IN (` + quotedScopes(auth.InstancePrincipalScopes) + `)`,
 			MaxIsZero: true,
 			Shows: "that instance-wide reach is held by named people and by no role, " +
 				"so registering an account never confers it",

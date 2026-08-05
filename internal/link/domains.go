@@ -120,25 +120,40 @@ func domainScope(organizationID, workspaceID *uuid.UUID) DomainScope {
 //   - **Workspace-owned** — the actor's own workspace, and nothing else. This is
 //     the check M39 exists for: another workspace's admin holds `domains.write`
 //     in their own workspace and it buys them nothing here.
+//
 //   - **Organization-owned** — the actor's own organization. Nothing registers
 //     one yet; the limb is here because the CHECK permits the state and a
 //     predicate that fell through to "allowed" for a state it did not name is
 //     the kind of gap this milestone is about.
-//   - **The instance default** — `domains.write`, which migration 00800 grants
-//     to the owner and admin roles alone. Unchanged: M39 does not widen who
-//     administers the instance default, and registering your own hostname is
-//     not a route to it.
+//
+//   - **The instance default** — `domains.write.instance`, which reaches a person
+//     only through `instance_grants` and is held by the instance principal.
+//
+//     It was `domains.write` until 0.2.0, which migration 00800 grants to the
+//     owner and admin *roles*. M39 did not widen that and this limb was
+//     unchanged through it — but the reach was real and F70 recorded it: the
+//     instance default is the hostname every workspace's links are served on
+//     until it registers its own, so on a multi-organization instance every
+//     owner and admin could repoint its root and change its bot policy, and
+//     under `SIGNUP_MODE=open` one registration reaches that. D38 refused to
+//     close it because there was no instance-level principal to name; D98 built
+//     one, and D100 moves it there.
 func canAdminister(actor *auth.Identity, organizationID, workspaceID *uuid.UUID) bool {
+	// The instance default first, because it is the limb that does *not* read
+	// the role permission. Checking `domains.write` up front would let a
+	// workspace admin past the gate and leave the answer to the switch below,
+	// which is the arrangement that made this reachable in the first place.
+	if organizationID == nil && workspaceID == nil {
+		return actor.Can(auth.PermDomainsWriteInstance)
+	}
 	if !actor.Can(PermDomainsWrite) {
 		return false
 	}
 	switch {
 	case workspaceID != nil:
 		return *workspaceID == actor.WorkspaceID
-	case organizationID != nil:
-		return *organizationID == actor.OrgID
 	default:
-		return true
+		return *organizationID == actor.OrgID
 	}
 }
 
@@ -414,21 +429,30 @@ func (s *Service) domainForWrite(
 		}
 		return dbgen.Domain{}, fmt.Errorf("read domain: %w", err)
 	}
-	if !canAdminister(actor, row.OrganizationID, row.WorkspaceID) {
-		return dbgen.Domain{}, fmt.Errorf("%w: %s this domain requires %s in the workspace "+
-			"that owns it", domain.ErrForbidden, verb, PermDomainsWrite)
-	}
 	// The instance default is administered through DomainSettings — its root
 	// redirect and its bot policy — and its hostname is a placeholder the
 	// resolver never reads, matching on `is_default` instead. Renaming or
 	// deleting it here would change a name nothing consults, or take away the
 	// hostname every link on the instance is served on.
+	//
+	// Checked **before** the permission, because it is a fact about the object
+	// and not about the actor: nobody may rename or delete this row, the
+	// principal included, so answering "you lack a permission" would be telling
+	// somebody to go and get one that would not help. It discloses nothing
+	// either — the default domain's hostname is printed beside every link in the
+	// product. The order moved when D100 gave the default its own permission
+	// (F70): before that, every owner and admin passed canAdminister here and
+	// reached this refusal anyway, so the two orders were indistinguishable.
 	if row.IsDefault {
 		return dbgen.Domain{}, domain.ValidationErrors{{
 			Field: "hostname", Code: "instance_default",
 			Message: "this is the instance's default domain: every workspace's links are " +
 				"on it, and it is configured by the operator rather than registered here",
 		}}
+	}
+	if !canAdminister(actor, row.OrganizationID, row.WorkspaceID) {
+		return dbgen.Domain{}, fmt.Errorf("%w: %s this domain requires %s in the workspace "+
+			"that owns it", domain.ErrForbidden, verb, PermDomainsWrite)
 	}
 	return row, nil
 }

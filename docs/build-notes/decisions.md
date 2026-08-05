@@ -183,6 +183,7 @@ file. Append a row when you append an entry.
 | [M45, a count that could not stay true and a milestone the enumeration forgot](#2026-08-05--m45-a-count-that-could-not-stay-true-and-a-milestone-the-enumeration-forgot) | F69 and F119, one mechanism wrong in two directions. **The count is removed rather than corrected**: it read *four*, was true when written, wrong within one milestone, and by M44.9 the true number was zero — the row predicted its own recurrence and was right four times, so its teeth are demonstrated rather than argued. F119: M33 was the only shipped Phase 2 milestone with a demo-visible feature and no coverage row, and it shipped inside the window whose closing is M33.5's entire deliverable — the milestone that motivated the enforcement is the one the enforcement forgot |
 | [M45, four answers, three of them decisions and one a correction](#2026-08-05--m45-four-answers-three-of-them-decisions-and-one-a-correction) | D100 — F70's instance default domain moves behind D98's principal, because D38's stated reason for refusing has stopped being true; the capability organization owners lose is named. D101 — F50's blocked bot is recorded in every link state, and *record for none* is the smaller-looking change that couples recording to the response and keeps an exception; what it deliberately does **not** fix is the raw `click_count`, which is F24. D102 — F105's inbox gains the workspace filter its comments promised since M40, with both halves of the predicate load-bearing and F94's claimed containment as the reason to build rather than delete. And **a correction to D18 with no new number**: the code has been right since before D18 was written, the *either direction* promise is narrowed rather than deleted, and the request-time gap is documented and left open with the price of closing it stated |
 | [A documentation change needs no permission, and still needs checking](#2026-08-05--a-documentation-change-needs-no-permission-and-still-needs-checking) | Owner-set standing rule: documentation updates are accepted in advance and verified. **It removes a prompt, not a check** — this milestone spent owner attention on questions with one right answer and a cost to establishing it, which is what the amendment rule already says about facts as against assertions. The verification half is load-bearing: four wording rows in one milestone named fewer sites than existed, so a standing approval that let a fix land on the listed sites would convert a prompt into a silent under-fix. And **the bound**, because "documentation" is what will be stretched — the test is not diff size but *which of the two is being corrected*, with F98 and F41 on one side and F50, which became D101, on the other |
+| [M45, building D100, and two orderings that had never been visible](#2026-08-05--m45-building-d100-and-two-orderings-that-had-never-been-visible) | F70. Not the permission — that is D100 — but **two check orders the new permission exposed**, both unobservable while everybody passed the first gate: `canAdminister` consulted the role permission before it knew which domain it was, which is the admit-then-switch arrangement that produced the finding; and the *this is the instance default* refusal sat below the permission check, when it is a fact about the row rather than the actor and nobody may rename it including the principal. The old test's premise was falsified by the decision — instance grants survive a demotion, which is D98 working — so it is replaced by one asserting a full organization owner is refused. A fixture helper instead of five rewrites. And the coverage enumeration derived from the scope list, with the admission that **this one cannot be sabotage-verified today** because it asserts zero |
 
 ---
 
@@ -15800,3 +15801,80 @@ So the test is not *how big is the diff*. It is: **if a document and the code
 disagree, which one is being corrected?** When it is the document, that is this
 rule and there is no prompt. When it is the behaviour, the document is a symptom
 and the decision is still the owner's.
+
+## 2026-08-05 — M45, building D100, and two orderings that had never been visible
+
+[F70](deferred-findings.md), and the thing worth recording is not the permission
+— that part is D100 and was decided before this — but the two check orders the
+new permission exposed. Both had been unobservable because everybody passed the
+first gate.
+
+### canAdminister checked the role permission before it knew which domain it was
+
+The function opened with `if !actor.Can(PermDomainsWrite) { return false }` and
+then chose a limb. That is fine while every limb needs that permission, and it is
+exactly wrong once one of them does not: a workspace admin holds `domains.write`,
+so they passed the opening check and the *default* limb — the one that used to
+`return true` unconditionally — decided the rest.
+
+So the instance-default limb is checked **first**, before the role permission is
+consulted at all. Otherwise the arrangement that produced F70 survives the fix in
+a smaller form: a gate that admits, followed by a switch that decides.
+
+### The "this is the instance default" refusal was below the permission check
+
+`domainForWrite` refused a rename or delete of the default domain — and did it
+*after* `canAdminister`. Nobody noticed, because until now every owner and admin
+passed `canAdminister` for that row and reached the refusal anyway. The two
+orders were indistinguishable in every reachable state.
+
+D100 makes them distinguishable, and the answer is that the refusal belongs
+first. It is a fact about the **row**, not about the actor: nobody may rename or
+delete the instance default, the principal included. Answering *you lack a
+permission* would send somebody to acquire one that would not help. It discloses
+nothing either — the default domain's hostname is printed beside every link in
+the product — so there is no reason to hide the real answer behind an
+authorization check.
+
+The integration suite caught this immediately, with the wrong refusal code, which
+is the argument for tests that assert *which* refusal rather than that one
+happened.
+
+### The test whose premise the decision falsified
+
+`TestRootRedirectNeedsDomainsWrite` demoted the fixture owner to editor and
+asserted the root redirect became unreachable. It now fails, and it should: the
+fixture's owner registered first, so the setup path made them the instance
+principal, and **instance grants survive a demotion** — which is D98 working as
+designed, since a principal who loses their organization role is still the
+instance's.
+
+Replaced rather than patched, because the claim changed. The new test takes a
+full organization **owner**, holding `domains.write`, and asserts they cannot
+repoint the instance root or change its bot policy — F70 stated as an assertion —
+then grants the instance scope and asserts the principal can. Reading is asserted
+to stay ungated, because the value is public to anyone who visits the bare
+domain and narrowing that would be a second defect wearing this one's clothes.
+
+### Fixtures, and a helper rather than five rewrites
+
+Three fixtures register their owner with `auth.Register` rather than claiming the
+instance through setup, so their owner is an ordinary organization owner. Their
+subjects are the audit record, the destination tiers, the refused-audit-write
+path — none of them this guard. `grantInstanceScope` gives the actor the one
+permission and says why in one place, instead of five tests being rewritten
+around a gate they are not about.
+
+### The enumeration that would have gone stale
+
+`demoCoverage`'s *no organization role carries instance-wide reach* row named the
+four principal scopes as a SQL literal. Adding a fifth would have left it short
+by one — the F45 and F104 class exactly, in a guard whose whole job is catching
+that shape. The list is built from `auth.InstancePrincipalScopes` now.
+
+**Stated rather than implied: this one cannot be sabotage-verified today.** The
+row asserts *zero*, so a shorter slug list still counts zero and truncating it
+changes nothing that fails. It fires only when a migration grants one of these to
+a role, which is the thing it exists to catch and which no current migration
+does. It is future-proofing, and calling it a tested guard would be the claim
+[F130](deferred-findings.md) is about.

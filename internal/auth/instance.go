@@ -39,6 +39,22 @@ const (
 	// PermAuditReadInstance reads the audit records of acts that belong to the
 	// instance rather than to any tenant.
 	PermAuditReadInstance = "audit.read.instance"
+
+	// PermDomainsWriteInstance administers the instance default domain: its root
+	// redirect and its bot policy.
+	//
+	// `domains.write` is a role permission and stays one, because a workspace
+	// administering its own registered hostname is M39's whole point. The
+	// instance default is not any tenant's — it is the hostname every
+	// workspace's links are served on until it registers one — and the guard
+	// answered `true` for it on the bare role permission, so on a
+	// multi-organization instance every owner and admin could repoint it. Under
+	// `SIGNUP_MODE=open` that is one registration away (F70, D100).
+	//
+	// Named to sort beside `domains.write` for the reason `audit.read.instance`
+	// is named beside `audit.read`: the reader comparing the two is the reader
+	// this permission is for.
+	PermDomainsWriteInstance = "domains.write.instance"
 )
 
 // InstancePrincipalScopes is everything the principal holds, enumerated.
@@ -55,6 +71,7 @@ var InstancePrincipalScopes = []string{
 	PermDestinationsReview,
 	PermDestinationsDecide,
 	PermAuditReadInstance,
+	PermDomainsWriteInstance,
 }
 
 // InstanceGrantable is what the principal may confer on somebody else.
@@ -68,6 +85,11 @@ var InstancePrincipalScopes = []string{
 // disclosure limb of D18, and D98 gives it to the principal rather than to
 // "instance-level review". Widening it is a decision, and this list is where
 // somebody would have to make it.
+//
+// PermDomainsWriteInstance is absent for the same reason (D100). The principal
+// administers the instance default domain; conferring *that* is not what D98
+// decided the principal may delegate, which was instance-level review of
+// disputes and nothing beside it.
 var InstanceGrantable = map[string]struct{}{
 	PermDestinationsReview: {},
 	PermDestinationsDecide: {},

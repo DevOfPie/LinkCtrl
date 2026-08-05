@@ -128,9 +128,13 @@ func (s *Service) LinkDomainBots(
 // loopback and metadata refusals would be a cleaner SSRF than the one the
 // validator exists to prevent, because reaching it needs no link and no alias.
 func (s *Service) SetRootRedirect(ctx context.Context, actor *auth.Identity, rawURL string) (*DomainSettings, error) {
-	if !actor.Can(PermDomainsWrite) {
-		return nil, fmt.Errorf("%w: changing domain settings requires %s",
-			domain.ErrForbidden, PermDomainsWrite)
+	// The instance default's own permission, not the role one (D100). Both of
+	// these operate on the instance default and nothing else — `SetDomainRootRedirect`
+	// and `SetDomainBotBlocking` are the per-hostname versions, and they keep
+	// `domains.write` through the ownership check, which is where it belongs.
+	if !actor.Can(auth.PermDomainsWriteInstance) {
+		return nil, fmt.Errorf("%w: changing the instance default domain's settings requires %s",
+			domain.ErrForbidden, auth.PermDomainsWriteInstance)
 	}
 	if !s.splitHosts {
 		return nil, domain.ValidationErrors{{
@@ -272,9 +276,13 @@ func (s *Service) SetRootRedirect(ctx context.Context, actor *auth.Identity, raw
 // misclassifies gets a 403 and has no way past it — the bypass is Phase 3 — and
 // nobody tells the link's owner it happened.
 func (s *Service) SetBotBlocking(ctx context.Context, actor *auth.Identity, block, enforced bool) (*DomainSettings, error) {
-	if !actor.Can(PermDomainsWrite) {
-		return nil, fmt.Errorf("%w: changing domain settings requires %s",
-			domain.ErrForbidden, PermDomainsWrite)
+	// The instance default's own permission, not the role one (D100). Both of
+	// these operate on the instance default and nothing else — `SetDomainRootRedirect`
+	// and `SetDomainBotBlocking` are the per-hostname versions, and they keep
+	// `domains.write` through the ownership check, which is where it belongs.
+	if !actor.Can(auth.PermDomainsWriteInstance) {
+		return nil, fmt.Errorf("%w: changing the instance default domain's settings requires %s",
+			domain.ErrForbidden, auth.PermDomainsWriteInstance)
 	}
 	// Enforcement without blocking is not a state. The database refuses it too
 	// (01800's CHECK), but a constraint violation reaches the caller as a 500

@@ -36,6 +36,24 @@ import (
 // policy itself is covered by unit tests.
 var fastParams = auth.Params{MemoryKiB: 19 * 1024, Iterations: 1, Parallelism: 1, SaltLength: 16, KeyLength: 32}
 
+// grantInstanceScope confers one instance-level permission on an account.
+//
+// Fixtures register their owner with auth.Register rather than claiming the
+// instance through /auth/setup, so they get an ordinary organization owner and
+// not the instance principal. Since D100 that distinction reaches the instance
+// default domain's settings, so a test whose subject is something else — the
+// audit record, the destination tiers — says so here rather than being rewritten
+// around a guard it is not about.
+func grantInstanceScope(t *testing.T, pool *pgxpool.Pool, userID uuid.UUID, scope string) {
+	t.Helper()
+	if _, err := pool.Exec(t.Context(),
+		`INSERT INTO instance_grants (user_id, permission_id)
+		 SELECT $1, id FROM permissions WHERE slug = $2
+		 ON CONFLICT DO NOTHING`, userID, scope); err != nil {
+		t.Fatalf("grant %s: %v", scope, err)
+	}
+}
+
 func newService(pool *pgxpool.Pool) *auth.Service {
 	return auth.NewService(pool, auth.ServiceConfig{
 		Params:  fastParams,

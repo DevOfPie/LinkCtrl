@@ -42,6 +42,24 @@ migrations run at boot.
   ones are the true ones. The SLO series `linkctrl_redirect_duration_seconds` is
   unaffected and always was — the redirect handler records it directly.
 
+- **The instance default domain's root redirect and bot policy are now the
+  instance principal's.** They needed `domains.write`, which the owner and admin
+  *roles* hold — so on an instance with more than one organization, every
+  organization's owner and admin could repoint the hostname all of their links
+  are served on and change the bot policy applied to them. With
+  `LINKCTRL_SIGNUP_MODE=open` that was one registration away, since a registrant
+  is provisioned as the owner of their own organization. They now need
+  `domains.write.instance`, which reaches a person only through the instance
+  principal.
+
+  **On upgrade the migration confers it on whoever already holds the
+  principal**, so an operator who has claimed their instance keeps working
+  exactly as before. It does not re-derive who that is, which means a principal
+  moved with `lctl instance principal move` stays moved. **Organization owners
+  and admins lose access to these two settings** — `domains.write` itself is
+  unchanged, and a workspace goes on registering and administering its own
+  hostnames.
+
 - **A redirect no longer pays the Redis read timeout twice while Redis is
   stalled.** A cache miss used to spend `REDIS_READ_TIMEOUT` on the lookup that
   never answered and then spend it again on the write that would have

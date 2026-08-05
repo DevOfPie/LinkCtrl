@@ -188,7 +188,16 @@ func TestEveryDestinationSurfaceRunsTheFullTierCheck(t *testing.T) {
 			return err
 		},
 		"domain.root_redirect": func(f *blockingFixture, url string) error {
-			_, err := f.links.SetRootRedirect(f.ctx, f.owner, url)
+			// The instance default's settings are the principal's since D100.
+			// This surface is here to prove the destination tiers run on it, so
+			// the actor is given the one permission rather than the test being
+			// rewritten around a guard it is not about.
+			grantInstanceScope(f.t, f.pool, f.owner.UserID, auth.PermDomainsWriteInstance)
+			actor, err := newService(f.pool).IdentityForEmail(f.t.Context(), "owner@example.com")
+			if err != nil {
+				return err
+			}
+			_, err = f.links.SetRootRedirect(f.ctx, actor, url)
 			return err
 		},
 	}
