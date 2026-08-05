@@ -111,7 +111,7 @@ echo
 emit_table "${EVERY_TASK[@]}"
 every=$(subtotal)
 
-echo "### \`/work-on-phase\` — per resume, on top of the above"
+echo "### \`/work phase\` — per resume, on top of the above"
 echo
 echo "Step 0 and step 1 of the loop, before a single milestone file is opened."
 echo
@@ -136,7 +136,7 @@ echo
 printf '| Trigger | Bytes | ≈tokens |\n| --- | ---: | ---: |\n'
 printf '| Any task | %s | %s |\n' "$every" "$(est_tokens "$every")"
 # shellcheck disable=SC2016  # the backticks are markdown, not a subshell
-printf '| `/work-on-phase` resume | %s | %s |\n' \
+printf '| `/work phase` resume | %s | %s |\n' \
 	"$((every + loop))" "$(est_tokens "$((every + loop))")"
 echo
 echo "Plus one \`phase-details/mN.md\` per milestone, which the split exists to"
