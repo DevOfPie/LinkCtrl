@@ -379,10 +379,35 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Not charged to the probe limit: the alias really exists, so asking for
 		// it is not probing. A link checker following a dead link is not abuse.
 		h.gone(w, r)
+		// Recorded, and this is D101 rather than an oversight corrected.
+		//
+		// Until 0.2.0 an expired or archived link recorded nothing here — while
+		// the bot gate above recorded a *blocked* request to the same link,
+		// because it answers before Decide runs. So whether identical traffic
+		// was counted depended on a setting about **responses**, and the same
+		// crawler was a click on a link with blocking on and nothing on a link
+		// with it off. The rule now has no exception to remember: a request that
+		// reached a real link is recorded, whatever the link's state made the
+		// answer.
+		//
+		// No destination, for the reason the gate gives: nothing was chosen.
+		// `record` is a no-op on HEAD and on a nil recorder, and this branch is
+		// reached only when the alias resolved, so there is always a link to
+		// attribute to.
+		h.record(r, res.Snapshot, start, uuid.Nil)
 		return
 	case redirect.OutcomeNotFound:
 		h.chargeProbe(r)
 		h.notFound(w, r)
+		// Only when a real link is behind it. This branch answers two different
+		// things: an alias that does not exist — a negative cache entry, most of
+		// this tree's traffic, and there is nothing to attribute a click to —
+		// and a link that exists but was asked for a path it cannot forward.
+		// The second is a request that reached a link, so D101 covers it; the
+		// first is not.
+		if !res.Snapshot.NotFound {
+			h.record(r, res.Snapshot, start, uuid.Nil)
+		}
 		return
 	case redirect.OutcomeRedirect:
 		// Falls through to the redirect below. Listed rather than left to a

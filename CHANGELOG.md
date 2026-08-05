@@ -42,6 +42,16 @@ migrations run at boot.
   ones are the true ones. The SLO series `linkctrl_redirect_duration_seconds` is
   unaffected and always was — the redirect handler records it directly.
 
+- **An expired or archived link now records the traffic it receives.** It
+  recorded nothing before, unless bot blocking happened to be switched on for
+  it — because the bot refusal is decided before the link's state is, so a
+  blocked crawler was counted on a dead link while a browser meeting the same
+  link's `410` was not. Whether identical traffic was counted therefore depended
+  on a setting about responses. **Counts on expired and archived links will
+  start moving**, most visibly under crawler traffic; `links.click_count`
+  includes bots, and the Clicks tile on the dashboard reads the human-only
+  rollup, which is why the two numbers differ.
+
 - **The notification inbox is now scoped to the workspace you are acting in.**
   A notification produced by a workspace — an automation rule firing, a custom
   domain failing its verification check — appears while you are in that
