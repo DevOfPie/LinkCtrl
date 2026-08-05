@@ -78,15 +78,36 @@ func (s *Service) Workspaces(ctx context.Context, actor *auth.Identity) ([]Works
 
 // CreateWorkspace adds a workspace to the caller's organization.
 //
-// Gated on workspace.write in the workspace the request is acting in, which is
-// what the identity carries. That is the right question for a create: there is
-// no target workspace yet, and the authority being exercised is over the
-// organization the caller is currently in.
+// Organization-wide workspace.write, not the identity's union. The two differ
+// for exactly one actor and the difference is the whole point: `Can` answers
+// from every membership matching the workspace being acted in (D31), so a
+// workspace-scoped admin holding workspace.write in their own corner passed it
+// and added workspaces to the entire organization. There is no target workspace
+// to resolve the permission against — that is what made the old gate look
+// right — but the object being created belongs to the organization, so the
+// organization is the scope the authority has to cover.
+//
+// This is D44's shape, and the same one `invite.orgWideAuthority` uses for the
+// same reason: `Can` first, so somebody holding the permission nowhere still
+// gets the plain refusal, then `In(nil)`, which only an organization-wide
+// membership satisfies. It was the last member-adjacent write in this package
+// still answering the old question (F63).
 func (s *Service) CreateWorkspace(
 	ctx context.Context, actor *auth.Identity, name string,
 ) (*Workspace, error) {
 	if !actor.Can(PermWorkspaceWrite) {
 		return nil, fmt.Errorf("%w: creating a workspace requires %s",
+			domain.ErrForbidden, PermWorkspaceWrite)
+	}
+	authority, err := auth.LoadMembershipAuthority(
+		ctx, s.q, actor.UserID, actor.OrgID, PermWorkspaceWrite)
+	if err != nil {
+		return nil, err
+	}
+	if !authority.In(nil).Granted {
+		return nil, fmt.Errorf(
+			"%w: a new workspace belongs to the whole organization, so creating one requires "+
+				"%s from an organization-wide membership; yours reaches one workspace",
 			domain.ErrForbidden, PermWorkspaceWrite)
 	}
 	name, slug, err := workspaceName(name)

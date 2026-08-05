@@ -384,6 +384,54 @@ func TestWorkspaceScopedMembershipAddsAndNeverNarrows(t *testing.T) {
 	}
 }
 
+// TestAWorkspaceScopedAdminCannotAddWorkspacesToTheOrganization covers the last
+// member-adjacent write in the package that still answered the pre-D44 question.
+//
+// A create has no target workspace to resolve the permission against, which is
+// what made gating on the identity's union look correct. But `Can` answers from
+// every membership matching the workspace being acted in (D31), so a
+// workspace-scoped admin holds workspace.write in their own corner and used to
+// pass — and what they created belonged to the whole organization, which is a
+// scope their membership does not cover.
+//
+// The refusal is asserted from the identity that legitimately holds the
+// permission, not from one that holds nothing: a test using a viewer would pass
+// against the old gate too and prove nothing (F63).
+func TestAWorkspaceScopedAdminCannotAddWorkspacesToTheOrganization(t *testing.T) {
+	f := newTeamFixture(t)
+	viewer := f.member(t, "wsadmin@example.com", "viewer")
+
+	marketing, err := f.team.CreateWorkspace(t.Context(), f.owner, "Marketing")
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	if _, err := f.team.Grant(t.Context(), f.owner, team.GrantInput{
+		UserID: viewer.UserID, WorkspaceID: marketing.ID, Role: "admin",
+	}); err != nil {
+		t.Fatalf("grant workspace access: %v", err)
+	}
+
+	scoped := f.identityIn(t, "wsadmin@example.com", marketing.ID)
+	if !scoped.Can("workspace.write") {
+		t.Fatal("the scoped admin does not hold workspace.write, so the refusal below would prove nothing")
+	}
+
+	if _, err := f.team.CreateWorkspace(t.Context(), scoped, "Sales"); !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("a workspace-scoped admin created an organization-wide workspace: %v", err)
+	}
+	if n := f.count(t,
+		`SELECT count(*) FROM workspaces WHERE organization_id = $1 AND name = 'Sales'`,
+		f.owner.OrgID); n != 0 {
+		t.Errorf("the refused create still wrote %d workspace rows", n)
+	}
+
+	// The org-wide side is untouched, which is what makes this a narrowing of
+	// one gate rather than a break of the operation.
+	if _, err := f.team.CreateWorkspace(t.Context(), f.owner, "Support"); err != nil {
+		t.Errorf("an organization-wide owner can no longer create a workspace: %v", err)
+	}
+}
+
 // A grant is for somebody already in the organization. A stranger is invited,
 // not granted, and a workspace in another tenant is not a workspace at all.
 func TestGrantRefusesNonMembersAndForeignWorkspaces(t *testing.T) {

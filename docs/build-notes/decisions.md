@@ -16907,3 +16907,51 @@ Recorded rather than fixed silently because the correction asserts a milestone
 is complete, and that assertion should be checkable: the reopening's write-up is
 in `m24.5.md`, its commit is `e3ef415`, and the token values are in
 `internal/ui/static/css/input.css`.
+
+## 2026-08-05 — M45, the last write in the package that asked the pre-D44 question
+
+[F63](deferred-findings.md). `CreateWorkspace` gated on `actor.Can`, which under
+D31 answers from the union of every membership matching the workspace the
+request is acting in. A workspace-scoped admin holds `workspace.write` in their
+own corner, so they passed — and what they created was a workspace belonging to
+the whole organization.
+
+### Why the old gate looked right
+
+Its own doc comment argued the case, and the argument is worth keeping because
+it is the trap rather than an oversight: *there is no target workspace yet, so
+the authority being exercised is over the organization the caller is currently
+in.* The first clause is true. The second does not follow from it. Having no
+target to resolve against is a fact about the **check**; which scope the
+authority must cover is a fact about the **object**, and the object here is
+organization-wide.
+
+Every other member-adjacent write in the package had already been moved by M28's
+reopening. This one survived because it is the only one with nothing to point
+at, which is exactly the shape a scope bug hides in.
+
+### The same shape as the invitation gate, deliberately
+
+`Can` first, then `In(nil)`. Not one check: the two refusals say different
+things, and somebody holding `workspace.write` nowhere should be told they lack
+the permission rather than told their membership is the wrong shape. That
+ordering is `invite.orgWideAuthority`'s and the reason is the same, so the two
+organization-wide gates in this tree now read alike.
+
+### The test refuses from an actor that holds the permission
+
+A test driving this from a viewer would pass against the old gate and prove
+nothing. It grants a workspace-scoped `admin`, asserts that identity really does
+carry `workspace.write`, and only then asserts the refusal — plus a row count,
+because a gate that returns an error after writing is a gate that did not hold.
+Sabotaged by short-circuiting the new condition; it fails on both.
+
+### A claim that was already written down, and already false
+
+`docs/SECURITY.md` says an organization-wide membership, an invitation or the
+organization itself is reachable only from an organization-wide membership.
+That sentence was true of everything it listed and false of the thing it did not
+list, which is how the row survived a security document that describes the rule
+correctly. The enumeration now names a new workspace too. Counted rather than
+trusted, per the standing rule that four wording rows in one milestone turned
+out to have more sites than they listed.
