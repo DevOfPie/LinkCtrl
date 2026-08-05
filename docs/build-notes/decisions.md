@@ -17758,3 +17758,57 @@ deliberate: what is being held is that the page *cannot* disagree with the
 enforcer, not that today's wiring happens to keep them equal. A test that only
 exercised the agreeing case would pass against the defect, which is the trap
 three other rows in this milestone fell into.
+
+## 2026-08-05 — M45, judging what the docs cost, and a headline number that is wrong
+
+W1 asks for the always-read contract's growth to be judged at the phase's
+documentation pass, and either defended or paid for by trimming. Here is the
+judgement, taken against a regenerated [doc-cost.md](doc-cost.md).
+
+### The headline moved and the loop did not get more expensive
+
+The predicted `/work phase` resume cost went from **95,159 bytes to 204,669** —
+more than doubled. `Plan.md` is 105,193 of that 109,510 increase: **96% of it**.
+
+That number is misleading, and saying so is most of the value of this exercise.
+The document states its own assumption — *a file's full size, charged to each
+trigger whose instructions name it, assuming every read is a whole-file read* —
+and for `Plan.md` that assumption is false by construction.
+[Step 1](phase-loop.md#1-validate) reads *Plan.md's ordering row for N*, a row,
+and the file is 169KB. It does not appear in the realized table at all, because
+nothing read it twice in the measured window.
+
+So the resume did not get 115% more expensive. A ceiling that was already loose
+got looser, and the model's error now exceeds the thing it is modelling.
+
+### What actually grew, and it is defended
+
+The realized column is `mean ÷ size` — how much of a file a read consumes:
+
+- `workflow.md` **0.78**, read 6 times. This is the genuine always-read cost, and
+  it grew **14,741 → 17,999 bytes** this phase.
+- `phase-loop.md` **0.43**, read 11 times. Grew **23,921 → 25,238**.
+- `phase-details/README.md` **0.83**, read 3 times.
+
+So the recurring growth is about **4.6KB across the two files anybody actually
+reads whole**. Every kilobyte of it is a rule this phase earned the hard way —
+the reopening rule, the stop conditions, the milestone target, the standing
+approvals — and each was written because its absence had already cost a run.
+That is defended rather than trimmed.
+
+### The two enormous files are cheap, and that is the point
+
+`decisions.md` is **1,085,569 bytes** and its realized ratio is **0.00**.
+`deferred-findings.md` is **432,079** at **0.05**. Both are append-only records
+read by grep and by anchor, never whole. A size-based judgement would flag them
+first and would be exactly wrong: the expensive files here are the small ones
+that get read entirely.
+
+### What is not fixed
+
+`scripts/doc-cost.sh` still charges `Plan.md` in full to every resume, so the
+next phase's headline will be wrong in the same direction and by more. Left
+alone deliberately: changing what the script measures mid-measurement would make
+this phase's number incomparable with the last one's, and the fix belongs with
+whoever changes the script rather than inside a release. Recorded here so the
+number is read with its error attached rather than trusted.
