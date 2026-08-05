@@ -177,11 +177,10 @@ way, carrying three things:
 - the bullet **as amended**, quoted
 - the **tree fact** that forced it — what was looked at, and what it said
 
-All three, because an entry recording only the new reading is indistinguishable
-from a bullet that always read that way. The amendment is the thing being
-recorded, not the conclusion; without the before, a reader cannot see that the
-definition of done moved, and the drift is invisible in exactly the file that
-exists to make it visible.
+All three, because the first is what makes it an amendment rather than a
+conclusion — argued in
+[the M24.5 entry](decisions.md#2026-07-31--plan-drift-is-allowed-silent-plan-drift-is-not),
+which is also the amendment that forced this rule.
 
 Plan drift is allowed here. Silent plan drift is not.
 
@@ -249,8 +248,17 @@ contradicts on what it *asserts* is still a prompt, and the milestone waits.
 8. `git push` to the phase branch
 9. Read the note's `Stop:` line before overwriting it — a
    [deferred stop](#stopping-at-the-checkpoint) ends the run here. Then reset
-   `.current-task.md` to the next milestone at step 1, and scan `.queue.md` for
-   rows marked `blocking?` — **those only**
+   `.current-task.md` to the next milestone at step 1, check it against
+   [the resume bar](#the-resume-bar), and scan `.queue.md` for rows
+   marked `blocking?` — **those only**
+
+3.9 is the **checkpoint**, and the report says so in as many words. It is the
+only state in which nothing is in flight, which makes it the only point where
+compacting or restarting the session costs effort and not knowledge. Neither is
+the loop's to do — `--autocompact` is fixed when the session is launched and
+`/compact` is the owner's — so naming the moment is the whole of the loop's part
+in it, and it is why the note is checked against its bar one line earlier rather
+than at the next resume, when whoever needed it is already gone.
 
 The queue scan is the one point in the loop that reads it, and it reads it for
 one thing. A `blocking?` row means the owner believes the next milestone would
@@ -297,7 +305,7 @@ rather than left to judgement. None of them is a reason.
 
 | Not a reason | Do this instead |
 | --- | --- |
-| Context is long, or running out | Keep the note true and carry on. Context is summarized automatically and the run continues; wrapping up early throws away a working run to avoid a problem that handles itself. |
+| Context is long, running out, or due to be compacted | Keep the note true and carry on. Context is summarized automatically and the run continues; wrapping up early throws away a working run to avoid a problem that handles itself. Compaction is an iteration boundary at worst, never an ending — and the loop cannot trigger one anyway. |
 | A worker returned, and its milestone was accepted and pushed | That is one iteration ending, not the run. Spawn the next worker in the same turn. |
 | The next milestone is large, or touches many files | Start it. Step 2 is interruptible at any point, which is what the note is for. An `X.9` review is the one exception, and it is a [§4](#4-repeat-or-stop) row rather than a judgement about size. |
 | The next milestone needs a long job — k6, a reseed, a rebuild | Start it. A job being slow is not a job being risky. |
@@ -338,21 +346,10 @@ A fresh session that opens on a review runs it immediately. The condition is
 the session started to do the review would stop on its own first move, and the
 loop would deadlock politely.
 
-This is **not** the context rule in the table below, and the difference is worth
-holding. That rule says a long context is never a reason to stop, and it stands:
-building continues until the phase ends. This one is about the *kind* of work.
-A review re-reads every milestone in its range against its own claims, across
-several independent dimensions, and puts each finding to something that tries to
-refute it. That is the most context-hungry work in the project, and it is the
-work most quietly damaged by having less — a shallow review does not fail, it
-returns fewer findings and reads like good news.
-
-It is written down because it already happened. [M32.9](phase-details/m32.9.md)
-was reached at the end of a run that had landed ten milestones, produced three
-findings, and had to record in its own decisions entry that a single-digit pass
-is a signal about the review rather than a compliment to the code. The milestone
-file had said exactly that in advance. The loop ran the review anyway, because
-nothing told it not to.
+This is **not** the context rule in the table above, which stands: a long context
+is never a reason to stop. This one is about the *kind* of work, not its
+quantity. Why that difference holds, and the run that forced it, are in
+[W17's entry](decisions.md#2026-08-01--two-rules-the-last-run-earned).
 
 ## Stop work
 
@@ -468,7 +465,27 @@ of one.
 with no memory of the last milestone, so what a worker would otherwise
 rediscover belongs here.
 
-It exists so that an interruption — a crash, a context limit, the owner saying
-stop — costs effort and not knowledge. It is not a reason to interrupt yourself:
-a note good enough to resume from is the normal state of this file, not a signal
-that stopping is now free.
+It exists so that an interruption — a crash, a compaction, a context limit, the
+owner saying stop — costs effort and not knowledge. It is not a reason to
+interrupt yourself: a note that clears the bar below is the normal state of this
+file, not a signal that stopping is now free.
+
+### The resume bar
+
+*Good enough to resume from* is an intention, and an intention cannot be wrong.
+The bar is a claim instead:
+
+> **A fresh session that reads this note and [step 0](#0-resume)'s inputs reaches
+> step 1 for the next milestone without asking the owner anything.**
+
+Checked at [3.9](#3-land), against the note just written, by the actor that wrote
+it. The test is to name what the note omits that would force a question — a
+decision taken this session and not yet in decisions.md, a rejection whose reason
+lives only in the conversation, a gate that passed for a reason nobody recorded.
+Nothing named, it clears. Something named, it goes in the note or in the file
+that owns it *before* 3.9 ends.
+
+The bar is deliberately about questions rather than about completeness. A note
+listing everything is unreadable and is not the goal; a note that leaves the next
+session unable to proceed without the owner is the failure, and it is the only
+one worth checking for.

@@ -194,6 +194,7 @@ file. Append a row when you append an entry.
 | [Two stops, one of which was only ever a sentence](#2026-08-05--two-stops-one-of-which-was-only-ever-a-sentence) | W9. `/stop` exists. Why it takes no arguments and refuses rather than interprets, why it reconciles the note against the tree instead of against a worker's report, and why it rewrites nothing when no loop is running. The checkpoint stop stays a phrase here and is W10's |
 | [The second stop becomes a flag](#2026-08-05--the-second-stop-becomes-a-flag-and-the-one-case-where-the-two-stops-disagree) | W10. Why a flag rather than a second command, why the checkpoint needed no redefining despite the note asking, and the one case where the two stops genuinely diverge — with nothing in flight, the immediate stop writes nothing and the deferred stop is already satisfied |
 | [Describing the commands to a reader who is not here](#2026-08-05--describing-the-commands-to-a-reader-who-is-not-here) | W12. A second description of the same five commands, which is a duplication and is admitted as one. Why the contract fields are *what it may decide* and *what it must not do* rather than a list of steps, why the page is the authority on nothing, why *not a command* is a section, and the three things an agent reached outside this harness needs — the last of which excludes any agent that cannot stop and wait |
+| [The loop cannot compact itself](#2026-08-05--the-loop-cannot-compact-itself-so-the-checkpoint-says-when-it-is-safe-to) | W25. The measurement that answered *would session hygiene buy tokens* — the recurring cost is the loop re-reading its own contract, not accumulated conversation — and the feasibility fact that reshaped the answer. Why the note's bar is about questions rather than completeness, what the trim did and did not pay for, and why this change saves no tokens |
 
 ---
 
@@ -16618,3 +16619,105 @@ whoever did it controls the name anyway; and each available repair is worse than
 the defect — `RESTRICT` makes deletion fail outright, `SET NULL` is impossible
 because `domain_id` is half the primary key, and re-keying by hostname would
 reserve aliases on a name whose next owner proved control of it.
+
+---
+
+## 2026-08-05 — The loop cannot compact itself, so the checkpoint says when it is safe to
+
+The owner asked whether adding compaction or other session hygiene to the phase
+loop would buy token efficiency without degrading work. Carries no milestone
+number: nothing was being built.
+
+### What the measurement said, and it was not what the question assumed
+
+From [doc-cost.md](doc-cost.md)'s realized section — 19 sessions, 189 `Read`
+calls, ≈250,432 tokens:
+
+| File | Reads | ≈tokens | Mean ÷ size |
+| --- | ---: | ---: | ---: |
+| `phase-loop.md` | 17 | 53,030 | 0.52 |
+| `workflow.md` | 13 | 37,977 | 0.79 |
+| `Plan.md` | 8 | 15,016 | 0.12 |
+| `decisions.md` | 7 | 5,239 | 0.01 |
+
+**The recurring cost is this loop re-reading its own contract.** Those two files
+are 36% of every measured Read. The files that look expensive are not:
+`decisions.md` at 0.01 and `deferred-findings.md` at 0.08 mean grep-instead-of-read
+already works, and `Plan.md` at 0.12 means partial reads work — though its
+*predicted* resume ceiling grew 64,169 → 162,696 bytes this phase, to fetch one
+ordering row.
+
+Compaction does not touch any of that, and plausibly worsens it: after a compact
+the orchestrator no longer holds phase-loop.md or workflow.md and reads them
+again, which is the 0.52 and the 0.79 paid a second time. That is mechanism
+rather than measurement — post-compaction re-reads are not separated in the
+realized data — and it is recorded as the reasoning it is.
+
+### The orchestrator has no compaction lever, which is why no rule says compact
+
+Checked before designing around it. `--autocompact` is a CLI flag fixed when the
+session is launched, `/compact` is the owner's command, and no tool exposes
+either. A rule reading *compact at 3.9* would have been unbuildable, and an actor
+meeting an unbuildable rule either invents a substitute or quietly skips it —
+the failure already recorded in
+[the M24.5 entry](#2026-07-31--plan-drift-is-allowed-silent-plan-drift-is-not),
+where a rule wrong in the cheap direction got skipped rather than followed.
+
+So the loop's part is naming the moment. 3.9 is the only state in which nothing
+is in flight, which makes it the only point where compacting or restarting costs
+effort and not knowledge, and the report now says so where the owner — who holds
+both levers — will see it.
+
+### The bar is a claim, and it is about questions rather than completeness
+
+`.current-task.md` already claimed to make an interruption cost effort and not
+knowledge, and closed on *a note good enough to resume from is the normal state
+of this file*. That is an intention, and by this repository's own standard an
+intention cannot be wrong, so nothing could ever fail it. It is now:
+
+> A fresh session that reads this note and step 0's inputs reaches step 1 for the
+> next milestone without asking the owner anything.
+
+Checked at 3.9 against the note just written, by the actor that wrote it. The
+test is naming what the note omits that would force a question — a decision taken
+this session and not yet in decisions.md, a rejection whose reason lives only in
+the conversation, a gate that passed for a reason nobody recorded.
+
+Deliberately not a completeness bar. A note listing everything is unreadable and
+would be written to satisfy the section, which is the failure the *risks section
+answered "Low"* pattern names. Leaving the next session unable to proceed without
+the owner is the only failure worth checking for, and it is the one compaction
+turns from recoverable into permanent.
+
+The check is at 3.9 rather than at the next resume because at the next resume
+whoever could still answer is gone.
+
+### What the trim paid for, and what it did not
+
+Two passages were deleted from phase-loop.md, both **verified present in this
+file in fuller form** before removal: the rationale under *A review gets its own
+session*, which duplicates [W17's entry](#2026-08-01--two-rules-the-last-run-earned)
+including its M32.9 evidence, and the *all three, because…* paragraph under
+*Amending a bullet*, which duplicates the M24.5 entry above. Both now point
+rather than restate, which is what phase-loop.md's own header already required of
+itself — *terse, trigger-first, no rationale; the why is in decisions.md*.
+
+A fact was corrected on the way past: the review section said the context rule
+was *in the table below* and it is above.
+
+**It did not pay in full.** phase-loop.md went 24,008 → 24,898 bytes, net **+890**
+— about 1,966 tokens across the 19-session sample, ~0.8% of the 250,432 measured.
+Reaching neutrality would have meant cutting operational text from the most-read
+contract in the repository, where a bad trim degrades every future run and does
+not announce itself. The shortfall is stated instead, which is what W1 asks of a
+growth: defend it or pay for it, and this is a partial payment with the remainder
+named.
+
+### This change saves no tokens, and that is not a defect in it
+
+Its product is fidelity — a checkpoint whose note can be shown to be resumable,
+and an owner who knows when compacting is free. The efficiency work is the read
+set: `phase-loop.md` at 0.52 and `workflow.md` at 0.79 re-read seventeen and
+thirteen times, and `Plan.md`'s ceiling charged per resume for one row. That is
+[W1](workflow-changes.md), scheduled into [M45](phase-details/m45.md), and it is
+deliberately not taken here.
