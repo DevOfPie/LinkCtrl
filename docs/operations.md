@@ -49,7 +49,7 @@ scrape_configs:
 
 | Metric | Use |
 | --- | --- |
-| `linkctrl_redirect_duration_seconds{outcome,cache}` | The SLO histogram. `cache` is `memory`, `redis`, `database`, `negative` or `rejected`. |
+| `linkctrl_redirect_duration_seconds{outcome,cache}` | The SLO histogram. `cache` is `memory`, `redis`, `database`, `negative`, `rejected` or **`none`**. `none` is the one worth knowing: it is emitted when resolution *failed* — no tier answered, because Postgres did not — so it is the only series carrying `outcome="error"`, which is the one the alert table below tells you to watch. It was undocumented until 0.2.0, where this row said five values ([F45](build-notes/deferred-findings.md)). |
 | `linkctrl_redirects_total{outcome,cache}` | Traffic and cache hit ratio. |
 | `linkctrl_http_requests_total{surface,method,status}` | `surface` is `redirect`, `api`, `web`, `static` or `ops`. `web` is derived at boot from the routes the dashboard actually registers, so it does not fall behind them; before 0.2.0 it came from a hand-written list and nine dashboard routes were counted as `redirect`. |
 | `linkctrl_http_request_duration_seconds{surface,method}` | Outside view, including all middleware. |
@@ -157,12 +157,13 @@ a follower whose scheduler has stopped.
 | --- | --- | --- |
 | `rollup` | 60s | Recomputes the per-link and per-workspace daily totals from raw events and upserts. Whole days, never incremental — an "add what arrived since the watermark" design double-counts on retry and, once it drifts, stays wrong invisibly. |
 | `dimension-rollup` | 15m | The same recompute for the per-dimension and per-destination breakdowns, on a longer clock because it costs far more: its upsert count is bounded by the distinct `(link, day, dimension, value)` tuples the day's clicks imply, where the totals are bounded by the links that were clicked. Measured at the SLO dataset it is 4.8–6.3s against a totals pass of ~1.5s ([slo.md](slo.md#re-measured-for-m37-2026-08-03)). **The visible consequence is that a breakdown on a link's page can be up to fifteen minutes behind the totals above it**, which is what the staleness alert below is for. Its own row in `job_state`, so a totals run cannot advance a watermark the breakdowns have not reached. |
-| `mail` | 30s | Drains `mail_outbox`. Does not run at all with no mailer configured, because nothing is ever queued then. Five attempts per message, backing off 1m to 16m; a message that never gets through is marked `failed` and kept with the relay's error. Faster than the hourly jobs because an invitation is something a person is waiting for. See [configuration.md](configuration.md#mail). |
+| `mail` | 30s | Drains `mail_outbox`. Does not run at all with no mailer configured, because nothing is ever queued then. Five attempts per message, backing off 1m, 2m, 4m and 8m between them — about fifteen minutes end to end, not the *1m to 16m* this row said until 0.2.0: the fifth attempt is the last, so the delay after it is never waited and `BackoffMax` is unreachable at the shipped attempt count ([F45](build-notes/deferred-findings.md)). A message that never gets through is marked `failed` and kept with the relay's error. Faster than the hourly jobs because an invitation is something a person is waiting for. See [configuration.md](configuration.md#mail). |
 | `partitions` | 1h | Creates monthly partitions two months ahead. |
 | `retention` | 1h | Drops monthly partitions that are entirely outside their table's window — `ANALYTICS_RETENTION_DAYS` for `click_events` and `visitors`, `AUDIT_RETENTION_DAYS` for `audit_logs`. Runs after `partitions`, so a run can never drop what it just created. With the audit default of `0` it drops no audit partition at all. |
 | `salt-purge` | 1h | Deletes analytics salts older than two days. **This is the de-identification step, not housekeeping**: once a salt is gone, that day's visitor hashes cannot be linked to an address by anyone. |
 | `audit-growth-warning` | 1h | Notifies every organization owner once `audit_logs` passes `AUDIT_SIZE_WARN_BYTES`, at most weekly each. Skipped entirely when the threshold is `0`. |
 | `partition-check` | 1h | Warns if rows landed in a default partition. |
+| `signup-purge` | 1h | Deletes pending registrations whose verification window has lapsed, and consumed ones past their short retention. Runs only where self-serve sign-up is possible; it exports `linkctrl_job_runs_total` like every other job and was the one `withLeadership` job with no row in this table until 0.2.0 ([F45](build-notes/deferred-findings.md)), so an operator reading it for the set of jobs to watch was one short. |
 | `domain-verification` | 1h | Re-reads every registered hostname's DNS TXT challenge. A hostname that starts passing begins being served without anybody pressing anything; one that stops passing keeps serving for `DOMAIN_VERIFY_GRACE` — a day by default — with the owning workspace notified at the **first** failure, and then stops being served on every replica. **This is the only job whose failure takes something offline**, which is why the window is long and why the warning comes early; the runbook is in [deployment.md](deployment.md#custom-domains). A pass that changed anything logs `custom domain verification` with the counts. **Serving hostnames are checked before registered-but-unserved ones**, so the stop above can only ever be delayed by other serving hostnames — never by a pile of registrations, which anybody can create and whose place in the queue a rename resets. A domain renamed while its check was in flight logs `a domain changed while its verification was in flight` and verifies nothing; one line is an owner renaming at an unlucky moment, a stream of them is somebody trying to have a check of one name land on another. `DOMAIN_VERIFY_INTERVAL=0` switches it off, which also removes the only thing that would ever stop serving a hostname whose record has gone. |
 | `housekeeping` | 1h | The reapers. Hard-deletes links whose 30-day trash window has passed — reserving any alias that ever received traffic in the same statement, so it is never reissued — and deletes sessions, revoked API keys and finished outbox rows past their retention. Each purged link is logged by alias; that log line is the only record of the deletion. |
 
@@ -241,12 +242,16 @@ not disagree about when this is a problem:
 
 ```yaml
 - alert: AuditLogLarge
-  # The same 5 GB the in-app owner notification fires at.
-  expr: linkctrl_audit_log_bytes > 5e9
+  # The same threshold the in-app owner notification fires at, spelled exactly.
+  # LINKCTRL_AUDIT_SIZE_WARN_BYTES defaults to 5368709120 — five *gibibytes* —
+  # and `5e9` is five gigabytes, seven per cent lower, so the two disagreed about
+  # when this is a problem while the comment claimed they were the same (F45).
+  # Change both if you change the variable.
+  expr: linkctrl_audit_log_bytes > 5368709120
   for: 1h
   labels: { severity: warning }
   annotations:
-    summary: "audit_logs has passed 5 GB"
+    summary: "audit_logs has passed 5 GiB"
     description: >-
       Currently {{ $value | humanize1024 }}B. Set
       LINKCTRL_AUDIT_RETENTION_DAYS, or confirm the disk is sized for it.
@@ -254,11 +259,11 @@ not disagree about when this is a problem:
 - alert: AuditLogGrowthUnbounded
   # Projects a fortnight ahead from the last week, so an instance heading for
   # trouble is flagged before it arrives rather than after.
-  expr: predict_linear(linkctrl_audit_log_bytes[7d], 14 * 86400) > 5e9
+  expr: predict_linear(linkctrl_audit_log_bytes[7d], 14 * 86400) > 5368709120
   for: 6h
   labels: { severity: warning }
   annotations:
-    summary: "audit_logs is on track to pass 5 GB within a fortnight"
+    summary: "audit_logs is on track to pass 5 GiB within a fortnight"
     description: >-
       Projected {{ $value | humanize1024 }}B. Growth this steady usually
       means retention was never configured.

@@ -329,6 +329,14 @@ func (s *Service) Pending(ctx context.Context) (int64, error) {
 // Backoff is the delay before attempt n+1, given that n attempts have been
 // made. Doubling from BackoffBase, capped at BackoffMax.
 //
+// **BackoffMax is unreachable at the shipped MaxAttempts**, and that is worth
+// stating where somebody reads the constants rather than leaving it to be
+// derived. Drain refuses a row at `attempts >= MaxAttempts` before asking for a
+// delay, so with five attempts the waits are 1m, 2m, 4m and 8m — fifteen minutes
+// end to end. Raising MaxAttempts is what makes the 30m cap do anything; a
+// document that read the cap off this function and called the span 1m to 16m was
+// wrong for exactly that reason (F45).
+//
 // No jitter: this is one leader draining one queue on a fixed tick, not N
 // clients stampeding a service, so there is nothing to spread out.
 func Backoff(attempts int) time.Duration {

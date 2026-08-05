@@ -1227,7 +1227,7 @@ that reached that tier, not queries executed.
   rather than real HMACs. Resolution is byte-for-byte the same path; the editing
   surface and visitor-uniqueness maths are not exercised. `lctl seed --help` says
   so too.
-- **Rate limits are per instance and in memory**, so a load generator hammering
+- **The 404-probe limit is per instance and in memory**, so a load generator hammering
   one address is throttled by `REDIRECT_404_RATE_LIMIT` only if it asks for
   aliases that do not exist. Every alias in the load test exists, and hits are
   never charged — which is why 240,001 requests from one address pass cleanly. A

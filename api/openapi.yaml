@@ -2228,9 +2228,13 @@ paths:
         wrong custodian for that.
 
         Actors are stored as a snapshot taken when the event was written, so a
-        record stays readable after the account it names is deleted.
-        `actor_label` is that snapshot; `actor_id` is present only while the
-        user still exists.
+        record would stay readable if the account it names were ever deleted —
+        and nothing in this product deletes one, so in practice `actor_label` is
+        belt and braces rather than the load-bearing field it was designed as.
+        `actor_id` is the acting user, and it is **never cleared**: it is absent
+        only on records written by something that is not a person, such as the
+        domain-verification job. This said "present only while the user still
+        exists" until 0.2.0, which described a lifecycle nothing implements.
 
         Addresses are never recorded. `ip_prefix` is a network — `/24` for
         IPv4, `/48` for IPv6 — which is enough to tell "the usual office" from
@@ -5523,11 +5527,17 @@ components:
           minItems: 1
           items: { type: string }
           description: |
-            Permission slugs you hold. `apikeys.*`, `org.delete` and
-            `audit.read` are never grantable — the first two because a key that
-            can mint keys or delete the organization needs a human behind it,
-            the third because the audit log discloses who acted from which
-            network.
+            Permission slugs you hold. Nine are never grantable to a key:
+            `apikeys.read`, `apikeys.write`, `org.delete`, `audit.read`,
+            `webhooks.write`, `automation.write`, `instance.admin`,
+            `destinations.decide` and `audit.read.instance`. A key that can mint
+            keys or delete an organization needs a human behind it; a webhook or
+            an automation rule outlives the credential that created it; the audit
+            log and its instance-wide surface disclose who acted from which
+            network; deciding a disputed destination lifts an instance-wide
+            blocklist entry, widening what the deciding key may point at; and
+            `instance.admin` confers instance-level review, so a key holding it
+            could grow the set that may delegate.
         expires_at:
           type: string
           format: date-time
@@ -5708,7 +5718,10 @@ components:
         actor_id:
           type: string
           format: uuid
-          description: Present only while the acting user still exists.
+          description: >-
+            The acting user. Absent on records written by something that is not
+            a person — the domain-verification job, a migration. Never cleared:
+            nothing in this product deletes a user.
         actor_api_key_id:
           type: string
           format: uuid

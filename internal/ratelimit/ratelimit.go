@@ -2,13 +2,24 @@
 //
 // Four properties shaped it, and each is a trade rather than an oversight.
 //
-// It is in-memory and per-instance, not backed by Redis. The surfaces being
-// protected include the redirect path, whose entire budget is 20ms, so spending
-// a network round trip to decide whether to allow a request would cost more
-// than the limit saves. Redis is also optional at runtime by design, and a
-// limiter that stops limiting when the cache goes away is worse than one whose
-// numbers are per-instance. The consequence is stated rather than hidden: with
-// N replicas the effective limit is N times the configured one.
+// It is in-memory and per-instance **by default**, and that is the shape this
+// package was built in. The surfaces being protected include the redirect path,
+// whose entire budget is 20ms, so spending a network round trip to decide
+// whether to allow a request would cost more than the limit saves. Redis is also
+// optional at runtime by design, and a limiter that stops limiting when the
+// cache goes away is worse than one whose numbers are per-instance. The
+// consequence is stated rather than hidden: with N replicas the effective limit
+// is N times the configured one.
+//
+// **M24 added a shared mode, and this paragraph said otherwise until 0.2.0**
+// (F38). `shared.go` — in this package — backs the *credential* and *API*
+// limiters with a Redis token bucket, so those two are shared across replicas
+// and fall back to these in-memory buckets only when Redis does not answer. The
+// 404-probe limiter is the one that stays plain, and `limits.go` says
+// "deliberately not shared" beside it for the reason above: it guards the
+// redirect path. So the per-instance multiplication described here is true of
+// the 404 limiter, true of every limiter while Redis is unreachable, and not
+// true of the credential and API limiters on a healthy instance.
 //
 // IPv6 is keyed by /64, not by address. A single host is routinely handed a
 // whole /64, so a per-address key would let one machine present an effectively

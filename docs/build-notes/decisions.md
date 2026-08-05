@@ -187,6 +187,7 @@ file. Append a row when you append an entry.
 | [M45, five rows that close by being written down](#2026-08-05--m45-five-rows-that-close-by-being-written-down) | F44, F57, F58, F113 and F117 — recorded rather than built, each on its own fix note and for five **different** reasons, which is the point of the entry: F44's repair is a feature and belongs in Plan.md first; F57's only coherent fix is keyed hashing, so the actionable half is telling operators of managed Redis to disable persistence; F58's obvious fix refuses IP literals that work today, trading a silent no-op for a silent regression; F113's reaper would delete the pre-DNS-cut-over case the code exists to protect; F117's state is unconstructible and the repair takes a correct limb with it. **Each records the fix considered and rejected**, which is what separates a recorded limitation from a row somebody stopped caring about — and none is closed for cheapness |
 | [M45, building D102, and a test that had been measuring two things at once](#2026-08-05--m45-building-d102-and-a-test-that-had-been-measuring-two-things-at-once) | F105. Both halves of the predicate in all three queries, because a filter in two of them leaves the bell counting rows the page will not show, and the count's predicate has to match the partial index character for character. **The interesting part is a test that broke on the difference rather than on a defect**: it measured *who was notified* by counting what they could see, which were the same number until D102 made them two questions. Fixed by saying where the reader is standing and asserting per workspace — the summed version produced 6 where 5 was expected, because organization-level news is visible from both, and that is the sum being the wrong instrument rather than an off-by-one. The result asserts the IS NULL half from a workspace the notification says nothing about, which the old shape could not state |
 | [M45, the redirect-path batch and the one measurement it owes](#2026-08-05--m45-the-redirect-path-batch-and-the-one-measurement-it-owes) | F64, F100, F115, F116, and **one k6 run for all ten redirect-path rows** — declared in the triage before any landed, 240,000 cached redirects 100% under 0.5ms, with the smaller dataset stated rather than glossed. F64 sets **only nosniff** and the entry says why: the other two are error-page policy, and putting them in the wrapper would change every successful redirect to fix a 307. F100's obvious fix was ruled out by its own row — HEAD must keep choosing and stop advancing — and the read-only twin is Budget's shape exactly, a precedent three hundred lines away. F115 closes the self-throttling limb and **records the other as D54's accepted cost**; the refund needed a clamp in the shared script, because every write kept tokens <= burst and none could break it while cost was always 1. F116 bounds both length and segment count, and invents no new status |
+| [M45, thirteen enumerations, and the one that gets a test](#2026-08-05--m45-thirteen-enumerations-and-the-one-that-gets-a-test) | F45, F38 and F111 — the first work under the owner's standing approval for documentation, which removes the prompt and keeps the verification. **Counted, not trusted, and it mattered**: the never-delegable map had grown to nine since the row was filed, making this the fifth wording row in one milestone whose list was short. One claim was checked and **left**, because correcting it would have invented a defect. Only that one list gets a test, and the entry says why — it is a security claim that has failed to keep up three separate times, where the other twelve are prose wrong once. The lists stay hand-written and the *failure* is generated, which is D97's argument. And **the test was wrong before the documents were**: its first run flagged a sentence that was already right, so the window was tightened rather than the document changed |
 
 ---
 
@@ -16091,3 +16092,85 @@ Refused through the existing not-forwardable 404 rather than a new 414, which th
 row asked for and which is right twice over: a distinct status tells a prober
 something the 404 does not, and the tree's header invariants were fragile enough
 that F64 was open against them while this was being written.
+
+## 2026-08-05 — M45, thirteen enumerations, and the one that gets a test
+
+[F45](deferred-findings.md), [F38](deferred-findings.md) and
+[F111](deferred-findings.md) — every list in this project that presented itself
+as complete and was not. The first documentation work done under the owner's
+standing approval, which removes the prompt and keeps the verification.
+
+### Counted, not trusted, and it mattered
+
+F45 was filed naming twelve enumerations and widened to thirteen. Working it
+found the count had moved again: D98 added three permissions to
+`NonDelegableScopes`, so the map held **nine** where the row said seven and
+`docs/SECURITY.md` said three.
+
+That is the fifth wording row in this milestone whose list was short, after F136,
+F139, F142 and F104. The lesson was already on record — a wording finding's site
+list is a starting point — and this is the run that made it a rule with a test
+behind it rather than an observation.
+
+The others, each verified against the code rather than against the row: the
+`_FILE` summary said two where the loader accepts four; the removed-variable
+table said three of five and omitted `SECRET_KEY`, which appeared in no markdown
+file in the repository and is the name most likely to be set by somebody being
+careful; the `cache` label was documented as five values against a domain of six,
+and the missing one is `none`, the only value carrying `outcome="error"` and
+therefore the series the runbook tells an operator to alert on; the README's
+audit list named seven categories and said the rest *arrive with the Phase 2
+features that produce them*, by which point all thirty-two had; `usage.md`'s page
+table listed eight of seventeen; the release archive listed three files against
+four; the Prometheus recipe compared `> 5e9` against a `5368709120` default and
+called them the same number; `actor_id` was documented as *present only while the
+user still exists*, describing a deletion nothing performs; the mail backoff was
+documented 1m–16m against a real span of 1m–8m, because the terminal check runs
+before the last delay is ever asked for; and `signup-purge` had no row in the
+jobs table at all.
+
+One was checked and **left**: the audit-growth warning really does notify every
+organization's owners. F137 changed the *dispute* recipients and not this one,
+and F49 is the open row about the fan-out. A sweep that corrected it would have
+been the sweep inventing a defect.
+
+### The list that gets a test, and why only that one
+
+`TestDocumentedNonDelegableScopesMatchTheMap` asserts that `docs/SECURITY.md`,
+`docs/usage.md` and `api/openapi.yaml` name exactly the slugs in
+`NonDelegableScopes`, in both directions.
+
+Only this list, and the reason is worth stating: it is the one a reader consults
+to decide what is safe to put on a credential, and it has drifted three times —
+written naming three, outgrown by M42 and M43, outgrown again by D98. The other
+twelve are each wrong once, in prose that explains itself; this one is a security
+claim that has now failed to keep up with the code three separate times.
+
+The lists are not generated, and that is deliberate. Each explains *why* its
+members are non-delegable, and generating that from a map produces a list nobody
+reads. What is generated is the **failure**: a hand-written list that has fallen
+behind now fails a test. That is D97's argument — derive the check, not the
+prose.
+
+### The test was wrong before the documents were
+
+On its first run it reported `docs/usage.md` naming `destinations.review` as
+never grantable, which the map does not hold. That looked like a fourth stale
+claim and was not: D98 split that permission and the sentence one paragraph down
+says correctly that it **is** grantable. The scan's window was wide enough to
+swallow the neighbour.
+
+The window was tightened rather than the document changed, and the test's own
+comment records the near miss. A guard that produces a false positive gets an
+exception added and then stops being read, which is the failure mode
+[F130](deferred-findings.md) is about — and this one came within one edit of
+"fixing" a sentence that was already right.
+
+### What the standing rule changed here
+
+None of these needed a decision. Every one had a single right answer and a cost
+to establishing it, which is exactly the shape the owner's approval was given
+for. What it did not remove is the checking: the counts above are counts, the
+audit-growth row was read before being left alone, and the `_FILE`, removed-variable
+and cache-label sets were taken from the code rather than from the row that
+reported them.

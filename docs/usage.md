@@ -18,7 +18,17 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 | `/notifications` | Things the instance wanted you to know about, and mark-read. |
 | `/disputes` | The review queue: destinations somebody was refused and has asked you to look at. Needs `destinations.review`, which is held instance-wide rather than by a role. The account that claimed the instance also appoints other reviewers here. |
 | `/feeds` | Whether this instance sends the destinations you type to a third party, and to whom. Read-only, and readable by everybody — what it describes is what happens to your own data. |
+| `/members` | Who is in this organization, at what role, with role changes and removal. Behind `members.read` and `members.write` from an organization-wide membership. |
+| `/workspaces` | The organization's workspaces: create, rename, delete. |
+| `/invites` | Pending invitations, and issuing one. Organization-wide `members.write`. |
+| `/organizations` | Create an organization of your own, behind `orgs.create`. |
+| `/domains` | Hostnames this workspace has registered, their verification state, and the challenge record to publish. |
+| `/webhooks` | Outbound subscriptions and their delivery log. |
+| `/automation` | Standing rules the scheduler runs unattended, and whether each is paused. |
+| `/campaigns` | Campaign labels, and the links filed under each. |
 | `/account` | Your profile, password and appearance. |
+
+This table listed eight of these pages until 0.2.0 and omitted the rest, including three that share the identity menu with pages it did list ([F45](build-notes/deferred-findings.md)).
 
 It works without JavaScript. htmx makes search and filtering swap a fragment
 instead of reloading, and that is the only thing it is used for.
@@ -390,13 +400,14 @@ members.read members.write  workspace.read workspace.write
 orgs.create
 ```
 
-`apikeys.read`, `apikeys.write`, `org.delete`, `audit.read`,
-`audit.read.instance`, `destinations.decide` and `instance.admin` are never
-grantable to a key — a key that can mint keys makes revoking a leaked one
+`apikeys.read`, `apikeys.write`, `org.delete`, `audit.read`, `webhooks.write`,
+`automation.write`, `audit.read.instance`, `destinations.decide` and
+`instance.admin` are never grantable to a key — a key that can mint keys makes revoking a leaked one
 meaningless, an irreversible action should need an interactive sign-in, the audit
 log ties a network prefix to a named person, a key that could allow a blocked
-destination could then point links at it, and a key that could appoint a reviewer
-would widen its reach by manufacturing somebody else's.
+destination could then point links at it, a webhook or an automation rule keeps
+running after the credential that registered it is revoked, and a key that could
+appoint a reviewer would widen its reach by manufacturing somebody else's.
 
 `destinations.review` **is** grantable, and the pair is the point: reading the
 dispute queue discloses who filed a dispute and a defanged host, escalating
