@@ -16955,3 +16955,63 @@ list, which is how the row survived a security document that describes the rule
 correctly. The enumeration now names a new workspace too. Counted rather than
 trusted, per the standing rule that four wording rows in one milestone turned
 out to have more sites than they listed.
+
+## 2026-08-05 — M45, a test that raced a flush, and an outbox with no way out
+
+### F11 — the flake was an ordering bug in the test, not a defect in the product
+
+`TestInvalidationReachesAnotherReplica` starts the subscriber in a goroutine and
+then warms the second replica's in-process cache. Every establishment, including
+the first, flushes both in-process tiers — that is D20, and it is right: pub/sub
+does not replay, so a subscriber cannot know which keys it missed and the only
+sound answer is to trust none of them.
+
+Nothing ordered those two. The flush was free to land between the warm-up
+filling the cache and the assertion reading it, which is exactly the observed
+shape: one failure in five uncached full runs of a tree whose diff never touched
+the redirect path, the resolver, Redis or the subscriber.
+
+**The barrier asks Redis, not the subscriber.** `PUBSUB NUMSUB` on the
+invalidation channel is a fact about the server rather than about the process
+under test, and it needs nothing added to the product. A readiness hook on
+`Subscriber` would have been the tidier API and the wrong trade here: a Tier 5
+test-only row is not where a product type grows a field for a test's benefit.
+
+**It also repairs what the test proved.** Without the barrier the publish could
+beat the subscription — the message missed, and the establishment flush dropping
+the entry anyway. The second wait would then pass while demonstrating nothing
+about an invalidation reaching another replica, which is the single claim the
+test exists for. Sabotaged by publishing to a dead channel: it times out.
+
+### F52 — the outbox had one exit, and it was gated on the thing that had gone
+
+`PurgeFinishedMail` takes `status <> 'pending'`, and that is correct while a
+mailer exists: `Drain` claims every pending row and moves it to sent or, after
+five attempts, failed, and the lease recovers rows a crash interrupted. Nothing
+stays pending, so nothing needs to.
+
+Clearing `SMTP_HOST` on an instance that had one breaks the premise rather than
+the rule. The mailer becomes nil, so the drain stops running; the rows enqueued
+before the change stay pending; the purge skips them by design. They are then
+both invisible — `CountPendingMail` is the only reader — and permanent.
+
+**Failed, not deleted.** The row then leaves by the same retention path as every
+other finished message instead of by a second delete, and an operator asking
+what happened to their queue gets an answer rather than an absence. The body
+goes for `MarkMailFailed`'s reason: a message that will never be sent should not
+keep holding what it was going to say.
+
+**Past the window, not at once.** Clearing `SMTP_HOST` by mistake and restoring
+it the same afternoon should still deliver the queue. Thirty days is the outbox's
+existing retention constant rather than a new knob — and the documentation says
+*30 days*, not a variable name, because there is no variable and inventing one in
+prose is how a document acquires a setting the code has never heard of.
+
+**The finder's stronger half stays refuted.** It read `status <> 'pending'` as a
+defect in its own right; it is not, for the reason above, and nothing was built
+for it. What was true is the transition, and that is all that was fixed.
+
+Two comments asserted the false half — `internal/mail/mail.go`'s *the outbox
+stays empty* and `jobs.go`'s *with no mailer nothing is ever enqueued*. Both were
+true of an instance that never had a relay and false of one that had it removed,
+which is how a package comment came to be the clearest statement of the bug.

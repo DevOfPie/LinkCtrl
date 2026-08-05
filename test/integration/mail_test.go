@@ -19,6 +19,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/mail"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
+	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
 )
 
@@ -444,6 +445,90 @@ func TestFinishedMailIsPurgedAndPendingMailIsNot(t *testing.T) {
 	}
 	if p, _ := f.mail.Pending(t.Context()); p != 1 {
 		t.Errorf("Pending() = %d, want 1", p)
+	}
+}
+
+// TestPendingMailIsAbandonedOnceThereIsNoRelayToSendIt is the complement of the
+// test above, and the two together are the whole rule.
+//
+// "A pending message must never be deleted by age" is right while a mailer
+// exists: Drain claims every pending row and moves it to sent or failed, so a
+// pending row is one still on its way. Clearing SMTP_HOST breaks the premise
+// rather than the rule — the drain is gated on the mailer and stops running,
+// the rows enqueued before the change stay pending forever, and the purge skips
+// them by design. Nothing but CountPendingMail could even see them (F52).
+//
+// Failed rather than deleted, so the record leaves by the same retention path as
+// every other finished message; past the same window rather than at once, so an
+// operator who clears SMTP_HOST by mistake and restores it the same afternoon
+// still gets their queue delivered.
+func TestPendingMailIsAbandonedOnceThereIsNoRelayToSendIt(t *testing.T) {
+	f := newMailFixture(t, true)
+	ctx := t.Context()
+	q := dbgen.New(f.pool)
+
+	warn := func(to string) {
+		t.Helper()
+		if err := f.mail.Enqueue(ctx, to, notify.MailAuditGrowth, map[string]string{
+			"Instance": "links.example.com", "Name": to,
+			"Size": "6.0 GiB", "Threshold": "5.0 GiB", "AppURL": "https://links.example.com",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	warn("stale@example.com")
+	warn("fresh@example.com")
+
+	// Nothing is old enough, so the relay going away costs nothing yet. This is
+	// the half that makes the window real rather than decorative.
+	if n, err := q.AbandonUnsendableMail(ctx, int32(mail.FinishedRetentionDays)); err != nil || n != 0 {
+		t.Fatalf("abandoned %d rows (err %v) while both were inside the window", n, err)
+	}
+
+	if _, err := f.pool.Exec(ctx,
+		fmt.Sprintf(`UPDATE mail_outbox SET created_at = now() - interval '%d days'
+		              WHERE recipient = 'stale@example.com'`,
+			mail.FinishedRetentionDays+1)); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := q.AbandonUnsendableMail(ctx, int32(mail.FinishedRetentionDays))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("abandoned %d rows, want only the aged one", n)
+	}
+
+	var staleRow, freshRow outboxRow
+	for _, r := range f.outbox(t) {
+		switch r.Recipient {
+		case "stale@example.com":
+			staleRow = r
+		case "fresh@example.com":
+			freshRow = r
+		}
+	}
+	if staleRow.Status != "failed" {
+		t.Errorf("the aged message is %q, want failed", staleRow.Status)
+	}
+	if staleRow.Body != "" {
+		t.Error("an abandoned message kept its body; it will never be sent and should not hold what it was going to say")
+	}
+	if !strings.Contains(staleRow.LastError, "no SMTP relay configured") {
+		t.Errorf("last_error = %q, want it to say why it was abandoned", staleRow.LastError)
+	}
+	if freshRow.Status != "pending" {
+		t.Errorf("the message inside the window is %q, want it left pending", freshRow.Status)
+	}
+
+	// And it now leaves by the ordinary retention path rather than needing a
+	// second delete, which is the reason for failing it instead of deleting it.
+	if purged, err := f.mail.PurgeFinished(ctx); err != nil || purged != 1 {
+		t.Errorf("PurgeFinished removed %d rows (err %v), want the abandoned one", purged, err)
+	}
+	if p, _ := f.mail.Pending(ctx); p != 1 {
+		t.Errorf("Pending() = %d, want the one still inside the window", p)
 	}
 }
 

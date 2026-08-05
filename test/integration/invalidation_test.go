@@ -278,7 +278,30 @@ func TestInvalidationReachesAnotherReplica(t *testing.T) {
 	defer stop()
 	go sub.Run(subCtx)
 
-	// Warm the other replica's in-process tier.
+	// Wait for the subscription to exist before warming anything, and ask Redis
+	// rather than the subscriber — there is no readiness hook and this test is
+	// not the place to add one to the product.
+	//
+	// The barrier is what this test was missing (F11). Every establishment
+	// including the first flushes both in-process tiers, which is D20 and is
+	// correct: pub/sub does not replay, so a subscriber cannot know which keys
+	// it missed. Run is a goroutine, so that flush used to be free to land
+	// between the warm-up filling the cache and the assertion reading it — the
+	// warm-up was racing a flush it had no way to see, which is why this failed
+	// once in five full runs of a tree that never touched the redirect path.
+	//
+	// It also makes the invalidation half prove itself. Without the barrier the
+	// publish could beat the subscription, the message would be missed, and the
+	// establishment flush would drop the entry anyway — so the test passed
+	// while demonstrating nothing about invalidation reaching another replica,
+	// which is the one thing it exists to demonstrate.
+	waitFor(t, 10*time.Second, "the subscriber to establish its subscription", func() bool {
+		counts, err := rdb.PubSubNumSub(ctx, redirect.InvalidationChannel).Result()
+		return err == nil && counts[redirect.InvalidationChannel] > 0
+	})
+
+	// Warm the other replica's in-process tier. Safe to assert directly now:
+	// the only flush is on establishment, and establishment has happened.
 	if _, err := other.Resolve(ctx, dom.ID, alias); err != nil {
 		t.Fatal(err)
 	}

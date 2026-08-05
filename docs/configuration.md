@@ -561,6 +561,15 @@ It cannot be granted to an API key — see [SECURITY.md](SECURITY.md).
 it does with this section deleted: notifications are delivered in the dashboard
 and nowhere else, nothing is queued, and no outbound connection is ever made.
 
+**Turning it off again is not the same as never turning it on.** Messages queued
+while a relay was configured stay in the outbox, and with no relay there is
+nothing to deliver them: the drain does not run. The scheduler abandons them
+once they are more than **30 days** old — the same fixed window the outbox keeps
+finished rows for, not a configurable one. They are marked `failed` with the
+reason rather than deleted, so the record of what was attempted survives that
+window and is then purged like any other finished row, and a warning names the
+count. Put `SMTP_HOST` back inside the 30 days and the queue delivers instead.
+
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `LINKCTRL_SMTP_HOST` | *(empty)* | **The switch.** Empty means no mailer. |

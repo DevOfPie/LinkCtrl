@@ -104,3 +104,35 @@ SELECT count(*) FROM mail_outbox WHERE status = 'pending';
 DELETE FROM mail_outbox
  WHERE status <> 'pending'
    AND created_at < now() - make_interval(days => sqlc.arg(max_age_days)::int);
+
+-- name: AbandonUnsendableMail :execrows
+--
+-- Fails pending rows on an instance that has no relay to send them.
+--
+-- The outbox has one guard against unbounded growth — PurgeFinishedMail — and it
+-- takes only `status <> 'pending'`, which is correct while a mailer exists:
+-- Drain claims every pending row and moves it to sent or, after five attempts,
+-- failed, and the lease recovers rows a crash interrupted. So nothing stays
+-- pending, and nothing needs to.
+--
+-- Clearing SMTP_HOST on an instance that had one breaks that. The mailer becomes
+-- nil, so the drain does not run; the rows enqueued before the change stay
+-- pending; and the purge skips them by design. They are then invisible — nothing
+-- but CountPendingMail reads them — and permanent (F52).
+--
+-- Failing rather than deleting, so the record of what was attempted survives its
+-- retention window like every other finished row, and reaches PurgeFinishedMail
+-- by the normal path rather than by a second delete. The body goes for the same
+-- reason MarkMailFailed drops it: a message that will never be sent should not
+-- keep holding what it was going to say.
+--
+-- Bounded by the same window rather than run eagerly, because an operator who
+-- clears SMTP_HOST by mistake and puts it back the same afternoon should still
+-- get their queue delivered. Only the caller decides when this applies: it runs
+-- on the no-mailer path and nowhere else.
+UPDATE mail_outbox
+   SET status = 'failed',
+       last_error = 'no SMTP relay configured; abandoned past the retention window',
+       body = ''
+ WHERE status = 'pending'
+   AND created_at < now() - make_interval(days => sqlc.arg(max_age_days)::int);

@@ -49,8 +49,12 @@ type jobRunner struct {
 	// auditSizeWarnBytes is the threshold. Zero means never warn.
 	auditSizeWarnBytes int64
 	// mailer drains the outbox. Nil when no SMTP relay is configured, and then
-	// the job does not run at all — there is nothing to drain, because with no
-	// mailer nothing is ever enqueued.
+	// the drain does not run at all.
+	//
+	// Nil does not mean the table is empty, which this comment used to assume:
+	// an instance that *had* a relay and had it cleared keeps everything queued
+	// before the change. The purge pass handles that case explicitly rather
+	// than inheriting the assumption (F52).
 	mailer *mail.Service
 	// signup sweeps registrations nobody completed. Never nil in the process —
 	// the service is always built — but held as a pointer so a test runner
@@ -648,6 +652,24 @@ func (j *jobRunner) housekeeping(ctx context.Context) error {
 			errs = append(errs, err)
 		} else if n > 0 {
 			j.log.Debug("finished mail purged", slog.Int64("count", n))
+		}
+	} else {
+		// No relay, which is not the same as no outbox. An instance that never
+		// had SMTP_HOST has an empty table and this does nothing; an instance
+		// that *had* one and had it cleared holds every message enqueued before
+		// the change, and holds it forever — the drain is gated on the mailer,
+		// and the purge below it takes only rows that are not pending, which is
+		// correct precisely because a mailer would never have left one (F52).
+		//
+		// Failed rather than deleted, so the row leaves by the same retention
+		// path as every other finished message instead of by a second delete.
+		// Past the same window rather than at once, so clearing SMTP_HOST by
+		// mistake and restoring it the same afternoon still delivers the queue.
+		if n, err := q.AbandonUnsendableMail(ctx, int32(mail.FinishedRetentionDays)); err != nil {
+			errs = append(errs, fmt.Errorf("abandon unsendable mail: %w", err))
+		} else if n > 0 {
+			j.log.Warn("pending mail abandoned: no SMTP relay is configured",
+				slog.Int64("count", n), slog.Int("older_than_days", mail.FinishedRetentionDays))
 		}
 	}
 

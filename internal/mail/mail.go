@@ -7,8 +7,16 @@
 // ends — nobody receives it, and nobody knows one was attempted.
 //
 // The whole package is optional. An instance with no SMTP_HOST never builds a
-// Service, every consumer holds nil, and the outbox stays empty — which is the
-// claim that keeps the mailer optional rather than quietly required.
+// Service and every consumer holds nil, which is the claim that keeps the
+// mailer optional rather than quietly required.
+//
+// "And the outbox stays empty" used to be part of that sentence, and it was
+// true only of an instance that never had SMTP_HOST — not of one that had it
+// and had it cleared, which keeps every row enqueued before the change. Those
+// rows are undrainable, because the drain is gated on the mailer, and they were
+// unpurgeable, because PurgeFinishedMail takes only rows that are not pending
+// (F52). The scheduler now abandons them past the retention window on the
+// no-mailer path, so the transition ends somewhere instead of nowhere.
 //
 // # What a queued message is worth to somebody reading the database
 //
