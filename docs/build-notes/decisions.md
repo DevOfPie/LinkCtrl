@@ -182,6 +182,7 @@ file. Append a row when you append an entry.
 | [M45, a table that was not the record it claimed, and a guard with no inputs](#2026-08-05--m45-a-table-that-was-not-the-record-it-claimed-and-a-guard-with-no-inputs) | F66 and F130. **Seven decisions were missing, not four** — D49-D52 as filed, plus D97-D99 the table had also never gained, folded in rather than filed twice; the collision this row is about had already cost M35 a renumbering across eleven files. Rows state the decision, because a table of titles is not the record the README calls it. F130 is **F39's fix with nothing holding it correct**: every page struct embeds exactly shell, so the branches ran against zero inputs and the revert left the package green. Synthetic fixtures are forced rather than chosen — the package contains none of the shapes, which is the finding — and the fifth case is the arrangement the guard must not flag |
 | [M45, a count that could not stay true and a milestone the enumeration forgot](#2026-08-05--m45-a-count-that-could-not-stay-true-and-a-milestone-the-enumeration-forgot) | F69 and F119, one mechanism wrong in two directions. **The count is removed rather than corrected**: it read *four*, was true when written, wrong within one milestone, and by M44.9 the true number was zero — the row predicted its own recurrence and was right four times, so its teeth are demonstrated rather than argued. F119: M33 was the only shipped Phase 2 milestone with a demo-visible feature and no coverage row, and it shipped inside the window whose closing is M33.5's entire deliverable — the milestone that motivated the enforcement is the one the enforcement forgot |
 | [M45, four answers, three of them decisions and one a correction](#2026-08-05--m45-four-answers-three-of-them-decisions-and-one-a-correction) | D100 — F70's instance default domain moves behind D98's principal, because D38's stated reason for refusing has stopped being true; the capability organization owners lose is named. D101 — F50's blocked bot is recorded in every link state, and *record for none* is the smaller-looking change that couples recording to the response and keeps an exception; what it deliberately does **not** fix is the raw `click_count`, which is F24. D102 — F105's inbox gains the workspace filter its comments promised since M40, with both halves of the predicate load-bearing and F94's claimed containment as the reason to build rather than delete. And **a correction to D18 with no new number**: the code has been right since before D18 was written, the *either direction* promise is narrowed rather than deleted, and the request-time gap is documented and left open with the price of closing it stated |
+| [A documentation change needs no permission, and still needs checking](#2026-08-05--a-documentation-change-needs-no-permission-and-still-needs-checking) | Owner-set standing rule: documentation updates are accepted in advance and verified. **It removes a prompt, not a check** — this milestone spent owner attention on questions with one right answer and a cost to establishing it, which is what the amendment rule already says about facts as against assertions. The verification half is load-bearing: four wording rows in one milestone named fewer sites than existed, so a standing approval that let a fix land on the listed sites would convert a prompt into a silent under-fix. And **the bound**, because "documentation" is what will be stretched — the test is not diff size but *which of the two is being corrected*, with F98 and F41 on one side and F50, which became D101, on the other |
 
 ---
 
@@ -15751,3 +15752,51 @@ Deliberately. It goes with the work on [F17](deferred-findings.md), because F18 
 F17's mechanical cause — the audit vocabulary lives in two packages, so anyone
 enumerating it from `internal/audit` is short by two — and the cost of fixing the
 enumeration while leaving the split is only visible from inside that work.
+
+## 2026-08-05 — A documentation change needs no permission, and still needs checking
+
+Owner-set, while M45's findings work was running. Written into
+[workflow.md](workflow.md)'s standing rules rather than into this milestone,
+because it governs how the loop asks rather than what this phase builds.
+
+> Documentation updates and changes should always be accepted, and verified.
+
+**What it removes is a prompt, not a check**, and the two halves are why it is
+worth an entry. This milestone has spent a lot of the owner's attention on
+questions that were not really questions: a sentence in `docs/configuration.md`
+said a memory-answered redirect costs nothing and that stopped being true at M34,
+a comment justified a cache-key decision with a claim a rolling restart falsifies,
+a decision's own text described a map the code had never implemented. None of
+those had two defensible answers. They had one right answer and a cost to
+establishing it, and putting them to the owner spent attention on arithmetic —
+which is exactly what [phase-loop.md](phase-loop.md)'s amendment rule already says
+about facts as against assertions.
+
+The verification half is doing real work in this phase, so it is stated rather
+than implied. **Four wording rows in one milestone turned out to name fewer sites
+than existed** — F136, F139, F142 and F104, the last by three — and the lesson
+already recorded from the first two is that a wording finding's site list is a
+starting point and the message strings inside a test are the part everybody's
+grep forgets. A standing approval that let a documentation fix land on the sites
+the row happened to list would convert a prompt into a silent under-fix, which is
+worse than the prompt.
+
+### The bound, because "documentation" is the part that will be stretched
+
+Prose, comments, and a decision's wording are in. Anything that changes what the
+product **does** is not, however small the diff and however much it reads like a
+correction: a status code, a default, a predicate, a permission.
+
+The distinction has teeth in a milestone doing this work. [F98](deferred-findings.md)
+closed as prose — two sentences corrected, no code — because every code fix
+available was worse than the defect. [F41](deferred-findings.md) closed the same
+way, correcting a false justification while leaving the cache key alone.
+[F50](deferred-findings.md) looked adjacent and was not: it reads as an
+inconsistency in what gets recorded, and closing it meant deciding what the
+product should record, which is [D101](../../Plan.md#phase-2-decisions-taken-after-the-plan-was-finalised)
+and went to the owner.
+
+So the test is not *how big is the diff*. It is: **if a document and the code
+disagree, which one is being corrected?** When it is the document, that is this
+rule and there is no prompt. When it is the behaviour, the document is a symptom
+and the decision is still the owner's.

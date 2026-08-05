@@ -267,6 +267,21 @@ because it arrived late. Carrying one is available and is the owner's to choose;
 it is not a thing to recommend, and a recommendation to carry needs a reason
 stated in the prompt rather than a default of cheapness. Owner-set, 2026-08-04.
 
+**A documentation change is approved in advance, and still has to be verified.**
+Correcting a document, a comment or a decision's text is **not** a decision to
+put to the owner: make it. This is a standing approval and it removes a prompt,
+never a check. Every claim written or corrected is verified against the tree the
+same way — the sentence is read against the code it describes, `make check-links`
+passes, and an enumeration is **counted rather than trusted**, because four
+wording rows in one milestone turned out to have more sites than they listed.
+
+The bound is what *counts* as documentation. Prose, comments and a decision's
+wording are in. **Anything that changes what the product does is not**, however
+small the diff and however much it reads like a correction — a status code, a
+default, a predicate, a permission. If a document is wrong because the behaviour
+is wrong, the document is not the decision: say which one is being corrected, and
+if it is the behaviour, that is still a prompt. Owner-set, 2026-08-05.
+
 **Stop and ask** for: destructive operations, scope changes, anything the owner
 would reasonably want to decide. Proceed without asking for reversible work that
 follows from the current milestone.
