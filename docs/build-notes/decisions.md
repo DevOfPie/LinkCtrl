@@ -17315,3 +17315,58 @@ writes both rollups directly and at odds with each other: producing that
 disagreement through the real jobs would mean racing a 60-second ticker against
 a 15-minute one, and the thing under test is how the reader presents two rollups
 that disagree, not whether they can be made to.
+
+## 2026-08-05 — A key belongs to an account, not to an organization — scheduled, not built
+
+Owner-directed on 2026-08-05, in answer to [F75](deferred-findings.md): an API
+key should be minted by an account and reach the organizations that account
+belongs to, the way a GitHub personal access token does. Asked with the
+instruction to validate it, plan it, and build it now if appropriate or schedule
+it if not.
+
+### It does answer F75, and that is why it is not a patch
+
+F75 is that revoking a key is scoped to its owner while listing keys is scoped
+to the owner *and* the organization, so the two disagree about which keys an
+actor acting in one organization can reach. The filter that makes them agree —
+one `AND organization_id = $3` — is refused by the row's own severity note,
+because it would make a key unrevokable from the organization somebody is signed
+into: you would have to switch organizations to stop your own compromised
+credential.
+
+A key scoped to its owner rather than to a tenancy dissolves the asymmetry
+instead of patching it. Both statements become owner-scoped and agree by
+construction. That is a better answer than either option I put to the owner.
+
+### Why it is Phase 3 rather than M45
+
+It reverses recorded decisions rather than extending them, and every one of them
+has a test and a reason behind it:
+
+- **F103** bounds a key's reads to one organization *because* the workspace
+  switcher exists to cross organizations and a key was issued for one. That is
+  the exact claim being inverted.
+- **M44** spent an `organization_id` parameter on `ResolveWorkspaceForUser` so
+  an organization-wide key could not land in a tenant it was never issued for.
+- **D43** caps the role a key-issued invitation may carry, and **D87** makes
+  rotation refuse a session. Both reason about one tenancy at a time.
+- `api_keys.organization_id` is non-null, and the audit trail records which
+  organization a key acted in.
+
+The open questions are real ones, not implementation detail: what a key's scopes
+mean when the owner's role differs between organizations, since the intersection
+is currently taken against one role; whether a key may act in an organization
+the owner joined after the key was minted; and what D43 and D87 become against a
+multi-tenant credential.
+
+None of that is a defect being fixed. It is a tenancy model being changed, and a
+phase close is the wrong place — the loop's own rule is that it stops at the
+phase's last milestone rather than starting the next one's work.
+
+### What happens to F75 meanwhile
+
+It stays **open** and points at the Plan.md row. Scheduled elsewhere is not
+resolved, and the asymmetry it describes is live until the model lands: a
+`204`-versus-`404` existence oracle against key ids a caller would have to guess.
+Closing it on the strength of a plan would be the tracker losing a defect to a
+promise.

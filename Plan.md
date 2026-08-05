@@ -742,6 +742,42 @@ The *why* for each is in decisions.md.
 ### Not in Phase 2
 
 - MFA, OAuth, OIDC, SSO, SCIM — Phase 3 by the scope table.
+- **An API key that reaches more than one organization.** Owner-directed on
+  2026-08-05, after [F75](docs/build-notes/deferred-findings.md): a key should be
+  minted by an *account* and reach the organizations that account belongs to,
+  the way a GitHub personal access token does, rather than being issued into one
+  organization. **Validated as the right answer to F75 and deliberately not
+  built here.** It dissolves that row instead of patching it — revoking and
+  listing would both be scoped to the owner, so the two statements agree by
+  construction rather than by adding a filter that makes a key unrevokable from
+  the organization somebody is signed into.
+
+  What makes it Phase 3 work rather than a phase-close fix is that it **reverses
+  recorded decisions rather than extending them**, and each one has a test and a
+  reason behind it. [F103](docs/build-notes/deferred-findings.md) bounds a key's
+  reads to one organization precisely because the workspace switcher exists to
+  cross organizations and a key was issued for one. M44 spent an
+  `organization_id` parameter on `ResolveWorkspaceForUser` so an
+  organization-wide key cannot land in a tenant it was never issued for. D43
+  caps the role a key-issued invitation may carry, and D87 makes rotation refuse
+  a session, both of which are reasoned about one tenancy at a time. `api_keys`
+  carries a non-null `organization_id`, and the audit trail records which
+  organization a key acted in.
+
+  So the work is: decide what a key's scopes mean when the owner's role differs
+  between organizations (the intersection is currently taken against one role),
+  decide whether a key may act in an organization the owner joined *after* the
+  key was minted, re-derive D43's cap and D87's rotation rule against a
+  multi-tenant credential, migrate the column, and re-open F103's bound. None of
+  that is a defect being fixed; it is a tenancy model being changed, and doing it
+  inside a phase close would cross both the scope contract and the phase
+  boundary.
+
+  Until it is built, F75's asymmetry stands as described in that row: revoking is
+  owner-scoped and listing is owner-and-organization-scoped, which leaves a
+  `204`-versus-`404` existence oracle against key ids a caller would have to
+  guess. **F75 stays open** and points here, because scheduled elsewhere is not
+  resolved.
 - **Account deletion and erasure, of any kind, for anybody.** There is no way to
   delete an account, and no subject-erasure routine. `users` appears in none of
   the schema's fourteen `DELETE` statements, nothing writes `users.deleted_at`,
