@@ -845,6 +845,11 @@ type Querier interface {
 	//
 	// Ties are broken by verified_at then id, so the answer is stable: a workspace
 	// that verifies a second hostname does not silently move its new links onto it.
+	// organization_id and workspace_id are selected because they are the domain's
+	// *scope*, and the scope is what decides whether an alias collision on it could
+	// involve a workspace the caller cannot see. A refusal that cannot tell a shared
+	// namespace from a private one has to be worded for the worst case or say
+	// nothing useful at all (F23).
 	GetWorkspaceDefaultDomain(ctx context.Context, arg GetWorkspaceDefaultDomainParams) (GetWorkspaceDefaultDomainRow, error)
 	// One workspace, scoped by organization so an id belonging to another tenant is
 	// indistinguishable from one that does not exist.

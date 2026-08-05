@@ -55,6 +55,71 @@ func (f *teamFixture) registeredIn(t *testing.T, actor *auth.Identity, hostname 
 	return d
 }
 
+// TestAnAliasCollisionSaysWhoseNamespaceItIs is F23.
+//
+// Alias uniqueness is per domain, so on a shared domain a refusal tells a member
+// of one workspace that *something* holds that name somewhere they may not be
+// able to see. That disclosure cannot be removed — a 409 and a 201 are
+// distinguishable whatever either says — so what is fixed is the silence around
+// it: the refusal names the namespace and says how to stop sharing one.
+//
+// Both cases are asserted, and the private one is the reason this is not a
+// blanket warning. M39 and M40 shipped the supported way for a workspace to get
+// its own alias namespace, so a collision on a workspace's own verified hostname
+// really is its own business, and telling that caller their name might be held
+// by an invisible link would be false.
+func TestAnAliasCollisionSaysWhoseNamespaceItIs(t *testing.T) {
+	f := newDomainFixture(t)
+	ctx := t.Context()
+
+	// The shared case: the instance default, which every workspace without a
+	// hostname of its own lands on.
+	if _, err := f.links.Create(ctx, f.owner, link.CreateInput{
+		Alias: "shared-name", URL: "https://example.com/first",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := f.links.Create(ctx, f.owner, link.CreateInput{
+		Alias: "shared-name", URL: "https://example.com/second",
+	})
+	if !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("second create on the shared domain = %v, want a conflict", err)
+	}
+	for _, want := range []string{"unique per domain", "outside this workspace", "Register a domain"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal on a shared domain does not mention %q; a caller "+
+				"cannot tell a name held elsewhere from one they simply cannot have.\n%s",
+				want, err)
+		}
+	}
+
+	// The private case: the workspace's own verified hostname. Nothing outside
+	// this workspace can hold a name on it, so the shared-namespace sentence
+	// would be a warning about a boundary that is not being crossed.
+	own := f.registeredIn(t, f.owner, "links.mine.example")
+	if _, err := f.pool.Exec(ctx,
+		`UPDATE domains SET verified_at = now(), workspace_id = $2 WHERE id = $1`,
+		own.ID, f.owner.WorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+	mine := own.ID
+	if _, err := f.links.Create(ctx, f.owner, link.CreateInput{
+		Alias: "private-name", URL: "https://example.com/mine", DomainID: &mine,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.links.Create(ctx, f.owner, link.CreateInput{
+		Alias: "private-name", URL: "https://example.com/mine-again", DomainID: &mine,
+	})
+	if !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("second create on the workspace's own hostname = %v, want a conflict", err)
+	}
+	if strings.Contains(err.Error(), "outside this workspace") {
+		t.Errorf("a collision on the workspace's own hostname warns about links "+
+			"outside the workspace; nothing outside it can hold that name.\n%s", err)
+	}
+}
+
 // **The test M39 exists for.** Two workspaces, an admin in each, and neither
 // one's `domains.write` reaches the other's hostname.
 //

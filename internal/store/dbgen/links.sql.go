@@ -559,7 +559,7 @@ func (q *Queries) GetTagByName(ctx context.Context, arg GetTagByNameParams) (Tag
 }
 
 const getWorkspaceDefaultDomain = `-- name: GetWorkspaceDefaultDomain :one
-SELECT id, hostname FROM domains
+SELECT id, hostname, organization_id, workspace_id FROM domains
 WHERE deleted_at IS NULL
   AND (
         is_default
@@ -581,8 +581,10 @@ type GetWorkspaceDefaultDomainParams struct {
 }
 
 type GetWorkspaceDefaultDomainRow struct {
-	ID       uuid.UUID
-	Hostname string
+	ID             uuid.UUID
+	Hostname       string
+	OrganizationID *uuid.UUID
+	WorkspaceID    *uuid.UUID
 }
 
 // The hostname a new link goes on when the caller names none.
@@ -604,10 +606,20 @@ type GetWorkspaceDefaultDomainRow struct {
 //
 // Ties are broken by verified_at then id, so the answer is stable: a workspace
 // that verifies a second hostname does not silently move its new links onto it.
+// organization_id and workspace_id are selected because they are the domain's
+// *scope*, and the scope is what decides whether an alias collision on it could
+// involve a workspace the caller cannot see. A refusal that cannot tell a shared
+// namespace from a private one has to be worded for the worst case or say
+// nothing useful at all (F23).
 func (q *Queries) GetWorkspaceDefaultDomain(ctx context.Context, arg GetWorkspaceDefaultDomainParams) (GetWorkspaceDefaultDomainRow, error) {
 	row := q.db.QueryRow(ctx, getWorkspaceDefaultDomain, arg.WorkspaceID, arg.OrganizationID)
 	var i GetWorkspaceDefaultDomainRow
-	err := row.Scan(&i.ID, &i.Hostname)
+	err := row.Scan(
+		&i.ID,
+		&i.Hostname,
+		&i.OrganizationID,
+		&i.WorkspaceID,
+	)
 	return i, err
 }
 

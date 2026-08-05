@@ -466,7 +466,7 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 		}); err != nil {
 			return nil, fmt.Errorf("check alias: %w", err)
 		} else if taken {
-			return nil, fmt.Errorf("%w: alias %q is already in use", domain.ErrConflict, code)
+			return nil, aliasTakenError(code, dom)
 		}
 	} else {
 		code, err = s.aliases.Generate(ctx, func(ctx context.Context, candidate string) (bool, error) {
@@ -513,7 +513,7 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 		// generated one that collides is a bug worth surfacing as such.
 		if isUniqueViolation(err) {
 			if in.Alias != "" {
-				return nil, fmt.Errorf("%w: alias %q is already in use", domain.ErrConflict, code)
+				return nil, aliasTakenError(code, dom)
 			}
 			return nil, fmt.Errorf("%w: generated alias collided", domain.ErrConflict)
 		}
@@ -654,7 +654,17 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 			}); err != nil {
 				return nil, fmt.Errorf("check alias: %w", err)
 			} else if taken {
-				return nil, fmt.Errorf("%w: alias %q is already in use", domain.ErrConflict, code)
+				// The link's current domain, reloaded for its scope. The rename
+				// path has the id and not the row, and the refusal has to know
+				// whether the namespace is shared before it can say so (F23).
+				d, derr := s.q.GetDomainByID(ctx, existing.DomainID)
+				if derr != nil {
+					return nil, fmt.Errorf("read domain: %w", derr)
+				}
+				return nil, aliasTakenError(code, targetDomain{
+					ID: d.ID, Hostname: d.Hostname,
+					OrganizationID: d.OrganizationID, WorkspaceID: d.WorkspaceID,
+				})
 			}
 			newAlias = &code
 		}
@@ -1406,6 +1416,14 @@ func (s *Service) ForgetHostnames() {
 type targetDomain struct {
 	ID       uuid.UUID
 	Hostname string
+	// OrganizationID and WorkspaceID carry the domain's scope, which is what
+	// decides whether an alias collision on it could involve a workspace the
+	// caller cannot see (F23). Both nil is the instance default — shared by
+	// every workspace that has not registered one; organization set and
+	// workspace nil is shared within one organization; workspace set is the
+	// workspace's own namespace and nothing outside it can collide.
+	OrganizationID *uuid.UUID
+	WorkspaceID    *uuid.UUID
 }
 
 // resolveTargetDomain decides which hostname a new link lands on.
@@ -1433,7 +1451,10 @@ func (s *Service) resolveTargetDomain(
 		if err != nil {
 			return targetDomain{}, fmt.Errorf("resolve default domain: %w", err)
 		}
-		return targetDomain{ID: row.ID, Hostname: row.Hostname}, nil
+		return targetDomain{
+			ID: row.ID, Hostname: row.Hostname,
+			OrganizationID: row.OrganizationID, WorkspaceID: row.WorkspaceID,
+		}, nil
 	}
 
 	row, err := s.q.GetDomainByID(ctx, *id)
@@ -1464,7 +1485,10 @@ func (s *Service) resolveTargetDomain(
 				"publish its DNS record and verify it before putting links there",
 		}}
 	}
-	return targetDomain{ID: row.ID, Hostname: row.Hostname}, nil
+	return targetDomain{
+		ID: row.ID, Hostname: row.Hostname,
+		OrganizationID: row.OrganizationID, WorkspaceID: row.WorkspaceID,
+	}, nil
 }
 
 // KeyLimiter is the slice of internal/ratelimit this package needs.
@@ -1479,4 +1503,43 @@ type KeyLimiter interface {
 	// here: a suppressed audit row is not retried and nobody is being told to
 	// wait for it.
 	AllowKey(key string) (bool, time.Duration)
+}
+
+// aliasTakenError is the refusal a caller gets when an alias is not available.
+//
+// One function for all three sites, and one *message* whatever the cause — a
+// live link, a trashed one still inside its window, or a reserved alias. Which
+// of them applies is not the caller's business, and the sites already said so;
+// this makes it structural rather than three literals that agree today.
+//
+// **It also names the namespace, which is what F23 is about.** Alias uniqueness
+// is per domain, so on a shared domain a refusal tells a member of one workspace
+// that *something* holds that name in a workspace they may not be able to see.
+// That disclosure cannot be removed — a 409 and a 201 are distinguishable
+// whatever either says — so what is fixed is the silence around it: the message
+// now explains that the namespace belongs to the domain rather than to the
+// workspace, and says how to stop sharing one.
+//
+// Bounded rather than instance-wide, which is what M39 and M40 changed and what
+// this wording has to keep true. A workspace serving its own verified hostname
+// has its own alias namespace and a collision there really is its own; the
+// shared case is the instance default, and the organization-owned hostname that
+// an organization's workspaces share. So the extra sentence appears only when
+// the domain is actually shared, rather than warning about a tenancy boundary
+// that is not being crossed.
+func aliasTakenError(code string, dom targetDomain) error {
+	if dom.WorkspaceID != nil {
+		// This workspace's own hostname. Nothing outside it can hold the name.
+		return fmt.Errorf("%w: alias %q is already in use", domain.ErrConflict, code)
+	}
+	scope := "every workspace on this instance that has not registered a domain of its own"
+	if dom.OrganizationID != nil {
+		scope = "every workspace in this organization that uses this domain"
+	}
+	return fmt.Errorf(
+		"%w: alias %q is already in use on %s. Aliases are unique per domain, and "+
+			"this one is shared by %s — so the name may be held by a link outside "+
+			"this workspace. Register a domain for this workspace to get an alias "+
+			"namespace of its own",
+		domain.ErrConflict, code, dom.Hostname, scope)
 }

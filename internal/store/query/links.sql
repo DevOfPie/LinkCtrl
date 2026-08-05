@@ -368,7 +368,12 @@ DELETE FROM link_tags WHERE link_id = $1;
 --
 -- Ties are broken by verified_at then id, so the answer is stable: a workspace
 -- that verifies a second hostname does not silently move its new links onto it.
-SELECT id, hostname FROM domains
+-- organization_id and workspace_id are selected because they are the domain's
+-- *scope*, and the scope is what decides whether an alias collision on it could
+-- involve a workspace the caller cannot see. A refusal that cannot tell a shared
+-- namespace from a private one has to be worded for the worst case or say
+-- nothing useful at all (F23).
+SELECT id, hostname, organization_id, workspace_id FROM domains
 WHERE deleted_at IS NULL
   AND (
         is_default

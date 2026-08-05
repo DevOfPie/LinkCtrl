@@ -17503,3 +17503,47 @@ second tenant's owner is in the test, and restoring the fan-out fails it.
 `TestAWorkspaceScopedOwnerHearsAboutTheirOwnWorkspaceAndNoOther` needed a grant
 rather than a rewrite: it uses this warning as a *vehicle* for D102's
 no-workspace-visibility predicate, not as its subject.
+
+## 2026-08-05 — M45, a refusal that could not say whose namespace it was
+
+[F23](deferred-findings.md). Alias uniqueness is per domain, so on a shared
+domain a refusal tells a member of one workspace that something holds that name
+somewhere they may not be able to see.
+
+### The disclosure is not removable, and was not removed
+
+A `409` and a `201` are distinguishable whatever either says. Nothing short of
+making alias uniqueness per workspace closes that, and per-domain uniqueness is
+what a short link *is* — two workspaces cannot both own `example.com/x`. So the
+row is closed on the half that can be fixed: the silence.
+
+The message now names the namespace — which hostname, that uniqueness is per
+domain, who shares it, and that registering a domain for the workspace gives it
+one of its own. A caller who could not previously tell "somebody else has this"
+from "you cannot have this" now can, and the thing they are being told is how the
+product works rather than a fact about a specific tenant.
+
+### Scoped, not blanket
+
+M39 and M40 shipped the supported way out, which is what the 2026-08-04
+re-derivation of this row turned on. A collision on a workspace's **own**
+verified hostname really is its own business, and warning that caller about links
+outside their workspace would be false — nothing outside it can hold that name.
+So the wording branches on the domain's scope, and `targetDomain` and
+`GetWorkspaceDefaultDomain` now carry `organization_id` and `workspace_id` so it
+can.
+
+### Three literals become one function
+
+The three collision sites already carried identical strings, and one of them
+explained why: *one message for all three causes, deliberately: which of them
+applies is not the caller's business*. That instinct was right and extended
+naturally to *whose workspace holds it*. Making it a function makes the agreement
+structural instead of three strings that happen to match today.
+
+### The test caught a bug in the fix
+
+The first implementation set the scope fields on the default-domain path and not
+on the named-domain path, so a workspace's own hostname produced the shared
+warning. The private case is in the test precisely because the fix is a branch,
+and a branch with only its common side asserted is a branch with no coverage.
