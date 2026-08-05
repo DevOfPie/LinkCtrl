@@ -381,7 +381,7 @@ cover — in particular on a deployment with an egress proxy — is in
 | `LINKCTRL_INVITE_TTL` | `168h` | How long an invitation stays redeemable. The clock starts when it is created, not when the mail goes out — delivery is asynchronous through the outbox — so a slow relay spends this window. It must be positive: expiry cannot be switched off, and revoking is how an invitation is ended early. |
 | `LINKCTRL_SESSION_ABSOLUTE_TTL` | `720h` | Hard deadline from creation. |
 | `LINKCTRL_SESSION_IDLE_TTL` | `168h` | Maximum gap between requests. Must not exceed the absolute TTL. Enforced at read time, so a change takes effect immediately. |
-| `LINKCTRL_LOGIN_LOCKOUT_THRESHOLD` | `5` | Failed attempts before a 15-minute per-account lockout. |
+| `LINKCTRL_LOGIN_LOCKOUT_THRESHOLD` | `5` | Failed attempts before a 15-minute per-account lockout. Counted across **both** places an account's password is checked — signing in, and redeeming an invitation into an account that already exists — because one lockout an operator configured should not leave the second door unbolted. `0` disables it. |
 | `LINKCTRL_ARGON2_MEMORY_KIB` | `65536` | 64 MiB. Floor of 19456 enforced (RFC 9106); lowering this is the easiest way to silently weaken password storage. |
 | `LINKCTRL_ARGON2_ITERATIONS` | `3` | Minimum 2. |
 | `LINKCTRL_ARGON2_PARALLELISM` | `2` | |

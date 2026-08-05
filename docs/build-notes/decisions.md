@@ -17015,3 +17015,49 @@ Two comments asserted the false half — `internal/mail/mail.go`'s *the outbox
 stays empty* and `jobs.go`'s *with no mailer nothing is ever enqueued*. Both were
 true of an instance that never had a relay and false of one that had it removed,
 which is how a package comment came to be the clearest statement of the bug.
+
+## 2026-08-05 — M45, the lockout that covered one of the two doors
+
+[F51](deferred-findings.md). Redeeming an invitation authenticates an account
+that already exists, which makes it a password oracle in the same sense
+`/auth/login` is. It had no lockout and kept no record: guesses there never
+counted toward the threshold, and an account already locked at the front door
+was still answered on its merits here.
+
+Low, and worth closing anyway. It is heavily gated by possession of a scarce
+token, and a successful guess yields nothing the same guess at `/auth/login`
+would not. What it costs is the meaning of a setting: an operator who sets
+`LOGIN_LOCKOUT_THRESHOLD` is entitled to read it as *this account locks after
+five wrong passwords*, not *after five at one of the two places that take one*.
+
+### One policy, built once
+
+`main.go` now builds `auth.LockoutPolicy` into a local and hands the same value
+to both services. The alternative — a second literal in the invite construction —
+is how the two would eventually disagree, and a lockout that differs by door is
+worse than one that is missing from a door, because it looks configured.
+
+### `s.q`, not `q`, and that is the fix rather than a detail
+
+The failure is recorded on the service's own queries and not on the
+transaction's. Redemption runs inside a transaction whose deferred rollback
+fires on every refusal path, so a count written through `q` would have been
+counted into nothing — the code would have read as correct and done nothing at
+all. It takes its own connection and touches only the `users` row the
+transaction never locked.
+
+### The refusal is unchanged, deliberately
+
+Still `ErrNotRedeemable`, still logged rather than returned. D27's whole posture
+is that redemption answers one way whatever went wrong, so surfacing a lockout
+here would trade a guessing bound for the enumeration oracle the uniform answer
+exists to close. The lock is honoured and invisible. A refused redemption also
+does not spend the invitation: a lockout delays somebody, and must not consume
+the one token they were sent.
+
+### Two claims, two sabotages
+
+The test asserts that failures *feed* the counter and that an existing lock is
+*honoured*, and either alone would leave the other unheld. Short-circuiting the
+lock check fails four assertions; forcing the threshold to zero fails the
+counter one. A test that makes two claims has to be shown to fail for each.

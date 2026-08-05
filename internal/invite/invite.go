@@ -187,6 +187,12 @@ type Config struct {
 	// one for an account being created. The service's own, so the cost
 	// parameters an operator configured are the ones that apply here.
 	Hasher *auth.Hasher
+	// Lockout is the same policy Login applies, and it is here for the same
+	// reason Hasher is: redemption verifies a password, so it is a second place
+	// an account's password can be guessed at. Without it the lockout an
+	// operator configured covered one of the two doors (F51). The zero value
+	// disables lockout, which is what a threshold of zero means everywhere else.
+	Lockout auth.LockoutPolicy
 	// Audit records the three lifecycle events. Nil records nothing.
 	Audit audit.Recorder
 	// Notify tells the inviter their invitation was accepted. Nil tells nobody.
@@ -728,12 +734,35 @@ func (s *Service) Redeem(ctx context.Context, in RedeemInput) (*Redeemed, error)
 		if user.Status != "active" || user.PasswordHash == nil {
 			return nil, refuse("account is not usable", slog.String("status", user.Status))
 		}
+		// A locked account is locked here too. This is the second door onto the
+		// same password, and it used to be the unbolted one: five wrong guesses
+		// at /auth/login lock the account, and the sixth through a redemption
+		// was answered on its merits (F51). Honouring it costs the invitation
+		// nothing — the token is not spent, and the person can redeem once the
+		// window passes.
+		if user.LockedUntil != nil && user.LockedUntil.After(time.Now()) {
+			return nil, refuse("account is locked out",
+				slog.String("invitation", inv.ID.String()))
+		}
 		if err := s.hasher.Verify(in.Password, *user.PasswordHash); err != nil {
 			if !errors.Is(err, auth.ErrMismatch) {
 				// A malformed stored hash is an operational fault, not a failed
 				// redemption. Surface it rather than reporting a generic refusal
 				// while the corrupt row goes unnoticed.
 				return nil, fmt.Errorf("verify password for user %s: %w", user.ID, err)
+			}
+			// Recorded on s.q rather than on q, and that is the whole point
+			// rather than a detail: this path returns an error, the deferred
+			// rollback discards everything the transaction did, and a failure
+			// counted inside it would be counted into nothing. The write is on
+			// its own connection and touches only the users row.
+			if _, rerr := s.q.RecordFailedLogin(ctx, dbgen.RecordFailedLoginParams{
+				ID:             user.ID,
+				Threshold:      s.cfg.Lockout.ThresholdParam(),
+				LockoutSeconds: s.cfg.Lockout.WindowSecondsParam(),
+			}); rerr != nil {
+				s.log.Warn("could not record a failed redemption attempt",
+					slog.String("user", user.ID.String()), slog.Any("error", rerr))
 			}
 			s.log.Debug("invitation refused: wrong password",
 				slog.String("invitation", inv.ID.String()))

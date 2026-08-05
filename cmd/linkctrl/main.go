@@ -269,6 +269,16 @@ func run(cfg config.Config, _ io.Writer) error {
 		}
 	}
 
+	// One policy, shared by both places a password can be guessed at. Sign-in is
+	// the obvious one; redeeming an invitation is the other, because it
+	// authenticates an existing account before adding the membership. Built once
+	// rather than twice so the two cannot drift into an instance whose lockout
+	// covers one door (F51).
+	lockout := auth.LockoutPolicy{
+		Threshold: cfg.Auth.LockoutThreshold,
+		Window:    15 * time.Minute,
+	}
+
 	authSvc := auth.NewService(pools.App, auth.ServiceConfig{
 		Params: auth.Params{
 			MemoryKiB:   cfg.Auth.Argon2MemoryKiB,
@@ -279,10 +289,7 @@ func run(cfg config.Config, _ io.Writer) error {
 			Absolute: cfg.Auth.SessionAbsoluteTTL,
 			Idle:     cfg.Auth.SessionIdleTTL,
 		},
-		Lockout: auth.LockoutPolicy{
-			Threshold: cfg.Auth.LockoutThreshold,
-			Window:    15 * time.Minute,
-		},
+		Lockout: lockout,
 	})
 
 	// Built here rather than at the other services' construction point below
@@ -447,6 +454,7 @@ func run(cfg config.Config, _ io.Writer) error {
 		TTL:         cfg.Auth.InviteTTL,
 		NewAccounts: signupSvc.Effective().AdmitsNewAccounts(),
 		Hasher:      authSvc.Hasher(),
+		Lockout:     lockout,
 		Audit:       auditSvc,
 		Notify:      notifySvc,
 		Mail:        inviteMailer(mailSvc),

@@ -53,6 +53,10 @@ type inviteOptions struct {
 	WithMailer  bool
 	// TTL defaults to a week, matching the shipped default.
 	TTL time.Duration
+	// Lockout is the policy both the auth service and the invite service get,
+	// which is how the process wires it (F51). The zero value disables lockout,
+	// so every test that does not ask for one behaves exactly as before.
+	Lockout auth.LockoutPolicy
 }
 
 func newInviteFixture(t *testing.T, opts inviteOptions) *inviteFixture {
@@ -60,8 +64,9 @@ func newInviteFixture(t *testing.T, opts inviteOptions) *inviteFixture {
 	pool := newDB(t)
 
 	authSvc := auth.NewService(pool, auth.ServiceConfig{
-		Params: fastParams,
-		TTL:    auth.SessionTTL{Absolute: 30 * 24 * time.Hour, Idle: 7 * 24 * time.Hour},
+		Params:  fastParams,
+		TTL:     auth.SessionTTL{Absolute: 30 * 24 * time.Hour, Idle: 7 * 24 * time.Hour},
+		Lockout: opts.Lockout,
 	})
 	owner, err := authSvc.Register(t.Context(), auth.RegisterInput{
 		Email: "owner@example.com", Name: "Owner", Password: invitePassword,
@@ -84,6 +89,7 @@ func newInviteFixture(t *testing.T, opts inviteOptions) *inviteFixture {
 		TTL:         opts.TTL,
 		NewAccounts: opts.NewAccounts,
 		Hasher:      authSvc.Hasher(),
+		Lockout:     opts.Lockout,
 		Audit:       audit.NewService(pool),
 		Notify:      f.notify,
 	}
@@ -616,6 +622,92 @@ func TestInvitationIsBoundToTheInvitedAddress(t *testing.T) {
 	// column on both sides.
 	if _, err := f.redeem(t, tokenOf(t, c), "INTENDED@Example.COM", invitePassword); err != nil {
 		t.Fatalf("the invited address was refused because of its case: %v", err)
+	}
+}
+
+// TestRedemptionHonoursAndFeedsTheLoginLockout closes the second door onto an
+// account's password.
+//
+// Redeeming an invitation authenticates an existing account, so it is a password
+// oracle in the same sense /auth/login is — and it was the one with no lockout
+// and no record: guesses there never counted toward the threshold, and an
+// account already locked at the front door was still answered on its merits
+// here. Heavily gated by possession of a scarce token, which is why it is Low
+// and not more, and worth parity regardless because the operator configured one
+// lockout and reasonably expects it to mean one (F51).
+//
+// Both halves are asserted, because either alone leaves the other unheld: that
+// failures here *feed* the counter, and that an existing lock is *honoured*.
+func TestRedemptionHonoursAndFeedsTheLoginLockout(t *testing.T) {
+	f := newInviteFixture(t, inviteOptions{
+		NewAccounts: true,
+		Lockout:     auth.LockoutPolicy{Threshold: 3, Window: 15 * time.Minute},
+	})
+	f.register(t, "member@example.com")
+	c := f.invited(t, "member@example.com", "editor")
+	token := tokenOf(t, c)
+
+	lockedUntil := func() *time.Time {
+		t.Helper()
+		var at *time.Time
+		if err := f.pool.QueryRow(t.Context(),
+			`SELECT locked_until FROM users WHERE email_lower = 'member@example.com'`).
+			Scan(&at); err != nil {
+			t.Fatal(err)
+		}
+		return at
+	}
+
+	// Wrong passwords, through redemption only. The threshold is three, so the
+	// third is the one that must lock the account — if these did not count, it
+	// would never lock at all.
+	for i := range 3 {
+		if _, err := f.redeem(t, token, "member@example.com", "not-the-password"); !errors.Is(err, invite.ErrNotRedeemable) {
+			t.Fatalf("wrong-password redemption %d answered %v, want ErrNotRedeemable", i+1, err)
+		}
+	}
+	at := lockedUntil()
+	if at == nil || !at.After(time.Now()) {
+		t.Fatalf("three wrong passwords through redemption left locked_until = %v; "+
+			"failures here do not feed the lockout", at)
+	}
+
+	// Locked at the front door.
+	if _, err := f.auth.Login(t.Context(), auth.LoginInput{
+		Email: "member@example.com", Password: invitePassword,
+	}); !errors.Is(err, auth.ErrAccountLocked) {
+		t.Errorf("login after the redemption lockout = %v, want ErrAccountLocked", err)
+	}
+
+	// And locked at this one, for the *correct* password — which is the half
+	// that says the lock is honoured rather than merely fed.
+	if _, err := f.redeem(t, token, "member@example.com", invitePassword); !errors.Is(err, invite.ErrNotRedeemable) {
+		t.Errorf("a locked account redeemed with the right password: %v", err)
+	}
+	if n := f.scalar(t, `SELECT count(*) FROM memberships WHERE organization_id = $1`,
+		f.owner.OrgID); n != 1 {
+		t.Errorf("the organization has %d memberships, want only the owner's", n)
+	}
+
+	// The invitation is not spent by any of it. A lockout delays somebody; it
+	// must not consume the one token they were sent.
+	var redeemedAt *time.Time
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT redeemed_at FROM invitations WHERE id = $1`, c.ID).Scan(&redeemedAt); err != nil {
+		t.Fatal(err)
+	}
+	if redeemedAt != nil {
+		t.Error("a refused redemption spent the invitation")
+	}
+
+	// Once the window passes, the same token and the right password work.
+	if _, err := f.pool.Exec(t.Context(),
+		`UPDATE users SET locked_until = now() - interval '1 minute'
+		  WHERE email_lower = 'member@example.com'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.redeem(t, token, "member@example.com", invitePassword); err != nil {
+		t.Errorf("redemption after the lockout elapsed: %v", err)
 	}
 }
 
