@@ -122,6 +122,19 @@ func tierOf(code string) (Tier, string, bool) {
 	return "", "", false
 }
 
+// BlockedAuditRatePerMin bounds how many audit rows one actor can provoke for
+// one refusal code in a minute (F14).
+//
+// A constant rather than a setting. The number an operator would tune it with is
+// not one they have — nobody knows how often their own members typo a blocked
+// destination — and the thing it protects against is a loop, which any value in
+// this range stops equally. Ten is comfortably above the handful a person
+// produces by accident in a minute and far below what a script does in a second.
+//
+// It bounds *rows*, never refusals: a destination is blocked identically whether
+// or not its audit row is written.
+const BlockedAuditRatePerMin = 10
+
 // Block is a refusal by one of the two appealable tiers.
 //
 // There is no counterpart type meaning "allowed", and that is structural rather
@@ -733,6 +746,29 @@ func (s *Service) recordBlocked(
 ) {
 	if s.audit == nil {
 		return
+	}
+	// Bounded per actor and per refusal code (F14). This is the one audited
+	// action that records something which did *not* happen — every other one is
+	// bounded by a state change somebody had the authority to make, and this one
+	// is bounded only by how fast a caller can be refused, which on an instance
+	// with open signup is how fast they can loop a request.
+	//
+	// The code is in the key on purpose. A per-actor bound would let somebody
+	// bury the refusal that mattered under a flood of a different one, because
+	// the attacker picks the noise; per-reason means a code nobody has provoked
+	// before is always recorded, however hard anything else is being hammered.
+	//
+	// Suppression drops the row rather than deferring it. A queued audit write
+	// is a second durability problem, and what is lost is the repetition count
+	// of a refusal already on record rather than the fact of it.
+	if s.blockedAuditLimit != nil {
+		key := "audit:blocked:" + actor.UserID.String() + ":" + tier.Code(rule)
+		if ok, _ := s.blockedAuditLimit.AllowKey(key); !ok {
+			s.log.Debug("repeat destination refusal not audited",
+				slog.String("code", tier.Code(rule)),
+				slog.String("surface", string(surface)))
+			return
+		}
 	}
 	err := s.audit.Record(ctx, actor, audit.Event{
 		Action:     audit.ActionDestinationBlocked,

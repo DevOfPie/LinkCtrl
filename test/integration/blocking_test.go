@@ -19,6 +19,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
+	"github.com/DevOfPie/LinkCtrl/internal/ratelimit"
 )
 
 // Destination blocking (M30), against a real database.
@@ -164,6 +165,71 @@ func codeOf(t *testing.T, err error) string {
 // and this is what "kept by test" means for behaviour. The structural half, which
 // catches a fourth surface being added later, is
 // TestEveryDestinationSurfaceGoesThroughTheCheck in internal/link.
+// TestRepeatRefusalsStopWritingRowsWithoutBuryingANewOne is F14.
+//
+// `destination.blocked` is the only audited action that records something which
+// did *not* happen. Every other one is bounded by a state change somebody had
+// the authority to make; this one is bounded by how fast a caller can be
+// refused, so a holder of an ordinary editor role could loop link creation with
+// `http://127.0.0.1/` and add a row per request, each carrying up to 2 KiB of
+// defanged URL, on an instance whose audit retention defaults to keep-forever.
+//
+// **The second half is the one that matters.** A per-actor bound would be a
+// suppression tool: the attacker picks the noise, so flooding one refusal would
+// bury a different one an operator needed to see. The budget is per actor *and*
+// per reason code, and this asserts both — that repeats stop writing, and that a
+// code nobody has provoked before is still recorded while another is being
+// hammered.
+func TestRepeatRefusalsStopWritingRowsWithoutBuryingANewOne(t *testing.T) {
+	f := newBlocking(t)
+	f.links = link.NewService(f.pool, link.Config{
+		Policy: link.DefaultDestinationPolicy(), BaseURL: "http://lnk.test",
+		SplitHosts: true, Audit: f.audit,
+		BlockedAuditLimit: ratelimit.New(3, ratelimit.Options{}),
+	})
+
+	blocked := func(url string) {
+		t.Helper()
+		if _, err := f.links.Create(f.ctx, f.owner, link.CreateInput{URL: url}); err == nil {
+			t.Fatalf("%s was not refused; this test needs a refusal", url)
+		}
+	}
+	rows := func(code string) int64 {
+		t.Helper()
+		var n int64
+		if err := f.pool.QueryRow(t.Context(), `
+			SELECT count(*) FROM audit_logs
+			 WHERE action = 'destination.blocked' AND metadata->>'code' = $1`, code).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+
+	const flooded = "unappealable.private_address"
+	for range 12 {
+		blocked("http://127.0.0.1/admin")
+	}
+	if n := rows(flooded); n != 3 {
+		t.Errorf("twelve identical refusals wrote %d rows, want the budget of 3", n)
+	}
+
+	// A different reason, from the same actor, while the first is exhausted.
+	// This is the property a per-actor bound would not have.
+	const other = "low_confidence.url_credentials"
+	blocked("https://paypal.com@evil.example/signin")
+	if n := rows(other); n != 1 {
+		t.Errorf("a refusal code nobody had provoked wrote %d rows while another was "+
+			"being flooded, want 1: a budget shared across reasons is a way to bury "+
+			"the refusal that mattered", n)
+	}
+
+	// And the refusal itself is untouched by any of it — the bound is on the
+	// row, never on the block.
+	if _, err := f.links.Create(f.ctx, f.owner, link.CreateInput{URL: "http://127.0.0.1/admin"}); err == nil {
+		t.Error("a destination stopped being blocked once its audit budget ran out")
+	}
+}
+
 func TestEveryDestinationSurfaceRunsTheFullTierCheck(t *testing.T) {
 	tiers := []struct {
 		name, url, wantCode string

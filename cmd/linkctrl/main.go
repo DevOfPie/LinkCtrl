@@ -561,6 +561,11 @@ func run(cfg config.Config, _ io.Writer) error {
 	})
 
 	linkSvc := link.NewService(pools.App, link.Config{
+		// Bounds the audit rows one actor can provoke by being refused, per
+		// refusal code (F14). Built with every other limit rather than here, so
+		// the composition root hands one value to the router and the service
+		// instead of two that can drift.
+		BlockedAuditLimit: limits.BlockedAudit,
 		// The unappealable tier is not configured here and cannot be: private
 		// and metadata addresses are refused unconditionally, and the scheme
 		// list is confined by config validation to a subset of http,https. What

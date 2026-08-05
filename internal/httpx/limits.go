@@ -9,6 +9,7 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/DevOfPie/LinkCtrl/internal/config"
+	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/ratelimit"
 )
@@ -31,13 +32,31 @@ type Limiters struct {
 	// reason NotFound is: only a submitted password may be charged, and the
 	// handler is the only thing that knows a request is one.
 	LinkPassword *ratelimit.Limiter
+	// BlockedAudit bounds how often one actor makes the *same* destination
+	// refusal write an audit row (F14).
+	//
+	// The odd one out here: every other limiter refuses a request, and this one
+	// refuses nothing. The refusal happens either way — what it bounds is the
+	// row. `destination.blocked` is the only audited action recording something
+	// that did not happen, so it is the only one with no successful state change
+	// bounding how often a caller can provoke it.
+	//
+	// Keyed per actor and per reason code, never per actor alone, because the
+	// attacker picks the noise: a per-actor budget would let a flood of one
+	// refusal bury a different one. Shared through Redis like Login, so the
+	// bound means one thing on a four-replica instance; a Redis that does not
+	// answer falls back to local buckets, which errs toward writing more rows
+	// rather than fewer.
+	BlockedAudit *ratelimit.Limiter
 }
 
 // NewLimiters builds the limits from configuration.
 //
-// One construction site for all three, so the composition root can hand the same
-// values to the router, the redirect handler and the metrics collector without
-// any of them re-deriving a limit from config.
+// One construction site for every limit, so the composition root can hand the
+// same values to the router, the redirect handler, the link service and the
+// metrics collector without any of them re-deriving a limit from config.
+// Deliberately not "all three", or all four: a count here is a fact nothing
+// keeps true, which is the shape F69 was.
 // The Redis client may be nil — cache disabled, or Redis unreachable at boot —
 // and then every limit is per instance exactly as it was before M24.
 func NewLimiters(cfg config.Config, rdb *goredis.Client, log *slog.Logger) Limiters {
@@ -73,6 +92,9 @@ func NewLimiters(cfg config.Config, rdb *goredis.Client, log *slog.Logger) Limit
 		// back to this instance's own buckets rather than blocking the request.
 		LinkPassword: ratelimit.New(cfg.Redirect.PasswordLimit, ratelimit.Options{
 			Shared: shared("link_password"),
+		}),
+		BlockedAudit: ratelimit.New(link.BlockedAuditRatePerMin, ratelimit.Options{
+			Shared: shared("blocked_audit"),
 		}),
 	}
 }

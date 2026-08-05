@@ -69,6 +69,9 @@ type Service struct {
 	// audit records administrative changes. Nil is valid and means nothing is
 	// recorded — the CLI and most tests run that way.
 	audit audit.Recorder
+	// blockedAuditLimit bounds the one audited action a caller can provoke at
+	// will. Nil is unbounded; see Config.BlockedAuditLimit.
+	blockedAuditLimit KeyLimiter
 	// feed is the opt-in third-party reputation check (M32). Nil on every
 	// instance that has not named a feed, which is the default, and nil is what
 	// the *operator's* half of "no destination leaves the box" is made of: there
@@ -162,6 +165,25 @@ type Config struct {
 	RootCache  RootInvalidator
 	// Audit records administrative changes. Nil records nothing.
 	Audit audit.Recorder
+	// BlockedAuditLimit bounds how often one actor can make the *same* refusal
+	// write an audit row. Nil leaves the write unbounded, which is the shipped
+	// M30 behaviour and what a runner built without a limiter gets.
+	//
+	// It exists because `destination.blocked` is the one audited action that
+	// records something which did **not** happen: every other one is bounded by
+	// a state change somebody had the authority to make, and this one is bounded
+	// by how fast a caller can be refused. A holder of an ordinary editor role
+	// could loop `POST /api/v1/links` with `http://127.0.0.1/` and add a row per
+	// request, each carrying up to 2 KiB of defanged URL, on an instance whose
+	// audit retention defaults to keep-forever (F14).
+	//
+	// **Keyed per actor *and per reason*, which is the part that matters.** A
+	// per-actor bound alone would let somebody bury the refusal that mattered
+	// under a flood of a different one — the attacker chooses the noise, so the
+	// budget has to be per-reason or it is a suppression tool. A refusal code
+	// nobody has provoked before is therefore always recorded, whatever else is
+	// being hammered.
+	BlockedAuditLimit KeyLimiter
 	// Feed is the opt-in third-party reputation check. Nil is the default and
 	// the only state in which this program sends nothing anywhere; see
 	// Service.askFeed and docs/build-notes/decisions.md, D40.
@@ -205,13 +227,14 @@ func NewService(pool *pgxpool.Pool, cfg Config) *Service {
 		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
 		cache:   cfg.Cache,
 
-		splitHosts:  cfg.SplitHosts,
-		rootCache:   cfg.RootCache,
-		audit:       cfg.Audit,
-		feed:        cfg.Feed,
-		feedMetrics: cfg.FeedMetrics,
-		hasher:      cfg.Hasher,
-		gates:       cfg.Gates,
+		splitHosts:        cfg.SplitHosts,
+		rootCache:         cfg.RootCache,
+		audit:             cfg.Audit,
+		blockedAuditLimit: cfg.BlockedAuditLimit,
+		feed:              cfg.Feed,
+		feedMetrics:       cfg.FeedMetrics,
+		hasher:            cfg.Hasher,
+		gates:             cfg.Gates,
 
 		dns:               cfg.DNS,
 		hosts:             cfg.Hosts,
@@ -1442,4 +1465,18 @@ func (s *Service) resolveTargetDomain(
 		}}
 	}
 	return targetDomain{ID: row.ID, Hostname: row.Hostname}, nil
+}
+
+// KeyLimiter is the slice of internal/ratelimit this package needs.
+//
+// Declared here rather than imported so a test satisfies it with a counter, and
+// so "no limiter configured" is a nil interface rather than a flag every call
+// site has to remember to check — the same shape Enqueuer takes in
+// internal/invite.
+type KeyLimiter interface {
+	// AllowKey reports whether this key has budget left, and consumes one unit
+	// when it does. The duration is how long until the next unit, and is unused
+	// here: a suppressed audit row is not retried and nobody is being told to
+	// wait for it.
+	AllowKey(key string) (bool, time.Duration)
 }

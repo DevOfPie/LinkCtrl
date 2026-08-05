@@ -17398,3 +17398,57 @@ problem, decided the same way in the same milestone: two defensible figures
 rendered next to each other, where the defect is the silence between them rather
 than either figure. Worth noting the pair, because the instinct in both cases was
 to change a number, and in both cases the number was right.
+
+## 2026-08-05 — M45, the one audited action nothing bounded, and the M30 bullet it amends
+
+[F14](deferred-findings.md). `destination.blocked` is the only action in the
+audit vocabulary that records something which did **not** happen. Every other one
+is bounded by a state change somebody had the authority to make; this one is
+bounded by how fast a caller can be refused. On an instance with open signup, or
+simply with members, a holder of an ordinary editor role could loop link creation
+against `http://127.0.0.1/` and add a row per request, each carrying up to 2 KiB
+of defanged URL, on a default whose audit retention is keep-forever.
+
+### Per reason, not per actor — that is the whole fix
+
+A per-actor budget is a suppression tool rather than a bound. The attacker
+chooses the noise, so a shared budget lets a flood of one refusal bury a
+different one an operator needed to see, and the fix would hand them the thing
+they wanted. Keyed per actor *and* per refusal code, a code nobody has provoked
+before is always recorded, however hard another is being hammered.
+
+The bound is on the **row** and never on the block. A destination is refused
+identically whether or not its audit row is written, and the test asserts that
+last, because a fix to an audit-volume problem that quietly weakened a refusal
+would be a much worse defect than the one it closed.
+
+### Why not collapse repeats into one row with a count
+
+That was the other candidate the row named, and it keeps more information. It
+also needs an `audit_logs` row to be **updated**, and that table is append-only
+by design — mutating a written record is a larger break of the audit contract
+than declining to add one. Declining loses the repetition count of a refusal
+already on record; updating puts a writer on a table whose value rests on not
+having one.
+
+### A rate, not a setting
+
+`BlockedAuditRatePerMin = 10`, a constant. The number an operator would tune it
+with is not one they have — nobody knows how often their own members typo a
+blocked destination — and what it defends against is a loop, which any value in
+this range stops equally. A knob here would be a knob nobody could set well.
+
+### M30's bullet is amended rather than silently falsified
+
+It read *Every blocked attempt writes an audit event with `ip_prefix` and the
+attempted URL stored as evidence*. That sentence is why the behaviour existed and
+it is no longer true, so the amendment carries all three parts the rule asks for
+— the bullet as it stood, the bullet as amended, and the tree fact that forced
+it. **This is an assertion-level amendment and it is flagged rather than assumed:**
+the owner approved F14 as work knowing both candidate fixes were changes to a
+shipped audit contract, and the standing rule puts a recorded abuse path in the
+running fix milestone's scope. If the intent was to keep *every* attempt recorded
+and pay the growth, this is the one commit to revert.
+
+`docs/SECURITY.md`'s audit row says the same in operator terms, beside the
+existing note about what else is deliberately not recorded.
