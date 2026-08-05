@@ -20,291 +20,6 @@ migrations run at boot.
 
 ## [Unreleased]
 
-### Changed
-
-- **`GET /api/v1/audit` now returns `workspace_id`.** The column has been stored
-  and indexed since the audit log shipped and was dropped on the way out, so a
-  reader could not tell which workspace a link-scoped action such as
-  `link.bot_blocking_changed` came from — those records name the link and
-  nothing else. It is absent on organization-level actions, which is most of the
-  invitation and membership vocabulary. **The log is still not filtered by
-  workspace**, deliberately: one that could be narrowed to wherever the reader
-  happens to be standing would hide exactly the actions worth reviewing.
-
-- **Dashboard pages are no longer counted as short links in the HTTP metrics.**
-  `linkctrl_http_requests_total{surface="redirect"}` and its duration histogram
-  mixed genuine short-link traffic with dashboard page loads for every route
-  added since 0.1.0 — nine of them, including `/notifications`, `/disputes`,
-  `/organizations` and `/campaigns` — because the classifier carried a
-  hand-written list that stopped being updated. The surface is now derived from
-  the routes the application actually registers. **Redirect-surface figures on
-  an instance with dashboard traffic will drop when you upgrade**, and the new
-  ones are the true ones. The SLO series `linkctrl_redirect_duration_seconds` is
-  unaffected and always was — the redirect handler records it directly.
-
-- **`linkctrl_rate_limit_fallback_total` is new**, and it is the series that
-  says a shared rate limit has stopped being shared. The tracked-keys gauge
-  cannot: a healthy shared limiter never writes its local table, so it reads zero
-  whether the limit is working or the instance is idle. Alert on the rate — the
-  counter is monotonic, so a threshold on its value latches forever after one
-  blip. `docs/operations.md` carries the expression.
-
-- **A mail relay's rejection no longer puts the recipient's address in the
-  process log.** A bounce echoes the address it refused, and that line was logged
-  at ERROR from the first failed attempt — moving an address out of the database,
-  which is access-controlled and retention-bounded, into a log stream that is
-  usually shipped elsewhere with neither. The address is replaced in the log line
-  and kept in `mail_outbox.last_error`, where the row already carries it.
-
-- **Two dark-theme hover colours meet WCAG AA.** White text on the accent and
-  danger hover surfaces was at 4.47:1 and 3.67:1, below the 4.5:1 the theme
-  claims for every token pair. Both hovers now darken rather than lighten, which
-  is what the light theme already does.
-
-- **A 6to4 address is anonymised as the IPv4 address it carries.** `2002::/16`
-  embeds a client's IPv4 address in the bytes a `/48` prefix keeps, so a session
-  or audit record from such a client stored all four octets where every other
-  address stored a network. It is now folded and masked to `/24` like any other
-  IPv4. No other IPv4-in-IPv6 scheme is affected — Teredo, NAT64 and ISATAP all
-  embed in bits the prefix already discards.
-
-- **The analytics salt cache no longer holds a salt the purge has deleted.** The
-  in-memory copy was evicted one day later than the database row, so for a day
-  the process held the salt whose deletion is the de-identification step. It now
-  uses the same rule the delete statement does, and trims on every lookup rather
-  than only when a new day's salt is created — which is what a replica that is
-  not the job leader relies on.
-
-- **A Redis outage now costs one probe per cooldown, as documented.** The shared
-  rate limiter's circuit breaker let every waiting request through the moment the
-  cooldown lapsed, each paying `REDIS_READ_TIMEOUT` against a server that was
-  still down. At the default 50ms this was wasteful; if you have raised that
-  timeout, it was the stall the breaker exists to prevent.
-
-- **The dispute queue no longer offers Allow on a refusal it cannot lift.** A
-  destination refused by an entry from `LINKCTRL_DESTINATION_BLOCKLIST` drew the
-  same **Allow** button as any other, and pressing it answered `409` — the entry
-  is rewritten from the environment at every boot, so removing it would last
-  until the next restart. That was the most likely dispute on any instance whose
-  operator configured a blocklist. The button is now drawn only where an allow
-  can actually do something, and the guidance to take the host out of the
-  environment is where the button used to be.
-
-- **Switching workspace from a link's page lands on your links, not on a
-  `404`.** The switcher returns you to the page you were on, and on a link's
-  detail page that page names a link belonging to the workspace you just left.
-
-- **The notification bell is no longer shown to an account that belongs to no
-  organization.** Its **View all** went to a page that redirects such an account
-  straight back — the one control in the header that led nowhere, offered to the
-  account most likely to have unread notifications.
-
-- **An invitation email to a closed instance no longer promises the form will
-  create an account.** With `LINKCTRL_SIGNUP_MODE=closed` an invitation may only
-  admit somebody who already has one, which the redemption page has always said
-  and the email contradicted.
-
-- **A `HEAD` request to a sequentially split link no longer advances the
-  rotation.** Link checkers and unfurlers probe with `HEAD`, and every probe used
-  to move the counter that decides which destination the next visitor gets —
-  re-phasing the test with no click recorded to explain why the arms were
-  uneven. A `HEAD` now reports the destination the next `GET` would be given,
-  which is what a checker needs, without changing it.
-
-- **A correct link password no longer spends the link's own rate limit.** The
-  per-link limb of `LINKCTRL_LINK_PASSWORD_RATE_LIMIT` is charged before the
-  password is checked, deliberately — that ordering is what stops timing
-  revealing which limb refused — so more legitimate visitors than the limit
-  opening the same link at once could exhaust it between them, with nobody
-  attacking anything. A correct password now hands that token back. Wrong
-  guesses are charged exactly as before, and the per-address limb is unchanged.
-
-- **A deep-link path is bounded.** With `forward_path` on, everything after the
-  alias is visitor-supplied and was limited only by the 1 MiB request ceiling,
-  while the joiner walks it several times. It is now capped at 4096 bytes and 64
-  segments, and anything past that gets the same `404` a path the link cannot
-  forward already got.
-
-- **An expired or archived link now records the traffic it receives.** It
-  recorded nothing before, unless bot blocking happened to be switched on for
-  it — because the bot refusal is decided before the link's state is, so a
-  blocked crawler was counted on a dead link while a browser meeting the same
-  link's `410` was not. Whether identical traffic was counted therefore depended
-  on a setting about responses. **Counts on expired and archived links will
-  start moving**, most visibly under crawler traffic; `links.click_count`
-  includes bots, and the Clicks tile on the dashboard reads the human-only
-  rollup, which is why the two numbers differ.
-
-- **The notification inbox is now scoped to the workspace you are acting in.**
-  A notification produced by a workspace — an automation rule firing, a custom
-  domain failing its verification check — appears while you are in that
-  workspace and not while you are in another. Anything belonging to the
-  organization rather than to one workspace, such as a dispute decision or an
-  audit-growth warning, is shown wherever you are. The bell's count, its
-  preview and the notifications page all agree, because they share the
-  predicate.
-
-  The column recording which workspace produced a notification has been written
-  since custom domains shipped and read by nothing, while the code comments
-  beside it said this was already how it worked. **If you rely on seeing every
-  workspace's notifications at once, switch workspace to see theirs** — there is
-  no combined view.
-
-- **The instance default domain's root redirect and bot policy are now the
-  instance principal's.** They needed `domains.write`, which the owner and admin
-  *roles* hold — so on an instance with more than one organization, every
-  organization's owner and admin could repoint the hostname all of their links
-  are served on and change the bot policy applied to them. With
-  `LINKCTRL_SIGNUP_MODE=open` that was one registration away, since a registrant
-  is provisioned as the owner of their own organization. They now need
-  `domains.write.instance`, which reaches a person only through the instance
-  principal.
-
-  **On upgrade the migration confers it on whoever already holds the
-  principal**, so an operator who has claimed their instance keeps working
-  exactly as before. It does not re-derive who that is, which means a principal
-  moved with `lctl instance principal move` stays moved. **Organization owners
-  and admins lose access to these two settings** — `domains.write` itself is
-  unchanged, and a workspace goes on registering and administering its own
-  hostnames.
-
-- **A redirect no longer pays the Redis read timeout twice while Redis is
-  stalled.** A cache miss used to spend `REDIS_READ_TIMEOUT` on the lookup that
-  never answered and then spend it again on the write that would have
-  repopulated the cache — measured at 108ms for a cold redirect against a
-  stalled server, past the 100ms uncached target. A failed lookup now suppresses
-  that write for one resolve, because a server that will not answer a read will
-  not usefully answer the write either. Nothing changes while Redis is healthy,
-  and the in-process cache is still populated either way. There is one case
-  where a redirect answered from memory still talks to Redis: a link carrying a
-  *returning visitor* routing condition, which is now written down in
-  `docs/configuration.md` where the opposite used to be.
-
-- **Registering an address that already has an account now answers `202` and
-  sends mail, where it used to answer `409`.** On an instance with `open`
-  sign-ups that status code was an unauthenticated way to ask whether an address
-  is registered here, which is a question a leaked address list can be tested
-  against. Both answers now cost the same and return the same body, and the
-  owner of the address gets a message saying somebody tried to register it —
-  which reaches the person concerned rather than whoever typed the address in.
-  **If you have an integration that treated `409` as "already registered", it
-  will now see `202`**; nothing was created, exactly as the body says.
-
-- **An email address that this product would accept and then fail to send to is
-  now refused when it is typed.** Nine forms — `a<b@c.de` and `a,b@c.de` among
-  them — passed the address pattern and were rejected by the mail parser, so a
-  registration committed a row and then answered `500`. They now answer `422`
-  like any other invalid address, on registration and on invitations alike.
-
-- **`GET /api/v1/workspaces` answered with an API key now lists only the
-  organization that key was issued for.** It used to list every workspace the
-  key's owner belongs to, in every organization — names, slugs and identifiers
-  for tenancies the key cannot act in, since a key is bound to the organization
-  it was created in and always has been. A signed-in browser is unaffected and
-  still sees all of them, because moving between organizations is exactly what
-  the workspace switcher is for. **If an integration was relying on that
-  endpoint to enumerate its owner's other organizations, it will now see one**;
-  issue a key in each organization you need to reach.
-
-- **A disputed destination now notifies the people who review disputes, instead
-  of every organization owner on the instance.** Filing a dispute costs only the
-  permission that would have let you create the link, and a refusal computed from
-  the URL — credentials before the host, for example — is bounded by the string
-  typed rather than by any blocklist row, so there is no useful limit on how many
-  one account can file. The limit that matters is what each one costs, and it
-  used to be one inbox row per organization owner: on an instance running
-  `SIGNUP_MODE=open` that is a number a stranger grows by registering, aimed at
-  people who cannot act on the queue anyway. It is now the holders of
-  `destinations.review`, which is the set you chose. **Nothing else about filing
-  or deciding changes**, and if you have not appointed anybody, that set is the
-  account that claimed the instance.
-
-- **The audit log is now bounded by the reader's own authority, not only by
-  their organization.** A membership scoped to one workspace used to read every
-  record in the organization, including workspaces where its holder had no
-  membership at all — a per-action timeline and a network prefix tied to a named
-  actor, for workspaces they do not administer. It now reads the records of the
-  workspaces its own scope covers. **An organization-wide membership is
-  unaffected** and still reads the whole organization, which is what the log is
-  for; only the workspace-scoped case narrows. Nothing needs to be done on
-  upgrade.
-
-- **Analytics breakdowns are recomputed every fifteen minutes instead of every
-  minute.** A link's click count still updates every sixty seconds. What moved is
-  the expensive half — the per-country, per-device, per-browser and
-  per-destination breakdowns — whose cost grows with the number of distinct
-  values your traffic produces rather than with the number of links you have. At
-  five and a half million clicks it was using between a sixth and a third of
-  every minute; it now uses under one percent of every fifteen.
-
-  **The visible consequence: a breakdown on a link's page can be up to fifteen
-  minutes behind the click count above it.** Nothing on the page distinguishes
-  the two, which is why the staleness metric above exists and why
-  `docs/operations.md` carries an alert for it. This is what makes it safe to
-  draw a map from those numbers at all — the alternative was a visualization
-  reading a job that would eventually stop finishing inside its own interval.
-
-  Nothing needs to be done about this on upgrade. The existing job keeps its name
-  and its position, so its history carries forward; the new one starts from the
-  usual two-day window.
-
-- **Upgrading to this version empties the redirect cache.** The cached value a
-  short link resolves through now carries its routing rules and its split-test
-  arms, and an entry written by the previous version does not — so the cache key
-  moved from `v1` to `v3` and every old entry is abandoned rather than read. The
-  first request for each live alias after the upgrade reads the database;
-  concurrent requests for the same one are collapsed into a single query, so a
-  popular link does not become a stampede. Nothing needs to be done about this,
-  and nothing is lost; expect a brief rise in database reads while traffic warms
-  the cache again.
-
-  The version moved twice inside this unreleased series — once for routing rules
-  and once for split testing — but they ship together, so an upgrade from 0.1.0
-  pays for one cold cache and not two. Both moved it for the same reason, and it
-  is the reason the earlier additions to that value deliberately avoided one: an
-  entry written by the older build carries no rules and no arms, so a link whose
-  owner has since divided its traffic would go on sending all of it to one place
-  for up to `REDIRECT_TTL`. That is a control the owner configured being silently
-  absent, which is exactly what a cold cache is for.
-
-  **On a multi-replica rolling upgrade there is one more consequence, and it is
-  deliberate.** Cache invalidations are broadcast on a channel versioned with the
-  cache key, so while old and new replicas are both running they do not hear each
-  other's invalidations. Each still invalidates its own caches correctly; what
-  they lose is the cross-replica broadcast, so an edit can take up to
-  `REDIRECT_TTL` to reach a replica on the other version. That is the same
-  degradation a Redis outage produces, it lasts only as long as the rollout, and
-  it is preferred to one version applying another version's messages under
-  different rules.
-
-- **`LINKCTRL_REDIRECT_DEFAULT_STATUS` accepts `303`, and never applies to a
-  password submission.** A correct link password is now answered `303` whatever
-  the instance is set to. On a `307` instance it used to be answered `307`, and
-  `307` forbids the browser from changing the method — so the browser re-sent the
-  password it had just submitted, as a POST body, to the link's destination: a
-  third-party host the link's owner chose and the operator does not control.
-  `303` is the one redirect status that mandates a `GET`, so the body stops here.
-  Nothing to do on upgrade, and `302` instances — the default — never had the
-  problem.
-
-- **A webhook batch is now sent all at once, so one unresponsive receiver no
-  longer holds up the rest of the instance.** Deliveries were sent one after
-  another on the same goroutine that runs every other scheduled job. At the
-  default `LINKCTRL_WEBHOOK_TIMEOUT` of ten seconds a full batch of twenty
-  therefore took up to two hundred seconds — and for that whole time nothing else
-  ran: invitation and verification mail sat in the outbox, automation rules did
-  not fire on their advertised minute, custom-domain re-verification did not
-  happen, and the analytics rollups went stale. It needed no misconfiguration and
-  no attack, only one webhook pointed at a host that accepts nothing and answers
-  nothing, which any member who can register a webhook could do by accident.
-
-  A drain now costs one attempt rather than twenty, whatever the backlog is.
-  **If you operate a receiver, the visible change is that it can see up to twenty
-  concurrent requests from this instance rather than a steady trickle, and they
-  no longer arrive in queue order** — deduplicate on the `X-LinkCtrl-Delivery`
-  header, as `docs/usage.md` has always said to. Nothing to configure, and the
-  retry schedule, the attempt count and the batch size are all unchanged.
-
 ### Added
 
 - **`lctl instance principal` — see who administers this instance, and hand that
@@ -1043,23 +758,291 @@ migrations run at boot.
   addition, and it is the only message this product sends to somebody who did not
   choose to be an administrator.
 
-
-### Removed
-
-- **`qr_codes.scan_count`.** A dormant column that nothing has ever incremented
-  since it was created, dropped rather than wired: incrementing it would have
-  cost a database write on the redirect path, and the number it produced would
-  have disagreed with the click figures beside it — those exclude bots and
-  deduplicate visitors, and a raw counter does neither. A QR scan is now counted
-  as a click labelled `qr`, which is strictly more than the counter would have
-  said. No instance has a non-zero value in it, so nothing is lost on upgrade.
-
-  This is one of the two non-additive schema changes in this release, and both
-  are stated in this file rather than left to be found in a migration. The other
-  is the mail outbox erasing the bodies of already-delivered messages, under
-  *Fixed*.
-
 ### Changed
+
+- **`GET /api/v1/audit` now returns `workspace_id`.** The column has been stored
+  and indexed since the audit log shipped and was dropped on the way out, so a
+  reader could not tell which workspace a link-scoped action such as
+  `link.bot_blocking_changed` came from — those records name the link and
+  nothing else. It is absent on organization-level actions, which is most of the
+  invitation and membership vocabulary. **The log is still not filtered by
+  workspace**, deliberately: one that could be narrowed to wherever the reader
+  happens to be standing would hide exactly the actions worth reviewing.
+
+- **Dashboard pages are no longer counted as short links in the HTTP metrics.**
+  `linkctrl_http_requests_total{surface="redirect"}` and its duration histogram
+  mixed genuine short-link traffic with dashboard page loads for every route
+  added since 0.1.0 — nine of them, including `/notifications`, `/disputes`,
+  `/organizations` and `/campaigns` — because the classifier carried a
+  hand-written list that stopped being updated. The surface is now derived from
+  the routes the application actually registers. **Redirect-surface figures on
+  an instance with dashboard traffic will drop when you upgrade**, and the new
+  ones are the true ones. The SLO series `linkctrl_redirect_duration_seconds` is
+  unaffected and always was — the redirect handler records it directly.
+
+- **`linkctrl_rate_limit_fallback_total` is new**, and it is the series that
+  says a shared rate limit has stopped being shared. The tracked-keys gauge
+  cannot: a healthy shared limiter never writes its local table, so it reads zero
+  whether the limit is working or the instance is idle. Alert on the rate — the
+  counter is monotonic, so a threshold on its value latches forever after one
+  blip. `docs/operations.md` carries the expression.
+
+- **A mail relay's rejection no longer puts the recipient's address in the
+  process log.** A bounce echoes the address it refused, and that line was logged
+  at ERROR from the first failed attempt — moving an address out of the database,
+  which is access-controlled and retention-bounded, into a log stream that is
+  usually shipped elsewhere with neither. The address is replaced in the log line
+  and kept in `mail_outbox.last_error`, where the row already carries it.
+
+- **Two dark-theme hover colours meet WCAG AA.** White text on the accent and
+  danger hover surfaces was at 4.47:1 and 3.67:1, below the 4.5:1 the theme
+  claims for every token pair. Both hovers now darken rather than lighten, which
+  is what the light theme already does.
+
+- **A 6to4 address is anonymised as the IPv4 address it carries.** `2002::/16`
+  embeds a client's IPv4 address in the bytes a `/48` prefix keeps, so a session
+  or audit record from such a client stored all four octets where every other
+  address stored a network. It is now folded and masked to `/24` like any other
+  IPv4. No other IPv4-in-IPv6 scheme is affected — Teredo, NAT64 and ISATAP all
+  embed in bits the prefix already discards.
+
+- **The analytics salt cache no longer holds a salt the purge has deleted.** The
+  in-memory copy was evicted one day later than the database row, so for a day
+  the process held the salt whose deletion is the de-identification step. It now
+  uses the same rule the delete statement does, and trims on every lookup rather
+  than only when a new day's salt is created — which is what a replica that is
+  not the job leader relies on.
+
+- **A Redis outage now costs one probe per cooldown, as documented.** The shared
+  rate limiter's circuit breaker let every waiting request through the moment the
+  cooldown lapsed, each paying `REDIS_READ_TIMEOUT` against a server that was
+  still down. At the default 50ms this was wasteful; if you have raised that
+  timeout, it was the stall the breaker exists to prevent.
+
+- **The dispute queue no longer offers Allow on a refusal it cannot lift.** A
+  destination refused by an entry from `LINKCTRL_DESTINATION_BLOCKLIST` drew the
+  same **Allow** button as any other, and pressing it answered `409` — the entry
+  is rewritten from the environment at every boot, so removing it would last
+  until the next restart. That was the most likely dispute on any instance whose
+  operator configured a blocklist. The button is now drawn only where an allow
+  can actually do something, and the guidance to take the host out of the
+  environment is where the button used to be.
+
+- **Switching workspace from a link's page lands on your links, not on a
+  `404`.** The switcher returns you to the page you were on, and on a link's
+  detail page that page names a link belonging to the workspace you just left.
+
+- **The notification bell is no longer shown to an account that belongs to no
+  organization.** Its **View all** went to a page that redirects such an account
+  straight back — the one control in the header that led nowhere, offered to the
+  account most likely to have unread notifications.
+
+- **An invitation email to a closed instance no longer promises the form will
+  create an account.** With `LINKCTRL_SIGNUP_MODE=closed` an invitation may only
+  admit somebody who already has one, which the redemption page has always said
+  and the email contradicted.
+
+- **A `HEAD` request to a sequentially split link no longer advances the
+  rotation.** Link checkers and unfurlers probe with `HEAD`, and every probe used
+  to move the counter that decides which destination the next visitor gets —
+  re-phasing the test with no click recorded to explain why the arms were
+  uneven. A `HEAD` now reports the destination the next `GET` would be given,
+  which is what a checker needs, without changing it.
+
+- **A correct link password no longer spends the link's own rate limit.** The
+  per-link limb of `LINKCTRL_LINK_PASSWORD_RATE_LIMIT` is charged before the
+  password is checked, deliberately — that ordering is what stops timing
+  revealing which limb refused — so more legitimate visitors than the limit
+  opening the same link at once could exhaust it between them, with nobody
+  attacking anything. A correct password now hands that token back. Wrong
+  guesses are charged exactly as before, and the per-address limb is unchanged.
+
+- **A deep-link path is bounded.** With `forward_path` on, everything after the
+  alias is visitor-supplied and was limited only by the 1 MiB request ceiling,
+  while the joiner walks it several times. It is now capped at 4096 bytes and 64
+  segments, and anything past that gets the same `404` a path the link cannot
+  forward already got.
+
+- **An expired or archived link now records the traffic it receives.** It
+  recorded nothing before, unless bot blocking happened to be switched on for
+  it — because the bot refusal is decided before the link's state is, so a
+  blocked crawler was counted on a dead link while a browser meeting the same
+  link's `410` was not. Whether identical traffic was counted therefore depended
+  on a setting about responses. **Counts on expired and archived links will
+  start moving**, most visibly under crawler traffic; `links.click_count`
+  includes bots, and the Clicks tile on the dashboard reads the human-only
+  rollup, which is why the two numbers differ.
+
+- **The notification inbox is now scoped to the workspace you are acting in.**
+  A notification produced by a workspace — an automation rule firing, a custom
+  domain failing its verification check — appears while you are in that
+  workspace and not while you are in another. Anything belonging to the
+  organization rather than to one workspace, such as a dispute decision or an
+  audit-growth warning, is shown wherever you are. The bell's count, its
+  preview and the notifications page all agree, because they share the
+  predicate.
+
+  The column recording which workspace produced a notification has been written
+  since custom domains shipped and read by nothing, while the code comments
+  beside it said this was already how it worked. **If you rely on seeing every
+  workspace's notifications at once, switch workspace to see theirs** — there is
+  no combined view.
+
+- **The instance default domain's root redirect and bot policy are now the
+  instance principal's.** They needed `domains.write`, which the owner and admin
+  *roles* hold — so on an instance with more than one organization, every
+  organization's owner and admin could repoint the hostname all of their links
+  are served on and change the bot policy applied to them. With
+  `LINKCTRL_SIGNUP_MODE=open` that was one registration away, since a registrant
+  is provisioned as the owner of their own organization. They now need
+  `domains.write.instance`, which reaches a person only through the instance
+  principal.
+
+  **On upgrade the migration confers it on whoever already holds the
+  principal**, so an operator who has claimed their instance keeps working
+  exactly as before. It does not re-derive who that is, which means a principal
+  moved with `lctl instance principal move` stays moved. **Organization owners
+  and admins lose access to these two settings** — `domains.write` itself is
+  unchanged, and a workspace goes on registering and administering its own
+  hostnames.
+
+- **A redirect no longer pays the Redis read timeout twice while Redis is
+  stalled.** A cache miss used to spend `REDIS_READ_TIMEOUT` on the lookup that
+  never answered and then spend it again on the write that would have
+  repopulated the cache — measured at 108ms for a cold redirect against a
+  stalled server, past the 100ms uncached target. A failed lookup now suppresses
+  that write for one resolve, because a server that will not answer a read will
+  not usefully answer the write either. Nothing changes while Redis is healthy,
+  and the in-process cache is still populated either way. There is one case
+  where a redirect answered from memory still talks to Redis: a link carrying a
+  *returning visitor* routing condition, which is now written down in
+  `docs/configuration.md` where the opposite used to be.
+
+- **Registering an address that already has an account now answers `202` and
+  sends mail, where it used to answer `409`.** On an instance with `open`
+  sign-ups that status code was an unauthenticated way to ask whether an address
+  is registered here, which is a question a leaked address list can be tested
+  against. Both answers now cost the same and return the same body, and the
+  owner of the address gets a message saying somebody tried to register it —
+  which reaches the person concerned rather than whoever typed the address in.
+  **If you have an integration that treated `409` as "already registered", it
+  will now see `202`**; nothing was created, exactly as the body says.
+
+- **An email address that this product would accept and then fail to send to is
+  now refused when it is typed.** Nine forms — `a<b@c.de` and `a,b@c.de` among
+  them — passed the address pattern and were rejected by the mail parser, so a
+  registration committed a row and then answered `500`. They now answer `422`
+  like any other invalid address, on registration and on invitations alike.
+
+- **`GET /api/v1/workspaces` answered with an API key now lists only the
+  organization that key was issued for.** It used to list every workspace the
+  key's owner belongs to, in every organization — names, slugs and identifiers
+  for tenancies the key cannot act in, since a key is bound to the organization
+  it was created in and always has been. A signed-in browser is unaffected and
+  still sees all of them, because moving between organizations is exactly what
+  the workspace switcher is for. **If an integration was relying on that
+  endpoint to enumerate its owner's other organizations, it will now see one**;
+  issue a key in each organization you need to reach.
+
+- **A disputed destination now notifies the people who review disputes, instead
+  of every organization owner on the instance.** Filing a dispute costs only the
+  permission that would have let you create the link, and a refusal computed from
+  the URL — credentials before the host, for example — is bounded by the string
+  typed rather than by any blocklist row, so there is no useful limit on how many
+  one account can file. The limit that matters is what each one costs, and it
+  used to be one inbox row per organization owner: on an instance running
+  `SIGNUP_MODE=open` that is a number a stranger grows by registering, aimed at
+  people who cannot act on the queue anyway. It is now the holders of
+  `destinations.review`, which is the set you chose. **Nothing else about filing
+  or deciding changes**, and if you have not appointed anybody, that set is the
+  account that claimed the instance.
+
+- **The audit log is now bounded by the reader's own authority, not only by
+  their organization.** A membership scoped to one workspace used to read every
+  record in the organization, including workspaces where its holder had no
+  membership at all — a per-action timeline and a network prefix tied to a named
+  actor, for workspaces they do not administer. It now reads the records of the
+  workspaces its own scope covers. **An organization-wide membership is
+  unaffected** and still reads the whole organization, which is what the log is
+  for; only the workspace-scoped case narrows. Nothing needs to be done on
+  upgrade.
+
+- **Analytics breakdowns are recomputed every fifteen minutes instead of every
+  minute.** A link's click count still updates every sixty seconds. What moved is
+  the expensive half — the per-country, per-device, per-browser and
+  per-destination breakdowns — whose cost grows with the number of distinct
+  values your traffic produces rather than with the number of links you have. At
+  five and a half million clicks it was using between a sixth and a third of
+  every minute; it now uses under one percent of every fifteen.
+
+  **The visible consequence: a breakdown on a link's page can be up to fifteen
+  minutes behind the click count above it.** Nothing on the page distinguishes
+  the two, which is why the staleness metric above exists and why
+  `docs/operations.md` carries an alert for it. This is what makes it safe to
+  draw a map from those numbers at all — the alternative was a visualization
+  reading a job that would eventually stop finishing inside its own interval.
+
+  Nothing needs to be done about this on upgrade. The existing job keeps its name
+  and its position, so its history carries forward; the new one starts from the
+  usual two-day window.
+
+- **Upgrading to this version empties the redirect cache.** The cached value a
+  short link resolves through now carries its routing rules and its split-test
+  arms, and an entry written by the previous version does not — so the cache key
+  moved from `v1` to `v3` and every old entry is abandoned rather than read. The
+  first request for each live alias after the upgrade reads the database;
+  concurrent requests for the same one are collapsed into a single query, so a
+  popular link does not become a stampede. Nothing needs to be done about this,
+  and nothing is lost; expect a brief rise in database reads while traffic warms
+  the cache again.
+
+  The version moved twice inside this unreleased series — once for routing rules
+  and once for split testing — but they ship together, so an upgrade from 0.1.0
+  pays for one cold cache and not two. Both moved it for the same reason, and it
+  is the reason the earlier additions to that value deliberately avoided one: an
+  entry written by the older build carries no rules and no arms, so a link whose
+  owner has since divided its traffic would go on sending all of it to one place
+  for up to `REDIRECT_TTL`. That is a control the owner configured being silently
+  absent, which is exactly what a cold cache is for.
+
+  **On a multi-replica rolling upgrade there is one more consequence, and it is
+  deliberate.** Cache invalidations are broadcast on a channel versioned with the
+  cache key, so while old and new replicas are both running they do not hear each
+  other's invalidations. Each still invalidates its own caches correctly; what
+  they lose is the cross-replica broadcast, so an edit can take up to
+  `REDIRECT_TTL` to reach a replica on the other version. That is the same
+  degradation a Redis outage produces, it lasts only as long as the rollout, and
+  it is preferred to one version applying another version's messages under
+  different rules.
+
+- **`LINKCTRL_REDIRECT_DEFAULT_STATUS` accepts `303`, and never applies to a
+  password submission.** A correct link password is now answered `303` whatever
+  the instance is set to. On a `307` instance it used to be answered `307`, and
+  `307` forbids the browser from changing the method — so the browser re-sent the
+  password it had just submitted, as a POST body, to the link's destination: a
+  third-party host the link's owner chose and the operator does not control.
+  `303` is the one redirect status that mandates a `GET`, so the body stops here.
+  Nothing to do on upgrade, and `302` instances — the default — never had the
+  problem.
+
+- **A webhook batch is now sent all at once, so one unresponsive receiver no
+  longer holds up the rest of the instance.** Deliveries were sent one after
+  another on the same goroutine that runs every other scheduled job. At the
+  default `LINKCTRL_WEBHOOK_TIMEOUT` of ten seconds a full batch of twenty
+  therefore took up to two hundred seconds — and for that whole time nothing else
+  ran: invitation and verification mail sat in the outbox, automation rules did
+  not fire on their advertised minute, custom-domain re-verification did not
+  happen, and the analytics rollups went stale. It needed no misconfiguration and
+  no attack, only one webhook pointed at a host that accepts nothing and answers
+  nothing, which any member who can register a webhook could do by accident.
+
+  A drain now costs one attempt rather than twenty, whatever the backlog is.
+  **If you operate a receiver, the visible change is that it can see up to twenty
+  concurrent requests from this instance rather than a steady trickle, and they
+  no longer arrive in queue order** — deduplicate on the `X-LinkCtrl-Delivery`
+  header, as `docs/usage.md` has always said to. Nothing to configure, and the
+  retry schedule, the attempt count and the batch size are all unchanged.
+
 
 - **`LINKCTRL_DESTINATION_BLOCKLIST` now seeds a database table** instead of
   being held in memory. It keeps working and still matches on a label boundary.
@@ -1077,6 +1060,20 @@ migrations run at boot.
   `https` alone still works and is the reason the variable exists.
 
 ### Removed
+
+- **`qr_codes.scan_count`.** A dormant column that nothing has ever incremented
+  since it was created, dropped rather than wired: incrementing it would have
+  cost a database write on the redirect path, and the number it produced would
+  have disagreed with the click figures beside it — those exclude bots and
+  deduplicate visitors, and a raw counter does neither. A QR scan is now counted
+  as a click labelled `qr`, which is strictly more than the counter would have
+  said. No instance has a non-zero value in it, so nothing is lost on upgrade.
+
+  This is one of the two non-additive schema changes in this release, and both
+  are stated in this file rather than left to be found in a migration. The other
+  is the mail outbox erasing the bodies of already-delivered messages, under
+  *Fixed*.
+
 
 - **`LINKCTRL_DESTINATION_BLOCK_PRIVATE_IPS`.** Private, loopback, link-local,
   carrier-NAT and cloud-metadata addresses are refused unconditionally. The
