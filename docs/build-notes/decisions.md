@@ -17061,3 +17061,59 @@ The test asserts that failures *feed* the counter and that an existing lock is
 *honoured*, and either alone would leave the other unheld. Short-circuiting the
 lock check fails four assertions; forcing the threshold to zero fails the
 counter one. A test that makes two claims has to be shown to fail for each.
+
+## 2026-08-05 — M45, a limit two writers could pass that neither could pass alone
+
+[F67](deferred-findings.md). `CreateRule` counted a link's rules on its own
+connection and then opened a transaction to write. `CreateVariant` did the same,
+and read two more rules that way — one kind per split, one fallback. All of them
+are check-then-act: the state each decision rests on is free to move between the
+read and the write.
+
+### Locking the link, not the rules
+
+`LockLink` takes `FOR UPDATE` on the link row, and the guards run after it.
+Locking the rules themselves would have been the obvious reading and is wrong in
+the case that matters least and breaks it anyway: an empty link has no rule rows
+to lock, so the first arm would have raced unprotected. Postgres takes
+`FOR KEY SHARE` on a parent when a row referencing it is inserted, and that
+conflicts with `FOR UPDATE` — so a locked link cannot acquire a rule or a split
+arm while the guard is deciding. This is `LockOrganizations`' pattern, and the
+comment there had already worked out the reasoning; the value of a documented
+pattern is that the second use of it is a lookup rather than a rediscovery.
+
+### The outer checks stay, and change meaning
+
+They are now the *message* and the inner ones are the *rule*. A caller who
+submits a bad destination to a full link should learn both at once rather than
+one per attempt, and that requires accumulating errors before the transaction
+exists. Deleting them would have made the refusal correct and the interface
+worse. Each ceiling's wording is now one function called from both places, so
+which message a caller sees cannot depend on how close the race was.
+
+### Two tests passed against the defect before one held
+
+This is the part worth keeping. **Racing goroutines are not a test here**: the
+window between the stale count and the insert is tens of microseconds, and six
+concurrent creates against a link one short of the ceiling produced exactly one
+winner *with the fix removed*. **Holding the link row is not a test either**:
+`CreateRuleDestination` inserts a row referencing the link, so it blocks on a
+held `FOR UPDATE` whether or not the code takes that lock itself — "the create
+blocked" proves nothing about where the decision was made.
+
+What discriminates is moving the count **under** a create that is already parked
+on the lock: fill the last seat from the locking transaction, commit, and let the
+parked request resume against a link that filled while it waited. Re-reading
+refuses it; not re-reading writes the twenty-first rule. Removing only the
+re-read — keeping the lock — fails three assertions.
+
+A test that passes against the defect is worse than no test, because it reads as
+coverage. Two of them were written here before the third, and the two are
+recorded rather than quietly replaced.
+
+### What is not covered
+
+The deterministic test drives `CreateRule`. `CreateVariant` shares
+`lockLinkForRules` and `loadSplitWith` rather than having a race test of its own,
+so its fix rests on the shared mechanism plus its existing tests. Said here
+rather than left for a reader to infer from the absence of a second test.

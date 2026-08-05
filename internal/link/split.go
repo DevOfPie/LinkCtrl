@@ -84,7 +84,19 @@ func (s *Service) GetSplit(ctx context.Context, actor *auth.Identity, linkID uui
 // loadSplit reads the split without re-checking the link, for callers that
 // already have.
 func (s *Service) loadSplit(ctx context.Context, workspaceID, linkID uuid.UUID) (*domain.Split, error) {
-	rows, err := s.q.ListVariantRules(ctx, dbgen.ListVariantRulesParams{
+	return s.loadSplitWith(ctx, s.q, workspaceID, linkID)
+}
+
+// loadSplitWith is loadSplit against a caller-supplied queries handle, so the
+// same read can be made inside a transaction that holds the link's lock.
+//
+// It exists because the split's two shape rules — one kind per link, one
+// fallback — were decided on a read taken outside the transaction that writes,
+// which is the same check-then-act the rule ceiling had (F67).
+func (s *Service) loadSplitWith(
+	ctx context.Context, q *dbgen.Queries, workspaceID, linkID uuid.UUID,
+) (*domain.Split, error) {
+	rows, err := q.ListVariantRules(ctx, dbgen.ListVariantRulesParams{
 		LinkID: linkID, WorkspaceID: workspaceID,
 	})
 	if err != nil {
@@ -150,12 +162,7 @@ func (s *Service) CreateVariant(
 	} else {
 		errs = append(errs, domain.ValidateSplitKind(in.Kind, existing.Kind)...)
 		if len(existing.Variants) >= domain.MaxVariantsPerLink {
-			errs = append(errs, domain.FieldError{
-				Field: "variants", Code: "too_many",
-				Message: fmt.Sprintf("a link may have at most %d split arms; past that "+
-					"a test does not produce a result anybody can act on",
-					domain.MaxVariantsPerLink),
-			})
+			errs = append(errs, variantCeilingError())
 		}
 	}
 	errs = append(errs, domain.ValidateWeight(in.Weight)...)
@@ -183,12 +190,7 @@ func (s *Service) CreateVariant(
 		return nil, fmt.Errorf("count routing rules: %w", err)
 	}
 	if count >= domain.MaxRulesPerLink {
-		errs = append(errs, domain.FieldError{
-			Field: "variants", Code: "too_many",
-			Message: fmt.Sprintf(
-				"a link may have at most %d rules and split arms together; the whole "+
-					"list travels in the cached snapshot", domain.MaxRulesPerLink),
-		})
+		errs = append(errs, combinedCeilingError())
 	}
 
 	if len(errs) > 0 {
@@ -209,6 +211,47 @@ func (s *Service) CreateVariant(
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.q.WithTx(tx)
+
+	// Every shape rule this write depends on, re-decided inside the transaction
+	// that writes, against a locked link. All three were read above on a
+	// connection with nothing holding the state still, so two creates a few
+	// milliseconds apart each saw a link that had room and both wrote — a
+	// second fallback, a second kind, or one arm past the ceiling, none of
+	// which either request would have produced alone (F67).
+	//
+	// The checks above are not redundant: they are what lets a caller learn
+	// about a full link alongside a bad destination, in one answer. These are
+	// what make the rules true.
+	if err := s.lockLinkForRules(ctx, q, linkID); err != nil {
+		return nil, err
+	}
+	settled, err := s.loadSplitWith(ctx, q, actor.WorkspaceID, linkID)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case in.Kind == domain.RuleKindFallback && settled.Fallback != nil:
+		return nil, domain.ValidationErrors{{
+			Field: "kind", Code: "conflict",
+			Message: "this link already has a fallback destination; edit it rather " +
+				"than adding a second, since only one can be the answer when " +
+				"nothing else applies",
+		}}
+	case in.Kind != domain.RuleKindFallback:
+		if ve := domain.ValidateSplitKind(in.Kind, settled.Kind); len(ve) > 0 {
+			return nil, ve
+		}
+		if len(settled.Variants) >= domain.MaxVariantsPerLink {
+			return nil, domain.ValidationErrors{variantCeilingError()}
+		}
+	}
+	count, err = q.CountRoutingRules(ctx, linkID)
+	if err != nil {
+		return nil, fmt.Errorf("count routing rules: %w", err)
+	}
+	if count >= domain.MaxRulesPerLink {
+		return nil, domain.ValidationErrors{combinedCeilingError()}
+	}
 
 	position, err := q.NextRuleDestinationPosition(ctx, linkID)
 	if err != nil {
@@ -416,4 +459,31 @@ func (s *Service) DeleteVariant(ctx context.Context, actor *auth.Identity, linkI
 
 	s.invalidateLink(ctx, link.DomainID, link.Alias)
 	return nil
+}
+
+// variantCeilingError and combinedCeilingError are the single statements of the
+// two limits a split arm has to clear.
+//
+// Functions rather than literals, for ruleCeilingError's reason: each is now
+// checked twice per write — once outside the transaction so a caller learns
+// about it beside every other validation error, and once inside against a
+// locked link so the limit is actually a limit (F67). Two copies of the wording
+// would be two things to keep in step, and which one a caller saw would depend
+// on how close the race was.
+func variantCeilingError() domain.FieldError {
+	return domain.FieldError{
+		Field: "variants", Code: "too_many",
+		Message: fmt.Sprintf("a link may have at most %d split arms; past that "+
+			"a test does not produce a result anybody can act on",
+			domain.MaxVariantsPerLink),
+	}
+}
+
+func combinedCeilingError() domain.FieldError {
+	return domain.FieldError{
+		Field: "variants", Code: "too_many",
+		Message: fmt.Sprintf(
+			"a link may have at most %d rules and split arms together; the whole "+
+				"list travels in the cached snapshot", domain.MaxRulesPerLink),
+	}
 }

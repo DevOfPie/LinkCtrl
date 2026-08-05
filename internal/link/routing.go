@@ -141,17 +141,16 @@ func (s *Service) CreateRule(
 		}
 	}
 
+	// Read here so a caller submitting a bad destination *and* a full link is
+	// told both at once, and enforced again inside the transaction below, which
+	// is where the invariant actually holds. This one is the message; that one
+	// is the rule.
 	count, err := s.q.CountRoutingRules(ctx, linkID)
 	if err != nil {
 		return nil, fmt.Errorf("count routing rules: %w", err)
 	}
 	if count >= domain.MaxRulesPerLink {
-		errs = append(errs, domain.FieldError{
-			Field: "rules", Code: "too_many",
-			Message: fmt.Sprintf(
-				"a link may have at most %d routing rules; the whole list is "+
-					"evaluated in order on every redirect", domain.MaxRulesPerLink),
-		})
+		errs = append(errs, ruleCeilingError())
 	}
 
 	if len(errs) > 0 {
@@ -174,6 +173,36 @@ func (s *Service) CreateRule(
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.q.WithTx(tx)
+
+	// The ceiling, decided inside the transaction that writes. The check above
+	// is a read on its own connection with nothing holding the state still, so
+	// two creates arriving within a few milliseconds of each other both saw
+	// MaxRulesPerLink-1 and both wrote — a limit passed by two writers that
+	// neither would have passed alone (F67).
+
+	// The ceiling, decided inside the transaction that writes. The check above
+	// is a read on its own connection with nothing holding the state still, so
+	// two creates arriving within a few milliseconds of each other both saw
+	// MaxRulesPerLink-1 and both wrote — a limit passed by two writers that
+	// neither would have passed alone (F67).
+
+	// The ceiling, decided inside the transaction that writes and after the
+	// link's lock is held. The check above runs on its own connection with
+	// nothing holding the state still, so a create that read a link with room
+	// and then waited — on this lock, or on the FOR KEY SHARE its own insert
+	// takes against the link — would go on to write against a count that had
+	// moved underneath it (F67).
+	if err := s.lockLinkForRules(ctx, q, linkID); err != nil {
+		return nil, err
+	}
+
+	count, err = q.CountRoutingRules(ctx, linkID)
+	if err != nil {
+		return nil, fmt.Errorf("count routing rules: %w", err)
+	}
+	if count >= domain.MaxRulesPerLink {
+		return nil, domain.ValidationErrors{ruleCeilingError()}
+	}
 
 	position, err := q.NextRuleDestinationPosition(ctx, linkID)
 	if err != nil {
@@ -414,4 +443,39 @@ func decodeConditions(raw []byte) (domain.RuleConditions, error) {
 		return c, err
 	}
 	return c, nil
+}
+
+// ruleCeilingError is the one statement of the per-link rule limit's message.
+//
+// One function rather than two literals, because the ceiling is now checked
+// twice for each write — once outside the transaction so a caller learns about
+// it alongside every other validation error, and once inside so the limit is
+// actually a limit (F67). Two copies of the wording would be two things to keep
+// in step, and the one a caller sees would depend on how close the race was.
+func ruleCeilingError() domain.FieldError {
+	return domain.FieldError{
+		Field: "rules", Code: "too_many",
+		Message: fmt.Sprintf(
+			"a link may have at most %d routing rules; the whole list is "+
+				"evaluated in order on every redirect", domain.MaxRulesPerLink),
+	}
+}
+
+// lockLinkForRules takes the link row's lock inside the caller's transaction, so
+// a ceiling decided after it is decided against a state nothing else can move.
+//
+// The link rather than its rules: Postgres takes FOR KEY SHARE on a parent when
+// a referencing row is inserted, which conflicts with FOR UPDATE, so this blocks
+// a concurrent rule or arm from appearing — including the first one, where a
+// lock over the rules themselves would have had no rows to take.
+func (s *Service) lockLinkForRules(ctx context.Context, q *dbgen.Queries, linkID uuid.UUID) error {
+	if _, err := q.LockLink(ctx, linkID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Deleted between the read above and this lock. Not found is what
+			// the caller would have got had it arrived a moment later.
+			return domain.ErrNotFound
+		}
+		return fmt.Errorf("lock link: %w", err)
+	}
+	return nil
 }

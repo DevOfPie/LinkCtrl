@@ -880,6 +880,38 @@ func (q *Queries) ListTags(ctx context.Context, workspaceID uuid.UUID) ([]ListTa
 	return items, nil
 }
 
+const lockLink = `-- name: LockLink :one
+SELECT id FROM links WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
+`
+
+// The link row, locked, for a guard whose decision is a count.
+//
+// A count cannot be locked, so `SELECT count(*)` as a ceiling check is a
+// check-then-act: two writers each read a state the other is changing, and both
+// pass a limit neither would pass alone. This is `LockOrganizations`' pattern at
+// the link level — take the lock on the parent, make the decision inside the
+// transaction that writes, and let the second writer block until the first
+// commits and then re-read what it left behind.
+//
+// Locking the *link* rather than the rules is what makes it work with nothing to
+// lock in the empty case. Postgres takes `FOR KEY SHARE` on a parent when a row
+// referencing it is inserted, and that conflicts with `FOR UPDATE` — so a locked
+// link cannot acquire a routing rule or a split arm while the guard is deciding,
+// including the first one, where a lock on the rules would have had no rows to
+// take (F67).
+//
+// Returns the id alone: the caller already has the link, and this exists for its
+// lock rather than for its columns. No workspace parameter, for the same reason
+// — every caller has already been through GetLink, which is workspace-scoped, so
+// adding one here would be a second tenancy check in a statement whose job is
+// serialization.
+func (q *Queries) LockLink(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockLink, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const purgeExpiredLinks = `-- name: PurgeExpiredLinks :many
 WITH doomed AS (
     SELECT id, domain_id, alias, click_count

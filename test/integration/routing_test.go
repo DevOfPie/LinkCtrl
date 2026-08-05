@@ -6,12 +6,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -310,6 +312,187 @@ func TestFirstMatchWinsOnTheRedirectPath(t *testing.T) {
 	}
 	if got := f.location("/route", nil); got != "https://example.com/off" {
 		t.Errorf("Location = %q after enabling the priority-1 rule, want its destination", got)
+	}
+}
+
+// TestTheRuleCeilingHoldsAgainstConcurrentCreates is the ceiling as an
+// invariant rather than as a message.
+//
+// The count was read on its own connection before the transaction that writes,
+// so two creates landing within a few milliseconds of each other both saw
+// MaxRulesPerLink-1 and both wrote: a limit passed by two requests that neither
+// would have passed alone. The fix locks the link row inside the transaction and
+// decides there, which works even for the first rule — Postgres takes FOR KEY
+// SHARE on a parent when a referencing row is inserted, and that conflicts with
+// FOR UPDATE, where a lock over the rules themselves would have had no rows to
+// take (F67).
+//
+// **It asserts the mechanism, not the race.** Racing goroutines were tried
+// first and are not a test: the window between the old count and the insert is
+// tens of microseconds, so six concurrent creates against a link one short of
+// the ceiling produced exactly one winner *with the fix removed*. A race test
+// that passes against the defect is worse than no test, because it reads as
+// coverage. What is deterministic is the lock — this holds the link row in one
+// transaction and requires the create to block on it, which is true only if the
+// decision is made inside the transaction that writes.
+//
+// The concurrent half is kept below it as an invariant check rather than as the
+// proof: it can fail, and it cannot pass falsely.
+func TestTheRuleCeilingHoldsAgainstConcurrentCreates(t *testing.T) {
+	f := newRulesOn(t, newDB(t), nil, fixedGeo{country: "GB"}, true)
+	f.claim()
+	id := f.createLink("ceiling", "https://example.com/default")
+
+	// One short of the ceiling, sequentially. Every one of these must succeed,
+	// or the race below would be measuring the wrong refusal.
+	for i := range domain.MaxRulesPerLink - 1 {
+		f.addRule(id, link.CreateRuleInput{
+			URL:        fmt.Sprintf("https://example.com/seat-%d", i),
+			Priority:   int32(100 + i),
+			Enabled:    true,
+			Conditions: domain.RuleConditions{Country: []string{"GB"}},
+		})
+	}
+
+	// The deterministic half, and it has to be built carefully, because two
+	// simpler versions of it pass against the defect.
+	//
+	// Racing goroutines do not work: the window between the old count and the
+	// insert is tens of microseconds, and six concurrent creates against a link
+	// one short of the ceiling produced exactly one winner with the fix removed.
+	//
+	// Merely holding the link row does not work either: CreateRuleDestination
+	// inserts a row referencing the link, which takes FOR KEY SHARE and blocks
+	// on a held FOR UPDATE whether or not this code takes the lock itself. So
+	// "the create blocked" proves nothing.
+	//
+	// What discriminates is whether the count is re-read *after* the wait. This
+	// fills the last seat from another transaction while a create is parked on
+	// the lock, then releases it. The parked create read a link with room; it
+	// resumes against one that is full. Re-reading refuses it, and not
+	// re-reading writes the twenty-first rule.
+	filler, err := f.pool.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := filler.Exec(t.Context(),
+		`SELECT id FROM links WHERE id = $1 FOR UPDATE`, id); err != nil {
+		t.Fatal(err)
+	}
+
+	parked := make(chan error, 1)
+	go func() {
+		_, err := f.links.CreateRule(context.Background(), f.owner, id, link.CreateRuleInput{
+			URL: "https://example.com/parked", Priority: 900, Enabled: true,
+			Conditions: domain.RuleConditions{Country: []string{"GB"}},
+		})
+		parked <- err
+	}()
+
+	// Long enough for the parked create to finish every read it makes outside
+	// its transaction — including the count, which is the one that goes stale —
+	// and reach the lock.
+	select {
+	case err := <-parked:
+		t.Fatalf("the create did not park on the held lock; it returned %v", err)
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	// The last seat, taken by somebody else, inside the transaction holding the
+	// lock. Written directly because the point is to move the count under a
+	// request that has already read it.
+	var fillerDest uuid.UUID
+	if err := filler.QueryRow(t.Context(), `
+		INSERT INTO destinations (id, link_id, workspace_id, url, url_host, position)
+		VALUES ($1, $2, $3, 'https://example.com/filler', 'example.com',
+		        (SELECT coalesce(max(position), 0) + 1 FROM destinations WHERE link_id = $2))
+		RETURNING id`,
+		uuid.Must(uuid.NewV7()), id, f.owner.WorkspaceID).Scan(&fillerDest); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := filler.Exec(t.Context(), `
+		INSERT INTO routing_rules (id, link_id, workspace_id, destination_id, priority, conditions, enabled)
+		VALUES ($1, $2, $3, $4, 800, '{"country":["GB"]}', true)`,
+		uuid.Must(uuid.NewV7()), id, f.owner.WorkspaceID, fillerDest); err != nil {
+		t.Fatal(err)
+	}
+	if err := filler.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Released, and now the parked create is deciding against a full link.
+	var ve domain.ValidationErrors
+	if err := <-parked; !errors.As(err, &ve) {
+		t.Errorf("a create that waited while the last seat was taken answered %v; "+
+			"want the ceiling refusal, which needs the count re-read after the lock", err)
+	}
+
+	var afterPark int
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT count(*) FROM routing_rules WHERE link_id = $1`, id).Scan(&afterPark); err != nil {
+		t.Fatal(err)
+	}
+	if afterPark != domain.MaxRulesPerLink {
+		t.Errorf("the link carries %d rules, want exactly the ceiling of %d",
+			afterPark, domain.MaxRulesPerLink)
+	}
+
+	// And a burst against the now-full link, as an invariant check rather than
+	// as proof: it can fail and it cannot pass falsely. Every one must refuse.
+	const racers = 6
+	var wg sync.WaitGroup
+	created := make([]bool, racers)
+	begin := make(chan struct{})
+	for i := range racers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-begin
+			_, err := f.links.CreateRule(context.Background(), f.owner, id, link.CreateRuleInput{
+				URL:        fmt.Sprintf("https://example.com/racer-%d", i),
+				Priority:   int32(500 + i),
+				Enabled:    true,
+				Conditions: domain.RuleConditions{Country: []string{"GB"}},
+			})
+			created[i] = err == nil
+		}()
+	}
+	close(begin)
+	wg.Wait()
+
+	for i, ok := range created {
+		if ok {
+			t.Errorf("racer %d added a rule to a link already at the ceiling", i)
+		}
+	}
+
+	var total int
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT count(*) FROM routing_rules WHERE link_id = $1`, id).Scan(&total); err != nil {
+		t.Fatal(err)
+	}
+	if total > domain.MaxRulesPerLink {
+		t.Errorf("the link carries %d rules, past the ceiling of %d", total, domain.MaxRulesPerLink)
+	}
+
+	// No destination nothing points at. The rule and its destination share a
+	// transaction, so a refusal that rolled back only half would show up here —
+	// and the ceiling check sits before both writes precisely so a refused
+	// create never reaches them. Counted as *unreferenced* rather than as a
+	// total, because the link's own primary destination is a row here too and
+	// comparing against the rule count would be off by exactly that one.
+	var orphans int
+	if err := f.pool.QueryRow(t.Context(), `
+		SELECT count(*) FROM destinations d
+		 WHERE d.link_id = $1
+		   AND NOT EXISTS (SELECT 1 FROM routing_rules r WHERE r.destination_id = d.id)
+		   AND NOT EXISTS (SELECT 1 FROM links l WHERE l.primary_destination_id = d.id)`,
+		id).Scan(&orphans); err != nil {
+		t.Fatal(err)
+	}
+	if orphans != 0 {
+		t.Errorf("%d destination rows are referenced by nothing; a refused create "+
+			"left half a write behind", orphans)
 	}
 }
 
