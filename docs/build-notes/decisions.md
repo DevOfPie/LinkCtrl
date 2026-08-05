@@ -181,6 +181,7 @@ file. Append a row when you append an entry.
 | [M45, three things the tree carried and nothing read](#2026-08-05--m45-three-things-the-tree-carried-and-nothing-read) | F55, F16 and F110 — a duplicated function, a list, and a column. F55 deleted rather than synced, with the surviving test checked as a strict superset first. **F16's fix is that nobody maintains the list**: the classifier is told the dashboard set at boot from `(*appMux).mounts()`, D97's argument a second time, and the row's proposed source had itself been deleted by F85 for the same drift — the test drives from `mounts()` too, so neither can fall behind. Nine routes were counted as short links; the SLO series was never affected and `docs/slo.md` needed nothing. F110 is **an undocumented choice riding on a documented one** — the query explains why the log is not *filtered* by workspace and says nothing about not *returning* it, and that reasoning does not reach the second question |
 | [M45, a table that was not the record it claimed, and a guard with no inputs](#2026-08-05--m45-a-table-that-was-not-the-record-it-claimed-and-a-guard-with-no-inputs) | F66 and F130. **Seven decisions were missing, not four** — D49-D52 as filed, plus D97-D99 the table had also never gained, folded in rather than filed twice; the collision this row is about had already cost M35 a renumbering across eleven files. Rows state the decision, because a table of titles is not the record the README calls it. F130 is **F39's fix with nothing holding it correct**: every page struct embeds exactly shell, so the branches ran against zero inputs and the revert left the package green. Synthetic fixtures are forced rather than chosen — the package contains none of the shapes, which is the finding — and the fifth case is the arrangement the guard must not flag |
 | [M45, a count that could not stay true and a milestone the enumeration forgot](#2026-08-05--m45-a-count-that-could-not-stay-true-and-a-milestone-the-enumeration-forgot) | F69 and F119, one mechanism wrong in two directions. **The count is removed rather than corrected**: it read *four*, was true when written, wrong within one milestone, and by M44.9 the true number was zero — the row predicted its own recurrence and was right four times, so its teeth are demonstrated rather than argued. F119: M33 was the only shipped Phase 2 milestone with a demo-visible feature and no coverage row, and it shipped inside the window whose closing is M33.5's entire deliverable — the milestone that motivated the enforcement is the one the enforcement forgot |
+| [M45, four answers, three of them decisions and one a correction](#2026-08-05--m45-four-answers-three-of-them-decisions-and-one-a-correction) | D100 — F70's instance default domain moves behind D98's principal, because D38's stated reason for refusing has stopped being true; the capability organization owners lose is named. D101 — F50's blocked bot is recorded in every link state, and *record for none* is the smaller-looking change that couples recording to the response and keeps an exception; what it deliberately does **not** fix is the raw `click_count`, which is F24. D102 — F105's inbox gains the workspace filter its comments promised since M40, with both halves of the predicate load-bearing and F94's claimed containment as the reason to build rather than delete. And **a correction to D18 with no new number**: the code has been right since before D18 was written, the *either direction* promise is narrowed rather than deleted, and the request-time gap is documented and left open with the price of closing it stated |
 
 ---
 
@@ -15624,3 +15625,129 @@ M33 by name while doing it.
 
 Verified by performing the deletion: it now fails by name, twice, once per
 demo shape the coverage test checks.
+
+## 2026-08-05 — M45, four answers, three of them decisions and one a correction
+
+The prompts M45's triage said would be put *when their row was reached*, put
+together because the rows they block are the ones left. Recorded before any of
+them is built, per the standing rule: an answer given in prose is a conclusion
+that gets re-derived differently.
+
+### D100 — the instance default domain is the instance principal's
+
+**F70.** `domains.write` is a role permission, so on a multi-organization
+instance every organization's owner and admin could administer the instance
+**default** domain — repoint its root redirect, change its bot policy. On an
+instance running `SIGNUP_MODE=open` that is one registration away, because a
+registrant is provisioned as the owner of their own organization.
+
+This was refused once. [D38](../../Plan.md#phase-2-decisions-taken-after-the-plan-was-finalised)
+recorded that the product had no instance-level principal, so *"the instance
+owner"* was not a thing the permission system could name, and F15, F31 and F70
+all bottomed out there.
+
+**D98 built one.** The default domain's root redirect and bot policy join the
+dispute queue and the instance audit log behind it. The reasoning is the one D98
+already accepted for those: the default domain belongs to the *instance*, not to
+whichever organization the caller happens to be standing in, and it is the
+hostname every workspace's links are served on until they register their own.
+
+The cost is stated rather than glossed. This **takes a capability away** from
+organization owners and admins who hold it today: an operator whose admin
+repoints the instance root has to be the principal or be granted it. And it is a
+fourth scope on a principal D98 deliberately enumerated rather than left open —
+enumerated is still what it is, and this entry is the enumeration growing by one
+in the open.
+
+Chosen over documenting and carrying, which is what the row has effectively been
+since D38 and which the 2026-08-04 standing rule now disallows without a reason
+that is not cheapness — D38's reason has stopped being true. And over naming an
+operator in configuration, which is the middle option D38 itself listed and which
+would put a second mechanism for *who runs this instance* beside the one just
+built.
+
+### D101 — a blocked bot is recorded in every link state, or the rule has an exception
+
+**F50.** With bot blocking on, a blocked bot writes a click event for **expired
+and archived** links, which recorded nothing before M32.5. `links.click_count` is
+rendered raw on the links table and the dashboard and is the `sort=clicks` key,
+so an archived link can accrue a visible count from crawler traffic and outrank
+active ones.
+
+No milestone claim is falsified — m32.5.md says *"a blocked attempt is counted,
+not audited"* without qualification — which is why the row is right that this is
+a decision and not a correction.
+
+**Recorded for every state.** Identical traffic is recorded identically, whatever
+the link's status made the response. The alternative — record for none — reads as
+the smaller change and is not: it makes the redirect path decide what to record
+from the response it was about to send, which is the coupling the current code
+avoids, and it leaves a blocked bot on a *live* link counted, so the rule gains an
+exception instead of losing one.
+
+**What this deliberately does not fix**, said plainly because the row is about a
+visible surprise: archived and expired links keep accruing counts from crawlers.
+That is the half a reader actually notices, and it is not this decision's to
+close — it is `links.click_count` being rendered raw beside a rollup that counts
+only humans, which is [F24](deferred-findings.md) and is approved separately.
+
+### D102 — the notification inbox gains the workspace filter it was believed to have
+
+**F105.** `notifications.workspace_id` is written on every M40 and M43
+notification and read by nothing: no query selects it, `Notification` has no
+field for it. Two comments state verbatim that it makes the notification appear
+*"in that workspace's inbox rather than wherever the reader happens to be
+standing"*, and `internal/notify/automation.go` writes a body reading *"matched …
+in **this workspace**"* that the reader cannot resolve.
+
+It is also [F94](deferred-findings.md)'s stated mitigation. That row was closed
+believing cross-workspace notifications were contained by an inbox scope that does
+not exist, which is the strongest argument for building the filter rather than
+deleting the column: the alternative settles F94's question in the other
+direction and that row would have to be re-read rather than inheriting this.
+
+The predicate is `workspace_id IS NULL OR workspace_id = @ws`, and both halves are
+load-bearing. A naive `= @ws` hides every organization-level notification, since
+disputes and audit-growth write NULL. It must be added **identically** to the
+count and the preview, or `notifications_user_unread_idx` stops serving one of
+them — `notifications.sql` warns about exactly that.
+
+The cost: a workspace-scoped notification stops appearing while its reader is
+standing in another workspace. That is a behaviour change to a shipped surface,
+and it is the behaviour the two comments have been promising since M40.
+
+### A correction to D18, and no new number for it
+
+**F12.** D18 says a permission is non-delegable *"when reading it exposes an
+actor's identity tied to network data, **or** when holding it lets a key widen its
+own reach. Everything else is delegable."* Applied literally that makes
+`org.delete` delegable — it discloses nothing and grants nothing — and it has been
+non-delegable since Phase 1, on irreversibility. The map's own comment states the
+wider rule: *"escalating, irreversible, or disclosing"*.
+
+So the code has been right since before D18 was written, and the text is what is
+wrong. **The text is corrected and nothing else changes.** No new decision number:
+this is decisions.md doing what it says it does — a later entry correcting an
+earlier one, with the earlier text left in place.
+
+The second limb is narrowed rather than deleted. D18 claims *"flipping a
+permission in either direction stays a one-line map edit"*, and it does not:
+adding an already-granted permission to `NonDelegableScopes` would not disarm keys
+already issued, because `Authenticate` restricts the identity to the **row's**
+stored scopes and never consults the map. Mint and rotate are covered —
+`resolveScopes` and, since M44, `narrowScopes` — and request time is not.
+
+**The gap is documented and left open**, which was the choice. Closing it means an
+`isNonDelegable` filter in `restrictTo`, a check on every authenticated API
+request, for a state no key has ever been in: `git log -S` confirms every entry
+landed in the same commit as the migration creating its permission. The corrected
+text says adding a scope binds new and rotated keys rather than promising a
+disarming that does not happen, so the sentence a future milestone relies on is
+true even though the mechanism behind it is narrower than it sounded.
+
+### F18 is not in this batch
+
+Deliberately. It goes with the work on [F17](deferred-findings.md), because F18 is
+F17's mechanical cause — the audit vocabulary lives in two packages, so anyone
+enumerating it from `internal/audit` is short by two — and the cost of fixing the
+enumeration while leaving the split is only visible from inside that work.
