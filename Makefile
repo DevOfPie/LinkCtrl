@@ -340,6 +340,10 @@ up: ## Start the full stack
 	@test -f "$(ENV_FILE)" || scripts/instance.sh init "$(INSTANCE)"
 	$(COMPOSE) up -d --wait
 
+.PHONY: load-breaking-point
+load-breaking-point: require-stack ## Grow the dataset until an SLO check fails
+	@scripts/slo-breaking-point.sh $(START_LINKS) $(MULTIPLIER) $(MAX_STEPS)
+
 .PHONY: down
 down: guard-down ## Stop the stack and remove volumes
 	$(COMPOSE) down -v

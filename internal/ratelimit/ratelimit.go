@@ -371,6 +371,27 @@ func (l *Limiter) Overflows() int64 {
 	return l.overflows.Load()
 }
 
+// Fallbacks counts requests this limiter decided locally because the shared
+// limiter did not answer.
+//
+// Zero on a limiter with no shared backing, and zero on a shared one while Redis
+// is healthy — which is what makes it readable: any movement means this replica
+// is enforcing its own numbers rather than the instance's, and the configured
+// limit has silently become per-replica.
+//
+// It exists because the tracked-keys gauge cannot say this. A healthy shared
+// limiter never writes its local table, so `Len()` reads zero and is
+// indistinguishable from no traffic — an operator watching it could not tell a
+// working shared limit from a fallen-back one, on the two limiters whose entire
+// justification for a Redis round trip is that per-replica multiplication is
+// unacceptable (F102).
+func (l *Limiter) Fallbacks() int64 {
+	if l == nil || l.shared == nil {
+		return 0
+	}
+	return l.shared.Fallbacks()
+}
+
 // Key folds an address to its rate-limiting identity: the full address for
 // IPv4, the /64 prefix for IPv6.
 //

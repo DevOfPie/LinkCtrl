@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -31,8 +32,42 @@ var rawPalette = regexp.MustCompile(
 //
 // The scan is over the embedded templates, which is what actually ships, rather
 // than over the source directory.
+//
+// **`funcs.go` is scanned too, and it was the gap** (F40). `input.css` names it
+// explicitly as a class source — `@source "../../funcs.go";` — because
+// `statusBadge` and its neighbours build utility strings in Go, and those
+// strings reach four template sites. The guard walked the `templates` embed and
+// nothing else, so the one file the stylesheet singles out as a special case was
+// the one file the enforcement could not see. Demonstrated rather than argued
+// before it was fixed: rewriting the status-badge map to raw emerald shades left
+// both theme tests green while Tailwind emitted the classes and a browser
+// rendered them.
+//
+// The six hand-written pages in `internal/httpx/static` are deliberately **not**
+// scanned, and that limb of F40 does not survive verification. m24.5.md scopes
+// the override to *every dashboard page* and already exempts a non-dashboard
+// surface; these are embedded byte slices on the redirect tree with no template,
+// and since M40 that tree answers on hostnames the dashboard's theme cookie
+// never reaches. They honour `prefers-color-scheme`, which is more than the
+// milestone asked of them.
 func TestTemplatesUseThemeTokensOnly(t *testing.T) {
 	var offenders []string
+
+	// The Go sources that build class strings, named by input.css. A list rather
+	// than a walk of the package: the point is that this set and the
+	// stylesheet's `@source` lines are the same set, and a walk would silently
+	// grow past what Tailwind actually scans.
+	for _, name := range []string{"funcs.go"} {
+		b, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatalf("read %s, which input.css names as a class source: %v", name, err)
+		}
+		for i, line := range strings.Split(string(b), "\n") {
+			for _, m := range rawPalette.FindAllString(line, -1) {
+				offenders = append(offenders, name+":"+itoa(i+1)+"  "+m)
+			}
+		}
+	}
 
 	err := fs.WalkDir(files, "templates", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -58,7 +93,7 @@ func TestTemplatesUseThemeTokensOnly(t *testing.T) {
 	}
 
 	if len(offenders) > 0 {
-		t.Errorf("templates name palette shades instead of theme tokens, so these "+
+		t.Errorf("these name palette shades instead of theme tokens, so they "+
 			"are wrong in the dark theme:\n  %s\n\nUse a semantic token from "+
 			"internal/ui/static/css/input.css — surface, raised, sunken, ink, muted, "+
 			"subtle, line, accent, ok, warn, danger — or add one there, with its "+

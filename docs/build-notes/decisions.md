@@ -190,6 +190,7 @@ file. Append a row when you append an entry.
 | [M45, thirteen enumerations, and the one that gets a test](#2026-08-05--m45-thirteen-enumerations-and-the-one-that-gets-a-test) | F45, F38 and F111 — the first work under the owner's standing approval for documentation, which removes the prompt and keeps the verification. **Counted, not trusted, and it mattered**: the never-delegable map had grown to nine since the row was filed, making this the fifth wording row in one milestone whose list was short. One claim was checked and **left**, because correcting it would have invented a defect. Only that one list gets a test, and the entry says why — it is a security claim that has failed to keep up three separate times, where the other twelve are prose wrong once. The lists stay hand-written and the *failure* is generated, which is D97's argument. And **the test was wrong before the documents were**: its first run flagged a sentence that was already right, so the window was tightened rather than the document changed |
 | [M45, four controls that told a reader the wrong thing](#2026-08-05--m45-four-controls-that-told-a-reader-the-wrong-thing) | F42, F22, F47 and F54 — a class this project keeps producing, where the promise and the enforcement live in different files. F42's flag asked *could an allow ever work for this rule* and the decision asked *for this refusal*; the fix is one helper both consult, and the two freshly-written rows need **different** sources, since `decide` must report the state before it deleted the entry. F22 collapses only the path that names an object. F47's bell was the one href in the header gated on nothing, offered to the account likeliest to have unread notifications — and the test named for that account cuts the nav one `div` too early to see it. F54 is **a surface that could not have been right**: the template was handed six keys and none was the mode. Fixing it surfaced that the renderer refuses an unknown key, which caught the branch immediately |
 | [M45, four small rows, two of which were not what they said](#2026-08-05--m45-four-small-rows-two-of-which-were-not-what-they-said) | F59, F120, F123 and F118. F59's two one-liners, each checked in the **other** direction too — Teredo, NAT64 and ISATAP are now cases, because a fold applied too widely turns a real IPv6 client into somebody else's IPv4 address — and the salt cache's predicate is now the statement's, with eviction on a hit because the other evictor runs under leadership. **F120's correction is a sentence and the filter deliberately stays**: narrowing `team.Roles` would hide admin from the workspace-scoped admin who may genuinely grant it, which is worse than the defect; no single list is exact for many targets. F123's re-arm on **dispatch** rather than on result is the whole design, and a failed probe then needs no special case. F118 recorded with every alternative in one place |
+| [A breaking-point harness, and the check that actually moves](#2026-08-05--a-breaking-point-harness-and-the-check-that-actually-moves) | Owner-asked tooling, classified as a task rather than a feature and committed on its own. `load-test.sh` answers *does this meet the SLO at the seeded size* and cannot answer *at what size does it stop*, so every column in slo.md is a pass and none is a bound. **No check failed to 3.2M links / 6.4M clicks** — and the finding is the margin, not the verdict: the redirect columns are flat because a cache hit does not care how many rows it did not read, and the number that moves is the dimension rollup's staleness at 661s against its 900s cadence. The edge is not on the path the SLO is about. Hence the rule the script now follows: **a passing measurement has to say how close it came**, or it is indistinguishable from one that checked nothing |
 | [A command that chooses a loop](#2026-08-05--a-command-that-chooses-a-loop-and-the-backlog-that-had-nothing-consuming-it) | W11, widened by the owner. `/work-on-phase` becomes `/work phase`, routing moves into its own file, and the process backlog gets a loop that consumes it. Why the kind is the last token, why an unknown target prompts instead of matching the nearest, why `--revalidate` touches routing only, and why the workflow loop is the third thing in this repository that is not delegated. Also what the command cannot do: cross-repository dispatch resolves nothing, and the reason is that the only globally visible place to put a command is untracked |
 | [Two stops, one of which was only ever a sentence](#2026-08-05--two-stops-one-of-which-was-only-ever-a-sentence) | W9. `/stop` exists. Why it takes no arguments and refuses rather than interprets, why it reconciles the note against the tree instead of against a worker's report, and why it rewrites nothing when no loop is running. The checkpoint stop stays a phrase here and is W10's |
 | [The second stop becomes a flag](#2026-08-05--the-second-stop-becomes-a-flag-and-the-one-case-where-the-two-stops-disagree) | W10. Why a flag rather than a second command, why the checkpoint needed no redefining despite the note asking, and the one case where the two stops genuinely diverge — with nothing in flight, the immediate stop writes nothing and the deferred stop is already satisfied |
@@ -16721,3 +16722,52 @@ set: `phase-loop.md` at 0.52 and `workflow.md` at 0.79 re-read seventeen and
 thirteen times, and `Plan.md`'s ceiling charged per resume for one row. That is
 [W1](workflow-changes.md), scheduled into [M45](phase-details/m45.md), and it is
 deliberately not taken here.
+
+## 2026-08-05 — A breaking-point harness, and the check that actually moves
+
+Owner-asked, mid-milestone: build something that grows the dataset until a check
+fails, and run it. Classified as **tooling** rather than a feature — it changes
+nothing the product does, so it commits on its own under the scope gate rather
+than going through planning.md's five artifacts. Saying which, because that
+classification is a judgement and a silent one would be the wrong kind.
+
+### The question load-test.sh cannot answer
+
+`scripts/load-test.sh` answers *does this build meet the SLO at the size the SLO
+is defined against*. The size is whoever seeded the database's choice, so every
+column in [slo.md](../slo.md) is a pass and none of them is a bound. Twenty-one
+runs at one size say nothing about where the twenty-second stops.
+
+`scripts/slo-breaking-point.sh` seeds, measures, checks, multiplies, and stops at
+the first documented claim that breaks. Five checks, each named against the
+document it comes from — so a failure is a claim being broken rather than a
+number somebody did not like.
+
+### What it found, which is not what it was looking for
+
+**No check failed.** ×4 from 50,000 links to 3,200,000 links and 6,400,000 click
+events: 100% of cached redirects under 20ms at every step, no analytics drops,
+the totals rollup fresh.
+
+The useful part is the margin, and it is the reason the script now prints margins
+on a **passing** step rather than the word "passed". The redirect columns are
+flat with size, which is not a surprise once said out loud — a cache hit does not
+care how many rows it did not read. The number that moves is the dimension
+rollup's staleness: **661 seconds at 3.2M links**, against its own 15-minute
+cadence and a 1-hour alert threshold.
+
+So the edge is not on the path the SLO is about. It is on the rollup that
+slo.md's own findings section already names as the real bottleneck, arrived at
+from the other direction: those columns measure what one run costs, and this
+measures how far behind it falls as the data grows.
+
+A harness that reported only pass/fail would have returned "everything is fine"
+from a run whose whole content is *which number is closest*. That is the change
+worth keeping: **a passing measurement has to say how close it came**, or it is
+indistinguishable from a measurement that checked nothing.
+
+### What it is not
+
+One machine, one disk, whatever else was running. The numbers are evidence about
+this box. The transferable part is the shape — which check gives first, and that
+it is not the one the SLO is stated over.

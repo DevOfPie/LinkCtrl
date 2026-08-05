@@ -42,6 +42,25 @@ migrations run at boot.
   ones are the true ones. The SLO series `linkctrl_redirect_duration_seconds` is
   unaffected and always was — the redirect handler records it directly.
 
+- **`linkctrl_rate_limit_fallback_total` is new**, and it is the series that
+  says a shared rate limit has stopped being shared. The tracked-keys gauge
+  cannot: a healthy shared limiter never writes its local table, so it reads zero
+  whether the limit is working or the instance is idle. Alert on the rate — the
+  counter is monotonic, so a threshold on its value latches forever after one
+  blip. `docs/operations.md` carries the expression.
+
+- **A mail relay's rejection no longer puts the recipient's address in the
+  process log.** A bounce echoes the address it refused, and that line was logged
+  at ERROR from the first failed attempt — moving an address out of the database,
+  which is access-controlled and retention-bounded, into a log stream that is
+  usually shipped elsewhere with neither. The address is replaced in the log line
+  and kept in `mail_outbox.last_error`, where the row already carries it.
+
+- **Two dark-theme hover colours meet WCAG AA.** White text on the accent and
+  danger hover surfaces was at 4.47:1 and 3.67:1, below the 4.5:1 the theme
+  claims for every token pair. Both hovers now darken rather than lighten, which
+  is what the light theme already does.
+
 - **A 6to4 address is anonymised as the IPv4 address it carries.** `2002::/16`
   embeds a client's IPv4 address in the bytes a `/48` prefix keeps, so a session
   or audit record from such a client stored all four octets where every other

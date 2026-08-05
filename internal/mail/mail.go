@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/mail"
+	"strings"
 	"sync"
 	"time"
 
@@ -281,7 +282,25 @@ func (s *Service) send(ctx context.Context, row dbgen.ClaimDueMailRow) []error {
 		return errs
 	}
 
+	// Two different audiences, and only one of them may see the address.
+	//
+	// `mail_outbox.last_error` keeps the relay's answer verbatim: that row
+	// already carries `recipient` as a column, it is access-controlled, and it is
+	// retention-bounded — nothing is disclosed by putting the same address in a
+	// sentence beside it.
+	//
+	// The **log** is the other audience, and it is typically shipped somewhere
+	// else with no LinkCtrl-side bound at all. `internal/observability/logging.go`
+	// redacts by attribute *name*, and `error` is not in that list, so a relay
+	// line like `550 5.1.1 <alice@example.com>: User unknown` went out
+	// unredacted on the **first bounce** — no exhaustion of the retry budget
+	// needed. No other slog attribute in this tree carries an address, so this
+	// defeated a convention the rest of the product keeps (F109).
+	//
+	// `internal/webhook/client.go` unwraps `*url.Error` for exactly this reason
+	// one package over; this is the same move against a relay's response line.
 	errs = append(errs, sendErr)
+	logErr := scrubAddress(sendErr, row.Recipient)
 	if row.Attempts >= MaxAttempts {
 		// Terminal, and kept. A row saying what was attempted and why it
 		// never arrived is the whole reason this is a table.
@@ -293,7 +312,7 @@ func (s *Service) send(ctx context.Context, row dbgen.ClaimDueMailRow) []error {
 		s.log.Error("mail abandoned after the last attempt",
 			slog.String("kind", row.Kind),
 			slog.Int("attempts", int(row.Attempts)),
-			slog.Any("error", sendErr))
+			slog.Any("error", logErr))
 		return errs
 	}
 	if err := s.q.MarkMailRetry(ctx, dbgen.MarkMailRetryParams{
@@ -304,6 +323,63 @@ func (s *Service) send(ctx context.Context, row dbgen.ClaimDueMailRow) []error {
 		errs = append(errs, fmt.Errorf("mail: reschedule %s: %w", row.ID, err))
 	}
 	return errs
+}
+
+// scrubAddress replaces a recipient address wherever it appears in an error.
+//
+// A relay routinely echoes the address it refused — `550 5.1.1
+// <alice@example.com>: User unknown` — so the error carrying that line into a
+// log carries the address with it. Replaced rather than dropped: the status code
+// and the relay's wording are the operational content, and an error reduced to
+// "delivery failed" would trade a disclosure for an outage nobody can diagnose.
+//
+// Case-insensitive, because SMTP is: a relay may echo `Alice@Example.com` for a
+// row stored lowercased, and a substring replace that missed it would be a
+// redaction that reads as one and is not.
+func scrubAddress(err error, recipient string) error {
+	if err == nil || recipient == "" {
+		return err
+	}
+	msg := err.Error()
+	lower := strings.ToLower(msg)
+	target := strings.ToLower(recipient)
+	var b strings.Builder
+	for {
+		i := strings.Index(lower, target)
+		if i < 0 {
+			b.WriteString(msg)
+			break
+		}
+		b.WriteString(msg[:i])
+		b.WriteString("[recipient]")
+		msg, lower = msg[i+len(target):], lower[i+len(target):]
+	}
+	// Also the local part on its own, which a relay may quote without the
+	// domain — "user unknown: alice". Only when it is long enough to be a
+	// recipient rather than a word that happens to match.
+	if local, _, ok := strings.Cut(recipient, "@"); ok && len(local) >= 3 {
+		return errors.New(replaceFold(b.String(), local, "[recipient]"))
+	}
+	return errors.New(b.String())
+}
+
+// replaceFold is strings.ReplaceAll, case-insensitively.
+func replaceFold(s, old, new string) string {
+	if old == "" {
+		return s
+	}
+	lower, target := strings.ToLower(s), strings.ToLower(old)
+	var b strings.Builder
+	for {
+		i := strings.Index(lower, target)
+		if i < 0 {
+			b.WriteString(s)
+			return b.String()
+		}
+		b.WriteString(s[:i])
+		b.WriteString(new)
+		s, lower = s[i+len(old):], lower[i+len(old):]
+	}
 }
 
 // PurgeFinished deletes sent and failed rows past the retention window,

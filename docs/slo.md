@@ -1120,6 +1120,40 @@ Twenty-one cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%,
 100%, 100%, 100%, 100%, 100%, 99.743%, 100%, 100%, 99.505%, 100%, 100%, 100%,
 100% and **100%** under 20ms.
 
+### Where the checks stop, measured rather than assumed (2026-08-05)
+
+Every column above is a **pass at a fixed size**, because the size is whoever
+seeded the database's choice. None of them is a bound. `scripts/slo-breaking-point.sh`
+asks the other question: seed, measure, check, multiply, and stop at the first
+documented claim that breaks.
+
+It checks five things, each named against the document it comes from — the
+cached-redirect SLO as a fraction under 20ms, analytics drops, and both rollups
+against the alert thresholds in [operations.md](operations.md).
+
+**Run of 2026-08-05, ×4 from 50,000 links, two clicks per link:**
+
+| Links | Clicks | Cached under 20ms | Drops | Totals rollup | Dimension rollup |
+| --- | --- | --- | --- | --- | --- |
+| 50,000 | 100,000 | 100% | 0 | fresh | fresh |
+| 200,000 | 400,000 | 100% | 0 | fresh | fresh |
+| 800,000 | 1,600,000 | 100% | 0 | fresh | fresh |
+| **3,200,000** | **6,400,000** | **100%** | **0** | 0.004s | **661s** |
+
+**No check failed.** Read the margins rather than the verdict, which is the whole
+reason the script prints them: the redirect columns are flat, because a cache hit
+does not care how many rows it did not read, and the number that *moves* with
+size is the dimension rollup's staleness — 661 seconds at 3.2M links, against its
+own 15-minute cadence and a 1-hour alert threshold.
+
+That is the bottleneck this document already names, arrived at from the other
+direction. The rollup columns above measure its cost per run; this measures how
+far behind it falls, and says the edge is there rather than on the redirect path.
+
+**What this is not.** It is one machine, one disk, and whatever else was running.
+The transferable part is the *shape* — which check gives first, and that it is not
+the one the SLO is about — not the numbers.
+
 ## What the measurement found
 
 A load test earns its cost in findings, not in numbers that confirm what you

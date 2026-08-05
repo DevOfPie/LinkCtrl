@@ -186,6 +186,22 @@
  *   ok-ink     on ok-soft     9.94:1
  *   warn-ink   on warn-soft  10.39:1
  *
+ *   on-accent (#ffffff) on accent        6.29:1   on accent-hover  7.90:1
+ *   on-accent (#ffffff) on danger        4.70:1   on danger-hover  6.29:1
+ *
+ * The two hover pairs are recorded because they were not, and because they
+ * failed: `accent-hover` was #6366f1 at 4.47:1 and `danger-hover` was #f43f5e
+ * at 3.67:1, both under AA for body text, on 21 buttons (F46). m24.5.md's claim
+ * is an unqualified *every token pair*, and a pair that exists only in a
+ * transient state is still a pair — WCAG 2.1 SC 1.4.3 has no hover exemption,
+ * and D21 restates the bar without a state carve-out.
+ *
+ * Both hovers now **darken** rather than lighten, which is the direction the
+ * light theme already takes and is what raises white-on-button contrast. A
+ * lighter hover is the instinct on a dark background and it is the instinct that
+ * produced this: it makes the button more prominent against the surface and less
+ * legible for the text on it, and only one of those is a WCAG requirement.
+ *
  * The status colours are the ones that go wrong here: amber, rose and emerald
  * at their light-theme values sit on dark surfaces at around 2:1. Each keeps a
  * dark tint for its surface and a light shade for its text, rather than
@@ -210,7 +226,7 @@
     --t-line-strong: #475569;
 
     --t-accent: #4f46e5;
-    --t-accent-hover: #6366f1;
+    --t-accent-hover: #4338ca;
     --t-accent-ink: #a5b4fc;
     --t-accent-soft: #1e1b4b;
     --t-accent-line: #3730a3;
@@ -224,7 +240,7 @@
     --t-warn-line: #92400e;
 
     --t-danger: #e11d48;
-    --t-danger-hover: #f43f5e;
+    --t-danger-hover: #be123c;
     --t-danger-soft: #4c0519;
     --t-danger-ink: #fda4af;
     --t-danger-line: #9f1239;
@@ -264,7 +280,7 @@
   --t-line-strong: #475569;
 
   --t-accent: #4f46e5;
-  --t-accent-hover: #6366f1;
+  --t-accent-hover: #4338ca;
   --t-accent-ink: #a5b4fc;
   --t-accent-soft: #1e1b4b;
   --t-accent-line: #3730a3;
@@ -278,7 +294,7 @@
   --t-warn-line: #92400e;
 
   --t-danger: #e11d48;
-  --t-danger-hover: #f43f5e;
+  --t-danger-hover: #be123c;
   --t-danger-soft: #4c0519;
   --t-danger-ink: #fda4af;
   --t-danger-line: #9f1239;
