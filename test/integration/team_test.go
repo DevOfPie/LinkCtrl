@@ -4,6 +4,7 @@ package integration
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -1814,6 +1815,54 @@ func TestDeletingAnOrganizationTakesItsTenancyAndNothingElse(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Analytics rollups for both organizations. Seeded directly because these
+	// three tables have no foreign key on either link_id or workspace_id — a
+	// deliberate choice at 00400, and the reason nothing cascaded them and they
+	// outlived the tenancy they described while the doc said the audit trail was
+	// all that survived (F106). No links are involved, which also keeps D37's
+	// refusal on links out of the way.
+	seedRollups := func(orgID uuid.UUID) {
+		t.Helper()
+		for _, stmt := range []string{
+			`INSERT INTO link_click_daily (link_id, workspace_id, day, clicks)
+			 SELECT gen_random_uuid(), w.id, current_date, 3
+			   FROM workspaces w WHERE w.organization_id = $1`,
+			`INSERT INTO link_dimension_daily (link_id, workspace_id, day, dimension, value, clicks)
+			 SELECT gen_random_uuid(), w.id, current_date, 'country', 'GB', 3
+			   FROM workspaces w WHERE w.organization_id = $1`,
+			`INSERT INTO workspace_click_daily (workspace_id, day, clicks)
+			 SELECT w.id, current_date, 7 FROM workspaces w WHERE w.organization_id = $1`,
+		} {
+			if _, err := f.pool.Exec(t.Context(), stmt, orgID); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	seedRollups(f.owner.OrgID)
+	seedRollups(other.OrgID)
+
+	// Captured before the delete. Counting through a join afterwards would find
+	// nothing whether or not the rows are still there, because the workspaces
+	// are gone — which is exactly the assertion that would have passed against
+	// the defect.
+	var doomedWorkspaces []uuid.UUID
+	wsRows, err := f.pool.Query(t.Context(),
+		`SELECT id FROM workspaces WHERE organization_id = $1`, f.owner.OrgID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for wsRows.Next() {
+		var id uuid.UUID
+		if err := wsRows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		doomedWorkspaces = append(doomedWorkspaces, id)
+	}
+	wsRows.Close()
+	if len(doomedWorkspaces) < 2 {
+		t.Fatalf("expected the organization's two workspaces, got %d", len(doomedWorkspaces))
+	}
+
 	if err := f.team.DeleteOrganization(t.Context(), f.owner, f.owner.OrgID); err != nil {
 		t.Fatalf("delete organization: %v", err)
 	}
@@ -1829,6 +1878,21 @@ func TestDeletingAnOrganizationTakesItsTenancyAndNothingElse(t *testing.T) {
 		if n := f.count(t, gone.sql, f.owner.OrgID); n != 0 {
 			t.Errorf("%d %s survived the organization", n, gone.what)
 		}
+	}
+
+	for _, table := range []string{"link_click_daily", "link_dimension_daily", "workspace_click_daily"} {
+		if n := f.count(t,
+			fmt.Sprintf(`SELECT count(*) FROM %s WHERE workspace_id = ANY($1::uuid[])`, table),
+			doomedWorkspaces); n != 0 {
+			t.Errorf("%d %s rows outlived the tenancy they describe", n, table)
+		}
+	}
+	// Scoped rather than a truncate: the other organization keeps its own.
+	if n := f.count(t,
+		`SELECT count(*) FROM workspace_click_daily wcd
+		   JOIN workspaces w ON w.id = wcd.workspace_id WHERE w.organization_id = $1`,
+		other.OrgID); n == 0 {
+		t.Error("deleting one organization took another organization's analytics rollups")
 	}
 
 	// The key is dead as a credential too, not merely as a row.

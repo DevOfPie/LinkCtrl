@@ -17117,3 +17117,48 @@ The deterministic test drives `CreateRule`. `CreateVariant` shares
 `lockLinkForRules` and `loadSplitWith` rather than having a race test of its own,
 so its fix rests on the shared mechanism plus its existing tests. Said here
 rather than left for a reader to infer from the absence of a second test.
+
+## 2026-08-05 — M45, three tables that outlived the tenancy, and a sentence that hid them
+
+[F106](deferred-findings.md). `link_click_daily`, `link_dimension_daily` and
+`workspace_click_daily` carry `workspace_id` with no foreign key — deliberate at
+00400, so a rollup write never blocks on a tenancy write — and nothing cascaded
+them. They survived the organization they described.
+
+### The defect is the claim, not the exposure
+
+Every reader scopes to a live `workspace_id`, so these rows were unreachable
+rather than disclosed. What was wrong is `DeleteOrganization`'s own doc: **What
+survives — the audit trail, and nothing else.** That paragraph then described a
+second survivor, the reserved aliases, two sentences further down. A sentence
+that already contradicted itself within one paragraph is exactly the kind that
+stops being read, which is how a third survivor sat under it unnoticed.
+
+It is now an enumeration with a note saying why it is one. `docs/usage.md` had
+the same shape — *Nothing else is kept* — and now names the rollups as the part
+the link refusal does not cover.
+
+### Before the delete, and that is required
+
+The workspaces are the only way to name these rows, and the cascade takes the
+workspaces. Run afterwards, the statement would match nothing and report success.
+
+### The assertion shape that would have passed against the defect
+
+`TestDeletingAnOrganizationTakesItsTenancyAndNothingElse` is the test that should
+have caught this, and the obvious extension to it would not have. Counting
+rollups through a join on `workspaces` **after** the delete finds zero whether or
+not the rows are still there, because the workspaces are gone. So the test
+captures the workspace ids first and counts against those.
+
+This is the second time in one milestone that the natural way to write an
+assertion passed against the defect it was written for — see F67, where two test
+designs did. Both are recorded rather than quietly replaced, because the failure
+is not in either fix: it is that a test can be written to look like coverage
+without being any.
+
+### The dispute half stays refuted
+
+The finder also read the instance-wide open-dispute slot as unreclaimable. It is
+not — `decide` loads and writes by id with no organization predicate, so any
+holder of `destinations.review` can free the host. Nothing was built for it.

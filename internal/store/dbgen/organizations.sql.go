@@ -76,6 +76,49 @@ func (q *Queries) DeleteOrganization(ctx context.Context, id uuid.UUID) (int64, 
 	return result.RowsAffected(), nil
 }
 
+const deleteOrganizationRollups = `-- name: DeleteOrganizationRollups :execrows
+WITH gone AS (
+    DELETE FROM link_click_daily
+     WHERE workspace_id IN (SELECT w.id FROM workspaces w WHERE w.organization_id = $1)
+    RETURNING 1
+), gone_dims AS (
+    DELETE FROM link_dimension_daily
+     WHERE workspace_id IN (SELECT w.id FROM workspaces w WHERE w.organization_id = $1)
+    RETURNING 1
+), gone_ws AS (
+    DELETE FROM workspace_click_daily
+     WHERE workspace_id IN (SELECT w.id FROM workspaces w WHERE w.organization_id = $1)
+    RETURNING 1
+)
+SELECT 1 FROM gone
+UNION ALL SELECT 1 FROM gone_dims
+UNION ALL SELECT 1 FROM gone_ws
+`
+
+// The three analytics rollups belonging to an organization's workspaces.
+//
+// They carry `workspace_id` with no foreign key — a deliberate choice recorded
+// at 00400, so a rollup job never blocks on a tenancy write and a partition drop
+// never has to consider them — and the cost of that choice is that nothing
+// cascades them. `link_click_daily`, `link_dimension_daily` and
+// `workspace_click_daily` therefore outlived the tenancy they describe, while
+// DeleteOrganization's own doc said the audit trail was all that survived (F106).
+//
+// Run *before* the organization is deleted, and that ordering is required rather
+// than tidy: the workspaces are what name these rows, and the cascade takes the
+// workspaces. After the delete there is nothing left to select them by.
+//
+// Not a security fix. Every reader scopes to a live workspace_id, so these rows
+// are unreachable rather than exposed; what they are is stale aggregate data
+// with no owner, and a sentence that was not true.
+func (q *Queries) DeleteOrganizationRollups(ctx context.Context, organizationID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOrganizationRollups, organizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getOrganization = `-- name: GetOrganization :one
 SELECT id, name, slug, data_region, is_personal, created_at, updated_at, deleted_at FROM organizations
 WHERE id = $1 AND deleted_at IS NULL

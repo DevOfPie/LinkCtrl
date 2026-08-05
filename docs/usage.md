@@ -1037,8 +1037,14 @@ stays in the table. It is not readable through the API afterwards — `GET
 /api/v1/audit` is scoped to the organization you are in, and nobody can be in a
 deleted one — so reading a deleted organization's history takes database access.
 
-Nothing else is kept, and the link refusal is why: an organization that can be
-deleted holds no links, so there are no aliases left to protect. Aliases that had
+Nothing else is kept, and the link refusal is most of why: an organization that
+can be deleted holds no links, so there are no aliases left to protect. The
+analytics rollups are the part the refusal does not cover — `link_click_daily`,
+`link_dimension_daily` and `workspace_click_daily` carry a workspace id with no
+foreign key, so nothing cascades them and they used to outlive the tenancy they
+described. They are deleted explicitly in the same transaction as of 0.2.0.
+Unreachable before that rather than exposed, since every reader scopes to a live
+workspace; what they were is aggregate data with no owner. Aliases that had
 received traffic were already reserved when those links were purged, against the
 instance domain, which belongs to no organization and is untouched.
 

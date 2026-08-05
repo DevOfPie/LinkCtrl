@@ -232,10 +232,14 @@ func (s *Service) CreateOrganization(
 //
 // # What survives
 //
-// The audit trail, and nothing else. `audit_logs.organization_id` carries no
-// foreign key, so every record this organization wrote outlives it, including
-// the `organization.deleted` record emitted below — whose metadata carries the
-// name and slug precisely because the row that held them is gone.
+// Two things, enumerated rather than counted. This paragraph opened with *the
+// audit trail, and nothing else* and then described a second survivor two
+// sentences later, which is how it also failed to notice a third (F106).
+//
+// The audit trail. `audit_logs.organization_id` carries no foreign key, so every
+// record this organization wrote outlives it, including the
+// `organization.deleted` record emitted below — whose metadata carries the name
+// and slug precisely because the row that held them is gone.
 //
 // The aliases of trashed links that received traffic, in `reserved_aliases`.
 // The link guard does not decide this, which is what an earlier version of this
@@ -246,6 +250,15 @@ func (s *Service) CreateOrganization(
 // the reservation is made here, in this transaction, at PurgeExpiredLinks'
 // threshold; an alias that never received a click is released, because nothing
 // in the wild points at it.
+//
+// **The analytics rollups no longer survive, and used to.** `link_click_daily`,
+// `link_dimension_daily` and `workspace_click_daily` carry `workspace_id` with
+// no foreign key, so nothing cascaded them and they outlived the tenancy they
+// described. Not a disclosure — every reader scopes to a live workspace, so the
+// rows were unreachable rather than exposed — but stale aggregate data with no
+// owner, and a sentence above that was not true. `DeleteOrganizationRollups`
+// takes them in this transaction, before the cascade removes the workspaces
+// that are the only way to name them.
 //
 // **It preserves the aliases on the shared default domain, and only those**
 // (F118). `reserved_aliases` is keyed to `domain_id` with `ON DELETE CASCADE`,
@@ -345,6 +358,21 @@ func (s *Service) DeleteOrganization(ctx context.Context, actor *auth.Identity, 
 	// cascade may still take trashed ones and their aliases with them (F28).
 	if err := q.ReserveOrganizationTraffickedAliases(ctx, org.ID); err != nil {
 		return fmt.Errorf("reserve trafficked aliases: %w", err)
+	}
+
+	// The analytics rollups, which nothing cascades. They carry workspace_id
+	// with no foreign key, so they used to outlive the tenancy they describe —
+	// while the doc above said the audit trail was all that survived (F106).
+	// Before the delete, because the workspaces are what name these rows and the
+	// cascade takes the workspaces with it.
+
+	// The analytics rollups, which nothing cascades. They carry workspace_id
+	// with no foreign key, so they used to outlive the tenancy they describe —
+	// while the doc above said the audit trail was all that survived (F106).
+	// Before the delete, because the workspaces are what name these rows and the
+	// cascade takes the workspaces with it.
+	if _, err := q.DeleteOrganizationRollups(ctx, org.ID); err != nil {
+		return fmt.Errorf("delete analytics rollups: %w", err)
 	}
 
 	n, err := q.DeleteOrganization(ctx, org.ID)

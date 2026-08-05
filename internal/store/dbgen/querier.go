@@ -502,6 +502,24 @@ type Querier interface {
 	// `organization_id IS NULL`, so it and the `reserved_aliases` rows keyed to it
 	// are untouched.
 	DeleteOrganization(ctx context.Context, id uuid.UUID) (int64, error)
+	//
+	// The three analytics rollups belonging to an organization's workspaces.
+	//
+	// They carry `workspace_id` with no foreign key — a deliberate choice recorded
+	// at 00400, so a rollup job never blocks on a tenancy write and a partition drop
+	// never has to consider them — and the cost of that choice is that nothing
+	// cascades them. `link_click_daily`, `link_dimension_daily` and
+	// `workspace_click_daily` therefore outlived the tenancy they describe, while
+	// DeleteOrganization's own doc said the audit trail was all that survived (F106).
+	//
+	// Run *before* the organization is deleted, and that ordering is required rather
+	// than tidy: the workspaces are what name these rows, and the cascade takes the
+	// workspaces. After the delete there is nothing left to select them by.
+	//
+	// Not a security fix. Every reader scopes to a live workspace_id, so these rows
+	// are unreachable rather than exposed; what they are is stale aggregate data
+	// with no owner, and a sentence that was not true.
+	DeleteOrganizationRollups(ctx context.Context, organizationID uuid.UUID) (int64, error)
 	// Clears whatever is outstanding for an address so a fresh attempt can take the
 	// slot.
 	//
