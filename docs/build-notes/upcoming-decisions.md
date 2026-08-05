@@ -42,28 +42,6 @@ conclusions are what this file exists to stop.
 
 ## Open — a milestone needs this
 
-### Every milestone from M26.5 on — does README describe the released product, or this branch?
-
-**Needed by:** every commit, since `b068b73` made README.md and
-docs/SECURITY.md part of the per-commit Docs gate. Forced at
-[M45](phase-details/m45.md), where the README status line moves to 0.2.0.
-
-**Currently behaving as B**, chosen by the orchestrator on 2026-07-31 without
-being put to the owner. That is the reason this entry exists: the convention was
-settled in prose, and the gate now enforces whatever it is.
-
-| Option | Buys | Costs |
-| --- | --- | --- |
-| **B — describes this branch** *(recommended, and what the tree does)* | The gate is meaningful from the day it was added; a reader of the phase branch sees what the phase branch does. Matches what M23, M24 and M24.5 already did to README | Anyone reading README on `phase-2` sees features no released version has. The status line says "released as 0.1.0" while the feature table describes more than 0.1.0, which is a contradiction a careful reader will find |
-| A — describes the released product | README is always true for somebody who installed a tag, which is who reads it | M23, M24 and M24.5's README edits become wrong and need reverting; the Docs gate becomes almost always a no-op, so it stops catching the drift it was added for; every phase's features land in README in one M45 lump |
-
-**Default if unanswered:** B continues. It is what the tree does and what the
-gate assumes.
-
-**Assumes:** that CHANGELOG's `[Unreleased]` section remains how released and
-unreleased work are told apart — true as of 2026-07-31, and the thing that makes
-B survivable.
-
 ## Open — nothing forces this
 
 No deadline, no milestone waiting. Read when convenient; an answer here is worth
@@ -95,66 +73,6 @@ and verified on 2026-08-01 by reproduction, not by reading — and that no
 milestone between here and M45 introduces a cross-workspace view for its own
 reasons.
 
-### F21 — once the workspace switcher's button is gone, what does a browser without JavaScript get?
-
-**Needed by:** nothing yet. [F21](deferred-findings.md) is unapproved, so no
-milestone is waiting. It becomes forced the moment F21 is scheduled.
-
-The owner directed the fix on 2026-08-02, via `/note`: *"The workspace drop down
-should perform the switch action when changed, a separate button to switch can't
-stay."* That settles the affordance and is not re-asked here. It leaves one
-thing open, and it is the kind that gets picked silently by whoever builds it.
-
-Switching on change needs a change handler, and the only one available is htmx —
-already served, already loaded on every page, already doing this exact thing at
-`internal/ui/templates/pages/links.html:56`. The current **Switch** button is
-also the only reason the control works with scripting off. Delete it and the
-switcher stops working entirely for that reader; keep it and the directive is
-not carried out.
-
-| Option | Buys | Costs |
-| --- | --- | --- |
-| **A `<noscript>` fallback — htmx on change, the button only when scripting is off** *(recommended)* | Carries the directive literally for every reader who has JavaScript, which is all of them in practice, and keeps the control usable for the one who does not. `<noscript>` is markup, so it costs no script, no CSP change and no new convention | It is more template than either alternative, and the fallback path is the one nobody will look at again. The recommendation is also the one that avoids making a call — if the project does not actually support scripting-off, this spends markup defending a reader it does not have |
-| Delete the button outright | Exactly what the directive says, and the simplest template in the tree. Matches `links.html`, whose filters already only work with htmx | A no-JS browser can see it has several workspaces and cannot reach any but one. Nothing else in the dashboard fails that way today |
-| Keep the button, add the change handler | Both paths work with no conditional markup | Directly refused by the directive, and the redundant control is the affordance problem F21 is about |
-
-**Default if unanswered:** nothing is built — F21 is unapproved, so the two-step
-switcher stays as it is. This question does not stall anything until F21 is
-scheduled.
-
-**Assumes:** that htmx stays loaded on every page from `layout.html:9` and stays
-under `script-src 'self'` — both true and read from the tree on 2026-08-02 — and
-that no explicit no-JavaScript support promise exists anywhere. That last one is
-the weak assumption: `nav.html`'s own comment (*"A plain form: a select and a
-button, no JavaScript"*) reads like a stance, but it is stated as a consequence
-of the CSP belief this finding disproves, and no tracked document promises the
-dashboard works with scripting off. If the owner holds that stance, say so and
-option A stops being a judgement call.
-
-### M26 — keep or strike the outbox's thirty-day purge?
-
-Finished `mail_outbox` rows are deleted after thirty days by the existing
-housekeeping reaper. **No bullet in [m26.md](phase-details/m26.md) asked for
-it.** The worker flagged it, the orchestrator accepted it and named it in
-`13df367`'s commit message as strikeable, and the owner has not said either way.
-
-| Option | Buys | Costs |
-| --- | --- | --- |
-| **Keep** *(recommended)* | The outbox does not become the one table in the schema growing forever with nothing watching it. Matches the thirty-day link purge the same reaper already runs | Thirty days is a constant, not a setting, and it deletes delivery history nobody configured — which is the shape D5 rejected for the audit log. The recommendation is also the cheap one, since keeping it means doing nothing |
-| Strike | The milestone ships exactly its bullets, and retention becomes its own decision with its own reasoning | The table grows unbounded until somebody schedules that decision |
-| Keep, but make it a setting | Both, honestly | A configuration variable, its documentation and its test, for a table nobody has yet complained about |
-
-**Default if unanswered:** it stays as built. Which is itself the thing worth
-noticing — unasked-for work defaults to shipped unless somebody objects.
-
-**Assumes:** `mail_outbox` stays the only table M26 added, and that no consumer
-begins depending on old rows being readable. Both true as of 2026-07-31.
-
----
-
-Entry format:
-
-```markdown
 ### <milestone> — <the question in one sentence>
 
 **Needed by:** M31, after M25 and M29 land.

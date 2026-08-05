@@ -17587,3 +17587,73 @@ time, by moving the tree **under** a move already parked on the lock.
 The two rows were deliberately never merged, and that held up: same class, but a
 different file, a different invariant and a different fix, with no single edit
 closing both. What they shared was not the fix. It was how to prove it.
+
+## 2026-08-05 — M45, four answers, and two of them change work already done
+
+Put to the owner at M45 once every approved code row was closed. All four had
+been sitting as open questions; two of them reverse a convention the loop had
+adopted without asking, which is the reason both entries exist.
+
+### D103 — the dashboard requires JavaScript
+
+Owner-answered: *requiring JavaScript for the dashboard is completely
+reasonable*. So [F21](deferred-findings.md)'s open half is settled by stating a
+stance rather than by defending a reader in markup. The **Switch** button goes,
+the select switches on change, and there is no `<noscript>` fallback.
+
+The alternative I recommended was the fallback, and the recommendation carried
+its own objection: it is the option that avoids making a call, and it spends
+template on a reader the project may not have. The owner made the call instead,
+which is the better outcome and the one a recommendation should be willing to
+lose to.
+
+**No new dependency**, restated in the answer as a standing bar. htmx is already
+served on every page from `layout.html` and already does exactly this at
+`links.html`, so switching on change costs no script, no CSP change and no
+package. `nav.html`'s comment — *a plain form: a select and a button, no
+JavaScript* — was never a promise; it was stated as a consequence of a CSP belief
+F21 disproves, and it goes with the button.
+
+The stance is about the **dashboard**. The redirect tree runs no script and that
+is a separate, load-bearing property.
+
+### D104 — README describes the released product
+
+Owner-answered, reversing what the tree does. The orchestrator chose the other
+reading in prose on 2026-07-31 without putting it to anybody, and the per-commit
+Docs gate then began enforcing it — which is exactly the shape this project
+writes questions down to avoid.
+
+README is read by somebody who installed a tag, and it should be true for them.
+
+The cost is accepted rather than argued away: the Docs gate becomes close to a
+no-op, so it stops catching the drift it was added for, and a phase's features
+land in README at its close rather than as they ship. `CHANGELOG.md`'s
+`[Unreleased]` section is what keeps released and unreleased tellable apart, and
+it is now load-bearing for that.
+
+**It also creates work.** M23, M24 and M24.5 edited README under the other
+convention; the documentation pass has to walk it against the last tag rather
+than against this branch.
+
+### D105 — the outbox's thirty-day purge stays
+
+Owner-answered. Nothing in [m26.md](phase-details/m26.md) asked for it: a worker
+added it, the orchestrator named it strikeable in `13df367`'s message, and nobody
+decided — which is the case worth noticing, because unasked-for work defaults to
+shipped unless somebody objects.
+
+Kept, because the alternative is the one table in the schema growing forever with
+nothing watching it, and it matches the thirty-day link purge the same reaper
+already runs. Not made a setting: a knob for a table nobody has complained about
+is a knob to document, test and get wrong. [F52](deferred-findings.md) now
+depends on this path — abandoned mail leaves by it.
+
+### F18 and F19 are approved as work
+
+Not `D`-numbered; they are scheduling, recorded in their own rows. F18 unifies
+the audit action vocabulary, which is the mechanical reason a count taken from
+`internal/audit` is short by two — and that count has been wrong twice in
+`docs/SECURITY.md`, at M32.5 and again at 0.2.0. Doing it *before* the
+documentation pass is the point: it makes the number that pass writes checkable
+rather than hand-counted.
