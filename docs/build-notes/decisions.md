@@ -176,6 +176,7 @@ file. Append a row when you append an entry.
 | [M45, a bound the write half had and the read half did not](#2026-08-05--m45-a-bound-the-write-half-had-and-the-read-half-did-not) | F103 and F104, closed together because F103's fix is the thing F104's rule forbade. The organization bound M44 put on what a key may *act* on, applied to what it may *read* — and why the filter is in the service rather than in the query the browser switcher shares. Both halves asserted in one fixture, because a filter that took the session with it would be the worse defect. **The census corrected F104's count from seven sites to ten**, and the four it missed are all D43's cap — which the rule licensed but described as invitations-only while the tree also caps role assignment on an existing membership. One of the ten is not authorization at all. The inherited Permissions rule amended, owner-answered, from two mechanisms to four; the recommendation was a rule stated as a test rather than a list, declined with its drift cost named, and the prediction left on the record |
 | [M45, two questions registration was answering](#2026-08-05--m45-two-questions-registration-was-answering) | F13 and F53. Why the registration oracle was defensible until M29 put a browser form in front of it, and the three things closing it took rather than one — the hash moved above the lookup so timing does not restore what the status code stopped carrying, nothing written for a taken address so a stranger cannot invalidate the owner's outstanding link, and a fourth mail template that deliberately carries no verification link. **The test compares whole bodies and that is what caught the residue**: Go's nanosecond clock against Postgres's microsecond, three extra digits on one answer only — an argument for asserting *indistinguishable* rather than a list of properties. F53 fixed in the shared validator rather than in signup, because invitations reach the same enqueue; the narrowing checked in both directions. And the unreachable branch deleted rather than left asserting the opposite of the code beside it |
 | [M45, three calls the redirect tree was not bounding](#2026-08-05--m45-three-calls-the-redirect-tree-was-not-bounding) | F48, F101 and F129 — one class at three sites, and why it is the redirect tree that has it: `RequestTimeout` lives in `appHandler`, which the tree is deliberately outside, so everything the chain would supply is supplied by hand. F48's pool crossing needed a new loader taking a queries handle, because the read's whole dependency was the handle and the crossing existed only through the service it hung off; the singleflight matters because M23's flush makes the miss fleet-simultaneous by design. **The scan was wrong before the code was**: written strictly it flagged two correct variable-form sites, so the rule was narrowed to the shape both defects had and the blind spot is named in the test rather than papered over — a guard with a false positive gets an exception and then stops being read. And why `/tls-check` keeps the application pool: the bound was the defect, the pool is right |
+| [M45, a stalled cache paid for twice, and a sentence that was never true of every link](#2026-08-05--m45-a-stalled-cache-paid-for-twice-and-a-sentence-that-was-never-true-of-every-link) | F9 and F98 — kept apart by the queue hygiene, worked together because they convict the same two sentences. F9's second timeout bought nothing, and the suppression is on the resolver rather than threaded through the call because `store` runs inside a singleflight whose leader may be a different request; window is `DBTimeout`, and it is **deliberately not a circuit breaker** — reads are how the cache recovers. Timing test at 400ms so the margin cannot be closed by a scheduler. **F98 closes as prose because every code fix is worse than the defect**: async answers after the destination is chosen, skipping silently stops a shipped rule matching. And why `docs/slo.md` needed nothing — the measurement was right and the sentence beside it was wrong, which is the opposite of the usual failure |
 
 ---
 
@@ -15307,3 +15308,84 @@ is a write to domain state triggered by a TLS handshake, not a read on the
 serving path, and the redirect pool is small precisely so that reads which must
 be fast are not queued behind writes. The bound was the defect; the pool is
 correct.
+
+## 2026-08-05 — M45, a stalled cache paid for twice, and a sentence that was never true of every link
+
+[F9](deferred-findings.md) and [F98](deferred-findings.md). M45's queue hygiene
+deliberately kept these apart — different call sites, different cache tiers,
+different SLOs, incompatible fixes — and they are worked together because they
+convict the **same two sentences**, and one of them turns out to be closable only
+by editing those sentences.
+
+### F9: the second timeout was pure waste
+
+A cache miss against a stalled Redis spent `REDIS_READ_TIMEOUT` on the lookup
+that never answered, went to Postgres, and then spent it *again* on the `Set`
+that would have repopulated the cache — against the same server that had just
+failed to answer. Measured at 108ms for a cold resolve at the shipped 50ms
+timeout, against a documented uncached target of 100ms. The second call bought
+nothing: whatever it wrote, nobody was going to read it, because reads were
+timing out too.
+
+A read that fails for any reason other than *the key is absent* now suppresses
+the repopulating write.
+
+**Recorded on the resolver rather than threaded through the call.** The obvious
+shape — return a flag from `fromRedis` and hand it to `store` — does not survive
+contact with the code: `store` is called from inside a singleflight, whose leader
+may be a different request than the one that observed the stall, on a context
+detached from it. The stall is a property of the server, not of a request, so it
+belongs on the resolver.
+
+**The window is `DBTimeout`**, one uncached resolve, because that is exactly the
+span between the failed read and the write it provokes. Long enough to cover the
+request that saw the failure and those already in flight beside it; short enough
+that a server which comes back is written to on the next miss rather than after a
+cooldown somebody has to reason about.
+
+**It is deliberately not a circuit breaker.** Reads are never skipped. A read is
+how the cache recovers, and a `Get` against a healthy server is the fast path
+this whole tier exists for — suppressing reads would turn a stall into an outage
+of the cache itself. Only the repopulating write is suppressed, and the
+in-process tier is still populated on the way through, so what skipping costs is
+that the *shared* tier stays cold for a window in which it was cold anyway.
+
+The test runs against a listener that accepts and never answers, at a 400ms
+timeout rather than the shipped 50ms, so the two outcomes are hundreds of
+milliseconds apart. A timing assertion is worth writing only when an unlucky
+scheduler cannot close the margin. Shown red at *400.869753ms*.
+
+### F98: a row whose every code fix is worse than the defect
+
+Since M34, a link carrying a `returning` condition performs a Redis `SISMEMBER`
+on **every** redirect, including one answered from the in-process tier. With
+Redis stalled that is a read timeout on the path the 20ms SLO is stated over.
+
+The row's own fix note disposes of both available repairs, and it is right about
+each. Making the lookup asynchronous answers the question after the destination
+has already been chosen, which is not a latency fix but a wrong answer. Skipping
+it when Redis fails silently stops a shipped routing rule matching — a visitor
+who should have been sent to the returning-visitor destination is sent somewhere
+else, and nothing tells anybody.
+
+So what is actually wrong is not the code. It is that
+`internal/platform/redis/redis.go` and `docs/configuration.md` both said *"A
+redirect already answered from memory costs nothing"*, which stopped being true
+the day M34 shipped. Both now say it usually costs nothing, name the one
+exception, scope it to links carrying that condition, and say why it cannot be
+deferred or dropped.
+
+`docs/slo.md` needed no change, and that is worth recording because it is the
+document a reader would expect to be wrong: its measurement already records all
+240,002 cache-hit requests performing the lookup and matching, at 100% under
+20ms. The measurement was right and the prose beside it was wrong, which is the
+opposite of the usual failure and the reason F98 scoped itself to the sentences
+rather than to the number.
+
+### Why these two are still not merged
+
+They stay separate rows in the log because they were separate defects: F9 was
+code and is fixed, F98 was prose and is corrected. Merging them would have hidden
+that one of the two had no code fix available — which is the more useful fact for
+anyone who reads this later and wonders why the returning-visitor lookup is still
+there.

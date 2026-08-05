@@ -45,12 +45,22 @@ func Open(ctx context.Context, c config.Config) (*redis.Client, error) {
 	// lookups at 51ms. The bound survives an operator retuning it, because the
 	// resolver's RedisTimeout *is* this value (cmd/linkctrl/main.go).
 	//
-	// Bounded, not free, and a whole redirect pays it twice: a miss spends this
-	// timeout on the failed lookup and again on the Set that repopulates the
-	// cache, both on the request. A cold resolve against a stalled Redis
-	// measured 108ms. Nothing here *compounds* — there is no retry loop, which
-	// was the invalidation path's defect and is what M26.6 bounded — so the
-	// second call is recorded as deferred finding F9 rather than fixed here.
+	// Bounded, not free. A cold resolve against a stalled Redis measured 108ms
+	// when it spent this timeout twice — once on the lookup that never answered
+	// and once on the Set that would have repopulated the cache. F9 closed the
+	// second one: a read that fails for any reason other than the key being
+	// absent suppresses the repopulating write for one uncached resolve, because
+	// a server that will not answer a Get will not usefully answer the Set
+	// either. So a miss now pays this once.
+	//
+	// **A hit is not always free**, which is the other half and is not about
+	// this file's timeouts at all. Since M34 a link carrying a `returning`
+	// condition performs a Redis SISMEMBER on every redirect whatever tier
+	// answered it, because the answer decides which destination is served. With
+	// the cache stalled that is this timeout on a request the 20ms SLO is stated
+	// over. It is not fixable here and F98 says why: making it asynchronous
+	// answers after the destination has been chosen, and skipping it on failure
+	// silently stops a shipped rule matching.
 	//
 	// MaxRetries is deliberately left at go-redis's default. It multiplies a
 	// dial that never completes — 1.906s to 7.764s at a 300ms dial timeout,

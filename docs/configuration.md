@@ -148,11 +148,23 @@ is the ceiling on every Redis command the service issues, whatever deadline the
 code around it asks for. Measured, against a proxy that accepts and stays
 silent: an edit costs at most `REDIS_INVALIDATE_BUDGET` and then commits anyway,
 and a redirect costs one read timeout per Redis call and then falls through to
-Postgres. A redirect already answered from memory costs nothing; a cold one
-measured 108ms, because it spends the timeout twice — once on the lookup that
-never answers and once on the write that would have repopulated the cache. Both
-figures hold for a connection that was established and then went quiet
-mid-command. Neither depends on Redis answering.
+Postgres. A cold one measured 108ms before 0.2.0, because it spent the timeout
+twice — once on the lookup that never answered and once on the write that would
+have repopulated the cache. It now spends it once: a lookup that fails for any
+reason other than the key being absent suppresses that write for one resolve,
+since a server that will not answer a read will not usefully answer the write
+either.
+
+**A redirect answered from memory usually costs nothing, and there is one
+exception.** A link carrying a *returning visitor* routing condition asks Redis
+whether this visitor has been seen before, on every redirect, whatever tier
+answered it — the answer decides which destination is served, so it cannot be
+deferred or skipped. With Redis stalled that is one read timeout on a request
+that would otherwise have touched nothing. It applies only to links with that
+condition; every other link is answered from memory without a Redis call.
+
+All these figures hold for a connection that was established and then went quiet
+mid-command. None depends on Redis answering.
 
 A caller asking for *less* than `REDIS_READ_TIMEOUT` gets what it asked for.
 That has been true only since 0.2.0: before it, go-redis was not configured to

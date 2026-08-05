@@ -22,6 +22,18 @@ migrations run at boot.
 
 ### Changed
 
+- **A redirect no longer pays the Redis read timeout twice while Redis is
+  stalled.** A cache miss used to spend `REDIS_READ_TIMEOUT` on the lookup that
+  never answered and then spend it again on the write that would have
+  repopulated the cache — measured at 108ms for a cold redirect against a
+  stalled server, past the 100ms uncached target. A failed lookup now suppresses
+  that write for one resolve, because a server that will not answer a read will
+  not usefully answer the write either. Nothing changes while Redis is healthy,
+  and the in-process cache is still populated either way. There is one case
+  where a redirect answered from memory still talks to Redis: a link carrying a
+  *returning visitor* routing condition, which is now written down in
+  `docs/configuration.md` where the opposite used to be.
+
 - **Registering an address that already has an account now answers `202` and
   sends mail, where it used to answer `409`.** On an instance with `open`
   sign-ups that status code was an unauthenticated way to ask whether an address

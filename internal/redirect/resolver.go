@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -110,6 +111,32 @@ type Resolver struct {
 	// request for a cold alias hits Postgres at once — the cache stampede that
 	// turns a traffic spike into an outage.
 	group singleflight.Group
+
+	// unavailableUntil is the instant after which the shared cache is worth
+	// writing to again, as unix nanoseconds. Zero means "no failure seen".
+	//
+	// Not a circuit breaker: reads are never skipped, because a read is how the
+	// cache recovers and because a Get against a healthy server is the fast path
+	// this whole tier exists for. It suppresses only the repopulating *write*
+	// after a read has just failed, for one uncached resolve's worth of time.
+	unavailableUntil atomic.Int64
+}
+
+// markUnavailable records that Redis just failed to answer a read.
+//
+// The window is DBTimeout — one uncached resolve — because that is exactly the
+// span between the failed lookup and the write it would otherwise provoke. Long
+// enough to cover the request that observed the failure and the ones already in
+// flight beside it; short enough that a server which comes back is written to
+// again on the next miss rather than after a cooldown somebody has to reason
+// about.
+func (r *Resolver) markUnavailable(now time.Time) {
+	r.unavailableUntil.Store(now.Add(r.opts.DBTimeout).UnixNano())
+}
+
+func (r *Resolver) redisUnavailable(now time.Time) bool {
+	until := r.unavailableUntil.Load()
+	return until != 0 && now.UnixNano() < until
 }
 
 func NewResolver(pool *pgxpool.Pool, rdb *goredis.Client, opts Options) *Resolver {
@@ -245,6 +272,13 @@ func (r *Resolver) fromRedis(ctx context.Context, k string, now time.Time) *Snap
 		if !errors.Is(err, goredis.Nil) {
 			r.log.Debug("redis lookup failed; falling through to postgres",
 				slog.String("key", k), slog.Any("error", err))
+			// A lookup that failed for any reason other than *absence* is
+			// evidence the server will not usefully answer the write that
+			// repopulates this key either. Recording that here is what stops
+			// the same request paying the timeout a second time in store()
+			// (F9): a cold resolve against a stalled Redis measured 108ms, of
+			// which 50ms was a Set nobody was going to read.
+			r.markUnavailable(now)
 		}
 		return nil
 	}
@@ -402,6 +436,19 @@ func (r *Resolver) store(ctx context.Context, k string, snap *Snapshot, now time
 	r.mem.set(k, snap, ttl, now)
 
 	if r.redis == nil {
+		return
+	}
+	// The lookup that led here already failed against this server, recently
+	// enough that the answer has not changed. Spending a second RedisTimeout on
+	// a write nobody will read is what made a cold resolve cost the timeout
+	// *twice* rather than once (F9), which is the difference between meeting the
+	// 100ms uncached target during a Redis stall and missing it.
+	//
+	// The in-process tier is populated above regardless, so the request after
+	// this one is a memory hit on this replica whatever Redis is doing. Skipping
+	// costs only that the *shared* tier stays cold for the window — which it was
+	// going to be anyway, since the server is not answering.
+	if r.redisUnavailable(now) {
 		return
 	}
 	b, err := snap.encode()
