@@ -42,6 +42,27 @@ migrations run at boot.
   ones are the true ones. The SLO series `linkctrl_redirect_duration_seconds` is
   unaffected and always was — the redirect handler records it directly.
 
+- **A `HEAD` request to a sequentially split link no longer advances the
+  rotation.** Link checkers and unfurlers probe with `HEAD`, and every probe used
+  to move the counter that decides which destination the next visitor gets —
+  re-phasing the test with no click recorded to explain why the arms were
+  uneven. A `HEAD` now reports the destination the next `GET` would be given,
+  which is what a checker needs, without changing it.
+
+- **A correct link password no longer spends the link's own rate limit.** The
+  per-link limb of `LINKCTRL_LINK_PASSWORD_RATE_LIMIT` is charged before the
+  password is checked, deliberately — that ordering is what stops timing
+  revealing which limb refused — so more legitimate visitors than the limit
+  opening the same link at once could exhaust it between them, with nobody
+  attacking anything. A correct password now hands that token back. Wrong
+  guesses are charged exactly as before, and the per-address limb is unchanged.
+
+- **A deep-link path is bounded.** With `forward_path` on, everything after the
+  alias is visitor-supplied and was limited only by the 1 MiB request ceiling,
+  while the joiner walks it several times. It is now capped at 4096 bytes and 64
+  segments, and anything past that gets the same `404` a path the link cannot
+  forward already got.
+
 - **An expired or archived link now records the traffic it receives.** It
   recorded nothing before, unless bot blocking happened to be switched on for
   it — because the bot refusal is decided before the link's state is, so a

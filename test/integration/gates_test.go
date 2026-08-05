@@ -1085,6 +1085,109 @@ func TestThePasswordBucketIsKeyedOnTheRequestsHostname(t *testing.T) {
 
 // --- brute force (D54) -------------------------------------------------------
 
+// A link with more legitimate visitors than its limit does not throttle itself.
+//
+// Both limbs are spent before the form is parsed, deliberately — that ordering
+// is what keeps timing from saying which limb refused — and the cost nobody had
+// recorded is that the per-alias bucket is emptied by *success* as readily as by
+// failure. Twenty people opening the same password link at the same moment
+// exhaust it between them, with no attacker present at all (F115).
+//
+// A correct password now hands the alias token back. That touches neither D53
+// nor D54: the per-alias keying that closes distributed guessing is unchanged,
+// an attacker who does not have the password never reaches the refund, and what
+// is returned was spent by somebody who proved they had it. The address limb
+// stays spent, which this test asserts too — a correct password is still traffic
+// from that address.
+func TestCorrectPasswordsDoNotThrottleTheLinkTheyOpen(t *testing.T) {
+	const limit = 6
+	f := newGates(t, limit)
+	f.setupOwner()
+
+	alias, _ := f.createGated(map[string]any{
+		"url": "https://example.com/secret", "password": "the-link-password",
+	})
+
+	// Measured on the **alias** bucket directly, and that is forced rather than
+	// chosen. Every request in this test comes from one client, so the
+	// per-address limb refuses long before the per-alias one does — in a real
+	// deployment the twenty visitors F115 describes have twenty addresses
+	// between them and only the alias bucket is shared. Counting tokens is the
+	// only way to ask about one limb from a fixture that has a single address.
+	tokensLeft := func() int {
+		t.Helper()
+		n := 0
+		for {
+			ok, _ := f.limiter.AllowKey(passwordAliasBucket(f.domainID, alias))
+			if !ok {
+				return n
+			}
+			n++
+			if n > limit*4 {
+				t.Fatal("the alias bucket never emptied; it is not the bucket this " +
+					"test thinks it is")
+			}
+		}
+	}
+
+	const correct = 3
+	for i := range correct {
+		resp := f.submit("/"+alias, url.Values{"password": {"the-link-password"}})
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusSeeOther {
+			t.Fatalf("visitor %d with the right password got %d, want 303", i+1, resp.StatusCode)
+		}
+	}
+
+	if n := tokensLeft(); n != limit {
+		t.Errorf("%d of %d alias tokens survived %d correct passwords, want all %d. "+
+			"A link that spends its own bucket on the people it was made for "+
+			"throttles its audience with no attacker present (F115)",
+			n, limit, correct, limit)
+	}
+}
+
+// A wrong guess is still charged, so the refund has not disarmed D54.
+func TestAWrongPasswordStillSpendsTheAliasBucket(t *testing.T) {
+	const limit = 6
+	f := newGates(t, limit)
+	f.setupOwner()
+
+	alias, _ := f.createGated(map[string]any{
+		"url": "https://example.com/secret", "password": "the-link-password",
+	})
+
+	const wrong = 3
+	for range wrong {
+		resp := f.submit("/"+alias, url.Values{"password": {"not-it"}})
+		_ = resp.Body.Close()
+	}
+
+	n := 0
+	for {
+		ok, _ := f.limiter.AllowKey(passwordAliasBucket(f.domainID, alias))
+		if !ok {
+			break
+		}
+		n++
+		if n > limit*4 {
+			t.Fatal("the alias bucket never emptied")
+		}
+	}
+	if n != limit-wrong {
+		t.Errorf("%d alias tokens survived %d wrong guesses, want %d. Refunding a "+
+			"correct password must not refund an incorrect one, or the per-alias "+
+			"limb D53's waiver rests on stops existing", n, wrong, limit-wrong)
+	}
+}
+
+// passwordAliasBucket spells the per-alias limiter key the gate uses. Kept here
+// rather than imported so a test cannot pass by sharing a typo with the code it
+// checks.
+func passwordAliasBucket(domainID uuid.UUID, alias string) string {
+	return "pw:" + domainID.String() + ":" + alias
+}
+
 // TestPasswordGuessesAreLimitedPerAliasAndPerAddress is D54.
 //
 // The per-alias limb is the one worth a test of its own: a per-address limit

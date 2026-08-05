@@ -190,6 +190,51 @@ func (l *Limiter) Check(addr netip.Addr) (bool, time.Duration) {
 	return l.takeKey(Key(addr), false)
 }
 
+// RefundKey hands one token back to a keyed bucket.
+//
+// For a caller that has to spend before it knows whether it should have. The
+// link-password gate is the one: both limbs are consumed before the form is
+// parsed, deliberately, so that timing cannot say which limb refused — and that
+// left a link with more than `burst` legitimate visitors in a burst throttling
+// itself with no attacker present (F115). A correct password refunds the alias
+// limb, which touches neither D53 nor D54: the per-alias keying that stops
+// distributed guessing is unchanged, and what is given back is only ever a token
+// spent by somebody who proved they had the password.
+//
+// The address limb is deliberately **not** refunded. A visitor typing the right
+// password is still traffic from that address, and the per-address limb is what
+// bounds one machine grinding a wordlist.
+//
+// Never above burst: the shared script clamps, and so does the local bucket.
+func (l *Limiter) RefundKey(key string) {
+	if l == nil {
+		return
+	}
+	if key == "" {
+		key = invalidKey
+	}
+	if l.shared != nil {
+		ttl := time.Duration(l.burst/l.perSecond*float64(time.Second)) + time.Minute
+		if _, _, answered := l.shared.take(l.perSecond, l.burst, -1, ttl, key); answered {
+			return
+		}
+	}
+	l.refundLocal(key)
+}
+
+// refundLocal gives a token back to this process's own bucket.
+//
+// Only a bucket that already exists. Creating one to refund into would be
+// inventing credit nobody spent, and an absent bucket is a full one anyway.
+func (l *Limiter) refundLocal(k string) {
+	sh := &l.shards[l.shardFor(k)]
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	if b, ok := sh.m[k]; ok {
+		b.tokens = math.Min(l.burst, b.tokens+1)
+	}
+}
+
 // Charge consumes a token if one is available, ignoring the answer.
 func (l *Limiter) Charge(addr netip.Addr) {
 	l.takeKey(Key(addr), true)

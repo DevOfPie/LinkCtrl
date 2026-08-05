@@ -670,6 +670,13 @@ func (h *RedirectHandler) errorPage(w http.ResponseWriter, r *http.Request, stat
 	// The redirect tree is outside the security-header chain, so every response
 	// it writes sets nosniff itself — the same rule writeTooManyRequests
 	// documents for the API limiter's refusals.
+	//
+	// *Writes* is the operative word, and until 0.2.0 it was doing more work
+	// than it looked. `ServeMux` answers its own path-cleaning redirect with an
+	// HTML body, and no handler here is involved in that one, so the invariant
+	// held for every response this project produces and not for every response
+	// the tree produces (F64). `alwaysNosniff` in router.go now covers the
+	// difference; this line stays because a handler must not depend on it.
 	head.Set("X-Content-Type-Options", "nosniff")
 	// Error pages must never be indexed: a shortener accumulates thousands of
 	// dead aliases, and letting a crawler index them is pure noise.
@@ -800,7 +807,37 @@ func appendPath(target, rest string) (string, bool) {
 // out of the subtree the owner pointed at, and silently dropping the segments
 // would send the visitor somewhere they did not ask for while looking like it
 // worked. A 404 says what happened.
+// MaxForwardedPath and MaxForwardedSegments bound a deep-link remainder.
+//
+// With forward_path on, everything after the alias is visitor-controlled and
+// nothing between the router and the joiner looked at its size: `MaxHeaderBytes`
+// is unset, so the ceiling was net/http's 1 MiB default, and a cache hit is
+// deliberately never charged to the 404-probe limiter. `joinable` walks every
+// segment calling `url.PathUnescape`, then the concatenation, the unescape of
+// the join and `u.String()` each copy the whole remainder — roughly five passes
+// over up to a megabyte, on a request that touches no database (F116).
+//
+// **Both bounds, because either alone misses it.** Length alone leaves the
+// per-segment cost, which is driven by segment *count*: a 40 KiB path of twenty
+// thousand empty segments is twenty thousand `PathUnescape` calls under any
+// sane length cap. Count alone leaves one enormous segment.
+//
+// Generous on purpose. The longest thing a real deep link forwards is a path a
+// human or a CMS produced, and these are two orders of magnitude above that —
+// this is an amplification bound, not a validation rule.
+const (
+	MaxForwardedPath     = 4096
+	MaxForwardedSegments = 64
+)
+
 func joinable(rest string) bool {
+	// Refused through the same not-forwardable path as a dot segment, which
+	// answers the ordinary 404. Inventing a 414 here would put a new status on a
+	// tree whose header invariants F64 shows are already fragile, and would tell
+	// a prober something the 404 does not.
+	if len(rest) > MaxForwardedPath || strings.Count(rest, "/") >= MaxForwardedSegments {
+		return false
+	}
 	for seg := range strings.SplitSeq(rest, "/") {
 		decoded, err := url.PathUnescape(seg)
 		if err != nil {

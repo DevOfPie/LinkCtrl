@@ -123,7 +123,13 @@ tokens = math.min(burst, tokens + (elapsed / 1000) * rate)
 local allowed = 0
 local retry = 0
 if tokens >= cost then
-  tokens = tokens - cost
+  -- Clamped, because cost may be negative. A refund (cost -1) hands a token
+  -- back to a bucket a caller spent and then decided it should not have, and
+  -- without this it could push the bucket past its burst — a bucket holding
+  -- more than burst is a limit that does not hold for the next burst-many
+  -- requests. Every other write in this script keeps tokens <= burst; this is
+  -- the one that could not, once the cost stopped being 1.
+  tokens = math.min(burst, tokens - cost)
   allowed = 1
 else
   retry = math.ceil(((cost - tokens) / rate) * 1000)

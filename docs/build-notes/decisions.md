@@ -186,6 +186,7 @@ file. Append a row when you append an entry.
 | [M45, building D100, and two orderings that had never been visible](#2026-08-05--m45-building-d100-and-two-orderings-that-had-never-been-visible) | F70. Not the permission — that is D100 — but **two check orders the new permission exposed**, both unobservable while everybody passed the first gate: `canAdminister` consulted the role permission before it knew which domain it was, which is the admit-then-switch arrangement that produced the finding; and the *this is the instance default* refusal sat below the permission check, when it is a fact about the row rather than the actor and nobody may rename it including the principal. The old test's premise was falsified by the decision — instance grants survive a demotion, which is D98 working — so it is replaced by one asserting a full organization owner is refused. A fixture helper instead of five rewrites. And the coverage enumeration derived from the scope list, with the admission that **this one cannot be sabotage-verified today** because it asserts zero |
 | [M45, five rows that close by being written down](#2026-08-05--m45-five-rows-that-close-by-being-written-down) | F44, F57, F58, F113 and F117 — recorded rather than built, each on its own fix note and for five **different** reasons, which is the point of the entry: F44's repair is a feature and belongs in Plan.md first; F57's only coherent fix is keyed hashing, so the actionable half is telling operators of managed Redis to disable persistence; F58's obvious fix refuses IP literals that work today, trading a silent no-op for a silent regression; F113's reaper would delete the pre-DNS-cut-over case the code exists to protect; F117's state is unconstructible and the repair takes a correct limb with it. **Each records the fix considered and rejected**, which is what separates a recorded limitation from a row somebody stopped caring about — and none is closed for cheapness |
 | [M45, building D102, and a test that had been measuring two things at once](#2026-08-05--m45-building-d102-and-a-test-that-had-been-measuring-two-things-at-once) | F105. Both halves of the predicate in all three queries, because a filter in two of them leaves the bell counting rows the page will not show, and the count's predicate has to match the partial index character for character. **The interesting part is a test that broke on the difference rather than on a defect**: it measured *who was notified* by counting what they could see, which were the same number until D102 made them two questions. Fixed by saying where the reader is standing and asserting per workspace — the summed version produced 6 where 5 was expected, because organization-level news is visible from both, and that is the sum being the wrong instrument rather than an off-by-one. The result asserts the IS NULL half from a workspace the notification says nothing about, which the old shape could not state |
+| [M45, the redirect-path batch and the one measurement it owes](#2026-08-05--m45-the-redirect-path-batch-and-the-one-measurement-it-owes) | F64, F100, F115, F116, and **one k6 run for all ten redirect-path rows** — declared in the triage before any landed, 240,000 cached redirects 100% under 0.5ms, with the smaller dataset stated rather than glossed. F64 sets **only nosniff** and the entry says why: the other two are error-page policy, and putting them in the wrapper would change every successful redirect to fix a 307. F100's obvious fix was ruled out by its own row — HEAD must keep choosing and stop advancing — and the read-only twin is Budget's shape exactly, a precedent three hundred lines away. F115 closes the self-throttling limb and **records the other as D54's accepted cost**; the refund needed a clamp in the shared script, because every write kept tokens <= burst and none could break it while cost was always 1. F116 bounds both length and segment count, and invents no new status |
 
 ---
 
@@ -15993,3 +15994,100 @@ A workspace-scoped notification stops appearing while its reader is standing
 elsewhere, and there is no combined view. That is D102's stated cost and it is
 now in `CHANGELOG.md` and `docs/usage.md` in the words an operator needs: switch
 workspace to see its news.
+
+## 2026-08-05 — M45, the redirect-path batch and the one measurement it owes
+
+[F64](deferred-findings.md), [F100](deferred-findings.md),
+[F115](deferred-findings.md) and [F116](deferred-findings.md) — the last of the
+rows that touch the redirect path — and the k6 run all ten of this milestone's
+redirect-path changes owe under the inherited rule.
+
+### One run, not ten
+
+F48, F101, F9, F65, F41, F50, F64, F100, F115 and F116 all touch the path. The
+inherited rule says re-run the measurement; it does not say re-run it once per
+row, and ten runs would answer the same question ten times. Batching was declared
+in the triage and the note before any of them landed, so this is a plan carried
+out rather than a shortcut discovered at the end.
+
+**240,000 cached redirects at 2,000/s, 100% under 0.5ms**, mix 240,000 memory and
+nothing else, redirect pool acquire waits zero. The dataset is 100,000 links and
+200,000 click events against the 100k/5M this project's earlier columns used, and
+that is stated in `docs/slo.md` rather than glossed: the click volume feeds the
+rollups and not the cache-hit path, the mix confirms what was exercised, and this
+is the right measurement for *did these ten changes slow a cached redirect*
+rather than a re-measurement of the rollup columns nothing here touches.
+
+### F64: only one of the three headers, and why
+
+The wrapper sets `X-Content-Type-Options` and not the other two. That is the
+whole design decision in this row.
+
+`ServeMux` answers its own path-cleaning redirect with an HTML body before any
+handler runs, so nothing this project writes could set a header on it. nosniff is
+the one with bite on an HTML body, and every handler on the tree already sets it,
+so applying it everywhere changes no response this project produces.
+
+`X-Robots-Tag: noindex` and `Cache-Control: no-store` are **error-page** policy,
+not tree policy. `Location` sets a different `Cache-Control` deliberately and no
+robots header at all, because a short link is meant to be shared. Putting those
+in the wrapper would have changed every successful redirect in order to fix a
+307 — a wider blast radius than the finding, arrived at by not asking which
+responses the headers were for.
+
+### F100: the fix the row ruled out was the obvious one
+
+Returning early on HEAD is what this looks like, and the row says why it is
+wrong: a HEAD would answer the link's own destination while a GET answers an arm,
+so a checker validates a URL no visitor is ever sent to. HEAD has to keep
+*choosing* and stop *advancing*, which `NextVariantRotation` cannot do because it
+is an upsert that returns what it wrote.
+
+`PeekVariantRotation` is the read-only twin, and it is `Budget`'s shape exactly —
+same caller, same reason, same file. Budget reads a click allowance without
+spending it, for HEAD, because a request asking whether a link is alive must not
+consume the thing it is asking about. The precedent was three hundred lines away
+and the rotation had simply never been given one.
+
+### F115: which limb, and the one that stays
+
+Two limbs, and only one is closable. **Self-throttling** is a defect: both
+buckets are spent before the form is parsed, so a link with more legitimate
+visitors than `LINK_PASSWORD_RATE_LIMIT` in a burst empties its own alias bucket
+with no attacker present. A correct password now refunds that token.
+
+The refund touches neither D53 nor D54, and the reasoning is worth stating
+because a rate limiter that gives tokens back is the shape of a mistake: the
+per-alias keying is unchanged, an attacker who does not have the password never
+reaches the refund, and what is handed back was spent by somebody who proved they
+had it. The **address** limb is deliberately not refunded — a correct password is
+still traffic from that address.
+
+`Limiter.RefundKey` needed one change to the shared script: clamp to burst after
+subtracting the cost. Every write in that script kept `tokens <= burst` and none
+of them could break it while cost was always 1; a negative cost can, and a bucket
+holding more than its burst is a limit that does not hold for the next
+burst-many requests.
+
+**The other limb is D54's accepted cost and is now recorded against it.** A
+stranger can hold a password link's bucket empty with wrong guesses and lock out
+its audience, at roughly one request every three seconds. No fix keeps the
+guarantee: dropping the alias limb or keying it on address-plus-alias reopens the
+distributed-guessing hole D54 exists to close, and D53's CSRF waiver rests on D54
+holding. It is in Plan.md's *Known limitations* rather than left for somebody to
+find.
+
+The measurement had to be taken on the alias bucket directly, and that is the
+finding in miniature: a fixture has one address, so the per-address limb refuses
+first and hides the per-alias one. Which is exactly why nobody noticed.
+
+### F116: both bounds, and the status that was not invented
+
+Length and segment count, because either alone misses it — the per-segment cost
+is driven by count, so twenty thousand empty segments is twenty thousand
+`PathUnescape` calls under any sane length cap.
+
+Refused through the existing not-forwardable 404 rather than a new 414, which the
+row asked for and which is right twice over: a distinct status tells a prober
+something the 404 does not, and the tree's header invariants were fragile enough
+that F64 was open against them while this was being written.

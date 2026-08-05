@@ -116,3 +116,24 @@ ON CONFLICT (link_id) DO UPDATE
    SET rotation   = link_click_budget.rotation + 1,
        updated_at = now()
 RETURNING rotation;
+
+-- name: PeekVariantRotation :one
+-- Read a link's rotation without advancing it (F100).
+--
+-- The read-only twin of NextVariantRotation, and it exists for one caller:
+-- HEAD. A link checker or an unfurler probing a sequentially split link used to
+-- advance the durable counter on every probe, re-phasing every subsequent
+-- visitor's arm — and because HEAD writes no click event, the per-destination
+-- breakdown could not show why the arms were uneven.
+--
+-- Returning early on HEAD is *not* the fix: a HEAD would then answer the link's
+-- own destination while a GET answers an arm, so a checker would validate a URL
+-- no visitor is ever sent to. HEAD has to choose the same arm the next GET
+-- would, which is what this reads.
+--
+-- The same shape as Budget, which reads a click allowance without spending it
+-- for exactly the same caller and the same reason. No row means no click has
+-- landed yet, and the caller treats that as position 1 — the first arm, which is
+-- what the first visitor will get.
+SELECT rotation FROM link_click_budget
+ WHERE link_id = sqlc.arg(link_id) AND workspace_id = sqlc.arg(workspace_id);

@@ -204,3 +204,37 @@ func (q *Queries) NextVariantRotation(ctx context.Context, arg NextVariantRotati
 	err := row.Scan(&rotation)
 	return rotation, err
 }
+
+const peekVariantRotation = `-- name: PeekVariantRotation :one
+SELECT rotation FROM link_click_budget
+ WHERE link_id = $1 AND workspace_id = $2
+`
+
+type PeekVariantRotationParams struct {
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+}
+
+// Read a link's rotation without advancing it (F100).
+//
+// The read-only twin of NextVariantRotation, and it exists for one caller:
+// HEAD. A link checker or an unfurler probing a sequentially split link used to
+// advance the durable counter on every probe, re-phasing every subsequent
+// visitor's arm — and because HEAD writes no click event, the per-destination
+// breakdown could not show why the arms were uneven.
+//
+// Returning early on HEAD is *not* the fix: a HEAD would then answer the link's
+// own destination while a GET answers an arm, so a checker would validate a URL
+// no visitor is ever sent to. HEAD has to choose the same arm the next GET
+// would, which is what this reads.
+//
+// The same shape as Budget, which reads a click allowance without spending it
+// for exactly the same caller and the same reason. No row means no click has
+// landed yet, and the caller treats that as position 1 — the first arm, which is
+// what the first visitor will get.
+func (q *Queries) PeekVariantRotation(ctx context.Context, arg PeekVariantRotationParams) (int64, error) {
+	row := q.db.QueryRow(ctx, peekVariantRotation, arg.LinkID, arg.WorkspaceID)
+	var rotation int64
+	err := row.Scan(&rotation)
+	return rotation, err
+}

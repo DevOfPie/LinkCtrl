@@ -1082,6 +1082,44 @@ them before believing the latency: a cached measurement with database reads in i
 is not a cached measurement, and a starved pool is the difference between "the
 query was slow" and "the request never got a connection".
 
+### Re-measured for M45's redirect-path batch (2026-08-05)
+
+Six findings fixed in [M45](build-notes/phase-details/m45.md) touch the redirect
+path, so the inherited rule applies and this is a k6 run rather than a note. They
+were batched deliberately and measured once, because one run answers for all of
+them and six runs would answer the same question six times.
+
+**What changed on the path, so the number is read against something.** F48 moved
+the root-redirect cache refill to the redirect pool and gave it a timeout and a
+single-flight; F101 added a deadline to one detached Redis delete; F9 suppresses
+the repopulating `Set` for one uncached resolve after a failed lookup; F65 routed
+two log calls through the nil-tolerant accessor; F41 changed a comment only; F50
+added one `record` call on the `410` branch; F64 sets one header in a wrapper
+around the mux; F100 reads the split rotation instead of advancing it **on HEAD
+only**; F115 adds one limiter call after a *correct* link password; F116 adds a
+length and a segment-count test to the deep-link joiner. Nothing was added to the
+ungated `GET` of an uncached-then-cached alias, which is what this column
+measures.
+
+| Column | Result |
+| --- | --- |
+| Cached, 2,000/s for 2 minutes | **240,000 redirects, 100% under 0.5ms** |
+| Cache mix | 240,000 memory, 0 redis, 0 database, 0 negative |
+| Redirect pool acquire waits | 0 |
+
+**The dataset is smaller than the runs above and that is stated rather than
+glossed**: 100,000 links and 200,000 click events, against the 100k/5M this
+document's earlier columns used. The click volume feeds the analytics pipeline
+and the rollups, not the cache-hit path being measured here, and the cache mix
+confirms what was exercised — every one of the 240,000 was a memory hit. It is
+the right measurement for *did these ten changes slow the cached redirect*, and
+it is not a re-measurement of the rollup columns, which nothing in this batch
+touches.
+
+Twenty-one cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%,
+100%, 100%, 100%, 100%, 100%, 99.743%, 100%, 100%, 99.505%, 100%, 100%, 100%,
+100% and **100%** under 20ms.
+
 ## What the measurement found
 
 A load test earns its cost in findings, not in numbers that confirm what you

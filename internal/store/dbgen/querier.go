@@ -1588,6 +1588,24 @@ type Querier interface {
 	// link, and a locking read there would let a stranger hold a write lock on the
 	// row by opening a page.
 	PeekInvitationByTokenHash(ctx context.Context, tokenHash []byte) (PeekInvitationByTokenHashRow, error)
+	// Read a link's rotation without advancing it (F100).
+	//
+	// The read-only twin of NextVariantRotation, and it exists for one caller:
+	// HEAD. A link checker or an unfurler probing a sequentially split link used to
+	// advance the durable counter on every probe, re-phasing every subsequent
+	// visitor's arm — and because HEAD writes no click event, the per-destination
+	// breakdown could not show why the arms were uneven.
+	//
+	// Returning early on HEAD is *not* the fix: a HEAD would then answer the link's
+	// own destination while a GET answers an arm, so a checker would validate a URL
+	// no visitor is ever sent to. HEAD has to choose the same arm the next GET
+	// would, which is what this reads.
+	//
+	// The same shape as Budget, which reads a click allowance without spending it
+	// for exactly the same caller and the same reason. No row means no click has
+	// landed yet, and the caller treats that as position 1 — the first arm, which is
+	// what the first visitor will get.
+	PeekVariantRotation(ctx context.Context, arg PeekVariantRotationParams) (int64, error)
 	// The end of the trash window: hard-delete links whose purge_after has passed.
 	//
 	// One statement, so the reservation and the deletion cannot be separated by a

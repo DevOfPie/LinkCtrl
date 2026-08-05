@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/DevOfPie/LinkCtrl/internal/httpx"
 )
 
 // Query forwarding, end to end: the write surface sets it, the redirect honours
@@ -96,6 +98,81 @@ func TestQueryForwarding(t *testing.T) {
 // Deep-link path forwarding (M33), end to end, and the half that is easy to get
 // wrong is the *off* half: with forwarding off, everything under an alias must
 // be as blank as an alias that was never created.
+// The two bounds on a forwarded remainder, and the header on a response no
+// handler in this repository writes.
+//
+// With forward_path on, everything after the alias is visitor-controlled and
+// nothing between the router and the joiner looked at its size: MaxHeaderBytes
+// is unset, so the ceiling was net/http's 1 MiB, and a cache hit is never
+// charged to the probe limiter. joinable walks every segment calling
+// PathUnescape, then three more passes copy the whole remainder (F116).
+//
+// Both bounds are asserted because either alone misses it: length alone leaves
+// the per-segment cost, which is driven by segment count, and count alone
+// leaves one enormous segment.
+func TestAForwardedPathIsBoundedInLengthAndInSegments(t *testing.T) {
+	f := newRedirect(t)
+	f.setupOwner()
+
+	on := f.createLink(map[string]any{
+		"url": "https://example.com/base", "alias": "bounded", "forward_path": true,
+	})
+
+	// A remainder the link forwards, so the bounds are not passing by refusing
+	// everything.
+	resp := f.get("/" + on + "/a/b")
+	if loc := resp.Header.Get("Location"); resp.StatusCode != http.StatusFound ||
+		loc != "https://example.com/base/a/b" {
+		t.Fatalf("an ordinary deep link answered %d %q; the bounds have refused "+
+			"something they should forward", resp.StatusCode, loc)
+	}
+	_ = resp.Body.Close()
+
+	for _, tc := range []struct {
+		name string
+		rest string
+	}{
+		{"one enormous segment", strings.Repeat("x", httpx.MaxForwardedPath+1)},
+		{"many empty segments", strings.Repeat("a/", httpx.MaxForwardedSegments+1)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := f.get("/" + on + "/" + tc.rest)
+			assertCustomNotFound(t, resp, "a remainder past the "+tc.name+" bound")
+		})
+	}
+}
+
+// ServeMux answers its own path-cleaning redirect, and it is the one response on
+// this tree no handler here writes.
+//
+// GET /{alias}//deep is cleaned to /{alias}/deep and answered by the mux with a
+// 307 and a text/html body — before any handler runs, so nothing this project
+// writes could set a header on it. That left an HTML body on the redirect tree
+// with no nosniff, against a comment in redirect.go claiming every response the
+// tree writes sets one (F64).
+func TestTheMuxsOwnCleaningRedirectCarriesNosniff(t *testing.T) {
+	f := newRedirect(t)
+	f.setupOwner()
+
+	on := f.createLink(map[string]any{
+		"url": "https://example.com/base", "alias": "cleaned", "forward_path": true,
+	})
+
+	resp := f.get("/" + on + "//deep")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusTemporaryRedirect {
+		t.Fatalf("a doubled slash answered %d, want 307 from the mux's own cleaning; "+
+			"this test has stopped exercising the response it is about", resp.StatusCode)
+	}
+	if got := resp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("the mux's cleaning redirect carries X-Content-Type-Options %q, want "+
+			"nosniff. It serves an HTML body on a tree that is outside the "+
+			"security-header chain, and no handler in this package is involved in "+
+			"writing it (F64)", got)
+	}
+}
+
 func TestDeepLinkPathForwarding(t *testing.T) {
 	f := newRedirect(t)
 	f.setupOwner()

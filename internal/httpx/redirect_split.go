@@ -141,9 +141,30 @@ func (h *RedirectHandler) rotate(
 			slog.String("alias", alias))
 		return splitOutcome{failed: true}
 	}
-	position, err := h.Gates.Rotate(r.Context(), snap.LinkID, snap.WorkspaceID)
+	// HEAD chooses without advancing (F100).
+	//
+	// A link checker or an unfurler probing this alias used to move the durable
+	// counter on every request, re-phasing every subsequent visitor's arm — and
+	// because HEAD writes no click event, the per-destination breakdown could
+	// not show why the arms were uneven. That falsified two absolutes in D8's
+	// entry at once: *the budget is the only gate that consumes something*, and
+	// *HEAD never consumes at all*. M36 put a second durable counter in the same
+	// table and neither sentence was revisited.
+	//
+	// Returning early on HEAD is the fix this looks like and it is wrong: a HEAD
+	// would answer the link's own destination while a GET answers an arm, so a
+	// checker validates a URL no visitor is ever sent to. It has to choose the
+	// arm the next GET would choose, which is what PeekRotation reads — the same
+	// shape, and the same caller, as Budget reading a click allowance without
+	// spending it.
+	rotate := h.Gates.Rotate
+	verb := "advance"
+	if r.Method == http.MethodHead {
+		rotate, verb = h.Gates.PeekRotation, "read"
+	}
+	position, err := rotate(r.Context(), snap.LinkID, snap.WorkspaceID)
 	if err != nil {
-		h.log().Error("could not advance a sequential split's rotation",
+		h.log().Error("could not "+verb+" a sequential split's rotation",
 			slog.String("alias", alias), slog.Any("error", err))
 		return splitOutcome{failed: true}
 	}
