@@ -143,6 +143,15 @@ func APIKeyHash(pepper []byte, prefix, secret string) []byte {
 // prefix is tied to a named person, so the rule this map encodes is now
 // "escalating, irreversible, or disclosing" rather than only the first two.
 //
+// **D18 now says that too.** Until 2026-08-05 the decision named only the
+// escalating and disclosing limbs and closed with "everything else is
+// delegable" — which, read literally by whoever adds the next irreversible
+// permission, makes org.delete delegable. This comment was right and the
+// decision was not, for eight months of milestones. F12 corrected the text
+// rather than the map, and the near miss is worth leaving on the record here:
+// the next milestone to add an irreversible permission is the one that would
+// have applied the two limbs, found neither matched, and shipped it delegable.
+//
 // This map is the only thing that makes audit.read session-only. There is no
 // second check in the handler or the service — the endpoint authorizes on the
 // permission like every other endpoint — so if machine export ever outweighs
