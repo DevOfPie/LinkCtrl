@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
-	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 )
 
@@ -149,7 +148,11 @@ func (h *Web) invitePage(r *http.Request, token string) invitePageData {
 		shell:       h.shell(r, "Invitation", ""),
 		Token:       token,
 		FieldErrors: map[string]string{},
-		NewAccounts: h.Config.Auth.SignupMode != config.SignupClosed,
+		// Asked of the service that enforces it, rather than re-derived from
+		// the configured signup mode. The two agreed and were not the same
+		// expression: enforcement reads the *effective* mode, and `open` with
+		// no mailer degrades to `invite` (F19).
+		NewAccounts: h.Invites.AdmitsNewAccounts(),
 	}
 }
 

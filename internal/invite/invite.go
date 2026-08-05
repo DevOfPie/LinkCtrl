@@ -595,6 +595,24 @@ func (s *Service) Offer(ctx context.Context, token string) (*Offer, error) {
 	}, nil
 }
 
+// AdmitsNewAccounts reports whether redemption may create an account that does
+// not exist yet.
+//
+// It exists so the question has **one** answer. The redemption page used to
+// derive it a second time, from `Config.Auth.SignupMode != SignupClosed`, while
+// enforcement read `cfg.NewAccounts` — set from
+// `signupSvc.Effective().AdmitsNewAccounts()`, which is the *effective* mode
+// rather than the configured one. Those agree today and are not the same
+// expression: `open` with no mailer degrades to `invite`, and anything that made
+// the effective mode diverge further would move the enforcement and leave the
+// page behind, offering a form whose submission is refused (F19).
+//
+// A nil receiver answers false, which is what a caller with no invite service
+// configured should show: no form for an account it cannot create.
+func (s *Service) AdmitsNewAccounts() bool {
+	return s != nil && s.cfg.NewAccounts
+}
+
 // RedeemInput is an attempt to join.
 type RedeemInput struct {
 	Token string

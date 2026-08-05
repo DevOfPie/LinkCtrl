@@ -17700,3 +17700,41 @@ than a third hand-count.
 the parenthetical naming `internal/dispute` as the second home is the thing this
 row just made false, and leaving it would have been a true count sitting beside a
 false reason.
+
+## 2026-08-05 — M45, one answer to "may an invitation create an account"
+
+[F19](deferred-findings.md), approved by the owner at M45. The redemption page
+derived the rule from `Config.Auth.SignupMode != SignupClosed`; enforcement read
+`cfg.NewAccounts`, set from `signupSvc.Effective().AdmitsNewAccounts()`.
+
+### They were not duplicates — they were different questions
+
+The page asked about the **configured** mode and the enforcer asks about the
+**effective** one. `open` with no mailer degrades to `invite`, so the two
+expressions already mean different things and agree only because nothing has yet
+made them diverge further. That is worse than a duplicate: a duplicate is
+obviously one thing written twice, and this looked like two facts.
+
+`invite.Service.AdmitsNewAccounts` is now the single statement, and the page asks
+it. A nil receiver answers false — a caller with no invite service should show no
+form for an account it cannot create.
+
+### The test found a second gap
+
+`Deps.Web` was never set in the invite fixture, and `GET /invite/{token}` hangs
+off `web.Invites` — so the redemption page was not routed in tests at all. Every
+assertion about what somebody holding an invitation link actually sees was
+unreachable, and nobody had noticed because nothing had tried.
+
+That is the same shape as [F73](deferred-findings.md)'s missing package: a
+surface can be absent from the tests by never having been wired, and nothing
+fails when it is. The suite keeps passing, over less.
+
+### The test asserts what cannot happen, not what does
+
+It sets the configured mode and the enforcer apart on purpose — a state
+`cmd/linkctrl` cannot produce, because it derives one from the other. That is
+deliberate: what is being held is that the page *cannot* disagree with the
+enforcer, not that today's wiring happens to keep them equal. A test that only
+exercised the agreeing case would pass against the defect, which is the trap
+three other rows in this milestone fell into.

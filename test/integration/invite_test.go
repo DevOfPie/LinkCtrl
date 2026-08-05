@@ -24,6 +24,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/mail"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
+	"github.com/DevOfPie/LinkCtrl/internal/ui"
 )
 
 // M27. Invitations: issuing, delivery, redemption, and the three things the
@@ -123,8 +124,19 @@ func (f *inviteFixture) serve(t *testing.T, mode config.SignupMode) *httptest.Se
 	cfg.Auth.SessionAbsoluteTTL = 30 * 24 * time.Hour
 	cfg.Auth.SessionIdleTTL = 7 * 24 * time.Hour
 
+	// The dashboard tree as well as the API. Without Deps.Web the redemption
+	// *page* is not routed at all — `GET /invite/{token}` hangs off web.Invites
+	// — so every assertion about what somebody holding a link sees was
+	// unreachable until F19 needed one.
+	renderer, err := ui.New()
+	if err != nil {
+		t.Fatalf("parse templates: %v", err)
+	}
 	f.server = httptest.NewServer(httpx.NewRouter(httpx.Deps{
 		Config: cfg, Auth: f.auth, Keys: f.keys, Invites: f.invites,
+		Web: &httpx.Web{
+			UI: renderer, Config: cfg, Auth: f.auth, Invites: f.invites,
+		},
 	}))
 	t.Cleanup(f.server.Close)
 	return f.server
@@ -708,6 +720,47 @@ func TestRedemptionHonoursAndFeedsTheLoginLockout(t *testing.T) {
 	}
 	if _, err := f.redeem(t, token, "member@example.com", invitePassword); err != nil {
 		t.Errorf("redemption after the lockout elapsed: %v", err)
+	}
+}
+
+// TestTheRedemptionPageFollowsTheEnforcerNotTheConfiguredMode is F19.
+//
+// "May an invitation create an account" was answered in two places: the page
+// derived it from `Config.Auth.SignupMode != SignupClosed`, and enforcement read
+// `cfg.NewAccounts` — set from the *effective* mode, which is not the configured
+// one. `open` with no mailer degrades to `invite`, so the two expressions are
+// already different questions that happen to agree.
+//
+// The test sets them apart on purpose. That state is not reachable through
+// `cmd/linkctrl`, which derives one from the other, and that is the point: what
+// is being asserted is that the page cannot disagree with the enforcer, not that
+// today's wiring happens to keep them equal. Nothing is wrong today — this buys
+// that a change to how the effective mode is computed moves both.
+func TestTheRedemptionPageFollowsTheEnforcerNotTheConfiguredMode(t *testing.T) {
+	// Enforcement refuses new accounts; the configured mode says otherwise.
+	f := newInviteFixture(t, inviteOptions{NewAccounts: false})
+	c := f.invited(t, "nobody@example.com", "editor")
+	srv := f.serve(t, config.SignupOpen)
+
+	resp, err := srv.Client().Get(srv.URL + "/invite/" + tokenOf(t, c))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(body)
+
+	if !strings.Contains(page, "not accepting new registrations") {
+		t.Errorf("the redemption page offers to create an account while the service "+
+			"that redeems refuses to: the page must ask the enforcer rather than "+
+			"re-derive the rule from the configured signup mode.\n%s", page)
+	}
+	if strings.Contains(page, "this becomes your password") {
+		t.Error("the page shows the new-account copy against an enforcer that would " +
+			"refuse the submission, which is a form whose only outcome is a refusal")
 	}
 }
 
