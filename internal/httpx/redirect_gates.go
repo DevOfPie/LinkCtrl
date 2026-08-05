@@ -246,7 +246,47 @@ func (h *RedirectHandler) passwordGate(
 		h.challenge(w, r, passwordWrongPage)
 		return gateResult{answered: true, label: "password_wrong"}
 	}
+	// The alias limb is given back, because this visitor proved they had the
+	// password (F115).
+	//
+	// Both limbs are consumed above, before the form is even parsed, and that
+	// ordering is deliberate — it is what keeps timing from saying which limb
+	// refused. The cost nobody had recorded is that a link with more than
+	// LINK_PASSWORD_RATE_LIMIT legitimate visitors in a burst throttles itself,
+	// with no attacker present at all: twenty people opening the same link at
+	// the same moment empty the alias bucket between them.
+	//
+	// Refunding on success touches neither D53 nor D54. The per-alias keying
+	// that closes distributed guessing is unchanged, an attacker who does not
+	// have the password never reaches this line, and what is handed back was
+	// spent by somebody who did. The **address** limb stays spent: a correct
+	// password is still traffic from that address, and that limb is what bounds
+	// one machine grinding a wordlist.
+	//
+	// It does not close the other limb of F115, and that one is D54's accepted
+	// cost rather than a defect: a stranger can still hold a password link's
+	// bucket empty with wrong guesses and lock out its intended audience, at
+	// roughly one request every three seconds. That is now recorded against D54
+	// rather than left for somebody to discover.
+	h.refundPasswordAlias(alias, domainID)
 	return gatePassed
+}
+
+// refundPasswordAlias returns the token passwordAllowed spent on the alias limb.
+//
+//nolint:contextcheck // deliberate: see ratelimit.Shared.take
+func (h *RedirectHandler) refundPasswordAlias(alias string, domainID uuid.UUID) {
+	if h.PasswordLimiter == nil {
+		return
+	}
+	h.PasswordLimiter.RefundKey(passwordAliasKey(alias, domainID))
+}
+
+// passwordAliasKey is the per-alias bucket, spelled in one place so the spend
+// and the refund cannot drift apart — which would make the refund a silent
+// no-op crediting a bucket nobody uses.
+func passwordAliasKey(alias string, domainID uuid.UUID) string {
+	return "pw:" + domainID.String() + ":" + alias
 }
 
 // passwordAllowed asks both limbs of the password limit.
@@ -266,7 +306,7 @@ func (h *RedirectHandler) passwordAllowed(
 	// sentence is true — keyed on the boot default it was one bucket shared by
 	// every hostname, which admits fewer guesses rather than more and is why this
 	// limb failed safe while the signature's did not.
-	byAlias, aliasRetry := h.PasswordLimiter.AllowKey("pw:" + domainID.String() + ":" + alias) //nolint:contextcheck // deliberate: see ratelimit.Shared.take
+	byAlias, aliasRetry := h.PasswordLimiter.AllowKey(passwordAliasKey(alias, domainID)) //nolint:contextcheck // deliberate: see ratelimit.Shared.take
 	if byAddr && byAlias {
 		return true, 0
 	}
@@ -410,4 +450,11 @@ type Gatekeeper interface {
 	// a counter Redis cannot hold. The name of the interface is now slightly
 	// wider than "gatekeeper", and that is the cheaper of the two prices.
 	Rotate(ctx context.Context, linkID, workspaceID uuid.UUID) (int64, error)
+	// PeekRotation reads that counter without advancing it, for HEAD (F100).
+	//
+	// Budget's twin, and here for Budget's reason: HEAD must be answered with
+	// what a visitor would get and must not change it. A probe used to advance
+	// the rotation and re-phase every subsequent visitor's arm, with no click
+	// event written to explain the skew.
+	PeekRotation(ctx context.Context, linkID, workspaceID uuid.UUID) (int64, error)
 }

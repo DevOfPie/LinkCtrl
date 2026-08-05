@@ -379,10 +379,35 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Not charged to the probe limit: the alias really exists, so asking for
 		// it is not probing. A link checker following a dead link is not abuse.
 		h.gone(w, r)
+		// Recorded, and this is D101 rather than an oversight corrected.
+		//
+		// Until 0.2.0 an expired or archived link recorded nothing here — while
+		// the bot gate above recorded a *blocked* request to the same link,
+		// because it answers before Decide runs. So whether identical traffic
+		// was counted depended on a setting about **responses**, and the same
+		// crawler was a click on a link with blocking on and nothing on a link
+		// with it off. The rule now has no exception to remember: a request that
+		// reached a real link is recorded, whatever the link's state made the
+		// answer.
+		//
+		// No destination, for the reason the gate gives: nothing was chosen.
+		// `record` is a no-op on HEAD and on a nil recorder, and this branch is
+		// reached only when the alias resolved, so there is always a link to
+		// attribute to.
+		h.record(r, res.Snapshot, start, uuid.Nil)
 		return
 	case redirect.OutcomeNotFound:
 		h.chargeProbe(r)
 		h.notFound(w, r)
+		// Only when a real link is behind it. This branch answers two different
+		// things: an alias that does not exist — a negative cache entry, most of
+		// this tree's traffic, and there is nothing to attribute a click to —
+		// and a link that exists but was asked for a path it cannot forward.
+		// The second is a request that reached a link, so D101 covers it; the
+		// first is not.
+		if !res.Snapshot.NotFound {
+			h.record(r, res.Snapshot, start, uuid.Nil)
+		}
 		return
 	case redirect.OutcomeRedirect:
 		// Falls through to the redirect below. Listed rather than left to a
@@ -645,6 +670,13 @@ func (h *RedirectHandler) errorPage(w http.ResponseWriter, r *http.Request, stat
 	// The redirect tree is outside the security-header chain, so every response
 	// it writes sets nosniff itself — the same rule writeTooManyRequests
 	// documents for the API limiter's refusals.
+	//
+	// *Writes* is the operative word, and until 0.2.0 it was doing more work
+	// than it looked. `ServeMux` answers its own path-cleaning redirect with an
+	// HTML body, and no handler here is involved in that one, so the invariant
+	// held for every response this project produces and not for every response
+	// the tree produces (F64). `alwaysNosniff` in router.go now covers the
+	// difference; this line stays because a handler must not depend on it.
 	head.Set("X-Content-Type-Options", "nosniff")
 	// Error pages must never be indexed: a shortener accumulates thousands of
 	// dead aliases, and letting a crawler index them is pure noise.
@@ -775,7 +807,37 @@ func appendPath(target, rest string) (string, bool) {
 // out of the subtree the owner pointed at, and silently dropping the segments
 // would send the visitor somewhere they did not ask for while looking like it
 // worked. A 404 says what happened.
+// MaxForwardedPath and MaxForwardedSegments bound a deep-link remainder.
+//
+// With forward_path on, everything after the alias is visitor-controlled and
+// nothing between the router and the joiner looked at its size: `MaxHeaderBytes`
+// is unset, so the ceiling was net/http's 1 MiB default, and a cache hit is
+// deliberately never charged to the 404-probe limiter. `joinable` walks every
+// segment calling `url.PathUnescape`, then the concatenation, the unescape of
+// the join and `u.String()` each copy the whole remainder — roughly five passes
+// over up to a megabyte, on a request that touches no database (F116).
+//
+// **Both bounds, because either alone misses it.** Length alone leaves the
+// per-segment cost, which is driven by segment *count*: a 40 KiB path of twenty
+// thousand empty segments is twenty thousand `PathUnescape` calls under any
+// sane length cap. Count alone leaves one enormous segment.
+//
+// Generous on purpose. The longest thing a real deep link forwards is a path a
+// human or a CMS produced, and these are two orders of magnitude above that —
+// this is an amplification bound, not a validation rule.
+const (
+	MaxForwardedPath     = 4096
+	MaxForwardedSegments = 64
+)
+
 func joinable(rest string) bool {
+	// Refused through the same not-forwardable path as a dot segment, which
+	// answers the ordinary 404. Inventing a 414 here would put a new status on a
+	// tree whose header invariants F64 shows are already fragile, and would tell
+	// a prober something the 404 does not.
+	if len(rest) > MaxForwardedPath || strings.Count(rest, "/") >= MaxForwardedSegments {
+		return false
+	}
 	for seg := range strings.SplitSeq(rest, "/") {
 		decoded, err := url.PathUnescape(seg)
 		if err != nil {

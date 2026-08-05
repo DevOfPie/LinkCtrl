@@ -171,6 +171,94 @@ func TestEveryArmAtZeroFallsThrough(t *testing.T) {
 // Three arms, nine requests, and the answer must be the rotation repeated three
 // times exactly. This is the one property "approximately sequential" would fail
 // and a statistical test would not notice.
+// HEAD chooses an arm and does not advance the rotation.
+//
+// A link checker or an unfurler probing a sequentially split link used to move
+// the durable counter on every probe, re-phasing every subsequent visitor's arm
+// — and because HEAD writes no click event, the per-destination breakdown could
+// not show why the arms were uneven (F100). That falsified two absolutes in one
+// decision entry: "the budget is the only gate that consumes something" and
+// "HEAD never consumes at all", both written before M36 put a second durable
+// counter in the same table.
+//
+// The assertion is deliberately in two parts. The counter must not move — that
+// is the defect — and the HEAD must still answer the arm a GET would, because
+// returning early on HEAD would have a checker validate the link's own
+// destination, a URL no visitor is ever sent to.
+func TestHeadChoosesASplitArmWithoutAdvancingIt(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("headrota", "https://example.com/control")
+
+	urls := []string{"https://example.com/one", "https://example.com/two"}
+	for _, u := range urls {
+		f.addVariant(id, link.CreateVariantInput{
+			Kind: domain.RuleKindSequential, URL: u, Enabled: true,
+		})
+	}
+
+	rotation := func() int64 {
+		t.Helper()
+		var n int64
+		if err := f.pool.QueryRow(t.Context(),
+			`SELECT coalesce(max(rotation), 0) FROM link_click_budget WHERE link_id = $1`,
+			id).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+
+	headLocation := func() string {
+		t.Helper()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodHead,
+			f.server.URL+"/headrota", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("User-Agent", humanUA)
+		resp, err := f.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusFound {
+			t.Fatalf("HEAD /headrota = %d, want 302", resp.StatusCode)
+		}
+		return resp.Header.Get("Location")
+	}
+
+	// Probed before anything has clicked. The first arm is what the first
+	// visitor will get, so that is what a checker must be shown.
+	before := rotation()
+	for range 5 {
+		if got := headLocation(); got != urls[0] {
+			t.Errorf("HEAD went to %q, want %q — the first arm, which is what the "+
+				"next GET will answer", got, urls[0])
+		}
+	}
+	if after := rotation(); after != before {
+		t.Errorf("five HEAD probes moved the rotation from %d to %d. Every visitor "+
+			"after them is re-phased, and no click event was written to explain it",
+			before, after)
+	}
+
+	// And the GET those probes did not disturb still gets the first arm.
+	if got := f.location("/headrota", nil); got != urls[0] {
+		t.Errorf("the first real visitor went to %q, want %q — the probes moved the "+
+			"rotation out from under them", got, urls[0])
+	}
+	// The second GET advances normally, so peeking has not broken advancing.
+	if got := f.location("/headrota", nil); got != urls[1] {
+		t.Errorf("the second visitor went to %q, want %q", got, urls[1])
+	}
+	// A HEAD after two clicks reports what the *third* visitor would get, which
+	// is the first arm again on a two-armed rotation.
+	if got := headLocation(); got != urls[0] {
+		t.Errorf("HEAD after two clicks went to %q, want %q — the arm the next GET "+
+			"would be given", got, urls[0])
+	}
+}
+
 func TestSequentialSplitIsStrict(t *testing.T) {
 	f := newRules(t)
 	f.claim()

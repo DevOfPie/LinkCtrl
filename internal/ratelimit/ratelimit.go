@@ -2,13 +2,24 @@
 //
 // Four properties shaped it, and each is a trade rather than an oversight.
 //
-// It is in-memory and per-instance, not backed by Redis. The surfaces being
-// protected include the redirect path, whose entire budget is 20ms, so spending
-// a network round trip to decide whether to allow a request would cost more
-// than the limit saves. Redis is also optional at runtime by design, and a
-// limiter that stops limiting when the cache goes away is worse than one whose
-// numbers are per-instance. The consequence is stated rather than hidden: with
-// N replicas the effective limit is N times the configured one.
+// It is in-memory and per-instance **by default**, and that is the shape this
+// package was built in. The surfaces being protected include the redirect path,
+// whose entire budget is 20ms, so spending a network round trip to decide
+// whether to allow a request would cost more than the limit saves. Redis is also
+// optional at runtime by design, and a limiter that stops limiting when the
+// cache goes away is worse than one whose numbers are per-instance. The
+// consequence is stated rather than hidden: with N replicas the effective limit
+// is N times the configured one.
+//
+// **M24 added a shared mode, and this paragraph said otherwise until 0.2.0**
+// (F38). `shared.go` — in this package — backs the *credential* and *API*
+// limiters with a Redis token bucket, so those two are shared across replicas
+// and fall back to these in-memory buckets only when Redis does not answer. The
+// 404-probe limiter is the one that stays plain, and `limits.go` says
+// "deliberately not shared" beside it for the reason above: it guards the
+// redirect path. So the per-instance multiplication described here is true of
+// the 404 limiter, true of every limiter while Redis is unreachable, and not
+// true of the credential and API limiters on a healthy instance.
 //
 // IPv6 is keyed by /64, not by address. A single host is routinely handed a
 // whole /64, so a per-address key would let one machine present an effectively
@@ -188,6 +199,51 @@ func (l *Limiter) AllowKey(key string) (bool, time.Duration) {
 // working short link never spends a token.
 func (l *Limiter) Check(addr netip.Addr) (bool, time.Duration) {
 	return l.takeKey(Key(addr), false)
+}
+
+// RefundKey hands one token back to a keyed bucket.
+//
+// For a caller that has to spend before it knows whether it should have. The
+// link-password gate is the one: both limbs are consumed before the form is
+// parsed, deliberately, so that timing cannot say which limb refused — and that
+// left a link with more than `burst` legitimate visitors in a burst throttling
+// itself with no attacker present (F115). A correct password refunds the alias
+// limb, which touches neither D53 nor D54: the per-alias keying that stops
+// distributed guessing is unchanged, and what is given back is only ever a token
+// spent by somebody who proved they had the password.
+//
+// The address limb is deliberately **not** refunded. A visitor typing the right
+// password is still traffic from that address, and the per-address limb is what
+// bounds one machine grinding a wordlist.
+//
+// Never above burst: the shared script clamps, and so does the local bucket.
+func (l *Limiter) RefundKey(key string) {
+	if l == nil {
+		return
+	}
+	if key == "" {
+		key = invalidKey
+	}
+	if l.shared != nil {
+		ttl := time.Duration(l.burst/l.perSecond*float64(time.Second)) + time.Minute
+		if _, _, answered := l.shared.take(l.perSecond, l.burst, -1, ttl, key); answered {
+			return
+		}
+	}
+	l.refundLocal(key)
+}
+
+// refundLocal gives a token back to this process's own bucket.
+//
+// Only a bucket that already exists. Creating one to refund into would be
+// inventing credit nobody spent, and an absent bucket is a full one anyway.
+func (l *Limiter) refundLocal(k string) {
+	sh := &l.shards[l.shardFor(k)]
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	if b, ok := sh.m[k]; ok {
+		b.tokens = math.Min(l.burst, b.tokens+1)
+	}
 }
 
 // Charge consumes a token if one is available, ignoring the answer.

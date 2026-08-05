@@ -89,8 +89,16 @@ const (
 
 	// The invitation lifecycle (M27). Three actions rather than one with a
 	// state in the metadata: an operator asking "who let this person in" is
-	// reading for an action, and a filter on `action` is the query the read API
-	// already supports.
+	// reading for an action, which is a thing to grep a page for rather than a
+	// query to run.
+	//
+	// This said the read API "already supports" a filter on `action`. It does
+	// not, and never did — the endpoint pages by cursor and takes no action
+	// parameter, and there is no index on the column to serve one (F45). The
+	// sentence was written a day after that API shipped, which is how a claim
+	// about a neighbouring feature comes to be wrong in a comment nobody
+	// re-reads. The three-actions-rather-than-one choice stands on its own: a
+	// state machine in jsonb is not readable by anything, filter or no filter.
 	//
 	// The redeemed event is the one with a different actor. Issuing and revoking
 	// are recorded against the administrator who did them; redeeming is recorded

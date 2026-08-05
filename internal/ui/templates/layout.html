@@ -30,7 +30,14 @@
     {{end}}
     <div class="ml-auto flex items-center gap-2">
       {{template "workspace_switch" .}}
-      {{template "notification_bell" .}}
+      {{/* Gated like the identity menu's own entries, and for the same reason
+           (F47). The bell's View all goes to /notifications, which sits behind
+           RequireOrganization and 303s straight back — so an account belonging
+           to nothing was offered the one control in this header that leads
+           nowhere. It is also the likeliest holder of unread notifications:
+           deleting an organization needs the owner role, and owners are the
+           recipient class for audit growth, invitations and disputes. */}}
+      {{if .HasOrganization}}{{template "notification_bell" .}}{{end}}
       {{template "identity_menu" .}}
     </div>
   </nav>

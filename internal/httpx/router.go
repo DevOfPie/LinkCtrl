@@ -685,6 +685,31 @@ func registerAppRoutes(d Deps, app *appMux) {
 //
 // Only RealIP is shared, because analytics needs the client address and
 // resolving it is a header read.
+// alwaysNosniff sets X-Content-Type-Options on every response a mux produces,
+// including the ones no handler in this repository writes.
+//
+// `ServeMux` cleans an escaped path before dispatching and answers the resulting
+// redirect **itself**: `GET /ld1//deep` is a 307 to `/ld1/deep` with a
+// `text/html` body of its own making, and no handler here is involved, so
+// nothing this project writes could set a header on it. That is F64, and it is
+// pre-existing rather than M33's — `cleanPath` applies whatever patterns are
+// registered — but the deep-link route is what made those cleaned paths land
+// somewhere real instead of 404ing a moment later.
+//
+// Only nosniff, deliberately. It is the one with bite on an HTML body, it is
+// already set by every handler on this tree and by the application tree's own
+// middleware, so applying it everywhere changes no response this project writes.
+// `X-Robots-Tag` and `Cache-Control: no-store` are **error-page** policy rather
+// than tree policy — `Location` deliberately sets a different `Cache-Control`
+// and no robots header, because a short link is meant to be shared — so setting
+// those here would change successful redirects to fix a 307.
+func alwaysNosniff(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		next.ServeHTTP(w, r)
+	})
+}
+
 func NewRouter(d Deps) http.Handler {
 	// --- application tree (authenticated, full middleware) ----------------
 	app := newAppMux()
@@ -903,7 +928,7 @@ func NewRouter(d Deps) http.Handler {
 			appHost:  config.CanonicalHost(d.Config.AppBaseURLParsed().Host),
 			linkHost: config.CanonicalHost(d.Config.LinkBaseURLParsed().Host),
 			app:      appMux,
-			link:     linkMux,
+			link:     alwaysNosniff(linkMux),
 			ops:      opsMux,
 		}
 	} else {
@@ -911,7 +936,7 @@ func NewRouter(d Deps) http.Handler {
 		registerOps(mux)
 		registerApp(mux)
 		registerRedirect(mux)
-		root = mux
+		root = alwaysNosniff(mux)
 	}
 
 	// Custom domains sit in front of whichever of those two this deployment is,
@@ -927,7 +952,7 @@ func NewRouter(d Deps) http.Handler {
 	if d.Hosts != nil {
 		customMux := http.NewServeMux()
 		registerCustom(customMux)
-		root = customHostRouter{hosts: d.Hosts, custom: customMux, next: root}
+		root = customHostRouter{hosts: d.Hosts, custom: alwaysNosniff(customMux), next: root}
 	}
 
 	// RealIP wraps both trees: analytics and rate limiting need the client

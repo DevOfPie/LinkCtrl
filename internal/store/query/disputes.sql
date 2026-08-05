@@ -30,7 +30,10 @@ INSERT INTO destination_disputes (
 RETURNING *;
 
 -- name: GetDestinationDispute :one
-SELECT * FROM destination_disputes WHERE id = @id;
+SELECT d.*, b.source AS entry_source
+  FROM destination_disputes d
+  LEFT JOIN blocked_destinations b ON b.host = d.blocked_host
+ WHERE d.id = @id;
 
 -- name: ListDestinationDisputes :many
 -- The queue, newest first, keyset on (created_at, id).
@@ -42,13 +45,25 @@ SELECT * FROM destination_disputes WHERE id = @id;
 --
 -- @open_only lets the page show the work and the archive from one query, which
 -- is the same shape ListNotifications' unread filter has.
-SELECT * FROM destination_disputes
- WHERE (NOT @open_only::boolean OR status = 'open')
+--
+-- The LEFT JOIN carries the blocklist entry's **source**, which is what decides
+-- whether an allow can do anything (F42). `liftableRules` says the *rule* is
+-- list-backed; it does not say the entry behind this particular refusal is one
+-- a decision may delete. An `env`-sourced entry comes from
+-- LINKCTRL_DESTINATION_BLOCKLIST and is rewritten at every boot, so removing it
+-- would be undone by the next restart and `entryToLift` refuses — while the page
+-- drew the Allow button from the rule alone and the operator found out by
+-- clicking. LEFT, because a refusal computed from the URL has no entry at all
+-- and must stay in the queue.
+SELECT d.*, b.source AS entry_source
+  FROM destination_disputes d
+  LEFT JOIN blocked_destinations b ON b.host = d.blocked_host
+ WHERE (NOT @open_only::boolean OR d.status = 'open')
    AND (
         sqlc.narg('cursor_created')::timestamptz IS NULL
-     OR (created_at, id) < (sqlc.narg('cursor_created')::timestamptz, sqlc.narg('cursor_id')::uuid)
+     OR (d.created_at, d.id) < (sqlc.narg('cursor_created')::timestamptz, sqlc.narg('cursor_id')::uuid)
    )
- ORDER BY created_at DESC, id DESC
+ ORDER BY d.created_at DESC, d.id DESC
  LIMIT @page_limit;
 
 -- name: CountOpenDestinationDisputes :one

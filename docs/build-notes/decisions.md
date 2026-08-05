@@ -186,6 +186,9 @@ file. Append a row when you append an entry.
 | [M45, building D100, and two orderings that had never been visible](#2026-08-05--m45-building-d100-and-two-orderings-that-had-never-been-visible) | F70. Not the permission — that is D100 — but **two check orders the new permission exposed**, both unobservable while everybody passed the first gate: `canAdminister` consulted the role permission before it knew which domain it was, which is the admit-then-switch arrangement that produced the finding; and the *this is the instance default* refusal sat below the permission check, when it is a fact about the row rather than the actor and nobody may rename it including the principal. The old test's premise was falsified by the decision — instance grants survive a demotion, which is D98 working — so it is replaced by one asserting a full organization owner is refused. A fixture helper instead of five rewrites. And the coverage enumeration derived from the scope list, with the admission that **this one cannot be sabotage-verified today** because it asserts zero |
 | [M45, five rows that close by being written down](#2026-08-05--m45-five-rows-that-close-by-being-written-down) | F44, F57, F58, F113 and F117 — recorded rather than built, each on its own fix note and for five **different** reasons, which is the point of the entry: F44's repair is a feature and belongs in Plan.md first; F57's only coherent fix is keyed hashing, so the actionable half is telling operators of managed Redis to disable persistence; F58's obvious fix refuses IP literals that work today, trading a silent no-op for a silent regression; F113's reaper would delete the pre-DNS-cut-over case the code exists to protect; F117's state is unconstructible and the repair takes a correct limb with it. **Each records the fix considered and rejected**, which is what separates a recorded limitation from a row somebody stopped caring about — and none is closed for cheapness |
 | [M45, building D102, and a test that had been measuring two things at once](#2026-08-05--m45-building-d102-and-a-test-that-had-been-measuring-two-things-at-once) | F105. Both halves of the predicate in all three queries, because a filter in two of them leaves the bell counting rows the page will not show, and the count's predicate has to match the partial index character for character. **The interesting part is a test that broke on the difference rather than on a defect**: it measured *who was notified* by counting what they could see, which were the same number until D102 made them two questions. Fixed by saying where the reader is standing and asserting per workspace — the summed version produced 6 where 5 was expected, because organization-level news is visible from both, and that is the sum being the wrong instrument rather than an off-by-one. The result asserts the IS NULL half from a workspace the notification says nothing about, which the old shape could not state |
+| [M45, the redirect-path batch and the one measurement it owes](#2026-08-05--m45-the-redirect-path-batch-and-the-one-measurement-it-owes) | F64, F100, F115, F116, and **one k6 run for all ten redirect-path rows** — declared in the triage before any landed, 240,000 cached redirects 100% under 0.5ms, with the smaller dataset stated rather than glossed. F64 sets **only nosniff** and the entry says why: the other two are error-page policy, and putting them in the wrapper would change every successful redirect to fix a 307. F100's obvious fix was ruled out by its own row — HEAD must keep choosing and stop advancing — and the read-only twin is Budget's shape exactly, a precedent three hundred lines away. F115 closes the self-throttling limb and **records the other as D54's accepted cost**; the refund needed a clamp in the shared script, because every write kept tokens <= burst and none could break it while cost was always 1. F116 bounds both length and segment count, and invents no new status |
+| [M45, thirteen enumerations, and the one that gets a test](#2026-08-05--m45-thirteen-enumerations-and-the-one-that-gets-a-test) | F45, F38 and F111 — the first work under the owner's standing approval for documentation, which removes the prompt and keeps the verification. **Counted, not trusted, and it mattered**: the never-delegable map had grown to nine since the row was filed, making this the fifth wording row in one milestone whose list was short. One claim was checked and **left**, because correcting it would have invented a defect. Only that one list gets a test, and the entry says why — it is a security claim that has failed to keep up three separate times, where the other twelve are prose wrong once. The lists stay hand-written and the *failure* is generated, which is D97's argument. And **the test was wrong before the documents were**: its first run flagged a sentence that was already right, so the window was tightened rather than the document changed |
+| [M45, four controls that told a reader the wrong thing](#2026-08-05--m45-four-controls-that-told-a-reader-the-wrong-thing) | F42, F22, F47 and F54 — a class this project keeps producing, where the promise and the enforcement live in different files. F42's flag asked *could an allow ever work for this rule* and the decision asked *for this refusal*; the fix is one helper both consult, and the two freshly-written rows need **different** sources, since `decide` must report the state before it deleted the entry. F22 collapses only the path that names an object. F47's bell was the one href in the header gated on nothing, offered to the account likeliest to have unread notifications — and the test named for that account cuts the nav one `div` too early to see it. F54 is **a surface that could not have been right**: the template was handed six keys and none was the mode. Fixing it surfaced that the renderer refuses an unknown key, which caught the branch immediately |
 | [A command that chooses a loop](#2026-08-05--a-command-that-chooses-a-loop-and-the-backlog-that-had-nothing-consuming-it) | W11, widened by the owner. `/work-on-phase` becomes `/work phase`, routing moves into its own file, and the process backlog gets a loop that consumes it. Why the kind is the last token, why an unknown target prompts instead of matching the nearest, why `--revalidate` touches routing only, and why the workflow loop is the third thing in this repository that is not delegated. Also what the command cannot do: cross-repository dispatch resolves nothing, and the reason is that the only globally visible place to put a command is untracked |
 | [Two stops, one of which was only ever a sentence](#2026-08-05--two-stops-one-of-which-was-only-ever-a-sentence) | W9. `/stop` exists. Why it takes no arguments and refuses rather than interprets, why it reconciles the note against the tree instead of against a worker's report, and why it rewrites nothing when no loop is running. The checkpoint stop stays a phrase here and is W10's |
 | [The second stop becomes a flag](#2026-08-05--the-second-stop-becomes-a-flag-and-the-one-case-where-the-two-stops-disagree) | W10. Why a flag rather than a second command, why the checkpoint needed no redefining despite the note asking, and the one case where the two stops genuinely diverge — with nothing in flight, the immediate stop writes nothing and the deferred stop is already satisfied |
@@ -15997,6 +16000,266 @@ A workspace-scoped notification stops appearing while its reader is standing
 elsewhere, and there is no combined view. That is D102's stated cost and it is
 now in `CHANGELOG.md` and `docs/usage.md` in the words an operator needs: switch
 workspace to see its news.
+
+## 2026-08-05 — M45, the redirect-path batch and the one measurement it owes
+
+[F64](deferred-findings.md), [F100](deferred-findings.md),
+[F115](deferred-findings.md) and [F116](deferred-findings.md) — the last of the
+rows that touch the redirect path — and the k6 run all ten of this milestone's
+redirect-path changes owe under the inherited rule.
+
+### One run, not ten
+
+F48, F101, F9, F65, F41, F50, F64, F100, F115 and F116 all touch the path. The
+inherited rule says re-run the measurement; it does not say re-run it once per
+row, and ten runs would answer the same question ten times. Batching was declared
+in the triage and the note before any of them landed, so this is a plan carried
+out rather than a shortcut discovered at the end.
+
+**240,000 cached redirects at 2,000/s, 100% under 0.5ms**, mix 240,000 memory and
+nothing else, redirect pool acquire waits zero. The dataset is 100,000 links and
+200,000 click events against the 100k/5M this project's earlier columns used, and
+that is stated in `docs/slo.md` rather than glossed: the click volume feeds the
+rollups and not the cache-hit path, the mix confirms what was exercised, and this
+is the right measurement for *did these ten changes slow a cached redirect*
+rather than a re-measurement of the rollup columns nothing here touches.
+
+### F64: only one of the three headers, and why
+
+The wrapper sets `X-Content-Type-Options` and not the other two. That is the
+whole design decision in this row.
+
+`ServeMux` answers its own path-cleaning redirect with an HTML body before any
+handler runs, so nothing this project writes could set a header on it. nosniff is
+the one with bite on an HTML body, and every handler on the tree already sets it,
+so applying it everywhere changes no response this project produces.
+
+`X-Robots-Tag: noindex` and `Cache-Control: no-store` are **error-page** policy,
+not tree policy. `Location` sets a different `Cache-Control` deliberately and no
+robots header at all, because a short link is meant to be shared. Putting those
+in the wrapper would have changed every successful redirect in order to fix a
+307 — a wider blast radius than the finding, arrived at by not asking which
+responses the headers were for.
+
+### F100: the fix the row ruled out was the obvious one
+
+Returning early on HEAD is what this looks like, and the row says why it is
+wrong: a HEAD would answer the link's own destination while a GET answers an arm,
+so a checker validates a URL no visitor is ever sent to. HEAD has to keep
+*choosing* and stop *advancing*, which `NextVariantRotation` cannot do because it
+is an upsert that returns what it wrote.
+
+`PeekVariantRotation` is the read-only twin, and it is `Budget`'s shape exactly —
+same caller, same reason, same file. Budget reads a click allowance without
+spending it, for HEAD, because a request asking whether a link is alive must not
+consume the thing it is asking about. The precedent was three hundred lines away
+and the rotation had simply never been given one.
+
+### F115: which limb, and the one that stays
+
+Two limbs, and only one is closable. **Self-throttling** is a defect: both
+buckets are spent before the form is parsed, so a link with more legitimate
+visitors than `LINK_PASSWORD_RATE_LIMIT` in a burst empties its own alias bucket
+with no attacker present. A correct password now refunds that token.
+
+The refund touches neither D53 nor D54, and the reasoning is worth stating
+because a rate limiter that gives tokens back is the shape of a mistake: the
+per-alias keying is unchanged, an attacker who does not have the password never
+reaches the refund, and what is handed back was spent by somebody who proved they
+had it. The **address** limb is deliberately not refunded — a correct password is
+still traffic from that address.
+
+`Limiter.RefundKey` needed one change to the shared script: clamp to burst after
+subtracting the cost. Every write in that script kept `tokens <= burst` and none
+of them could break it while cost was always 1; a negative cost can, and a bucket
+holding more than its burst is a limit that does not hold for the next
+burst-many requests.
+
+**The other limb is D54's accepted cost and is now recorded against it.** A
+stranger can hold a password link's bucket empty with wrong guesses and lock out
+its audience, at roughly one request every three seconds. No fix keeps the
+guarantee: dropping the alias limb or keying it on address-plus-alias reopens the
+distributed-guessing hole D54 exists to close, and D53's CSRF waiver rests on D54
+holding. It is in Plan.md's *Known limitations* rather than left for somebody to
+find.
+
+The measurement had to be taken on the alias bucket directly, and that is the
+finding in miniature: a fixture has one address, so the per-address limb refuses
+first and hides the per-alias one. Which is exactly why nobody noticed.
+
+### F116: both bounds, and the status that was not invented
+
+Length and segment count, because either alone misses it — the per-segment cost
+is driven by count, so twenty thousand empty segments is twenty thousand
+`PathUnescape` calls under any sane length cap.
+
+Refused through the existing not-forwardable 404 rather than a new 414, which the
+row asked for and which is right twice over: a distinct status tells a prober
+something the 404 does not, and the tree's header invariants were fragile enough
+that F64 was open against them while this was being written.
+
+## 2026-08-05 — M45, thirteen enumerations, and the one that gets a test
+
+[F45](deferred-findings.md), [F38](deferred-findings.md) and
+[F111](deferred-findings.md) — every list in this project that presented itself
+as complete and was not. The first documentation work done under the owner's
+standing approval, which removes the prompt and keeps the verification.
+
+### Counted, not trusted, and it mattered
+
+F45 was filed naming twelve enumerations and widened to thirteen. Working it
+found the count had moved again: D98 added three permissions to
+`NonDelegableScopes`, so the map held **nine** where the row said seven and
+`docs/SECURITY.md` said three.
+
+That is the fifth wording row in this milestone whose list was short, after F136,
+F139, F142 and F104. The lesson was already on record — a wording finding's site
+list is a starting point — and this is the run that made it a rule with a test
+behind it rather than an observation.
+
+The others, each verified against the code rather than against the row: the
+`_FILE` summary said two where the loader accepts four; the removed-variable
+table said three of five and omitted `SECRET_KEY`, which appeared in no markdown
+file in the repository and is the name most likely to be set by somebody being
+careful; the `cache` label was documented as five values against a domain of six,
+and the missing one is `none`, the only value carrying `outcome="error"` and
+therefore the series the runbook tells an operator to alert on; the README's
+audit list named seven categories and said the rest *arrive with the Phase 2
+features that produce them*, by which point all thirty-two had; `usage.md`'s page
+table listed eight of seventeen; the release archive listed three files against
+four; the Prometheus recipe compared `> 5e9` against a `5368709120` default and
+called them the same number; `actor_id` was documented as *present only while the
+user still exists*, describing a deletion nothing performs; the mail backoff was
+documented 1m–16m against a real span of 1m–8m, because the terminal check runs
+before the last delay is ever asked for; and `signup-purge` had no row in the
+jobs table at all.
+
+One was checked and **left**: the audit-growth warning really does notify every
+organization's owners. F137 changed the *dispute* recipients and not this one,
+and F49 is the open row about the fan-out. A sweep that corrected it would have
+been the sweep inventing a defect.
+
+### The list that gets a test, and why only that one
+
+`TestDocumentedNonDelegableScopesMatchTheMap` asserts that `docs/SECURITY.md`,
+`docs/usage.md` and `api/openapi.yaml` name exactly the slugs in
+`NonDelegableScopes`, in both directions.
+
+Only this list, and the reason is worth stating: it is the one a reader consults
+to decide what is safe to put on a credential, and it has drifted three times —
+written naming three, outgrown by M42 and M43, outgrown again by D98. The other
+twelve are each wrong once, in prose that explains itself; this one is a security
+claim that has now failed to keep up with the code three separate times.
+
+The lists are not generated, and that is deliberate. Each explains *why* its
+members are non-delegable, and generating that from a map produces a list nobody
+reads. What is generated is the **failure**: a hand-written list that has fallen
+behind now fails a test. That is D97's argument — derive the check, not the
+prose.
+
+### The test was wrong before the documents were
+
+On its first run it reported `docs/usage.md` naming `destinations.review` as
+never grantable, which the map does not hold. That looked like a fourth stale
+claim and was not: D98 split that permission and the sentence one paragraph down
+says correctly that it **is** grantable. The scan's window was wide enough to
+swallow the neighbour.
+
+The window was tightened rather than the document changed, and the test's own
+comment records the near miss. A guard that produces a false positive gets an
+exception added and then stops being read, which is the failure mode
+[F130](deferred-findings.md) is about — and this one came within one edit of
+"fixing" a sentence that was already right.
+
+### What the standing rule changed here
+
+None of these needed a decision. Every one had a single right answer and a cost
+to establishing it, which is exactly the shape the owner's approval was given
+for. What it did not remove is the checking: the counts above are counts, the
+audit-growth row was read before being left alone, and the `_FILE`, removed-variable
+and cache-label sets were taken from the code rather than from the row that
+reported them.
+
+## 2026-08-05 — M45, four controls that told a reader the wrong thing
+
+[F42](deferred-findings.md), [F22](deferred-findings.md),
+[F47](deferred-findings.md) and [F54](deferred-findings.md). Nothing here is a
+security defect and nothing loses data. Each is a control or a sentence that
+promises an outcome the code will not produce, which is a class this project
+keeps producing because the promise and the enforcement live in different files.
+
+### F42: the button and the refusal were reading different things
+
+`Liftable` decides whether the queue draws **Allow**. It read
+`liftableRules[reasonCode]` — is this rule list-backed — while `entryToLift`
+additionally refuses an entry whose source is `env`, because
+`LINKCTRL_DESTINATION_BLOCKLIST` is rewritten at every boot and deleting a row
+from it would last until the next restart.
+
+So the flag answered *could an allow ever do anything for this rule* and the
+decision answered *can it do anything for this refusal*. A source census on a
+migrated database returns `env` and `shortener` and nothing else, which makes
+this the **most likely dispute** on any instance whose operator configured a
+blocklist — the button 409ed on every one of them, through `webError`, as an
+error page rather than in-context guidance.
+
+The fix is not a second condition at the call site. It is `canLiftEntry`, spelled
+once and consulted by both, so the two cannot drift apart again; the queries
+carry the entry's source through a LEFT JOIN, LEFT because a refusal computed
+from the URL has no entry and must stay in the queue.
+
+The two paths returning a freshly written row needed different answers, and the
+difference is worth recording. `File` resolves the source with one lookup, on a
+path that has already written and notified. `decide` uses the source read
+**before** the decision — an allow has just deleted the entry, and reporting *not
+liftable* because the lift succeeded is the opposite of informative.
+
+### F22: the switcher carried a path that names one object
+
+`next` is the current path, so switching workspace keeps the reader where they
+were. On `/links/{id}` that path names an id belonging to the workspace being
+left, so the switch lands on Not found.
+
+Collapsed to `/links`, not `/dashboard`: the reader was looking at links. The
+table test asserts the paths that must **stay** alongside the two that must not,
+because a rule that trimmed more would throw away the page somebody chose.
+
+### F47: the one href in the header gated on nothing
+
+`/notifications` sits behind `RequireOrganization` and 303s straight back. Every
+other control in the identity menu is gated on `HasOrganization`; the bell was
+not, so the account that belongs to nothing was offered the single control there
+that leads nowhere — on the page it is redirected to.
+
+It is also the *likeliest* holder of unread notifications, which is what makes it
+worth more than tidiness: deleting an organization needs the owner role, and
+owners are the recipient class for audit-growth, invitation and dispute
+notifications.
+
+`TestTheHeaderOffersNothingToAnAccountThatBelongsToNothing` could not have caught
+this — it cuts the nav one `div` before the bell, despite its name. The per-page
+header test now expects zero bells wherever the shell has no organization, which
+is a claim about every page rather than about one.
+
+### F54: the surface that could not have told the truth
+
+The invitation mail said *"if you do not have an account yet, that form creates
+one"* with no condition. On a closed instance with a relay — intended, and
+documented — redemption refuses to create one, and the landing page says so. The
+mail that got somebody there did not.
+
+The service has always known: `Redeem` reads `cfg.NewAccounts`. What the template
+could not do is ask, because `RenderMail` was handed six keys and none of them
+was the mode. That is the shape worth naming — not a wrong branch, but a surface
+with no way to be right.
+
+Two things fell out of fixing it, both useful. The renderer **refuses a template
+referencing a key nobody passed**, so the new branch failed immediately rather
+than rendering an empty sentence — a property worth knowing about before adding
+a conditional to any of these files. And the fixture now renders both sides,
+because a template with an `if` exercised on one side has an untested half, and
+here the untested half is the one that only ever appears on somebody else's
+instance.
 
 ---
 

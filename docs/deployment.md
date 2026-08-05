@@ -591,8 +591,13 @@ What to know before running several:
   once. This covers a Redis that stalls as well as one that goes away: the
   subscriber bounds its read with `REDIS_SUBSCRIBER_READ_TIMEOUT` and makes
   Redis answer a probe before it accepts silence as *nothing has changed*.
-- **Rate limits are still per instance.** N replicas allow roughly N times the
-  configured limit, and the 404-probe limiter stays that way permanently.
+- **The credential and API rate limits are shared across replicas; the
+  404-probe limit is not.** Since 0.2.0 the first two go through Redis, so the
+  configured number holds however many replicas are running — and falls back to
+  per-replica buckets whenever Redis does not answer, which is the fail-open
+  direction the cache-is-optional rule requires. The 404-probe limiter stays per
+  instance permanently, because it guards the redirect path: N replicas allow
+  roughly N times its configured limit.
 - Vertical growth first: Postgres `shared_buffers` and the two pool sizes
   (`DB_MAX_CONNS`, `DB_REDIRECT_MAX_CONNS`) are the knobs that matter. Keep
   their total under the server's `max_connections`; startup refuses to run when

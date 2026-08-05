@@ -392,6 +392,70 @@ func (f *botFixture) captureAs(path, ua string) string {
 // must produce a click event — the traffic is real and its owner should see it —
 // and none may produce an audit row, because the audit log is for administrative
 // change and a table that grows with crawler traffic stops being readable.
+// A link that is expired or archived records the traffic it receives, and it
+// records the same traffic whether or not bots are being blocked.
+//
+// Until 0.2.0 it did not. The bot gate answers **before** Decide runs, so a
+// blocked crawler on an expired link was recorded while a browser meeting the
+// same link's 410 was not — which made "is this counted" depend on a setting
+// about *responses*, and made the same crawler a click on a link with blocking
+// on and nothing on a link with it off. `links.click_count` is rendered raw on
+// the links table and the dashboard and is the `sort=clicks` key, so the
+// asymmetry was visible: an archived link accrued a count from crawlers only
+// when somebody had switched blocking on.
+//
+// D101 chose to record in every state rather than in none. Recording in none
+// would make the redirect path decide what to record from the response it was
+// about to send, and would leave a blocked bot on a *live* link counted — the
+// rule would gain an exception instead of losing one.
+func TestAnExpiredLinkRecordsItsTrafficWithOrWithoutBotBlocking(t *testing.T) {
+	f := newBots(t)
+	f.claim()
+
+	quiet := f.createLink("d101quiet", "https://example.com/quiet")
+	loud := f.createLink("d101loud", "https://example.com/loud")
+	if _, err := f.pool.Exec(t.Context(),
+		`UPDATE links SET expires_at = now() - interval '1 hour' WHERE id = ANY($1)`,
+		[]uuid.UUID{quiet, loud}); err != nil {
+		t.Fatal(err)
+	}
+	// Blocking on for one of them and off for the other, which is the whole
+	// comparison: two links in the same state, receiving the same request.
+	f.setLinkPolicy(loud, "on")
+
+	if got := f.statusOf("/d101quiet", humanUA); got != http.StatusGone {
+		t.Fatalf("the expired link answered %d, want 410 — this test needs it expired", got)
+	}
+	if got := f.statusOf("/d101loud", botUA); got != http.StatusForbidden {
+		t.Fatalf("the blocking link answered a bot %d, want 403", got)
+	}
+
+	if err := f.ingester.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	count := func(id uuid.UUID) int {
+		t.Helper()
+		var n int
+		if err := f.pool.QueryRow(t.Context(),
+			`SELECT count(*) FROM click_events WHERE link_id = $1`, id).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+
+	if n := count(quiet); n != 1 {
+		t.Errorf("an expired link answering 410 recorded %d clicks, want 1. Identical "+
+			"traffic has to be recorded identically whatever the link's state made "+
+			"the response — otherwise whether a visit is counted depends on a "+
+			"setting about responses (D101)", n)
+	}
+	if n := count(loud); n != 1 {
+		t.Errorf("an expired link with blocking on recorded %d clicks for one refused "+
+			"bot, want 1", n)
+	}
+}
+
 func TestABlockedAttemptIsCountedNotAudited(t *testing.T) {
 	f := newBots(t)
 	f.claim()

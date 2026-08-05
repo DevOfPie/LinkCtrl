@@ -38,9 +38,12 @@ No defaults. The process refuses to start without them.
 | `LINKCTRL_API_KEY_PEPPER` | ≥32 bytes. `openssl rand -base64 48`. Keys the HMAC that protects every API key hash, so **changing it invalidates every existing API key**. Not rotatable in place. |
 | `LINKCTRL_DATABASE_URL` | pgx-compatible DSN. Compose builds it from the `POSTGRES_*` variables. |
 
-`API_KEY_PEPPER` and `DATABASE_URL` also accept a `_FILE` suffix pointing at a
-file, for mounted secrets. Setting both forms of the same secret is an error, not
-a precedence rule.
+Four variables accept a `_FILE` suffix pointing at a file, for mounted secrets:
+`API_KEY_PEPPER` and `DATABASE_URL` here, and `SMTP_PASSWORD` and
+`FEED_AUTH_TOKEN` in their own sections below. Setting both forms of the same
+secret is an error, not a precedence rule. (This said two until 0.2.0, while the
+loader accepted four and the two missing ones were documented correctly in their
+own rows — a summary that had fallen behind the table it summarises, F45.)
 
 ## Core
 
@@ -389,8 +392,15 @@ next successful login.
 
 ## Rate limits
 
-Three limits, all per client address, all per instance, and `0` disables any of
-them. A negative value is refused rather than read as "unlimited".
+Three limits, all keyed on the client address, and `0` disables any of them. A
+negative value is refused rather than read as "unlimited".
+
+**Two of the three are shared across replicas and one is not**, which is the
+thing to know before running more than one. The credential and API limits go
+through Redis, so the configured number is the number however many replicas are
+running; the 404-probe limit is deliberately in memory only, because it guards
+the redirect path and a network round trip there would cost more than the limit
+saves. See *Per instance, unless the limit is shared* below.
 
 | Variable | Default | Applies to |
 | --- | --- | --- |
@@ -679,7 +689,10 @@ Read by the Postgres image, not by LinkCtrl.
 
 ## Removed variables
 
-These existed, did nothing, and are gone. The fixed behaviour was the design
+These existed, did nothing, and are gone. **The table is the set startup warns
+about**, and it said three of the five until 0.2.0 — `SECRET_KEY` appeared in no
+markdown file in the repository at all, which is the one whose name most invites
+somebody to set it (F45). The fixed behaviour was the design
 rather than a default waiting to be overridden, so the variable went instead of
 the behaviour becoming configurable. Startup warns if one is still set in your
 `.env`, and `lctl config check` reports it — a stale line is worth saying out loud
@@ -690,3 +703,5 @@ and is not a reason to refuse to boot.
 | `LINKCTRL_INGEST_WORKERS` | One ingest consumer, which is what makes batch coalescing work. |
 | `LINKCTRL_VISITOR_SALT_ROTATION` | One UTC day, the period the purge window de-identifies against. |
 | `LINKCTRL_BOT_FILTER_ENABLED` | Bots are always classified and recorded; headline figures exclude them in the queries. |
+| `LINKCTRL_SECRET_KEY` | Nothing was ever keyed by it. Sessions use random 32-byte tokens stored as SHA-256, CSRF is origin-based, and API keys use `API_KEY_PEPPER` — rotating this changed nothing, which is the opposite of what a variable with that name promises. |
+| `LINKCTRL_DESTINATION_BLOCK_PRIVATE_IPS` | Private, loopback, link-local, carrier-NAT and cloud-metadata addresses are refused unconditionally since M30. It was an off switch on the one tier that must not have one: the person it protects is the visitor whose browser would do the fetching, and they are not the person who would be turning it off. Point links at an intranet with a hostname that resolves there, not with a literal address. |

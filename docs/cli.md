@@ -82,8 +82,15 @@ together.
 `down` rolls back one migration. Test it on a copy: `down` migrations drop
 columns, and a rollback after real traffic loses whatever those columns held.
 
-The server does all of this at boot unless `MIGRATE_ON_START=false`, which is the
-setting to use if you want migrations to be a deliberate step.
+The server does all of this at boot unless `LINKCTRL_MIGRATE_ON_START=false`,
+which is the setting to use if you want migrations to be a deliberate step.
+
+**The prefix is not optional.** Every variable this product reads carries
+`LINKCTRL_`, applied by the loader rather than written into each name, so an
+unprefixed `MIGRATE_ON_START` is read by nothing and is not in the removed-variable
+list either — startup does not warn about it. A change-controlled deployment that
+set it would suppress nothing, take the migrations at boot anyway, and be told
+nothing about why. This line said the bare name until 0.2.0 (F111).
 
 ### `partitions ensure`
 

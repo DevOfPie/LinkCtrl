@@ -42,6 +42,60 @@ migrations run at boot.
   ones are the true ones. The SLO series `linkctrl_redirect_duration_seconds` is
   unaffected and always was — the redirect handler records it directly.
 
+- **The dispute queue no longer offers Allow on a refusal it cannot lift.** A
+  destination refused by an entry from `LINKCTRL_DESTINATION_BLOCKLIST` drew the
+  same **Allow** button as any other, and pressing it answered `409` — the entry
+  is rewritten from the environment at every boot, so removing it would last
+  until the next restart. That was the most likely dispute on any instance whose
+  operator configured a blocklist. The button is now drawn only where an allow
+  can actually do something, and the guidance to take the host out of the
+  environment is where the button used to be.
+
+- **Switching workspace from a link's page lands on your links, not on a
+  `404`.** The switcher returns you to the page you were on, and on a link's
+  detail page that page names a link belonging to the workspace you just left.
+
+- **The notification bell is no longer shown to an account that belongs to no
+  organization.** Its **View all** went to a page that redirects such an account
+  straight back — the one control in the header that led nowhere, offered to the
+  account most likely to have unread notifications.
+
+- **An invitation email to a closed instance no longer promises the form will
+  create an account.** With `LINKCTRL_SIGNUP_MODE=closed` an invitation may only
+  admit somebody who already has one, which the redemption page has always said
+  and the email contradicted.
+
+- **A `HEAD` request to a sequentially split link no longer advances the
+  rotation.** Link checkers and unfurlers probe with `HEAD`, and every probe used
+  to move the counter that decides which destination the next visitor gets —
+  re-phasing the test with no click recorded to explain why the arms were
+  uneven. A `HEAD` now reports the destination the next `GET` would be given,
+  which is what a checker needs, without changing it.
+
+- **A correct link password no longer spends the link's own rate limit.** The
+  per-link limb of `LINKCTRL_LINK_PASSWORD_RATE_LIMIT` is charged before the
+  password is checked, deliberately — that ordering is what stops timing
+  revealing which limb refused — so more legitimate visitors than the limit
+  opening the same link at once could exhaust it between them, with nobody
+  attacking anything. A correct password now hands that token back. Wrong
+  guesses are charged exactly as before, and the per-address limb is unchanged.
+
+- **A deep-link path is bounded.** With `forward_path` on, everything after the
+  alias is visitor-supplied and was limited only by the 1 MiB request ceiling,
+  while the joiner walks it several times. It is now capped at 4096 bytes and 64
+  segments, and anything past that gets the same `404` a path the link cannot
+  forward already got.
+
+- **An expired or archived link now records the traffic it receives.** It
+  recorded nothing before, unless bot blocking happened to be switched on for
+  it — because the bot refusal is decided before the link's state is, so a
+  blocked crawler was counted on a dead link while a browser meeting the same
+  link's `410` was not. Whether identical traffic was counted therefore depended
+  on a setting about responses. **Counts on expired and archived links will
+  start moving**, most visibly under crawler traffic; `links.click_count`
+  includes bots, and the Clicks tile on the dashboard reads the human-only
+  rollup, which is why the two numbers differ.
+
 - **The notification inbox is now scoped to the workspace you are acting in.**
   A notification produced by a workspace — an automation rule firing, a custom
   domain failing its verification check — appears while you are in that

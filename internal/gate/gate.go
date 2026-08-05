@@ -252,6 +252,34 @@ func (s *Service) Rotate(ctx context.Context, linkID, workspaceID uuid.UUID) (in
 	return position, nil
 }
 
+// PeekRotation reports the position the next GET would get, without advancing.
+//
+// HEAD only, and the reasoning is Budget's below: a request asking *what does
+// this link do* must be answered with what a visitor would get, and must not
+// change it. A link checker probing a sequentially split link used to advance
+// the durable counter on every probe, re-phasing every subsequent visitor's arm
+// with no click recorded to explain it (F100).
+//
+// No row means nothing has clicked this link yet, which is position 1 — the
+// first arm. `pgx.ErrNoRows` is the ordinary case here rather than a failure.
+func (s *Service) PeekRotation(ctx context.Context, linkID, workspaceID uuid.UUID) (int64, error) {
+	ctx, cancel := s.bounded(ctx)
+	defer cancel()
+	position, err := s.q.PeekVariantRotation(ctx, dbgen.PeekVariantRotationParams{
+		LinkID: linkID, WorkspaceID: workspaceID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 1, nil
+		}
+		return 0, fmt.Errorf("read split rotation: %w", err)
+	}
+	// The advancing twin returns the position it moved *to*, so the first click
+	// is 1. A peek before any click has to report the same 1, and a peek after
+	// N clicks reports what the next one would move to.
+	return position + 1, nil
+}
+
 // Budget reports how much of a link's allowance has been spent, without
 // spending any of it.
 //

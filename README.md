@@ -6,13 +6,20 @@ measure, script and revoke — not a row you create once and hope about.
 Runs as one Go binary with Postgres and Redis beside it. No Node in the image,
 no SaaS dependency, no telemetry leaving the box.
 
-> **Status: Phase 1 complete, released as 0.1.0.** All twenty-one milestones
-> are built, tested and exercised end to end; every configuration setting takes
-> effect, and the redirect latency target is measured, not aspirational. See
-> [CHANGELOG.md](CHANGELOG.md) for what is in it. What is deferred to Phase 2 is
-> listed plainly in
-> [Not built yet](#not-built-yet). Check that list before deploying anything you
-> care about.
+> **Status: Phase 2 complete and unreleased. 0.1.0 is the latest tag.**
+> Everything described below is built, tested and exercised end to end, and the
+> redirect latency target is measured rather than aspirational — but most of it
+> is **not in 0.1.0**, which shipped Phase 1 only. Until 0.2.0 is tagged, running
+> a released version gets you the smaller product the `[0.1.0]` section of
+> [CHANGELOG.md](CHANGELOG.md) describes; running `main` gets you this page.
+> [Not built yet](#not-built-yet) is the list of what is still missing from
+> either, and it is the one to read before deploying anything you care about.
+>
+> *(This block said "Phase 1 complete, released as 0.1.0" while the table below
+> described a dozen Phase 2 features in the present tense, and pointed at a
+> changelog section that states their absence — a reader who followed the Quick
+> start and pinned the tag as instructed got an instance with none of what this
+> page had just sold them.)*
 
 ---
 
@@ -62,8 +69,11 @@ docker compose up -d --wait
 ```
 
 That runs `latest`. For anything you care about, pin a version — set
-`LINKCTRL_TAG=0.1.0` in `.env` — so that a later `pull` is a decision rather than a
-surprise. Releases also publish static binaries for linux, macOS and Windows if you
+`LINKCTRL_TAG` in `.env` to the release you mean — so that a later `pull` is a
+decision rather than a surprise. **The latest tag is `0.1.0`, which is Phase 1
+only**: pinning it gets you a working shortener without the organizations,
+custom domains, routing rules, split tests, gated links, webhooks or automation
+this page describes. Releases also publish static binaries for linux, macOS and Windows if you
 would rather not use Docker; see [docs/releasing.md](docs/releasing.md).
 
 Open <http://localhost:8080>. The first visit lands on a setup form that creates
@@ -94,7 +104,7 @@ answers, not the same ones with a domain name.
 | **Abuse limits** | Per-address limits on credential endpoints, the API, and 404 probing. The last charges misses only, so a working link is never throttled by anyone's scanning. |
 | **Bot blocking** | Refuse automated clients on a link, or on the whole link domain, with `403` and a body naming nothing — identical whether the link is live, expired or archived, so being blocked reveals no more than a `404` would. Off by default and inherited from the domain; an operator with `domains.write` may enforce it so no link can opt out. Detection is the same user-agent heuristic the click statistics use, and **there is no challenge or appeal**: a person it misjudges cannot get through. Refusals are counted as bot clicks and on `linkctrl_redirects_total{outcome="blocked_bot"}`, never written to the audit log — a crawler would fill it. |
 | **API keys** | `lk_live_…` bearer tokens, scoped to permissions you hold, intersected with your current role on every request — and dead the moment their owner stops holding a membership that covers them, so removing somebody stops the credentials they leave behind. Revocable by their owner, or by anybody holding `apikeys.write` across the organization, which is the answer to a key that has to be stopped and an owner who will not stop it. Usage timestamps. Issued for one workspace by default, or for the whole organization if your own membership reaches that far. **A key can replace itself** — one call with its own token returns a successor with the same reach or less, and the old secret keeps working for a bounded window before it stops. Nobody has to be signed in, which is the point; the cost is that a leaked key can rotate itself too, so every generation is listed and audited and [SECURITY.md](docs/SECURITY.md) says what to do about a key you did not create. |
-| **Audit log** | Events recorded with the actor snapshotted at write time and a network prefix rather than an address, readable at `GET /api/v1/audit` behind a non-delegable permission. Retention is its own setting and defaults to keeping everything, so growth is reported rather than trimmed silently. Root-redirect changes, the invitation lifecycle, member and workspace changes, the organization lifecycle, refused destinations and bot-blocking changes are recorded so far; the rest arrive with the Phase 2 features that produce them. A bot being refused is not among them — that is traffic, and it is counted rather than logged. An organization's records outlive the organization, so a teardown does not erase its own trail. |
+| **Audit log** | Events recorded with the actor snapshotted at write time and a network prefix rather than an address, readable at `GET /api/v1/audit` behind a non-delegable permission. Retention is its own setting and defaults to keeping everything, so growth is reported rather than trimmed silently. **Thirty-two actions are recorded**, which is every administrative change this product makes: the root redirect and bot policy of a domain, the invitation lifecycle, member and workspace changes, the organization lifecycle, refused destinations and the disputes that follow them, domain registration and verification, API key rotation, automation firings, and the instance-level acts that belong to no tenant. This list said seven categories and *the rest arrive with the Phase 2 features that produce them* until 0.2.0, by which point they had arrived — a reader sizing audit coverage from the front page was out by half. A bot being refused is not among them — that is traffic, and it is counted rather than logged. An organization's records outlive the organization, so a teardown does not erase its own trail. |
 | **Notifications** | An in-app inbox for things the instance wanted you to know about — the audit log outgrowing its threshold is the first — with mark-read. A bell in the header carries the count and previews the newest few, so answering "what is it" costs nothing; the full page is one click on. Emailed as well when a mailer is configured. |
 | **Mail** | Optional SMTP, off unless `SMTP_HOST` is set. Queued in an outbox and delivered by the scheduler, so a message survives a restart; plain text only, and every consumer works unchanged with no mailer at all. |
 | **Invitations** | Bring somebody into your organization with a single-use, revocable, expiring link. It is tied to the address you send it to, so forwarding it cannot add a stranger, and the role it carries is capped at your own — at `editor` when an API key issued it, because redeeming one produces an account that outlives the key. Emailed when a mailer is configured, copyable either way. While sign-ups are `closed` an invitation may only add an account that already exists. |

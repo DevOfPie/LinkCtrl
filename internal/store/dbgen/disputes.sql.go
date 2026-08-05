@@ -134,12 +134,33 @@ func (q *Queries) GetBlockedDestination(ctx context.Context, host string) (GetBl
 }
 
 const getDestinationDispute = `-- name: GetDestinationDispute :one
-SELECT id, host, url_defanged, reason_code, status, organization_id, workspace_id, created_by, created_by_label, created_at, decided_by, decided_by_label, decided_at, blocked_host FROM destination_disputes WHERE id = $1
+SELECT d.id, d.host, d.url_defanged, d.reason_code, d.status, d.organization_id, d.workspace_id, d.created_by, d.created_by_label, d.created_at, d.decided_by, d.decided_by_label, d.decided_at, d.blocked_host, b.source AS entry_source
+  FROM destination_disputes d
+  LEFT JOIN blocked_destinations b ON b.host = d.blocked_host
+ WHERE d.id = $1
 `
 
-func (q *Queries) GetDestinationDispute(ctx context.Context, id uuid.UUID) (DestinationDispute, error) {
+type GetDestinationDisputeRow struct {
+	ID             uuid.UUID
+	Host           string
+	UrlDefanged    string
+	ReasonCode     string
+	Status         string
+	OrganizationID *uuid.UUID
+	WorkspaceID    *uuid.UUID
+	CreatedBy      *uuid.UUID
+	CreatedByLabel string
+	CreatedAt      time.Time
+	DecidedBy      *uuid.UUID
+	DecidedByLabel string
+	DecidedAt      *time.Time
+	BlockedHost    string
+	EntrySource    *string
+}
+
+func (q *Queries) GetDestinationDispute(ctx context.Context, id uuid.UUID) (GetDestinationDisputeRow, error) {
 	row := q.db.QueryRow(ctx, getDestinationDispute, id)
-	var i DestinationDispute
+	var i GetDestinationDisputeRow
 	err := row.Scan(
 		&i.ID,
 		&i.Host,
@@ -155,6 +176,7 @@ func (q *Queries) GetDestinationDispute(ctx context.Context, id uuid.UUID) (Dest
 		&i.DecidedByLabel,
 		&i.DecidedAt,
 		&i.BlockedHost,
+		&i.EntrySource,
 	)
 	return i, err
 }
@@ -267,13 +289,15 @@ func (q *Queries) InsertDestinationDispute(ctx context.Context, arg InsertDestin
 }
 
 const listDestinationDisputes = `-- name: ListDestinationDisputes :many
-SELECT id, host, url_defanged, reason_code, status, organization_id, workspace_id, created_by, created_by_label, created_at, decided_by, decided_by_label, decided_at, blocked_host FROM destination_disputes
- WHERE (NOT $1::boolean OR status = 'open')
+SELECT d.id, d.host, d.url_defanged, d.reason_code, d.status, d.organization_id, d.workspace_id, d.created_by, d.created_by_label, d.created_at, d.decided_by, d.decided_by_label, d.decided_at, d.blocked_host, b.source AS entry_source
+  FROM destination_disputes d
+  LEFT JOIN blocked_destinations b ON b.host = d.blocked_host
+ WHERE (NOT $1::boolean OR d.status = 'open')
    AND (
         $2::timestamptz IS NULL
-     OR (created_at, id) < ($2::timestamptz, $3::uuid)
+     OR (d.created_at, d.id) < ($2::timestamptz, $3::uuid)
    )
- ORDER BY created_at DESC, id DESC
+ ORDER BY d.created_at DESC, d.id DESC
  LIMIT $4
 `
 
@@ -282,6 +306,24 @@ type ListDestinationDisputesParams struct {
 	CursorCreated *time.Time
 	CursorID      *uuid.UUID
 	PageLimit     int32
+}
+
+type ListDestinationDisputesRow struct {
+	ID             uuid.UUID
+	Host           string
+	UrlDefanged    string
+	ReasonCode     string
+	Status         string
+	OrganizationID *uuid.UUID
+	WorkspaceID    *uuid.UUID
+	CreatedBy      *uuid.UUID
+	CreatedByLabel string
+	CreatedAt      time.Time
+	DecidedBy      *uuid.UUID
+	DecidedByLabel string
+	DecidedAt      *time.Time
+	BlockedHost    string
+	EntrySource    *string
 }
 
 // The queue, newest first, keyset on (created_at, id).
@@ -293,7 +335,17 @@ type ListDestinationDisputesParams struct {
 //
 // @open_only lets the page show the work and the archive from one query, which
 // is the same shape ListNotifications' unread filter has.
-func (q *Queries) ListDestinationDisputes(ctx context.Context, arg ListDestinationDisputesParams) ([]DestinationDispute, error) {
+//
+// The LEFT JOIN carries the blocklist entry's **source**, which is what decides
+// whether an allow can do anything (F42). `liftableRules` says the *rule* is
+// list-backed; it does not say the entry behind this particular refusal is one
+// a decision may delete. An `env`-sourced entry comes from
+// LINKCTRL_DESTINATION_BLOCKLIST and is rewritten at every boot, so removing it
+// would be undone by the next restart and `entryToLift` refuses — while the page
+// drew the Allow button from the rule alone and the operator found out by
+// clicking. LEFT, because a refusal computed from the URL has no entry at all
+// and must stay in the queue.
+func (q *Queries) ListDestinationDisputes(ctx context.Context, arg ListDestinationDisputesParams) ([]ListDestinationDisputesRow, error) {
 	rows, err := q.db.Query(ctx, listDestinationDisputes,
 		arg.OpenOnly,
 		arg.CursorCreated,
@@ -304,9 +356,9 @@ func (q *Queries) ListDestinationDisputes(ctx context.Context, arg ListDestinati
 		return nil, err
 	}
 	defer rows.Close()
-	items := []DestinationDispute{}
+	items := []ListDestinationDisputesRow{}
 	for rows.Next() {
-		var i DestinationDispute
+		var i ListDestinationDisputesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Host,
@@ -322,6 +374,7 @@ func (q *Queries) ListDestinationDisputes(ctx context.Context, arg ListDestinati
 			&i.DecidedByLabel,
 			&i.DecidedAt,
 			&i.BlockedHost,
+			&i.EntrySource,
 		); err != nil {
 			return nil, err
 		}
