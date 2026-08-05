@@ -39,13 +39,27 @@ func (q *Queries) CountRecentNotificationsOfKind(ctx context.Context, arg CountR
 const countUnreadNotifications = `-- name: CountUnreadNotifications :one
 SELECT count(*) FROM notifications
  WHERE user_id = $1 AND read_at IS NULL
+   AND (workspace_id IS NULL OR workspace_id = $2)
 `
+
+type CountUnreadNotificationsParams struct {
+	UserID      uuid.UUID
+	WorkspaceID *uuid.UUID
+}
 
 // Served by notifications_user_unread_idx, the partial index the table already
 // ships with: the WHERE clause here has to match the index's predicate exactly
 // or this becomes a sequential scan on every page render in the dashboard.
-func (q *Queries) CountUnreadNotifications(ctx context.Context, userID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countUnreadNotifications, userID)
+//
+// **Both halves of the workspace predicate are load-bearing** (D102, F105).
+// `workspace_id = @workspace_id` alone hides every organization-level
+// notification, because disputes and audit-growth write NULL — the reader would
+// lose exactly the notifications that are not about any one workspace. And the
+// clause has to be identical here and in ListUnreadNotificationPreview below, or
+// the badge and the list it previews disagree while one of them stops using the
+// index.
+func (q *Queries) CountUnreadNotifications(ctx context.Context, arg CountUnreadNotificationsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countUnreadNotifications, arg.UserID, arg.WorkspaceID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -87,17 +101,19 @@ const listNotifications = `-- name: ListNotifications :many
 SELECT id, user_id, workspace_id, kind, title, body, data, read_at, created_at
   FROM notifications
  WHERE user_id = $1
-   AND (NOT $2::boolean OR read_at IS NULL)
+   AND (workspace_id IS NULL OR workspace_id = $2)
+   AND (NOT $3::boolean OR read_at IS NULL)
    AND (
-        $3::timestamptz IS NULL
-     OR (created_at, id) < ($3::timestamptz, $4::uuid)
+        $4::timestamptz IS NULL
+     OR (created_at, id) < ($4::timestamptz, $5::uuid)
    )
  ORDER BY created_at DESC, id DESC
- LIMIT $5
+ LIMIT $6
 `
 
 type ListNotificationsParams struct {
 	UserID        uuid.UUID
+	WorkspaceID   *uuid.UUID
 	UnreadOnly    bool
 	CursorCreated *time.Time
 	CursorID      *uuid.UUID
@@ -110,6 +126,7 @@ type ListNotificationsParams struct {
 func (q *Queries) ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]Notification, error) {
 	rows, err := q.db.Query(ctx, listNotifications,
 		arg.UserID,
+		arg.WorkspaceID,
 		arg.UnreadOnly,
 		arg.CursorCreated,
 		arg.CursorID,
@@ -175,13 +192,15 @@ SELECT id, user_id, workspace_id, kind, title, body, data, read_at, created_at,
        count(*) OVER () AS unread_total
   FROM notifications
  WHERE user_id = $1 AND read_at IS NULL
+   AND (workspace_id IS NULL OR workspace_id = $2)
  ORDER BY created_at DESC, id DESC
- LIMIT $2
+ LIMIT $3
 `
 
 type ListUnreadNotificationPreviewParams struct {
-	UserID    uuid.UUID
-	PageLimit int32
+	UserID      uuid.UUID
+	WorkspaceID *uuid.UUID
+	PageLimit   int32
 }
 
 type ListUnreadNotificationPreviewRow struct {
@@ -212,7 +231,7 @@ type ListUnreadNotificationPreviewRow struct {
 // while the preview stays bounded. A page render costs one notification query
 // here, as it did when it cost a bare count.
 func (q *Queries) ListUnreadNotificationPreview(ctx context.Context, arg ListUnreadNotificationPreviewParams) ([]ListUnreadNotificationPreviewRow, error) {
-	rows, err := q.db.Query(ctx, listUnreadNotificationPreview, arg.UserID, arg.PageLimit)
+	rows, err := q.db.Query(ctx, listUnreadNotificationPreview, arg.UserID, arg.WorkspaceID, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}

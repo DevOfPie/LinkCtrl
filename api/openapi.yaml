@@ -5766,6 +5766,19 @@ components:
             Per-kind detail, returned verbatim. `audit.growth` carries `bytes`
             and `threshold`, so a client can render the numbers without parsing
             them back out of the sentence.
+        workspace_id:
+          type: string
+          format: uuid
+          description: |
+            The workspace this notification belongs to. Absent when it belongs to
+            the organization rather than to one workspace — a dispute decision,
+            an audit-growth warning — and those are shown wherever the reader is
+            acting.
+
+            **The inbox is filtered by the workspace you are acting in since
+            0.2.0.** Before that every notification was shown everywhere, while
+            the column recording which workspace produced one was written and
+            read by nothing.
         read_at:
           type: string
           format: date-time

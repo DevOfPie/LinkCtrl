@@ -72,9 +72,18 @@ type Notification struct {
 	Body  string    `json:"body,omitempty"`
 	// Data is per-kind detail. Shape is the kind's business, not this
 	// package's, and it is returned verbatim.
-	Data      map[string]any `json:"data,omitempty"`
-	ReadAt    *time.Time     `json:"read_at,omitempty"`
-	CreatedAt time.Time      `json:"created_at"`
+	Data map[string]any `json:"data,omitempty"`
+	// WorkspaceID is the workspace this notification belongs to, when it belongs
+	// to one. Absent on anything that is the organization's — a dispute
+	// decision, an audit-growth warning — which is what makes those visible
+	// wherever the reader is standing.
+	//
+	// Returned since 0.2.0. The column was written from M40 onward and read by
+	// nothing (F105), while two comments stated it produced a per-workspace
+	// inbox; D102 built the filter those comments described.
+	WorkspaceID *uuid.UUID `json:"workspace_id,omitempty"`
+	ReadAt      *time.Time `json:"read_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
 }
 
 // Event is a notification about to be written. The recipient is a separate
@@ -364,9 +373,14 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f Filter) (*do
 	}
 
 	params := dbgen.ListNotificationsParams{
-		UserID:     actor.UserID,
-		UnreadOnly: f.UnreadOnly,
-		PageLimit:  limit + 1,
+		UserID: actor.UserID,
+		// The workspace the reader is standing in. Rows carrying no workspace —
+		// disputes, audit growth, anything that belongs to the organization
+		// rather than to one of its workspaces — are shown wherever they are
+		// standing, which is the `IS NULL` half of the predicate (D102).
+		WorkspaceID: &actor.WorkspaceID,
+		UnreadOnly:  f.UnreadOnly,
+		PageLimit:   limit + 1,
 	}
 	if f.Cursor != "" {
 		cur, err := decodeCursor(f.Cursor)
@@ -409,7 +423,10 @@ func (s *Service) Unread(ctx context.Context, actor *auth.Identity) (int64, erro
 	if actor == nil {
 		return 0, nil
 	}
-	n, err := s.q.CountUnreadNotifications(ctx, actor.UserID)
+	n, err := s.q.CountUnreadNotifications(ctx, dbgen.CountUnreadNotificationsParams{
+		UserID:      actor.UserID,
+		WorkspaceID: &actor.WorkspaceID,
+	})
 	if err != nil {
 		return 0, fmt.Errorf("count unread notifications: %w", err)
 	}
@@ -445,8 +462,9 @@ func (s *Service) UnreadPreview(ctx context.Context, actor *auth.Identity, limit
 	}
 
 	rows, err := s.q.ListUnreadNotificationPreview(ctx, dbgen.ListUnreadNotificationPreviewParams{
-		UserID:    actor.UserID,
-		PageLimit: limit,
+		UserID:      actor.UserID,
+		WorkspaceID: &actor.WorkspaceID,
+		PageLimit:   limit,
 	})
 	if err != nil {
 		return 0, nil, fmt.Errorf("list unread notification preview: %w", err)
@@ -506,12 +524,13 @@ func (s *Service) MarkAllRead(ctx context.Context, actor *auth.Identity) (int64,
 
 func toNotification(r dbgen.Notification) Notification {
 	n := Notification{
-		ID:        r.ID,
-		Kind:      r.Kind,
-		Title:     r.Title,
-		Body:      r.Body,
-		ReadAt:    r.ReadAt,
-		CreatedAt: r.CreatedAt,
+		ID:          r.ID,
+		Kind:        r.Kind,
+		Title:       r.Title,
+		Body:        r.Body,
+		WorkspaceID: r.WorkspaceID,
+		ReadAt:      r.ReadAt,
+		CreatedAt:   r.CreatedAt,
 	}
 	// A row whose data does not decode is still returned, without it. Failing
 	// the page would let one malformed row hide every notification around it.

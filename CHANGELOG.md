@@ -42,6 +42,21 @@ migrations run at boot.
   ones are the true ones. The SLO series `linkctrl_redirect_duration_seconds` is
   unaffected and always was — the redirect handler records it directly.
 
+- **The notification inbox is now scoped to the workspace you are acting in.**
+  A notification produced by a workspace — an automation rule firing, a custom
+  domain failing its verification check — appears while you are in that
+  workspace and not while you are in another. Anything belonging to the
+  organization rather than to one workspace, such as a dispute decision or an
+  audit-growth warning, is shown wherever you are. The bell's count, its
+  preview and the notifications page all agree, because they share the
+  predicate.
+
+  The column recording which workspace produced a notification has been written
+  since custom domains shipped and read by nothing, while the code comments
+  beside it said this was already how it worked. **If you rely on seeing every
+  workspace's notifications at once, switch workspace to see theirs** — there is
+  no combined view.
+
 - **The instance default domain's root redirect and bot policy are now the
   instance principal's.** They needed `domains.write`, which the owner and admin
   *roles* hold — so on an instance with more than one organization, every

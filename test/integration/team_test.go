@@ -926,9 +926,21 @@ func TestAWorkspaceScopedOwnerHearsAboutTheirOwnWorkspaceAndNoOther(t *testing.T
 		t.Fatalf("an owner could not grant owner scoped to one workspace: %v", err)
 	}
 
-	unread := func(who *auth.Identity) int64 {
+	// Counted **from a named workspace**, because since D102 the inbox is scoped
+	// to the one its reader is acting in. That splits two questions this test
+	// used to ask with one instrument: *was this person notified* and *do they
+	// see it right now*. The subject here is the first — who is on the recipient
+	// list — so each count says where the reader is standing rather than
+	// measuring the default workspace and calling it the inbox.
+	//
+	// Organization-level news carries no workspace and is visible from every
+	// one, which is what the IS NULL half of the predicate is for and what the
+	// audit-growth assertion below relies on.
+	unreadIn := func(who *auth.Identity, workspace uuid.UUID) int64 {
 		t.Helper()
-		n, err := notifier.Unread(t.Context(), who)
+		standing := *who
+		standing.WorkspaceID = workspace
+		n, err := notifier.Unread(t.Context(), &standing)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -938,7 +950,8 @@ func TestAWorkspaceScopedOwnerHearsAboutTheirOwnWorkspaceAndNoOther(t *testing.T
 	// Deltas, not totals: redemption already told the owner that carol accepted
 	// their invitation, and a test that counted absolutes would be asserting on
 	// that too.
-	ownerBase, carolBase := unread(f.owner), unread(carolEverywhere)
+	ownerInSupport, ownerInMarketing := unreadIn(f.owner, support.ID), unreadIn(f.owner, marketing.ID)
+	carolInMarketing := unreadIn(carolEverywhere, marketing.ID)
 
 	// Support is not hers. The hostname and the aliases in these two belong to a
 	// workspace she holds no membership in.
@@ -952,12 +965,13 @@ func TestAWorkspaceScopedOwnerHearsAboutTheirOwnWorkspaceAndNoOther(t *testing.T
 		[]string{"acme-launch", "acme-pricing"}); err != nil {
 		t.Fatal(err)
 	}
-	if n := unread(carolEverywhere) - carolBase; n != 0 {
+	if n := unreadIn(carolEverywhere, support.ID); n != 0 {
 		t.Errorf("a workspace-scoped owner received %d notifications about a workspace "+
 			"they hold no membership in", n)
 	}
-	if n := unread(f.owner) - ownerBase; n != 2 {
-		t.Errorf("the organization-wide owner received %d of the 2 notifications", n)
+	if n := unreadIn(f.owner, support.ID) - ownerInSupport; n != 2 {
+		t.Errorf("the organization-wide owner received %d of the 2 notifications about "+
+			"Support", n)
 	}
 
 	// Marketing is hers, and this is the half a single predicate would have
@@ -972,7 +986,7 @@ func TestAWorkspaceScopedOwnerHearsAboutTheirOwnWorkspaceAndNoOther(t *testing.T
 		[]string{"mkt-launch"}); err != nil {
 		t.Fatal(err)
 	}
-	if n := unread(carolEverywhere) - carolBase; n != 2 {
+	if n := unreadIn(carolEverywhere, marketing.ID) - carolInMarketing; n != 2 {
 		t.Errorf("the owner of Marketing received %d of the 2 notifications about "+
 			"Marketing; passing a workspace id is how a producer says whose news this is", n)
 	}
@@ -982,13 +996,21 @@ func TestAWorkspaceScopedOwnerHearsAboutTheirOwnWorkspaceAndNoOther(t *testing.T
 	if err := notifier.WarnAuditGrowth(t.Context(), 10_000, 1_000); err != nil {
 		t.Fatal(err)
 	}
-	if n := unread(carolEverywhere) - carolBase; n != 2 {
+	if n := unreadIn(carolEverywhere, marketing.ID) - carolInMarketing; n != 2 {
 		t.Errorf("a workspace-scoped owner was told the organization's audit log is "+
 			"growing (%d received, want the 2 they already had); the setting that bounds "+
 			"it is not theirs to change", n)
 	}
-	if n := unread(f.owner) - ownerBase; n != 5 {
-		t.Errorf("the organization-wide owner received %d, want 5", n)
+	// Visible from **either** workspace, because it belongs to neither. That is
+	// the IS NULL half of D102's predicate, asserted from a workspace the
+	// notification says nothing about.
+	if n := unreadIn(f.owner, support.ID) - ownerInSupport; n != 3 {
+		t.Errorf("the organization-wide owner sees %d from Support, want 3 — its own "+
+			"two plus the audit-growth warning, which belongs to no workspace", n)
+	}
+	if n := unreadIn(f.owner, marketing.ID) - ownerInMarketing; n != 3 {
+		t.Errorf("the organization-wide owner sees %d from Marketing, want 3 — its own "+
+			"two plus the same audit-growth warning", n)
 	}
 
 	// One person holding both an organization-wide owner membership and one
@@ -999,13 +1021,13 @@ func TestAWorkspaceScopedOwnerHearsAboutTheirOwnWorkspaceAndNoOther(t *testing.T
 	}); err != nil {
 		t.Fatalf("an owner could not grant themselves a scoped role: %v", err)
 	}
-	before := unread(f.owner)
+	before := unreadIn(f.owner, marketing.ID)
 	if err := notifier.AutomationFired(t.Context(), f.owner.OrgID, marketing.ID,
 		uuid.Must(uuid.NewV7()), "Archive stale", "no_clicks", 1,
 		[]string{"mkt-second"}); err != nil {
 		t.Fatal(err)
 	}
-	if n := unread(f.owner) - before; n != 1 {
+	if n := unreadIn(f.owner, marketing.ID) - before; n != 1 {
 		t.Errorf("an owner holding both an organization-wide and a workspace-scoped "+
 			"membership received %d copies of one notification", n)
 	}

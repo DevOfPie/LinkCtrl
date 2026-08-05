@@ -185,6 +185,7 @@ file. Append a row when you append an entry.
 | [A documentation change needs no permission, and still needs checking](#2026-08-05--a-documentation-change-needs-no-permission-and-still-needs-checking) | Owner-set standing rule: documentation updates are accepted in advance and verified. **It removes a prompt, not a check** — this milestone spent owner attention on questions with one right answer and a cost to establishing it, which is what the amendment rule already says about facts as against assertions. The verification half is load-bearing: four wording rows in one milestone named fewer sites than existed, so a standing approval that let a fix land on the listed sites would convert a prompt into a silent under-fix. And **the bound**, because "documentation" is what will be stretched — the test is not diff size but *which of the two is being corrected*, with F98 and F41 on one side and F50, which became D101, on the other |
 | [M45, building D100, and two orderings that had never been visible](#2026-08-05--m45-building-d100-and-two-orderings-that-had-never-been-visible) | F70. Not the permission — that is D100 — but **two check orders the new permission exposed**, both unobservable while everybody passed the first gate: `canAdminister` consulted the role permission before it knew which domain it was, which is the admit-then-switch arrangement that produced the finding; and the *this is the instance default* refusal sat below the permission check, when it is a fact about the row rather than the actor and nobody may rename it including the principal. The old test's premise was falsified by the decision — instance grants survive a demotion, which is D98 working — so it is replaced by one asserting a full organization owner is refused. A fixture helper instead of five rewrites. And the coverage enumeration derived from the scope list, with the admission that **this one cannot be sabotage-verified today** because it asserts zero |
 | [M45, five rows that close by being written down](#2026-08-05--m45-five-rows-that-close-by-being-written-down) | F44, F57, F58, F113 and F117 — recorded rather than built, each on its own fix note and for five **different** reasons, which is the point of the entry: F44's repair is a feature and belongs in Plan.md first; F57's only coherent fix is keyed hashing, so the actionable half is telling operators of managed Redis to disable persistence; F58's obvious fix refuses IP literals that work today, trading a silent no-op for a silent regression; F113's reaper would delete the pre-DNS-cut-over case the code exists to protect; F117's state is unconstructible and the repair takes a correct limb with it. **Each records the fix considered and rejected**, which is what separates a recorded limitation from a row somebody stopped caring about — and none is closed for cheapness |
+| [M45, building D102, and a test that had been measuring two things at once](#2026-08-05--m45-building-d102-and-a-test-that-had-been-measuring-two-things-at-once) | F105. Both halves of the predicate in all three queries, because a filter in two of them leaves the bell counting rows the page will not show, and the count's predicate has to match the partial index character for character. **The interesting part is a test that broke on the difference rather than on a defect**: it measured *who was notified* by counting what they could see, which were the same number until D102 made them two questions. Fixed by saying where the reader is standing and asserting per workspace — the summed version produced 6 where 5 was expected, because organization-level news is visible from both, and that is the sum being the wrong instrument rather than an off-by-one. The result asserts the IS NULL half from a workspace the notification says nothing about, which the old shape could not state |
 
 ---
 
@@ -15944,3 +15945,51 @@ None of them is closed because it was cheap. Three are closed because the
 available repair is worse than the defect, one because the repair is a feature,
 and one because the defect is unreachable. A row closed for cheapness would be
 the standing rule of 2026-08-04 being ignored one row at a time.
+
+## 2026-08-05 — M45, building D102, and a test that had been measuring two things at once
+
+[F105](deferred-findings.md). The predicate itself is D102 and was decided
+before this; what building it turned up is that the inbox had been answering a
+question nobody had separated.
+
+### Both halves, in all three queries, or none
+
+`workspace_id IS NULL OR workspace_id = @workspace_id`. The `IS NULL` half is not
+defensive padding: disputes and audit growth write NULL, so without it the reader
+loses exactly the notifications that are not about any one workspace — a strictly
+worse defect than the one being closed, and the row's own fix note said so.
+
+Added identically to `ListNotifications`, `CountUnreadNotifications` and
+`ListUnreadNotificationPreview`. `notifications.sql` already warned that the
+count's predicate has to match `notifications_user_unread_idx` character for
+character or the dashboard's every page render becomes a sequential scan, and the
+preview composes that predicate deliberately. A filter added to two of the three
+would have left the bell counting rows the page will not show.
+
+### The test that had to be told which question it was asking
+
+`TestAWorkspaceScopedOwnerHearsAboutTheirOwnWorkspaceAndNoOther` measured *who is
+on the recipient list* by counting unread notifications through `notify.Unread`.
+That was sound while the inbox showed everything: received and visible were the
+same number.
+
+D102 makes them different questions, and the test broke on the difference rather
+than on a defect. It is fixed by making the measurement say **where the reader is
+standing** — `unreadIn(who, workspace)` — and by asserting per workspace instead
+of summing. The summed version was tried first and produced 6 where the test
+expected 5, because an organization-level notification is visible from both
+workspaces and counted twice; that is not an off-by-one to absorb into the
+expected number, it is the sum being the wrong instrument.
+
+The per-workspace form is better than what it replaced. It now asserts the
+audit-growth warning is visible from **both** workspaces explicitly, which is the
+`IS NULL` half proved from a workspace the notification says nothing about — a
+property the old test could not have stated because it had no way to say *from
+where*.
+
+### The cost, restated where it lands
+
+A workspace-scoped notification stops appearing while its reader is standing
+elsewhere, and there is no combined view. That is D102's stated cost and it is
+now in `CHANGELOG.md` and `docs/usage.md` in the words an operator needs: switch
+workspace to see its news.

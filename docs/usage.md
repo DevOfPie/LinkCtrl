@@ -31,7 +31,17 @@ address.
 
 The **bell** carries the unread count and, opened, shows the newest few unread
 notifications with a **View all** link to `/notifications`, which is still the
-full surface: everything, paged, with mark-read. The preview is deliberately
+full surface: everything, paged, with mark-read.
+
+**Since 0.2.0 the inbox is scoped to the workspace you are acting in.** A
+notification a workspace produced — an automation rule firing, a custom domain
+failing verification — is there while you are in that workspace and not while
+you are in another; switch workspace to see its news. Anything that belongs to
+the organization rather than to one workspace, a dispute decision or an
+audit-growth warning, follows you everywhere. The count, the preview and the
+page all agree, because they ask the same question. There is no combined view.
+
+The preview is deliberately
 short, and nothing is only reachable through it.
 
 Your **email address** opens a menu holding the administrative surfaces —

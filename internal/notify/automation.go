@@ -35,6 +35,11 @@ const KindAutomationFired = "automation.fired"
 // The notification carries the owning workspace so it appears in that
 // workspace's inbox rather than wherever the reader happens to be standing.
 //
+// True since 0.2.0 and not before (F105, D102): the column was written from M40
+// onward and read by nothing — no query selected it, the domain type had no
+// field for it — so this sentence described an inbox scope that did not exist,
+// in the one place a reader would look before adding the filter themselves.
+//
 // `subjects` is the human list, already bounded by the caller. `matched` is the
 // real count, which can be larger when a run was truncated at its per-rule cap
 // — and printing the count separately from the list is what stops a truncated

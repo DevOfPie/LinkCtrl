@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -93,6 +94,88 @@ func TestNotificationsTableGainedNoColumns(t *testing.T) {
 
 // An inbox is one person's. Reading is scoped by user rather than filtered
 // afterwards, and this is the assertion that would notice if that changed.
+// A workspace's notifications stay in that workspace, and the organization's
+// follow the reader everywhere.
+//
+// The column recording which workspace produced a notification was written from
+// M40 onward and read by nothing — no query selected it and the domain type had
+// no field for it — while two comments in this package stated verbatim that it
+// made the notification "appear in that workspace's inbox rather than wherever
+// the reader happens to be standing" (F105). It was also F94's stated
+// mitigation, so that row was closed believing in a containment that did not
+// exist, which is why D102 built the filter rather than deleting the column.
+//
+// Both halves are asserted together because a bare `workspace_id = @ws` would
+// hide every organization-level notification — disputes and audit growth write
+// NULL — which is a worse defect than the one it closed.
+func TestTheInboxIsScopedToTheWorkspaceExceptWhereItIsNot(t *testing.T) {
+	f := newNotify(t)
+
+	// A second workspace in the same organization, and an identity in each.
+	second := addWorkspace(t, f.pool, f.owner.OrgID, "Second")
+	here := f.owner
+	there := *f.owner
+	there.WorkspaceID = second
+
+	if err := f.svc.Notify(t.Context(), f.owner.UserID, notify.Event{
+		Kind: notify.KindAutomationFired, Title: "Belongs to the first workspace",
+		WorkspaceID: &here.WorkspaceID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.Notify(t.Context(), f.owner.UserID, notify.Event{
+		Kind: notify.KindAuditGrowth, Title: "Belongs to the organization",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	titles := func(actor *auth.Identity) []string {
+		page, err := f.svc.List(t.Context(), actor, notify.Filter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, n := range page.Items {
+			out = append(out, n.Title)
+		}
+		return out
+	}
+
+	got := titles(here)
+	if len(got) != 2 {
+		t.Errorf("standing in the workspace that produced it, the inbox held %v; want "+
+			"both the workspace notification and the organization one", got)
+	}
+
+	got = titles(&there)
+	if slices.Contains(got, "Belongs to the first workspace") {
+		t.Error("a notification belonging to one workspace was shown while its reader " +
+			"was standing in another. That is what the column was written for and what " +
+			"two comments in this package have claimed since M40")
+	}
+	if !slices.Contains(got, "Belongs to the organization") {
+		t.Errorf("an organization-level notification vanished when the reader moved "+
+			"workspace (saw %v). Disputes and audit growth carry no workspace, so a "+
+			"predicate without its IS NULL half hides exactly the notifications that "+
+			"are not any one workspace's", got)
+	}
+
+	// The badge and the preview must agree with the list, or the bell shows a
+	// count for rows the page will not show.
+	if n, err := f.svc.Unread(t.Context(), &there); err != nil || n != 1 {
+		t.Errorf("unread count in the second workspace = %d (err %v), want 1 — the "+
+			"organization-level one only", n, err)
+	}
+	total, preview, err := f.svc.UnreadPreview(t.Context(), &there, notify.PreviewLimit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || len(preview) != 1 {
+		t.Errorf("preview in the second workspace = %d rows, total %d; want 1 and 1, "+
+			"matching the count and the list", len(preview), total)
+	}
+}
+
 func TestNotificationsAreNotVisibleToOtherUsers(t *testing.T) {
 	f := newNotify(t)
 

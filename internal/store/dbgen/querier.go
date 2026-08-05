@@ -202,7 +202,15 @@ type Querier interface {
 	// Served by notifications_user_unread_idx, the partial index the table already
 	// ships with: the WHERE clause here has to match the index's predicate exactly
 	// or this becomes a sequential scan on every page render in the dashboard.
-	CountUnreadNotifications(ctx context.Context, userID uuid.UUID) (int64, error)
+	//
+	// **Both halves of the workspace predicate are load-bearing** (D102, F105).
+	// `workspace_id = @workspace_id` alone hides every organization-level
+	// notification, because disputes and audit-growth write NULL — the reader would
+	// lose exactly the notifications that are not about any one workspace. And the
+	// clause has to be identical here and in ListUnreadNotificationPreview below, or
+	// the badge and the list it previews disagree while one of them stops using the
+	// index.
+	CountUnreadNotifications(ctx context.Context, arg CountUnreadNotificationsParams) (int64, error)
 	// Whether an account belongs to anything at all.
 	//
 	// Read by exactly one caller: the first-organization path (D36). An account with

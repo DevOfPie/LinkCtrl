@@ -47,6 +47,11 @@ const (
 // The notification carries the owning workspace so it appears in that
 // workspace's inbox rather than wherever the reader happens to be standing.
 //
+// True since 0.2.0 and not before (F105, D102): the column was written from M40
+// onward and read by nothing — no query selected it, the domain type had no
+// field for it — so this sentence described an inbox scope that did not exist,
+// in the one place a reader would look before adding the filter themselves.
+//
 // The deadline is in the body as a time and in the jsonb as a timestamp, because
 // the sentence has to be readable now and the value has to be renderable later
 // without parsing English back out of it.
