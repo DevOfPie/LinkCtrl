@@ -446,14 +446,33 @@ the only supported authentication mechanism; it is refused over an unencrypted
 connection, so the password is never sent in clear, but it is a reusable
 credential in the environment like any other.
 
-**The audit log works, but plenty still does not write to it.** The writer, the
-read API, retention and the growth metric all exist. The events recorded today
-are **changing a domain's root redirect**, the **invitation lifecycle** —
-issued, revoked, accepted — the **membership changes** M28 added: a member added
-to a workspace, removed or re-roled, a workspace created, renamed or deleted, and
-an organization created or deleted. Link creation and editing, key minting and revocation,
-and sign-in are *not* trailed — each arrives with the Phase 2 milestone that owns
-it. Do not treat a quiet audit log as evidence that nothing happened.
+**The audit log works, and what it does not cover is worth knowing.** The writer,
+the read API, retention and the growth metric all exist.
+
+*This paragraph was wrong in both directions until 0.2.0* ([F17](build-notes/deferred-findings.md)),
+which is why it now points at a list rather than restating one. It named five
+kinds of event when the vocabulary had grown to **thirty-two**, and it said key
+revocation was untrailed when `apikey.revoked` had been recorded since M44 — so
+a security-conscious reader met both an under-count and a claim that something
+was unaudited when it was. The authoritative list is `audit.AllActions` in
+`internal/audit`, a test fails if a constant is declared without appearing in it,
+and the coverage row above states its length.
+
+**What is genuinely not trailed**, checked against that list rather than
+remembered:
+
+- **Link creation, editing and deletion.** The highest-volume writes in the
+  product, and the ones an operator most often wants a history of.
+- **Signing in**, successfully or otherwise. Failed attempts move
+  `users.failed_login_count` and `users.locked_until`, which is the only record.
+- **Minting an API key.** Rotating one and revoking one *are* recorded; creating
+  one is not, so a key's first appearance in the trail is its rotation or its
+  end.
+- **Redeeming an invitation creates a membership**, and the redemption is
+  recorded — but the account that may have been created alongside it is not, and
+  neither is self-serve registration.
+
+Do not treat a quiet audit log as evidence that nothing happened.
 
 **No malware scanning of destinations, no rate limit on redirect volume per
 link.** A popular link and a link being used for amplification look the same.
