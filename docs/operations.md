@@ -51,7 +51,7 @@ scrape_configs:
 | --- | --- |
 | `linkctrl_redirect_duration_seconds{outcome,cache}` | The SLO histogram. `cache` is `memory`, `redis`, `database`, `negative` or `rejected`. |
 | `linkctrl_redirects_total{outcome,cache}` | Traffic and cache hit ratio. |
-| `linkctrl_http_requests_total{surface,method,status}` | `surface` is `redirect`, `api`, `web`, `static` or `ops`. |
+| `linkctrl_http_requests_total{surface,method,status}` | `surface` is `redirect`, `api`, `web`, `static` or `ops`. `web` is derived at boot from the routes the dashboard actually registers, so it does not fall behind them; before 0.2.0 it came from a hand-written list and nine dashboard routes were counted as `redirect`. |
 | `linkctrl_http_request_duration_seconds{surface,method}` | Outside view, including all middleware. |
 | `linkctrl_analytics_queue_depth` | Leading indicator for the click pipeline. |
 | `linkctrl_analytics_events_dropped_total` | Clicks discarded to protect redirect latency. |

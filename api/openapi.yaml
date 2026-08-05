@@ -5713,6 +5713,19 @@ components:
           type: string
           description: The kind of object acted on. Absent for instance-wide settings.
         target_id: { type: string, format: uuid }
+        workspace_id:
+          type: string
+          format: uuid
+          description: |
+            The workspace the action happened in. Absent for organization-level
+            actions, which is most of the invitation and membership vocabulary.
+
+            The log itself is **not** filtered by workspace — one that could be
+            narrowed to wherever the reader happens to be standing would hide
+            exactly the actions worth reviewing. This field is how a reader tells
+            a link-scoped action apart afterwards: `link.bot_blocking_changed`
+            names the link as its target and nothing else, where `workspace.*`
+            actions carry the workspace as `target_id` already.
         ip_prefix:
           type: string
           description: |

@@ -22,6 +22,26 @@ migrations run at boot.
 
 ### Changed
 
+- **`GET /api/v1/audit` now returns `workspace_id`.** The column has been stored
+  and indexed since the audit log shipped and was dropped on the way out, so a
+  reader could not tell which workspace a link-scoped action such as
+  `link.bot_blocking_changed` came from — those records name the link and
+  nothing else. It is absent on organization-level actions, which is most of the
+  invitation and membership vocabulary. **The log is still not filtered by
+  workspace**, deliberately: one that could be narrowed to wherever the reader
+  happens to be standing would hide exactly the actions worth reviewing.
+
+- **Dashboard pages are no longer counted as short links in the HTTP metrics.**
+  `linkctrl_http_requests_total{surface="redirect"}` and its duration histogram
+  mixed genuine short-link traffic with dashboard page loads for every route
+  added since 0.1.0 — nine of them, including `/notifications`, `/disputes`,
+  `/organizations` and `/campaigns` — because the classifier carried a
+  hand-written list that stopped being updated. The surface is now derived from
+  the routes the application actually registers. **Redirect-surface figures on
+  an instance with dashboard traffic will drop when you upgrade**, and the new
+  ones are the true ones. The SLO series `linkctrl_redirect_duration_seconds` is
+  unaffected and always was — the redirect handler records it directly.
+
 - **A redirect no longer pays the Redis read timeout twice while Redis is
   stalled.** A cache miss used to spend `REDIS_READ_TIMEOUT` on the lookup that
   never answered and then spend it again on the write that would have

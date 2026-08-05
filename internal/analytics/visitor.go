@@ -72,34 +72,6 @@ func VisitorHash(salt []byte, ip netip.Addr, userAgent string, workspaceID uuid.
 	return mac.Sum(nil)[:VisitorHashLength]
 }
 
-// AnonymizeIP reduces an address to a network prefix: /24 for IPv4, /48 for
-// IPv6.
-//
-// Used for session and audit records, never for click events — those keep no
-// address at all. The distinction is deliberate: "where was my account signed
-// in from" is a question a user legitimately asks about their own data,
-// whereas analytics has no such need.
-func AnonymizeIP(addr netip.Addr) string {
-	if !addr.IsValid() {
-		return ""
-	}
-	// Must fold first. Masking ::ffff:203.0.113.42 to /48 as though it were
-	// IPv6 preserves the entire embedded IPv4 address, which is exactly the
-	// data this function exists to discard.
-	if addr.Is4In6() {
-		addr = addr.Unmap()
-	}
-	bits := 24
-	if addr.Is6() {
-		bits = 48
-	}
-	prefix, err := addr.Prefix(bits)
-	if err != nil {
-		return ""
-	}
-	return prefix.String()
-}
-
 // SaltDay returns the UTC day a timestamp belongs to.
 //
 // UTC always, never local time. A local-time boundary would rotate the salt at

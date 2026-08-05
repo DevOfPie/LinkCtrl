@@ -271,11 +271,47 @@ const (
 	SurfaceOps      Surface = "ops"
 )
 
-// webPrefixes are the dashboard's own paths. Anything not matched here, not
-// under /api or /static, and not an operational endpoint is a short link.
+// webPrefixes are the dashboard's own paths, and they are **not** maintained by
+// hand any more.
+//
+// They were, and the list stopped being updated after Phase 1 while eleven
+// dashboard routes were added beside it — so `/notifications`, `/workspaces`,
+// `/members`, `/invites`, `/organizations`, `/signup`, `/disputes` and the rest
+// all fell through to the classifier's default and were counted as **redirects**
+// (F16). Nothing was served differently; what was wrong was the numbers an
+// operator reads, because `surface="redirect"` mixed short-link traffic under a
+// 20ms budget with dashboard page loads under a 250ms one.
+//
+// The fix is not a longer list. `SetWebPaths` is called at boot with what the
+// application mux was actually handed, so this cannot drift from the routes
+// again — a hand-written second copy of a list that already exists is the defect
+// rather than the omission. The value here is the Phase 1 set, kept only as the
+// answer before boot and for callers with no router: a test, or the classifier
+// invoked directly.
 var webPrefixes = []string{
 	"/login", "/logout", "/setup", "/dashboard", "/docs",
 	"/links", "/keys", "/account",
+}
+
+// SetWebPaths replaces the dashboard path set with the routes the application
+// mux was given.
+//
+// Called once at boot, before any request is served. Paths arrive as the mux
+// spells them — an exact path like `/login`, or a subtree like `/links/` — and
+// both are reduced to the prefix form this classifier matches on. The root
+// pattern is dropped because `/` is handled explicitly below.
+func SetWebPaths(paths []string) {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		p = strings.TrimSuffix(p, "/")
+		if p == "" || strings.HasPrefix(p, "/{") {
+			continue
+		}
+		out = append(out, p)
+	}
+	if len(out) > 0 {
+		webPrefixes = out
+	}
 }
 
 // ClassifySurface maps a request path to its surface.

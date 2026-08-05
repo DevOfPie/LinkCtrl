@@ -690,6 +690,12 @@ func NewRouter(d Deps) http.Handler {
 	app := newAppMux()
 	registerAppRoutes(d, app)
 
+	// Tell the metrics classifier what the dashboard actually is, from the mux
+	// that was just handed the routes rather than from a second list somebody
+	// maintains. The first copy of that list fell eleven routes behind and every
+	// one of them was counted as a short link (F16).
+	observability.SetWebPaths(app.mounts())
+
 	var appHandler http.Handler = app.mux
 	if a := d.authenticator(); a != nil {
 		appHandler = Session(a, d.Config.SecureCookies)(appHandler)

@@ -394,6 +394,79 @@ func TestAuditReadCannotBeGrantedToAnAPIKey(t *testing.T) {
 
 // seedAuditEvents writes n records for the instance's only organization,
 // spaced so the ordering is unambiguous.
+// The workspace an action happened in comes back with it.
+//
+// The column has been stored, indexed, selected and scanned since M21 and was
+// dropped on the way out (F110) — a second choice riding on a documented first
+// one, since the query explains at length why the read is not *filtered* by
+// workspace and says nothing about not returning it. Without the field a reader
+// cannot tell which workspace a link-scoped action came from: those actions name
+// the link and nothing else, where `workspace.*` actions carry it as target_id
+// and were readable all along.
+//
+// The organization-level case is asserted beside it, because the fix must not
+// turn an absent workspace into a zero uuid — that would read as a real
+// workspace nobody can look up.
+func TestTheAuditLogSaysWhichWorkspaceAnActionHappenedIn(t *testing.T) {
+	f := newAPI(t)
+	f.setupOwner()
+
+	var orgID, wsID uuid.UUID
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT id FROM organizations LIMIT 1`).Scan(&orgID); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT id FROM workspaces WHERE organization_id = $1 LIMIT 1`, orgID).Scan(&wsID); err != nil {
+		t.Fatal(err)
+	}
+
+	// One action inside a workspace, one that belongs to the organization.
+	for _, row := range []struct {
+		action string
+		ws     *uuid.UUID
+	}{
+		{"link.bot_blocking_changed", &wsID},
+		{"invitation.created", nil},
+	} {
+		if _, err := f.pool.Exec(t.Context(), `
+			INSERT INTO audit_logs (id, occurred_at, organization_id, workspace_id,
+			                        actor_label, action, metadata)
+			VALUES ($1, now(), $2, $3, 'seed@example.com', $4, '{}'::jsonb)`,
+			uuid.Must(uuid.NewV7()), orgID, row.ws, row.action); err != nil {
+			t.Fatalf("seed %s: %v", row.action, err)
+		}
+	}
+
+	resp := f.do(http.MethodGet, "/api/v1/audit?limit=50", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/v1/audit = %d", resp.StatusCode)
+	}
+	var page struct {
+		Items []struct {
+			Action      string `json:"action"`
+			WorkspaceID string `json:"workspace_id"`
+		} `json:"items"`
+	}
+	f.decode(resp, &page)
+
+	got := map[string]string{}
+	for _, it := range page.Items {
+		got[it.Action] = it.WorkspaceID
+	}
+
+	if got["link.bot_blocking_changed"] != wsID.String() {
+		t.Errorf("a link-scoped action reported workspace_id %q, want %q — the column "+
+			"is stored and selected, and the reader cannot otherwise tell which "+
+			"workspace the link was in",
+			got["link.bot_blocking_changed"], wsID)
+	}
+	if w := got["invitation.created"]; w != "" {
+		t.Errorf("an organization-level action reported workspace_id %q, want it "+
+			"absent; a zero uuid reads as a workspace that cannot be looked up", w)
+	}
+}
+
 func seedAuditEvents(t *testing.T, pool *pgxpool.Pool, n int) {
 	t.Helper()
 	var orgID uuid.UUID

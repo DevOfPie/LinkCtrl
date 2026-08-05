@@ -178,6 +178,7 @@ file. Append a row when you append an entry.
 | [M45, three calls the redirect tree was not bounding](#2026-08-05--m45-three-calls-the-redirect-tree-was-not-bounding) | F48, F101 and F129 — one class at three sites, and why it is the redirect tree that has it: `RequestTimeout` lives in `appHandler`, which the tree is deliberately outside, so everything the chain would supply is supplied by hand. F48's pool crossing needed a new loader taking a queries handle, because the read's whole dependency was the handle and the crossing existed only through the service it hung off; the singleflight matters because M23's flush makes the miss fleet-simultaneous by design. **The scan was wrong before the code was**: written strictly it flagged two correct variable-form sites, so the rule was narrowed to the shape both defects had and the blind spot is named in the test rather than papered over — a guard with a false positive gets an exception and then stops being read. And why `/tls-check` keeps the application pool: the bound was the defect, the pool is right |
 | [M45, a stalled cache paid for twice, and a sentence that was never true of every link](#2026-08-05--m45-a-stalled-cache-paid-for-twice-and-a-sentence-that-was-never-true-of-every-link) | F9 and F98 — kept apart by the queue hygiene, worked together because they convict the same two sentences. F9's second timeout bought nothing, and the suppression is on the resolver rather than threaded through the call because `store` runs inside a singleflight whose leader may be a different request; window is `DBTimeout`, and it is **deliberately not a circuit breaker** — reads are how the cache recovers. Timing test at 400ms so the margin cannot be closed by a scheduler. **F98 closes as prose because every code fix is worse than the defect**: async answers after the destination is chosen, skipping silently stops a shipped rule matching. And why `docs/slo.md` needed nothing — the measurement was right and the sentence beside it was wrong, which is the opposite of the usual failure |
 | [M45, an accessor nobody retrofitted and a reason that was never the reason](#2026-08-05--m45-an-accessor-nobody-retrofitted-and-a-reason-that-was-never-the-reason) | F65 and F41. **The fix for F65 is not the accessor, because the accessor already existed** — M35 added `log()` and the two calls that predated it went round it, so the guard is a scan for `.Logger.<method>(…)` and the accessor's own comment had been claiming the property nothing enforced. F41: the conclusion holds and the stated reason is false — a rolling restart has both builds serving at once, which the *"nobody can have switched blocking on yet"* clause assumes away, and the row reproduced three 302s to a bot. **No bump, by arithmetic**: 0.1.0 keys on v1, this build on v3, and every bump since lands in the same unreleased minor, so the residue is empty for F132's reason. The comment now carries the rule instead of the excuse |
+| [M45, three things the tree carried and nothing read](#2026-08-05--m45-three-things-the-tree-carried-and-nothing-read) | F55, F16 and F110 — a duplicated function, a list, and a column. F55 deleted rather than synced, with the surviving test checked as a strict superset first. **F16's fix is that nobody maintains the list**: the classifier is told the dashboard set at boot from `(*appMux).mounts()`, D97's argument a second time, and the row's proposed source had itself been deleted by F85 for the same drift — the test drives from `mounts()` too, so neither can fall behind. Nine routes were counted as short links; the SLO series was never affected and `docs/slo.md` needed nothing. F110 is **an undocumented choice riding on a documented one** — the query explains why the log is not *filtered* by workspace and says nothing about not *returning* it, and that reasoning does not reach the second question |
 
 ---
 
@@ -15451,3 +15452,78 @@ because nobody has had time to configure it yet. If the stale reading is a
 control the owner configured being silently absent, bump it and pay for the cold
 cache. That is the argument v2 and v3 were both bumped on, stated once where the
 next person will meet it.
+
+## 2026-08-05 — M45, three things the tree carried and nothing read
+
+[F55](deferred-findings.md), [F16](deferred-findings.md) and
+[F110](deferred-findings.md). A duplicated function, a list, and a column: each
+stored, maintained or selected, and each read by nobody.
+
+### F55: delete the copy, do not sync it
+
+`internal/analytics` carried a statement-for-statement duplicate of
+`auth.AnonymizeIP` with its own near-duplicate test. Both live callers use the
+`auth` copy; `grep` for `analytics.AnonymizeIP` returns nothing.
+
+Deleted rather than synced, which the row is right about: it is a
+fix-divergence trap sitting on the privacy boundary, and the failure it invites
+is a one-line correction landing in one copy while the other goes on passing its
+own green tests. That is not hypothetical — the 6to4 truncation gap that
+[F59](deferred-findings.md) is about is exactly that kind of one-line fix.
+
+Checked rather than assumed: the surviving test in `internal/auth/password_test.go`
+carries the same four cases, including the `::ffff:` fold the deleted one made a
+point of, plus loopback. A strict superset, so nothing is lost.
+
+### F16: the fix is that nobody maintains the list
+
+The surface classifier's `webPrefixes` was written in Phase 1 and never updated,
+while eleven dashboard routes were added beside it. Everything not matched, not
+under `/api/` or `/static/` and not an ops endpoint falls through to
+`SurfaceRedirect`, so `/notifications`, `/workspaces`, `/members`, `/invites`,
+`/organizations`, `/signup`, `/disputes`, `/theme`, `/automation`, `/campaigns`
+and `/feeds` were all counted and timed as short links.
+
+Nothing was served differently. The cost is entirely on the numbers an operator
+reads: `surface="redirect"` mixed traffic under a 20ms budget with dashboard page
+loads under a 250ms one, so the redirect surface's own figures were inflated by
+whatever the dashboard was doing. The SLO series is untouched and always was —
+`linkctrl_redirect_duration_seconds` is recorded by the redirect handler
+directly, which is why `docs/slo.md` needed no correction.
+
+**Adding `/feeds` would have made the list wrong in a new way**, and the row said
+so, which is why it was filed rather than fixed on the spot. The classifier is
+now told the set at boot from `(*appMux).mounts()` — what the mux was actually
+handed. That is D97's argument applied a second time: a hand-written list beside
+the registrations reads as if it were checked and can only ever be compared
+against itself.
+
+The row proposed deriving it from `dashboardPatterns`. That slice no longer
+exists — F85 deleted it for having fallen behind the registrations it sat beside
+— and the row's own Reviewed cell already carried that correction. `mounts()` is
+a better source than the row could have asked for.
+
+The test drives its assertion from `mounts()` too, so it cannot drift either.
+Shown red by removing the boot call: nine routes reported `surface="redirect"`.
+
+### F110: an undocumented choice riding on a documented one
+
+The audit log stores `workspace_id`, indexes it, selects it and scans it into the
+generated row — and then `toEntry` copied ten fields and not that one, so no
+reader has ever seen it.
+
+What makes this worth an entry rather than a one-line diff is the shape.
+`audit.sql` explains at length why the read is not *filtered* by workspace: a log
+that could be narrowed to the workspace the reader happens to be in would hide
+exactly the actions worth reviewing. It says nothing about not *returning* it. So
+a second decision was riding on the first one's reasoning without ever being
+made, and the reasoning does not reach it — returning the field takes nothing
+away from the reader, it tells them which workspace a record came from.
+
+The compensation was partial and that is the live cost: `workspace.*` actions
+carry the workspace as `target_id` and were readable all along, while a
+link-scoped action such as `link.bot_blocking_changed` names only the link.
+
+The test asserts the organization-level case beside the workspace one, because a
+fix that turned an absent workspace into a zero uuid would read as a workspace
+nobody can look up — which is worse than the field being missing.

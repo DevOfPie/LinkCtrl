@@ -300,6 +300,19 @@ type Entry struct {
 	Action        string     `json:"action"`
 	TargetType    string     `json:"target_type,omitempty"`
 	TargetID      *uuid.UUID `json:"target_id,omitempty"`
+	// WorkspaceID is the workspace the action happened in, when it happened in
+	// one. Absent on organization-level actions, which is most of the
+	// invitation and membership vocabulary.
+	//
+	// Returned since 0.2.0. It was stored, indexed, selected and scanned before
+	// that and then dropped on the way out (F110) — an undocumented second
+	// choice riding on a documented first one, since the query explains at
+	// length why the read is not *filtered* by workspace and says nothing about
+	// not returning it. Without it a reader cannot tell which workspace a
+	// link-scoped action such as `link.bot_blocking_changed` came from: those
+	// actions name the link as their target and nothing else, where
+	// `workspace.*` actions carry it as `target_id` and are readable already.
+	WorkspaceID *uuid.UUID `json:"workspace_id,omitempty"`
 	// IPPrefix is a network, never an address: /24 for IPv4, /48 for IPv6.
 	IPPrefix string         `json:"ip_prefix,omitempty"`
 	Metadata map[string]any `json:"metadata,omitempty"`
@@ -638,6 +651,7 @@ func toEntry(r dbgen.AuditLog) Entry {
 		ActorAPIKeyID: r.ActorApiKeyID,
 		Action:        r.Action,
 		TargetID:      r.TargetID,
+		WorkspaceID:   r.WorkspaceID,
 	}
 	if r.TargetType != nil {
 		e.TargetType = *r.TargetType
