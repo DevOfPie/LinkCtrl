@@ -33,6 +33,7 @@ append-only and records which.
 | --- | --- | --- |
 | [../../Plan.md](../../Plan.md) | Scope. What is in, what is out, what order | Deciding *what* |
 | [workflow.md](workflow.md) | The gates. What must pass before anything lands | Every task |
+| [work-loop.md](work-loop.md) | Routing. Which target, which kind, which loop — and the loop over process changes | `/work` is invoked |
 | [phase-loop.md](phase-loop.md) | The sequence. Who does what, in what order, and when to stop | Building a phase |
 | [planning.md](planning.md) | How a requested feature becomes planned work | A feature is asked for |
 | [phase-details/](phase-details/) | One definition of done per milestone, plus the status table | Building one milestone |
@@ -44,8 +45,9 @@ append-only and records which.
 | [doc-cost.md](doc-cost.md) | What the always-read documents cost to read, measured | Adding to them |
 
 Precedence is fixed and conflicts are bugs: Plan.md wins on *what*, workflow.md
-on *what must pass*, phase-loop.md on *what order*. An actor that finds two of
-them disagreeing reports it rather than picking one.
+on *what must pass*, phase-loop.md on *what order*, work-loop.md on *which loop
+is entered at all*. An actor that finds two of them disagreeing reports it rather
+than picking one.
 
 ## Four ideas that carry most of the weight
 

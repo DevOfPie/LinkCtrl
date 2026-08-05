@@ -102,15 +102,28 @@ Each entry records what it assumes about a tree that is not built yet.
 Validation re-checks those assumptions when it reaches the milestone, and a false
 one re-opens the question rather than inheriting a stale answer.
 
-### The phase is being worked
+### Work is being done
 
-Trigger phrase **"Work on Phase"**, or `/work-on-phase`.
-[phase-loop.md](phase-loop.md) holds the cycle: validate the next milestone,
-build it, land it, repeat until the phase ends. It sequences the gates below and
-never replaces them, and it stops at the phase's last milestone rather than
-starting the next one. It runs as two actors — an orchestrator that validates,
-accepts and commits, and a worker per milestone that builds and stops before the
-commit.
+`/work [target …] <kind>` resolves a **route** and enters that route's loop.
+[work-loop.md](work-loop.md) holds the grammar, the route table, and the rule
+that an unknown target or kind is a prompt rather than a near-match. It decides
+routing and nothing else; the loop it reaches decides the rest.
+
+```
+/work phase      → phase-loop.md, until the phase ends
+/work workflow   → work-loop.md's own loop, over approved process changes
+/work            → the backlog for each kind, and a recommendation. Enters nothing.
+```
+
+The trigger phrase **"Work on Phase"** still means `/work phase`.
+
+[phase-loop.md](phase-loop.md) holds the phase cycle: validate the next
+milestone, build it, land it, repeat until the phase ends. It sequences the gates
+below and never replaces them, and it stops at the phase's last milestone rather
+than starting the next one. It runs as two actors — an orchestrator that
+validates, accepts and commits, and a worker per milestone that builds and stops
+before the commit. The workflow loop is **not** delegated, and
+[work-loop.md](work-loop.md#the-workflow-loop) says why.
 
 ### Before completing a commit
 

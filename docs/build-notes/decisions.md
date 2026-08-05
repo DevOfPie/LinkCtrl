@@ -186,6 +186,7 @@ file. Append a row when you append an entry.
 | [M45, building D100, and two orderings that had never been visible](#2026-08-05--m45-building-d100-and-two-orderings-that-had-never-been-visible) | F70. Not the permission — that is D100 — but **two check orders the new permission exposed**, both unobservable while everybody passed the first gate: `canAdminister` consulted the role permission before it knew which domain it was, which is the admit-then-switch arrangement that produced the finding; and the *this is the instance default* refusal sat below the permission check, when it is a fact about the row rather than the actor and nobody may rename it including the principal. The old test's premise was falsified by the decision — instance grants survive a demotion, which is D98 working — so it is replaced by one asserting a full organization owner is refused. A fixture helper instead of five rewrites. And the coverage enumeration derived from the scope list, with the admission that **this one cannot be sabotage-verified today** because it asserts zero |
 | [M45, five rows that close by being written down](#2026-08-05--m45-five-rows-that-close-by-being-written-down) | F44, F57, F58, F113 and F117 — recorded rather than built, each on its own fix note and for five **different** reasons, which is the point of the entry: F44's repair is a feature and belongs in Plan.md first; F57's only coherent fix is keyed hashing, so the actionable half is telling operators of managed Redis to disable persistence; F58's obvious fix refuses IP literals that work today, trading a silent no-op for a silent regression; F113's reaper would delete the pre-DNS-cut-over case the code exists to protect; F117's state is unconstructible and the repair takes a correct limb with it. **Each records the fix considered and rejected**, which is what separates a recorded limitation from a row somebody stopped caring about — and none is closed for cheapness |
 | [M45, building D102, and a test that had been measuring two things at once](#2026-08-05--m45-building-d102-and-a-test-that-had-been-measuring-two-things-at-once) | F105. Both halves of the predicate in all three queries, because a filter in two of them leaves the bell counting rows the page will not show, and the count's predicate has to match the partial index character for character. **The interesting part is a test that broke on the difference rather than on a defect**: it measured *who was notified* by counting what they could see, which were the same number until D102 made them two questions. Fixed by saying where the reader is standing and asserting per workspace — the summed version produced 6 where 5 was expected, because organization-level news is visible from both, and that is the sum being the wrong instrument rather than an off-by-one. The result asserts the IS NULL half from a workspace the notification says nothing about, which the old shape could not state |
+| [A command that chooses a loop](#2026-08-05--a-command-that-chooses-a-loop-and-the-backlog-that-had-nothing-consuming-it) | W11, widened by the owner. `/work-on-phase` becomes `/work phase`, routing moves into its own file, and the process backlog gets a loop that consumes it. Why the kind is the last token, why an unknown target prompts instead of matching the nearest, why `--revalidate` touches routing only, and why the workflow loop is the third thing in this repository that is not delegated. Also what the command cannot do: cross-repository dispatch resolves nothing, and the reason is that the only globally visible place to put a command is untracked |
 
 ---
 
@@ -15993,3 +15994,124 @@ A workspace-scoped notification stops appearing while its reader is standing
 elsewhere, and there is no combined view. That is D102's stated cost and it is
 now in `CHANGELOG.md` and `docs/usage.md` in the words an operator needs: switch
 workspace to see its news.
+
+---
+
+## 2026-08-05 — A command that chooses a loop, and the backlog that had nothing consuming it
+
+Prompted by the owner on 2026-08-05, taking W11 off the *Proposed* table and
+widening it in the same breath. The row asked for `/work --phase` and
+`/work --workflow`. What was asked for now is a command whose arguments are
+*positional and nested* — `/work linkctrl phase` — with an unknown target
+verified rather than guessed, and a flag that forces the route to be re-derived.
+Carries no milestone number: nothing was being built.
+
+### Routing is a separate concern from the loop, and now a separate file
+
+The obvious place for `/work` was inside [phase-loop.md](phase-loop.md), which
+already had the trigger. That would have been wrong for a reason the second kind
+makes plain: choosing *which* loop to enter is a decision that happens before any
+loop exists to make it, and folding it into one loop's file makes that loop the
+implicit default. [work-loop.md](work-loop.md) is therefore the routing
+authority and nothing else. Once a loop is entered, that loop's file wins on
+sequence exactly as before — the precedence line in
+[build-notes/README.md](README.md) gained a fourth clause rather than a
+rearrangement.
+
+The cost is a fourth always-adjacent process document, and W1's judgement of
+what the always-read contract costs now has more to weigh. It is not an
+always-read file: it is read when `/work` is invoked, and a phase-loop resume
+does not read it.
+
+### The kind is the last token
+
+Stated as a parse rule rather than inferred, because the alternative fails
+silently. Inferring — *a known kind anywhere in the arguments is the kind* —
+breaks the first time a target is named `phase`, and it breaks by routing
+somewhere plausible rather than by erroring. Positional is checkable by a reader:
+count the tokens, the last one is the kind.
+
+The empty target list meaning *this repository* is what keeps `/work phase`
+short. `/work linkctrl phase` is the same instruction spelled out, and both
+resolving to one route is the property the nesting grammar has to preserve as it
+grows.
+
+### An unknown target is a prompt, and near-matching is what it prevents
+
+`/work linkctl phase` is one keystroke from a valid route. Every fuzzy resolution
+scheme handles that case well and handles the other one — a target the owner
+means and this repository has never heard of — by silently doing something else.
+The two are indistinguishable from the spelling, which is precisely why the
+answer is the owner's rather than the command's.
+
+*Note where appropriate* is then three outcomes rather than one, and which one
+applies is also the owner's answer: a real unknown target earns a row in the
+route table, a typo earns nothing, and a target that ought to exist earns a
+*Proposed* row. A route table that accumulates misspellings stops being a list of
+targets, so the typo case noting nothing is load-bearing rather than an omission.
+
+### `--revalidate` re-checks the route and nothing else
+
+The flag is the owner's, spelled `-Revalidate | -reval | -r`. All three are
+accepted alongside `--revalidate`; the long form leads because
+[`/note`](../../.claude/commands/note.md) already spells its arguments
+`--issue|--feature|--task`, and a surface with one convention and three
+concessions is more readable than one with two conventions.
+
+Its bound matters more than its spelling. A route table is a written claim about
+a tree that changes, and re-deriving means reading the tree the row asserts
+before an unattended run starts on it. It is **not** a way to force a rebuild,
+re-run a gate, or discard the milestone in flight: `/work phase -r` re-checks
+which loop to enter and prompts, and the phase loop then reads
+`.current-task.md` at step 0 exactly as it always does. Left unbounded, a flag
+called *revalidate* would have accumulated every meaning of the word.
+
+### The workflow loop is not delegated
+
+The third thing in this repository that is not, after `X.9` reviews and the phase
+close. The two-actor split exists because a builder is the worst judge of its own
+work, so departing from it needs better than *the work is small*. Two reasons
+that are about what the work is:
+
+A workflow change edits the contract the split is written in. A worker rewriting
+[workflow.md](workflow.md) is editing its own instructions mid-run, and the
+orchestrator's acceptance step would be run against a document that moved
+underneath it. And approval is per row and the owner's, so the product of each
+iteration is a conversation — the same shape that already exempts reviews and the
+phase close.
+
+What it costs is that nobody independent checks the change against the tree. That
+is recorded in work-loop.md as a loss rather than argued away.
+
+### What the no-kind report cannot do
+
+W11's row asked for a recommendation between kinds and observed that judging how
+necessary a pending process change is would need something nothing records. That
+is still true, and the report says so rather than presenting a ranked answer: it
+would be comparing a phase's ordered plan against an unordered list. Recording an
+urgency for process changes would change this file's neighbour
+[workflow-changes.md](workflow-changes.md), and that was not made here.
+
+### `/work-on-phase` is removed, not aliased
+
+The owner's words were that it *would become* `/work phase`. An alias kept for
+compatibility would leave two spellings of one route in a repository whose
+command surface is five entries long, and the trigger phrase **"Work on Phase"**
+already survives for anyone typing prose. Every reference was rewritten;
+`doc-cost.md` still names the old file and is regenerated rather than edited, so
+it will correct itself at the next `make doc-cost`.
+
+### What this does not do, stated because the grammar promises it
+
+Cross-repository dispatch does not work. `/work linkctrl phase` typed outside
+this repository resolves nothing, because the command is defined in
+`.claude/commands/work.md` and is visible only where this repository is checked
+out. The only globally visible place to define it today is the user's home
+configuration, which is untracked and survives no clone — the property
+`.queue.md` is deliberately transient for, and the opposite of what a command
+contract needs. That is W23, unapproved, and whatever closes it has to answer
+where a globally visible command is versioned.
+
+The nesting grammar is written now regardless, and that is the deliberate part:
+the parse rule is the thing a second repository would otherwise invent
+differently.

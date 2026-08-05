@@ -1,7 +1,8 @@
 # The phase loop
 
-Trigger: **"Work on Phase"**, or `/work-on-phase`. Builds the current phase one
-milestone at a time, unattended, until the phase ends.
+Trigger: `/work phase`, or **"Work on Phase"**. Builds the current phase one
+milestone at a time, unattended, until the phase ends. Routing here is
+[work-loop.md](work-loop.md)'s; everything from step 0 on is this file's.
 
 *Until the phase ends* is literal. One invocation is expected to land many
 milestones in sequence, and the run stops only on a condition in
