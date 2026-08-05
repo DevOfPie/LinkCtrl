@@ -247,6 +247,25 @@ func (s *Service) CreateOrganization(
 // threshold; an alias that never received a click is released, because nothing
 // in the wild points at it.
 //
+// **It preserves the aliases on the shared default domain, and only those**
+// (F118). `reserved_aliases` is keyed to `domain_id` with `ON DELETE CASCADE`,
+// and a workspace's own registered hostname cascades from the workspace, which
+// cascades from here — so for a link on a custom hostname the reservation
+// inserted a line above is removed by the cascade of this same statement. The
+// inserts are wasted rather than wrong.
+//
+// **Nothing is done about that, and the reasons are worth having in one place.**
+// The exposure F28 is about is the shared default domain, whose
+// `organization_id` is NULL and which this teardown does not touch, so the path
+// that matters is intact. For a custom hostname the domain row is destroyed
+// too, and re-serving one of its aliases would require re-registering the
+// hostname *and* passing the TXT check — at which point whoever did that
+// controls the name anyway and the reservation was never what protected
+// anybody. And every available repair is worse: `RESTRICT` makes organization
+// deletion fail outright, `SET NULL` is impossible because `domain_id` is half
+// the primary key, and re-keying reservations by hostname would reserve aliases
+// on a name whose next owner proved control of it.
+//
 // Nothing else is preserved. Holding anything else back would be keeping rows
 // nobody can reach on behalf of an organization nobody can enter.
 func (s *Service) DeleteOrganization(ctx context.Context, actor *auth.Identity, id uuid.UUID) error {

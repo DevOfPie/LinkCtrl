@@ -345,6 +345,17 @@ func TestAnonymizeIP(t *testing.T) {
 		// which is precisely the data this function exists to discard.
 		{"::ffff:203.0.113.42", "203.0.113.0/24"},
 		{"127.0.0.1", "127.0.0.0/24"},
+		// 6to4: the client's IPv4 address sits in bytes 2-5, inside the /48 an
+		// IPv6 address is masked to, so masking as IPv6 preserved all four
+		// octets of it (F59).
+		{"2002:cb00:712a::1", "203.0.113.0/24"},
+		// Every other v4-in-v6 scheme embeds in the low bits a /48 discards, so
+		// each of these is masked as ordinary IPv6 and must stay that way — a
+		// fold applied too widely would turn a real IPv6 client into somebody
+		// else's IPv4 address.
+		{"2001:0:4136:e378:8000:63bf:3fff:fdd2", "2001:0:4136::/48"}, // Teredo
+		{"64:ff9b::cb00:712a", "64:ff9b::/48"},                       // NAT64
+		{"2001:db8::5efe:cb00:712a", "2001:db8::/48"},                // ISATAP
 	}
 
 	for _, tc := range tests {

@@ -189,6 +189,7 @@ file. Append a row when you append an entry.
 | [M45, the redirect-path batch and the one measurement it owes](#2026-08-05--m45-the-redirect-path-batch-and-the-one-measurement-it-owes) | F64, F100, F115, F116, and **one k6 run for all ten redirect-path rows** — declared in the triage before any landed, 240,000 cached redirects 100% under 0.5ms, with the smaller dataset stated rather than glossed. F64 sets **only nosniff** and the entry says why: the other two are error-page policy, and putting them in the wrapper would change every successful redirect to fix a 307. F100's obvious fix was ruled out by its own row — HEAD must keep choosing and stop advancing — and the read-only twin is Budget's shape exactly, a precedent three hundred lines away. F115 closes the self-throttling limb and **records the other as D54's accepted cost**; the refund needed a clamp in the shared script, because every write kept tokens <= burst and none could break it while cost was always 1. F116 bounds both length and segment count, and invents no new status |
 | [M45, thirteen enumerations, and the one that gets a test](#2026-08-05--m45-thirteen-enumerations-and-the-one-that-gets-a-test) | F45, F38 and F111 — the first work under the owner's standing approval for documentation, which removes the prompt and keeps the verification. **Counted, not trusted, and it mattered**: the never-delegable map had grown to nine since the row was filed, making this the fifth wording row in one milestone whose list was short. One claim was checked and **left**, because correcting it would have invented a defect. Only that one list gets a test, and the entry says why — it is a security claim that has failed to keep up three separate times, where the other twelve are prose wrong once. The lists stay hand-written and the *failure* is generated, which is D97's argument. And **the test was wrong before the documents were**: its first run flagged a sentence that was already right, so the window was tightened rather than the document changed |
 | [M45, four controls that told a reader the wrong thing](#2026-08-05--m45-four-controls-that-told-a-reader-the-wrong-thing) | F42, F22, F47 and F54 — a class this project keeps producing, where the promise and the enforcement live in different files. F42's flag asked *could an allow ever work for this rule* and the decision asked *for this refusal*; the fix is one helper both consult, and the two freshly-written rows need **different** sources, since `decide` must report the state before it deleted the entry. F22 collapses only the path that names an object. F47's bell was the one href in the header gated on nothing, offered to the account likeliest to have unread notifications — and the test named for that account cuts the nav one `div` too early to see it. F54 is **a surface that could not have been right**: the template was handed six keys and none was the mode. Fixing it surfaced that the renderer refuses an unknown key, which caught the branch immediately |
+| [M45, four small rows, two of which were not what they said](#2026-08-05--m45-four-small-rows-two-of-which-were-not-what-they-said) | F59, F120, F123 and F118. F59's two one-liners, each checked in the **other** direction too — Teredo, NAT64 and ISATAP are now cases, because a fold applied too widely turns a real IPv6 client into somebody else's IPv4 address — and the salt cache's predicate is now the statement's, with eviction on a hit because the other evictor runs under leadership. **F120's correction is a sentence and the filter deliberately stays**: narrowing `team.Roles` would hide admin from the workspace-scoped admin who may genuinely grant it, which is worse than the defect; no single list is exact for many targets. F123's re-arm on **dispatch** rather than on result is the whole design, and a failed probe then needs no special case. F118 recorded with every alternative in one place |
 | [A command that chooses a loop](#2026-08-05--a-command-that-chooses-a-loop-and-the-backlog-that-had-nothing-consuming-it) | W11, widened by the owner. `/work-on-phase` becomes `/work phase`, routing moves into its own file, and the process backlog gets a loop that consumes it. Why the kind is the last token, why an unknown target prompts instead of matching the nearest, why `--revalidate` touches routing only, and why the workflow loop is the third thing in this repository that is not delegated. Also what the command cannot do: cross-repository dispatch resolves nothing, and the reason is that the only globally visible place to put a command is untracked |
 | [Two stops, one of which was only ever a sentence](#2026-08-05--two-stops-one-of-which-was-only-ever-a-sentence) | W9. `/stop` exists. Why it takes no arguments and refuses rather than interprets, why it reconciles the note against the tree instead of against a worker's report, and why it rewrites nothing when no loop is running. The checkpoint stop stays a phrase here and is W10's |
 | [The second stop becomes a flag](#2026-08-05--the-second-stop-becomes-a-flag-and-the-one-case-where-the-two-stops-disagree) | W10. Why a flag rather than a second command, why the checkpoint needed no redefining despite the note asking, and the one case where the two stops genuinely diverge — with nothing in flight, the immediate stop writes nothing and the deferred stop is already satisfied |
@@ -16529,3 +16530,91 @@ waits for the owner. An agent that cannot stop and wait should run none of them
 rather than run them with the prompts elided — which is the *ask, never assume*
 rule stated as a precondition rather than as an instruction, because an
 instruction is exactly what such an agent would be unable to follow.
+
+## 2026-08-05 — M45, four small rows, two of which were not what they said
+
+[F59](deferred-findings.md), [F120](deferred-findings.md),
+[F123](deferred-findings.md) and [F118](deferred-findings.md). Cosmetic and
+trivial tiers, and two of them turned out to need the opposite of what their
+titles implied.
+
+### F59: two one-liners, both checked in the other direction
+
+**6to4.** `2002::/16` carries the client's IPv4 address in bytes 2 to 5, inside
+the `/48` this product keeps, so `2002:cb00:712a::1` masked to
+`2002:cb00:712a::/48` — which is `203.0.113.42` intact. Folded to the embedded
+address and masked like any other IPv4.
+
+Every other v4-in-v6 scheme was tested rather than assumed, and each is now a
+case in the table: Teredo, NAT64 and ISATAP all embed in the low bits a `/48`
+discards. That direction matters as much as the fix — a fold applied too widely
+would turn a real IPv6 client into somebody else's IPv4 address, which is a
+privacy defect in the opposite direction.
+
+**The salt cache.** A salt for day D carries `purge_at = D + SaltRetentionDays`
+and the statement deletes `purge_at < now()`, so D's row is gone the moment day
+D+2 begins. The cache evicted `d.Before(today - SaltRetentionDays)`, which keeps
+exactly that day. The process held in memory the one salt the de-identification
+step had just deleted.
+
+The predicate is now the statement's rather than an approximation of it. Two
+further things fell out: eviction runs on a cache **hit**, because the other
+evictor is `Purge` and `Purge` runs under leadership — so on a follower a hit was
+the only eviction there was — and `Purge` trims unconditionally rather than only
+when its own delete returned a count, because on a multi-replica instance the
+leader's delete is the only one that ever does.
+
+The row is right that this is bounded: `README.md` and `salt.go` make claims
+about what a *database* holds, and a heap copy in a live process is not one. What
+changes is that "the salt is gone" can be said without a footnote about which
+copy.
+
+### F120: the correction is a sentence, and the filter deliberately stays
+
+The row reads as *both Roles functions filter on the wrong rank*. Working it
+found one of the two already fixed and the other correctly written.
+
+`invite.Roles` reads the organization-wide rank, exactly as `Create`'s ceiling
+does, and its own comment explains why — that axis had closed before this
+milestone reached it.
+
+`team.Roles` still filters on the union rank, and that is **right**.
+`resolveRole` compares against the authority covering the *target*, and this one
+list is rendered for a page whose rows target different workspaces and whose
+grant form chooses its target on submit. Narrowing to the organization-wide rank
+— the fix the row's framing implies — is correct for invitations, because an
+invitation admits somebody to the whole organization and one ceiling governs it.
+For a role assignment it would hide admin from the workspace-scoped admin who may
+genuinely grant it, which is a worse defect than the one being closed: a control
+that refuses to offer what the service permits.
+
+So what was wrong is the sentence claiming *a control cannot offer something
+resolveRole will then refuse*. No single list is exact for many targets. The
+comment now says that, and says where exactness lives.
+
+D43's cap stays applied, because it is absolute rather than per-target: no key
+may produce an interactive owner or admin anywhere.
+
+### F123: the fix note's trap was the whole design
+
+A half-open state, built the way the row required: `allow()` re-arms `openUntil`
+**when the probe is dispatched**, not when it answers.
+
+That ordering is the entire point and the note said so. Re-arming on the result
+leaves the probe's own timeout window — a full `REDIS_READ_TIMEOUT` — open to
+every concurrent caller, which is the herd being prevented, arriving a moment
+later. A failed probe then needs no special case at all: the breaker is already
+armed, so it stays shut for another cooldown without having to reach the failure
+threshold a second time.
+
+### F118: recorded, with every alternative in one place
+
+The reservation a teardown writes is deleted by that teardown's own cascade, for
+a link on a workspace's own hostname. Wasted inserts rather than a wrong outcome,
+and the comment now carries why nothing is done: F28's exposure is the shared
+default domain, which teardown does not touch; re-serving a custom hostname's
+alias needs re-registering the name and passing the TXT check, at which point
+whoever did it controls the name anyway; and each available repair is worse than
+the defect — `RESTRICT` makes deletion fail outright, `SET NULL` is impossible
+because `domain_id` is half the primary key, and re-keying by hostname would
+reserve aliases on a name whose next owner proved control of it.

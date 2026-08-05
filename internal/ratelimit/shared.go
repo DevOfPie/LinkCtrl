@@ -268,10 +268,29 @@ func (b *breaker) now() time.Time {
 }
 
 // allow reports whether a Redis call should be attempted.
+// allow reports whether this caller may attempt the shared limiter, and admits
+// exactly one probe per cooldown once the breaker is open.
+//
+// **The re-arm happens when the probe is dispatched, not when it answers**, and
+// that is the whole of the half-open state (F123). Reading `openUntil` and
+// returning true without writing it let *every* concurrent request through the
+// moment the cooldown lapsed — each paying the full timeout — which is the
+// opposite of what the comment above promised, and what makes a retuned
+// `REDIS_READ_TIMEOUT` expensive rather than merely wasteful. Deferring the
+// re-arm to the probe's result would leave the probe's own timeout window open
+// for the same herd.
+//
+// A probe that fails needs no special case: `openUntil` is already armed, so the
+// breaker stays shut until the next cooldown without waiting to reach the
+// failure threshold again. A probe that succeeds clears it in succeed().
 func (b *breaker) allow() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.openUntil.IsZero() || b.now().After(b.openUntil) {
+	if b.openUntil.IsZero() {
+		return true
+	}
+	if b.now().After(b.openUntil) {
+		b.openUntil = b.now().Add(breakerCooldown)
 		return true
 	}
 	return false

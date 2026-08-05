@@ -261,14 +261,30 @@ type Role struct {
 	Rank        int32  `json:"rank"`
 }
 
-// Roles lists the roles this actor may assign: their own rank and below, most
-// powerful first.
+// Roles lists the roles this actor may assign somewhere: their union rank and
+// below, most powerful first, with D43's cap applied for a key.
 //
-// Read from the seeded rows rather than listed in Go, so a control cannot offer
-// something resolveRole will then refuse. The same shape internal/invite's
-// Roles has, for the same reason — and the D43 cap is applied here for that
-// reason too: a key offered admin in this list and refused it on the write would
-// make the sentence above false.
+// Read from the seeded rows rather than listed in Go, so the four built-in roles
+// have one definition.
+//
+// **It is not a promise that every entry will be accepted, and it used to say it
+// was** (F120). `resolveRole` compares against `here.Rank` — the authority of
+// the membership covering the *target* — and this list is rendered once for a
+// page whose rows target different workspaces and whose grant form chooses its
+// target on submit. An organization-wide viewer who is admin in one workspace
+// has a union rank of admin, so admin appears here and is refused for every
+// target their organization-wide membership covers.
+//
+// Narrowing to the organization-wide rank, which is what internal/invite's Roles
+// does, is **wrong here** and right there: an invitation admits somebody to the
+// whole organization, so one ceiling governs it. A role assignment is per
+// membership, and filtering on the weakest authority would hide admin from the
+// workspace-scoped admin who may genuinely grant it. No single list is exact for
+// many targets; the service is where exactness lives, and the refusal is the
+// mechanism rather than a failure of this one.
+//
+// The D43 cap is different and is applied, because it is absolute rather than
+// per-target: no key may produce an interactive owner or admin anywhere.
 func (s *Service) Roles(ctx context.Context, actor *auth.Identity) ([]Role, error) {
 	if !actor.Can(PermMembersWrite) {
 		return nil, fmt.Errorf("%w: assigning a role requires %s", domain.ErrForbidden, PermMembersWrite)

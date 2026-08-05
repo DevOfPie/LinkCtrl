@@ -53,6 +53,13 @@ func (c *SaltCache) For(ctx context.Context, day time.Time) ([]byte, error) {
 	c.mu.RLock()
 	if s, ok := c.salts[day]; ok {
 		c.mu.RUnlock()
+		// Evicted on a **hit** as well as a miss (F59). Eviction used to run
+		// only where a salt was created, so a replica that had already loaded
+		// today's salt never trimmed again — and Purge, the other evictor, runs
+		// under leadership, so a follower held yesterday's salts for as long as
+		// the process lived. Two map reads on a hot path, against a map that
+		// holds three days.
+		c.evictExpired(day)
 		return s, nil
 	}
 	c.mu.RUnlock()
@@ -85,17 +92,34 @@ func (c *SaltCache) For(ctx context.Context, day time.Time) ([]byte, error) {
 
 	c.mu.Lock()
 	c.salts[day] = salt
-	// Drop anything older than retention so the map cannot grow without bound
-	// on a long-running process.
-	cutoff := day.AddDate(0, 0, -SaltRetentionDays-1)
+	c.mu.Unlock()
+	c.evictExpired(day)
+
+	return salt, nil
+}
+
+// evictExpired drops every cached salt whose row the purge has deleted, or
+// would delete now.
+//
+// **The predicate is the SQL's, not an approximation of it.** A salt for day D
+// carries `purge_at = D + SaltRetentionDays` and the statement deletes
+// `purge_at < now()`, so the moment day D+2 begins, D's row is gone. The old
+// cutoff was `d.Before(day - SaltRetentionDays)`, which keeps exactly that day —
+// so the process held in memory the one salt the de-identification step had just
+// deleted from the database (F59).
+//
+// The claim it makes true is `README.md`'s and `salt.go`'s own: those are claims
+// about what a *database* holds, and a heap copy in a live process is not one —
+// but "the salt is gone" is a sentence worth being able to say without a
+// footnote about which copy.
+func (c *SaltCache) evictExpired(now time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	for d := range c.salts {
-		if d.Before(cutoff) {
+		if d.AddDate(0, 0, SaltRetentionDays).Before(now) || d.AddDate(0, 0, SaltRetentionDays).Equal(now) {
 			delete(c.salts, d)
 		}
 	}
-	c.mu.Unlock()
-
-	return salt, nil
 }
 
 // Cached returns a day's salt only if it is already in memory.
@@ -155,15 +179,9 @@ func (c *SaltCache) Purge(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("purge salts: %w", err)
 	}
-	if n > 0 {
-		c.mu.Lock()
-		cutoff := SaltDay(time.Now()).AddDate(0, 0, -SaltRetentionDays)
-		for d := range c.salts {
-			if d.Before(cutoff) {
-				delete(c.salts, d)
-			}
-		}
-		c.mu.Unlock()
-	}
+	// Unconditionally, not only when this call deleted something: on a
+	// multi-replica instance the leader's delete is the one that returns a
+	// count, and every other replica's memory needs trimming just the same.
+	c.evictExpired(SaltDay(time.Now()))
 	return n, nil
 }

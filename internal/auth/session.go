@@ -174,6 +174,19 @@ func AnonymizeIP(addr netip.Addr) string {
 	if addr.Is4In6() {
 		addr = addr.Unmap()
 	}
+	// **6to4 is the same bug in a different scheme** (F59). `2002::/16` carries
+	// the client's IPv4 address in bytes 2 to 5, which is inside the /48 this
+	// function keeps: `2002:cb00:712a::1` masks to `2002:cb00:712a::/48`, and
+	// those bytes are `203.0.113.42` in full. Folded to the embedded address and
+	// masked to /24 like any other IPv4.
+	//
+	// Every other v4-in-v6 scheme was checked rather than assumed, and none
+	// needs this: Teredo, NAT64 and ISATAP all embed in the low bits that a /48
+	// discards. 6to4 is the single blind spot, against a mechanism RFC 7526
+	// deprecated in 2015 — which is why it is one branch and not a table.
+	if v4, ok := sixToFour(addr); ok {
+		addr = v4
+	}
 	bits := 24
 	if addr.Is6() {
 		bits = 48
@@ -183,6 +196,22 @@ func AnonymizeIP(addr netip.Addr) string {
 		return ""
 	}
 	return prefix.String()
+}
+
+// sixToFour extracts the IPv4 address a 6to4 address embeds.
+//
+// 2002:V4ADDR::/16 — the four bytes after the 2002 prefix are the client's IPv4
+// address verbatim. Reported as not-6to4 for everything else, including
+// `::ffff:` mapped addresses, which the caller has already unmapped.
+func sixToFour(addr netip.Addr) (netip.Addr, bool) {
+	if !addr.Is6() || addr.Is4In6() {
+		return addr, false
+	}
+	b := addr.As16()
+	if b[0] != 0x20 || b[1] != 0x02 {
+		return addr, false
+	}
+	return netip.AddrFrom4([4]byte{b[2], b[3], b[4], b[5]}), true
 }
 
 // LockoutPolicy throttles repeated failed logins for one account.

@@ -42,6 +42,26 @@ migrations run at boot.
   ones are the true ones. The SLO series `linkctrl_redirect_duration_seconds` is
   unaffected and always was — the redirect handler records it directly.
 
+- **A 6to4 address is anonymised as the IPv4 address it carries.** `2002::/16`
+  embeds a client's IPv4 address in the bytes a `/48` prefix keeps, so a session
+  or audit record from such a client stored all four octets where every other
+  address stored a network. It is now folded and masked to `/24` like any other
+  IPv4. No other IPv4-in-IPv6 scheme is affected — Teredo, NAT64 and ISATAP all
+  embed in bits the prefix already discards.
+
+- **The analytics salt cache no longer holds a salt the purge has deleted.** The
+  in-memory copy was evicted one day later than the database row, so for a day
+  the process held the salt whose deletion is the de-identification step. It now
+  uses the same rule the delete statement does, and trims on every lookup rather
+  than only when a new day's salt is created — which is what a replica that is
+  not the job leader relies on.
+
+- **A Redis outage now costs one probe per cooldown, as documented.** The shared
+  rate limiter's circuit breaker let every waiting request through the moment the
+  cooldown lapsed, each paying `REDIS_READ_TIMEOUT` against a server that was
+  still down. At the default 50ms this was wasteful; if you have raised that
+  timeout, it was the stall the breaker exists to prevent.
+
 - **The dispute queue no longer offers Allow on a refusal it cannot lift.** A
   destination refused by an entry from `LINKCTRL_DESTINATION_BLOCKLIST` drew the
   same **Allow** button as any other, and pressing it answered `409` — the entry
