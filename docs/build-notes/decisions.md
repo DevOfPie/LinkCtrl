@@ -180,6 +180,7 @@ file. Append a row when you append an entry.
 | [M45, an accessor nobody retrofitted and a reason that was never the reason](#2026-08-05--m45-an-accessor-nobody-retrofitted-and-a-reason-that-was-never-the-reason) | F65 and F41. **The fix for F65 is not the accessor, because the accessor already existed** — M35 added `log()` and the two calls that predated it went round it, so the guard is a scan for `.Logger.<method>(…)` and the accessor's own comment had been claiming the property nothing enforced. F41: the conclusion holds and the stated reason is false — a rolling restart has both builds serving at once, which the *"nobody can have switched blocking on yet"* clause assumes away, and the row reproduced three 302s to a bot. **No bump, by arithmetic**: 0.1.0 keys on v1, this build on v3, and every bump since lands in the same unreleased minor, so the residue is empty for F132's reason. The comment now carries the rule instead of the excuse |
 | [M45, three things the tree carried and nothing read](#2026-08-05--m45-three-things-the-tree-carried-and-nothing-read) | F55, F16 and F110 — a duplicated function, a list, and a column. F55 deleted rather than synced, with the surviving test checked as a strict superset first. **F16's fix is that nobody maintains the list**: the classifier is told the dashboard set at boot from `(*appMux).mounts()`, D97's argument a second time, and the row's proposed source had itself been deleted by F85 for the same drift — the test drives from `mounts()` too, so neither can fall behind. Nine routes were counted as short links; the SLO series was never affected and `docs/slo.md` needed nothing. F110 is **an undocumented choice riding on a documented one** — the query explains why the log is not *filtered* by workspace and says nothing about not *returning* it, and that reasoning does not reach the second question |
 | [M45, a table that was not the record it claimed, and a guard with no inputs](#2026-08-05--m45-a-table-that-was-not-the-record-it-claimed-and-a-guard-with-no-inputs) | F66 and F130. **Seven decisions were missing, not four** — D49-D52 as filed, plus D97-D99 the table had also never gained, folded in rather than filed twice; the collision this row is about had already cost M35 a renumbering across eleven files. Rows state the decision, because a table of titles is not the record the README calls it. F130 is **F39's fix with nothing holding it correct**: every page struct embeds exactly shell, so the branches ran against zero inputs and the revert left the package green. Synthetic fixtures are forced rather than chosen — the package contains none of the shapes, which is the finding — and the fifth case is the arrangement the guard must not flag |
+| [M45, a count that could not stay true and a milestone the enumeration forgot](#2026-08-05--m45-a-count-that-could-not-stay-true-and-a-milestone-the-enumeration-forgot) | F69 and F119, one mechanism wrong in two directions. **The count is removed rather than corrected**: it read *four*, was true when written, wrong within one milestone, and by M44.9 the true number was zero — the row predicted its own recurrence and was right four times, so its teeth are demonstrated rather than argued. F119: M33 was the only shipped Phase 2 milestone with a demo-visible feature and no coverage row, and it shipped inside the window whose closing is M33.5's entire deliverable — the milestone that motivated the enforcement is the one the enforcement forgot |
 
 ---
 
@@ -15581,3 +15582,45 @@ than one that checks nothing.
 
 Verified by performing F130's revert again afterwards: it now fails two cases by
 name, where before it changed nothing.
+
+## 2026-08-05 — M45, a count that could not stay true and a milestone the enumeration forgot
+
+[F69](deferred-findings.md) and [F119](deferred-findings.md). One mechanism —
+`demoCoverage()` and the rule in `phase-details/README.md` that points at it —
+wrong in two directions at once: it described its own shape with a number, and it
+left out a milestone.
+
+### F69: remove the number, do not correct it
+
+The rule said *"Its four trailing rows assert zero for milestones not yet built"*.
+That was true when M33.5 wrote it, and wrong within one milestone: M34 converted
+its own row exactly as the rule instructs, and the count beside the rule did not
+move with it.
+
+F69 predicted it would drift again at M41 with nothing to notice. It then drifted
+at M41, M42, M43 and M44, and by M44.9 every trailing row had been converted, so
+the true count was **zero** and the sentence described nothing that existed.
+
+So the durable fix is the one the row proposed rather than the one it needed:
+stop writing the count. *Its trailing rows* stays true however many there are. A
+number nobody maintains is a claim that decays on a schedule, and correcting it
+to three would have bought exactly one milestone.
+
+The tier stays *Cosmetic*. What changed is that the teeth are demonstrated rather
+than argued — the row predicted its own recurrence and was right four times.
+
+### F119: the milestone the enforcement was built for
+
+`demoCoverage()` enumerates what the demo must show, and M33 had no row in it —
+the only shipped Phase 2 milestone with a demo-visible feature and nothing
+asserting it. Deleting the single `forwardPath: true` from `cmd/lctl/demo.go` left
+the build green.
+
+The irony is worth recording rather than smoothing over. M33 shipped inside the
+window where the obligation existed and nothing enforced it, and closing that
+window is [M33.5](phase-details/m33.5.md)'s entire deliverable — so the milestone
+that motivated the enforcement is the one the enforcement forgot. m33.5.md names
+M33 by name while doing it.
+
+Verified by performing the deletion: it now fails by name, twice, once per
+demo shape the coverage test checks.

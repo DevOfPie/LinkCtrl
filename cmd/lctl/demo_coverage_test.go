@@ -216,6 +216,18 @@ func demoCoverage() []demoFeature {
 				"every seeded destination was sent to a third party",
 		},
 		{
+			Milestone: "M33", Feature: "A link that forwards the path below its alias",
+			Query: `SELECT count(*) FROM links
+			         WHERE workspace_id IN (` + demoWorkspaces + `) AND forward_path`,
+			Min: 1,
+			Shows: "deep-link forwarding, which is invisible on a demo where every " +
+				"link ignores what follows its alias. M33 is the milestone this " +
+				"enumeration was missing entirely (F119): it shipped inside the " +
+				"window where the obligation existed and nothing enforced it, which " +
+				"is the window M33.5 closed — and deleting its one `forwardPath: " +
+				"true` from the seeder left the build green",
+		},
+		{
 			Milestone: "M32.5", Feature: "Bot blocking on for exactly one link",
 			Query: `SELECT count(*) FROM links
 			         WHERE workspace_id IN (` + demoWorkspaces + `) AND bot_blocking = 'on'`,
