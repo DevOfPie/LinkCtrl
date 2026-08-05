@@ -517,6 +517,23 @@ type domainCheckTarget struct {
 // Raising the batch was the other obvious move and it is strictly worse: more
 // rows inside the same ten minutes, each able to block for the DNS timeout, is
 // the same starvation with a longer queue.
+// **Nothing here reaps an unverified claim, and nothing anywhere else does**
+// (F113). A registration holds its hostname instance-wide — `domains_hostname_key`
+// is unconditioned on verification — and a claim that never passes its check is
+// never polled out of existence, so the name is held until its registrant deletes
+// the row, which only they can do.
+//
+// The squat itself is a documented limitation and is deliberate: a second
+// registration of the same name is refused instance-wide whoever asks, with an
+// uninformative refusal so it cannot be used to ask what a neighbour registered.
+// What was undocumented is that the claim is also **permanent** — free, and
+// unhandable.
+//
+// A reaper on a timer is not the fix it looks like. The pending arm below exists
+// precisely to keep checking a hostname registered *before* its DNS cut-over, and
+// a reaper would delete exactly those. It could not use a NULL
+// `verification_checked_at` as evidence of abandonment either, because
+// `RenameDomain` writes that NULL onto a live row. Recorded rather than built.
 func (s *Service) verificationWorkList(ctx context.Context, batch int32) ([]domainCheckTarget, error) {
 	serving, err := s.q.ListServingDomainsForVerification(ctx, batch)
 	if err != nil {

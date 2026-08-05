@@ -32,9 +32,20 @@ CREATE TABLE users (
     mfa_secret        text,
     mfa_enabled_at    timestamptz,
 
-    -- Set by the GDPR erasure routine. Distinct from deleted_at: erasure
-    -- scrubs identifying fields while keeping the row so foreign keys and
-    -- audit records stay intact.
+    -- **Dormant. Nothing writes this column, and no erasure routine exists.**
+    --
+    -- The shape it was designed for stands: erasure would scrub identifying
+    -- fields while keeping the row, so foreign keys and audit records stay
+    -- intact, which is what distinguishes it from deleted_at. But the sentence
+    -- here read "Set by the GDPR erasure routine" in the present tense from the
+    -- first migration onward, and there has never been such a routine — no
+    -- writer, no query, no CLI command, and `users` appears in none of the
+    -- fourteen DELETE statements in this schema (F44).
+    --
+    -- Four lines above, mfa_secret is marked "Phase 3". This file knew how to
+    -- mark something forward-looking and did not do it here, which is the whole
+    -- of the finding: the absence was never a recorded deferral, it was a gap
+    -- that read as a feature.
     anonymized_at     timestamptz,
 
     last_login_at     timestamptz,

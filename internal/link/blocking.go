@@ -780,6 +780,25 @@ func (s *Service) recordBlocked(
 // instance whose refusals do not match its configuration is worse than one that
 // does not start — and a line an operator added and which silently refuses
 // nothing is exactly that state.
+// **An entry that is not a bare hostname is stored and matches nothing** (F58).
+//
+// `canonicalHost` folds and validates the *shape* of a host, so `https://evil.example`
+// and `*.evil.example` survive it, land in the table, and appear in the operator's
+// list — while `MatchBlockedDestination` is asked only for dot-delimited fragments
+// of a real hostname, which neither can ever be. The operator sees their entry and
+// it refuses nothing.
+//
+// `checkListEntry` exists three hundred lines up and would catch it, and calling it
+// here is **wrong**: it refuses IP-literal entries, which work today and which an
+// operator blocking `169.254.169.254` reasonably expects to. So the cheap fix
+// trades a silent no-op for a silent regression, which is why this is recorded
+// rather than repaired. It is also not a regression from anything: the pre-M30
+// in-memory list validated nothing either, and m30.md's only claim here is that
+// the env list keeps working.
+//
+// Self-inflicted and bounded — an operator's own typo cannot make the instance
+// refuse *less* than it did before M30 — but it is one function call away from
+// the boot-time rigour `main.go` spends on exactly this class of mistake.
 func (s *Service) SeedBlocklist(ctx context.Context, hosts []string) error {
 	keep := make([]string, 0, len(hosts))
 	for _, raw := range hosts {

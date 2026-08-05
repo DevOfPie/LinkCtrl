@@ -9,6 +9,13 @@
 -- consequence is that the largest table in the system holds no personal data
 -- and is out of scope for subject-access and erasure requests entirely.
 --
+-- That says nothing about whether such requests can be *served*, and until 0.2.0
+-- it read as though it did. **This product has no erasure mechanism at all**
+-- (F44): the tables that do hold addresses — users, destination_disputes —
+-- have no deletion path, and `anonymized_at` in 00200 has no writer. The claim
+-- above is about this table's contents and is true of them; it is not a claim
+-- that the other tables are in scope and handled.
+--
 -- NOTE: no CREATE TABLE ... PARTITION OF appears in this file, by rule.
 -- sqlc emits a duplicate junk model for every child partition it sees, so
 -- partitions would add a dead struct to generated code every month. They are

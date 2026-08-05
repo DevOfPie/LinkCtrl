@@ -149,6 +149,27 @@ func canAdminister(actor *auth.Identity, organizationID, workspaceID *uuid.UUID)
 	if !actor.Can(PermDomainsWrite) {
 		return false
 	}
+	// **The organization limb reads the identity's union, and D44 says it should
+	// read the covering membership** (F117). *"A write is authorized by the
+	// membership whose scope covers the object being written, not by the
+	// identity's union"* — so a workspace-scoped admin's union would reach an
+	// organization-owned row here.
+	//
+	// Latent, and checked in four directions rather than assumed: `CreateDomain`'s
+	// only caller writes both owner columns, no update statement touches
+	// `domains.workspace_id`, the seeded default row has a NULL organization, and
+	// `domains.workspace_id` is `ON DELETE CASCADE`, so deleting a workspace
+	// removes the row rather than promoting it to organization-owned. The state
+	// is unconstructible through any shipped or migrated path; the CHECK at
+	// `02500_domain_ownership.sql` is what legalises it in the schema.
+	//
+	// Not repaired, because the obvious repair is wrong. Replacing all three
+	// limbs with the organization-wide check would take the workspace limb with
+	// it, and that one is correctly the union under D31; and `Domains()` calls
+	// this per row, so a per-call authority load is a query per row. It becomes
+	// real the moment anything registers an organization-owned hostname, and
+	// whoever adds that surface has no reason to look here — which is what this
+	// comment is for.
 	switch {
 	case workspaceID != nil:
 		return *workspaceID == actor.WorkspaceID

@@ -560,6 +560,16 @@ Worth knowing so you do not spend an afternoon re-adding it:
   UTC offset, leaving gaps that silently swallow rows.
 - Redis runs with no persistence and `allkeys-lru`. Any key may vanish at any
   moment, which is exactly what the design assumes.
+- **If you point `LINKCTRL_REDIS_URL` at a managed Redis, turn persistence off
+  there too.** The shipped compose file is memory-only and this is only a
+  question once you move off it. The shared rate limiter keys on the client
+  address — the full address for IPv4, a `/64` for IPv6 — for the length of the
+  limiter's window, 120 seconds by default. That is not a column and no address
+  is stored in Postgres, which is the product's stance; it does mean a managed
+  service with RDB or AOF snapshots enabled by default writes client addresses
+  to disk on somebody else's infrastructure, on a retention schedule you did not
+  choose. Anonymising the IPv4 side is not an option the product can take: a
+  `/24` key would let one host exhaust the budget of 255 neighbours.
 - Log files rotate at 10 MB × 3 per service.
 
 ## Scaling, honestly

@@ -487,10 +487,17 @@ func (s *Service) RecordAPIKeyRevocation(
 // actorLabel is the snapshot stored beside the actor's id.
 //
 // Email, because that is how a person is identified everywhere else in this
-// product and it stays meaningful after the account is deleted. Falling back to
-// the display name, then to a fixed string: a record with no readable actor is
-// still a record that something happened, and dropping the event instead would
-// lose more than it protects.
+// product and it stays meaningful if the account is ever deleted. Falling back
+// to the display name, then to a fixed string: a record with no readable actor
+// is still a record that something happened, and dropping the event instead
+// would lose more than it protects.
+//
+// *"If"* rather than *"after"*, corrected at M45: **no path in this product
+// deletes a user** (F44). `users` appears in none of the schema's DELETE
+// statements, nothing writes `users.deleted_at`, and `anonymized_at` has no
+// writer either. The snapshot is still the right design — it is what makes the
+// record survive a deletion that does not exist yet — but the present tense
+// described a lifecycle nobody had built.
 func actorLabel(actor *auth.Identity) string {
 	if actor == nil {
 		return "system"

@@ -184,6 +184,7 @@ file. Append a row when you append an entry.
 | [M45, four answers, three of them decisions and one a correction](#2026-08-05--m45-four-answers-three-of-them-decisions-and-one-a-correction) | D100 — F70's instance default domain moves behind D98's principal, because D38's stated reason for refusing has stopped being true; the capability organization owners lose is named. D101 — F50's blocked bot is recorded in every link state, and *record for none* is the smaller-looking change that couples recording to the response and keeps an exception; what it deliberately does **not** fix is the raw `click_count`, which is F24. D102 — F105's inbox gains the workspace filter its comments promised since M40, with both halves of the predicate load-bearing and F94's claimed containment as the reason to build rather than delete. And **a correction to D18 with no new number**: the code has been right since before D18 was written, the *either direction* promise is narrowed rather than deleted, and the request-time gap is documented and left open with the price of closing it stated |
 | [A documentation change needs no permission, and still needs checking](#2026-08-05--a-documentation-change-needs-no-permission-and-still-needs-checking) | Owner-set standing rule: documentation updates are accepted in advance and verified. **It removes a prompt, not a check** — this milestone spent owner attention on questions with one right answer and a cost to establishing it, which is what the amendment rule already says about facts as against assertions. The verification half is load-bearing: four wording rows in one milestone named fewer sites than existed, so a standing approval that let a fix land on the listed sites would convert a prompt into a silent under-fix. And **the bound**, because "documentation" is what will be stretched — the test is not diff size but *which of the two is being corrected*, with F98 and F41 on one side and F50, which became D101, on the other |
 | [M45, building D100, and two orderings that had never been visible](#2026-08-05--m45-building-d100-and-two-orderings-that-had-never-been-visible) | F70. Not the permission — that is D100 — but **two check orders the new permission exposed**, both unobservable while everybody passed the first gate: `canAdminister` consulted the role permission before it knew which domain it was, which is the admit-then-switch arrangement that produced the finding; and the *this is the instance default* refusal sat below the permission check, when it is a fact about the row rather than the actor and nobody may rename it including the principal. The old test's premise was falsified by the decision — instance grants survive a demotion, which is D98 working — so it is replaced by one asserting a full organization owner is refused. A fixture helper instead of five rewrites. And the coverage enumeration derived from the scope list, with the admission that **this one cannot be sabotage-verified today** because it asserts zero |
+| [M45, five rows that close by being written down](#2026-08-05--m45-five-rows-that-close-by-being-written-down) | F44, F57, F58, F113 and F117 — recorded rather than built, each on its own fix note and for five **different** reasons, which is the point of the entry: F44's repair is a feature and belongs in Plan.md first; F57's only coherent fix is keyed hashing, so the actionable half is telling operators of managed Redis to disable persistence; F58's obvious fix refuses IP literals that work today, trading a silent no-op for a silent regression; F113's reaper would delete the pre-DNS-cut-over case the code exists to protect; F117's state is unconstructible and the repair takes a correct limb with it. **Each records the fix considered and rejected**, which is what separates a recorded limitation from a row somebody stopped caring about — and none is closed for cheapness |
 
 ---
 
@@ -15878,3 +15879,68 @@ changes nothing that fails. It fires only when a migration grants one of these t
 a role, which is the thing it exists to catch and which no current migration
 does. It is future-proofing, and calling it a tested guard would be the claim
 [F130](deferred-findings.md) is about.
+
+## 2026-08-05 — M45, five rows that close by being written down
+
+[F44](deferred-findings.md), [F57](deferred-findings.md),
+[F58](deferred-findings.md), [F113](deferred-findings.md) and
+[F117](deferred-findings.md). The triage decided each of these closes as a
+recorded limitation rather than as code, and each on its own fix note rather than
+on a general preference for writing over building. Worth one entry because the
+five reasons are different and the difference is the point.
+
+**F44 — the fix is a feature, so it is not this milestone's.** Erasure is
+described by five sites and implemented by none. Building it means a deletion
+path for `users` and `destination_disputes`, an anonymisation routine, and a
+decision about what survives — that is scope, and scope goes in Plan.md before it
+goes in a phase close. What *is* this milestone's is that four comments and a
+security document said it existed. The absence now appears in both lists a reader
+consults and in SECURITY.md's own gaps section, each naming what **is** reclaimed
+so the hole is sized: partitioned analytics, audit retention, invitation and
+notification cascades.
+
+**F57 — the actionable half is documentation, and the row says so.** The shared
+limiter's Redis key carries the full IPv4 address. The stance *"no IP column
+anywhere"* is not violated — a key is not a column, and every corroborating
+document scopes itself to storage — but the stance did not say what it does about
+Redis, and `LINKCTRL_REDIS_URL` may point at a managed service that snapshots by
+default. Anonymising is **not available**: a `/24` key would let one host exhaust
+255 neighbours' budget, and the `/64` used for IPv6 is evasion resistance rather
+than privacy. Keyed hashing is the only coherent fix and is not built, so the
+honest close is to tell operators to disable persistence and to say why.
+
+**F58 — the obvious fix is a silent regression.** Malformed blocklist entries are
+stored and match nothing. `checkListEntry` exists and would catch them, and
+calling it refuses IP-literal entries, which work today and which an operator
+blocking `169.254.169.254` reasonably expects to. Trading a silent no-op for a
+silent regression is worse, and it is not a regression from anything: the pre-M30
+in-memory list validated nothing either.
+
+**F113 — the fix would delete the case the code protects.** Nothing reaps an
+unverified hostname claim, so a registration holds a name permanently. A reaper
+on a timer breaks the pending arm's whole purpose, which is to keep checking a
+hostname registered *before* its DNS cut-over; and it could not read a NULL
+`verification_checked_at` as abandonment, because a rename writes one onto a live
+row. The squat was documented; what was not is that it is permanent as well as
+unhandable.
+
+**F117 — the state is unconstructible, and the comment goes where somebody will
+meet it.** `canAdminister`'s organization limb reads the identity's union where
+D44 says it should read the covering membership. Four independent checks say no
+shipped or migrated path can produce an organization-owned domain row. The repair
+is wrong as well as unnecessary: replacing all three limbs takes the workspace
+limb with it, and that one is correctly the union under D31. So the note sits
+beside the limb, because the row's own argument is that whoever adds an
+organization-owned hostname surface has no reason to look here.
+
+### What these have in common, and what they do not
+
+Every one of them **records a fix that was considered and rejected**, with the
+reason. That is the difference between a recorded limitation and a row somebody
+quietly stopped caring about, and it is the standing rule this project keeps
+losing to: deciding a finding does not matter is a decision.
+
+None of them is closed because it was cheap. Three are closed because the
+available repair is worse than the defect, one because the repair is a feature,
+and one because the defect is unreachable. A row closed for cheapness would be
+the standing rule of 2026-08-04 being ignored one row at a time.

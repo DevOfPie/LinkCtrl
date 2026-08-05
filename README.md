@@ -310,6 +310,13 @@ Known limitations and deferred work, so nobody discovers them in production:
 - **The signup mode is the operator's alone.** There is no runtime toggle: it is
   an `.env` edit and a restart. An owner who wants to let somebody in without
   one sends an invitation.
+- **There is no way to delete an account, and no erasure routine.** Nothing in
+  the product removes a user or scrubs their details, and a schema column named
+  for a GDPR erasure routine has never had one behind it. Analytics is the
+  exception and always was: click events and visitor rows are dropped wholesale
+  on a retention schedule and hold no addresses in the first place. If you are
+  deploying this somewhere that has to answer erasure requests, that is yours to
+  do with database access.
 - **There is no account recovery, and a mailer does not add one.** If somebody
   forgets their password, they cannot get back in by themselves: there is no
   *forgot password* link, no reset email, and nothing to switch on — the
