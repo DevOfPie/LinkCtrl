@@ -17657,3 +17657,46 @@ the audit action vocabulary, which is the mechanical reason a count taken from
 `docs/SECURITY.md`, at M32.5 and again at 0.2.0. Doing it *before* the
 documentation pass is the point: it makes the number that pass writes checkable
 rather than hand-counted.
+
+## 2026-08-05 — M45, one home for the audit vocabulary and a count that checks itself
+
+[F18](deferred-findings.md), approved by the owner at M45 and built *before* the
+documentation pass on purpose.
+
+### Rehoming is the smaller half
+
+`dispute.allowed` and `dispute.upheld` were declared in `internal/dispute`, so
+anything enumerating the vocabulary from `internal/audit` was short by two
+however carefully it was done. Moving them is one edit and it fixes the symptom.
+
+What was actually missing is that **there was no enumeration at all**. Nothing in
+the tree could answer "what are the audit actions" except by reading the file, so
+`docs/SECURITY.md`'s coverage count was maintained by hand beside a list nothing
+checked. It was wrong twice — twelve until M32.5 while omitting
+`destination.blocked`, eighteen until 0.2.0 — and the pattern in both is the
+same: a number a person kept, next to a list a person also kept, with nothing
+relating the two.
+
+### The list is written out, and something checks it
+
+`AllActions` is a literal slice. Reflection cannot see constants, so there is no
+way to derive it — and a slice somebody has to keep in step is exactly the shape
+that failed twice already. `TestAllActionsIsExhaustive` parses `audit.go`'s AST
+and compares the declared constants against the list in both directions, plus a
+length check, because a duplicated entry would satisfy both directions and still
+make the count wrong.
+
+Adding an action and forgetting the list is now a failing build in the package
+that owns it, rather than a documentation defect discovered two milestones later
+by somebody counting.
+
+### Built before the documentation pass, deliberately
+
+The pass has to write a coverage number. Doing this first means that number is
+`len(audit.AllActions())` — checkable by a reader who does not trust it — rather
+than a third hand-count.
+
+`SECURITY.md`'s explanation of *why* the count came up short is corrected too:
+the parenthetical naming `internal/dispute` as the second home is the thing this
+row just made false, and leaving it would have been a true count sitting beside a
+false reason.

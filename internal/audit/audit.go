@@ -152,6 +152,26 @@ const (
 	// because this table is read verbatim by the audit API and every consumer
 	// written after this one would otherwise have to remember.
 	ActionDestinationBlocked = "destination.blocked"
+)
+
+// The dispute lifecycle (M31).
+//
+// Declared here rather than in internal/dispute, which is where they lived until
+// M45. The vocabulary having two homes meant anything enumerating it from this
+// package was silently short by two, and that is not hypothetical: the action
+// count in docs/SECURITY.md was wrong twice, at M32.5 and again at 0.2.0, and
+// [F18](../../docs/build-notes/deferred-findings.md) is the mechanical cause
+// both times. internal/dispute now refers to these rather than declaring its
+// own, so there is one list and AllActions can be complete.
+//
+// The decisions are recorded and the filing is not, and that asymmetry is
+// deliberate: a filing's whole record is the dispute row, which carries who and
+// when and outlives the account. A decision has an effect *outside* that row —
+// an entry gone from the instance-wide blocklist — and the audit log is the only
+// place that effect is otherwise visible.
+const (
+	ActionDisputeAllowed = "dispute.allowed"
+	ActionDisputeUpheld  = "dispute.upheld"
 
 	// Bot blocking (M32.5). Two actions because they are two grants: changing a
 	// link needs links.update, changing the domain needs domains.write, and the
@@ -721,4 +741,59 @@ func decodeCursor(s string) (cursor, error) {
 		return cursor{}, err
 	}
 	return cursor{OccurredAt: at, ID: id}, nil
+}
+
+// AllActions is every action this package declares, and it is exhaustive.
+//
+// It exists because the vocabulary is enumerated by things outside the code —
+// docs/SECURITY.md states a coverage count, and a reader checks a claim like
+// that by counting. That count has been wrong twice: it read twelve until M32.5
+// while omitting destination.blocked, and eighteen until 0.2.0 while the list
+// had grown past it. Both times the number was maintained by hand beside a list
+// that was not.
+//
+// TestAllActionsIsExhaustive parses this file and fails if a constant is
+// declared without appearing here, so adding an action and forgetting this list
+// is a failing build rather than a documentation defect discovered two
+// milestones later. The list is written out rather than derived at runtime
+// because reflection cannot see constants, and a slice somebody has to keep in
+// step is only safe if something checks.
+//
+// Ordered as declared, which groups them by subsystem the way the constants are
+// grouped; nothing depends on the order.
+func AllActions() []string {
+	return []string{
+		ActionDomainRootRedirectChanged,
+		ActionDomainCreated,
+		ActionDomainRenamed,
+		ActionDomainDeleted,
+		ActionDomainVerified,
+		ActionDomainUnverified,
+		ActionInvitationCreated,
+		ActionInvitationRevoked,
+		ActionInvitationRedeemed,
+		ActionMemberAdded,
+		ActionMemberRemoved,
+		ActionMemberRoleChanged,
+		ActionWorkspaceCreated,
+		ActionWorkspaceRenamed,
+		ActionWorkspaceDeleted,
+		ActionOrganizationCreated,
+		ActionOrganizationDeleted,
+		ActionDestinationBlocked,
+		ActionDisputeAllowed,
+		ActionDisputeUpheld,
+		ActionLinkBotBlockingChanged,
+		ActionDomainBotBlockingChanged,
+		ActionWebhookCreated,
+		ActionWebhookUpdated,
+		ActionWebhookDeleted,
+		ActionWebhookSecretRotated,
+		ActionAutomationRuleCreated,
+		ActionAutomationRuleUpdated,
+		ActionAutomationRuleDeleted,
+		ActionAutomationFired,
+		ActionAPIKeyRotated,
+		ActionAPIKeyRevoked,
+	}
 }

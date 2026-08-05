@@ -136,9 +136,13 @@ const (
 // carries who and when and outlives the account. A decision has an effect
 // *outside* that row — an entry gone from the instance-wide blocklist — and the
 // audit log is the only place that effect is otherwise visible.
+// Declared in internal/audit since M45 and referred to here, so the vocabulary
+// has one home and anything enumerating it from that package is complete (F18).
+// Kept as names in this package because they are this package's verbs and its
+// callers read better for it.
 const (
-	ActionDisputeAllowed = "dispute.allowed"
-	ActionDisputeUpheld  = "dispute.upheld"
+	ActionDisputeAllowed = audit.ActionDisputeAllowed
+	ActionDisputeUpheld  = audit.ActionDisputeUpheld
 )
 
 // Dispute is one appeal, as every reader sees it.
