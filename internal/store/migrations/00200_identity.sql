@@ -64,7 +64,9 @@ CREATE TABLE organizations (
     -- Row-level regional routing is explicitly not attempted.
     data_region text        NOT NULL DEFAULT 'default',
     -- True for the organization auto-created at registration. Distinguishes
-    -- "your own space" from a real shared organization in Phase 2.
+    -- "your own space" from a real shared organization — which Phase 2 built,
+    -- so this is a distinction the product now makes rather than one it was
+    -- going to.
     is_personal boolean     NOT NULL DEFAULT false,
     created_at  timestamptz NOT NULL DEFAULT now(),
     updated_at  timestamptz NOT NULL DEFAULT now(),
@@ -106,8 +108,10 @@ CREATE TABLE roles (
     name        text        NOT NULL,
     description text        NOT NULL DEFAULT '',
     is_builtin  boolean     NOT NULL DEFAULT false,
-    -- Lower binds tighter. Used to resolve the effective role when a user
-    -- holds more than one, which cannot happen in Phase 1 but will in Phase 2.
+    -- Lower binds tighter. Resolves the effective role when a user holds more
+    -- than one, which Phase 1 could not produce and Phase 2 does: a
+    -- workspace-scoped membership adds a second matching row (D31, D44), and
+    -- the lowest rank among them wins.
     rank        int         NOT NULL DEFAULT 100,
     created_at  timestamptz NOT NULL DEFAULT now()
 );

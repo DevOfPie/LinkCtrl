@@ -14,7 +14,11 @@ import (
 // httpx while httpx already imports analytics for the reader — a cycle.
 //
 // The handler depends only on a one-method interface, so the recorder can be
-// swapped for a broker-backed one in Phase 2 without touching the hot path.
+// swapped for a broker-backed one without touching the hot path. That is a
+// property the seam has, not a plan: this said "in Phase 2" until 0.2.0, and
+// Phase 2 did not do it. The in-process queue is what ships, and Redis Streams
+// remains an upgrade path nothing exercises — M42 put webhook delivery on
+// Postgres rather than on a broker, which is the closest this phase came.
 type clickRecorder struct {
 	ingester *analytics.Ingester
 }

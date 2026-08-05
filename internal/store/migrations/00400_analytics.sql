@@ -49,10 +49,16 @@ CREATE TABLE click_events (
     -- one workspace's analytics cannot be joined against another's — while the
     -- salt does the other job, making a day's hashes irreversible once purged.
     visitor_hash  bytea,
-    -- Dormant. Intended as "first time this visitor_hash was seen for this link
-    -- today", for Phase 2's new-versus-returning split. Nothing computes it and
-    -- nothing reads it, so it is always false; deriving it at ingest would cost
-    -- a lookup per click for a number no surface shows.
+    -- Dormant, and it stayed dormant through Phase 2 (D12). Intended as "first
+    -- time this visitor_hash was seen for this link today", for a
+    -- new-versus-returning split. Nothing computes it and nothing reads it, so
+    -- it is always false; deriving it at ingest would cost a lookup per click
+    -- for a number no surface shows.
+    --
+    -- This said "for Phase 2's split" until 0.2.0, which read as scheduled work
+    -- rather than as a column waiting for a reason. It is under partition
+    -- maintenance and retention like every other column here, so whenever
+    -- something does write it, those guarantees already apply.
     is_first_visit boolean    NOT NULL DEFAULT false,
 
     country       text,
