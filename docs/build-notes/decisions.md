@@ -179,6 +179,7 @@ file. Append a row when you append an entry.
 | [M45, a stalled cache paid for twice, and a sentence that was never true of every link](#2026-08-05--m45-a-stalled-cache-paid-for-twice-and-a-sentence-that-was-never-true-of-every-link) | F9 and F98 — kept apart by the queue hygiene, worked together because they convict the same two sentences. F9's second timeout bought nothing, and the suppression is on the resolver rather than threaded through the call because `store` runs inside a singleflight whose leader may be a different request; window is `DBTimeout`, and it is **deliberately not a circuit breaker** — reads are how the cache recovers. Timing test at 400ms so the margin cannot be closed by a scheduler. **F98 closes as prose because every code fix is worse than the defect**: async answers after the destination is chosen, skipping silently stops a shipped rule matching. And why `docs/slo.md` needed nothing — the measurement was right and the sentence beside it was wrong, which is the opposite of the usual failure |
 | [M45, an accessor nobody retrofitted and a reason that was never the reason](#2026-08-05--m45-an-accessor-nobody-retrofitted-and-a-reason-that-was-never-the-reason) | F65 and F41. **The fix for F65 is not the accessor, because the accessor already existed** — M35 added `log()` and the two calls that predated it went round it, so the guard is a scan for `.Logger.<method>(…)` and the accessor's own comment had been claiming the property nothing enforced. F41: the conclusion holds and the stated reason is false — a rolling restart has both builds serving at once, which the *"nobody can have switched blocking on yet"* clause assumes away, and the row reproduced three 302s to a bot. **No bump, by arithmetic**: 0.1.0 keys on v1, this build on v3, and every bump since lands in the same unreleased minor, so the residue is empty for F132's reason. The comment now carries the rule instead of the excuse |
 | [M45, three things the tree carried and nothing read](#2026-08-05--m45-three-things-the-tree-carried-and-nothing-read) | F55, F16 and F110 — a duplicated function, a list, and a column. F55 deleted rather than synced, with the surviving test checked as a strict superset first. **F16's fix is that nobody maintains the list**: the classifier is told the dashboard set at boot from `(*appMux).mounts()`, D97's argument a second time, and the row's proposed source had itself been deleted by F85 for the same drift — the test drives from `mounts()` too, so neither can fall behind. Nine routes were counted as short links; the SLO series was never affected and `docs/slo.md` needed nothing. F110 is **an undocumented choice riding on a documented one** — the query explains why the log is not *filtered* by workspace and says nothing about not *returning* it, and that reasoning does not reach the second question |
+| [M45, a table that was not the record it claimed, and a guard with no inputs](#2026-08-05--m45-a-table-that-was-not-the-record-it-claimed-and-a-guard-with-no-inputs) | F66 and F130. **Seven decisions were missing, not four** — D49-D52 as filed, plus D97-D99 the table had also never gained, folded in rather than filed twice; the collision this row is about had already cost M35 a renumbering across eleven files. Rows state the decision, because a table of titles is not the record the README calls it. F130 is **F39's fix with nothing holding it correct**: every page struct embeds exactly shell, so the branches ran against zero inputs and the revert left the package green. Synthetic fixtures are forced rather than chosen — the package contains none of the shapes, which is the finding — and the fifth case is the arrangement the guard must not flag |
 
 ---
 
@@ -15527,3 +15528,56 @@ link-scoped action such as `link.bot_blocking_changed` names only the link.
 The test asserts the organization-level case beside the workspace one, because a
 fix that turned an absent workspace into a zero uuid would read as a workspace
 nobody can look up — which is worse than the field being missing.
+
+## 2026-08-05 — M45, a table that was not the record it claimed, and a guard with no inputs
+
+[F66](deferred-findings.md) and [F130](deferred-findings.md). Both are a
+mechanism that reads as authoritative and is not being kept true by anything.
+
+### F66: seven decisions, not four
+
+`phase-details/README.md` calls Plan.md's post-finalisation table the place
+decisions are *"recorded in full"*. M34's four — D49 through D52 — were never
+written there, and the cost was already paid once: M35's orchestrator read that
+table to find the next free number, found it authoritative, and minted D49 and
+D50 a second time. The collision was resolved by renumbering M35's pair to
+D53/D54 across Plan.md, decisions.md, `docs/SECURITY.md`, six Go files, two
+embedded HTML pages and an integration test.
+
+**Three more were missing than the row knew about.** The table stopped at D96
+while D97, D98 and D99 all existed in decisions.md. Those were noted as work for
+M45's documentation pass, and they went in here instead: it is the same absence,
+and filing the identical gap twice would be the tracker doing the thing this row
+is about.
+
+Each row states the decision rather than restating its title, because a table of
+titles is not a record and the README's claim is what makes this a finding rather
+than a preference.
+
+### F130: F39's own finding, one level up
+
+`TestNoPageDataStructShadowsTheShell` reads the real package. Every page struct
+in it embeds exactly `shell` and nothing else — so the branch F39 added, which
+records an embedded field as *declared*, and the walk through non-shell
+promotions, both ran against **zero inputs**. F130 proved it by performing the
+revert: delete the three lines and the whole package stays green.
+
+That is the same shape as the finding that produced them. F39 was a guard
+believed to work; this is that guard's fix believed to work, with nothing that
+fails if it stops.
+
+The inputs are synthetic, and that is forced rather than chosen. The package
+contains none of the shapes — which *is* the finding — so nothing read off the
+tree could exercise the branches. The fixtures carry the four shapes the code's
+own comments claim to defend against, including the two that are silent because
+there is no field name to read: an embedded type whose *name* collides with a
+shell field, and an embedded pointer to a qualified type where the `*` and the
+package qualifier are dropped.
+
+The fifth case is the one the guard must **not** flag — a page reaching shell
+through an intermediate struct. Inheriting the shell's fields is what pages are
+for, and a guard that rejected the arrangement it exists to allow would be worse
+than one that checks nothing.
+
+Verified by performing F130's revert again afterwards: it now fails two cases by
+name, where before it changed nothing.
