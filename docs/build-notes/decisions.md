@@ -188,6 +188,7 @@ file. Append a row when you append an entry.
 | [M45, building D102, and a test that had been measuring two things at once](#2026-08-05--m45-building-d102-and-a-test-that-had-been-measuring-two-things-at-once) | F105. Both halves of the predicate in all three queries, because a filter in two of them leaves the bell counting rows the page will not show, and the count's predicate has to match the partial index character for character. **The interesting part is a test that broke on the difference rather than on a defect**: it measured *who was notified* by counting what they could see, which were the same number until D102 made them two questions. Fixed by saying where the reader is standing and asserting per workspace — the summed version produced 6 where 5 was expected, because organization-level news is visible from both, and that is the sum being the wrong instrument rather than an off-by-one. The result asserts the IS NULL half from a workspace the notification says nothing about, which the old shape could not state |
 | [A command that chooses a loop](#2026-08-05--a-command-that-chooses-a-loop-and-the-backlog-that-had-nothing-consuming-it) | W11, widened by the owner. `/work-on-phase` becomes `/work phase`, routing moves into its own file, and the process backlog gets a loop that consumes it. Why the kind is the last token, why an unknown target prompts instead of matching the nearest, why `--revalidate` touches routing only, and why the workflow loop is the third thing in this repository that is not delegated. Also what the command cannot do: cross-repository dispatch resolves nothing, and the reason is that the only globally visible place to put a command is untracked |
 | [Two stops, one of which was only ever a sentence](#2026-08-05--two-stops-one-of-which-was-only-ever-a-sentence) | W9. `/stop` exists. Why it takes no arguments and refuses rather than interprets, why it reconciles the note against the tree instead of against a worker's report, and why it rewrites nothing when no loop is running. The checkpoint stop stays a phrase here and is W10's |
+| [The second stop becomes a flag](#2026-08-05--the-second-stop-becomes-a-flag-and-the-one-case-where-the-two-stops-disagree) | W10. Why a flag rather than a second command, why the checkpoint needed no redefining despite the note asking, and the one case where the two stops genuinely diverge — with nothing in flight, the immediate stop writes nothing and the deferred stop is already satisfied |
 
 ---
 
@@ -16161,3 +16162,52 @@ makes the deferred stop an immediate one. That distinction arrives with W10.
 Nothing is committed, pushed, or reverted, and uncommitted work stays in the
 tree. Removing it is the owner's call, and a stop command that tidied up would
 be destroying the evidence of where the run got to.
+
+---
+
+## 2026-08-05 — The second stop becomes a flag, and the one case where the two stops disagree
+
+W10, which depended on W9 and follows it by one commit. The owner's note was
+verbatim: *move stop-at-next-checkpoint command to a flag on the existing stop
+command so `/stop --checkpoint` would perform the function*. Carries no milestone
+number.
+
+### A flag, not a second command
+
+The alternative was `/stop-at-checkpoint` beside `/stop`. Two commands would put
+the choice in the command name, where it is invisible until you already know both
+exist — which is the discoverability problem W9 was raised about, reproduced one
+level up. A flag puts both stops in one place, and the argument table is where an
+owner reading `/stop` learns there is a second one.
+
+It also makes the refusal cheaper to state. W9's command refused every argument
+because it could not tell the checkpoint form from a typo. This one has to tell
+them apart anyway, so the refusal narrows to *anything that is not the checkpoint
+flag*, and the reason it refuses rather than assuming is unchanged: the two stops
+differ precisely in what they cost.
+
+### The checkpoint needed no redefining
+
+W10's row asked the question and the answer is no.
+[phase-loop.md](phase-loop.md#stopping-at-the-checkpoint) already defined a
+checkpoint as the end of the landing step and nothing else — not the end of a
+gate, not a worker's report, not a tidy-looking moment mid-build. A flag invokes
+exactly that.
+
+What did change is that there are now two loops, so the definition is stated once
+and points at both landing steps: step 3.9 for a phase, step 3 for the workflow
+loop. That is a consequence of W11 rather than of this row, and it is the first
+place the two loops had to be named together.
+
+### Where the two stops stop agreeing
+
+With no loop running they diverge, and the command says so rather than treating
+*nothing to stop* as one case:
+
+- **Immediate** rewrites nothing. A `.current-task.md` reconciled by a command
+  that stopped nothing asserts an interruption that did not happen, and the next
+  resume reads it as one.
+- **Deferred** is already satisfied. An orchestrator holding a validate step with
+  no worker spawned is at a checkpoint by definition, so the deferred stop is an
+  immediate one — and the report names which it became, because silently
+  becoming the other stop is the substitution this whole design refuses.

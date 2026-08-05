@@ -127,11 +127,10 @@ before the commit. The workflow loop is **not** delegated, and
 
 ### The loop is being stopped
 
-`/stop`, or the phrase it replaces. [phase-loop.md](phase-loop.md#stop-work) is
-still the contract and the command adds nothing to it beyond being invokable. It
-takes no arguments; given any, it stops **nothing** and says so.
-
-Stopping at the checkpoint remains a phrase and not a command.
+`/stop` now, `/stop --checkpoint` after the unit in flight lands. Both are the
+phrases they replace — [phase-loop.md](phase-loop.md#stop-work) is still the
+contract and the command adds nothing to it beyond being invokable. An
+unrecognised argument stops **nothing** and says so.
 
 ### Before completing a commit
 
