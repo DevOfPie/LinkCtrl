@@ -37,11 +37,11 @@ import (
 //
 // An interface with one method, and the implementation is deliberately in
 // another package (internal/dnsx). This package's guard test —
-// TestTheFeedIsTheOnlyWayADestinationLeaves — fails the build on any outbound
-// symbol here at all, because a lookup added to "check the host resolves" would
-// send a user's destination to a nameserver while /feeds went on saying nothing
-// leaves. Custom-domain verification needs DNS and does not need it *here*: this
-// file decides when to ask, and something else does the asking.
+// TestThisPackageOpensNoSocketOfItsOwn — fails the build on any outbound symbol
+// here at all, because a lookup added to "check the host resolves" would send a
+// user's destination to a nameserver that /feeds does not name. Custom-domain
+// verification needs DNS and does not need it *here*: this file decides when to
+// ask, and something else does the asking.
 //
 // The seam earns its place twice over. A test can say exactly what DNS answered,
 // and the demo seeder supplies a lookup that satisfies the challenge for its own
@@ -182,8 +182,15 @@ func (s *Service) VerifyDomain(ctx context.Context, actor *auth.Identity, id uui
 		// It also starts the grace window on a *serving* hostname, which is
 		// correct: a failed check is a failed check, and D70's clock does not
 		// care who asked for it.
-		if _, ferr := s.q.MarkDomainVerificationFailed(ctx,
-			dbgen.MarkDomainVerificationFailedParams{ID: row.ID, VerificationError: reason}); ferr != nil {
+		if _, ferr := s.q.MarkDomainVerificationFailed(ctx, failedWrite(row, reason)); ferr != nil {
+			if errors.Is(ferr, pgx.ErrNoRows) {
+				// The row changed under the check, so this failure is about a name
+				// it no longer carries. Answered as the conflict it is rather than
+				// as the DNS failure it looks like: the sentence below would name
+				// the old hostname and tell whoever renamed the row to publish a
+				// record for a name they have just stopped using.
+				return nil, domainChangedUnderCheck(row.Hostname)
+			}
 			return nil, fmt.Errorf("record failed verification: %w", ferr)
 		}
 		// A validation error rather than a 500: nothing went wrong here, the
@@ -242,6 +249,23 @@ func (s *Service) VerifyDomain(ctx context.Context, actor *auth.Identity, id uui
 func verifiedWrite(row dbgen.Domain) dbgen.MarkDomainVerifiedParams {
 	return dbgen.MarkDomainVerifiedParams{
 		ID: row.ID, Hostname: row.Hostname, VerificationToken: row.VerificationToken,
+	}
+}
+
+// failedWrite is the same conditional write on the failure path (F131).
+//
+// The gap is identical — the same read, the same nameserver holding it open, the
+// same rename able to commit inside it — so the predicate is identical, and the
+// two helpers sit together so that neither can be tightened without the other
+// being read. A failure is not a stop and does not start serving anything, which
+// is why this was left addressed by id when M40's reopening scoped the change to
+// the two writes that do; what it lands on a renamed row is a refusal sentence
+// naming a hostname that row no longer has, and a check watermark it never
+// earned. Neither is reach, and neither is true.
+func failedWrite(row dbgen.Domain, reason string) dbgen.MarkDomainVerificationFailedParams {
+	return dbgen.MarkDomainVerificationFailedParams{
+		ID: row.ID, Hostname: row.Hostname, VerificationToken: row.VerificationToken,
+		VerificationError: reason,
 	}
 }
 
@@ -389,9 +413,20 @@ func (s *Service) ReverifyDomains(ctx context.Context, now time.Time, batch int3
 			continue
 		}
 
-		failed, err := s.q.MarkDomainVerificationFailed(ctx,
-			dbgen.MarkDomainVerificationFailedParams{ID: full.ID, VerificationError: reason})
+		failed, err := s.q.MarkDomainVerificationFailed(ctx, failedWrite(full, reason))
 		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				// Renamed or removed while this lookup was in flight, so the check
+				// that just failed says nothing about the name the row now has.
+				// Logged and skipped for the reason the success path logs and
+				// skips — and returning here is what keeps the grace window below
+				// out of reach of a pass that checked a different hostname.
+				s.log.Warn("a domain changed while its verification was in flight; "+
+					"the failed check was not recorded",
+					slog.String("hostname", full.Hostname),
+					slog.String("domain_id", full.ID.String()))
+				continue
+			}
 			errs = append(errs, fmt.Errorf("record failure for %s: %w", full.Hostname, err))
 			continue
 		}

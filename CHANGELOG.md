@@ -123,6 +123,33 @@ migrations run at boot.
 
 ### Added
 
+- **`lctl instance principal` — see who administers this instance, and hand that
+  over when the account holding it cannot be reached.** The principal is
+  conferred once, on the account that completes `/setup`, and deliberately by
+  nothing else: an operation that could confer it would let one administrator
+  mint another, and the whole point of the permission is that the set of people
+  who may appoint dispute reviewers cannot grow. That left one situation with no
+  answer at all — the founding colleague has left, or its password is lost and
+  this product has no password reset — and the only route was editing the
+  database by hand.
+
+  ```sh
+  $ lctl instance principal show
+  $ lctl instance principal move --to you@example.com
+  ```
+
+  **It moves the principal and cannot add one.** Exactly one account holds it
+  afterwards, checked before the change commits, so the bound survives the
+  repair; reviewers already appointed keep the dispute queue, and nothing inside
+  any organization changes. It refuses under `APP_ENV=production` without
+  `--force`, as `lctl seed` and `lctl demo` do, and it writes an instance-wide
+  audit record with the actor recorded as `system` — nobody signed in to make it.
+
+  Anybody who can run this could already have written to the database directly,
+  which is why it is a command rather than a page: the authority is filesystem
+  access to the box, the same claim `/setup` itself rests on. What is new is that
+  the change is recorded and cannot leave two principals behind.
+
 - **An instance-level principal: somebody who administers the box rather than a
   tenant in it.** Until now every instance-wide reach in this product was guarded
   by a permission granted to the **owner** role — and `owner` is
@@ -1189,6 +1216,20 @@ migrations run at boot.
   There is one now.
 
 ### Fixed
+
+- **A failed custom-domain check could write its refusal onto a hostname it never
+  checked.** Verification reads a row, asks a nameserver about the hostname it
+  read — seconds, against a server the domain's owner runs — and writes the result
+  back. Renaming the domain in that gap is something its owner is entitled to do
+  at any moment, and the successful path already refused to land on a row that had
+  changed. The failing path did not: the new hostname acquired an error message
+  about the old one, shown on the Domains page, and a "last checked" timestamp it
+  had not earned — which pushed it behind every genuinely unchecked registration
+  in the re-verification queue. Both paths now write only onto the row whose name
+  and token were actually proved, and the on-demand check answers *this changed
+  while it was being checked, try again* instead. **No hostname's serving status
+  is affected in either direction**; what was wrong was what the page said and
+  whose turn came next.
 
 - **A timeout the service set on a Redis call did nothing; `REDIS_READ_TIMEOUT`
   was the only thing bounding a stalled cache.** The client was not configured to

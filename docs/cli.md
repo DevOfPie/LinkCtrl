@@ -48,6 +48,8 @@ apikey create      Issue an API key   --user --name --scopes
                                       [--expires-in] [--org-wide]
 apikey list        List a user's API keys                          --user
 apikey revoke      Revoke an API key                         --user --id
+instance principal show   Who administers this instance
+instance principal move   Move that to another account        --to [--force]
 seed               Generate a load-testing dataset  --links --clicks [--reset]
 demo               Fill an instance with demo data              [--reset]
 version            Print version information
@@ -168,6 +170,51 @@ a credential gets stopped when the person holding it cannot be reached. Revoking
 somebody else's writes an `apikey.revoked` audit record; revoking your own does
 not. A key that account may not act on reports not-found rather than refusing, so
 an id cannot be probed.
+
+### `instance principal`
+
+Who administers this instance — appoints and removes the people who work the
+destination-dispute queue, and reads the audit records of acts that belong to no
+organization.
+
+```sh
+$ lctl instance principal show
+ID                                    EMAIL                NAME
+019fb19b-6fa9-7932-9de0-81810c2db7b2  founder@example.com  Founder
+
+$ lctl instance principal move --to you@example.com
+the instance principal is you@example.com
+taken from founder@example.com
+```
+
+**This is the one subcommand that does not act as a named user**, and the reason
+is worth stating rather than hiding. Everything else here resolves an identity
+from `--user` and calls the same service the API does, so an operator cannot use
+`lctl` to escape the permission system. There is no such trick available for
+*who administers the instance*: that authority is deliberately outside the
+permission system, conferred once at `/setup` and by nothing else, so a `--user`
+to act as would be a question about which identity to pretend to be.
+
+What authorizes it is the shell. Whoever runs `lctl` holds the database URL, the
+configuration and the deploy, which is the same claim to the box that `/setup`
+itself rests on — so this reaches a state an operator could already reach with
+`psql`, and reaching it through the service is what makes the audit record exist.
+
+**A move, never an addition.** Exactly one account holds the principal
+afterwards, checked before the change commits. Anything that could produce a
+second one would defeat the bound that makes delegating dispute review safe: the
+first delegatee would appoint the next, and the property is gone in two hops.
+Reviewers already appointed keep the queue, and nothing inside any organization
+changes.
+
+The account must exist; this appoints nobody new and changes no password. Under
+`APP_ENV=production` it refuses without `--force`, as `seed` and `demo` do. The
+change is written to the instance-wide audit log with the actor recorded as
+`system`, because nobody signed in to make it.
+
+Use it when the founding account cannot be reached — a departed colleague, or a
+forgotten password on an instance with no mailer. See
+[operations.md](operations.md#moving-the-instance-principal).
 
 ### `version`
 

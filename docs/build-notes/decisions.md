@@ -170,6 +170,7 @@ file. Append a row when you append an entry.
 | [M45, seven comments that were confidently wrong](#2026-08-04--m45-seven-comments-that-were-confidently-wrong) | F8, F99, F122, F124, F126, F127 and F128 — the cheap comment sweep, no behaviour changed anywhere; why a conclusion whose reason was wrong keeps the conclusion; **F8's mechanism re-measured at the pinned go-redis rather than inherited** — `ContextTimeoutEnabled` is why a context bounds nothing, which becomes F138 rather than a fix; F99's placement kept and argued from the row lock instead of from the link class M36 falsified; F122's three wrong reasons for a behaviour D90 licenses, including the one that inverts for a NULL-workspace key; F124's `/64` as a floor and not a customer; F126's mechanism separated from the property it does have; F127's placement that is not serialization, with no lock added on purpose; and **F128's fork answered in the open** — the sentence narrowed rather than the work equalised, the row's count corrected from three doubled outcomes to four, and what equalising downward would have cost said rather than implied |
 | [M45, the demo flake was the random stream moving, not the minute](#2026-08-04--m45-the-demo-flake-was-the-random-stream-moving-not-the-minute) | D99 — F71 and F74: why a minute boundary was the trigger and not the cause, and what the shared PRNG was multiplying it by; the discard sitting inside a click's own draws, so a dropped click consumed three fewer than a kept one and re-rolled every link and day after it — which is where unequal, unbounded and negative deltas come from; the trigger measured on its own at one click per thirty-seven seconds; the two changes and why neither replaces the other; the history ending at the top of the hour and what that costs the demo; the generation split out so the property is asserted in five seconds rather than through a twenty-second integration test; the four alternatives refused, including freezing the test's clock and generating whole days; the hour-boundary residual priced rather than claimed away; and why F68 is not this |
 | [M45, two bounds that were nothing but a number somebody typed](#2026-08-04--m45-two-bounds-that-were-nothing-but-a-number-somebody-typed) | F137 and F138 — one shape in two subsystems, a value that reads like a bound and is not; **F137's multiplier was the recipient list**, so rate-limiting the route or capping the filer would have left it, and `EveryOwner` was the pre-D98 approximation of "everybody who could act" rather than carelessness; the review half and not the decide half, `EveryOwner` deleted rather than kept beside its replacement, and no fallback for an empty set; what is left after it and why bounding the filing count is a separate change; **F138's option walked call site by call site** — it can only shorten a call, `RedisTimeout` *is* `REDIS_READ_TIMEOUT` so almost every site sees the same number, and the one behaviour that changes is a caller with less than the ceiling left; why the pub/sub path never needed it; and why **neither hand-built defence is removed** — the limiter's timer bounds what the caller waits and the invalidate budget bounds a loop, both measured rather than argued |
+| [M45, an operator's recovery, and three wordings that were short](#2026-08-05--m45-an-operators-recovery-and-three-wordings-that-were-short) | F140, F131, F136 and F139 — why an `lctl` command is not the in-product path D98 forbids, and the three things built rather than asserted: it **moves and cannot add**, checked before the commit; it takes no actor because the authority is the shell, which is the trust `Register` already spends on `/setup`; and the absence of a permission check is held by a tree-wide scan rather than by discipline. Why the audit actor is `system` and why the production guard reads oddly and is still right. F131 as M40's predicate on the path that starts nothing, and the queue-position cost the row understated. F136 and F139 as two enumerations that were both short, the site left for an orchestrator's amendment (F142), and the three F139 sites read and left. And F132, unanswered: its second reason was false when written |
 
 ---
 
@@ -14621,3 +14622,149 @@ invalidated, and now this. Each named a **current holder of a role** where the
 rule was about the role, and each survived because nothing re-reads a milestone
 file once its row says `done`. The review is what re-reads them, which is an
 argument for the `X.9` slot existing rather than for a process nobody would run.
+
+---
+
+## 2026-08-05 — M45, an operator's recovery, and three wordings that were short
+
+Four approved rows off the queue M45's own fix work produced: F140, F131, F136
+and F139. One of them is the only place in this product where an operation is
+authorized by having a shell rather than by holding a permission, and the rest of
+this entry is mostly about why that is not a hole.
+
+### F140: the repair D98 left to `psql`, built as the thing it already trusts
+
+[D98](#2026-08-04--d98-the-instance-level-principal-d38-said-did-not-exist)
+recorded the gap and refused to close it, in one sentence — *adding an operation
+that confers `instance.admin` is precisely what the delegation bound forbids, and
+any in-product recovery path is a variation on it*. That reasoning is right and
+it is about **in-product** paths. It does not reach a command an operator runs on
+the box, and the owner chose that shape.
+
+**`lctl instance principal move --to <email>`**, beside a `show` that answers who
+holds it. Three things make it defensible and each was built rather than
+asserted.
+
+**It moves and cannot add.** The transaction confers all four
+`InstancePrincipalScopes` on the target, withdraws all four from every other
+holder, and then re-reads the holders of `instance.admin` before committing.
+Anything but exactly the named account and it refuses, having changed nothing.
+That is D98's bound — *the set of people who may delegate cannot grow* — as a
+check rather than a claim, and it is what separates this from the operation D98
+forbids. The direction is migration 03400's: the permission leaves a set and
+lands on one person, so nobody gains reach.
+
+**Its authority is the shell, so it asks for no identity.** `MovePrincipal` takes
+no `*auth.Identity` and calls no `Can`. That is deliberate to the point of being
+the design: whoever runs `lctl` chooses which account to name, so a permission
+check there would be theatre — and worse, it would read as an in-product
+authorization and invite somebody to hang a route off it. The trust is the one
+`internal/auth`'s `Register` already spends on the whole setup flow, in its own
+words: *the first user is trusted by construction: they had filesystem or deploy
+access to reach the setup page*. Reaching this state needed the database a moment
+ago; it needs the database now. Nothing widened.
+
+The absence of a check is safe **only while nothing routes there**, which is a
+property of the tree rather than of the file, so it is a test:
+`TestThePrincipalMoveIsReachableFromTheShellAndNowhereElse` walks every non-test
+`.go` file outside `internal/instance` and `cmd/lctl` and fails on the symbol
+appearing at all. Blunt, like the sibling scan in `internal/link` — it matches a
+comment as readily as a call, which costs a sentence somebody rewords and buys a
+rule no indirection defeats. A handler calling this would be a strictly worse
+version of the gap the row was filed about: a takeover behind no credential.
+
+**The audit actor is `system`, and that is an answer rather than a gap.** Nobody
+signed in. Naming the outgoing principal would put an address in the column that
+answers *who did this* for the person least likely to have done it — the account
+being moved off is usually the one nobody can reach. The record carries both ends
+and `"via": "lctl"`, is instance-wide for the reason every write in that package
+is, and existing at all is half of why the command was worth building instead of
+documenting the `INSERT`.
+
+Guarded like `lctl seed` and `lctl demo`: refused under `APP_ENV=production`
+without `--force`. That guard reads oddly here at first, because production is
+exactly where the command is needed — which is the point. It asks rather than
+refuses, and what it stops is the up-arrow in the wrong terminal, which is the
+same thing it stops for the other two. The test asserts all three carry it rather
+than that this one does, because the failure worth catching is the fourth
+destructive subcommand copying a pattern the guard has already been dropped from.
+
+No migration: the four queries this needs already existed. What it does not do is
+also worth recording — it registers nobody, changes no password, and leaves every
+appointed reviewer holding the queue, because a handover of who appoints is not a
+purge of who was appointed.
+
+[F141](deferred-findings.md), filed the day before, is why this is worth more
+than the *Minor* its own row carries: there is no account recovery in this
+product, so the principal's password and the principal are one thing to lose.
+
+### F131: the same predicate, on the path that does not start serving
+
+M40's reopening scoped the conditional write to the two sites that begin serving
+a hostname, which was the right scope for the reach it was closing and left the
+failure path addressed by id. The gap underneath is identical — the same read,
+the same nameserver holding it open for as long as its operator likes, the same
+rename able to commit inside it — so the predicate is now identical too, and
+`failedWrite` sits beside `verifiedWrite` so neither can be tightened without the
+other being read.
+
+What a late failure lands on a renamed row is not reach, and the row says so.
+It is two lies: a `verification_error` naming the old hostname, rendered on the
+Domains page against the new one, and a `verification_checked_at` the new name
+never earned. **The second is slightly wider than the row states.** That column
+is what `verificationWorkList` orders NULLS FIRST, so the watermark moves the
+renamed row out of the head of the pending queue — a name nobody has ever checked
+gets checked later for having been renamed, which is the same queue-position
+argument `TestServingHostnamesAreCheckedBeforePendingOnes` was written for,
+arriving from the other direction.
+
+`UnverifyDomain` needed nothing. Its own `verified_at IS NOT NULL` already made a
+late unverify a zero-row write, and it is now unreachable on that path as well,
+because the failed write returns first. The on-demand path answers the conflict
+the success path already answers rather than *publish a TXT record at …*, which
+named a hostname the caller had just stopped using.
+
+### F136 and F139: two enumerations, both short, both checked
+
+Neither is behaviour and both are the class [F122](deferred-findings.md) is
+about — a sentence that costs a reader the wrong belief. They are recorded
+together because they made the same mistake and it is the mistake F122's own
+closure warned about.
+
+**F136's four sites were five.** The fifth is the `t.Errorf` inside the test
+itself, which printed *the reputation feed is the one thing in this program that
+sends a destination anywhere* — the sentence the row calls false, in the output
+its failure produces. `TestTheFeedIsTheOnlyWayADestinationLeaves` is now
+`TestThisPackageOpensNoSocketOfItsOwn`, which is the narrower and still-true
+claim the row itself identifies: the scan finds no outbound symbol in
+`internal/link`, and `emitLink` hands the raw destination to the webhook queue
+from that same package, with the dial in `internal/webhook`. `internal/dnsx` was
+read in the same pass as the row asked and was corrected too — it was defensible
+about what the guard prevents and not about `/feeds`, which has named two
+channels since F135.
+
+One site was found and **deliberately not fixed**.
+`TestNoDestinationLeavesAnInstanceWithNoFeed` over-claims identically and is
+named after [m32.md](phase-details/m32.md)'s own first bullet, so renaming the
+test without the bullet detaches the two — and the bullet is an
+[amendment](phase-loop.md#amending-a-bullet) only the orchestrator may make.
+Filed as F142 rather than done quietly or left unrecorded.
+
+**F139's five sites were seven**, found by the sweep F122's closure says to run
+instead of trusting the list. The two additions are `POST /api/v1/api-keys`'s
+operation description and `auth.CreateAPIKeyInput.OrgWide` — the same short-form
+claim, one of them published. Three more were read and left, because *follows its
+owner* is the qualifier in verb form and is the phrasing F122's own repair
+adopted: the key form's help text, the M44 CHANGELOG entry, and
+`MayCreateOrgWide`. D90 is untouched in both directions.
+
+### What is not here
+
+**F132 is unanswered and is a prompt.** Its second stated reason — that nothing
+in the tree records that closing F77 left live rows behind — was false when it
+was written: `Plan.md`'s known-limitation table carries that row verbatim, added
+by 98cc6de, which is F77's own closing commit. Its first reason stands and is
+under-recorded. What it asks for cannot be built without deciding what happens to
+a stored link whose folded destination the tiers would now refuse, and Plan.md
+puts that decision out of Phase 2 in two places while calling it *a separate job
+and a separate decision*. The prompt is in the note, unanswered.

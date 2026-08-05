@@ -259,6 +259,156 @@ func TestThePrincipalDelegatesReviewAndADelegateCannotDelegateOnwards(t *testing
 	}
 }
 
+// TestTheOperatorCanMoveThePrincipalAndTheSetNeverGrows is F140.
+//
+// D98 leaves the principal conferrable at setup and nowhere else, `instance.admin`
+// out of `InstanceGrantable` so no holder can mint another, and nothing in the
+// product deleting a `users` row. What that leaves reachable is an operator losing
+// the *account*: a forgotten password with no mailer, or a colleague who has left.
+// F141 established there is no account recovery in this product at all, so the
+// principal's password and the principal are one thing to lose, and the only
+// repair was `psql`.
+//
+// The claim under test is that the repair is now a command **and is still a
+// move**. The set of accounts that may appoint reviewers is one before and one
+// after; anything else would defeat the bound in the same breath as closing the
+// gap, since a second principal appoints a third.
+//
+// It drives the service rather than the CLI because the CLI is a flag parser over
+// this call — what it adds is the production guard, which is `lctl seed`'s and
+// asserted where that one is.
+func TestTheOperatorCanMoveThePrincipalAndTheSetNeverGrows(t *testing.T) {
+	f := newInstanceFixture(t)
+	f.register("successor@example.com")
+	f.register("reviewer@example.com")
+
+	// A reviewer the outgoing principal appointed. What happens to them is half
+	// the claim: they were given the queue, not the box, and a handover of the box
+	// must not take the queue off them.
+	if _, err := f.svc.GrantReviewer(t.Context(), f.principal, "reviewer@example.com"); err != nil {
+		t.Fatalf("appoint a reviewer: %v", err)
+	}
+
+	before, err := f.svc.Principals(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before) != 1 || before[0].Email != "founder@example.com" {
+		t.Fatalf("the instance starts with %d principals, want the founder alone; "+
+			"this test asserts nothing about a move otherwise", len(before))
+	}
+
+	moved, err := f.svc.MovePrincipal(t.Context(), "successor@example.com")
+	if err != nil {
+		t.Fatalf("move the principal: %v", err)
+	}
+	if moved.To.Email != "successor@example.com" {
+		t.Errorf("the move reports %s as the new principal", moved.To.Email)
+	}
+	if len(moved.From) != 1 || moved.From[0].Email != "founder@example.com" {
+		t.Errorf("the move reports %v as having lost it; who lost it is the question "+
+			"an operator asks afterwards", moved.From)
+	}
+
+	successor := f.identity("successor@example.com")
+	for _, slug := range auth.InstancePrincipalScopes {
+		if !successor.Can(slug) {
+			t.Errorf("the new principal does not hold %s. The principal is the four "+
+				"together — handing over three leaves somebody who can appoint "+
+				"reviewers and cannot see the queue they are appointed to.", slug)
+		}
+	}
+	founder := f.identity("founder@example.com")
+	for _, slug := range auth.InstancePrincipalScopes {
+		if founder.Can(slug) {
+			t.Errorf("the outgoing principal still holds %s. A move that only adds is "+
+				"the operation D98 forbids: two accounts able to appoint reviewers is "+
+				"the unbounded spread the delegation bound exists to stop.", slug)
+		}
+	}
+
+	// The bound, read back out of the table rather than off the return value.
+	holders := f.count(
+		`SELECT count(*) FROM instance_grants ig JOIN permissions p ON p.id = ig.permission_id
+		  WHERE p.slug = $1`, auth.PermInstanceAdmin)
+	if holders != 1 {
+		t.Fatalf("%d accounts hold %s after a move, want exactly 1",
+			holders, auth.PermInstanceAdmin)
+	}
+
+	reviewer := f.identity("reviewer@example.com")
+	if !reviewer.Can(auth.PermDestinationsReview) || !reviewer.Can(auth.PermDestinationsDecide) {
+		t.Error("the appointed reviewer lost the queue when the box changed hands. " +
+			"Moving the principal is a handover of who appoints, not a purge of who " +
+			"was appointed.")
+	}
+	if founder.Role != "owner" {
+		t.Errorf("the outgoing principal's organization role became %q; a move must "+
+			"touch nothing inside any organization", founder.Role)
+	}
+
+	// The record. Instance-wide because it decides who administers the box, and
+	// actor `system` because nobody signed in to do it — the authority was the
+	// shell, and naming either end of the transfer as the actor would put an
+	// address in the column that answers *who did this* for somebody who did not.
+	var label string
+	var actorID, orgID *uuid.UUID
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT actor_label, actor_user_id, organization_id FROM audit_logs
+		  WHERE action = $1`, instance.ActionPrincipalMoved).
+		Scan(&label, &actorID, &orgID); err != nil {
+		t.Fatalf("no audit record for the move: %v. Going through the service rather "+
+			"than the database is half the point of building the command.", err)
+	}
+	if label != "system" || actorID != nil {
+		t.Errorf("the record names actor %q/%v; nobody in the product performed this",
+			label, actorID)
+	}
+	if orgID != nil {
+		t.Error("the move is filed under an organization. It decides who administers " +
+			"every organization on the instance and belongs to none of them.")
+	}
+}
+
+// TestMovingThePrincipalIsIdempotentAndRefusesAnAddressNobodyHas.
+//
+// Both halves are about an operator who is repairing something at a shell with
+// incomplete information, which is the only situation this command is ever used
+// in. Re-running it must not read as a refusal, and a typo must not leave the
+// instance in a state somebody has to diagnose.
+func TestMovingThePrincipalIsIdempotentAndRefusesAnAddressNobodyHas(t *testing.T) {
+	f := newInstanceFixture(t)
+
+	if _, err := f.svc.MovePrincipal(t.Context(), "founder@example.com"); err != nil {
+		t.Fatalf("moving the principal onto the account that already holds it: %v. "+
+			"Two administrators doing the same obvious thing must not produce "+
+			"something that reads like a refusal.", err)
+	}
+	if !f.identity("founder@example.com").Can(auth.PermInstanceAdmin) {
+		t.Fatal("re-running the move took the principal off the account it was " +
+			"moving it onto")
+	}
+
+	var ve domain.ValidationErrors
+	_, err := f.svc.MovePrincipal(t.Context(), "nobody@example.com")
+	if !errors.As(err, &ve) || ve[0].Code != "unknown" {
+		t.Errorf("moving onto an address nobody has returned %v; it must be a "+
+			"validation refusal naming the field, not a server error", err)
+	}
+	holders := f.count(
+		`SELECT count(*) FROM instance_grants ig JOIN permissions p ON p.id = ig.permission_id
+		  WHERE p.slug = $1`, auth.PermInstanceAdmin)
+	if holders != 1 {
+		t.Errorf("%d accounts hold %s after a refused move, want the 1 that held it "+
+			"before", holders, auth.PermInstanceAdmin)
+	}
+	if n := f.count(`SELECT count(*) FROM audit_logs WHERE action = $1`,
+		instance.ActionPrincipalMoved); n != 1 {
+		t.Errorf("%d audit records for two calls, one of which was refused and one of "+
+			"which changed nothing observable; want the 1 the successful call wrote", n)
+	}
+}
+
 // TestAnInstanceGrantSurvivesLosingEveryOrganization.
 //
 // D36 made "belongs to nothing" a state a signed-in account can be in, and every

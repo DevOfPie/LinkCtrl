@@ -815,6 +815,23 @@ func (f *domainFixture) state(id uuid.UUID) (hostname string, verified bool) {
 	return hostname, at != nil
 }
 
+// checkState reads what the row says about the last *failed* check.
+//
+// The two columns a failure writes, and neither is reach — which is why they are
+// read straight out of the table rather than off the domain the service returns:
+// the sentence is rendered on the Domains page and the watermark decides the
+// order of the re-verification queue, so a value either of them should not hold
+// is invisible to a caller and visible to whoever owns the hostname.
+func (f *domainFixture) checkState(id uuid.UUID) (sentence *string, checked *time.Time) {
+	f.t.Helper()
+	if err := f.pool.QueryRow(f.t.Context(),
+		`SELECT verification_error, verification_checked_at FROM domains WHERE id = $1`, id).
+		Scan(&sentence, &checked); err != nil {
+		f.t.Fatal(err)
+	}
+	return sentence, checked
+}
+
 // verifiedEvents is every hostname the audit log claims was verified.
 func (f *domainFixture) verifiedEvents() []string {
 	f.t.Helper()
@@ -925,6 +942,98 @@ func TestTheJobCannotVerifyANameItDidNotCheck(t *testing.T) {
 	}
 	for _, h := range f.verifiedEvents() {
 		t.Errorf("the audit log records %s as verified; nothing was", h)
+	}
+}
+
+// TestARenameCannotInheritAFailureInFlight is F131: the same claim on the
+// failure path, which was left addressed by id when the reopening scoped the
+// conditional write to the two sites that start serving.
+//
+// A failure grants nothing, so what a late write lands here is not reach. It is
+// two lies about a name nobody checked — a `verification_error` sentence naming
+// the hostname the row used to have, rendered on the Domains page beside the one
+// it has now, and a `verification_checked_at` watermark that moves the row out of
+// the head of the pending queue `verificationWorkList` orders NULLs first. So the
+// name that has genuinely never been checked is checked later for having been
+// renamed, and the page tells its owner to publish a record for a name they have
+// just stopped using.
+//
+// Both columns are NULL after a rename, which is what makes the assertion
+// possible: anything in either of them was written by the check of a different
+// hostname.
+func TestARenameCannotInheritAFailureInFlight(t *testing.T) {
+	f := newDomains(t)
+	d := f.register(customHost)
+	// The challenge is deliberately not published, so the check fails.
+
+	f.zone.interrupt(func() {
+		if _, err := f.links.RenameDomain(t.Context(), f.owner, d.ID, otherCustomHost); err != nil {
+			t.Errorf("the rename this test races against did not happen: %v", err)
+		}
+	})
+
+	_, err := f.links.VerifyDomain(t.Context(), f.owner, d.ID)
+	if err == nil {
+		t.Fatal("the check reported success; nothing was published for either name")
+	}
+	var ve domain.ValidationErrors
+	if !errors.As(err, &ve) || ve[0].Code != "conflict" {
+		t.Errorf("the refusal was %v; a row that changed under the check is a conflict, "+
+			"not an unverified hostname — the caller is being told to publish a record "+
+			"for a name this row no longer has", err)
+	}
+
+	hostname, _ := f.state(d.ID)
+	if hostname != otherCustomHost {
+		t.Fatalf("the row holds %s, so this test raced nothing", hostname)
+	}
+	sentence, checked := f.checkState(d.ID)
+	if sentence != nil {
+		t.Errorf("%s carries the sentence %q, which was written by a check of %s",
+			otherCustomHost, *sentence, customHost)
+	}
+	if checked != nil {
+		t.Errorf("%s is watermarked as checked at %s; the only lookup this test ran "+
+			"asked about %s", otherCustomHost, checked.UTC(), customHost)
+	}
+}
+
+// TestTheJobCannotFailANameItDidNotCheck is F131 on the leader's path, which
+// reaches every registered hostname on the instance rather than one the caller
+// owns — and which is the path the watermark actually matters on, because it is
+// the one that decides whose turn is next.
+func TestTheJobCannotFailANameItDidNotCheck(t *testing.T) {
+	f := newDomains(t)
+	d := f.register(customHost)
+
+	f.zone.interrupt(func() {
+		if _, err := f.links.RenameDomain(t.Context(), f.owner, d.ID, otherCustomHost); err != nil {
+			t.Errorf("the rename this test races against did not happen: %v", err)
+		}
+	})
+
+	sum, err := f.links.ReverifyDomains(t.Context(), time.Now(), 100)
+	if err != nil {
+		t.Fatalf("the pass failed rather than declining the write: %v", err)
+	}
+	if sum.Checked != 1 {
+		t.Fatalf("the pass checked %d domains; it was meant to check exactly the one "+
+			"that gets renamed", sum.Checked)
+	}
+
+	hostname, _ := f.state(d.ID)
+	if hostname != otherCustomHost {
+		t.Fatalf("the row holds %s, so this test raced nothing", hostname)
+	}
+	sentence, checked := f.checkState(d.ID)
+	if sentence != nil {
+		t.Errorf("%s carries the sentence %q, which was written by a check of %s",
+			otherCustomHost, *sentence, customHost)
+	}
+	if checked != nil {
+		t.Errorf("%s is watermarked as checked at %s, so it sorts behind every "+
+			"genuinely unchecked registration on the next pass; the only lookup this "+
+			"pass ran asked about %s", otherCustomHost, checked.UTC(), customHost)
 	}
 }
 

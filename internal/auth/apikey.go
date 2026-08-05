@@ -260,10 +260,16 @@ type APIKeyInfo struct {
 	Prefix string    `json:"prefix"`
 	Scopes []string  `json:"scopes"`
 	// OrgWide is the workspace choice made when the key was created: false for
-	// a key bound to one workspace, true for one valid across every workspace in
-	// the organization (a NULL workspace_id). Reported rather than left implicit,
-	// because the two are otherwise indistinguishable in a list and they are not
-	// the same credential.
+	// a key bound to one workspace, true for one not pinned to any (a NULL
+	// workspace_id). Reported rather than left implicit, because the two are
+	// otherwise indistinguishable in a list and they are not the same credential.
+	//
+	// Not pinned is not *all at once*: there is no per-request workspace
+	// selector, so a request made with such a key resolves exactly one workspace
+	// the way a sign-in does, bounded to the organization the key was issued in
+	// (D90). The qualifier is here because leaving it out cost two readers a
+	// high-severity misfiling — F122, and this field is one of the sites F139
+	// found still saying it short.
 	OrgWide    bool       `json:"org_wide"`
 	LastUsedAt *time.Time `json:"last_used_at"`
 	ExpiresAt  *time.Time `json:"expires_at"`
@@ -290,13 +296,15 @@ type CreateAPIKeyInput struct {
 	Name      string
 	Scopes    []string
 	ExpiresAt *time.Time
-	// OrgWide asks for a key valid in every workspace of the organization
-	// instead of only the one its creator was acting in.
+	// OrgWide asks for a key that is not pinned to the workspace its creator was
+	// acting in. Each request still resolves exactly one, the way a sign-in
+	// does, within the organization the key is issued in — see APIKeyInfo.OrgWide
+	// and D90.
 	//
-	// Opt-in, and false is the behaviour every key had before M44. Reaching
-	// every workspace is not something to grant because somebody left a field
-	// blank, and the check behind it is not the ordinary permission check —
-	// see MayCreateOrgWide.
+	// Opt-in, and false is the behaviour every key had before M44. Being able to
+	// act in any of an organization's workspaces is not something to grant
+	// because somebody left a field blank, and the check behind it is not the
+	// ordinary permission check — see MayCreateOrgWide.
 	OrgWide bool
 }
 

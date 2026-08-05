@@ -210,6 +210,18 @@ confer instance-level review on other accounts, at `/disputes` or through
 anybody else**, and cannot read the roster: `instance.admin` is not among the
 scopes a grant confers, so the set of people who may delegate cannot grow.
 
+Nothing in the product moves `instance.admin`, and that leaves the operator with
+the one case the product cannot answer: the founding account is unreachable — a
+colleague who has left, or a lost password on an instance with no mailer and no
+password reset. `lctl instance principal move` is the answer, and it is a command
+rather than a page because its authority is filesystem access to the box, which
+is the same claim `/setup` already rests on. **It moves the principal and cannot
+add one**: exactly one account holds it afterwards, checked before the change
+commits, so the bound above survives the repair. It writes an instance-wide audit
+record whose actor is `system`, because nobody signed in to make it. Anyone who
+can run it could already have edited the database directly; what changes is that
+the edit is now recorded and cannot produce a second principal by accident.
+
 `destinations.decide` and `instance.admin` are kept off every API key by
 `auth.NonDelegableScopes` — a key that can allow a destination could then point
 links at it, and a key that can appoint a reviewer widens its reach by

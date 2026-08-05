@@ -60,14 +60,18 @@ func answering(t *testing.T, body string) (*httptest.Server, *[]asked) {
 }
 
 // TestNoFeedConfiguredMeansNoClient is the first half of the milestone's
-// zero-egress claim, at the only place it can be made structural.
+// no-feed-egress claim, at the only place it can be made structural.
 //
 // Off is not a flag on a client — it is the absence of one. New returns a nil
 // *Client, callers store it in a nil interface, and internal/link's guard is
 // `s.feed == nil`. There is therefore no branch anywhere that could be written
 // the wrong way round and no object holding a URL that something might later
-// call. The other half — that a nil checker really does mean nothing leaves —
-// is asserted end to end in test/integration/feed_test.go.
+// call. The other half — that a nil checker means no destination reaches the
+// feed — is asserted end to end in test/integration/feed_test.go.
+//
+// **Neither half is a claim that nothing leaves** (F136). The feed is one of the
+// two channels /feeds discloses; the other is a workspace's own webhooks, which
+// no operator setting reaches and which this package knows nothing about.
 func TestNoFeedConfiguredMeansNoClient(t *testing.T) {
 	for _, url := range []string{"", "   ", "\t\n"} {
 		c, err := New(Config{URL: url, Name: "Someone", Method: MethodPOST,

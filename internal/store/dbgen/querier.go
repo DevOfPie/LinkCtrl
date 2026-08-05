@@ -1375,6 +1375,24 @@ type Querier interface {
 	// COALESCE keeps the first failure's timestamp, so a run of failures anchors on
 	// when the run began rather than sliding forward with every poll, which would
 	// make the window unreachable.
+	//
+	// **The hostname and the token are in the predicate for the reason
+	// MarkDomainVerified carries them (M40, reopened; F131).** This is the same
+	// read-check-write, over the same gap held open by the same nameserver, and the
+	// rename that commits inside it is the same rename. What a late write lands here
+	// is smaller than what it lands there and it is not nothing: a
+	// `verification_error` sentence naming the *old* hostname, shown on the Domains
+	// page against the new one, and a `verification_checked_at` the new name never
+	// earned — which moves the row out of the head of the pending queue that
+	// `verificationWorkList` orders NULLs first, so the name nobody has checked is
+	// checked later than it should be. Predicating on what was proved makes the late
+	// write affect zero rows, and the caller treats that as the conflict it is.
+	//
+	// It also closes the statement below transitively on the job's path. A failed
+	// check that finds no row to land on returns before UnverifyDomain is reached, so
+	// the grace window cannot expire against a hostname this pass never checked —
+	// UnverifyDomain's own `verified_at IS NOT NULL` was already refusing that write,
+	// and now nothing gets that far to be refused.
 	MarkDomainVerificationFailed(ctx context.Context, arg MarkDomainVerificationFailedParams) (Domain, error)
 	// A successful check, written only onto the row that was actually checked.
 	//

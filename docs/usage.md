@@ -357,8 +357,9 @@ Mint one in the dashboard at `/keys`, or on a headless host with
 stored, so it cannot be recovered afterwards. Lose it, revoke it, mint another.
 
 **Reach.** A key is bound to the workspace you created it in and acts only there.
-The alternative — valid in every workspace of the organization — is the *Reach*
-control on the form, `"org_wide": true` on the API, or `--org-wide` on the CLI. It
+The alternative — not pinned to one, rather than acting in all of them at once —
+is the *Reach* control on the form, `"org_wide": true` on the API, or
+`--org-wide` on the CLI. It
 needs `apikeys.write` held through an **organization-wide** membership: a role you
 hold in one workspace issues keys for that workspace, which is the same rule that
 stops a workspace-scoped admin re-roling an organization-wide member. The key

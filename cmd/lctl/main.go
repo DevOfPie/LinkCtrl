@@ -36,6 +36,8 @@ Commands:
   apikey create      Issue an API key   --user --name --scopes [--expires-in]
   apikey list        List a user's API keys                          --user
   apikey revoke      Revoke an API key                         --user --id
+  instance principal show   Who administers this instance
+  instance principal move   Move that to another account        --to [--force]
   seed               Generate a load-testing dataset  --links --clicks [--reset]
   demo               Fill an instance with demo data              [--reset]
   version            Print version information
@@ -75,6 +77,9 @@ func run(args []string) error {
 
 	case "apikey":
 		return apikeyCmd(args[1:])
+
+	case "instance":
+		return instanceCmd(args[1:])
 
 	case "seed":
 		return seedCmd(args[1:])

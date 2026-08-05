@@ -2,12 +2,12 @@
 //
 // It exists as its own package rather than as a method on the service that uses
 // it, and the reason is a guard test in internal/link: that package decides what
-// a destination may be, and the one thing it is permitted to send anywhere is a
+// a destination may be, and the one thing it is permitted to dial is a
 // reputation-feed check behind an interface an operator opted into. A source
 // scan there fails the build on any outbound symbol at all — net.Dial,
 // http.Client, net.Resolver — because a DNS lookup added to "check the host
-// resolves" would send a user's destination to a nameserver while /feeds went on
-// saying nothing leaves.
+// resolves" would send a user's destination to a nameserver that /feeds does not
+// name. The page names two channels, and a third one is what the scan is for.
 //
 // Custom-domain verification (M40) genuinely needs DNS, so the talking happens
 // here and internal/link holds a one-method interface. The distinction is not

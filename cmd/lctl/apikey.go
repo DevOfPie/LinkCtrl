@@ -109,7 +109,8 @@ func apikeyCreate(args []string) error {
 		// own membership is organization-wide, so this flag asks rather than
 		// grants — which is the point of the CLI acting as a named user at all.
 		orgWide = fs.Bool("org-wide", false,
-			"valid in every workspace of the organization, instead of only the user's current one")
+			"not pinned to one workspace: each request resolves one the way a sign-in does, "+
+				"within the organization the key is issued in")
 	)
 	if err := fs.Parse(args); err != nil {
 		return err

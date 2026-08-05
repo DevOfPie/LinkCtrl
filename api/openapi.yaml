@@ -2084,8 +2084,9 @@ paths:
         grantable. The response is the only time the token is shown.
 
         The key is bound to the workspace you are acting in unless you ask for
-        `org_wide`, which reaches every workspace in the organization and needs
-        an organization-wide membership to grant.
+        `org_wide`, which leaves it unpinned — one workspace still resolved per
+        request, the way a sign-in does, within the organization it was issued
+        in — and needs an organization-wide membership to grant.
       requestBody:
         required: true
         content:
@@ -5357,8 +5358,15 @@ components:
           description: |
             The workspace choice made when the key was created. `false` is a key
             bound to one workspace — the behaviour every key had before 0.2.0.
-            `true` is a key valid in every workspace of the organization, which
-            only somebody with an organization-wide membership can issue.
+            `true` is a key that is not pinned to one, which only somebody with an
+            organization-wide membership can issue.
+
+            Not pinned is not *all at once*. There is no per-request workspace
+            selector, so a request made with such a key resolves exactly one
+            workspace the way a sign-in does — the owner's pinned default,
+            otherwise the one they last used — bounded to the organization the key
+            was issued in. It follows its owner's current choice, a switch made in
+            a browser included.
         last_used_at:
           type: string
           format: date-time
@@ -5504,11 +5512,15 @@ components:
           type: boolean
           default: false
           description: |
-            Ask for a key valid in every workspace of the organization instead of
-            only the one you are acting in. Defaults to `false`, and refused with
-            a `422` on the `org_wide` field unless you hold `apikeys.write`
-            through an **organization-wide** membership — a role held in one
-            workspace issues keys for that workspace.
+            Ask for a key that is not pinned to the workspace you are acting in.
+            Defaults to `false`, and refused with a `422` on the `org_wide` field
+            unless you hold `apikeys.write` through an **organization-wide**
+            membership — a role held in one workspace issues keys for that
+            workspace.
+
+            It does not act in every workspace at once: each request resolves a
+            single workspace the way a sign-in does, bounded to the organization
+            the key is issued in. See `org_wide` on the key itself.
 
     RotateAPIKeyRequest:
       type: object

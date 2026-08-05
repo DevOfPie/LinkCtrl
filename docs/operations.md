@@ -312,27 +312,37 @@ path while it waits.
 
 ### Moving the instance principal
 
-The account that claimed the instance holds `instance.admin`, and there is
-deliberately no operation anywhere that confers it: a principal that could mint
-another principal would defeat the bound that makes delegation safe. Somebody
-holding it appoints reviewers, and reviewers appoint nobody.
+The account that claimed the instance holds `instance.admin`, and no page, API
+route or key confers it: a principal that could mint another principal would
+defeat the bound that makes delegation safe. Somebody holding it appoints
+reviewers, and reviewers appoint nobody.
 
-That leaves one case with no in-product answer — the founding account is gone, or
-was never the operator's. It is a `psql` fix, and it is a fix an operator can
-make because they have the database and the person who lost the account does not:
+That leaves one case — the founding account is gone, or was never the operator's,
+or its password is lost and this product has no password reset. It is the
+operator's to fix, because they have the box and the person who lost the account
+does not:
 
-```sql
-INSERT INTO instance_grants (user_id, permission_id)
-SELECT u.id, p.id
-  FROM users u, permissions p
- WHERE u.email_lower = lower('you@example.com')
-   AND p.slug IN ('instance.admin', 'destinations.review',
-                  'destinations.decide', 'audit.read.instance')
-ON CONFLICT DO NOTHING;
+```sh
+$ lctl instance principal show
+ID                                    EMAIL                NAME
+019fb19b-6fa9-7932-9de0-81810c2db7b2  founder@example.com  Founder
+
+$ lctl instance principal move --to you@example.com
+the instance principal is you@example.com
+taken from founder@example.com
 ```
 
-Withdrawing the old one is the same statement with `DELETE … USING`. The change
-takes effect on that account's next request; nothing is cached.
+**It moves and never adds.** Exactly one account holds the principal afterwards,
+checked before the change commits, so the set of people who can appoint reviewers
+cannot grow — which is why this is a command an operator runs and not a control
+in the dashboard. Reviewers already appointed keep the queue; nothing inside any
+organization changes. On an instance running with `APP_ENV=production` it asks for
+`--force`, exactly as `lctl seed` and `lctl demo` do.
+
+The account has to exist already: this appoints, it does not register anybody and
+it does not change a password. The change takes effect on that account's next
+request, nothing is cached, and it is written to the instance-wide audit log with
+the actor recorded as `system`, because nobody signed in to make it.
 
 
 ## What is not here yet
