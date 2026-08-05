@@ -149,7 +149,7 @@ Then:
 | Tests | Unit and integration green under `-race` |
 | Generated code | If any `.sql` changed: `make sqlc` produces no diff |
 | OpenAPI | If any API surface changed: `make openapi` passes |
-| Docs | Plan.md reflects new truth; decisions.md has the *why* for anything non-obvious. **If the milestone changed what an operator or reader would observe**, `README.md` and `docs/SECURITY.md` say so too — a claim either file makes that the milestone just made false is a failing gate, not cleanup for the phase's documentation pass |
+| Docs | Plan.md reflects new truth; decisions.md has the *why* for anything non-obvious. **If the milestone changed what an operator or reader would observe**, `docs/SECURITY.md` says so too — a claim it makes that the milestone just made false is a failing gate, not cleanup for the phase's documentation pass. **`README.md` is not in this gate (D104).** It describes the *released* product, so a mid-phase commit does not touch it and the phase's features land there at the close, when the tag makes them released. The cost is accepted and stated: this gate no longer catches README drift, because there is no mid-phase README to drift — `CHANGELOG.md`'s `[Unreleased]` section is what carries unreleased work until then, and it is load-bearing for that. |
 | Demo | **If the milestone added something somebody can see**, `cmd/lctl/demo.go` seeds it, so the demo instance shows the feature instead of an empty page where it would be. The rule and its exceptions are in [phase-details/README.md](phase-details/README.md#what-every-milestone-inherits); this row is where it is checked |
 | Links | Every relative link and anchor in tracked `.md` resolves |
 | Scope | **No more than one milestone per commit.** Never bundle two; splitting one across several is fine. Work smaller than a milestone — a process or workflow change — is not a milestone and commits on its own, as soon as it is complete. |
@@ -206,7 +206,7 @@ phase touched.
 | File | Check |
 | --- | --- |
 | `Plan.md` | Build status, milestone rows, scope tables, known limitations all true as of now |
-| `README.md` | Status line, feature claims, "Not built yet" |
+| `README.md` | Status line, feature claims, "Not built yet". **This pass is the only place README changes (D104)**, because it describes the released product and the tag is what releases it. So it is written against what the tag will ship rather than against the branch, and the `[Unreleased]` section of CHANGELOG.md is what it draws from. |
 | `CHANGELOG.md` | Entry for what shipped, with its limitations |
 | `docs/*.md` | Configuration, usage, operations, deployment, CLI, releasing — every documented behaviour still behaves that way |
 | `docs/build-notes/decisions.md` | Append-only. Never edit an entry; a later entry corrects an earlier one |
