@@ -154,6 +154,7 @@ file. Append a row when you append an entry.
 | [M45's triage, and the widest option four times](#2026-08-04--m45s-triage-and-the-widest-option-four-times) | All eleven moderate security rows, the disclosure taught its second channel, the non-security set including the dispute family, and hygiene plus the comment sweep; **F15 and F31 are blocked on D38's missing instance-level principal and that choice is not made here**; why hygiene goes first, and the three rows that cannot be judged on their own terms |
 | [D98, the instance-level principal D38 said did not exist](#2026-08-04--d98-the-instance-level-principal-d38-said-did-not-exist) | The owner's choice over three alternatives, and the two constraints that came with it; why "a change requires a person" is built as a split permission with the decide half non-delegable rather than as a credential-type branch the inherited rule forbids; why a holder may not re-delegate; and why the principal's scopes are enumerated rather than implied |
 | [M45's second triage, a standing rule, and a validation that failed](#2026-08-04--m45s-second-triage-a-standing-rule-and-a-validation-that-failed) | F114 closed approved-but-not-built and why that is a third disposition rather than a dropped row; the owner's standing rule that a recorded abuse path is in a fix milestone's scope by default, and why the recommendation habit it corrects needed correcting; F141 — there is no account recovery in this product at all, why a claims-based review could not see it, and what it does to F140 |
+| [M31's bullet amended, because D98 moved who "the owner" was](#2026-08-05--m31s-bullet-amended-because-d98-moved-who-the-owner-was) | A fact rather than an assertion: the bullet named the holder of review where the rule was about the role, and D98 moved it off the organization owner; why the claim is truer after F137's fix than when it was written; and the class this is the third instance of — a label correct when written, wrong afterwards, surviving because only a review re-reads a done milestone |
 | [M35, which namespace a gate is keyed on](#2026-08-04--m35-which-namespace-a-gate-is-keyed-on) | D94 — three corrections and one amendment: a verified password answers **303** unconditionally and D53's *"answers the 302 itself"* is superseded, with 303 joining `REDIRECT_DEFAULT_STATUS`'s allowed set; the signature and the password bucket keyed on the domain the request arrived on rather than the boot constant; the signed URL minted on the link's own hostname, with an unreadable domain row an error rather than a fallback; HEAD reading the budget without spending it, and what that read costs; why the fix invalidates no signature that ever worked, against a constraint that expected it to; the fixture in which the defect was testable at all |
 | [M42, what one drain costs, and the fix that would have moved the cost rather than removed it](#2026-08-04--m42-what-one-drain-costs-and-the-fix-that-would-have-moved-the-cost-rather-than-removed-it) | D95 — a claimed batch is dialled together and `Drain` waits for it, so one drain costs one attempt and not `DrainBatch` of them; why the WaitGroup is what makes D77's lock trap inapplicable rather than survived; why a webhook goroutine of its own is not a fix, `pg_try_advisory_lock` being session-scoped, and would convert every other job's stall into a skip; what it does to F90 (nothing) and to F91 (unreachable, not fixed); what a receiver now sees |
 | [M43, the queue's own clock, and why the watermark could not be it](#2026-08-04--m43-the-queues-own-clock-and-why-the-watermark-could-not-be-it) | D96 — one column was carrying two facts, and ordering the due query on the firing watermark meant the hundred-and-first enabled rule was never evaluated at all; `last_checked_at` added by 03100 with the due index rebuilt on it; why advancing `last_fired_at` on a no-match run is the tempting fix and breaks `min_count`; one cursor statement a run rather than one a rule, and the three deliberate details in it — no `updated_at`, failed rules stamped too, `WithoutCancel` so a cut-off run keeps what it looked at; why a NULL cursor is the right thing for a new or resumed rule; the test's shape, and why its first assertion is that nothing happened |
@@ -168,6 +169,7 @@ file. Append a row when you append an entry.
 | [M45, the queue showed one host and the button deleted another](#2026-08-04--m45-the-queue-showed-one-host-and-the-button-deleted-another) | F33, with F95 and F125 folded in — the dispute stored the host that was *typed* while `entryToLift` re-ran the candidate walk at decision time, so an owner approved a string the button did not act on and an entry added while the dispute waited could retarget the decision; why the repair is *store the entry at filing* rather than *render it at decision*; why `host` was not rewritten and 01600's index not replaced, and what the second partial index's `blocked_host <> ''` predicate is for; F125 true as written, with **accident** carrying the sentence; **F95's amplification explicitly not closed** — the multiplier is `EveryOwner`, which is F15's question, so the residue becomes F137 and 01600's comment shrinks to a claim the index can keep; and why F114 comes back as a prompt rather than a fix |
 | [M45, seven comments that were confidently wrong](#2026-08-04--m45-seven-comments-that-were-confidently-wrong) | F8, F99, F122, F124, F126, F127 and F128 — the cheap comment sweep, no behaviour changed anywhere; why a conclusion whose reason was wrong keeps the conclusion; **F8's mechanism re-measured at the pinned go-redis rather than inherited** — `ContextTimeoutEnabled` is why a context bounds nothing, which becomes F138 rather than a fix; F99's placement kept and argued from the row lock instead of from the link class M36 falsified; F122's three wrong reasons for a behaviour D90 licenses, including the one that inverts for a NULL-workspace key; F124's `/64` as a floor and not a customer; F126's mechanism separated from the property it does have; F127's placement that is not serialization, with no lock added on purpose; and **F128's fork answered in the open** — the sentence narrowed rather than the work equalised, the row's count corrected from three doubled outcomes to four, and what equalising downward would have cost said rather than implied |
 | [M45, the demo flake was the random stream moving, not the minute](#2026-08-04--m45-the-demo-flake-was-the-random-stream-moving-not-the-minute) | D99 — F71 and F74: why a minute boundary was the trigger and not the cause, and what the shared PRNG was multiplying it by; the discard sitting inside a click's own draws, so a dropped click consumed three fewer than a kept one and re-rolled every link and day after it — which is where unequal, unbounded and negative deltas come from; the trigger measured on its own at one click per thirty-seven seconds; the two changes and why neither replaces the other; the history ending at the top of the hour and what that costs the demo; the generation split out so the property is asserted in five seconds rather than through a twenty-second integration test; the four alternatives refused, including freezing the test's clock and generating whole days; the hour-boundary residual priced rather than claimed away; and why F68 is not this |
+| [M45, two bounds that were nothing but a number somebody typed](#2026-08-04--m45-two-bounds-that-were-nothing-but-a-number-somebody-typed) | F137 and F138 — one shape in two subsystems, a value that reads like a bound and is not; **F137's multiplier was the recipient list**, so rate-limiting the route or capping the filer would have left it, and `EveryOwner` was the pre-D98 approximation of "everybody who could act" rather than carelessness; the review half and not the decide half, `EveryOwner` deleted rather than kept beside its replacement, and no fallback for an empty set; what is left after it and why bounding the filing count is a separate change; **F138's option walked call site by call site** — it can only shorten a call, `RedisTimeout` *is* `REDIS_READ_TIMEOUT` so almost every site sees the same number, and the one behaviour that changes is a caller with less than the ceiling left; why the pub/sub path never needed it; and why **neither hand-built defence is removed** — the limiter's timer bounds what the caller waits and the invalidate budget bounds a loop, both measured rather than argued |
 
 ---
 
@@ -14430,3 +14432,192 @@ m44.9.md requires three things be verified live.
 It also changes F140's weight. The instance principal is one account whose only
 credential is a password, so *lost password* and *lost principal* are the same
 event, and both currently end at `psql`.
+
+## 2026-08-04 — M45, two bounds that were nothing but a number somebody typed
+
+[F137](deferred-findings.md) and [F138](deferred-findings.md). Unrelated
+subsystems, one shape: in each, a value that reads like a bound bounds nothing,
+and the thing actually holding the line is somewhere else entirely.
+
+### F137 — the multiplier was the recipient list, and it had just become nameable
+
+[F33](deferred-findings.md#closed) keyed the one-open-dispute index on the
+blocklist entry a refusal matched, which makes every subdomain of one listed host
+a single decision. It could close nothing for a rule *computed from the URL*:
+`url_credentials` fires on any host carrying userinfo, those disputes store an
+empty `blocked_host`, and 01600's second index skips them on purpose — a shared
+key would let one open homograph dispute lock out every unrelated destination on
+the instance. F33's own test files `https://a@one.example/x` and
+`https://a@two.example/x` and asserts **both succeed**, which is that decision
+written down.
+
+So the number of filings was never going to be the bound, and F137's fix note
+said as much in advance: rate-limiting the route and capping the filer both leave
+the amplification, because the multiplier is `notify.EveryOwner` rather than the
+filer. That is the unusual half of this row. The abuse is not that one account
+can file a lot; it is that each filing's cost is set by **how many other people
+have registered**, which is a quantity neither the filer nor the reviewer
+controls and which an instance running `LINKCTRL_SIGNUP_MODE=open` grows for
+free.
+
+`EveryOwner` walked `ListOrganizationIDs` and told each organization's owners.
+That was not carelessness — before [D98](#2026-08-04--d98-the-instance-level-principal-d38-said-did-not-exist)
+there was no other set to name. D38 had recorded that this product has no
+instance-level principal, the blocklist and its disputes cross every tenant
+(M31), and "everybody who might be able to act" was therefore approximated by
+"every owner of everything". The approximation *was* the amplifier.
+
+D98 introduced the principal, and [M45's build of it](#2026-08-04--m45-building-the-principal-d98-authorized)
+deliberately left `EveryOwner` alone and said so in the open — *"the reviewers
+are now a named set, and the notification fan-out is a different list computed by
+a different function for a different reason. Narrowing it is obviously available
+now in a way it was not before."* This is that narrowing, taken now that the row
+approving it exists rather than folded into the milestone that noticed it.
+
+`EveryReviewer` reads `ListInstanceGrantHolders(destinations.review)`. Three
+details are decisions rather than consequences:
+
+- **The review half, not the decide half.** A reviewer holds both in the ordinary
+  case; the halves are separately revocable, and somebody left with only reading
+  is still somebody who should hear that the queue moved.
+- **`EveryOwner` is deleted rather than kept beside it.** It had exactly one
+  caller. An exported helper meaning *tell every organization owner about an
+  instance-wide thing* is F15's shape with no consumer, and the next feature that
+  needs an instance-wide notification would reach for it. `WarnAuditGrowth` is
+  untouched and unaffected — it walks organizations itself and is
+  [F49](deferred-findings.md), a separate open row about a warning nobody can act
+  on, not about a stranger's reach.
+- **No fallback when the set is empty.** A claimed instance always has one: setup
+  confers the principal in the transaction that creates the first account, and
+  03400 confers it on the earliest surviving account of an instance that already
+  existed. An empty set means an operator revoked every grant, and the honest
+  answer to that is silence rather than a broadcast to people who were removed
+  from the job.
+
+**What is left, said plainly.** One account can still open an unbounded number of
+disputes about computed refusals, and the browser route still carries no limiter.
+That is now an unbounded *queue*, for the people whose job the queue is, and no
+longer an inbox flood for everybody who ever signed up. Bounding the filing count
+is a separate change with its own cost — narrowing `url_credentials` changes what
+M30 refuses, and a per-filer cap needs a knob — and neither is what this row
+asked for.
+
+The test is `TestAFilingReachesTheReviewersAndNobodyElse`, and its shape is the
+argument: two extra self-serve accounts, each the owner of its own organization,
+which is exactly the population the old fan-out swept up. Sabotaged by restoring
+the `EveryOwner` walk — one filing wrote three notifications instead of one, both
+strangers received one, and the run reported six rows where three are correct.
+
+### F138 — the option, and the two defences it does not replace
+
+`internal/platform/redis.Open` never set `ContextTimeoutEnabled`, so go-redis's
+`baseClient.context` handed every socket deadline `context.Background()`
+(`redis.go:1033-1038`, v9.21.0). Every `context.WithTimeout` in this tree wrapped
+around a Redis call was decoration, and `REDIS_READ_TIMEOUT` was the only thing
+bounding a stall. Measured again here rather than inherited: against a listener
+that accepts and never answers, one command carrying a 50ms context cost
+**400.85ms** with `ReadTimeout` 400ms, and **50.32ms** with the option set.
+
+The option is one line. What took the work was establishing what it changes,
+because F138's own note is right that this is the client the redirect path uses.
+
+**It can only shorten a call.** `pool.Conn.deadline` takes the minimum of
+`now+ReadTimeout` and the context's deadline, so `REDIS_READ_TIMEOUT` remains the
+ceiling on every command and no caller can widen past it. Every call site was
+walked and the answer is the same at almost all of them, because
+`Options.RedisTimeout` *is* `REDIS_READ_TIMEOUT`: the resolver's `Get`, its
+`Set`, `retryDelete`'s per-attempt `dctx`, the publish, the returning-visitor
+`SIsMember` and the shared limiter's script all ask for exactly the ceiling, so
+`min` picks the same number it always did. Two ask for more and are unaffected
+for the same reason — the analytics pipeline's five seconds and the readiness
+probe's 750ms were already 50ms on the wire, before this and after it. Two ask
+for nothing at all, and still do: `fromRedis`'s corrective `Del` and
+`sweepRedis`'s walk both go through `context.WithoutCancel`, which drops the
+deadline as well as the cancellation.
+
+So the behaviour that actually changes is one case: **a caller with less than
+`ReadTimeout` left now gets what it asked for.** On the redirect path that is the
+request context, so a lookup starting 240ms into a 250ms budget is bounded by the
+10ms remaining rather than spending 50ms the request does not have. The populate
+is deliberately not in that set — `store` detaches first, so a cache write still
+gets its full budget after the client has gone.
+
+The pub/sub path never needed the option and is untouched by it: `PubSub` reads
+and writes through `cn.WithReader` with the caller's context directly rather than
+through `baseClient.context`, so `ReceiveTimeout` has always meant what it says.
+That matters because the subscriber is the one place a mis-set deadline would be
+silent rather than slow.
+
+**Neither hand-built defence is removed, and that was measured rather than
+argued.** The tempting reading of this row is *the option is what the tree
+hand-builds twice, so delete one of them.* It is wrong on both:
+
+- `internal/ratelimit`'s abandoned goroutine bounds **what the caller waits**,
+  and the socket deadline does not. The same probe measured `Shared.take` at
+  50.46ms without the option and 50.28ms with it — the timer was already the
+  binding constraint. Removing it would make a login endpoint's latency a
+  consequence of go-redis's retry count, backoff and pool behaviour, none of
+  which a socket deadline covers. What the option *does* buy there is real but
+  invisible: the abandoned goroutine now releases its connection in 50ms instead
+  of 400ms.
+- D26's `REDIS_INVALIDATE_BUDGET` bounds a **loop**. Three attempts each
+  entitled to `REDIS_READ_TIMEOUT`, plus the backoff between them, is three times
+  that knob however faithfully each attempt is honoured. The option bounds one
+  attempt; the budget bounds three. The same argument holds for `sweepRedis`,
+  whose walk issues an unbounded number of SCAN/UNLINK pairs.
+
+D26's recorded *reason* does move, and Plan.md's row says so: *"a context
+go-redis will not honour"* was true of the client as configured then and is not
+now. The decision stands on its other leg, which was always the stronger one.
+
+**What this cost in comments.** Six comments in the tree asserted the old
+behaviour as a live fact — the client's own, the limiter's, the resolver's two,
+the publisher's and the returning set's — plus two in the integration tests and
+one paragraph in `docs/configuration.md`. Every one is rewritten to say what is
+true now *and* what was true before, because each of them exists to stop somebody
+re-deriving a defence, and a comment that merely stops being wrong stops carrying
+its reason. `redisProxy.clientAsDeployed` gained the option too: it claims in its
+own doc to build the client `Open` builds, and a helper asserting bounds for a
+client no deployment runs is precisely how [F2](deferred-findings.md#closed)'s
+nine seconds came to be recorded against a deployment that would have seen 215ms.
+
+Two tests, both sabotage-verified against the field they each guard:
+`TestAContextDeadlineBoundsARedisCall` (option removed → 400.84ms against a
+50ms deadline) and `TestReadTimeoutStillCapsAGenerousDeadline`, which asserts the
+ceiling still holds from above (`ReadTimeout` raised to go-redis's 3s default →
+3.01s against a 5s deadline). The second exists because the first would pass just
+as well on a client that had thrown the ceiling away.
+
+## 2026-08-05 — M31's bullet amended, because D98 moved who "the owner" was
+
+Made at M45's step 3.4, on the worker's report and not by it — a worker never
+amends a milestone file. Per [phase-loop.md](phase-loop.md#amending-a-bullet),
+carrying the text as it stood, as amended, and the tree fact that forced it.
+
+**Stood:** *"Owner decisions (allow / uphold) act only on the runtime
+low-confidence list, are audit events, and notify the disputing creator in-app; a
+newly filed dispute notifies **the owner** in-app."*
+
+**Amended:** *"Review decisions … a newly filed dispute notifies **whoever holds
+review** in-app."*
+
+**Tree fact:** `internal/store/migrations/03400_instance_principal.sql` deletes
+`destinations.review` from the `owner` role, and `internal/notify/notify.go:238`
+now answers `EveryReviewer` from the instance grant table. An organization owner
+holds neither the permission nor the notification.
+
+A fact and not an assertion, which is why it is amended rather than prompted. What
+the bullet asserts is that filing a dispute tells the people who will decide it,
+and that is not only still true but **truer than when it was written** — F137's
+whole finding was that it told everybody *except* by that description, because
+before D98 there was no set to name and "every organization owner" was the
+approximation available. The word *owner* was a fact about who held review on
+2026-08-01. D98 moved it, and this file was not touched at the time.
+
+Worth recording as a class rather than a one-off. This is the third label in this
+phase to be correct when written and wrong afterwards — the inherited rule that
+said *"Redirects are 302"*, M35's reopening claiming signatures would be
+invalidated, and now this. Each named a **current holder of a role** where the
+rule was about the role, and each survived because nothing re-reads a milestone
+file once its row says `done`. The review is what re-reads them, which is an
+argument for the `X.9` slot existing rather than for a process nobody would run.

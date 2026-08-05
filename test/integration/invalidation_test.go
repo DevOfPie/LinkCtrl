@@ -214,15 +214,23 @@ func (p *redisProxy) client(t *testing.T) *goredis.Client {
 // clientAsDeployed builds the client internal/platform/redis.Open builds, with
 // the timeouts named rather than inherited, so a test asserting a bound says
 // which configuration it is asserting it for.
+//
+// ContextTimeoutEnabled is part of that and not an optimisation: without it
+// go-redis hands the socket deadline context.Background() and every deadline a
+// caller passes is inert, which is the shipped behaviour this file exists to
+// measure. F138 is the row; a helper that omitted it would assert bounds for a
+// client no deployment runs, which is exactly how F2's nine seconds came to be
+// recorded against a deployment that would have seen 215ms.
 func (p *redisProxy) clientAsDeployed(t *testing.T, dial, read time.Duration) *goredis.Client {
 	t.Helper()
 	c := goredis.NewClient(&goredis.Options{
-		Addr:         p.addr(),
-		DialTimeout:  dial,
-		ReadTimeout:  read,
-		WriteTimeout: read,
-		PoolSize:     50,
-		MinIdleConns: 2,
+		Addr:                  p.addr(),
+		DialTimeout:           dial,
+		ReadTimeout:           read,
+		WriteTimeout:          read,
+		PoolSize:              50,
+		MinIdleConns:          2,
+		ContextTimeoutEnabled: true,
 	})
 	t.Cleanup(func() { _ = c.Close() })
 	return c
@@ -645,8 +653,9 @@ func TestRedirectsSurviveRedisBeingDown(t *testing.T) {
 // bound the other: a server that never answers at all, and a server that
 // answered the handshake and then stopped carrying bytes. Not covered: a dial
 // whose packets are dropped outright, which needs a network this test cannot
-// arrange. That shape is bounded by the per-attempt deadline instead, since a
-// dial — unlike a stalled read — does honour the context it is given.
+// arrange. That shape is bounded by the per-attempt deadline instead, which a
+// dial has always honoured and which since M45 a stalled read honours too
+// (F138) — the budget below is still what bounds three attempts of it.
 func TestAnEditIsBoundedWhenRedisStalls(t *testing.T) {
 	const (
 		readTimeout = 400 * time.Millisecond
@@ -814,12 +823,14 @@ func assertInvalidateDoesNotHang(t *testing.T, when string, invalidate func()) {
 
 // The publish half, on its own, which is the part this milestone owns.
 //
-// A stalled Redis does not honour the short context go-redis is handed, so the
-// only bound that holds is not waiting at all — measured at three seconds of
-// added edit latency before the publish was made fire-and-forget. The delete
-// beside it is slower still and predates this milestone; see deferred finding
-// F2. This asserts the half that was fixed here rather than the total, so it
-// stays meaningful when F2 is eventually addressed.
+// The client here is the bare one, with go-redis's own three-second defaults and
+// no ContextTimeoutEnabled, and that is the point rather than an oversight: it
+// is the worst client this code could be handed, and the assertion is that the
+// publish does not wait on it whatever it is. Measured at three seconds of added
+// edit latency before the publish was made fire-and-forget. The delete beside it
+// is slower still and predates this milestone; see deferred finding F2. This
+// asserts the half that was fixed here rather than the total, so it stays
+// meaningful when F2 is eventually addressed.
 func TestPublishingAnInvalidationDoesNotWaitOnAStalledRedis(t *testing.T) {
 	proxy := newRedisProxy(t)
 	proxy.blackholed(true)

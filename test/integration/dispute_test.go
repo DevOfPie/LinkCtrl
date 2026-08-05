@@ -17,6 +17,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/dispute"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/instance"
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
@@ -123,6 +124,27 @@ func (f *disputeFixture) identity(email string) *auth.Identity {
 	return id
 }
 
+// register makes an ordinary self-serve account, which provisions an
+// organization and makes them its owner.
+//
+// That population is the whole of F137's multiplier: before M45 a filing wrote
+// one notification per organization owner on the instance, so every one of these
+// accounts made a stranger's next dispute cost one more inbox row.
+func (f *disputeFixture) register(email string) *auth.Identity {
+	f.t.Helper()
+	id, err := f.auth.Register(f.ctx, auth.RegisterInput{
+		Email: email, Name: email, Password: disputePassword,
+	})
+	if err != nil {
+		f.t.Fatalf("register %s: %v", email, err)
+	}
+	if id.Role != "owner" {
+		f.t.Fatalf("%s registered as %q; this fixture asserts nothing about the "+
+			"owner fan-out unless they are an owner", email, id.Role)
+	}
+	return id
+}
+
 // editor is somebody who can create links and review nothing.
 func (f *disputeFixture) editor(email string) *auth.Identity {
 	f.t.Helper()
@@ -167,6 +189,18 @@ func (f *disputeFixture) blockedHosts() map[string]string {
 		f.t.Fatal(err)
 	}
 	return out
+}
+
+// filedNotifications counts every dispute.filed row on the instance, whoever it
+// belongs to. It is the fan-out itself rather than one inbox's share of it.
+func (f *disputeFixture) filedNotifications() int {
+	f.t.Helper()
+	var n int
+	if err := f.pool.QueryRow(f.ctx,
+		`SELECT count(*) FROM notifications WHERE kind = $1`, dispute.KindFiled).Scan(&n); err != nil {
+		f.t.Fatal(err)
+	}
+	return n
 }
 
 func (f *disputeFixture) openDisputeCount() int {
@@ -492,9 +526,11 @@ func TestTheEntryLiftedIsTheOneRecordedAtFiling(t *testing.T) {
 // 01600's index comment used to make and could not keep.
 //
 // One blocked row is one decision. Keyed on the typed host, that row admitted a
-// fresh open dispute — and a notification to every owner on the instance — for
-// every distinct subdomain somebody could type, which is unbounded. Keyed on the
-// entry, the second appeal is the same appeal.
+// fresh open dispute — and, at the time, a notification to every owner on the
+// instance — for every distinct subdomain somebody could type, which is
+// unbounded. Keyed on the entry, the second appeal is the same appeal. The
+// recipient half is F137 and is asserted by
+// TestAFilingReachesTheReviewersAndNobodyElse.
 func TestOneOpenDisputePerBlocklistEntry(t *testing.T) {
 	f := newDispute(t)
 	editor := f.editor("editor@example.com")
@@ -507,7 +543,7 @@ func TestOneOpenDisputePerBlocklistEntry(t *testing.T) {
 	if _, err := f.disputes.File(f.ctx, editor, "https://mail.evil.example/y"); !errors.Is(err, domain.ErrConflict) {
 		t.Errorf("a second open dispute about the same blocklist entry returned %v, "+
 			"want a conflict. Every subdomain of a listed host is the same decision "+
-			"and the same notification to every owner on the instance.", err)
+			"and the same notification to the same reviewers.", err)
 	}
 	if n := f.openDisputeCount(); n != 1 {
 		t.Errorf("%d open disputes, want 1", n)
@@ -533,6 +569,81 @@ func TestOneOpenDisputePerBlocklistEntry(t *testing.T) {
 	if _, err := f.disputes.File(f.ctx, editor, "https://a@two.example/x"); err != nil {
 		t.Errorf("a second computed-rule dispute about a different host returned %v; "+
 			"they carry no blocklist entry and must not share one bound", err)
+	}
+}
+
+// TestAFilingReachesTheReviewersAndNobodyElse is F137.
+//
+// F33 keyed the one-open-dispute bound on the blocklist entry that refused the
+// destination, which makes every subdomain of a listed host one decision. A
+// refusal computed from the URL has no entry to key on — `url_credentials` fires
+// on any host carrying userinfo — so those stay bounded by the string that was
+// typed, which is not a bound. That half was left open deliberately: sharing a
+// key across them would let one open homograph dispute lock out every unrelated
+// destination on the instance, and TestOneOpenDisputePerBlocklistEntry asserts
+// it still does not.
+//
+// So what was left to bound was never the number of filings. It was what each
+// one costs, and until M45 each one cost **one inbox row per organization owner
+// on the instance** — a number a stranger grows by registering, and which the
+// filer neither controls nor is charged for. Rate-limiting the route or capping
+// the filer leaves that multiplier exactly where it is.
+//
+// D98 replaced the guess with an answer: the people who can act on a dispute are
+// the holders of destinations.review, and this asserts a filing reaches them and
+// stops there. The two strangers below are owners of their own organizations,
+// which is precisely the population the old fan-out swept up.
+func TestAFilingReachesTheReviewersAndNobodyElse(t *testing.T) {
+	f := newDispute(t)
+	editor := f.editor("editor@example.com")
+	// Two more organizations, each with an owner who has nothing to do with the
+	// instance's dispute queue.
+	first := f.register("first-org@example.com")
+	second := f.register("second-org@example.com")
+
+	// The F137 shape: a rule computed from the URL, so no blocklist entry exists
+	// and no index bounds how many of these one filer may open.
+	if _, err := f.disputes.File(f.ctx, editor, "https://a@one.example/x"); err != nil {
+		t.Fatalf("File: %v", err)
+	}
+
+	// One filing, one notification. Three organization owners exist.
+	if n := f.filedNotifications(); n != 1 {
+		t.Errorf("one filing wrote %d %s notifications on an instance with three "+
+			"organization owners, want 1. The recipient set is the multiplier: a "+
+			"filer who cannot be bounded must not be amplified by how many people "+
+			"have signed up", n, dispute.KindFiled)
+	}
+	if got := len(f.inbox(f.owner.UserID, dispute.KindFiled)); got != 1 {
+		t.Errorf("the reviewer has %d %s notifications, want 1", got, dispute.KindFiled)
+	}
+	for _, stranger := range []*auth.Identity{first, second} {
+		if got := len(f.inbox(stranger.UserID, dispute.KindFiled)); got != 0 {
+			t.Errorf("%s owns an organization and reviews nothing, but has %d %s "+
+				"notifications", stranger.Email, got, dispute.KindFiled)
+		}
+	}
+
+	// And the set is the grant table read live, not a shape fixed at boot:
+	// appointing a reviewer adds them to it, and only them.
+	svc := instance.NewService(f.pool, instance.Config{})
+	if _, err := svc.GrantReviewer(f.ctx, f.owner, first.Email); err != nil {
+		t.Fatalf("GrantReviewer: %v", err)
+	}
+	if _, err := f.disputes.File(f.ctx, editor, "https://a@two.example/x"); err != nil {
+		t.Fatalf("File a second computed-rule dispute: %v", err)
+	}
+	if got := len(f.inbox(first.UserID, dispute.KindFiled)); got != 1 {
+		t.Errorf("a newly appointed reviewer has %d %s notifications from the "+
+			"filing that followed their appointment, want 1", got, dispute.KindFiled)
+	}
+	if got := len(f.inbox(second.UserID, dispute.KindFiled)); got != 0 {
+		t.Errorf("an owner who was not appointed has %d %s notifications, want 0",
+			got, dispute.KindFiled)
+	}
+	if n := f.filedNotifications(); n != 3 {
+		t.Errorf("%d %s notifications after two filings and two reviewers, want 3 "+
+			"(one reviewer for the first, two for the second)", n, dispute.KindFiled)
 	}
 }
 

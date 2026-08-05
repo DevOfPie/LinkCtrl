@@ -158,8 +158,19 @@ something this product does.
 **A low-confidence refusal can be appealed, and the queue is built as an attack
 surface.** Whoever was refused asks for a review — from the link form, or
 `POST /api/v1/disputes` — and the request appears at `/disputes` with a
-notification to the owner, who allows it (the blocklist entry is deleted) or
-upholds it. Both decisions are audit events and both notify the person who asked.
+notification to the reviewers, who allow it (the blocklist entry is deleted) or
+uphold it. Both decisions are audit events and both notify the person who asked.
+
+**A filing notifies the reviewers and nobody else, and that is the bound on it.**
+Filing costs only the permission that would have let you create the link, the
+route carries no rate limiter, and a refusal computed from the URL rather than
+matched against a list row is bounded by the string typed — so the number of
+filings one account can produce is not usefully limited. What is limited is the
+cost of each: before 0.2.0 every filing wrote one notification per organization
+owner on the instance, which on an open-signup instance is a number a stranger
+grows by registering. Since 0.2.0 it is the holders of `destinations.review`, a
+set the instance principal chose. Neither rate-limiting the route nor capping the
+filer would have touched that, because the multiplier was the recipient list.
 
 The queue's whole job is to show an administrator a URL a stranger chose, so:
 

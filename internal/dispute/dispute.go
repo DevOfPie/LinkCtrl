@@ -201,10 +201,12 @@ type Judge interface {
 // Notifier is internal/notify's writing half, as this package needs it.
 //
 // Reviewers, not "owners of an organization": the queue is instance-wide, so the
-// people to tell about a new dispute are everybody who could act on it.
+// people to tell about a new dispute are everybody who could act on it. Until
+// M45 that was the same method spelled `EveryOwner`, which meant every owner of
+// every organization because no other set existed — see EveryReviewer, and F137.
 type Notifier interface {
 	Notify(ctx context.Context, userID uuid.UUID, e notify.Event) error
-	EveryOwner(ctx context.Context) ([]notify.Recipient, error)
+	EveryReviewer(ctx context.Context) ([]notify.Recipient, error)
 	// RecipientByID and Mail are the outcome email (D1's addendum). Mail is a
 	// no-op on an instance with no mailer, so this package never asks whether
 	// one is configured — in-app delivery is the baseline and the mail is the
@@ -684,11 +686,26 @@ func (s *Service) record(
 // it. Failure is logged, never returned: the dispute is filed either way, and
 // refusing the filing because a notification could not be written would lose the
 // thing that matters to keep the thing that reports it.
+//
+// **The recipient set is what bounds this, and nothing else does** (F137).
+// Filing costs `link.PermCreate`, the browser route carries no limiter, and a
+// refusal computed from the URL rather than matched against a blocklist row —
+// `url_credentials` fires on any host with an `a@` prefix — has no entry for
+// 01600's one-open-dispute index to key on, so distinct strings are distinct
+// open disputes without bound. F33 closed the subdomain multiplier by keying the
+// index on the matched entry; it could close nothing for a rule that matches no
+// entry, and the remaining lever was always *how many people each filing
+// reaches*. While that was every organization owner on the instance it was a
+// number that grew with registrations, which is a stranger multiplying their own
+// nuisance by the size of somebody else's user base. It is now the reviewers,
+// which is a set the instance principal chose and can change — so an unbounded
+// number of filings is an unbounded queue for the people whose job the queue is,
+// and not an inbox flood for everyone who ever signed up.
 func (s *Service) tellReviewers(ctx context.Context, d dbgen.DestinationDispute) {
 	if s.notify == nil {
 		return
 	}
-	reviewers, err := s.notify.EveryOwner(ctx)
+	reviewers, err := s.notify.EveryReviewer(ctx)
 	if err != nil {
 		s.log.Warn("dispute filed but reviewers could not be listed", slog.Any("error", err))
 		return

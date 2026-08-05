@@ -68,12 +68,14 @@ type invalidation struct {
 // gain.
 //
 // It does not wait for the result, and that is load-bearing rather than
-// laziness. A stalled Redis — one that accepts the connection and then never
-// answers — does not honour the short context this hands its client: measured
-// against a black-holed server, waiting for the publish added three seconds to
-// an edit. Since the caller has nothing to do with the outcome either way, the
-// bound that actually holds is to not wait at all. Failures are logged from the
-// goroutine, so a broadcast that never landed is still visible.
+// laziness. It was built when a stalled Redis — one that accepts the connection
+// and then never answers — did not honour the short context this hands its
+// client: measured against a black-holed server, waiting for the publish added
+// three seconds to an edit. Since M45 that context binds (F138), so waiting
+// would now cost RedisTimeout instead of three seconds — but the caller still
+// has nothing to do with the outcome either way, so the right amount to wait is
+// still none of it. Failures are logged from the goroutine, so a broadcast that
+// never landed is still visible.
 func (r *Resolver) publish(ctx context.Context, msg invalidation) {
 	if r.redis == nil {
 		return

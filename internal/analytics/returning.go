@@ -143,10 +143,11 @@ func (s *ReturningSet) Seen(
 	}
 
 	// Its own deadline, independent of the request's, exactly as the resolver's
-	// cache read takes one. What actually bounds a Redis that accepts the
-	// connection and then never answers is the client's own ReadTimeout, not
-	// this context — that is M26.6's finding and it has not changed; this is the
-	// budget for the ordinary case.
+	// cache read takes one. Since M45 it binds a Redis that accepts the
+	// connection and then never answers as well as the ordinary case (F138);
+	// before that the client's own ReadTimeout was the only thing that did, and
+	// it still caps this from above — s.timeout is REDIS_READ_TIMEOUT, so the
+	// two numbers are the same one and always have been.
 	rctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
@@ -187,7 +188,11 @@ func (s *ReturningSet) mark(ctx context.Context, marks []returningMark, now time
 	// goroutine, not the hot path, and a flush that gives up too eagerly loses
 	// a whole batch's worth of returning-visitor state. Five seconds against the
 	// thirty this goroutine already allows its Postgres write, so a stalled Redis
-	// cannot become the thing that holds up a flush. What a stall costs is the
+	// cannot become the thing that holds up a flush. It is the budget for the
+	// whole exchange and not the wire: REDIS_READ_TIMEOUT caps each command
+	// underneath it at 50ms whatever this says, before F138 and after it, so the
+	// five seconds is headroom for a slow pipeline rather than patience with a
+	// stalled one. What a stall costs is the
 	// queue filling and the ingester dropping events, which is counted and
 	// alertable and is what a full queue has always done — the redirect path is
 	// never waited on either way.

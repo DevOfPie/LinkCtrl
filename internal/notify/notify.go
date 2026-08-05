@@ -206,38 +206,43 @@ func (r Recipient) Greeting() string {
 	return r.Email
 }
 
-// EveryOwner lists the users to tell about something concerning the *instance*
-// rather than one organization.
+// EveryReviewer lists the users to tell about something concerning the
+// *instance* rather than one organization.
 //
-// The distinction is not decoration. A destination blocklist, and the disputes
-// about it, cross every organization on the box (M31), so the people who can act
-// are the owners of all of them — and telling only the first organization's
-// owners would be silently wrong on any instance with a second one, which is the
-// bug WarnAuditGrowth's comment already names for its own loop.
+// It replaces EveryOwner, which walked every organization on the box and told
+// each one's owners. That was the only recipient set available before D98
+// introduced an instance-level principal — the blocklist and the disputes about
+// it cross every organization (M31), so "everybody who might be able to act" was
+// approximated by "every owner of everything". The approximation was the
+// amplifier in [F137]: one filer could put an unbounded number of disputes in
+// front of a recipient list that grows with every registration on an instance
+// running LINKCTRL_SIGNUP_MODE=open, and neither rate-limiting the filer nor
+// capping the queue touches a multiplier that is the recipient list.
 //
-// Deduplicated by user, because one account can own two organizations and would
-// otherwise receive the same notification twice.
-func (s *Service) EveryOwner(ctx context.Context) ([]Recipient, error) {
-	orgs, err := s.q.ListOrganizationIDs(ctx)
+// [F137]: ../../docs/build-notes/deferred-findings.md
+//
+// Since D98 the people who can act are a named set, so this asks who they are
+// rather than guessing. It reads the review half rather than the decide half:
+// a reviewer holds both in the ordinary case, and the one who has been left with
+// only reading is still somebody who should hear that the queue moved.
+//
+// No deduplication, unlike the loop it replaces: a grant is one row per
+// (user, permission), so the query cannot return an account twice.
+//
+// It is never empty on a claimed instance. The setup flow confers the principal
+// in the same transaction that creates the first account, and migration 03400
+// confers it on the earliest surviving account of an instance that already
+// existed — so an instance with disputes to file is an instance with somebody to
+// tell. An empty result means the operator revoked every grant, and the honest
+// answer to that is no notification rather than a broadcast.
+func (s *Service) EveryReviewer(ctx context.Context) ([]Recipient, error) {
+	rows, err := s.q.ListInstanceGrantHolders(ctx, auth.PermDestinationsReview)
 	if err != nil {
-		return nil, fmt.Errorf("notify: list organizations: %w", err)
+		return nil, fmt.Errorf("notify: list instance reviewers: %w", err)
 	}
-	seen := make(map[uuid.UUID]struct{}, len(orgs))
-	var out []Recipient
-	for _, orgID := range orgs {
-		// nil: a blocklist entry is not in a workspace, so this is the
-		// organization-wide owners of each organization and nobody else.
-		owners, err := s.OwnersOf(ctx, orgID, nil)
-		if err != nil {
-			return nil, err
-		}
-		for _, o := range owners {
-			if _, dup := seen[o.UserID]; dup {
-				continue
-			}
-			seen[o.UserID] = struct{}{}
-			out = append(out, o)
-		}
+	out := make([]Recipient, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, Recipient{UserID: r.ID, Email: r.Email, Name: r.Name})
 	}
 	return out, nil
 }

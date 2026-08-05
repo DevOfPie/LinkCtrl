@@ -504,10 +504,14 @@ const sweepScanCount = 500
 // is acceptable precisely because this runs when somebody changes a policy and
 // never on the redirect path.
 //
-// Bounded from outside the call, like deleteFromRedis, because a stalled read
-// does not honour the context go-redis is handed (M26.6, D26). An unfinished
-// sweep is reported so the operator learns their change may take until TTL to
-// reach every replica, rather than believing it landed everywhere.
+// Bounded from outside the call, like deleteFromRedis, because the budget is
+// for the whole walk and no per-command deadline can express that: the loop
+// below issues an unbounded number of SCAN and UNLINK pairs, and each one is
+// separately entitled to REDIS_READ_TIMEOUT. Since M45 a stalled command does
+// honour the context it is handed (F138), which bounds one command; this bounds
+// the walk. An unfinished sweep is reported so the operator learns their change
+// may take until TTL to reach every replica, rather than believing it landed
+// everywhere.
 func (r *Resolver) sweepRedis(ctx context.Context, prefix string) error {
 	base, cancel := context.WithTimeout(context.WithoutCancel(ctx), domainSweepBudget)
 
@@ -567,21 +571,26 @@ const invalidateAttempts = 3
 // budget.
 //
 // The budget is held out here rather than pushed into the context go-redis is
-// given, because that context does not bind a stalled read. Measured for M26.6
-// against a server that accepts the connection and then never answers: a client
-// whose ReadTimeout was 400ms took 402ms to fail a command carrying a 50ms
-// context, and one left at go-redis's 3s default took 3.0s. What bounds a
-// stalled read is the client's own ReadTimeout; the caller's deadline is
-// consulted for the dial and not for this. So a loop spending RedisTimeout on
-// each of three attempts multiplied whatever REDIS_READ_TIMEOUT was set to —
-// which is how the same three attempts measured 9.07s while M23 was being
-// built, against a test client that had left the timeout at the default.
+// given, because it bounds the *loop* and a per-command deadline cannot. Three
+// attempts each entitled to RedisTimeout, plus the backoff between them, is
+// three times whatever REDIS_READ_TIMEOUT is set to however faithfully each one
+// is honoured — which is how the same three attempts measured 9.07s while M23
+// was being built, against a test client that had left the timeout at go-redis's
+// 3s default.
+//
+// Until M45 nothing honoured them at all. Measured for M26.6 against a server
+// that accepts the connection and then never answers: a client whose ReadTimeout
+// was 400ms took 402ms to fail a command carrying a 50ms context. That was
+// go-redis handing the socket deadline context.Background() unless
+// Options.ContextTimeoutEnabled is set, which internal/platform/redis now sets
+// (F138), so an attempt is bounded by its own dctx below. The budget is what
+// still bounds three of them.
 //
 // Bounding the wait from outside the call is what internal/ratelimit does for
 // the same failure and the same reason (M24). An attempt still running when the
-// budget is spent has its context cancelled, which a stalled read will not
-// notice; what makes the bound hold is that the caller has stopped waiting. A
-// delete that lands a moment later removes a key that should be gone anyway.
+// budget is spent is cancelled and, since F138, notices; what makes the bound
+// hold either way is that the caller has stopped waiting. A delete that lands a
+// moment later removes a key that should be gone anyway.
 //
 // Detached from the caller's context, because the invalidation must complete
 // even if the request that triggered the edit has gone away.

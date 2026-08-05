@@ -143,9 +143,9 @@ vanish at any moment. Losing it makes redirects slower, never wrong.
 Redis being unavailable at startup is a warning, not a failure.
 
 A Redis that *accepts* a connection and then never answers is the failure worth
-knowing about, because it is the one that can hold a caller. On the request and
-edit paths go-redis bounds a stalled read by `REDIS_READ_TIMEOUT` and not by the
-deadline the caller passes. Measured, against a proxy that accepts and stays
+knowing about, because it is the one that can hold a caller. `REDIS_READ_TIMEOUT`
+is the ceiling on every Redis command the service issues, whatever deadline the
+code around it asks for. Measured, against a proxy that accepts and stays
 silent: an edit costs at most `REDIS_INVALIDATE_BUDGET` and then commits anyway,
 and a redirect costs one read timeout per Redis call and then falls through to
 Postgres. A redirect already answered from memory costs nothing; a cold one
@@ -153,6 +153,12 @@ measured 108ms, because it spends the timeout twice — once on the lookup that
 never answers and once on the write that would have repopulated the cache. Both
 figures hold for a connection that was established and then went quiet
 mid-command. Neither depends on Redis answering.
+
+A caller asking for *less* than `REDIS_READ_TIMEOUT` gets what it asked for.
+That has been true only since 0.2.0: before it, go-redis was not configured to
+apply a caller's deadline to the socket at all, so the read timeout was the only
+bound and a shorter deadline meant nothing. The knob's meaning is unchanged —
+it is still the most any one Redis command may cost — and no default moved.
 
 The invalidation subscriber is the exception, and it needs its own variable
 because of it. `REDIS_READ_TIMEOUT` does not reach the pub/sub receive path at

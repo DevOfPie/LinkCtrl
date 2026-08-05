@@ -32,21 +32,18 @@ func Open(ctx context.Context, c config.Config) (*redis.Client, error) {
 	}
 
 	opt.DialTimeout = c.Redis.DialTimeout
-	// The read timeout is the hot path's patience. 50ms is far above a healthy
-	// round trip and below the 100ms uncached redirect budget, so a stalled
-	// Redis costs bounded latency and the lookup falls through to Postgres.
+	// The read timeout is the hot path's patience, and the ceiling on every call
+	// in this tree. 50ms is far above a healthy round trip and below the 100ms
+	// uncached redirect budget, so a stalled Redis costs bounded latency and the
+	// lookup falls through to Postgres.
 	//
-	// Measured for M26.6 rather than assumed, because the resolver's per-lookup
-	// deadline is not what holds this: a stalled read runs to ReadTimeout
-	// whatever context it was handed. Against a proxy that accepted the
-	// connection and never answered, five consecutive lookups cost 51ms each,
+	// Measured for M26.6 rather than assumed, against a proxy that accepted the
+	// connection and never answered: five consecutive lookups cost 51ms each,
 	// and the same held for a connection established and then left to go quiet
 	// mid-command. DialTimeout does not enter into it, because a server that
 	// accepts is a server whose dial succeeded: raising it to 8s left those
-	// lookups at 51ms. A dial, unlike a read, does honour the deadline anyway —
-	// an unroutable address with a 2s dial timeout under a 50ms context cost
-	// 50ms. The bound survives an operator retuning it, because the resolver's
-	// RedisTimeout *is* this value (cmd/linkctrl/main.go).
+	// lookups at 51ms. The bound survives an operator retuning it, because the
+	// resolver's RedisTimeout *is* this value (cmd/linkctrl/main.go).
 	//
 	// Bounded, not free, and a whole redirect pays it twice: a miss spends this
 	// timeout on the failed lookup and again on the Set that repopulates the
@@ -65,6 +62,43 @@ func Open(ctx context.Context, c config.Config) (*redis.Client, error) {
 	opt.WriteTimeout = c.Redis.ReadTimeout
 	opt.PoolSize = c.Redis.PoolSize
 	opt.MinIdleConns = 2
+	// Without this, a deadline handed to a Redis call is decoration: go-redis's
+	// baseClient.context hands the socket deadline context.Background() unless
+	// it is set, so what actually bounded a stalled read was ReadTimeout and
+	// nothing else. Every comment in this tree that says "the caller's deadline
+	// does not bind a stalled read" was describing this one unset field (F138).
+	//
+	// Measured at the pinned v9.21.0, against a listener that accepts and never
+	// answers: one command carrying a 50ms context cost 400.85ms with
+	// ReadTimeout 400ms, and 50.32ms with this set. TestAContextDeadlineBounds
+	// ARedisCall is that probe.
+	//
+	// It can only ever *shorten* a call, never lengthen one. pool.Conn.deadline
+	// takes the minimum of now+ReadTimeout and the context's deadline, so the
+	// ceiling above still applies to a caller who asks for longer — the
+	// analytics pipeline's five seconds and the readiness probe's 750ms are
+	// still 50ms on the wire, exactly as they were.
+	//
+	// What changes is the other direction, and only there: a caller with less
+	// than ReadTimeout left now gets what it asked for. On the redirect path
+	// that is the request context, so a lookup starting 240ms into a 250ms
+	// budget is bounded by the 10ms remaining instead of spending 50ms it does
+	// not have. The populate is unaffected — store() detaches with
+	// context.WithoutCancel, which drops the deadline as well as the cancel, so
+	// a cache write still gets its full RedisTimeout after the request is gone.
+	//
+	// It removes neither hand-built defence, and that was checked rather than
+	// assumed. internal/ratelimit's timer still bounds what the *caller* waits
+	// — the same probe measured Shared.take at 50.46ms without this and 50.28ms
+	// with it, because the timer was already the binding constraint — and D26's
+	// REDIS_INVALIDATE_BUDGET still bounds a three-attempt loop that this
+	// bounds one attempt of. Both keep their reasons, restated where they live.
+	//
+	// The pub/sub path never needed it: PubSub.conn writes and reads through
+	// cn.WithReader with the caller's context directly rather than through
+	// baseClient.context, so the subscriber's ReceiveTimeout has always meant
+	// what it says.
+	opt.ContextTimeoutEnabled = true
 
 	client := redis.NewClient(opt)
 
@@ -77,4 +111,10 @@ func Open(ctx context.Context, c config.Config) (*redis.Client, error) {
 }
 
 // PingTimeout is the budget for a readiness probe's cache check.
+//
+// Generous, and deliberately not the number that decides a stall: ReadTimeout
+// caps every command under it, so a Redis that accepts and never answers is
+// reported degraded in REDIS_READ_TIMEOUT rather than in this. What this bounds
+// is the rest — acquiring a connection, dialling one, retrying — on a probe that
+// must answer whatever the cache is doing.
 const PingTimeout = 750 * time.Millisecond

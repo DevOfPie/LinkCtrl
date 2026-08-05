@@ -906,6 +906,87 @@ Twenty-four cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%,
 the gated configuration, which is a different path rather than a regression in
 this one.
 
+### Re-measured for M45's Redis client change (2026-08-05)
+
+[F138](build-notes/deferred-findings.md#closed): `internal/platform/redis.Open`
+now sets `ContextTimeoutEnabled`. That is the client the resolver holds, so the
+inherited rule applies and this is a k6 run rather than a note.
+
+**What changed on the path, so the numbers are read against something.** Nothing
+executes differently in the healthy case. `Options.RedisTimeout` *is*
+`REDIS_READ_TIMEOUT`, so `fromRedis` and `store` already asked their calls for
+exactly the client's own ceiling; go-redis takes the minimum of the two, and the
+minimum of a number and itself is that number. No allocation, no branch and no
+call was added anywhere on the redirect path — the diff on this path is one
+field on an options struct at boot. The one case that does change is a request
+context with **less** than `REDIS_READ_TIMEOUT` left, which under load never
+happens: at 2,000 rps the whole request is 87µs of a 250ms budget.
+
+**The uncached column is the one that matters here**, because the cached column
+does not touch Redis at all — its own cache-mix line says `0 redis`. Both are
+taken anyway, because the SLO is stated on the cached path and a change to the
+client is exactly the kind that could reach it by accident.
+
+| | Target | Measured |
+| --- | --- | --- |
+| Cached redirect, server-side | p99 < 20ms | **100% of 240,001 under 20ms**; 100% under 0.5ms |
+| Cached redirect, generator-side | — | avg **87.42µs**, median 83.27µs, p(90) 104.59µs, p(95) 113.02µs, max 6.12ms, min 37.40µs |
+| Sustained rate | 2,000 rps for 2m | 2,000.00 rps, 240,001 requests, zero failures, no dropped iterations |
+| Dataset | 100k links, 5M events | 100,000 links, 5,000,000 events, freshly seeded |
+| Cache mix | hits only | 240,001 memory, 0 redis, 0 database |
+| Redirect pool | — | 0 acquire waits |
+
+The uncached path, which is where the Redis client is actually exercised:
+
+| | Target | Measured |
+| --- | --- | --- |
+| Uncached redirect, generator-side | p99 < 100ms | avg **287.71µs**, median 295.78µs, p(90) 346.99µs, p(95) 366.28µs, max 8.91ms, at 500 rps for 1m, zero failures |
+| Cache mix | mostly misses | 25,946 database, 2,646 redis, 1,409 memory |
+| Redirect pool | — | 2 acquire waits, 0.015s total |
+
+**The cached column did not move.** 87.42µs against
+[M45's redirect findings](#re-measured-for-m45s-redirect-findings-2026-08-04)'s
+87.33µs, [M41](#re-measured-for-m41-2026-08-03)'s 87.04µs and
+[M40](#re-measured-for-m40-2026-08-03)'s 87.44µs, on the same host and a dataset
+seeded the same way — a 0.1% spread across four measurements, which is the
+run-to-run precision this document has recorded since its first section. The
+uncached column is the second-fastest recorded, behind
+[M33](#re-measured-for-m33-2026-08-02)'s 421.47µs p99 and well inside the 100ms
+target; it is not comparable to it directly, because the summary k6 prints now
+reports p(95) rather than p99.
+
+#### What this run verified live, and what it could not
+
+**The stall bound, on the built image, because the whole finding is about what
+happens when Redis stops answering.** `docker pause` on the Redis container is
+the exact failure shape: connections stay established and nothing is answered,
+which is what a refused connection is not. Three cold aliases each answered
+**302 in 102ms** while it was paused, against 4.95ms warm and 1.55ms after
+unpausing. 102ms is the documented cost of a cold resolve against a stalled
+Redis — the read timeout spent twice, once on the lookup that never answers and
+once on the `Set` that would have repopulated the cache, plus the Postgres query
+— and it is unchanged, which is the point: the ceiling is still
+`REDIS_READ_TIMEOUT` and the option did not lower it.
+
+**The half that changed could not be shown here**, and saying which half is the
+honest version of "the numbers did not move". A request with less than 50ms of
+its budget left is not a state a healthy instance enters, and manufacturing one
+under k6 would measure the manufacture. It is asserted instead by
+`TestAContextDeadlineBoundsARedisCall`, against a listener that accepts and never
+answers: 50ms asked for, 50ms spent, where the same call cost 400.85ms with the
+option removed.
+
+Taken on image `sha256:99ca625a3b8c…` (`linkctrl:test`, built 2026-08-04 23:54
+UTC from the M45 F137/F138 working tree at `v0.1.0-103-g58b2042-dirty`), rebuilt
+and recreated from the tree immediately before the runs, against a freshly seeded
+`make seed-slo` dataset. Both cache tiers were emptied and the container restarted
+before each column and before the live check. Same host as
+[M35](#re-measured-for-m35-2026-08-03) onward.
+
+Twenty-five cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%,
+100%, 100%, 100%, 100%, 100%, 99.743%, 100%, 100%, 99.505%, 100%, 100%, 100%,
+100%, 100%, 99.405%, 100%, 99.826% and **100%** under 20ms.
+
 ## Reproducing it
 
 ```sh

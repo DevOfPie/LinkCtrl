@@ -22,6 +22,19 @@ migrations run at boot.
 
 ### Changed
 
+- **A disputed destination now notifies the people who review disputes, instead
+  of every organization owner on the instance.** Filing a dispute costs only the
+  permission that would have let you create the link, and a refusal computed from
+  the URL — credentials before the host, for example — is bounded by the string
+  typed rather than by any blocklist row, so there is no useful limit on how many
+  one account can file. The limit that matters is what each one costs, and it
+  used to be one inbox row per organization owner: on an instance running
+  `SIGNUP_MODE=open` that is a number a stranger grows by registering, aimed at
+  people who cannot act on the queue anyway. It is now the holders of
+  `destinations.review`, which is the set you chose. **Nothing else about filing
+  or deciding changes**, and if you have not appointed anybody, that set is the
+  account that claimed the instance.
+
 - **The audit log is now bounded by the reader's own authority, not only by
   their organization.** A membership scoped to one workspace used to read every
   record in the organization, including workspaces where its holder had no
@@ -1177,6 +1190,21 @@ migrations run at boot.
 
 ### Fixed
 
+- **A timeout the service set on a Redis call did nothing; `REDIS_READ_TIMEOUT`
+  was the only thing bounding a stalled cache.** The client was not configured to
+  apply a caller's deadline to the socket, so against a Redis that accepts a
+  connection and never answers, a call asking for 50ms still took the full read
+  timeout — measured at 401ms with the read timeout at 400ms, and 50ms once the
+  option is set. **No default moved and no knob changed meaning**:
+  `REDIS_READ_TIMEOUT` is still the ceiling on every Redis command, and a caller
+  asking for longer — the readiness probe, the returning-visitor batch — is still
+  held to it. What changes is a caller asking for *less*, which on the redirect
+  path means a lookup starting late in the request budget no longer spends time
+  the request does not have. Both hand-built defences around this are unchanged
+  and still needed: the invalidation budget bounds a three-attempt loop, and the
+  shared rate limiter bounds what the request waits rather than what one command
+  costs.
+
 - **`docs/configuration.md` said the IPv6 rate limit is keyed by /64 and left
   out what that means for a subscriber holding more than one.** A single host is
   routinely handed a whole /64, which is why the key is not the address — but a
@@ -1560,8 +1588,9 @@ migrations run at boot.
   changes: every retry that used to succeed still fits inside the budget.
 - The bound covers a Redis that accepts a connection and never answers, and one
   that answered and then went quiet mid-command. Both are bounded because the
-  caller stops waiting — a stalled read ignores the deadline the client is
-  given, which is the part that made this worth fixing rather than tuning.
+  caller stops waiting rather than because any single command gives up: three
+  attempts each entitled to `REDIS_READ_TIMEOUT` is three times that knob, which
+  is what made this worth fixing rather than tuning.
 - **A bounded failure is still a failure to invalidate.** The edit is committed
   either way, the failure is logged, and the stale cache entry expires with
   `REDIRECT_TTL` exactly as before. Redirects are untouched, and were measured

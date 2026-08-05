@@ -139,15 +139,24 @@ var takeSHA = goredis.NewScript(takeScript)
 // take asks Redis for a decision, reporting whether it answered at all.
 //
 // The Redis call runs in its own goroutine and is abandoned on timeout rather
-// than merely cancelled. That is not belt and braces: a stalled Redis — one
-// that accepts a connection and never answers — runs to the client's own
-// ReadTimeout whatever context it was handed. go-redis applies a caller's
-// deadline to the socket only when Options.ContextTimeoutEnabled is set, and
-// internal/platform/redis does not set it, so the context handed to Run below
-// does not shorten a stalled read however short it is; that package's comment
-// carries the measurements. Establishing the
-// connection has nothing to do with it — a read that stalls on an already-open
-// connection behaves the same, and a dial on its own does honour its deadline.
+// than merely cancelled, and it stayed that way through F138 rather than
+// surviving it by neglect.
+//
+// It was built because a stalled Redis — one that accepts a connection and
+// never answers — used to run to the client's own ReadTimeout whatever context
+// it was handed: go-redis applies a caller's deadline to the socket only when
+// Options.ContextTimeoutEnabled is set, and internal/platform/redis did not set
+// it. Since M45 it does, so the context below now shortens the call itself.
+//
+// What that changed is which goroutine waits, not how long this one does. The
+// same probe measured Run against a stall at 400.85ms without the option and
+// 50.32ms with it, and `take` at 50.46ms and 50.28ms — because the timer was
+// already the binding constraint and still is. Keeping it is what makes the
+// caller's bound this package's own number rather than a consequence of
+// go-redis's retry count, backoff and pool behaviour, none of which the socket
+// deadline covers; the option is what stops the abandoned goroutine holding a
+// connection for eight times as long as anybody is waiting for it.
+//
 // The invalidation path multiplied that same bound by a retry loop until M26.6
 // bounded the loop (F2); here it would be a login endpoint hanging on an
 // optional dependency, so the deadline is enforced from outside the call.
