@@ -629,6 +629,19 @@ type RedeemInput struct {
 // One transaction, and single-use is the database's to enforce: the invitation
 // row is locked on the way in, and the write that spends it is conditional on
 // it still being unspent.
+// boolText renders a flag for a mail template.
+//
+// RenderMail takes map[string]string deliberately — that is what lets it
+// neutralize every value on the way in — so a boolean arrives as a word and the
+// template compares it. "yes" and "" rather than "true"/"false" because an empty
+// string is falsey to text/template's `if`, which keeps the template readable.
+func boolText(b bool) string {
+	if b {
+		return "yes"
+	}
+	return ""
+}
+
 func (s *Service) Redeem(ctx context.Context, in RedeemInput) (*Redeemed, error) {
 	// Checked before anything is looked up, so the answer cannot depend on
 	// whether an account exists. Every stored password already satisfies this
@@ -877,6 +890,14 @@ func (s *Service) mail(ctx context.Context, c *Created, actor *auth.Identity, or
 		"URL":          c.URL,
 		"Email":        c.Email,
 		"Expires":      c.ExpiresAt.UTC().Format("2 January 2006, 15:04 UTC"),
+		// Whether redemption may create an account, which the mail asserted
+		// unconditionally until 0.2.0 (F54). The service has always known —
+		// `Redeem` reads the same field — but `RenderMail` was handed six keys
+		// and none of them was this, so the template could not have branched
+		// even if somebody had wanted it to. A closed instance with a relay is
+		// an intended, documented state, and the redemption page tells the
+		// truth about it while the mail that got somebody there did not.
+		"NewAccounts": boolText(s.cfg.NewAccounts),
 	}); err != nil {
 		s.log.Warn("invitation issued but the mail was not queued",
 			slog.String("invitation", c.ID.String()), slog.Any("error", err))

@@ -629,7 +629,7 @@ type Querier interface {
 	// Not scoped by owner, like every other statement addressed by id in this
 	// schema. link.Service has already judged the actor against the row.
 	GetDefaultDomainSettings(ctx context.Context, domainID uuid.UUID) (GetDefaultDomainSettingsRow, error)
-	GetDestinationDispute(ctx context.Context, id uuid.UUID) (DestinationDispute, error)
+	GetDestinationDispute(ctx context.Context, id uuid.UUID) (GetDestinationDisputeRow, error)
 	// One domain's bot policy, by id.
 	//
 	// Read on the management path only, and only when a link's own setting is being
@@ -950,7 +950,17 @@ type Querier interface {
 	//
 	// @open_only lets the page show the work and the archive from one query, which
 	// is the same shape ListNotifications' unread filter has.
-	ListDestinationDisputes(ctx context.Context, arg ListDestinationDisputesParams) ([]DestinationDispute, error)
+	//
+	// The LEFT JOIN carries the blocklist entry's **source**, which is what decides
+	// whether an allow can do anything (F42). `liftableRules` says the *rule* is
+	// list-backed; it does not say the entry behind this particular refusal is one
+	// a decision may delete. An `env`-sourced entry comes from
+	// LINKCTRL_DESTINATION_BLOCKLIST and is rewritten at every boot, so removing it
+	// would be undone by the next restart and `entryToLift` refuses — while the page
+	// drew the Allow button from the rule alone and the operator found out by
+	// clicking. LEFT, because a refusal computed from the URL has no entry at all
+	// and must stay in the queue.
+	ListDestinationDisputes(ctx context.Context, arg ListDestinationDisputesParams) ([]ListDestinationDisputesRow, error)
 	// Every domain the caller may use: the instance default, whatever their
 	// organization owns, and whatever their own workspace owns.
 	//

@@ -104,13 +104,33 @@ type shell struct {
 	HasOrganization bool
 }
 
+// switchTarget is where the workspace switcher should land, given the page the
+// reader is on.
+//
+// Usually the same page: switching workspace from /links stays on /links, which
+// is the whole point of carrying `next` at all. The exception is a page whose
+// URL names **one object** — a link's detail page — because that object belongs
+// to the workspace being left. Following `next` there lands on a link id that
+// does not exist in the target workspace and renders Not found, so a switcher
+// that visibly fails to follow a switch (F22) on the one surface where the
+// collection view would have worked perfectly well.
+//
+// Collapsed to the collection rather than to the dashboard: the reader was
+// looking at links, and they still want links.
+func switchTarget(path string) string {
+	if rest, ok := strings.CutPrefix(path, "/links/"); ok && rest != "" {
+		return "/links"
+	}
+	return path
+}
+
 func (h *Web) shell(r *http.Request, title, nav string) shell {
 	s := shell{
 		Title:           title,
 		Nav:             nav,
 		Identity:        IdentityFrom(r.Context()),
 		Theme:           themeFrom(r),
-		Path:            r.URL.Path,
+		Path:            switchTarget(r.URL.Path),
 		HasOrganization: IdentityFrom(r.Context()).HasOrganization(),
 	}
 	// One notification query per page render, served by the partial index the

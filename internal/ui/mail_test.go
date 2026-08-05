@@ -25,6 +25,11 @@ func mailData() map[string]string {
 		"Email":        "invitee@example.com",
 		"URL":          "https://links.example.com/invite/2ZQ3jd0eGkE",
 		"Expires":      "7 August 2026, 09:00 UTC",
+		// Whether redemption may create an account (F54, D7). Non-empty is
+		// "open"; the closed branch has a test of its own below, because a
+		// fixture that only ever renders one branch would leave the other
+		// unexercised — which is how the unconditional sentence survived.
+		"NewAccounts": "yes",
 		// The dispute outcome (M32, D1's addendum). Host and reason code are
 		// what internal/dispute actually hands over: the host already defanged,
 		// and the reason code from this program's own vocabulary. The
@@ -35,6 +40,51 @@ func mailData() map[string]string {
 		"Host":       "evil[.]example",
 		"ReasonCode": "low_confidence.feed_reputation",
 		"Outcome":    "The refusal stands, so that destination still cannot be used here.",
+	}
+}
+
+// The invitation mail says something different when the instance is closed.
+//
+// It said "if you do not have an account yet, that form creates one"
+// unconditionally, which is false wherever redemption may not create one — a
+// closed instance with a mail relay, which is an intended and documented state.
+// The service has always known the answer and the template was handed six keys,
+// none of them this, so it could not have branched (F54).
+//
+// Both branches are rendered because a template with an `if` nobody exercises on
+// both sides is a template with an untested half, and the untested half is the
+// one that only appears on somebody else's instance.
+func TestTheInvitationMailBranchesOnWhetherSignupsAreOpen(t *testing.T) {
+	r, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	openData := mailData()
+	_, openBody, err := r.RenderMail("invitation", openData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(openBody, "that form creates one") {
+		t.Error("an open instance's invitation no longer says the form creates an " +
+			"account, which is the thing an invitee needs to know")
+	}
+
+	closedData := mailData()
+	closedData["NewAccounts"] = ""
+	_, closedBody, err := r.RenderMail("invitation", closedData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(closedBody, "that form creates one") {
+		t.Error("a closed instance's invitation still promises the form creates an " +
+			"account. Redemption refuses that, and the landing page says so — so " +
+			"the mail is the one surface in the flow telling a stranger the " +
+			"opposite of what happens (F54)")
+	}
+	if !strings.Contains(closedBody, "not accepting new sign-ups") {
+		t.Error("a closed instance's invitation does not say why an account is " +
+			"needed first; the reader is left to discover it at the form")
 	}
 }
 
@@ -156,6 +206,13 @@ func TestEveryMailRendersUntrustedInputInert(t *testing.T) {
 		"Host":       "evil[.]example\r\n.\r\nMAIL FROM:<attacker@example.com>",
 		"ReasonCode": "low_confidence.feed_reputation\nSubject: You have been paid",
 		"Outcome":    "The refusal stands.\r\n\u202eBcc: someone@example.com",
+		// A flag rather than a value, and hostile all the same: a non-empty
+		// string takes the open branch, so this asserts the branch a stranger
+		// could steer if the value ever came from outside. It does not — the
+		// service reads it from configuration — and the key is here because
+		// RenderMail refuses a template referencing a key nobody passed, which
+		// is the property that caught this template's new branch at all.
+		"NewAccounts": "yes\r\nBcc: everyone@example.com",
 	}
 
 	for _, name := range r.MailTemplates() {

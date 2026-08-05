@@ -30,6 +30,20 @@ const (
 // all, which is the whole point of them, so there is no identity to draw.
 var chromelessPages = []string{"login", "setup", "error", "invite", "signup", "verify"}
 
+// hasOrganization reads the shell flag out of a page's test data.
+//
+// The data is map[string]any because these fixtures stand in for a dozen
+// different page structs; the flag is set on all of them and cleared on the one
+// page an account belonging to nothing is sent to.
+func hasOrganization(d any) bool {
+	m, ok := d.(map[string]any)
+	if !ok {
+		return true
+	}
+	v, ok := m["HasOrganization"].(bool)
+	return !ok || v
+}
+
 // TestExactlyOneIdentityMenuAndBellPerPage is M24.5's assertion applied to the
 // two controls this milestone moves, and for the same reason.
 //
@@ -70,8 +84,17 @@ func TestExactlyOneIdentityMenuAndBellPerPage(t *testing.T) {
 			if got := strings.Count(body, identityMenuMark); got != want {
 				t.Errorf("%s renders %d identity menus, want %d", page, got, want)
 			}
-			if got := strings.Count(body, bellMark); got != want {
-				t.Errorf("%s renders %d notification bells, want %d", page, got, want)
+			// The bell is additionally gated on belonging to an organization
+			// (F47). Its View all goes to /notifications, which sits behind
+			// RequireOrganization and 303s straight back, so drawing it for an
+			// account that belongs to nothing offered the one control in this
+			// header that leads nowhere — on the page that account is sent to.
+			wantBell := want
+			if want == 1 && !hasOrganization(d) {
+				wantBell = 0
+			}
+			if got := strings.Count(body, bellMark); got != wantBell {
+				t.Errorf("%s renders %d notification bells, want %d", page, got, wantBell)
 			}
 		})
 	}

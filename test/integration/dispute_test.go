@@ -718,6 +718,67 @@ func TestAllowRefusesWhatItCannotActuallyLift(t *testing.T) {
 		}
 	})
 
+	// The one an operator-configured instance actually sees.
+	//
+	// `operator_blocklist` is a list-backed rule, so `liftableRules` says yes and
+	// the page drew Allow — while `entryToLift` refuses an entry that came from
+	// LINKCTRL_DESTINATION_BLOCKLIST, because deleting it would last until the
+	// next restart rewrites the list. A source census on a fully migrated
+	// database returns only `env` and `shortener`, so this is not an edge case:
+	// it is the most likely dispute on any instance whose operator configured a
+	// blocklist, and the button 409ed on every one of them (F42).
+	t.Run("an env-sourced entry cannot be lifted, and does not offer to be", func(t *testing.T) {
+		f := newDispute(t)
+		f.blockHost("envblocked.example", link.SourceEnv)
+
+		d, err := f.disputes.File(f.ctx, f.owner, "https://envblocked.example/thing")
+		if err != nil {
+			t.Fatalf("File: %v", err)
+		}
+		if d.Liftable {
+			t.Error("a refusal backed by an environment entry reports itself liftable. " +
+				"The queue draws an Allow button from exactly this flag, and the " +
+				"decision behind it answers 409 — which is the most likely dispute " +
+				"on an operator-configured instance")
+		}
+		if _, err := f.disputes.Allow(f.ctx, f.owner, d.ID); !errors.Is(err, domain.ErrConflict) {
+			t.Errorf("Allow returned %v, want a conflict", err)
+		}
+
+		// And the queue agrees with the filing response: both read the same
+		// flag, and a page that disagreed with the API would be the same defect
+		// one surface over.
+		page, err := f.disputes.List(f.ctx, f.owner, dispute.Filter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var seen bool
+		for _, item := range page.Items {
+			if item.ID != d.ID {
+				continue
+			}
+			seen = true
+			if item.Liftable {
+				t.Error("the queue reports the env-sourced dispute as liftable")
+			}
+		}
+		if !seen {
+			t.Fatal("the dispute is not in the queue at all; this test asserted nothing")
+		}
+
+		// A shortener-sourced entry for the same rule still offers the button,
+		// so the fix narrowed the flag rather than switching it off.
+		f.blockHost("listed.example", link.SourceReview)
+		liftable, err := f.disputes.File(f.ctx, f.owner, "https://listed.example/thing")
+		if err != nil {
+			t.Fatalf("File: %v", err)
+		}
+		if !liftable.Liftable {
+			t.Error("a refusal backed by a removable entry no longer offers Allow; the " +
+				"flag has been narrowed past the thing it is for")
+		}
+	})
+
 	t.Run("a dispute filed before the entry was recorded", func(t *testing.T) {
 		f := newDispute(t)
 		f.blockHost("evil.example", link.SourceReview)

@@ -188,6 +188,7 @@ file. Append a row when you append an entry.
 | [M45, building D102, and a test that had been measuring two things at once](#2026-08-05--m45-building-d102-and-a-test-that-had-been-measuring-two-things-at-once) | F105. Both halves of the predicate in all three queries, because a filter in two of them leaves the bell counting rows the page will not show, and the count's predicate has to match the partial index character for character. **The interesting part is a test that broke on the difference rather than on a defect**: it measured *who was notified* by counting what they could see, which were the same number until D102 made them two questions. Fixed by saying where the reader is standing and asserting per workspace — the summed version produced 6 where 5 was expected, because organization-level news is visible from both, and that is the sum being the wrong instrument rather than an off-by-one. The result asserts the IS NULL half from a workspace the notification says nothing about, which the old shape could not state |
 | [M45, the redirect-path batch and the one measurement it owes](#2026-08-05--m45-the-redirect-path-batch-and-the-one-measurement-it-owes) | F64, F100, F115, F116, and **one k6 run for all ten redirect-path rows** — declared in the triage before any landed, 240,000 cached redirects 100% under 0.5ms, with the smaller dataset stated rather than glossed. F64 sets **only nosniff** and the entry says why: the other two are error-page policy, and putting them in the wrapper would change every successful redirect to fix a 307. F100's obvious fix was ruled out by its own row — HEAD must keep choosing and stop advancing — and the read-only twin is Budget's shape exactly, a precedent three hundred lines away. F115 closes the self-throttling limb and **records the other as D54's accepted cost**; the refund needed a clamp in the shared script, because every write kept tokens <= burst and none could break it while cost was always 1. F116 bounds both length and segment count, and invents no new status |
 | [M45, thirteen enumerations, and the one that gets a test](#2026-08-05--m45-thirteen-enumerations-and-the-one-that-gets-a-test) | F45, F38 and F111 — the first work under the owner's standing approval for documentation, which removes the prompt and keeps the verification. **Counted, not trusted, and it mattered**: the never-delegable map had grown to nine since the row was filed, making this the fifth wording row in one milestone whose list was short. One claim was checked and **left**, because correcting it would have invented a defect. Only that one list gets a test, and the entry says why — it is a security claim that has failed to keep up three separate times, where the other twelve are prose wrong once. The lists stay hand-written and the *failure* is generated, which is D97's argument. And **the test was wrong before the documents were**: its first run flagged a sentence that was already right, so the window was tightened rather than the document changed |
+| [M45, four controls that told a reader the wrong thing](#2026-08-05--m45-four-controls-that-told-a-reader-the-wrong-thing) | F42, F22, F47 and F54 — a class this project keeps producing, where the promise and the enforcement live in different files. F42's flag asked *could an allow ever work for this rule* and the decision asked *for this refusal*; the fix is one helper both consult, and the two freshly-written rows need **different** sources, since `decide` must report the state before it deleted the entry. F22 collapses only the path that names an object. F47's bell was the one href in the header gated on nothing, offered to the account likeliest to have unread notifications — and the test named for that account cuts the nav one `div` too early to see it. F54 is **a surface that could not have been right**: the template was handed six keys and none was the mode. Fixing it surfaced that the renderer refuses an unknown key, which caught the branch immediately |
 
 ---
 
@@ -16174,3 +16175,84 @@ for. What it did not remove is the checking: the counts above are counts, the
 audit-growth row was read before being left alone, and the `_FILE`, removed-variable
 and cache-label sets were taken from the code rather than from the row that
 reported them.
+
+## 2026-08-05 — M45, four controls that told a reader the wrong thing
+
+[F42](deferred-findings.md), [F22](deferred-findings.md),
+[F47](deferred-findings.md) and [F54](deferred-findings.md). Nothing here is a
+security defect and nothing loses data. Each is a control or a sentence that
+promises an outcome the code will not produce, which is a class this project
+keeps producing because the promise and the enforcement live in different files.
+
+### F42: the button and the refusal were reading different things
+
+`Liftable` decides whether the queue draws **Allow**. It read
+`liftableRules[reasonCode]` — is this rule list-backed — while `entryToLift`
+additionally refuses an entry whose source is `env`, because
+`LINKCTRL_DESTINATION_BLOCKLIST` is rewritten at every boot and deleting a row
+from it would last until the next restart.
+
+So the flag answered *could an allow ever do anything for this rule* and the
+decision answered *can it do anything for this refusal*. A source census on a
+migrated database returns `env` and `shortener` and nothing else, which makes
+this the **most likely dispute** on any instance whose operator configured a
+blocklist — the button 409ed on every one of them, through `webError`, as an
+error page rather than in-context guidance.
+
+The fix is not a second condition at the call site. It is `canLiftEntry`, spelled
+once and consulted by both, so the two cannot drift apart again; the queries
+carry the entry's source through a LEFT JOIN, LEFT because a refusal computed
+from the URL has no entry and must stay in the queue.
+
+The two paths returning a freshly written row needed different answers, and the
+difference is worth recording. `File` resolves the source with one lookup, on a
+path that has already written and notified. `decide` uses the source read
+**before** the decision — an allow has just deleted the entry, and reporting *not
+liftable* because the lift succeeded is the opposite of informative.
+
+### F22: the switcher carried a path that names one object
+
+`next` is the current path, so switching workspace keeps the reader where they
+were. On `/links/{id}` that path names an id belonging to the workspace being
+left, so the switch lands on Not found.
+
+Collapsed to `/links`, not `/dashboard`: the reader was looking at links. The
+table test asserts the paths that must **stay** alongside the two that must not,
+because a rule that trimmed more would throw away the page somebody chose.
+
+### F47: the one href in the header gated on nothing
+
+`/notifications` sits behind `RequireOrganization` and 303s straight back. Every
+other control in the identity menu is gated on `HasOrganization`; the bell was
+not, so the account that belongs to nothing was offered the single control there
+that leads nowhere — on the page it is redirected to.
+
+It is also the *likeliest* holder of unread notifications, which is what makes it
+worth more than tidiness: deleting an organization needs the owner role, and
+owners are the recipient class for audit-growth, invitation and dispute
+notifications.
+
+`TestTheHeaderOffersNothingToAnAccountThatBelongsToNothing` could not have caught
+this — it cuts the nav one `div` before the bell, despite its name. The per-page
+header test now expects zero bells wherever the shell has no organization, which
+is a claim about every page rather than about one.
+
+### F54: the surface that could not have told the truth
+
+The invitation mail said *"if you do not have an account yet, that form creates
+one"* with no condition. On a closed instance with a relay — intended, and
+documented — redemption refuses to create one, and the landing page says so. The
+mail that got somebody there did not.
+
+The service has always known: `Redeem` reads `cfg.NewAccounts`. What the template
+could not do is ask, because `RenderMail` was handed six keys and none of them
+was the mode. That is the shape worth naming — not a wrong branch, but a surface
+with no way to be right.
+
+Two things fell out of fixing it, both useful. The renderer **refuses a template
+referencing a key nobody passed**, so the new branch failed immediately rather
+than rendering an empty sentence — a property worth knowing about before adding
+a conditional to any of these files. And the fixture now renders both sides,
+because a template with an `if` exercised on one side has an untested half, and
+here the untested half is the one that only ever appears on somebody else's
+instance.

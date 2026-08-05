@@ -383,7 +383,10 @@ func (s *Service) File(ctx context.Context, actor *auth.Identity, rawURL string)
 	}
 
 	s.tellReviewers(ctx, row)
-	return toDispute(row), nil
+	// One lookup, on a path that has already written and notified. The filer's
+	// own response carries Liftable too, and answering it from the rule alone
+	// would put the same wrong claim in the API that F42 put on the page.
+	return toDispute(row, s.entrySourceFor(ctx, row.BlockedHost)), nil
 }
 
 // disputable reports whether a verdict may be appealed, returning the refusal to
@@ -467,7 +470,7 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f Filter) (*do
 		rows = rows[:limit]
 	}
 	for _, r := range rows {
-		page.Items = append(page.Items, *toDispute(r))
+		page.Items = append(page.Items, *toDispute(listRowToDispute(r), deref(r.EntrySource)))
 	}
 	if page.HasMore && len(page.Items) > 0 {
 		last := page.Items[len(page.Items)-1]
@@ -567,7 +570,10 @@ func (s *Service) decide(
 
 	s.record(ctx, actor, row, lifted)
 	s.tellFiler(ctx, row)
-	return toDispute(row), nil
+	// The source as it was **before** the decision: an allow has just deleted
+	// the entry, and reporting "not liftable" because the lift succeeded would
+	// be the opposite of informative.
+	return toDispute(row, deref(existing.EntrySource)), nil
 }
 
 // entryToLift finds the blocklist row an allow would remove, or refuses.
@@ -584,7 +590,7 @@ func (s *Service) decide(
 // filer was refused by and the owner was shown. Naming it at filing time is F33's
 // repair, and it is what makes DeleteBlockedDestination's scoping comment true as
 // written.
-func (s *Service) entryToLift(ctx context.Context, d dbgen.DestinationDispute) (string, error) {
+func (s *Service) entryToLift(ctx context.Context, d dbgen.GetDestinationDisputeRow) (string, error) {
 	if !liftableRules[d.ReasonCode] {
 		return "", fmt.Errorf(
 			"%w: %s is computed from the URL rather than held in the blocklist, so there "+
@@ -625,6 +631,65 @@ func (s *Service) entryToLift(ctx context.Context, d dbgen.DestinationDispute) (
 			domain.ErrConflict, row.Host)
 	}
 	return row.Host, nil
+}
+
+// entrySourceFor reads the source of the blocklist entry behind a refusal.
+//
+// Empty when there is no entry — a refusal computed from the URL, or a
+// list-backed one whose entry has since gone. Errors are treated as "no entry"
+// rather than failing the caller: this decides whether a button is drawn, and
+// refusing to file a dispute because the button's state could not be computed
+// would trade a cosmetic defect for a functional one.
+func (s *Service) entrySourceFor(ctx context.Context, host string) string {
+	if host == "" {
+		return ""
+	}
+	row, err := s.q.GetBlockedDestination(ctx, host)
+	if err != nil {
+		return ""
+	}
+	return row.Source
+}
+
+// listRowToDispute drops the joined column so the renderer keeps taking the
+// table's own shape. The two differ by exactly one field, and threading a second
+// row type through toDispute would buy nothing.
+func listRowToDispute(r dbgen.ListDestinationDisputesRow) dbgen.DestinationDispute {
+	return dbgen.DestinationDispute{
+		ID: r.ID, Host: r.Host, UrlDefanged: r.UrlDefanged, ReasonCode: r.ReasonCode,
+		Status: r.Status, OrganizationID: r.OrganizationID, WorkspaceID: r.WorkspaceID,
+		CreatedBy: r.CreatedBy, CreatedByLabel: r.CreatedByLabel, CreatedAt: r.CreatedAt,
+		DecidedBy: r.DecidedBy, DecidedByLabel: r.DecidedByLabel, DecidedAt: r.DecidedAt,
+		BlockedHost: r.BlockedHost,
+	}
+}
+
+// deref is the empty string for a LEFT JOIN that matched nothing.
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// canLiftEntry reports whether the entry behind a refusal is one a decision may
+// delete.
+//
+// Spelled once and consulted from both the page and the refusal, so the button
+// and the answer cannot disagree — which is what F42 was: `entryToLift` refused
+// an `env`-sourced entry and `Liftable` never asked, so an operator-configured
+// instance's most likely dispute drew an Allow button that answered 409.
+//
+// A rule whose verdict is re-asked on every write deletes nothing and is
+// liftable regardless of any entry, which is why it is checked first.
+// An empty source means no row was joined: either the refusal is computed from
+// the URL, or it is list-backed and was filed before the entry was recorded.
+// Both are refusals a decision cannot lift.
+func canLiftEntry(reasonCode, entrySource string) bool {
+	if liftedByDecision[reasonCode] {
+		return true
+	}
+	return entrySource != "" && entrySource != link.SourceEnv
 }
 
 // record writes the audit event for a decision.
@@ -797,7 +862,12 @@ func (s *Service) mailFiler(ctx context.Context, d dbgen.DestinationDispute, out
 	}
 }
 
-func toDispute(r dbgen.DestinationDispute) *Dispute {
+// toDispute renders one row for a reader.
+//
+// entrySource is the blocklist entry behind this refusal, or empty when there is
+// none — a refusal computed from the URL, or a list-backed one filed before the
+// entry was recorded. It decides Liftable together with the rule (F42).
+func toDispute(r dbgen.DestinationDispute, entrySource string) *Dispute {
 	d := &Dispute{
 		ID: r.ID,
 		// Defanged on the way out. The columns hold the plain hosts because those
@@ -810,7 +880,14 @@ func toDispute(r dbgen.DestinationDispute) *Dispute {
 		FiledBy:     r.CreatedByLabel,
 		CreatedAt:   r.CreatedAt,
 		DecidedAt:   r.DecidedAt,
-		Liftable:    liftableRules[r.ReasonCode],
+		// Both halves. The rule says whether an allow *could* delete something;
+		// the source says whether this refusal's entry is one a decision may
+		// delete. An env-sourced entry is rewritten from
+		// LINKCTRL_DESTINATION_BLOCKLIST at every boot, so `entryToLift` refuses
+		// it — and the page drew its Allow button from the rule alone, which
+		// meant the most likely dispute on an operator-configured instance got a
+		// button that 409s and no explanation (F42).
+		Liftable: liftableRules[r.ReasonCode] && canLiftEntry(r.ReasonCode, entrySource),
 	}
 	// Empty stays empty rather than becoming a defanged nothing, so "no entry
 	// behind this refusal" reads the same on every surface.

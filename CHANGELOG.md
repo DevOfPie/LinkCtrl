@@ -42,6 +42,29 @@ migrations run at boot.
   ones are the true ones. The SLO series `linkctrl_redirect_duration_seconds` is
   unaffected and always was — the redirect handler records it directly.
 
+- **The dispute queue no longer offers Allow on a refusal it cannot lift.** A
+  destination refused by an entry from `LINKCTRL_DESTINATION_BLOCKLIST` drew the
+  same **Allow** button as any other, and pressing it answered `409` — the entry
+  is rewritten from the environment at every boot, so removing it would last
+  until the next restart. That was the most likely dispute on any instance whose
+  operator configured a blocklist. The button is now drawn only where an allow
+  can actually do something, and the guidance to take the host out of the
+  environment is where the button used to be.
+
+- **Switching workspace from a link's page lands on your links, not on a
+  `404`.** The switcher returns you to the page you were on, and on a link's
+  detail page that page names a link belonging to the workspace you just left.
+
+- **The notification bell is no longer shown to an account that belongs to no
+  organization.** Its **View all** went to a page that redirects such an account
+  straight back — the one control in the header that led nowhere, offered to the
+  account most likely to have unread notifications.
+
+- **An invitation email to a closed instance no longer promises the form will
+  create an account.** With `LINKCTRL_SIGNUP_MODE=closed` an invitation may only
+  admit somebody who already has one, which the redemption page has always said
+  and the email contradicted.
+
 - **A `HEAD` request to a sequentially split link no longer advances the
   rotation.** Link checkers and unfurlers probe with `HEAD`, and every probe used
   to move the counter that decides which destination the next visitor gets —

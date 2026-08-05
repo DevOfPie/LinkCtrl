@@ -9,9 +9,13 @@ To accept, open this link and enter the address this invitation was sent to
 
     {{.URL}}
 
-If you do not have an account yet, that form creates one. If you already do,
+{{if .NewAccounts}}If you do not have an account yet, that form creates one. If you already do,
 use the password you sign in with — accepting adds the organization to the
-account you already have rather than making you a second one.
+account you already have rather than making you a second one.{{else}}You will need an account on this instance already, and the form asks for the
+password you sign in with. This instance is not accepting new sign-ups, so if
+you do not have one, ask whoever invited you before following the link —
+accepting adds the organization to an account that exists rather than making
+one.{{end}}
 
 The link works once and stops working on {{.Expires}}. It is tied to the
 address above, so forwarding it to somebody else will not let them join.
