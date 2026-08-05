@@ -412,6 +412,84 @@ func TestAWorkspaceScopedMembershipDoesNotReachItsSiblings(t *testing.T) {
 	}
 }
 
+// TestASoftDeletedOrganizationIsNeitherListedNorResolvedInto pins the two
+// halves of one scoping rule to each other.
+//
+// ListWorkspacesForUser has always filtered the organization's deleted_at as
+// well as the workspace's; ResolveWorkspaceForUser filtered only the
+// workspace's. A workspace under a soft-deleted organization could therefore be
+// resolved *into* and never *listed*, which is the worst shape the disagreement
+// has: the switcher marks nothing selected because the current workspace is not
+// in the list it was given, so a browser shows the first entry while the session
+// acts somewhere else entirely.
+//
+// Nothing in the tree soft-deletes an organization — DeleteOrganization is a
+// hard DELETE — so the column is set here directly. That is the point rather
+// than a shortcut: the two queries agree today by accident, and this test is
+// what makes them agree on purpose (F25).
+func TestASoftDeletedOrganizationIsNeitherListedNorResolvedInto(t *testing.T) {
+	pool := newDB(t)
+	svc := newService(pool)
+	ctx := context.Background()
+
+	first, err := svc.Register(ctx, auth.RegisterInput{Email: "softdel@example.com", Password: wsPassword})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := addOrgWithWorkspace(t, pool, first.UserID, "Beta", "Beta")
+
+	// Pinned, so the precedence prefers it over the workspace registration
+	// made. Without this the fallback would be indistinguishable from the
+	// ordering it was always going to produce.
+	res, err := svc.Login(ctx, auth.LoginInput{Email: "softdel@example.com", Password: wsPassword})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SetDefaultWorkspace(ctx, res.Identity, &second); err != nil {
+		t.Fatal(err)
+	}
+	before, err := svc.Login(ctx, auth.LoginInput{Email: "softdel@example.com", Password: wsPassword})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Identity.WorkspaceID != second {
+		t.Fatalf("baseline: pinned workspace did not win, got %s want %s",
+			before.Identity.WorkspaceID, second)
+	}
+
+	if _, err := pool.Exec(ctx, `
+		UPDATE organizations SET deleted_at = now()
+		 WHERE id = (SELECT organization_id FROM workspaces WHERE id = $1)`,
+		second); err != nil {
+		t.Fatal(err)
+	}
+
+	after, err := svc.Login(ctx, auth.LoginInput{Email: "softdel@example.com", Password: wsPassword})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Identity.WorkspaceID == second {
+		t.Errorf("resolved into a workspace under a soft-deleted organization (%s)", second)
+	}
+	if after.Identity.WorkspaceID != first.WorkspaceID {
+		t.Errorf("resolution landed at %s, want the surviving workspace %s",
+			after.Identity.WorkspaceID, first.WorkspaceID)
+	}
+
+	// The half that was already right, asserted beside the half that was not —
+	// so a later change breaking either one fails here rather than producing
+	// the split again.
+	list, err := svc.Workspaces(ctx, after.Identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range list {
+		if w.ID == second {
+			t.Errorf("the switcher offers %s, which belongs to a soft-deleted organization", w.Name)
+		}
+	}
+}
+
 // addWorkspace gives an organization a second workspace, without giving the user
 // a second organization.
 //

@@ -53,8 +53,15 @@ die() { echo "slo-breaking-point: $*" >&2; exit 1; }
 command -v docker >/dev/null || die "docker is required"
 
 # The database URL as the host sees it, for `lctl seed`.
+#
+# The directive sits on its own line immediately above the `.`, not above the
+# `set -a` that used to share the line with it: a directive attaches to the next
+# *command*, and three commands separated by semicolons meant it was disabling
+# SC1090 for `set -a`, which never triggers it.
+set -a
 # shellcheck disable=SC1090
-set -a; . "$ENV_FILE"; set +a
+. "$ENV_FILE"
+set +a
 DB_PORT="${POSTGRES_PORT:?}"
 DSN="postgres://${POSTGRES_USER:-linkctrl}:${POSTGRES_PASSWORD:?}@localhost:${DB_PORT}/${POSTGRES_DB:-linkctrl}?sslmode=disable"
 
@@ -132,8 +139,11 @@ while [ "$step" -lt "$MAX_STEPS" ]; do
 
   # Warm the cache tiers, then snapshot: the server histogram is cumulative, so
   # a snapshot taken before the warm-up folds every cold read into the result.
-  RATE="$RATE" DURATION="$DURATION" \
-    "${REPO_ROOT}/scripts/load-test.sh" cached "$RATE" "$DURATION" \
+  # Positionally, and not also as prefix assignments: load-test.sh reads rate
+  # and duration as $2 and $3 and overwrites whatever it inherited, so the
+  # prefix form was dead and shellcheck was right to say the expansions beside
+  # it could not see it.
+  "${REPO_ROOT}/scripts/load-test.sh" cached "$RATE" "$DURATION" \
     >"$OUT/bp-load-${step}.txt" 2>&1 || true
   scrape >"$after"
   cp "$after" "$before" 2>/dev/null || true

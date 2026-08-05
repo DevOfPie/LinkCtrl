@@ -16853,3 +16853,57 @@ same job would have been a second thing to keep true.
 deletion. Only the `phase-loop.md` share is on the resume path; `work-loop.md` is
 read when `/work` is invoked and not on a resume, which is where the bulk landed
 deliberately. M45's doc-cost judgement inherits the number.
+
+## 2026-08-05 — M45, one scoping rule stated twice, and a status row that outlived its milestone
+
+Two things landed together because the second was found while verifying the
+first, and neither is large enough to carry a commit alone.
+
+### F25 — the resolve half and the list half disagreed, latently
+
+`ListWorkspacesForUser` filters the organization's `deleted_at` as well as the
+workspace's. `ResolveWorkspaceForUser` filtered only the workspace's. Both are
+statements of one rule — *which workspaces is this user entitled to be in* — and
+they disagreed about a workspace under a soft-deleted organization: resolvable
+into, never listed.
+
+That is the worst shape the disagreement has, rather than a tie. The switcher
+marks the current workspace by finding it in the list it was given; a current
+workspace absent from that list marks nothing, so the browser highlights the
+first entry while the session acts somewhere else entirely. Nothing tells the
+reader which one is true.
+
+**Fixed while latent, on purpose.** `DeleteOrganization` is a hard `DELETE` and
+nothing in the tree writes `organizations.deleted_at`, so no input reaches this
+today. Waiting would mean the first thing to soft-delete an organization — the
+obvious implementation of a restore window, or a tenancy teardown that wanted to
+be reversible — inherits a resolution path that disagrees with its own list, and
+inherits it silently. The cost of fixing it now is one join.
+
+The test sets the column directly, which is the only way to reach the state, and
+asserts both halves side by side: resolution falls back to the surviving
+workspace, *and* the switcher does not offer the deleted one. Pinning the half
+that was already right is what stops a later change re-opening the split from
+the other direction. Sabotaged by dropping the filter — it fails on both
+assertions.
+
+### M24.5's status row said `in progress (reopened)` after the reopening landed
+
+Found by [step 0](phase-loop.md#0-resume)'s *verify state independently*, which
+is exactly the check that catches this: [M24.5](phase-details/m24.5.md)'s
+reopening was completed and written up in `e3ef415`, F46 was closed by it, and
+the two dark hover tokens are `#4338ca` and `#be123c` in the tree — but the
+status row was never set back.
+
+It is one word, and it was not harmless. The status table is where
+[step 1](phase-loop.md#1-validate) reads *next milestone* from, defined as the
+first row that is not `done`. A finished milestone left un-`done` means the next
+unattended run selects it, reads a milestone file describing work already in the
+tree, and has to discover that by validation rather than by being told. Status
+lives in that table and nowhere else, which is what makes a stale cell there
+cost more than a stale cell would anywhere else.
+
+Recorded rather than fixed silently because the correction asserts a milestone
+is complete, and that assertion should be checkable: the reopening's write-up is
+in `m24.5.md`, its commit is `e3ef415`, and the token values are in
+`internal/ui/static/css/input.css`.

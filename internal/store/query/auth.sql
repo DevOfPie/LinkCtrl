@@ -143,8 +143,21 @@ SELECT * FROM roles WHERE slug = $1 AND organization_id IS NULL;
 -- default is a property of the person rather than of the tenancy. The key would
 -- then act in a tenant it was never issued for. Every other caller passes NULL
 -- and resolves exactly as it always did.
+--
+-- The organization's own deleted_at is checked as well as the workspace's, and
+-- the two are not the same check. ListWorkspacesForUser has always filtered
+-- both; this statement filtered only the workspace, so a workspace under a
+-- soft-deleted organization could be resolved *into* and never *listed* — the
+-- switcher would mark nothing selected, and a browser would show the first
+-- entry while the session acted somewhere else. Latent rather than live, and
+-- deliberately fixed anyway: DeleteOrganization is a hard DELETE today and
+-- nothing in the tree sets organizations.deleted_at, so the two queries agree
+-- in practice and would stop agreeing the moment anything soft-deletes an
+-- organization. The asymmetry is invisible from either statement alone, which
+-- is the reason it survived to be found by review rather than by a user (F25).
 SELECT w.*
 FROM workspaces w
+JOIN organizations o ON o.id = w.organization_id
 JOIN memberships m ON m.organization_id = w.organization_id
 JOIN users u       ON u.id = m.user_id
 LEFT JOIN sessions s ON s.id = sqlc.narg(session_id)::uuid
@@ -152,6 +165,7 @@ LEFT JOIN sessions s ON s.id = sqlc.narg(session_id)::uuid
                     AND s.revoked_at IS NULL
 WHERE m.user_id = sqlc.arg(user_id)
   AND w.deleted_at IS NULL
+  AND o.deleted_at IS NULL
   AND (sqlc.narg(organization_id)::uuid IS NULL
        OR w.organization_id = sqlc.narg(organization_id)::uuid)
   -- A NULL memberships.workspace_id covers every workspace in the organization;
