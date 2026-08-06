@@ -174,13 +174,49 @@ fifteen milestones will not cover them at Phase 2's depth — that phase spent 3
 comparable ground. So Phase 3 takes some of these areas, not all, and the target
 is what forces that to be decided rather than discovered at milestone twenty.
 
+**Which areas does Phase 3 take?** **A, B, E and F.** Owner-set 2026-08-06.
+
+| Area | In Phase 3 | |
+| --- | --- | --- |
+| **A** — Identity and account lifecycle | **Yes** | Carries F44 and F141, the only two candidates here that make a claim the tree makes today false |
+| **B** — Dashboard UI and UX | **Yes** | Asked for first, and the area everything else rebases onto. Cannot be specified without the owner's walkthrough |
+| **E** — Infrastructure and resilience | **Yes** | |
+| **F** — QR codes and campaigns | **Yes** | Overlaps B on the settings vocabulary — one milestone or an ordered pair, never two independent ones |
+| **C** — Analytics and reporting | No | Stays a candidate. Not dropped, not re-homed |
+| **D** — Redirect path and routing | No | Stays a candidate. Every row here owes the `slo.md` k6 measurement, which is a cost the phase does not take on |
+| **G** — Commercial and entitlements | No | Stays a candidate. Plan.md already carries entitlements at 3+ and a plugin system at 4, so the seam question keeps until then |
+
+**And it is planned in full before anything is built.** Owner-set the same day:
+every chosen area gets its Plan.md rows, milestone files and numbering before
+milestone one starts, so the fifteen-milestone target is enforced by arithmetic
+rather than discovered at milestone twenty. What that costs is a planning stretch
+with nothing shipping, and it is bounded by B's walkthrough rather than by the
+planning itself — see *Open questions*.
+
 ---
 
 ## Open questions
 
-**Which areas does Phase 3 take?** No recommendation is offered on the whole
-set — that is scope, and it is the owner's alone. Two observations that are the
-actor's to make rather than the owner's to derive: **A carries the two defects**
-(F44, F141), which are the only candidates in this file that make a current claim
-false; and **B is what the owner asked for first** and is also the area that
-blocks parallel work hardest, per its boundary note.
+**Which areas does Phase 3 take?** **Answered 2026-08-06 — A, B, E and F.** See
+*Answered* above. What remains open is everything below.
+
+**What does the redesign actually specify?** B's row says it cannot be specified
+without the owner, and the owner has chosen to plan the whole phase before
+building any of it. Those two do not conflict but they do order: **the
+walkthrough is planning's first input, not its alternative.** Until it happens, B
+has no milestones to write, and the areas that rebase onto B cannot be numbered
+against it either. Nothing else in the phase is blocked by it — A, E and F can be
+planned in full while it waits, and under [W33](workflow-changes.md#made)'s
+fallback a blocked B is exactly the case an independent area now answers.
+
+**Does the update checker default on or off?** E's row already says this owes a
+decision before it owes code — it introduces a new outbound-connection class, and
+`docs/SECURITY.md` treats the only existing one as an operator-visible property.
+It belongs in [upcoming-decisions.md](upcoming-decisions.md) when the phase is
+planned, not here.
+
+**How do B and F share the QR work?** F's boundary note says the settings
+vocabulary is B's templates over F's generator, so with both areas taken they are
+one milestone or an ordered pair — never two independent ones. Which of the two
+is a planning decision, and it is the one place the chosen set puts two areas on
+the same files.

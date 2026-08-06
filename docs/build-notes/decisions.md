@@ -232,6 +232,7 @@ file. Append a row when you append an entry.
 | [Working past a question without losing it](#2026-08-06--working-past-a-question-without-losing-it) | W33's fallback half made; the recommendation that was overruled and why the wider form is defensible; the `Parked:` line as the price of it |
 | [A check that outlives the session that ran it](#2026-08-06--a-check-that-outlives-the-session-that-ran-it) | W14 made: the render-verification harness; why its page comes from the templates rather than from a fixture or the instance; why it is opt-in and what that costs |
 | [Measuring what the contract reads](#2026-08-06--measuring-what-the-contract-reads-not-what-it-names) | W34 made: by-row charging in doc-cost.sh; why the phase boundary is the only moment for it; the two trims examined and declined |
+| [Phase 3 takes four areas, and one of them cannot be planned yet](#2026-08-06--phase-3-takes-four-areas-and-one-of-them-cannot-be-planned-yet) | A, B, E, F in; C, D, G stay candidates; planned in full before anything is built, and why the walkthrough is planning's first input rather than its alternative |
 
 ---
 
@@ -19056,3 +19057,60 @@ anything, and trimming either would destroy the record for no gain. Size is not
 cost; the ratio is.
 
 Recorded with no milestone number, per the convention for a process change.
+
+---
+
+## 2026-08-06 — Phase 3 takes four areas, and one of them cannot be planned yet
+
+Owner-set, against [phase-3-candidates.md](phase-3-candidates.md)'s seven work
+areas and planning.md's fifteen-milestone target.
+
+**In: A, B, E, F.** Identity and account lifecycle; dashboard UI and UX;
+infrastructure and resilience; QR codes and campaigns. **Out, and staying
+candidates rather than being dropped: C, D, G** — analytics and reporting,
+redirect path and routing, commercial and entitlements. Nothing is removed from
+the candidate list; four areas are scheduled and three are not, which is the
+distinction the no-silent-removal rule exists to keep.
+
+The set is defensible on its own terms and the reasons are not all the same
+shape. **A** is where the only two candidates live that make a claim the tree
+makes *today* false — F44's account deletion and GDPR erasure, described as
+existing by the schema and four sites, and F141's forgotten password locking an
+account out permanently. Those are defects wearing feature clothes. **B** is what
+the owner asked for first and the area everything else rebases onto. **F** was
+taken with B rather than beside it, which its own boundary note demanded: the
+redesign's third complaint is QR settings vocabulary, which is B's templates over
+F's generator. **E** is the one chosen area with no dependency on the others.
+
+**D was the interesting exclusion.** Every row in it lands on the redirect hot
+path and owes `slo.md`'s k6 measurement, so taking two of its rows means running
+that measurement twice — a real cost the phase declined rather than a judgement
+that the work does not matter.
+
+### Planned in full first, and the ordering that forces
+
+The owner also chose to plan the whole phase before building any of it: every
+chosen area gets its Plan.md rows, milestone files and numbering before milestone
+one starts. What that buys is the size target enforced by arithmetic instead of
+discovered at milestone twenty, which is exactly the failure Phase 2 demonstrated
+— 33 milestones arriving one justified insertion at a time with nobody ever being
+the person who decided the phase was large.
+
+**It collides with B, and the collision resolves by ordering rather than by
+choice.** B's row says in as many words that it cannot be specified without the
+owner: it asks for an area-by-area walkthrough plus blind-task exercises, where
+the owner is handed a task with no instructions and the UX is judged by whether
+it can be done. So *plan everything first* and *the walkthrough* are not
+alternatives. The walkthrough is planning's **first input**, and until it happens
+B has no milestones to write and the areas that rebase onto B cannot be numbered
+against it.
+
+Everything else can proceed while it waits. A, E and F are plannable now, and
+this is the first real use of [W33](workflow-changes.md#made)'s fallback in
+anger: a blocked B is precisely the case an independent area is supposed to
+answer, and the areas were cut by which files a milestone touches so that
+independence would mean something.
+
+Recorded with no milestone number. It is a scope decision rather than a process
+one, but Phase 3 has no Plan.md section yet for it to live in — writing that
+section is the planning work this decision authorises, not a precondition of it.
