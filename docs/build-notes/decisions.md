@@ -17900,3 +17900,40 @@ One divergence was found while moving the steps and is a
 `./cmd/linkctrl/...`, while the CI job runs only `./test/integration/`. Widening
 CI's coverage inside a refactor would have been exactly the mixing this entry
 argues against.
+
+## 2026-08-06 — F1's fix takes W27's route, because the token cannot push it
+
+[F1](deferred-findings.md) is approved work whose fix lands in
+`.github/workflows/release.yml`. The commit was made, verified, and refused by
+the remote: the fine-grained PAT has no `Workflows` permission.
+
+The first instinct was to ask for the permission. The owner's answer was to use
+the route [W27](workflow-changes.md) had just built for exactly this, and that
+is the better answer — `ci/proposed/README.md` had already worked out why the
+permission stays absent, and granting it to unblock one `awk` change would have
+traded a lever over `packages: write`, `actions: write` and the tag ruleset for
+a one-line fix to a release note.
+
+### Why it is a proposal and not a make target
+
+W28's split puts checks and tool versions in the Makefile and triggers,
+permissions and workflow bodies on the owner's side. This step is neither a check
+nor a version: it *produces the release body*, and its output feeds
+`gh release create`. There is no target it could move to without moving the
+publish with it, which is the thing the split exists to keep on one side.
+
+### F1 stays open
+
+The extraction that runs at the 0.2.0 tag is the live workflow, not the file in
+`ci/proposed/`. Until the owner applies it, the 0.2.0 release body carries the
+`[Unreleased]:` and `[0.1.0]:` definitions exactly as v0.1.0's does. Closing the
+row on a written fix would record a defect as gone while the thing it describes
+still runs — the same shape as closing [F75](deferred-findings.md) on a Plan.md
+row, and refused for the same reason.
+
+### What was verified before proposing it
+
+Both programs run over the real `CHANGELOG.md` as it will be at 0.2.0: the old
+one pulls the two reference definitions into the 0.1.0 body, the new one pulls
+zero and keeps all 165 lines. `make workflow-proposals` reports it pending with
+the diff, which is what the owner reviews.
