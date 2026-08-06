@@ -278,7 +278,15 @@ ci-integration: ## Integration tests against caller-provided services — what C
 		exit 1; \
 	}
 	@scripts/ci-db-timezone.sh "$(TEST_DATABASE_URL)"
-	go test -tags=integration -race -count=1 ./test/integration/
+	@# The same three packages `test-integration` runs, and that is the point
+	@# (F144). This ran `./test/integration/` alone, so two integration tests
+	@# never ran on a runner at all: the demo-coverage list in `cmd/lctl`, which
+	@# fails when a milestone adds a visible feature and seeds nothing, and the
+	@# scheduler's own tests in `cmd/linkctrl`, added at F73 for a job whose
+	@# whole claim is that it runs without leadership. Neither can live in
+	@# `test/integration`, because that package cannot import package main —
+	@# which is exactly why they were easy to leave out of CI and hard to notice.
+	go test -tags=integration -race -count=1 ./test/integration/... ./cmd/lctl/... ./cmd/linkctrl/...
 
 IMAGE         ?= linkctrl:ci
 IMAGE_VERSION ?= ci
