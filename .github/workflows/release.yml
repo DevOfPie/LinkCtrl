@@ -1,28 +1,3 @@
-# PROPOSAL — release.yml, closing F1.
-#
-# Apply per ci/proposed/README.md:
-#     cp ci/proposed/release.yml .github/workflows/release.yml
-#     make workflow-proposals      # must report: applied
-#
-# WHAT CHANGES: one step, "Extract this version's changelog section". Its awk
-# gains a second exit condition so the extraction stops at CHANGELOG.md's
-# trailing link-reference block, and a printf trims the blank line that exit
-# leaves behind. Nothing else in this file is touched.
-#
-# WHAT DOES NOT CHANGE: every trigger, the permissions blocks, GO_VERSION, the
-# service images, runs-on, every action and its SHA pin, the tag ruleset the
-# release path depends on, and the order of every job and step. This alters what
-# the release *notes say*, not what runs on a runner.
-#
-# WHY IT CANNOT BE A MAKEFILE EDIT: ci/proposed/README.md's table puts a check
-# in a make target and this is not a check — it is the body of the release the
-# workflow publishes, produced by a step whose output feeds gh release create.
-# There is no target it could move to without moving the publish with it.
-#
-# VERIFIED against the real CHANGELOG.md as it will be at 0.2.0, by running both
-# the old and the new program over it: the old pulls the two `[Unreleased]:` and
-# `[0.1.0]:` definitions into the 0.1.0 body, the new pulls zero and keeps all
-# 165 lines of content.
 # Publishes a release: a multi-architecture image, checksummed binaries, and notes.
 #
 # Triggered by a tag, because the tag is the thing being released — the version the
