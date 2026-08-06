@@ -149,18 +149,22 @@ destination.
 **Given.** Optionally a count or a list of units to read ahead over. Default is
 the next three.
 
-**Decides.** Which choices the plan does not yet cover. Not the choices
-themselves.
+**Decides.** Which choices the plan does not yet cover, and when they are put to
+the owner. Not the choices themselves.
 
 **Must not.** Fix anything it finds — a plan defect is a question, not a
 correction, because silently correcting it means the loop later validates
 against a plan somebody quietly edited. Decide anything, including the obvious
-ones. Cross a phase boundary.
+ones. Ask before the file is written, or ask a question in words the entry does
+not use. Cross a phase boundary.
 
 **Authority.** [workflow.md](workflow.md#a-decision-is-coming-and-the-loop-has-not-reached-it-yet).
 
 **Produces.** Open questions in a tracked file, each with options, costs, a
-recommendation, and what it assumes about a tree that is not built yet.
+recommendation, and what it assumes about a tree that is not built yet — and
+then the asking of them, so a read-ahead ends with answers rather than with a
+file nobody was told about. An answer moves to decisions.md immediately; an
+unanswered question stays where it was written.
 
 ---
 

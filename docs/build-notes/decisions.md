@@ -234,6 +234,7 @@ file. Append a row when you append an entry.
 | [Measuring what the contract reads](#2026-08-06--measuring-what-the-contract-reads-not-what-it-names) | W34 made: by-row charging in doc-cost.sh; why the phase boundary is the only moment for it; the two trims examined and declined |
 | [Phase 3 takes four areas, and one of them cannot be planned yet](#2026-08-06--phase-3-takes-four-areas-and-one-of-them-cannot-be-planned-yet) | A, B, E, F in; C, D, G stay candidates; planned in full before anything is built, and why the walkthrough is planning's first input rather than its alternative |
 | [What the resume path reads is the live phase](#2026-08-06--what-the-resume-path-reads-is-the-live-phase) | W35 made: a finished phase's status rows move to their own file; plus Phase 3 starts at M46 and budgets two adversarial reviews, and the walkthrough gates all planning |
+| [The command catches up with the file it writes](#2026-08-06--the-command-catches-up-with-the-file-it-writes) | W8 made: `/preview-decisions` asks after filing; why the order is the substance; where an early answer lives before the milestone that uses it lands |
 
 ---
 
@@ -19176,3 +19177,72 @@ numbered, so three areas planned early might have needed trimming afterwards.
 Planning once, with B's real shape in it, is what the size target is for.
 
 Recorded with no milestone number.
+
+---
+
+## 2026-08-06 — The command catches up with the file it writes
+
+W8 was raised by the owner on 2026-07-31, minutes after a `/preview-decisions`
+run wrote six entries and asked nothing. All six were answered in that same
+session — but only because the owner asked why no prompts had appeared. The row
+then sat unapproved for six days, twice reviewed and twice left as a suggestion,
+because what the owner had asked for was the *row*.
+
+Approved and made 2026-08-06, with the owner specifying the order: **the file
+first, then the prompts.**
+
+### The order is the substance, not a detail of sequencing
+
+Asking first and filing after would produce the same questions and a worse
+failure mode. A run interrupted mid-conversation — a context limit, a crash, an
+owner who steps away — would have asked some questions and recorded none, and
+the questions it asked would exist only in a transcript. Filing first means the
+durable artifact is complete before a word is spoken, and the asking is a second
+pass over something already written down.
+
+**The rule was already there.** `upcoming-decisions.md`'s own header says *a
+question answered in conversation and nowhere else is a question that will be
+re-asked, and answered differently. Write it here first, then answer it.* The
+file has said that the whole time; the command that writes the file never did
+the second half. W8 is not a new rule — it is the command catching up with a
+rule already binding on it, which is why it needed no change to the file's
+header and none to workflow.md's contract beyond naming the new step.
+
+### The prompt is the entry, not a paraphrase of it
+
+Step 2 already requires every entry to carry options, costs, a recommendation
+and what it assumes about a tree that is not built yet — *reading ahead is not an
+excuse for a thinner prompt*. So step 3 authors nothing. A question phrased one
+way in the file and another way in the conversation is **two questions**, and the
+answer then attaches to whichever one the owner was actually looking at.
+
+### Where an early answer lives
+
+This is the part W8 makes load-bearing, and it was worth stating explicitly
+rather than leaving to be inferred. Before this change answers trickled in and
+were usually used soon after; now a single run can produce six answers for
+milestones weeks away.
+
+The file holds **questions, never answers** — its header is unambiguous. So an
+answered entry leaves it and the answer is appended to decisions.md immediately,
+carrying the date it was *given*. The `D` number is assigned in Plan.md when the
+milestone that uses it lands, which is what makes the trail show that the
+decision predated the work. An answer left sitting in upcoming-decisions.md
+would be a decision living in the file that exists to hold questions, and it
+would be re-taken by whoever builds the milestone.
+
+Two answers that are not answers, handled explicitly because both have happened:
+*you decide* means the entry's stated **default**, recorded as the owner's and
+noted as taken rather than chosen; **silence** means the entry stays untouched
+and the report names it. Nothing is inferred from either.
+
+### What it costs
+
+A read-ahead used to be a cheap unattended run and is now a conversation. That is
+what the row buys and it is not free — the owner has to be present for a command
+that previously needed nobody. The mitigation is the one the file was designed
+around: the questions are answerable at leisure because the loop is not standing
+still on them, and only the questions *this run wrote* are asked, so a second run
+over the same milestones is quiet.
+
+Recorded with no milestone number, per the convention for a process change.

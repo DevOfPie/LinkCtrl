@@ -2,11 +2,16 @@
 description: Find the decisions the loop will hit next, so they can be answered early
 ---
 
-Read ahead of the loop and collect the questions it has not reached yet. You are
-the **orchestrator**. This command builds nothing, edits no code, and answers
-nothing — its whole product is
+Read ahead of the loop and collect the questions it has not reached yet, write
+them down, **then ask them**. You are the **orchestrator**. This command builds
+nothing, edits no code, and answers nothing itself.
+
+Its durable product is
 [upcoming-decisions.md](../../docs/build-notes/upcoming-decisions.md), a file of
-open questions.
+open questions, and that file is written **before** a single question is put to
+the owner. The order is the point: a run interrupted halfway through asking has
+still recorded every question it found, and that file's own header is where the
+rule comes from — *write it here first, then answer it*.
 
 An unanswered prompt is the phase loop's only self-inflicted stop condition, and
 since W33 it is a *conditional* one — the loop parks the question and falls back
@@ -65,11 +70,28 @@ Do not duplicate a question already in the file. An entry whose milestone has
 since been built and whose question went unasked is deleted, and the report says
 so — it means the milestone did not need it after all.
 
-## 3. Report
+## 3. Ask
 
-Per milestone: covered, or the questions raised. Then the count now waiting in
-the file. Answering happens in conversation, or by the owner editing the file
-directly; either way an entry leaves it only via
-[decisions.md](../../docs/build-notes/decisions.md), and the answer is appended
-there with its `D` number when the milestone that uses it lands — carrying the
-date it was *given*, not only the date it was used.
+Put every entry this run wrote to the owner. Not a summary of them — the entry
+already carries options, costs, a recommendation and its assumptions, because
+step 2 required all four, so **the prompt is that content and nothing newly
+authored**. A question phrased differently in the conversation than in the file
+is two questions.
+
+Ask only what this run wrote. Entries already in the file were asked when they
+were written; re-asking them every run is how a read-ahead becomes noise.
+
+| The owner | Then |
+| --- | --- |
+| Answers | The entry **leaves the file**, and the answer is appended to [decisions.md](../../docs/build-notes/decisions.md) **now**, carrying the date it was given. Its `D` number is assigned in Plan.md when the milestone that uses it lands. The file holds questions and never answers, so an answer that stays here is an answer that will be re-taken |
+| Says *you decide* | That is an answer: the entry's stated **default** is what happens. Record it as the owner's, with the note that it was taken as the default rather than chosen |
+| Does not answer | The entry stays, unanswered and untouched. Nothing is inferred from silence, and the report names it |
+
+**Never answer one yourself.** Reading ahead does not relax *ask, never assume*;
+it moves when the asking happens, and this step is when.
+
+## 4. Report
+
+Per milestone: covered, or the questions raised. Then what each answer did —
+recorded to decisions.md, or still waiting — and the count now in the file,
+including entries older than this run.

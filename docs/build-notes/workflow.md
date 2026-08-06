@@ -90,10 +90,11 @@ file, and draining is what makes it durable.
 ### A decision is coming, and the loop has not reached it yet
 
 `/preview-decisions` reads ahead: it runs [step 1](phase-loop.md#1-validate)'s
-*decisions cover it* check across the milestones not yet built and writes what
-it finds to [upcoming-decisions.md](upcoming-decisions.md), unanswered. Answering
-one there is worth exactly what answering it in the loop is worth, and costs the
-loop no stall.
+*decisions cover it* check across the milestones not yet built, writes what it
+finds to [upcoming-decisions.md](upcoming-decisions.md), **and then asks** — the
+file first, always, so an interrupted run has still recorded every question.
+Answering one there is worth exactly what answering it in the loop is worth, and
+costs the loop no stall.
 
 One direction only. An entry leaves that file when it is answered, and the answer
 is appended to [decisions.md](decisions.md) with its `D` number on the date it is
