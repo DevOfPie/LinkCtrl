@@ -65,15 +65,18 @@ for a change nobody has agreed to yet.
 From a checkout with the owner's credentials:
 
 ```sh
-cp ci/proposed/ci.yml .github/workflows/ci.yml
+cp ci/proposed/NAME.yml .github/workflows/NAME.yml
 make workflow-proposals          # must now report: applied
-git add .github/workflows/ci.yml
+git add .github/workflows/NAME.yml
 git commit
 ```
 
-`make workflow-proposals` compares the two files byte for byte, so `applied` means
-the live workflow is the file that was reviewed and not an edited-in-transit
-version of it.
+`make workflow-proposals` compares the two files, so `applied` means the live
+workflow is the file that was reviewed and not an edited-in-transit version of
+it. Use `cp` rather than copying the text through an editor: only the **final
+newline** is normalised in that comparison, and everything else counts,
+whitespace included. The first proposal applied by hand lost its trailing newline
+and reported pending until the comparison was taught to ignore that one byte.
 
 Then close the loop the way the repository closes every process change: move the
 row in [`docs/build-notes/workflow-changes.md`](../../docs/build-notes/workflow-changes.md)

@@ -27,6 +27,22 @@ fi
 pending=0
 found=0
 
+# A proposal is applied by copying it, and a copy that goes through an editor
+# rather than `cp` routinely loses its trailing newline. That is not a change to
+# the workflow, but a byte-for-byte comparison calls it one — and a report that
+# cries pending on an applied proposal is a report people stop reading, which is
+# the failure this repository has already had once with the link gate.
+#
+# So trailing newlines are normalised and nothing else is. Whitespace inside a
+# YAML file is not incidental, and the whole point of the comparison is that the
+# live workflow is the file that was reviewed.
+#
+# Command substitution strips trailing newlines from both sides, which is the
+# whole normalisation — no sed, no temporary files.
+same() {
+  [ "$(<"$1")" = "$(<"$2")" ]
+}
+
 for proposal in "$proposed_dir"/*.yml "$proposed_dir"/*.yaml; do
   [ -e "$proposal" ] || continue
   found=$((found + 1))
@@ -36,7 +52,7 @@ for proposal in "$proposed_dir"/*.yml "$proposed_dir"/*.yaml; do
   if [ ! -e "$live" ]; then
     printf 'PENDING  %s — no %s yet; this proposal creates it\n' "$name" "$live"
     pending=$((pending + 1))
-  elif cmp -s "$proposal" "$live"; then
+  elif same "$proposal" "$live"; then
     printf 'applied  %s — matches %s\n' "$name" "$live"
   else
     printf 'PENDING  %s — differs from %s\n' "$name" "$live"
