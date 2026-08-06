@@ -1,0 +1,177 @@
+# PROPOSED replacement for .github/workflows/ci.yml — not live until the owner
+# copies it into place. See ci/proposed/README.md for why it arrives this way and
+# for the two commands that apply it.
+#
+# The checks every change has to pass.
+#
+# `make check` is the local equivalent for the parts that need no services. This
+# file adds the parts that do: integration tests against a real Postgres and Redis,
+# and a container build. If the two ever disagree, this file is what gates a merge,
+# so keep the Makefile in step with it rather than the other way round.
+#
+# Every step here is a make target. What a step *does* therefore lives in the
+# Makefile, which is writable by whoever is building this repository; what a step
+# *is* — the triggers, the permissions block, the service images, the pinned
+# actions — lives here, and changing it needs the owner. That split is the whole
+# point of the file, and ci/proposed/README.md is where it is argued.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  # So a scheduled run catches a dependency or base-image problem that no commit
+  # introduced. Nothing is more confusing than a release build failing on code
+  # that has not changed in weeks.
+  schedule:
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.26"
+
+jobs:
+  build:
+    name: Build and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The build stamps a version from git describe, which needs history.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      # Vendored assets verified against their pinned checksums, stylesheet,
+      # build, version stamp, vet, unit tests under -race, the OpenAPI parity
+      # test, module tidiness, and generated code matching its source. Adding a
+      # tenth check means editing the Makefile, not this file.
+      - name: Build and check
+        run: make ci-build
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      # shellcheck over scripts/, then the assets — the stylesheet is embedded, so
+      # the package does not compile without it and the linter cannot type-check
+      # anything that imports internal/ui.
+      - name: Shell scripts and assets
+        run: make ci-lint
+
+      # Action major matters here: v6 and earlier run only golangci-lint v1.x and
+      # refuse the v2 config schema this repository uses — the job would fail on
+      # every run. v7 is where the action gained v2 support.
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          # Pinned: a linter that updates itself turns an unrelated release into a
+          # red build, which is how nolint comments accumulate for the wrong reason.
+          version: v2.12.2
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: linkctrl
+          POSTGRES_PASSWORD: ci-password
+          POSTGRES_DB: linkctrl
+          TZ: UTC
+        options: >-
+          --health-cmd "pg_isready -U linkctrl -d linkctrl"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: Build the stylesheet
+        run: make htmx swagger-ui css
+
+      # Asserts the session timezone is UTC before running anything, then runs the
+      # suite. Both variables are required by the target rather than defaulted:
+      # without LINKCTRL_REDIS_URL the Redis tier tests skip and the job is green
+      # for three tests that never ran.
+      - name: Integration tests with the race detector
+        run: make ci-integration
+        env:
+          TEST_DATABASE_URL: postgres://linkctrl:ci-password@localhost:5432/linkctrl?sslmode=disable
+          LINKCTRL_REDIS_URL: redis://localhost:6379/0
+          PGPASSWORD: ci-password
+
+  image:
+    name: Container image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Third-party actions are pinned to commit SHAs, not tags, matching the
+      # project's bar for third-party build inputs (the Tailwind, htmx and
+      # Swagger downloads are all checksum-verified): a tag is a moving
+      # reference its owner can repoint under a workflow's token. GitHub-owned
+      # actions/* stay on tags.
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      # Both release platforms, because the Dockerfile selects a Tailwind asset by
+      # TARGETARCH and an arm64-only failure would otherwise surface for the first
+      # time during a release.
+      - name: Build for both release platforms
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false
+          build-args: |
+            VERSION=ci
+            COMMIT=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Load the amd64 image and check it starts and reports itself
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          load: true
+          tags: linkctrl:ci
+          build-args: |
+            VERSION=ci
+            COMMIT=${{ github.sha }}
+          cache-from: type=gha
+
+      - name: The image answers for itself
+        run: make ci-image-smoke

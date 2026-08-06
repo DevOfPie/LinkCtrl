@@ -161,6 +161,11 @@ check-links: ## Verify every relative link and anchor in tracked markdown
 # A gate, after a phase of being a tool someone remembered to run by hand. This
 # repository's own decision log records how that ends: the link gate was listed
 # for a whole phase, unenforced, and did not work when finally built.
+#
+# The runner ships shellcheck, so this costs an apt-get nothing in CI. Unpinned,
+# unlike golangci-lint: shellcheck's output is stable across minor versions, and
+# its scripts-only surface means a surprise finding is a two-line fix rather than
+# a red build across the repository.
 .PHONY: shellcheck
 shellcheck: ## Lint every shell script
 	shellcheck scripts/*.sh
@@ -183,8 +188,108 @@ tidy: ## Tidy and verify modules
 	go mod tidy
 	go mod verify
 
+.PHONY: vet
+vet: ## Run go vet
+	go vet ./...
+
+# `tidy` repairs; this one reports. A gate that fixes what it finds passes on a
+# tree nobody has looked at, which is the same distinction verify-assets draws
+# against `make htmx swagger-ui`.
+.PHONY: check-tidy
+check-tidy: ## Fail if go.mod or go.sum are not tidy
+	go mod tidy
+	git diff --exit-code -- go.mod go.sum
+
+# Must match the version stamped into internal/store/dbgen, which sqlc writes
+# into every file it emits. A mismatch fails on the comment alone, with the rest
+# of the diff empty — which is what it did the first time this check ever ran,
+# having been pinned a minor version behind the committed output since it was
+# written. Bumping it here is the whole change; nothing else names the version.
+SQLC_VERSION := v1.31.1
+
+# `go install` puts sqlc in $(go env GOPATH)/bin. That is on PATH on a GitHub
+# runner; on a workstation it may not be, which is the one way this target fails
+# for a reason that has nothing to do with the diff it is checking.
+.PHONY: check-generate
+check-generate: ## Fail if committed generated code does not match its source
+	go install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
+	sqlc generate
+	git diff --exit-code -- internal/store/dbgen
+
+.PHONY: check-version-stamp
+check-version-stamp: build ## Fail if a built binary does not report its version stamp
+	@scripts/check-version-stamp.sh $(BIN)/linkctrl $(BIN)/lctl
+
 .PHONY: check
 check: tidy lint shellcheck test ## Everything CI runs, short of integration tests
+
+## ---- ci -------------------------------------------------------------------
+
+# One target per CI job, and every step of every job is a target rather than a
+# `run:` block in YAML. This is not tidiness: the agent that maintains this
+# repository holds a token without the `Workflows` permission and cannot write
+# `.github/workflows/` at all, so a check added here reaches CI on the next push
+# while a check added as a workflow step reaches CI only after the owner applies
+# a proposal by hand. ci/proposed/README.md is the contract and says what still
+# has to go through that route — triggers, permissions, service images, actions.
+#
+# These are not `make check`, and the difference is deliberate: CI runs uncached,
+# against services the runner provides, and verifies the vendored assets instead
+# of repairing them. `make check` is the local gate and is unchanged.
+#
+# The cost of the aggregates, stated: GitHub shows one step per `run:`, so
+# folding a job into one target costs the per-check timing and the green tick
+# beside each name in the run summary. Make prints the recipe it is running, so a
+# failure still names itself in the log — that is the trade, and it is what buys
+# a CI check that can be added without a workflow edit.
+
+.PHONY: ci-test
+ci-test: ## Unit tests with the race detector, uncached — what CI runs
+	go test -race -count=1 ./...
+
+.PHONY: ci-build
+ci-build: verify-assets css build check-version-stamp vet ci-test openapi check-tidy check-generate ## The CI build job, end to end
+	@echo "ci-build: every check passed"
+
+# golangci-lint is not here. It runs from a commit-pinned action in the workflow,
+# and pinning is the point of that action — reproducing it with a `go install`
+# would be a second version of the same pin, free to drift from the first.
+.PHONY: ci-lint
+ci-lint: shellcheck htmx swagger-ui css ## The CI lint job's steps, short of golangci-lint
+	@echo "ci-lint: shell clean, assets built; golangci-lint runs from the workflow's pinned action"
+
+# Against whatever Postgres and Redis the caller provides, not the compose
+# instance: on a runner these are service containers, and require-stack would try
+# to start a stack that is already there under different ports.
+#
+# Both variables are required rather than defaulted, and LINKCTRL_REDIS_URL is
+# the one that matters most: without it the Redis tier tests fall back to
+# localhost:6379, find nothing, and *skip*. The suite stays green while three
+# tests that never ran claim to cover the cache — so an unset variable fails here
+# instead of passing quietly.
+.PHONY: ci-integration
+ci-integration: ## Integration tests against caller-provided services — what CI runs
+	@test -n "$(TEST_DATABASE_URL)" || { \
+		echo "TEST_DATABASE_URL is not set — refusing to run against an unknown database."; \
+		exit 1; \
+	}
+	@test -n "$(LINKCTRL_REDIS_URL)" || { \
+		echo "LINKCTRL_REDIS_URL is not set — the Redis tier tests would skip and the run would be green for it."; \
+		exit 1; \
+	}
+	@scripts/ci-db-timezone.sh "$(TEST_DATABASE_URL)"
+	go test -tags=integration -race -count=1 ./test/integration/
+
+IMAGE         ?= linkctrl:ci
+IMAGE_VERSION ?= ci
+
+.PHONY: ci-image-smoke
+ci-image-smoke: ## Check a built container image runs and reports its version
+	@scripts/ci-image-smoke.sh "$(IMAGE)" "$(IMAGE_VERSION)"
+
+.PHONY: workflow-proposals
+workflow-proposals: ## Which ci/proposed/ workflow proposals the owner has not applied yet
+	@scripts/workflow-proposals.sh
 
 ## ---- codegen --------------------------------------------------------------
 

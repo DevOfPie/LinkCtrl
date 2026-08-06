@@ -17812,3 +17812,91 @@ alone deliberately: changing what the script measures mid-measurement would make
 this phase's number incomparable with the last one's, and the fix belongs with
 whoever changes the script rather than inside a release. Recorded here so the
 number is read with its error attached rather than trusted.
+
+## 2026-08-06 — CI logic moves into the Makefile, because the token cannot write the workflow
+
+The account building this repository holds a fine-grained PAT with
+`Contents: write` and no `Workflows` permission. That is not a gap waiting to be
+filled. It was asked as a direct question — *should the org token gain
+`Workflows`* — and the answer is no, for a reason that is easy to state and easy
+to miss.
+
+### The permission is not a lever on YAML
+
+A workflow file is code that runs with `GITHUB_TOKEN`, and a workflow's own
+`permissions:` block overrides the repository default. The repository's
+`default_workflow_permissions` is `read`; that is a default, not a ceiling, and
+a job may re-request more. So write access to `.github/workflows/` converts into
+`packages: write` — publishing to `ghcr.io/DevOfPie/LinkCtrl`, `latest`
+included — into `actions: write`, which deletes the run logs that are the audit
+trail, and into `pages: write`. None of those appear on the token that was
+granted.
+
+It also routes around the tag ruleset. That ruleset is the only control on the
+release path, and it works by restricting who may create a `v*` tag; a job with
+`packages: write` on `on: push` needs no tag at all. And a workflow with a
+`schedule:` or `workflow_dispatch:` trigger keeps running after the token that
+wrote it is revoked, which is the same revocation-surviving property that keeps
+`Webhooks` off the grant.
+
+One permission therefore buys most of the list it was meant to sit outside. That
+is the whole argument, and it holds regardless of who is asking or how routine
+the workflow edit is.
+
+### The refusal is at the push, so "open a PR" is not an option
+
+GitHub rejects the push, not the merge: a branch carrying a change under
+`.github/workflows/` cannot leave this machine. There is no version of *propose
+it and let the owner review the diff in a PR* that works, which is why the
+proposal arrives as a file at a path that is not `.github/workflows/`.
+
+### The split, and why most CI changes stop needing the owner
+
+Almost every CI change is a change to *what a check does*, not to *what CI is*.
+Separating the two makes the manual step rare enough to afford:
+
+- What a step does — the commands, the tool pins, the assertions — is now a make
+  target. `ci-build`, `ci-lint`, `ci-integration`, `ci-image-smoke`. Adding a
+  check inside one reaches CI on the next push.
+- What CI is — triggers, `permissions:`, service images, `runs-on`, action SHA
+  pins, `GO_VERSION` — stays in the workflow and goes through `ci/proposed/`.
+
+The sqlc version is the clearest case. It was a literal inside a workflow step,
+so bumping it needed a permission this account will not have; it is now
+`SQLC_VERSION` in the Makefile, where the comment explaining why the pin matters
+travels with it.
+
+This grants nothing new. `Contents: write` on a repository whose CI is
+`on: push: branches: ["**"]` already means arbitrary code on a runner — editing
+the Makefile has always been enough. Moving the steps there makes explicit what
+was already true, without adding the escalation primitive.
+
+### What it costs, stated rather than absorbed
+
+GitHub renders one step per `run:`, so a job folded into a single target loses
+the per-check timing and the tick beside each check's name in the run summary.
+`make` prints the recipe it is running, so a failure still names itself in the
+log. That is the trade: a slightly worse run summary, in exchange for CI checks
+that can be added by the actor that writes the tests.
+
+### What was deliberately not done
+
+The proposal is a pure refactor. The triggers, the `permissions: contents: read`
+block, the service images, the pinned actions and the order of the commands are
+untouched, because a proposal that mixes a refactor with a semantic change gets
+approved for the refactor.
+
+Two things were left alone on purpose. `GO_VERSION` could read from `go.mod` via
+`setup-go`'s `go-version-file`, which would move Go bumps to the agent-writable
+side; it also changes resolution from *latest 1.26.x* to the exact patch in
+`go.mod`, and that is a semantic change that belongs in its own proposal. And
+the integration job's service containers could be replaced by the repository's
+own compose stack, which would move the image pins into `docker-compose.yml`;
+that is a larger change to how CI gets its database, and it was not asked for.
+
+One divergence was found while moving the steps and is a
+[deferred-findings](deferred-findings.md) row rather than a fix here:
+`make test-integration` runs `./test/integration/...`, `./cmd/lctl/...` and
+`./cmd/linkctrl/...`, while the CI job runs only `./test/integration/`. Widening
+CI's coverage inside a refactor would have been exactly the mixing this entry
+argues against.
