@@ -1,9 +1,15 @@
 # Phase details
 
-One file per milestone, named for its number: `m21.md` … `m45.md`, plus the
-fractional insertions — `X.9` is reserved for scheduled reviews, `X.1`–`X.8` for
-added scope; the rules are in [planning.md](../planning.md). Read exactly the one you are building — that is what this
-split is for. Nothing here restates another file.
+One file per milestone, named for its number — `m46.md`, and the fractional
+insertions beside it, where `X.9` is reserved for scheduled reviews and
+`X.1`–`X.8` for added scope; the rules are in [planning.md](../planning.md).
+Read exactly the one you are building — that is what this split is for. Nothing
+here restates another file.
+
+**The table below is the live phase and nothing else.** A finished phase's rows
+move to their own file, so the resume path reads the milestones that can still
+be next rather than every milestone there has ever been: Phase 1 is in
+[phase-1.md](phase-1.md), Phase 2 in [phase-2.md](phase-2.md).
 
 [Plan.md](../../../Plan.md) holds the scope contract and the ordering table.
 This directory holds the definitions of done those rows point at.
@@ -19,48 +25,34 @@ looks like an ordering mistake. Reopening is what happens when a shipped
 milestone's claim turns out false — the rule, and why it beats a successor
 milestone, is in [workflow.md](../workflow.md).
 
+## Phase 3
+
+**Not planned yet.** Four work areas are chosen — identity and account
+lifecycle, dashboard UI and UX, infrastructure and resilience, QR codes and
+campaigns — and the phase is planned in full before its first milestone is
+built. Numbering continues from Phase 2, so the first row is **M46**. Two
+adversarial reviews are budgeted inside the fifteen-milestone target, as Phase 2
+had: one mid-phase, one pre-release. What gates the planning, and the three
+questions still open, are in
+[phase-3-candidates.md](../phase-3-candidates.md).
+
+Until a row exists here, [step 1](../phase-loop.md#1-validate) has no next
+milestone and `/work phase` enters nothing. That is the accurate state, not a
+missing file.
+
 | # | Milestone | Depends on | Status |
 | --- | --- | --- | --- |
-| [M21](m21.md) | Audit log: behavior, retention, growth alerting | — | done |
-| [M22](m22.md) | Notifications: in-app behavior | — | done |
-| [M23](m23.md) | Cross-replica cache invalidation (pub/sub) | — | done |
-| [M24](m24.md) | Shared rate limits (credentials and API) | — | done |
-| [M24.5](m24.5.md) | Dark mode: theme tokens, system default, override | — (before M25) | done |
-| [M25](m25.md) | Workspace and organization switcher | — | done |
-| [M26](m26.md) | Mailer: optional SMTP delivery | — | done |
-| [M26.5](m26.5.md) | Dashboard header: identity menu and notification bell | — (before M27) | done |
-| [M26.6](m26.6.md) | Bounded Redis failure, when the server never answers | — (before M32.5, M34, M40) | done |
-| [M27](m27.md) | Organizations: invitations and joining | M21 M22 M25 M26 | done |
-| [M28](m28.md) | Team management, workspaces, org creation | M27 | done |
-| [M28.5](m28.5.md) | Organization deletion and tenancy teardown | M28 | done |
-| [M29](m29.md) | Self-serve signup, configured by the operator | M26 M27 | done |
-| [M30](m30.md) | Destination blocking: tiers and logging | M21 | done |
-| [M31](m31.md) | Blocked-attempt disputes and owner review | M30 M22 | done |
-| [M32](m32.md) | Opt-in reputation and malware feeds | M30 M31 | done |
-| [M32.5](m32.5.md) | Bot blocking, per domain and per link | — (before M33, M34) | done |
-| [M32.9](m32.9.md) | **Mid-phase adversarial review** | M21–M32.5 | done |
-| [M33](m33.md) | Deep-link path forwarding | — (before M34) | done |
-| [M33.5](m33.5.md) | A demo that shows the phase, not just its links | M32.9 | done |
-| [M34](m34.md) | Routing rules: conditions, first-match evaluation | M23 M30 M33 | done |
-| [M35](m35.md) | Gated links: password, signed, one-time, max-click | M34 (ordering) | done |
-| [M36](m36.md) | Split testing: weighted, sequential, fallback, flags | M34 M35 M30 | done |
-| [M37](m37.md) | Dimension visualizations, rollup cadence first | — | done |
-| [M38](m38.md) | Folders: API and tree UI | — | done |
-| [M39](m39.md) | Per-domain ownership | M21 | done |
-| [M40](m40.md) | Custom domains: verification and serving | M39 M23 | done |
-| [M41](m41.md) | QR codes and campaigns | — | done |
-| [M42](m42.md) | Webhooks | M30 | done |
-| [M43](m43.md) | Automation rules | M22 M35 M42 | done |
-| [M44](m44.md) | API keys: rotation and scope choice | M21 | done |
-| [M44.9](m44.9.md) | **Pre-release adversarial review** | M21–M44 | done |
-| [M45](m45.md) | Deferred findings, documentation pass, 0.2.0 | all | done |
 
 New milestone files start from [_template.md](_template.md).
-Phase 1's late-added milestones are in [phase-1.md](phase-1.md).
 
 ## What every milestone inherits
 
-Not repeated in the files below. These hold for all of Phase 2.
+Not repeated in the milestone files. **These are Phase 2's**, and they stayed
+here rather than moving with its status table because most are product
+invariants that outlast the phase that wrote them — never permanent redirects,
+the privacy stance, `ui` stays stdlib-only, sabotage a test that passes first
+try. **Which of them Phase 3 inherits is confirmed when Phase 3 is planned**,
+one at a time, rather than assumed by the table having been left in place.
 
 | Rule | Consequence |
 | --- | --- |

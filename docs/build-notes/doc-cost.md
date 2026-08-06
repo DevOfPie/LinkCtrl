@@ -45,9 +45,9 @@ Step 0 and step 1 of the loop, before a single milestone file is opened.
 | File | Bytes | ≈tokens |
 | --- | ---: | ---: |
 | `docs/build-notes/phase-loop.md` | 28436 | 7109 |
-| `docs/build-notes/phase-details/README.md` | 10044 | 2511 |
+| `docs/build-notes/phase-details/README.md` | 8838 | 2209 |
 | `Plan.md`, longest row | 185 | 46 |
-| **Total** | **38665** | **9666** |
+| **Total** | **37459** | **9364** |
 
 ### A feature request — on top of *every task*
 
@@ -56,9 +56,9 @@ planning.md's path, per workflow.md's feature trigger.
 | File | Bytes | ≈tokens |
 | --- | ---: | ---: |
 | `docs/build-notes/planning.md` | 7286 | 1821 |
-| `docs/build-notes/phase-details/README.md` | 10044 | 2511 |
+| `docs/build-notes/phase-details/README.md` | 8838 | 2209 |
 | `docs/build-notes/phase-details/_template.md` | 1585 | 396 |
-| **Total** | **18915** | **4728** |
+| **Total** | **17709** | **4427** |
 
 ### Reference — named by the contract, not read whole by it
 
@@ -67,18 +67,18 @@ what makes the predicted column a ceiling rather than an estimate.
 
 | File | Bytes | ≈tokens |
 | --- | ---: | ---: |
-| `docs/build-notes/decisions.md` | 1158005 | 289501 |
+| `docs/build-notes/decisions.md` | 1166242 | 291560 |
 | `docs/build-notes/deferred-findings.md` | 461200 | 115300 |
 | `docs/build-notes/development.md` | 6389 | 1597 |
 | `docs/build-notes/upcoming-decisions.md` | 4870 | 1217 |
-| **Total** | **1630464** | **407616** |
+| **Total** | **1638701** | **409675** |
 
 ### Floors
 
 | Trigger | Bytes | ≈tokens |
 | --- | ---: | ---: |
 | Any task | 20755 | 5188 |
-| `/work phase` resume | 59420 | 14855 |
+| `/work phase` resume | 58214 | 14553 |
 
 Plus one `phase-details/mN.md` per milestone, which the split exists to
 keep small — the loop reads the one being built and no others.
@@ -87,7 +87,7 @@ keep small — the loop reads the one being built and no others.
 
 ## Realized — what Read actually returned
 
-From 13 session transcript(s) on this machine, 124 Read call(s).
+From 13 session transcript(s) on this machine, 125 Read call(s).
 
 Realized bytes are what the tool returned, including the line-number
 prefix Read adds, so a whole-file read measures slightly above the
@@ -104,16 +104,16 @@ singletons are rolled up in the last row instead.
 | `docs/build-notes/deferred-findings.md` | 7 | 145478 | 36369 | 20782 | 461200 | 0.05 |
 | `docs/build-notes/workflow.md` | 9 | 144033 | 36008 | 16003 | 19017 | 0.84 |
 | `docs/build-notes/phase-loop.md` | 19 | 142538 | 35634 | 7502 | 28436 | 0.26 |
-| `docs/build-notes/decisions.md` | 13 | 38640 | 9660 | 2972 | 1158005 | 0.00 |
-| `docs/build-notes/phase-details/README.md` | 4 | 35322 | 8830 | 8830 | 10044 | 0.88 |
+| `docs/build-notes/phase-details/README.md` | 5 | 45549 | 11387 | 9109 | 8838 | 1.03 |
+| `docs/build-notes/decisions.md` | 13 | 38640 | 9660 | 2972 | 1166242 | 0.00 |
 | `docs/build-notes/work-loop.md` | 3 | 26853 | 6713 | 8951 | 15073 | 0.59 |
-| `docs/build-notes/workflow-changes.md` | 3 | 24066 | 6016 | 8022 | 22292 | 0.36 |
+| `docs/build-notes/workflow-changes.md` | 3 | 24066 | 6016 | 8022 | 23328 | 0.34 |
 | `docs/build-notes/phase-details/m45.md` | 3 | 17532 | 4383 | 5844 | 6517 | 0.90 |
 | `.current-task.md` | 3 | 17148 | 4287 | 5716 | 4012 | 1.42 |
 | `Taskfile.yml` | 3 | 14652 | 3663 | 4884 | 27863 | 0.18 |
-| `docs/build-notes/phase-3-candidates.md` | 2 | 14425 | 3606 | 7212 | 12849 | 0.56 |
+| `docs/build-notes/phase-3-candidates.md` | 2 | 14425 | 3606 | 7212 | 15346 | 0.47 |
 | `docs/build-notes/phase-details/m28.5.md` | 3 | 11842 | 2960 | 3947 | 11250 | 0.35 |
-| `docs/build-notes/doc-cost.md` | 2 | 7926 | 1981 | 3963 | 3219 | 1.23 |
+| `docs/build-notes/doc-cost.md` | 2 | 7926 | 1981 | 3963 | 3217 | 1.23 |
 | `docs/build-notes/planning.md` | 2 | 7792 | 1948 | 3896 | 7286 | 0.53 |
 | `docs/build-notes/phase-details/m33.5.md` | 2 | 7759 | 1939 | 3879 | 6492 | 0.60 |
 | `internal/httpx/router.go` | 2 | 6545 | 1636 | 3272 | 53079 | 0.06 |
@@ -123,7 +123,7 @@ singletons are rolled up in the last row instead.
 | `scripts/slo-breaking-point.sh` | 2 | 1467 | 366 | 733 | 10246 | 0.07 |
 | `docs/build-notes/upcoming-decisions.md` | 2 | 1438 | 359 | 719 | 4870 | 0.15 |
 | _32 file(s) read once_ | 32 | 170689 | 42672 | | | |
-| **Total** | **124** | **847793** | **211948** | | | |
+| **Total** | **125** | **858020** | **214505** | | | |
 
 A floor, not a total: content also reaches the context through Bash
 (`cat`, `sed`, `grep`), through search results, and through the

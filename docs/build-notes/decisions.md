@@ -233,6 +233,7 @@ file. Append a row when you append an entry.
 | [A check that outlives the session that ran it](#2026-08-06--a-check-that-outlives-the-session-that-ran-it) | W14 made: the render-verification harness; why its page comes from the templates rather than from a fixture or the instance; why it is opt-in and what that costs |
 | [Measuring what the contract reads](#2026-08-06--measuring-what-the-contract-reads-not-what-it-names) | W34 made: by-row charging in doc-cost.sh; why the phase boundary is the only moment for it; the two trims examined and declined |
 | [Phase 3 takes four areas, and one of them cannot be planned yet](#2026-08-06--phase-3-takes-four-areas-and-one-of-them-cannot-be-planned-yet) | A, B, E, F in; C, D, G stay candidates; planned in full before anything is built, and why the walkthrough is planning's first input rather than its alternative |
+| [What the resume path reads is the live phase](#2026-08-06--what-the-resume-path-reads-is-the-live-phase) | W35 made: a finished phase's status rows move to their own file; plus Phase 3 starts at M46 and budgets two adversarial reviews, and the walkthrough gates all planning |
 
 ---
 
@@ -19114,3 +19115,64 @@ independence would mean something.
 Recorded with no milestone number. It is a scope decision rather than a process
 one, but Phase 3 has no Plan.md section yet for it to live in — writing that
 section is the planning work this decision authorises, not a precondition of it.
+
+---
+
+## 2026-08-06 — What the resume path reads is the live phase
+
+Three questions were put to the owner before Phase 3 planning starts, because
+`/preview-decisions` could not reach them: it reads ahead over the un-`done` rows
+in the status table, and after M45 there are none. The read-ahead tool is
+structurally blind at a phase boundary, which is worth knowing the next time one
+comes round — the substitute is asking directly, and the questions are the same
+ones it would have found.
+
+### Where a finished phase's rows live (W35)
+
+Phase 1's milestones were already archived in `phase-1.md`; Phase 2's 33 rows sat
+in `phase-details/README.md`, which [step 1](phase-loop.md#1-validate) reads on
+every resume at a **0.88** realized ratio — nearly whole, every time. Appending
+Phase 3 beneath them was the alternative, and it would have reached forty-eight
+rows and kept climbing every phase.
+
+So a finished phase's status rows now move to their own file and README carries
+the live phase alone. **The immediate saving is small and should not be oversold**
+— 10044 → 8838 bytes, because README's bulk is the inherited-rules table, not the
+status rows. What the change actually buys is that the table stops growing across
+phases, which is the shape the doc-cost audit exists to catch rather than a number
+worth celebrating today.
+
+Two things deliberately did not move. The **inherited-rules table** stayed: its
+anchor is linked from three places, and most of its rules are product invariants
+that outlast the phase that wrote them. But leaving it in place would silently
+imply Phase 3 inherits all of it, so its lede now says the set is **confirmed at
+planning, one rule at a time**. And the **status semantics** — where status
+lives, what `in progress (reopened)` means — stayed, because those are live rules
+rather than Phase 2 history.
+
+### Phase 3 starts at M46, with two reviews inside the fifteen
+
+Numbering continues rather than restarting, as Phase 2 continued Phase 1's.
+
+Two adversarial reviews are budgeted, matching Phase 2's M32.9 and M44.9: one
+mid-phase, one pre-release. That spends two of fifteen milestones, and they are
+not cheap slots any more — [W13](workflow-changes.md#made) added the doc-cost
+audit to what a review does. The mid-phase one is what earns the cost: Phase 2's
+M32.9 found defects that changed the design of milestones not yet written, and
+the same findings after M36 would have forced rewrites instead. One review, at
+the end, buys back a milestone and gets its findings when everything is already
+built.
+
+### The walkthrough gates all planning
+
+The owner chose to plan the whole phase before building any of it, and to hold
+the walkthrough **before planning starts** rather than planning the three
+unblocked areas first. So nothing is planned until it happens.
+
+That is the stricter of the two options and it was chosen knowingly. Planning A,
+E and F first would have started immediately and used W33's fallback exactly as
+intended — but the fifteen-milestone budget cannot be checked until B is
+numbered, so three areas planned early might have needed trimming afterwards.
+Planning once, with B's real shape in it, is what the size target is for.
+
+Recorded with no milestone number.
