@@ -8,9 +8,12 @@ nothing — its whole product is
 [upcoming-decisions.md](../../docs/build-notes/upcoming-decisions.md), a file of
 open questions.
 
-An unanswered prompt is the phase loop's only self-inflicted stop condition. The
-point of reading ahead is that the owner can answer at leisure, in any session,
-before the loop is standing still waiting.
+An unanswered prompt is the phase loop's only self-inflicted stop condition, and
+since W33 it is a *conditional* one — the loop parks the question and falls back
+to an independent milestone where one exists, and stops only where none does.
+That makes reading ahead worth more rather than less: an answer given early costs
+the loop no stall at all, where an answer given late costs whatever the loop
+built past the question in the meantime.
 
 ## Scope
 

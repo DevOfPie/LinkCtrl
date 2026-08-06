@@ -113,8 +113,10 @@ actually landed. The note is only what was being attempted.
 Held by a worker at step 2 or 3 → spawn a new worker from step 2. Never continue
 the old one.
 
-Note records an unanswered prompt → re-ask it. Never answer it yourself, and
-spawn nothing while it stands.
+Note records an unanswered prompt → re-ask it, and never answer it yourself.
+Whether anything may proceed meanwhile is [step 1](#1-validate)'s fallback rule,
+not this step's: park the question, take an independent milestone if there is
+one, and **spawn nothing while it stands** if there is not.
 
 ## 1. Validate
 
