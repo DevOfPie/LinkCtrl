@@ -224,6 +224,7 @@ file. Append a row when you append an entry.
 | [M45, the fourth obligation](#2026-08-06--m45-the-fourth-obligation-the-versioning-note-named-its-own-contents-as-future-work) | Corrects the count above: the pre-1.0 note justified `0.x` with three features 0.2.0 shipped, and now names what is actually outstanding |
 | [Phase 2 ran 33 milestones, not 31](#2026-08-06--phase-2-ran-33-milestones-not-31-and-the-number-feeds-a-decision) | 25 integers plus 8 fractional insertions, counted from the table; the baseline for the milestone-count target was understated by two |
 | [The size target is fifteen](#2026-08-06--the-size-target-is-fifteen-and-the-rule-says-what-it-costs) | W32 made: under sixteen milestone files, insertions counted, revisitable; why past-it is a conversation; why the target gives before a milestone's reviewability does |
+| [Six process rows approved](#2026-08-06--six-process-rows-approved-and-the-two-answers-that-cost-something) | W13 W1 W16 W23 W14 W33-fallback approved and W8 deliberately not; why judging doc-cost twice is one rule and one pointer; why fallback on an unanswered prompt is a weakening the owner bought knowingly |
 
 ---
 
@@ -18484,3 +18485,122 @@ resolves: **the target gives, not the milestone's reviewability.**
 Recorded with no milestone number, per the convention for a process change.
 W33 — whether the loop may hold more than one milestone, or fall back to an
 independent one when blocked — is untouched by this and remains proposed.
+
+---
+
+## 2026-08-06 — Six process rows approved, and the two answers that cost something
+
+The process backlog was put to the owner in one sitting, row by row, because
+Phase 2 is closed and Phase 3 is not planned — which is the only moment a change
+to how phases run can land without editing the contract underneath a milestone in
+flight. Six rows approved, one deliberately not. This entry records the answers
+before they are acted on, per the standing rule; each row's own commit records
+what it changed.
+
+**Approved.** W13 (an `X.9` review audits doc-cost, run by the orchestrator),
+W1 (the documentation pass judges the always-read contract's growth, not merely
+regenerates the number), W16 (`/note --discuss`), W23 (`/work` reachable from
+outside this repository), W14 (the render-verification harness), and the
+**fallback half of W33** — the loop takes an independent milestone when the next
+one is blocked, instead of stopping.
+
+**Not approved: W8.** `/preview-decisions` still writes its questions to a file
+and asks nothing. It was reviewed beside the rest and left as a suggestion, which
+is a different state from unexamined and the row now says so.
+
+### Judging doc-cost happens twice, and is written once
+
+W13 moves the judgement to the review milestones; W1 wanted it at the phase's
+documentation pass. The owner chose **both**, and the two checkpoints are not
+redundant: mid-phase is where growth is still cheap to reverse, and the close is
+where the number is final. Phase 2 is the evidence for the second — its growth
+was judged at M45, a phase close, and no `X.9` review touched it.
+
+What the answer costs is a second copy of a rule, which is exactly the failure
+workflow-changes.md's own header names: *a row that tries to state the rule
+becomes a second copy that drifts*. So the rule is written **once**, in
+phase-loop.md's `X.9` section, and workflow.md's documentation-pass row points at
+it. A reader gets one definition of what *judge* means and two places obliged to
+do it.
+
+W1 also exposes a shape worth naming: it had been marked approved and *scheduled
+into M45 as a bullet*, and a bullet is spent when its milestone lands. The
+judgement happened once, in Phase 2, and left the gate still reading
+*regenerated*. Scheduling a recurring rule as a milestone bullet discharges the
+row without creating the rule — that is why W1 was still sitting in *Proposed*
+with nothing left to make.
+
+### Fallback fires on an unanswered prompt, and that is a weakening
+
+The loop's `§4` table has exactly one stop it inflicts on itself: *a prompt is
+unanswered*. Everything else that stops it is external — the owner, a phase
+boundary, a gate failing twice. The owner chose to let fallback fire on that stop
+as well as on a dependency block, so a prompt-blocked milestone is parked and the
+loop starts an independent one.
+
+The cost was stated when the choice was put, and it is real: questions accumulate
+while the tree moves past them, and the answer the owner eventually gives arrives
+against a repository that is no longer the one the question was asked about. The
+recommendation was dependency blocks only. The owner chose the wider form
+knowingly, and the reason it is defensible is the one the narrower form cannot
+claim — an unanswered prompt is the *most common* block in practice, so the
+narrow rule would fire least often exactly when stalling costs most.
+
+Two obligations follow, and they are what keep the weakening honest rather than
+silent. `.current-task.md` gains a **`Parked:`** line naming every set-aside
+milestone and the question it owes, verbatim and unanswered. And the parked
+questions are re-reported at every step boundary and at the run's stop, so a
+growing queue of them is visible in the place the owner already reads. The loop
+never answers a parked prompt; parking is not deciding.
+
+### W23's versioning question, answered
+
+The row could not be made until somebody said where a globally visible command is
+versioned, because the honest answer — the operator's home configuration — has
+the property the row objects to: it survives no clone. The owner's answer is a
+**global dispatcher** that holds no repository logic, resolves the arguments it is
+given against a registry the operator's persona configuration carries, and keeps
+the name `/work` everywhere. A target it cannot resolve is reported, not guessed
+at — the unknown-target rule extended across repositories rather than replaced.
+
+So the row splits, and the split is stated rather than papered over: this
+repository versions the **contract** — how dispatch resolves, what stays
+authoritative here — and does not version the dispatcher. That is the same shape
+as the `ci/proposed/` route, where the tracked half is the description and the
+untracked half is named as untracked.
+
+### W14 takes the expensive form
+
+The row offered a cheap alternative — state in writing that rendered-page claims
+are verified by hand at named engines — and the owner chose the harness. That
+buys a check anybody can repeat and costs a Node toolchain plus three engine
+builds on a machine that has none, which D25 already permits: shipped code stays
+stdlib-only, tooling that only verifies may use Node. It is an opt-in `make`
+target and stays out of CI, so nothing forces it to run; the rot risk is accepted
+in exchange for CI that does not download browsers on every push.
+
+### Two things repaired without asking
+
+W15 was in *Proposed* **and** in *Made* — the row was copied rather than moved
+when it landed, so the backlog showed a change that had already shipped. Removed
+from *Proposed*; it is re-homed by the *Made* row, so the no-silent-removal rule
+is satisfied without a second entry.
+
+The *Proposed* table is deliberately **not** reordered to match the execution
+order, though the order does not match the plan: the loop picks the first
+approved row, and all six are being made in one sitting by one actor. Reordering
+would serve only an unattended run that is not happening.
+
+### The delegation conflict, named rather than picked
+
+The owner's instruction was *use sub agents if beneficial*.
+[work-loop.md](work-loop.md#the-workflow-loop) says this loop is not delegated,
+and gives two reasons — a workflow change edits the contract the actor split is
+written in, and approval per row is a conversation. Per workflow.md's precedence
+rule a conflict is a bug to report rather than a choice to make silently, so the
+narrow reading was taken and stated: every contract edit and every commit stays
+with the orchestrator, and a subagent may build W14's harness and toolchain,
+whose product is tooling rather than the contract. Neither of the rule's two
+stated reasons reaches that work.
+
+Recorded with no milestone number, per the convention for a process change.
