@@ -229,6 +229,7 @@ file. Append a row when you append an entry.
 | [A bullet is spent; a rule recurs](#2026-08-06--a-bullet-is-spent-a-rule-recurs) | W1 made: the documentation pass judges growth as well as regenerating it; why scheduling a recurring rule as a milestone bullet discharges the row without creating the rule |
 | [The marker that buys back a decision](#2026-08-06--the-marker-that-buys-back-a-decision) | W16 made: `/note --discuss`; why the teeth are in the drain and not in the capture; why classification is cheap to perform and hard to undo |
 | [Dispatch is a resolution step, not a cd](#2026-08-06--dispatch-is-a-resolution-step-not-a-cd) | W23 made: cross-repository `/work`; why the dispatcher holds no repository logic and verifies before entering; which half survives no clone |
+| [Working past a question without losing it](#2026-08-06--working-past-a-question-without-losing-it) | W33's fallback half made; the recommendation that was overruled and why the wider form is defensible; the `Parked:` line as the price of it |
 
 ---
 
@@ -18823,5 +18824,69 @@ Route to the nearest registered target. Inside one repository a near-match costs
 a milestone; across repositories it aims an entire unattended run at a checkout
 the owner did not name. The unknown-target rule applies unchanged, one level up:
 what was typed, what it is nearest to, and what each would actually do.
+
+Recorded with no milestone number, per the convention for a process change.
+
+---
+
+## 2026-08-06 — Working past a question without losing it
+
+W33 had two halves and they cost differently. **Concurrency** — the loop holding
+more than one milestone at once — needs a resume note per milestone, a git story
+for two workers in one tree, and an answer for who commits when both finish.
+**Fallback** — taking an independent milestone when the next one is blocked —
+needs one change to step 1's selection rule. The owner approved the fallback half
+and not the other, so a worker still holds exactly one milestone and the note
+still names one; the rule forbidding a worker to start a second is untouched.
+
+### The recommendation was overruled, and the reasoning is worth keeping
+
+The question put to the owner was which kind of block fallback answers. The
+recommendation was **dependency blocks only** — a row whose `Depends on` is
+unsatisfied, or whose work cannot physically proceed — leaving *a prompt is
+unanswered* as an immediate stop. The reason for the recommendation: that stop is
+the **only one the loop imposes on itself**. Everything else that ends a run is
+external — the owner, a phase boundary, a gate failing twice. Weakening the one
+self-inflicted stop lets the tree move past a question while it is still open, so
+the answer eventually arrives against a repository that is no longer the one the
+question was about.
+
+The owner chose the wider form knowingly. The argument that makes it defensible
+is the one the narrow form cannot claim: **an unanswered prompt is the block that
+actually happens.** Dependency blocks are rare, because the status table is
+ordered by dependency in the first place; a prompt-blocked milestone is the
+common case, and a rule that fires only in the rare case is a rule that mostly
+does not fire. Fallback that cannot answer the usual block buys very little.
+
+Both readings are recorded because a decision log that keeps only the chosen one
+loses what a later reader needs to judge it.
+
+### The price is that questions must accumulate visibly
+
+Letting the loop work past an open question is only safe if the question cannot
+quietly disappear, so the change is not just the selection rule. `.current-task.md`
+gains a **`Parked:`** line carrying every set-aside milestone and the question it
+owes, verbatim and unanswered. The line **only grows** — a row leaves when the
+owner answers, never because the list got long — and the parked questions are
+re-reported at every step boundary and at the run's stop, in the place the owner
+already reads.
+
+The resume bar gains a matching clause: a note omitting a parked milestone's owed
+question does not clear it. Without that, a fresh session would silently un-park
+the row, validate it again, and re-raise the same prompt — which is not a
+disaster, but it is the loop forgetting a conversation it already had.
+
+**Parking is not deciding.** The loop never answers a parked prompt and never
+drops one on its own judgement, and an answered question sends its row back to
+its place in table order rather than to the end of the queue.
+
+### What fallback deliberately cannot do
+
+It changes *which* row is next and nothing else. Table order still decides — the
+first independent row, never a later one because it looks easier — and nothing is
+skipped that was not blocked. *Independent* is defined rather than left to
+judgement: every `Depends on` row `done`, and no shared work area with the blocked
+one, which is what phase-3-candidates.md's grouping is for and the reason that
+grouping was useful before either half of W33 existed.
 
 Recorded with no milestone number, per the convention for a process change.

@@ -121,6 +121,24 @@ spawn nothing while it stands.
 **Next milestone** = first row in
 [phase-details/README.md](phase-details/README.md) that is not `done`.
 
+**Blocked, and another row is independent → take that one instead of stopping.**
+Blocked means a check below raises a prompt, or the work itself cannot proceed.
+*Independent* means every row in its `Depends on` column is `done` **and** it does
+not build on the same files or subsystem as the blocked one — what
+[phase-3-candidates.md](phase-3-candidates.md) groups by as a work area. Table
+order still decides: the loop takes the **first** independent un-`done` row, never
+a later one because it looks easier, and skips nothing that was not blocked.
+
+The blocked milestone is **parked**, and parking is not deciding. Its question
+stays owed: verbatim on the note's `Parked:` line, unanswered, re-reported at
+every step boundary and at the run's stop. The loop never answers it and never
+drops it. Answered, that row returns to its place in table order — ahead of
+everything behind it — and the next iteration takes it.
+
+Nothing independent → [§4](#4-repeat-or-stop) fires as it always did. Fallback
+only ever changes *which* row is next; it never invents one and never reorders the
+table.
+
 Read exactly three things. Not the other milestone files — the split exists so
 you do not.
 
@@ -285,7 +303,7 @@ continue:
 
 | Stop when | Because |
 | --- | --- |
-| A prompt is unanswered | Ask, never assume |
+| A prompt is unanswered **and no un-`done` row is independent of it** | Ask, never assume. A blocked question is not a blocked phase, so [step 1](#1-validate) falls back first and this fires only when there is nowhere to fall. The question stays owed either way — parking it is not answering it |
 | The milestone just landed was the phase's last row — Phase 2: [M45](phase-details/m45.md) | Never cross a phase boundary |
 | No un-`done` rows remain | Same |
 | The same cause failed a gate twice | Retrying is not progress |
@@ -462,6 +480,7 @@ M21 — Audit log · step 2 (build) · worker · branch phase-2
 Done:    writer; actor_label + ip_prefix asserted by test; root-redirect event
 Next:    GET /api/v1/audit — keyset pagination, audit.read gate
 Blocked: none        # or the prompt, verbatim, and that it is unanswered
+Parked:  none        # or: MN — the question it owes, verbatim and unanswered
 Stop:    none        # or: at the checkpoint — owner asked <date>
                      # or: after M45 — milestone target, /work M45 phase
 
@@ -479,6 +498,14 @@ a [deferred stop](#stopping-at-the-checkpoint) — or a
 [milestone target](work-loop.md#a-milestone-target)'s bound — survives a crash.
 It is the orchestrator's alone: a worker never writes it, because a worker never
 learns of one.
+
+`Parked:` survives 3.9 the same way and for the same reason, and is the
+orchestrator's alone for the same reason. It carries every milestone
+[step 1](#1-validate) set aside and the question each one owes, and it **only
+grows** — a row leaves it when the owner answers, never because the list got
+long. This is what keeps the fallback honest: the loop is allowed to work past an
+unanswered question, so the questions have to accumulate somewhere the owner
+already reads, and be re-reported rather than merely stored.
 
 *Cost too much to re-derive* carries weight it did not before: a worker starts
 with no memory of the last milestone, so what a worker would otherwise
@@ -500,7 +527,8 @@ The bar is a claim instead:
 Checked at [3.9](#3-land), against the note just written, by the actor that wrote
 it. The test is to name what the note omits that would force a question — a
 decision taken this session and not yet in decisions.md, a rejection whose reason
-lives only in the conversation, a gate that passed for a reason nobody recorded.
+lives only in the conversation, a gate that passed for a reason nobody recorded,
+a parked milestone whose owed question is not on the `Parked:` line.
 Nothing named, it clears. Something named, it goes in the note or in the file
 that owns it *before* 3.9 ends.
 
