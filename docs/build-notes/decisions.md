@@ -220,6 +220,7 @@ file. Append a row when you append an entry.
 | [The scheduler splits into families, because inline was a latency contract nobody could keep](#2026-08-06--the-scheduler-splits-into-families-because-inline-was-a-latency-contract-nobody-could-keep) | D107 — one goroutine per job family, one advisory lock key per family; a single shared key would turn concurrency into skipped work and poison the follower-liveness metric |
 | [Two queue rows closed as already built](#2026-08-06--two-queue-rows-closed-as-already-built-and-where-the-behaviour-lives) | A blocked bot is a click with `is_bot` true and a **Bots** tile, by M32.5's design; more than one node already works and HA is the Phase 3 row. The residual neither covers, named so it is not rediscovered |
 | [Phases get shorter, milestones get work areas](#2026-08-06--phases-get-shorter-milestones-get-work-areas-and-phase-3-gets-a-candidate-list) | Two owner directives (W32, W33) and a correction to the premise behind one; why fallback and concurrency cost differently; why the Phase 3 candidate list is not Plan.md |
+| [M45, closing 0.2.0](#2026-08-06--m45-closing-020-f1-verified-f1s-stated-reason-corrected-and-the-read-cost-defended) | F1's extraction verified pre-tag; why F1 **cannot recur** and m45.md's "newest section is last" was false; the always-read floors defended with realized read ratios rather than trimmed |
 
 ---
 
@@ -18302,3 +18303,89 @@ area carries the only two candidates that are defects**: F44 (no account deletio
 or GDPR erasure, while the schema and four sites describe both as existing) and
 F141 (no account recovery at all, and nothing says so). Every other row in the
 file is optional in a way those two are not.
+
+---
+
+## 2026-08-06 — M45, closing 0.2.0: F1 verified, F1's stated reason corrected, and the read cost defended
+
+The three obligations M45 left standing when the phase's PR merged, all
+discharged at the release rather than deferred past it.
+
+### F1's check ran, and it passes
+
+m45.md requires the release workflow's `awk` extraction be run **directly against
+CHANGELOG.md as it will be at 0.2.0**, before any tag exists, because the
+extraction only executes inside the workflow and a fix confirmed by releasing is
+confirmed once the notes are already public and the tag immutable.
+
+Run with `ver="## [0.2.0]"` against the CHANGELOG this commit ships: **1803 lines
+extracted, zero `[…]: https://…` definitions, and the body ends on a prose
+line** — the last sentence of the cold-redirect latency note, not a separator and
+not a reference block. The assertion the bullet asks for holds.
+
+### And the reason the bullet gave for F1 was wrong
+
+m45.md said *"the newest section is always last in CHANGELOG.md"* and that F1
+*"will recur on every release, because the newest section is last every time."*
+Neither describes this file. CHANGELOG.md runs **newest-first** — `[Unreleased]`,
+`[0.2.0]`, `[0.1.0]` — so the newest section is at the top and the trailing
+link-reference block is reachable only when extracting the **oldest** section.
+
+At 0.1.0 the newest section *was* the oldest, because it was the only one, and
+that is the whole reason the bug bit. From 0.2.0 on, `## [0.1.0]` sits below the
+newest section and the `## [` exit fires first. **So F1 cannot recur**, and
+W29's link-reference exit clause is dormant insurance rather than the fix that
+carries the release. It is still correct and still cheap, and it would fire again
+only for a re-extraction of the oldest section, which no release does.
+
+Amended as a **fact** rather than prompted as an assertion, per the rule that an
+orchestrator corrects a fact and logs it: what the bullet *requires* — verify
+before tagging, never by tagging — is untouched and was honoured. What changed is
+a claim about the shape of a file, and the file is checkable. The uncomfortable
+part is worth stating: the bullet's reasoning was wrong for two days and the
+verification it demanded still caught the right thing, because the assertion was
+right for reasons the explanation had misidentified.
+
+### The always-read cost grew, and the growth is defended rather than trimmed
+
+m45.md's last documentation bullet is a decision, not a regeneration: the phase's
+growth in the files read on every task is *either defended or paid for by
+trimming*. `make doc-cost` had not been re-run since the last change to
+workflow.md, so the file on disk was stale and the number had never been judged.
+
+Regenerated, the two floors moved:
+
+| Floor | Was | Now | Delta |
+| --- | ---: | ---: | ---: |
+| Any task (`CLAUDE.md` + `workflow.md`) | 19737 | 20343 | **+606** |
+| `/work phase` resume | 224406 | 225539 | **+1133** |
+
+**Defended, not trimmed, and the numbers say why.** The every-task growth is
+`workflow.md` alone (+606 bytes), and all of it is the standing rule that
+`.github/workflows/` cannot be committed to — a rule that exists because a push
+touching those paths is rejected before any review happens, so its 606 bytes buy
+back a class of failed push that has already cost real time. The resume growth is
+`Plan.md` (+545, the pointer to the Phase 3 candidate list) net of
+`phase-details/README.md` (−18). Plan.md's realized **Mean ÷ size is 0.01** — it
+is grepped and read in ranges, never whole — so a 545-byte addition moves the
+predicted ceiling and not the cost anyone actually pays. The two files that *are*
+read near-whole, `workflow.md` at 0.83 and `phase-details/README.md` at 0.88,
+are the ones where trimming would pay, and neither grew for a reason worth
+undoing.
+
+The reference set grew far more — decisions.md +32KB and deferred-findings.md
++29KB across the phase close — and is deliberately not charged against this
+judgement. Both are read at 0.00 and 0.05 of their size: append-only files
+consulted by grep, whose growth is the record working rather than a cost
+recurring. `phase-3-candidates.md` is in no read set at all and adds nothing to
+either floor.
+
+One property of the file to note, since it invited the staleness: doc-cost.md
+carries no generation date so that regenerating an unchanged tree produces no
+diff, and *"every diff in this file is real growth."* That is true of the
+predicted tables and **not** of the realized ones, which move with every session
+that reads anything. So a diff here proves growth only in its top half, and the
+bottom half will always differ. Not corrected in the generator — the sentence is
+about why there is no date, and the realized section is honest about being
+this machine's transcripts — but a reader treating any diff as growth is reading
+it more strictly than it can bear.

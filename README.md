@@ -69,10 +69,11 @@ docker compose up -d --wait
 
 That runs `latest`. For anything you care about, pin a version — set
 `LINKCTRL_TAG` in `.env` to the release you mean — so that a later `pull` is a
-decision rather than a surprise. **The latest tag is `0.1.0`, which is Phase 1
-only**: pinning it gets you a working shortener without the organizations,
-custom domains, routing rules, split tests, gated links, webhooks or automation
-this page describes. Releases also publish static binaries for linux, macOS and Windows if you
+decision rather than a surprise. **The latest tag is `0.2.0`, and it is what this
+page describes** — the organizations, custom domains, routing rules, split tests,
+gated links, webhooks and automation below all ship in it. `0.1.0` is Phase 1
+only: a working shortener with none of them, so pin it only if that is what you
+want. Releases also publish static binaries for linux, macOS and Windows if you
 would rather not use Docker; see [docs/releasing.md](docs/releasing.md).
 
 Open <http://localhost:8080>. The first visit lands on a setup form that creates
