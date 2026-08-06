@@ -73,6 +73,16 @@ boundary.
 **Authority.** [work-loop.md](work-loop.md), which carries the route table.
 Once a loop is entered, that loop's file.
 
+**Typed elsewhere.** The same words reach a **dispatcher** when the working
+directory is another repository. It resolves the outermost target to a checkout,
+verifies the checkout still declares the kind asked for, and hands everything
+else to that repository's own contract — holding no repository logic itself,
+because anything it decided would be a second route table drifting against the
+one it dispatched to. This repository versions that contract, in
+[work-loop.md](work-loop.md#dispatch-from-outside-this-repository), and does not
+version the dispatcher: a command visible from every directory cannot live in one
+checkout, so it survives no clone.
+
 **Produces.** A loop that runs until one of that loop's stop conditions fires —
 one more of them when a milestone target bounded the run — and, where a target
 was unknown and the owner named a real one, a row appended to the route table.

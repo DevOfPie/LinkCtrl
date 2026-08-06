@@ -57,9 +57,10 @@ An unknown kind is handled exactly like an [unknown target](#an-unknown-target).
 ## Targets
 
 A target names **where** the work is, not what it is. Targets nest, outermost
-first, each narrowing the one before it. Two levels exist — the repository, and
-a milestone inside it — and the nesting rule is written for the level above
-both, which is [cross-repository dispatch](#what-this-cannot-do-yet).
+first, each narrowing the one before it. Two levels exist here — the repository,
+and a milestone inside it — and the outermost is what
+[dispatch from outside this repository](#dispatch-from-outside-this-repository)
+resolves.
 
 ### Route table
 
@@ -253,24 +254,46 @@ is: landing one row is an iteration, not an event.
 
 ---
 
-## What this cannot do yet
+## Dispatch from outside this repository
 
-Stated because the grammar above promises more than the tree delivers, and a
-route table that quietly covers one repository while its syntax describes many
-is the drift this file exists to prevent.
+`/work linkctrl phase` typed in another directory reaches a **dispatcher**, not
+this file. The dispatcher is a command visible from anywhere; this section is the
+contract it honours, and it is the half this repository versions.
 
-**Cross-repository dispatch does not work.** `/work linkctrl phase` typed
-outside this repository resolves nothing, because the command is defined in
-[`.claude/commands/work.md`](../../.claude/commands/work.md) and is visible only
-where this repository is checked out. Making it work needs the command visible
-from any working directory — which today means an untracked file in the user's
-home configuration, surviving no clone. That is
-[workflow-changes.md](workflow-changes.md)'s W23, and it is unapproved.
+**The dispatcher holds no repository logic.** It parses by the rule above — the
+kind is the last token — resolves the **outermost** target against a registry of
+checkouts, changes to that checkout, and hands the remaining arguments to *that*
+repository's own contract. Everything after the outermost target is opaque to it:
+a kind it has never heard of, a milestone spelled some other way, and a flag it
+does not know are all somebody else's grammar. Anything it decided for itself
+would be a second route table, drifting against the one it dispatched to.
 
-**The route table is local.** Even given a globally visible command, this table
-is the routes *this repository* knows. Nothing here is authoritative for another
-repository's kinds, and a target row claiming otherwise would be a claim no
-reader could check.
+**It verifies before it enters, rather than trusting the registry.** A registry
+row is a written claim about a tree that moves — a checkout gets deleted, renamed,
+or stops declaring the kind being asked for. So having resolved a target, the
+dispatcher confirms the checkout is there and that the repository declares that
+kind, and it reports instead of entering when the work is already done. This is
+[`--revalidate`](#flags)'s reasoning applied one level up, and it is why dispatch
+is a resolution step rather than a `cd`.
 
-The nesting grammar is written now anyway, and that is deliberate: the parse rule
-is the thing a second repository would otherwise invent differently.
+**An unresolvable target is reported, never guessed.** The
+[unknown-target rule](#an-unknown-target) governs, unchanged and one level up:
+what was typed, what it is nearest to, and what each of those would do. A
+dispatcher that picked the closest registered checkout would be routing a whole
+run at a repository the owner did not name.
+
+**The route table is local.** This table is the routes *this repository* knows.
+Nothing here is authoritative for another repository's kinds, and a target row
+claiming otherwise would be a claim no reader could check. The nesting grammar is
+shared and the routes are not — which is the reason the parse rule is written as
+a rule rather than left to be inferred, since it is the thing a second repository
+would otherwise invent differently.
+
+**What this repository does not version.** The dispatcher and its registry live
+in the operator's home configuration, because a command visible from every
+directory cannot live in one checkout. They survive no clone. A fresh clone gets
+this contract and the local `/work`, which is enough to run every loop here from
+inside the repository; it does not get cross-repository dispatch, and nothing in
+a clone can conjure it. That is stated rather than papered over, the same way
+[`ci/proposed/`](../../ci/proposed/README.md) states which half of CI this
+repository cannot push.

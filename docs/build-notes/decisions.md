@@ -228,6 +228,7 @@ file. Append a row when you append an entry.
 | [W13, and the bytes it spends to judge bytes](#2026-08-06--w13-and-the-bytes-it-spends-to-judge-bytes) | The `X.9` doc-cost audit; why the definition lives in the non-delegated section instead of gaining a delegation exception; why the recurring cost is the one to judge |
 | [A bullet is spent; a rule recurs](#2026-08-06--a-bullet-is-spent-a-rule-recurs) | W1 made: the documentation pass judges growth as well as regenerating it; why scheduling a recurring rule as a milestone bullet discharges the row without creating the rule |
 | [The marker that buys back a decision](#2026-08-06--the-marker-that-buys-back-a-decision) | W16 made: `/note --discuss`; why the teeth are in the drain and not in the capture; why classification is cheap to perform and hard to undo |
+| [Dispatch is a resolution step, not a cd](#2026-08-06--dispatch-is-a-resolution-step-not-a-cd) | W23 made: cross-repository `/work`; why the dispatcher holds no repository logic and verifies before entering; which half survives no clone |
 
 ---
 
@@ -18762,5 +18763,65 @@ the owner wants to think first — so a row can carry both.
 marked row, and the owner has to be present for it. That is what the row bought,
 and the marker is opt-in precisely so the cost is only paid where it was asked
 for.
+
+Recorded with no milestone number, per the convention for a process change.
+
+---
+
+## 2026-08-06 — Dispatch is a resolution step, not a `cd`
+
+W23 sat unmade because of one honest problem: a command visible from every
+directory cannot live in a checkout, and the only place it can live is home
+configuration, which survives no clone. The row said whatever closed it had to
+answer where a globally visible command is versioned. The owner's answer is that
+it is not versioned by any repository — the repositories version the **contract**
+instead.
+
+So the change splits, and the split is written down rather than implied. This
+repository gains a section saying what a dispatcher must do and must not do. The
+dispatcher and its registry live in the operator's home configuration. A fresh
+clone gets every loop that runs from inside the repository and does not get
+cross-repository dispatch, and nothing in a clone can conjure it. That is the
+same shape as `ci/proposed/`, where the tracked half is the description of a
+change only the owner can apply.
+
+### The dispatcher holds no repository logic
+
+It parses by the shared rule — the kind is the last token — resolves the
+outermost target, and hands everything else through untouched. A kind it has
+never heard of, a milestone spelled some other way, a flag it does not know: all
+somebody else's grammar.
+
+The reason is not modesty about scope. Anything the dispatcher decided would be a
+**second route table**, and two route tables for one repository drift — the
+failure this project keeps meeting in other forms, most recently a proposal file
+left sitting beside the workflow it had already been applied to. One authority
+per claim, and the authority for a repository's kinds is that repository.
+
+### It verifies before it enters
+
+A registry row is a written claim about a tree that moves: checkouts get renamed,
+repositories restructure, and the kind being asked for may not exist there any
+more. So resolution is four checks — the checkout is present, its contract file
+is present, it declares that kind, and the named work is still outstanding —
+before anything is entered.
+
+The last of those is the one worth naming. Dispatching into finished work and
+letting the loop discover it is not free: the loop resumes, reads its note,
+validates, and only then reports. Checking up front costs a lookup, and it
+matches what a milestone target already does inside the repository — already
+`done` enters nothing, because re-running finished work is scheduling and
+scheduling is the owner's.
+
+This is `--revalidate`'s reasoning applied one level up. A route table is a
+written claim about a tree that changes; so is a registry, and it is staler,
+because nothing in any repository updates it.
+
+### What it must never do
+
+Route to the nearest registered target. Inside one repository a near-match costs
+a milestone; across repositories it aims an entire unattended run at a checkout
+the owner did not name. The unknown-target rule applies unchanged, one level up:
+what was typed, what it is nearest to, and what each would actually do.
 
 Recorded with no milestone number, per the convention for a process change.
