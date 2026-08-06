@@ -35,9 +35,9 @@ Step 0 and step 1 of the loop, before a single milestone file is opened.
 | File | Bytes | ≈tokens |
 | --- | ---: | ---: |
 | `docs/build-notes/phase-loop.md` | 25238 | 6309 |
-| `docs/build-notes/phase-details/README.md` | 10051 | 2512 |
-| `Plan.md` | 169907 | 42476 |
-| **Total** | **205196** | **51299** |
+| `docs/build-notes/phase-details/README.md` | 10044 | 2511 |
+| `Plan.md` | 169954 | 42488 |
+| **Total** | **205236** | **51309** |
 
 ### A feature request — on top of *every task*
 
@@ -46,9 +46,9 @@ planning.md's path, per workflow.md's feature trigger.
 | File | Bytes | ≈tokens |
 | --- | ---: | ---: |
 | `docs/build-notes/planning.md` | 7286 | 1821 |
-| `docs/build-notes/phase-details/README.md` | 10051 | 2512 |
+| `docs/build-notes/phase-details/README.md` | 10044 | 2511 |
 | `docs/build-notes/phase-details/_template.md` | 1585 | 396 |
-| **Total** | **18922** | **4730** |
+| **Total** | **18915** | **4728** |
 
 ### Reference — named by the contract, not read whole by it
 
@@ -68,7 +68,7 @@ what makes the predicted column a ceiling rather than an estimate.
 | Trigger | Bytes | ≈tokens |
 | --- | ---: | ---: |
 | Any task | 20343 | 5085 |
-| `/work phase` resume | 225539 | 56384 |
+| `/work phase` resume | 225579 | 56394 |
 
 Plus one `phase-details/mN.md` per milestone, which the split exists to
 keep small — the loop reads the one being built and no others.
@@ -77,7 +77,7 @@ keep small — the loop reads the one being built and no others.
 
 ## Realized — what Read actually returned
 
-From 12 session transcript(s) on this machine, 95 Read call(s).
+From 12 session transcript(s) on this machine, 96 Read call(s).
 
 Realized bytes are what the tool returned, including the line-number
 prefix Read adds, so a whole-file read measures slightly above the
@@ -95,7 +95,7 @@ singletons are rolled up in the last row instead.
 | `docs/build-notes/workflow.md` | 8 | 124224 | 31056 | 15528 | 18605 | 0.83 |
 | `docs/build-notes/phase-loop.md` | 11 | 119693 | 29923 | 10881 | 25238 | 0.43 |
 | `docs/build-notes/decisions.md` | 11 | 37319 | 9329 | 3392 | 1129485 | 0.00 |
-| `docs/build-notes/phase-details/README.md` | 4 | 35322 | 8830 | 8830 | 10051 | 0.88 |
+| `docs/build-notes/phase-details/README.md` | 4 | 35322 | 8830 | 8830 | 10044 | 0.88 |
 | `docs/build-notes/phase-details/m45.md` | 3 | 17532 | 4383 | 5844 | 6517 | 0.90 |
 | `Taskfile.yml` | 3 | 14652 | 3663 | 4884 | 25989 | 0.19 |
 | `docs/build-notes/phase-details/m28.5.md` | 3 | 11842 | 2960 | 3947 | 11250 | 0.35 |
@@ -103,11 +103,11 @@ singletons are rolled up in the last row instead.
 | `docs/build-notes/phase-details/m33.5.md` | 2 | 7759 | 1939 | 3879 | 6492 | 0.60 |
 | `internal/httpx/router.go` | 2 | 6545 | 1636 | 3272 | 53079 | 0.06 |
 | `.current-task.md` | 2 | 5652 | 1413 | 2826 | 11026 | 0.26 |
+| `Plan.md` | 3 | 2765 | 691 | 921 | 169954 | 0.01 |
 | `docs/build-notes/workflow-changes.md` | 2 | 2591 | 647 | 1295 | 21332 | 0.06 |
-| `Plan.md` | 2 | 2012 | 503 | 1006 | 169907 | 0.01 |
 | `scripts/slo-breaking-point.sh` | 2 | 1467 | 366 | 733 | 10246 | 0.07 |
 | _31 file(s) read once_ | 31 | 160494 | 40123 | | | |
-| **Total** | **95** | **700374** | **175093** | | | |
+| **Total** | **96** | **701127** | **175281** | | | |
 
 A floor, not a total: content also reaches the context through Bash
 (`cat`, `sed`, `grep`), through search results, and through the

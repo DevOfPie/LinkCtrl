@@ -464,8 +464,9 @@ caveat with the data.
 **Phase 1: 21 of 21 milestones, all of them in 0.1.0, tagged `v0.1.0` on `main`
 and released on 2026-07-31.**
 
-**Phase 2: complete and unreleased**, every milestone through
-[M45](docs/build-notes/phase-details/m45.md) built. Status per milestone lives in
+**Phase 2: 33 milestones — 25 integers M21–M45 and 8 fractional insertions — all
+of them in 0.2.0, tagged `v0.2.0` on `main` and released on 2026-08-06.** Status
+per milestone lives in
 [phase-details/README.md](docs/build-notes/phase-details/README.md) and nowhere
 else; the plan below is the scope contract rather than a progress report.
 
