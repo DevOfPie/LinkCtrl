@@ -338,13 +338,49 @@ func (s *APIKeyService) insertSuccessor(
 // after the key was minted must not ride a rotation into a new credential; the
 // refusal names it so the caller can rotate into a set without it.
 func narrowScopes(held, requested []string) ([]string, domain.ValidationErrors) {
-	ceiling := make(map[string]struct{}, len(held))
-	for _, s := range held {
-		ceiling[s] = struct{}{}
+	var errs domain.ValidationErrors
+	var out []string
+
+	if requested == nil {
+		out = append(out, held...)
+	} else {
+		ceiling := make(map[string]struct{}, len(held))
+		for _, s := range held {
+			ceiling[s] = struct{}{}
+		}
+		seen := make(map[string]struct{}, len(requested))
+		out = make([]string, 0, len(requested))
+		for _, raw := range requested {
+			scope := strings.TrimSpace(raw)
+			if scope == "" {
+				continue
+			}
+			if _, dup := seen[scope]; dup {
+				continue
+			}
+			seen[scope] = struct{}{}
+
+			if _, ok := ceiling[scope]; !ok {
+				errs = append(errs, domain.FieldError{
+					Field: "scopes", Code: "not_held",
+					Message: fmt.Sprintf(
+						"this key does not hold %q, and a rotation cannot add one; a successor is identical or narrower",
+						scope),
+				})
+				continue
+			}
+			out = append(out, scope)
+		}
 	}
 
-	var errs domain.ValidationErrors
-	for _, s := range held {
+	// Checked against what survives into the successor, not against what the
+	// predecessor held. The refusal's own instruction is to rotate into a set
+	// that omits the scope, and a check on the held set would refuse exactly
+	// that rotation — stranding the key behind revoke-and-re-mint, which loses
+	// the grace overlap rotation exists to provide. Inherited by default or
+	// re-requested by name, a surviving non-delegable scope refuses the same
+	// way; only omitting it goes through.
+	for _, s := range out {
 		if isNonDelegable(s) {
 			errs = append(errs, domain.FieldError{
 				Field: "scopes", Code: "not_delegable",
@@ -353,39 +389,6 @@ func narrowScopes(held, requested []string) ([]string, domain.ValidationErrors) 
 					s),
 			})
 		}
-	}
-	if len(errs) > 0 {
-		return nil, errs
-	}
-
-	if requested == nil {
-		out := make([]string, len(held))
-		copy(out, held)
-		return out, nil
-	}
-
-	seen := make(map[string]struct{}, len(requested))
-	out := make([]string, 0, len(requested))
-	for _, raw := range requested {
-		scope := strings.TrimSpace(raw)
-		if scope == "" {
-			continue
-		}
-		if _, dup := seen[scope]; dup {
-			continue
-		}
-		seen[scope] = struct{}{}
-
-		if _, ok := ceiling[scope]; !ok {
-			errs = append(errs, domain.FieldError{
-				Field: "scopes", Code: "not_held",
-				Message: fmt.Sprintf(
-					"this key does not hold %q, and a rotation cannot add one; a successor is identical or narrower",
-					scope),
-			})
-			continue
-		}
-		out = append(out, scope)
 	}
 	if len(errs) > 0 {
 		return nil, errs

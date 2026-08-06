@@ -262,6 +262,72 @@ func TestRotationRefusesToWidenOverTheAPI(t *testing.T) {
 	}
 }
 
+// A key minted before a scope became non-delegable is the one holder that rule
+// never met: the mint path refuses the scope today, so such a key exists only
+// as history, and rotation is where its scope would otherwise ride forward
+// forever. The refusal must land on what the successor would hold — inheriting
+// carries the scope, so it refuses; naming the scope carries it just the same,
+// so it refuses identically; omitting it is the way forward the refusal itself
+// names, and it must keep the grace overlap that makes rotation worth having
+// over revoke-and-re-mint.
+func TestRotationDropsANowNonDelegableScopeButWillNotCarryIt(t *testing.T) {
+	f := newAPI(t)
+	f.setupOwner()
+
+	original := f.createKey("pre-m43", "links.read")
+	// Create refuses webhooks.write, so the historical key is written the way it
+	// actually came to exist: the row predates the rule.
+	if _, err := f.pool.Exec(t.Context(),
+		`UPDATE api_keys SET scopes = ARRAY['links.read','webhooks.write'] WHERE id = $1`,
+		original.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	var problem struct {
+		Status int                            `json:"status"`
+		Errors []struct{ Field, Code string } `json:"errors"`
+	}
+
+	// Inheriting (no scopes named) would carry the scope into the successor.
+	resp := f.doWithKey(original.Key, http.MethodPost, "/api/v1/api-keys/rotate", nil)
+	f.decode(resp, &problem)
+	if problem.Status != http.StatusUnprocessableEntity {
+		t.Fatalf("inheriting a now-non-delegable scope returned %d, want 422", problem.Status)
+	}
+	if len(problem.Errors) != 1 || problem.Errors[0].Field != "scopes" ||
+		problem.Errors[0].Code != "not_delegable" {
+		t.Errorf("errors = %+v, want one not_delegable on scopes", problem.Errors)
+	}
+
+	// Naming it is the same carry-forward, spelled out.
+	resp = f.doWithKey(original.Key, http.MethodPost, "/api/v1/api-keys/rotate",
+		map[string]any{"scopes": []string{"links.read", "webhooks.write"}})
+	f.decode(resp, &problem)
+	if problem.Status != http.StatusUnprocessableEntity ||
+		len(problem.Errors) != 1 || problem.Errors[0].Code != "not_delegable" {
+		t.Errorf("re-requesting the scope gave %d %+v, want 422 with one not_delegable",
+			problem.Status, problem.Errors)
+	}
+
+	// Omitting it succeeds, and the predecessor still verifies inside its grace
+	// window — the overlap a forced revoke-and-re-mint would not have.
+	successor := f.rotate(original.Key, map[string]any{"scopes": []string{"links.read"}},
+		http.StatusCreated)
+	if len(successor.Scopes) != 1 || successor.Scopes[0] != "links.read" {
+		t.Errorf("successor holds %v, want [links.read]", successor.Scopes)
+	}
+	for name, token := range map[string]string{
+		"the successor":   successor.Key,
+		"the predecessor": original.Key,
+	} {
+		r := f.doWithKey(token, http.MethodGet, "/api/v1/links", nil)
+		_ = r.Body.Close()
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("%s returned %d during the grace window, want 200", name, r.StatusCode)
+		}
+	}
+}
+
 func TestASessionCannotRotateAndAKeyRotatesOnce(t *testing.T) {
 	f := newAPI(t)
 	f.setupOwner()

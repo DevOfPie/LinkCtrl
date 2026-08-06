@@ -88,10 +88,24 @@ func TestRotationRefusesToCarryANowNonDelegableScope(t *testing.T) {
 			"a scope that stopped being delegable must not survive a rotation")
 	}
 	// Named explicitly, the rotation succeeds without it: the refusal has to
-	// leave a way forward, or the key is stranded.
+	// leave a way forward, or the key is stranded — revoke-and-re-mint is the
+	// only exit left, and that loses the grace overlap rotation exists for.
 	scopes, errs := narrowScopes(held, []string{"links.read"})
+	if len(errs) != 0 {
+		t.Fatalf("dropping the refused scope was still refused: %v", errs)
+	}
+	if len(scopes) != 1 || scopes[0] != "links.read" {
+		t.Errorf("rotating away from the refused scope produced %v, want [links.read]", scopes)
+	}
+
+	// Re-requesting it by name is the same carry-forward, spelled out; naming
+	// the scope must not launder what inheriting it refuses.
+	_, errs = narrowScopes(held, []string{"links.read", "webhooks.write"})
 	if len(errs) == 0 {
-		t.Fatalf("dropping the refused scope was still refused; got %v", scopes)
+		t.Error("explicitly re-requesting webhooks.write was accepted; a scope that " +
+			"stopped being delegable must not survive a rotation however it is asked for")
+	} else if errs[0].Code != "not_delegable" {
+		t.Errorf("re-requesting the scope refused with code %q, want not_delegable", errs[0].Code)
 	}
 }
 
