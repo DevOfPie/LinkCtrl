@@ -329,6 +329,22 @@ the owner's to schedule. Fix only what makes a shipped milestone's own claim
 false; everything else becomes deferred rows. Then **prompt** with the triage
 before acting on it.
 
+A review also **judges what the always-read contract costs**: `make doc-cost`,
+then defend the growth or trim to pay for it. **This is the one place that
+judgement is defined**, and anything else obliged to make it points here rather
+than restating it. Defending names what the bytes bought and the file's realized
+read ratio; trimming deletes or merges until the growth is offset. Regenerating
+and moving on is neither, and was the gap — the number existed and obliged
+nobody. Being in this section is what makes it the orchestrator's, so the
+no-delegation rule above gains no exception.
+
+Judge the **recurring** cost rather than the headline number.
+`scripts/doc-cost.sh` charges Plan.md whole while [step 1](#1-validate) reads one
+row of it: at the last regeneration Plan.md was 169954 bytes of a 225579-byte
+resume charge, and its *realized* read ratio was 0.01. The files worth arguing
+about are the ones read end to end — [workflow.md](workflow.md) at 0.83, this
+file at 0.43.
+
 **Phase close** ([M45](phase-details/m45.md)). Every deferred row needs
 individual owner review, so expect a conversation rather than an iteration. Its
 release actions reach outside the repo — tagging, pushing a tag, opening the

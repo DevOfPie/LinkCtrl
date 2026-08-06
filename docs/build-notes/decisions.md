@@ -225,6 +225,7 @@ file. Append a row when you append an entry.
 | [Phase 2 ran 33 milestones, not 31](#2026-08-06--phase-2-ran-33-milestones-not-31-and-the-number-feeds-a-decision) | 25 integers plus 8 fractional insertions, counted from the table; the baseline for the milestone-count target was understated by two |
 | [The size target is fifteen](#2026-08-06--the-size-target-is-fifteen-and-the-rule-says-what-it-costs) | W32 made: under sixteen milestone files, insertions counted, revisitable; why past-it is a conversation; why the target gives before a milestone's reviewability does |
 | [Six process rows approved](#2026-08-06--six-process-rows-approved-and-the-two-answers-that-cost-something) | W13 W1 W16 W23 W14 W33-fallback approved and W8 deliberately not; why judging doc-cost twice is one rule and one pointer; why fallback on an unanswered prompt is a weakening the owner bought knowingly |
+| [W13, and the bytes it spends to judge bytes](#2026-08-06--w13-and-the-bytes-it-spends-to-judge-bytes) | The `X.9` doc-cost audit; why the definition lives in the non-delegated section instead of gaining a delegation exception; why the recurring cost is the one to judge |
 
 ---
 
@@ -18602,5 +18603,68 @@ narrow reading was taken and stated: every contract edit and every commit stays
 with the orchestrator, and a subagent may build W14's harness and toolchain,
 whose product is tooling rather than the contract. Neither of the rule's two
 stated reasons reaches that work.
+
+Recorded with no milestone number, per the convention for a process change.
+
+---
+
+## 2026-08-06 — W13, and the bytes it spends to judge bytes
+
+`make doc-cost` has existed since Phase 2 and obliged nobody. It printed a number
+at the documentation pass, the number went into a generated file, and the file
+recorded growth that no rule required anyone to answer for. W13 makes an `X.9`
+review judge it: **defend the growth or trim to pay for it.**
+
+**Defend** means naming what the bytes bought and the file's realized read ratio.
+**Trim** means deleting or merging until the growth is offset. The pairing is the
+point — a rule that only says *justify it* is satisfied by prose, and one that
+only says *cut* is satisfied by deleting a reason somebody needed.
+
+### Where the rule lives is the substance of the row
+
+The row as raised said *trigger a worker*, and the loop says `X.9` reviews are
+never delegated. Resolving that by writing an exception would have been the
+cheap fix and the wrong one: an exception is a second rule, and the next reader
+has to hold both.
+
+Instead the obligation is written **inside** the section that already says
+neither of these two milestones is delegated. Placement does the work. *The
+orchestrator runs the doc-cost audit* is not stated as a new rule; it follows
+from where the sentence sits, and the no-delegation rule stands unamended and
+gains nothing.
+
+That also fixes which file owns the definition. The judgement is defined in
+phase-loop.md and nowhere else, and W1 — the same judgement at the phase's
+documentation pass — points at it. Two obligations, one definition. The
+alternative was the failure workflow-changes.md's own header names: a second copy
+that drifts.
+
+### Judge the recurring cost, not the headline
+
+The rule says so explicitly because the headline number is misleading in a way a
+first-time judge would not guess, and [doc-cost.md](doc-cost.md) as generated
+shows it. `scripts/doc-cost.sh` charges Plan.md **whole** while
+[step 1](phase-loop.md#1-validate) reads a single row of it: Plan.md is 169954 of
+the 225579-byte `/work phase` resume charge — three quarters of the modelled
+cost — and the same file's *realized* ratio, three reads averaging 921 bytes, is
+**0.01**. The model's error on one row exceeds most of what it models.
+
+The honest measure is the mean-÷-size column for the files read end to end:
+workflow.md at 0.83 and phase-loop.md at 0.43. Those two are the recurring cost,
+and they are what a review should defend or trim. decisions.md is 1129485 bytes
+at a ratio of 0.00 — eleven reads, 3392 bytes each — and costs the loop
+essentially nothing, which is why appending to it freely is not the extravagance
+its size suggests.
+
+### The cost, stated because the rule is about exactly this
+
+This change adds roughly a thousand bytes to phase-loop.md, which is the second
+most-read file in the repository and one of the two the audit will scrutinise.
+A rule about growth that grows the file it governs is not a paradox, but it is a
+debt: the first `X.9` review to run this audit inherits it and should say whether
+these bytes were bought or borrowed. `scripts/doc-cost.sh` is deliberately not
+changed here — its known modelling error stays exactly as it is, because
+adjusting what it measures between phases would make the phases incomparable, and
+comparability is the whole value of the record.
 
 Recorded with no milestone number, per the convention for a process change.
