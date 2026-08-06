@@ -221,6 +221,7 @@ file. Append a row when you append an entry.
 | [Two queue rows closed as already built](#2026-08-06--two-queue-rows-closed-as-already-built-and-where-the-behaviour-lives) | A blocked bot is a click with `is_bot` true and a **Bots** tile, by M32.5's design; more than one node already works and HA is the Phase 3 row. The residual neither covers, named so it is not rediscovered |
 | [Phases get shorter, milestones get work areas](#2026-08-06--phases-get-shorter-milestones-get-work-areas-and-phase-3-gets-a-candidate-list) | Two owner directives (W32, W33) and a correction to the premise behind one; why fallback and concurrency cost differently; why the Phase 3 candidate list is not Plan.md |
 | [M45, closing 0.2.0](#2026-08-06--m45-closing-020-f1-verified-f1s-stated-reason-corrected-and-the-read-cost-defended) | F1's extraction verified pre-tag; why F1 **cannot recur** and m45.md's "newest section is last" was false; the always-read floors defended with realized read ratios rather than trimmed |
+| [M45, the fourth obligation](#2026-08-06--m45-the-fourth-obligation-the-versioning-note-named-its-own-contents-as-future-work) | Corrects the count above: the pre-1.0 note justified `0.x` with three features 0.2.0 shipped, and now names what is actually outstanding |
 
 ---
 
@@ -18389,3 +18390,33 @@ bottom half will always differ. Not corrected in the generator — the sentence 
 about why there is no date, and the realized section is honest about being
 this machine's transcripts — but a reader treating any diff as growth is reading
 it more strictly than it can bear.
+
+---
+
+## 2026-08-06 — M45, the fourth obligation: the versioning note named its own contents as future work
+
+The entry above said three obligations and discharged three. There were four,
+and the missed one is the release bullet's second half rather than the tag:
+m45.md requires that *"the CHANGELOG's 'pre-1.0 while Phase 2 is outstanding'
+wording is updated to say what is now outstanding instead"*, and the audit that
+found the other three checked the tag and not the sentence beside it.
+
+It read: *"The product is pre-1.0 while Phase 2 is outstanding. Shared
+workspaces, folders and custom domains will change the dashboard and add
+tables."* All three of those **shipped in 0.2.0**. The note explaining why the
+version stays in `0.x` was justifying it by naming, in the future tense, three
+features the same file documents as released — so an operator reading it to size
+the risk of upgrading was told the upgrade's own contents were still to come.
+
+Rewritten against what is actually outstanding, and every limb of it is checkable:
+no account recovery (F141 — a forgotten password locks the account out
+permanently), no account deletion or erasure (F44), MFA and SSO in a later phase
+per Plan.md's scope table, and the dashboard redesign the owner asked for on
+2026-08-06, now an area-B row in phase-3-candidates.md. Each moves the product
+surface, which is the argument the sentence exists to make; the previous version
+made the same argument from features that had arrived.
+
+Documentation wording, so it did not re-trigger validation under the rule that
+only spelling, phrasing and docs wording are exempt — but `release-check` was
+re-run regardless, because the tree has to be clean at the tag and this is the
+file the release gate greps for its version section.

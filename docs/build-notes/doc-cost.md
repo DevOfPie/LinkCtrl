@@ -57,11 +57,11 @@ what makes the predicted column a ceiling rather than an estimate.
 
 | File | Bytes | ≈tokens |
 | --- | ---: | ---: |
-| `docs/build-notes/decisions.md` | 1123199 | 280799 |
+| `docs/build-notes/decisions.md` | 1125248 | 281312 |
 | `docs/build-notes/deferred-findings.md` | 461200 | 115300 |
 | `docs/build-notes/development.md` | 5884 | 1471 |
 | `docs/build-notes/upcoming-decisions.md` | 4870 | 1217 |
-| **Total** | **1595153** | **398788** |
+| **Total** | **1597202** | **399300** |
 
 ### Floors
 
@@ -77,7 +77,7 @@ keep small — the loop reads the one being built and no others.
 
 ## Realized — what Read actually returned
 
-From 12 session transcript(s) on this machine, 90 Read call(s).
+From 12 session transcript(s) on this machine, 92 Read call(s).
 
 Realized bytes are what the tool returned, including the line-number
 prefix Read adds, so a whole-file read measures slightly above the
@@ -94,7 +94,7 @@ singletons are rolled up in the last row instead.
 | `docs/build-notes/deferred-findings.md` | 7 | 145478 | 36369 | 20782 | 461200 | 0.05 |
 | `docs/build-notes/workflow.md` | 8 | 124224 | 31056 | 15528 | 18605 | 0.83 |
 | `docs/build-notes/phase-loop.md` | 11 | 119693 | 29923 | 10881 | 25238 | 0.43 |
-| `docs/build-notes/decisions.md` | 11 | 37319 | 9329 | 3392 | 1123199 | 0.00 |
+| `docs/build-notes/decisions.md` | 11 | 37319 | 9329 | 3392 | 1125248 | 0.00 |
 | `docs/build-notes/phase-details/README.md` | 4 | 35322 | 8830 | 8830 | 10051 | 0.88 |
 | `docs/build-notes/phase-details/m45.md` | 3 | 17532 | 4383 | 5844 | 6517 | 0.90 |
 | `Taskfile.yml` | 3 | 14652 | 3663 | 4884 | 25989 | 0.19 |
@@ -104,8 +104,8 @@ singletons are rolled up in the last row instead.
 | `.current-task.md` | 2 | 5652 | 1413 | 2826 | 11026 | 0.26 |
 | `Plan.md` | 2 | 2012 | 503 | 1006 | 169907 | 0.01 |
 | `scripts/slo-breaking-point.sh` | 2 | 1467 | 366 | 733 | 10246 | 0.07 |
-| _30 file(s) read once_ | 30 | 164804 | 41201 | | | |
-| **Total** | **90** | **694301** | **173575** | | | |
+| _32 file(s) read once_ | 32 | 167171 | 41792 | | | |
+| **Total** | **92** | **696668** | **174167** | | | |
 
 A floor, not a total: content also reaches the context through Bash
 (`cat`, `sed`, `grep`), through search results, and through the

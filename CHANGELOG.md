@@ -9,11 +9,16 @@ whether an upgrade is safe:
 
 - **The REST API is `/api/v1`** and is a stable contract. A breaking change there
   becomes `/api/v2`, not a major version bump here.
-- **The product** is pre-1.0 while Phase 2 is outstanding. Shared workspaces,
-  folders and custom domains will change the dashboard and add tables, so the
-  version stays in the `0.x` range until that has settled. `0.x` here means "the
-  product surface may still move", not "unfinished": everything documented as
-  built is tested and exercised end to end.
+- **The product** is pre-1.0 while account lifecycle and identity are incomplete.
+  There is no account recovery — a forgotten password locks the account out
+  permanently — and no account deletion or erasure of any kind; MFA and SSO are a
+  later phase, and a dashboard redesign is planned for early Phase 3. Each of
+  those moves the product surface, so the version stays in the `0.x` range until
+  they have settled. `0.x` here means "the product surface may still move", not
+  "unfinished": everything documented as built is tested and exercised end to end.
+  *(This read "pre-1.0 while Phase 2 is outstanding. Shared workspaces, folders
+  and custom domains will change the dashboard and add tables" until 0.2.0 — all
+  three shipped in it, so the sentence named its own contents as future work.)*
 
 The database schema only ever changes additively within a minor version, and
 migrations run at boot.
