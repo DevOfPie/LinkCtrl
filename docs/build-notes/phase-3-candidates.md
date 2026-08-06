@@ -25,13 +25,17 @@ Two owner directives shape it, both 2026-08-06:
    by which files a milestone would touch rather than by which feature sounds
    like which.
 
-**The loop cannot do 2 yet.** [phase-loop.md](phase-loop.md) is built on one
-milestone at a time — the worker is explicitly forbidden from starting a second,
-and `.current-task.md` names one milestone, one step, one actor. Both halves of
-the directive are proposed as [W33](workflow-changes.md#proposed) and neither is
-built. Grouping the candidates is useful either way: the fallback half needs only
-that the loop may *choose* a different independent milestone instead of stopping,
-which is much cheaper than running two at once.
+**The loop can now do half of 2.** [W33](workflow-changes.md#made)'s fallback half
+was made on 2026-08-06: when the next milestone is blocked — including by an
+unanswered prompt — [step 1](phase-loop.md#1-validate) takes the first
+*independent* un-`done` row instead of stopping, where independent means its
+dependencies are `done` **and it shares no work area with the blocked one**. That
+is what makes the grouping below load-bearing rather than merely tidy.
+
+Running two at once is still not possible and is **not** approved: the worker is
+forbidden from starting a second milestone, and `.current-task.md` names one
+milestone, one step, one actor. So an area boundary buys a fallback destination,
+not concurrency.
 
 ---
 
