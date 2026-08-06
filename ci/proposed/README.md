@@ -87,6 +87,13 @@ otherwise invite.
 
 ## Writing one
 
+- **No header addressed to the reviewer.** A proposal is a whole-file copy and
+  applying it is `cp`, so anything the file says about itself lands on the live
+  workflow — W29's proposal opened with a `# PROPOSAL` block explaining how to
+  apply it, and after it was applied the release workflow began by telling a
+  reader to apply a file they were already reading. The diff *is* the
+  description, and `make workflow-proposals` prints it. Say what a comment needs
+  to say in the `workflow-changes.md` row, which nobody copies anywhere.
 - Change one thing. A proposal is reviewed by a human reading YAML, and a diff
   that mixes a trigger change with a refactor gets approved for the refactor.
 - Say what is *not* changing. The reviewer's question is always "does this alter

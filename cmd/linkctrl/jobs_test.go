@@ -4,8 +4,11 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
+	"github.com/DevOfPie/LinkCtrl/internal/store"
 )
 
 // The scheduler's own tests. This package had none until M45, which is part of
@@ -20,18 +24,73 @@ import (
 // a clock, without leadership — and nothing about it is visible from
 // test/integration, which cannot reach an unexported type in package main.
 
+// jobsPool creates a throwaway database, migrates it, and returns a pool on it.
+//
+// **It does not connect to TEST_DATABASE_URL itself**, and that is the whole
+// point of the helper. The first version did, and it passed here and failed on
+// a runner with `relation "domains" does not exist`: a developer's instance has
+// a migrated base database, and CI's Postgres service container is empty
+// because every other suite migrates a database of its own. So the test was
+// asserting against whatever happened to be lying around, which on one machine
+// was the right schema and on another was nothing.
+//
+// Same shape as cmd/lctl's newDemoDB, deliberately — a second way of getting a
+// migrated database is a second thing that can be wrong about which one it got.
 func jobsPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
+	ctx := context.Background()
+
+	if os.Getenv("TEST_DATABASE_URL") == "" {
 		t.Skip("TEST_DATABASE_URL is not set")
 	}
-	pool, err := pgxpool.New(context.Background(), dsn)
+
+	admin, err := pgxpool.New(ctx, jobsDSNFor("postgres"))
 	if err != nil {
-		t.Fatalf("open pool: %v", err)
+		t.Fatalf("connect to the maintenance database: %v\n\n"+
+			"These tests need Postgres. Start it with `make up`, and run them with "+
+			"`make test-integration` so TEST_DATABASE_URL is set.", err)
+	}
+	defer admin.Close()
+
+	name := "t_jobs_" + strings.ReplaceAll(uuid.Must(uuid.NewV7()).String(), "-", "")[:16]
+	if _, err := admin.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s", name)); err != nil {
+		t.Fatalf("create test database: %v", err)
+	}
+	t.Cleanup(func() {
+		cleanup, err := pgxpool.New(context.Background(), jobsDSNFor("postgres"))
+		if err != nil {
+			return
+		}
+		defer cleanup.Close()
+		_, _ = cleanup.Exec(context.Background(),
+			fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", name))
+	})
+
+	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	if err := store.Migrate(ctx, jobsDSNFor(name), quiet); err != nil {
+		t.Fatalf("migrate test database: %v", err)
+	}
+
+	pool, err := pgxpool.New(ctx, jobsDSNFor(name))
+	if err != nil {
+		t.Fatalf("connect to test database: %v", err)
 	}
 	t.Cleanup(pool.Close)
 	return pool
+}
+
+// jobsDSNFor rewrites the database name in TEST_DATABASE_URL.
+func jobsDSNFor(name string) string {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	i := strings.LastIndex(dsn, "/")
+	if i < 0 {
+		return dsn
+	}
+	rest := ""
+	if j := strings.Index(dsn[i:], "?"); j >= 0 {
+		rest = dsn[i+j:]
+	}
+	return dsn[:i+1] + name + rest
 }
 
 // TestTheHostReloadRunsWithoutASubscriberAndWithoutLeadership is F73's fix as a

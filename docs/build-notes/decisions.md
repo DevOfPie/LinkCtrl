@@ -17961,3 +17961,60 @@ urgency for my own work.
 The fix stays proposed as [W29](workflow-changes.md) and is still worth applying
 — it is defensive against a release that ends up last, and against anybody
 reordering the file — but it does not gate the tag, and the row now says so.
+
+## 2026-08-06 — CI caught the test that F144's fix had just started running
+
+The first CI run after [F144](deferred-findings.md) widened `ci-integration`
+failed, on the package the widening added. `cmd/linkctrl`'s scheduler test —
+written this session for [F73](deferred-findings.md), and the first test that
+package ever had — died with `relation "domains" does not exist`.
+
+### The test was borrowing a database instead of owning one
+
+`jobsPool` connected straight to `TEST_DATABASE_URL` and assumed a schema. Every
+other integration suite here creates a throwaway database and migrates it, so on
+a runner the base database is *empty* — nothing had ever needed it. A
+developer's instance has a migrated base database, which is why it passed
+locally every time.
+
+So the test asserted against whatever happened to be lying around: the right
+schema on one machine, nothing on another. It now creates and migrates its own,
+in the shape `cmd/lctl`'s `newDemoDB` already uses — a second way of obtaining a
+migrated database would be a second thing that can be wrong about which one it
+got.
+
+### This is what the widening was for, and it worked immediately
+
+F144 was closed the same day, and the very next run found a defect that had been
+invisible for as long as the package was excluded. Worth recording because the
+argument for widening was hypothetical — *a runner should catch a regression
+somebody did not run locally* — and it stopped being hypothetical within one
+push.
+
+It also cuts the other way: the defect it found was **mine**, introduced by the
+fix that added the package. A test that only ever ran on the machine that wrote
+it is not a test that passes; it is a test that has not been asked.
+
+### Verified against a harder condition than CI's
+
+CI's base database exists and is empty. The local check points
+`TEST_DATABASE_URL` at a database that does **not exist at all**, and the test
+passes — it never touches the base DSN's database, only the maintenance
+connection it derives from it.
+
+### The route taught itself something, by being used
+
+Applying W29 put its own `# PROPOSAL` header onto the live workflow, so
+`release.yml` now opens by telling a reader to `cp` a file over the one they are
+reading, and describes a made change as pending. Nothing executes a comment, and
+F1 closes regardless — what F1 asserts is what the `awk` extracts.
+
+Removing it is *itself* a workflow change the token cannot push, so it is
+[W30](workflow-changes.md) rather than an edit. That is the route working as
+designed rather than a nuisance: the second proposal costs one `cp`, and the
+alternative was asking for the permission the whole mechanism exists to avoid.
+
+`ci/proposed/README.md`'s *Writing one* section now says a proposal carries no
+header addressed to the reviewer, because applying one is `cp` and anything the
+file says about itself lands on the live workflow. The diff is the description,
+and `make workflow-proposals` prints it.
