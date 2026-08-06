@@ -11,12 +11,22 @@ There is no generation date. The commit date is the date, and leaving it out
 means regenerating on an unchanged tree produces no diff, so every diff in this
 file is real growth.
 
+**How charging works, and when it changed.** A file the contract says to read is
+charged in full. A file the contract says to read *one row of* is charged at that
+file's longest such row. Before 2026-08-06 every file was charged in full,
+including `Plan.md`, which step 1 reads a single ordering row of — so the
+`/work phase` resume floor was reported at 225579 bytes when three quarters of
+that was one file nobody reads whole. Numbers from before that commit are **not
+comparable** with numbers after it. The change was made at a phase boundary for
+exactly that reason.
+
 ---
 
 ## Predicted — what the documented read sets cost
 
-A file's full size, charged to each trigger whose instructions name it. This is
-a ceiling: it assumes every read is a whole-file read.
+Charged from what the contract instructs, per the note above. It remains a
+ceiling: a whole-file entry assumes the whole file is read, and a by-row entry
+assumes the longest row rather than a typical one.
 
 ### Every task
 
@@ -25,8 +35,8 @@ Read before anything else happens, per CLAUDE.md.
 | File | Bytes | ≈tokens |
 | --- | ---: | ---: |
 | `CLAUDE.md` | 1738 | 434 |
-| `docs/build-notes/workflow.md` | 18605 | 4651 |
-| **Total** | **20343** | **5085** |
+| `docs/build-notes/workflow.md` | 19017 | 4754 |
+| **Total** | **20755** | **5188** |
 
 ### `/work phase` — per resume, on top of the above
 
@@ -34,10 +44,10 @@ Step 0 and step 1 of the loop, before a single milestone file is opened.
 
 | File | Bytes | ≈tokens |
 | --- | ---: | ---: |
-| `docs/build-notes/phase-loop.md` | 25238 | 6309 |
+| `docs/build-notes/phase-loop.md` | 28436 | 7109 |
 | `docs/build-notes/phase-details/README.md` | 10044 | 2511 |
-| `Plan.md` | 169954 | 42488 |
-| **Total** | **205236** | **51309** |
+| `Plan.md`, longest row | 185 | 46 |
+| **Total** | **38665** | **9666** |
 
 ### A feature request — on top of *every task*
 
@@ -57,18 +67,18 @@ what makes the predicted column a ceiling rather than an estimate.
 
 | File | Bytes | ≈tokens |
 | --- | ---: | ---: |
-| `docs/build-notes/decisions.md` | 1129485 | 282371 |
+| `docs/build-notes/decisions.md` | 1158005 | 289501 |
 | `docs/build-notes/deferred-findings.md` | 461200 | 115300 |
-| `docs/build-notes/development.md` | 5884 | 1471 |
+| `docs/build-notes/development.md` | 6389 | 1597 |
 | `docs/build-notes/upcoming-decisions.md` | 4870 | 1217 |
-| **Total** | **1601439** | **400359** |
+| **Total** | **1630464** | **407616** |
 
 ### Floors
 
 | Trigger | Bytes | ≈tokens |
 | --- | ---: | ---: |
-| Any task | 20343 | 5085 |
-| `/work phase` resume | 225579 | 56394 |
+| Any task | 20755 | 5188 |
+| `/work phase` resume | 59420 | 14855 |
 
 Plus one `phase-details/mN.md` per milestone, which the split exists to
 keep small — the loop reads the one being built and no others.
@@ -77,7 +87,7 @@ keep small — the loop reads the one being built and no others.
 
 ## Realized — what Read actually returned
 
-From 12 session transcript(s) on this machine, 96 Read call(s).
+From 13 session transcript(s) on this machine, 124 Read call(s).
 
 Realized bytes are what the tool returned, including the line-number
 prefix Read adds, so a whole-file read measures slightly above the
@@ -92,22 +102,28 @@ singletons are rolled up in the last row instead.
 | File | Reads | Total bytes | ≈tokens | Mean/read | Size now | Mean ÷ size |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `docs/build-notes/deferred-findings.md` | 7 | 145478 | 36369 | 20782 | 461200 | 0.05 |
-| `docs/build-notes/workflow.md` | 8 | 124224 | 31056 | 15528 | 18605 | 0.83 |
-| `docs/build-notes/phase-loop.md` | 11 | 119693 | 29923 | 10881 | 25238 | 0.43 |
-| `docs/build-notes/decisions.md` | 11 | 37319 | 9329 | 3392 | 1129485 | 0.00 |
+| `docs/build-notes/workflow.md` | 9 | 144033 | 36008 | 16003 | 19017 | 0.84 |
+| `docs/build-notes/phase-loop.md` | 19 | 142538 | 35634 | 7502 | 28436 | 0.26 |
+| `docs/build-notes/decisions.md` | 13 | 38640 | 9660 | 2972 | 1158005 | 0.00 |
 | `docs/build-notes/phase-details/README.md` | 4 | 35322 | 8830 | 8830 | 10044 | 0.88 |
+| `docs/build-notes/work-loop.md` | 3 | 26853 | 6713 | 8951 | 15073 | 0.59 |
+| `docs/build-notes/workflow-changes.md` | 3 | 24066 | 6016 | 8022 | 22292 | 0.36 |
 | `docs/build-notes/phase-details/m45.md` | 3 | 17532 | 4383 | 5844 | 6517 | 0.90 |
-| `Taskfile.yml` | 3 | 14652 | 3663 | 4884 | 25989 | 0.19 |
+| `.current-task.md` | 3 | 17148 | 4287 | 5716 | 4012 | 1.42 |
+| `Taskfile.yml` | 3 | 14652 | 3663 | 4884 | 27863 | 0.18 |
+| `docs/build-notes/phase-3-candidates.md` | 2 | 14425 | 3606 | 7212 | 12849 | 0.56 |
 | `docs/build-notes/phase-details/m28.5.md` | 3 | 11842 | 2960 | 3947 | 11250 | 0.35 |
+| `docs/build-notes/doc-cost.md` | 2 | 7926 | 1981 | 3963 | 3219 | 1.23 |
 | `docs/build-notes/planning.md` | 2 | 7792 | 1948 | 3896 | 7286 | 0.53 |
 | `docs/build-notes/phase-details/m33.5.md` | 2 | 7759 | 1939 | 3879 | 6492 | 0.60 |
 | `internal/httpx/router.go` | 2 | 6545 | 1636 | 3272 | 53079 | 0.06 |
-| `.current-task.md` | 2 | 5652 | 1413 | 2826 | 11026 | 0.26 |
+| `docs/build-notes/commands.md` | 3 | 5026 | 1256 | 1675 | 9421 | 0.18 |
+| `.claude/commands/work.md` | 2 | 3857 | 964 | 1928 | 2021 | 0.95 |
 | `Plan.md` | 3 | 2765 | 691 | 921 | 169954 | 0.01 |
-| `docs/build-notes/workflow-changes.md` | 2 | 2591 | 647 | 1295 | 21332 | 0.06 |
 | `scripts/slo-breaking-point.sh` | 2 | 1467 | 366 | 733 | 10246 | 0.07 |
-| _31 file(s) read once_ | 31 | 160494 | 40123 | | | |
-| **Total** | **96** | **701127** | **175281** | | | |
+| `docs/build-notes/upcoming-decisions.md` | 2 | 1438 | 359 | 719 | 4870 | 0.15 |
+| _32 file(s) read once_ | 32 | 170689 | 42672 | | | |
+| **Total** | **124** | **847793** | **211948** | | | |
 
 A floor, not a total: content also reaches the context through Bash
 (`cat`, `sed`, `grep`), through search results, and through the

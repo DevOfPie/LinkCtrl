@@ -231,6 +231,7 @@ file. Append a row when you append an entry.
 | [Dispatch is a resolution step, not a cd](#2026-08-06--dispatch-is-a-resolution-step-not-a-cd) | W23 made: cross-repository `/work`; why the dispatcher holds no repository logic and verifies before entering; which half survives no clone |
 | [Working past a question without losing it](#2026-08-06--working-past-a-question-without-losing-it) | W33's fallback half made; the recommendation that was overruled and why the wider form is defensible; the `Parked:` line as the price of it |
 | [A check that outlives the session that ran it](#2026-08-06--a-check-that-outlives-the-session-that-ran-it) | W14 made: the render-verification harness; why its page comes from the templates rather than from a fixture or the instance; why it is opt-in and what that costs |
+| [Measuring what the contract reads](#2026-08-06--measuring-what-the-contract-reads-not-what-it-names) | W34 made: by-row charging in doc-cost.sh; why the phase boundary is the only moment for it; the two trims examined and declined |
 
 ---
 
@@ -18973,5 +18974,85 @@ exactly, the way the Makefile pins every other vendored version. That leaves
 Playwright's own dependencies floating, and the entire point of keeping this
 harness is that somebody else runs the same check and gets the same answer. The
 lockfile is tracked. 1.7KB is a cheap price for a reproducible check.
+
+Recorded with no milestone number, per the convention for a process change.
+
+---
+
+## 2026-08-06 — Measuring what the contract reads, not what it names
+
+A token-efficiency review of the operating contract turned up one finding that
+dwarfed the others and was not about prose at all: **the biggest number in
+`doc-cost.md` described nothing anyone pays.** The `/work phase` resume floor
+read 229189 bytes, and 169954 of it — three quarters — was `Plan.md`, a file
+[step 1](phase-loop.md#1-validate) reads *one ordering row* of. Its realized read
+ratio was **0.01**: three reads averaging 921 bytes against a 170KB file.
+
+So the report's headline was a modelling artifact, and a rule made this morning
+([W13](workflow-changes.md#made), [W1](workflow-changes.md#made)) now obliges a
+review and a documentation pass to *judge* that number. An obligation to act on a
+number is only as good as the number.
+
+### The fix, and why it could only happen now
+
+`scripts/doc-cost.sh` gains a second kind of entry. `path` is charged whole;
+`path::regex` is charged at the file's longest matching line. `Plan.md` is
+charged at its longest ordering row — **185 bytes**, of 33 such rows — because
+that is what the contract instructs a resume to read. The floor becomes 59420
+bytes, ≈14855 tokens.
+
+**No read got cheaper.** Nothing about the loop changed; the measure stopped
+overstating. That distinction is the whole reason this is recorded rather than
+quietly committed, because a floor falling by 74% between two snapshots looks
+like an optimisation and is not one.
+
+[W24](workflow-changes.md#made) refused this exact change mid-phase, and was
+right to: *changing what it measures mid-measurement makes phases incomparable*,
+and comparability is the record's entire value. Phase 2 is closed, 0.2.0 is
+tagged, and Phase 3 is unplanned — this is the one moment the objection does not
+apply, and the discontinuity is now stated permanently in the generated header
+rather than left for a reader to infer from a step in the numbers.
+
+### The fallback tested itself
+
+A `path::regex` whose pattern matches nothing falls back to charging the file
+whole and marks the row **row pattern matched nothing, charged whole**. It fails
+loud rather than reporting zero, because a pattern stops matching when a file is
+restructured, and understating in the flattering direction is the failure mode a
+cost report cannot afford.
+
+That path was not exercised by a contrived test. The first pattern was broken:
+`awk -v` processes escape sequences in the value before the regex engine sees it,
+so `\[` arrived as a bare `[`, opened a bracket expression that never closed, and
+awk died on an invalid regex. The generated table said so in as many words on the
+first run. The regex now reaches awk through `ENVIRON`, which hands the bytes
+over untouched, and the reason is a comment in the script — it is the kind of
+thing that gets "simplified" back.
+
+### Two trims examined and declined, and the one place not to spend
+
+Recorded because deciding something no longer matters is a decision, and this
+project keeps losing exactly that kind.
+
+**`workflow.md`'s rationale, not trimmed.** 19017 bytes at a 0.83 realized read
+ratio — the file paid nearly whole on every task, and the largest genuine
+recurring cost in the repository. Its own header says *terse, trigger-first, no
+rationale… rationale belongs in decisions.md*, and four standing rules have since
+grown two paragraphs of why apiece. An estimated 2.5–3.5KB was recoverable,
+≈600–900 tokens per task. **The owner declined.** The cost of the trim is that
+those rules are long *because* short versions were misread before, and cutting
+the why is how a rule gets re-litigated.
+
+**`phase-loop.md`'s W13 paragraph, not trimmed.** The file grew 3198 bytes today
+and sits at a 0.43 ratio. W13's own entry called those bytes a debt and said the
+first review should judge them. The owner declined the trim, so the debt stands
+recorded rather than paid — which is a legitimate outcome and is different from
+it going unnoticed.
+
+**Where not to spend, stated so nobody re-derives it:** `decisions.md` is
+1129485 bytes at a realized ratio of **0.00** — eleven reads averaging 3392 bytes
+— and `deferred-findings.md` is 461200 at **0.05**. Neither costs the loop
+anything, and trimming either would destroy the record for no gain. Size is not
+cost; the ratio is.
 
 Recorded with no milestone number, per the convention for a process change.

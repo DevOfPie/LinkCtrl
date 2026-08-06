@@ -9,9 +9,11 @@
 #
 # Two numbers, because either one alone misleads:
 #
-#   Predicted  a file's size, charged in full to every trigger whose documented
-#              read set names it. Exact in bytes. Wrong for any file that is
-#              grepped rather than read whole — which is most of the large ones.
+#   Predicted  what a trigger's documented read set costs, charged from what the
+#              contract actually instructs. A file the contract says to read is
+#              charged in full. A file it says to read *one row of* is charged at
+#              that file's longest such row, which is the ceiling for a single-row
+#              read. Exact in bytes either way.
 #
 #   Realized   what Read actually returned, from this machine's session
 #              transcripts. Exact, and the only way to know whether partial
@@ -41,10 +43,15 @@ cd "$(dirname "$0")/.." || exit 1
 # with workflow.md's triggers and phase-loop.md's step 1: a set that drifts from
 # the contract reports a cost nobody pays.
 EVERY_TASK=(CLAUDE.md docs/build-notes/workflow.md)
+# An entry may be `path` — charged whole — or `path::regex`, charged at the
+# longest line matching that regex. The second form is for a file the contract
+# reads one row of: phase-loop.md's step 1 says "Plan.md's ordering row for N",
+# and charging the whole 170KB file for one 185-byte row reported a cost nobody
+# has ever paid. See the note in the generated header about comparability.
 PHASE_LOOP=(
 	docs/build-notes/phase-loop.md
 	docs/build-notes/phase-details/README.md
-	Plan.md
+	'Plan.md::^\| \[M'
 )
 FEATURE=(
 	docs/build-notes/planning.md
@@ -60,20 +67,49 @@ REFERENCE=(
 
 bytes_of() { wc -c <"$1" | tr -d ' '; }
 
+# The longest line matching a regex, plus its newline. Prints nothing when the
+# regex matches no line, and the caller falls back to the whole file and says so
+# — a pattern that stops matching means the file was restructured, and reporting
+# zero for it would understate the cost in exactly the direction that flatters.
+# The regex reaches awk through the environment rather than through -v, because
+# -v processes escape sequences in the value first: `\[` arrives as a bare `[`,
+# which opens a bracket expression that never closes, and awk dies on an invalid
+# regex. ENVIRON hands the bytes over untouched.
+longest_row_of() {
+	DOC_COST_RE="$2" awk '
+		$0 ~ ENVIRON["DOC_COST_RE"] { n = length($0) + 1; if (n > m) m = n }
+		END { if (m) print m }
+	' "$1"
+}
+
 # 4 bytes per token. An approximation, labelled as one everywhere it appears —
 # the byte counts are measurements and the token counts are not, and this
 # repository's standing rule is that the difference stays visible.
 est_tokens() { echo $(($1 / 4)); }
 
 emit_table() {
-	local total=0 f b
+	local total=0 entry f re b label
 	printf '| File | Bytes | ≈tokens |\n| --- | ---: | ---: |\n'
-	for f in "$@"; do
+	for entry in "$@"; do
+		f=${entry%%::*}
+		re=""
+		[ "$entry" != "$f" ] && re=${entry#*::}
 		[ -f "$f" ] || continue
-		b=$(bytes_of "$f")
-		total=$((total + b))
 		# shellcheck disable=SC2016  # the backticks are markdown, not a subshell
-		printf '| `%s` | %s | %s |\n' "$f" "$b" "$(est_tokens "$b")"
+		label="\`$f\`"
+		if [ -n "$re" ]; then
+			b=$(longest_row_of "$f" "$re")
+			if [ -n "$b" ]; then
+				label="$label, longest row"
+			else
+				b=$(bytes_of "$f")
+				label="$label — **row pattern matched nothing, charged whole**"
+			fi
+		else
+			b=$(bytes_of "$f")
+		fi
+		total=$((total + b))
+		printf '| %s | %s | %s |\n' "$label" "$b" "$(est_tokens "$b")"
 	done
 	printf '| **Total** | **%s** | **%s** |\n\n' "$total" "$(est_tokens "$total")"
 	echo "$total" >/tmp/doc-cost-total.$$
@@ -95,12 +131,22 @@ There is no generation date. The commit date is the date, and leaving it out
 means regenerating on an unchanged tree produces no diff, so every diff in this
 file is real growth.
 
+**How charging works, and when it changed.** A file the contract says to read is
+charged in full. A file the contract says to read *one row of* is charged at that
+file's longest such row. Before 2026-08-06 every file was charged in full,
+including `Plan.md`, which step 1 reads a single ordering row of — so the
+`/work phase` resume floor was reported at 225579 bytes when three quarters of
+that was one file nobody reads whole. Numbers from before that commit are **not
+comparable** with numbers after it. The change was made at a phase boundary for
+exactly that reason.
+
 ---
 
 ## Predicted — what the documented read sets cost
 
-A file's full size, charged to each trigger whose instructions name it. This is
-a ceiling: it assumes every read is a whole-file read.
+Charged from what the contract instructs, per the note above. It remains a
+ceiling: a whole-file entry assumes the whole file is read, and a by-row entry
+assumes the longest row rather than a typical one.
 
 HEADER
 
