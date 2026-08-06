@@ -17937,3 +17937,27 @@ Both programs run over the real `CHANGELOG.md` as it will be at 0.2.0: the old
 one pulls the two reference definitions into the 0.1.0 body, the new one pulls
 zero and keeps all 165 lines. `make workflow-proposals` reports it pending with
 the diff, which is what the owner reviews.
+
+## 2026-08-06 — F1 does not block 0.2.0, and I said it did
+
+Cutting the `[0.2.0]` section made a claim of mine measurable and wrong.
+
+[F1](deferred-findings.md) is that the release-notes `awk` runs from a version's
+heading to the next one, and the newest version is the last section in
+`CHANGELOG.md`, so the range runs off the end and sweeps up the trailing link
+definitions. All true — of whichever section is **last**.
+
+v0.1.0 was hit because it was the *first* release and therefore the only section
+in the file. Once `[0.2.0]` is cut above `[0.1.0]`, extracting 0.2.0 stops at
+`## [0.1.0]` and never reaches the reference block. Measured against the real
+file: the old program and the new one both extract 0.2.0 with zero reference
+definitions.
+
+I told the owner that shipping without the fix meant the 0.2.0 body would carry
+them "exactly as v0.1.0's does", and offered that as a reason not to release
+first. That was wrong, and it was wrong in the direction that manufactures
+urgency for my own work.
+
+The fix stays proposed as [W29](workflow-changes.md) and is still worth applying
+— it is defensive against a release that ends up last, and against anybody
+reordering the file — but it does not gate the tag, and the row now says so.

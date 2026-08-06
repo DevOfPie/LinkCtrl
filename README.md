@@ -6,12 +6,11 @@ measure, script and revoke — not a row you create once and hope about.
 Runs as one Go binary with Postgres and Redis beside it. No Node in the image,
 no SaaS dependency, no telemetry leaving the box.
 
-> **Status: Phase 2 complete and unreleased. 0.1.0 is the latest tag.**
-> Everything described below is built, tested and exercised end to end, and the
-> redirect latency target is measured rather than aspirational — but most of it
-> is **not in 0.1.0**, which shipped Phase 1 only. Until 0.2.0 is tagged, running
-> a released version gets you the smaller product the `[0.1.0]` section of
-> [CHANGELOG.md](CHANGELOG.md) describes; running `main` gets you this page.
+> **Status: 0.2.0.** Everything described below is built, tested and exercised
+> end to end, and the redirect latency target is measured rather than
+> aspirational. This page describes the released product — see
+> [CHANGELOG.md](CHANGELOG.md) for what each version shipped, and its
+> `[Unreleased]` section for anything on `main` that no tag carries yet.
 > [Not built yet](#not-built-yet) is the list of what is still missing from
 > either, and it is the one to read before deploying anything you care about.
 >

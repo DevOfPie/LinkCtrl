@@ -20,6 +20,10 @@ migrations run at boot.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.2.0] - 2026-08-06
+
 ### Added
 
 - **`lctl instance principal` — see who administers this instance, and hand that
@@ -1988,5 +1992,6 @@ all in [Plan.md](Plan.md#known-limitations) with their consequences:
   and a registration creates a new isolated workspace rather than adding a member
   to yours. Invitations, and a signup form worth having, are Phase 2.
 
-[Unreleased]: https://github.com/DevOfPie/LinkCtrl/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/DevOfPie/LinkCtrl/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/DevOfPie/LinkCtrl/releases/tag/v0.2.0
 [0.1.0]: https://github.com/DevOfPie/LinkCtrl/releases/tag/v0.1.0

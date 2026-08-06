@@ -45,7 +45,7 @@ milestone, is in [workflow.md](../workflow.md).
 | [M35](m35.md) | Gated links: password, signed, one-time, max-click | M34 (ordering) | done |
 | [M36](m36.md) | Split testing: weighted, sequential, fallback, flags | M34 M35 M30 | done |
 | [M37](m37.md) | Dimension visualizations, rollup cadence first | — | done |
-| [M38](m38.md) | Folders: API and tree UI | — | in progress (reopened) |
+| [M38](m38.md) | Folders: API and tree UI | — | done |
 | [M39](m39.md) | Per-domain ownership | M21 | done |
 | [M40](m40.md) | Custom domains: verification and serving | M39 M23 | done |
 | [M41](m41.md) | QR codes and campaigns | — | done |
