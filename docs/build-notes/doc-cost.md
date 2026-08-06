@@ -57,11 +57,11 @@ what makes the predicted column a ceiling rather than an estimate.
 
 | File | Bytes | ≈tokens |
 | --- | ---: | ---: |
-| `docs/build-notes/decisions.md` | 1125248 | 281312 |
+| `docs/build-notes/decisions.md` | 1126905 | 281726 |
 | `docs/build-notes/deferred-findings.md` | 461200 | 115300 |
 | `docs/build-notes/development.md` | 5884 | 1471 |
 | `docs/build-notes/upcoming-decisions.md` | 4870 | 1217 |
-| **Total** | **1597202** | **399300** |
+| **Total** | **1598859** | **399714** |
 
 ### Floors
 
@@ -94,7 +94,7 @@ singletons are rolled up in the last row instead.
 | `docs/build-notes/deferred-findings.md` | 7 | 145478 | 36369 | 20782 | 461200 | 0.05 |
 | `docs/build-notes/workflow.md` | 8 | 124224 | 31056 | 15528 | 18605 | 0.83 |
 | `docs/build-notes/phase-loop.md` | 11 | 119693 | 29923 | 10881 | 25238 | 0.43 |
-| `docs/build-notes/decisions.md` | 11 | 37319 | 9329 | 3392 | 1125248 | 0.00 |
+| `docs/build-notes/decisions.md` | 11 | 37319 | 9329 | 3392 | 1126905 | 0.00 |
 | `docs/build-notes/phase-details/README.md` | 4 | 35322 | 8830 | 8830 | 10051 | 0.88 |
 | `docs/build-notes/phase-details/m45.md` | 3 | 17532 | 4383 | 5844 | 6517 | 0.90 |
 | `Taskfile.yml` | 3 | 14652 | 3663 | 4884 | 25989 | 0.19 |

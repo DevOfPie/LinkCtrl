@@ -13,9 +13,11 @@ pointer plus which area it belongs to, and the reason stays where it was written
 
 Two owner directives shape it, both 2026-08-06:
 
-1. **A phase aims to be shorter than Phase 2.** Phase 2 ran **31 milestone
-   files** — M21–M45 plus six fractional insertions. How much shorter is not
-   decided; the number is an open question below.
+1. **A phase aims to be shorter than Phase 2.** Phase 2 ran **33 milestone
+   files** — 25 integers, M21 through M45, plus 8 fractional insertions. Counted
+   from the status table and the directory, not recalled: this said *31 and six*
+   on first writing and both numbers were wrong. How much shorter is not decided;
+   the number is an open question below.
 2. **Milestones should sit in separate work areas**, so more than one can be
    worked at a time, or so a blocked milestone has an independent one to fall
    back to. That is what the grouping is *for*, and it is why the areas are cut
@@ -158,7 +160,7 @@ than 3.
 
 Answering either changes what this file becomes. Both are the owner's.
 
-**1. How many milestones is "shorter than Phase 2"?** Phase 2 ran 31 files.
+**1. How many milestones is "shorter than Phase 2"?** Phase 2 ran 33 files.
 Recommendation: **a target of 12–15**, stated in [planning.md](planning.md) so an
 insertion has something to be measured against — enough for two or three of the
 areas above at Phase 2's depth, which is what a coherent release needs, and small

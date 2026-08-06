@@ -222,6 +222,7 @@ file. Append a row when you append an entry.
 | [Phases get shorter, milestones get work areas](#2026-08-06--phases-get-shorter-milestones-get-work-areas-and-phase-3-gets-a-candidate-list) | Two owner directives (W32, W33) and a correction to the premise behind one; why fallback and concurrency cost differently; why the Phase 3 candidate list is not Plan.md |
 | [M45, closing 0.2.0](#2026-08-06--m45-closing-020-f1-verified-f1s-stated-reason-corrected-and-the-read-cost-defended) | F1's extraction verified pre-tag; why F1 **cannot recur** and m45.md's "newest section is last" was false; the always-read floors defended with realized read ratios rather than trimmed |
 | [M45, the fourth obligation](#2026-08-06--m45-the-fourth-obligation-the-versioning-note-named-its-own-contents-as-future-work) | Corrects the count above: the pre-1.0 note justified `0.x` with three features 0.2.0 shipped, and now names what is actually outstanding |
+| [Phase 2 ran 33 milestones, not 31](#2026-08-06--phase-2-ran-33-milestones-not-31-and-the-number-feeds-a-decision) | 25 integers plus 8 fractional insertions, counted from the table; the baseline for the milestone-count target was understated by two |
 
 ---
 
@@ -18420,3 +18421,27 @@ Documentation wording, so it did not re-trigger validation under the rule that
 only spelling, phrasing and docs wording are exempt — but `release-check` was
 re-run regardless, because the tree has to be clean at the tag and this is the
 file the release gate greps for its version section.
+
+---
+
+## 2026-08-06 — Phase 2 ran 33 milestones, not 31, and the number feeds a decision
+
+A correction to the entry two above. It recorded the owner's directive that
+phases be shorter than Phase 2 and put Phase 2 at *31 milestone files — M21–M45
+plus six fractional insertions*. Both numbers were recalled rather than counted,
+and both are wrong: the status table has **33 rows** and `phase-details/` has 33
+matching files, being **25 integers** M21 through M45 and **8** fractional
+insertions (M24.5, M26.5, M26.6, M28.5, M32.5, M32.9, M33.5, M44.9).
+
+It matters because the number is the baseline for an open owner decision — what
+milestone-count target planning.md should carry — and a target argued against 31
+when the real figure is 33 understates by two what "shorter" has to beat. The
+recommendation of 12–15 is unchanged; it was never derived from the wrong number.
+
+Corrected in workflow-changes.md's W32 row and in phase-3-candidates.md, each
+carrying its own before-and-after so the diff is not the only record. This is
+workflow.md's own rule — *an enumeration is counted rather than trusted* — failing
+in the one place it is written down, which is worth the entry: the rule exists
+because four wording rows in one milestone turned out to have more sites than they
+listed, and the actor that wrote the rule down then trusted a count of milestones
+it had just read a table of.
