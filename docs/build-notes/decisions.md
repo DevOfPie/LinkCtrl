@@ -230,6 +230,7 @@ file. Append a row when you append an entry.
 | [The marker that buys back a decision](#2026-08-06--the-marker-that-buys-back-a-decision) | W16 made: `/note --discuss`; why the teeth are in the drain and not in the capture; why classification is cheap to perform and hard to undo |
 | [Dispatch is a resolution step, not a cd](#2026-08-06--dispatch-is-a-resolution-step-not-a-cd) | W23 made: cross-repository `/work`; why the dispatcher holds no repository logic and verifies before entering; which half survives no clone |
 | [Working past a question without losing it](#2026-08-06--working-past-a-question-without-losing-it) | W33's fallback half made; the recommendation that was overruled and why the wider form is defensible; the `Parked:` line as the price of it |
+| [A check that outlives the session that ran it](#2026-08-06--a-check-that-outlives-the-session-that-ran-it) | W14 made: the render-verification harness; why its page comes from the templates rather than from a fixture or the instance; why it is opt-in and what that costs |
 
 ---
 
@@ -18888,5 +18889,89 @@ skipped that was not blocked. *Independent* is defined rather than left to
 judgement: every `Depends on` row `done`, and no shared work area with the blocked
 one, which is what phase-3-candidates.md's grouping is for and the reason that
 grouping was useful before either half of W33 existed.
+
+Recorded with no milestone number, per the convention for a process change.
+
+---
+
+## 2026-08-06 — A check that outlives the session that ran it
+
+M26.5 says its popover positioning *"is therefore explicit and verified in a
+browser at each engine, not assumed from the markup"*, and lists that under Risks
+as the one part of the milestone that has to be looked at rather than asserted.
+It was looked at. The harness that did the looking lived in a session scratchpad
+and is gone, so the claim survived and the evidence did not.
+
+W14 offered two ways to close that, and they are not the same size. Writing down
+*these claims are verified by hand at named engines* costs a paragraph and makes
+the gap honest. Keeping a harness costs a Node toolchain and three browser
+engines on a machine with none, and makes the gap smaller. **The owner chose the
+harness**, and D25 is what permits it: shipped code stays stdlib-only, tooling
+that only verifies it may use Node.
+
+### The page under test is assembled from the product, not copied from it
+
+The interesting decision is not Playwright; it is where the HTML comes from, and
+two obvious answers are both wrong.
+
+**A committed static fixture** is a second copy of the header. It can stay green
+for years while the template it claims to describe drifts away from it, and a
+harness that verifies its own copy of the markup verifies nothing. This
+repository has met that shape twice this week already — a proposal file left
+beside the workflow it had been applied to, and a rule stated in two files.
+
+**The running test instance** is the real page, and makes a geometry check depend
+on Docker, Postgres, Redis, a migrated schema, a claimed account and a session
+cookie. Every one of those is a way to fail red for a reason that has nothing to
+do with where a panel sits, which is how a check stops being believed. It would
+also be out of reach of anyone who has only cloned the repository.
+
+So the fixture is assembled at run time out of the product's own files: every
+geometry-bearing class string read from `layout.html` and `partials/nav.html`,
+styled by the built `app.css` the server serves. The panel *contents* are
+invented, and no claim is about them. When a class string cannot be found the
+extractor fails by name — which file, what it looked for — rather than throwing
+further down, because a template that moved is exactly when M26.5's claims want
+re-reading.
+
+Measurements are taken against what the page renders — the header's bottom edge,
+the nav container's content edge — rather than against numbers retyped from the
+template, which would make the check a restatement. Only `60px` and the `3px`
+clearance are asserted as constants, because those two *are* the claim.
+
+### Opt-in, and what that costs
+
+`verify-render` is reachable from nothing: not `check`, no `ci-` target, not
+`release-check`, not any prerequisite of those. The claim was verified by walking
+the prerequisite closure of all ten rather than by reading the file, and the
+comment saying so sits directly above `check`, which is where somebody would
+otherwise wire it in.
+
+The cost is stated rather than absorbed, and it is the same cost the by-hand
+option had: **nothing forces this to run.** It can rot between the rare
+milestones that make a rendered-geometry claim. What it buys over the by-hand
+option is that when somebody does run it, they get numbers instead of a promise —
+and the rot is detectable, because a rotted harness fails loudly the next time
+anyone tries.
+
+### Verified, then verified again
+
+The harness was built by a subagent — its product is tooling, not the operating
+contract, which is the only reason delegation was available at all under
+work-loop.md's no-delegation rule. What it reported was not taken on trust. The
+orchestrator ran `make verify-render` itself and watched nine checks pass in all
+three engines; walked the ten prerequisite chains independently; and performed
+its own sabotage, on a different claim than the subagent's — `top-[3.75rem]`
+changed to `3.25rem`, which failed the clearance assertion with the measured
+offsets, then restored by counter-edit and confirmed byte-identical to `HEAD`.
+Never `git checkout`, which has destroyed uncommitted work in this repository
+twice.
+
+One thing was changed rather than accepted: the subagent gitignored
+`package-lock.json`, reasoning that `package.json` pins the one direct dependency
+exactly, the way the Makefile pins every other vendored version. That leaves
+Playwright's own dependencies floating, and the entire point of keeping this
+harness is that somebody else runs the same check and gets the same answer. The
+lockfile is tracked. 1.7KB is a cheap price for a reproducible check.
 
 Recorded with no milestone number, per the convention for a process change.

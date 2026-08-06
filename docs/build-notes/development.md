@@ -81,6 +81,14 @@ the templates and embedded into the binary, so a build without it runs fine but
 serves unstyled pages (the server warns at boot). The vendored htmx is
 committed; the target just verifies it against its pinned checksum.
 
+`make verify-render` is the one target here that needs Node, and it is reachable
+from nothing else — not `check`, not any `ci-` target, not `release-check`. It
+re-checks [M26.5](phase-details/m26.5.md)'s popover geometry in Blink, Gecko and
+WebKit, and it is opt-in because the engines are a several-hundred-megabyte
+download that no other target wants. Setup and what it asserts are in
+[tools/render-verify/README.md](../../tools/render-verify/README.md); D25 is why
+Node is allowed to appear at all.
+
 `Taskfile.yml` mirrors the Makefile for contributors without `make`.
 
 Everything that connects to the database reads `POSTGRES_PASSWORD` out of

@@ -223,6 +223,37 @@ check-version-stamp: build ## Fail if a built binary does not report its version
 .PHONY: check
 check: tidy lint shellcheck test ## Everything CI runs, short of integration tests
 
+# Deliberately NOT a prerequisite of `check` above, of any ci- target, or of
+# release-check — and this comment sits here because directly above is where
+# somebody would add it.
+#
+# M26.5 positions the header's two popover panels against the viewport, because
+# a top-layer element ignores the header's containing block, and says the result
+# is "verified in a browser at each engine, not assumed from the markup". This is
+# that verification, kept rather than thrown away with the session that first
+# ran it (W14). It reads the class strings out of the templates and the built
+# stylesheet, so it needs no instance running and never touches :8081 or :8080.
+#
+# Node is required, and this target is the only thing in this repository that
+# requires it. D25 is what permits it: shipped code stays stdlib-only, tooling
+# that only verifies it may use Node. tools/render-verify is not imported by
+# anything, not built into anything, and not in the image.
+#
+# The npm install is done for you; the three browser engines are not. That is
+# several hundred megabytes, and a target that quietly spends it is a target
+# nobody runs twice — so the harness names the command instead.
+RENDER_VERIFY := tools/render-verify
+
+.PHONY: verify-render
+verify-render: ## Re-verify M26.5's popover geometry in Blink, Gecko and WebKit (needs Node)
+	@command -v node >/dev/null 2>&1 || { \
+		echo "node is not on PATH, and this is the one target in this file that needs it."; \
+		echo "See $(RENDER_VERIFY)/README.md, and Plan.md D25 for why it is allowed to."; \
+		exit 1; \
+	}
+	@test -d $(RENDER_VERIFY)/node_modules || npm install --prefix $(RENDER_VERIFY)
+	@node $(RENDER_VERIFY)/verify.mjs $(RENDER_ARGS)
+
 ## ---- ci -------------------------------------------------------------------
 
 # One target per CI job, and every step of every job is a target rather than a

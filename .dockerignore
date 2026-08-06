@@ -28,6 +28,16 @@ docs/
 *.md
 !README.md
 
+# The render-verification harness (tools/render-verify, Plan.md D25). Named in
+# full rather than left to `node_modules/` above: these patterns are matched
+# against the whole path with Go's filepath.Match, where `*` does not cross a
+# `/`, so `node_modules/` excludes the one at the root and nothing nested. The
+# builder stage runs `COPY . .`, so without this line 19MB of Playwright would
+# be shipped into the build context and into a layer of an image that has no
+# Node in it. Nothing here is compiled: `go list ./...` finds no package under
+# tools/.
+tools/
+
 docker-compose*.yml
 Caddyfile
 Taskfile.yml

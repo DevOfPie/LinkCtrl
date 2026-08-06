@@ -74,6 +74,10 @@ vars:
   # would otherwise land on the default project.
   COMPOSE: docker compose -p {{.PROJECT}} --env-file {{.ENV_FILE}}
 
+  # The browser harness for M26.5's rendered-geometry claims. Keep in sync with
+  # the Makefile, which is the reference.
+  RENDER_VERIFY: tools/render-verify
+
   # The platforms a release publishes. linux/amd64 and linux/arm64 are the
   # deployment targets; the darwin and windows builds exist so an operator can
   # run lctl against a remote database from their own machine.
@@ -240,6 +244,38 @@ tasks:
       - task: lint
       - task: shellcheck
       - task: test
+
+  # Deliberately NOT called by `check` above, by any ci- task, or by
+  # release-check — and this comment sits here because directly above is where
+  # somebody would add it.
+  #
+  # M26.5 positions the header's two popover panels against the viewport, because
+  # a top-layer element ignores the header's containing block, and says the
+  # result is "verified in a browser at each engine, not assumed from the
+  # markup". This is that verification, kept rather than thrown away with the
+  # session that first ran it (W14). It reads the class strings out of the
+  # templates and the built stylesheet, so it needs no instance running and never
+  # touches :8081 or :8080.
+  #
+  # Node is required, and this is the only task here that requires it. D25 is
+  # what permits it: shipped code stays stdlib-only, tooling that only verifies
+  # it may use Node. tools/render-verify is not imported by anything, not built
+  # into anything, and not in the image.
+  #
+  # The npm install is done for you; the three browser engines are not. That is
+  # several hundred megabytes, and a task that quietly spends it is a task nobody
+  # runs twice — so the harness names the command instead.
+  verify-render:
+    desc: Re-verify M26.5's popover geometry in Blink, Gecko and WebKit (needs Node)
+    preconditions:
+      - sh: 'command -v node >/dev/null 2>&1'
+        msg: >-
+          node is not on PATH, and this is the one task in this file that needs
+          it. See tools/render-verify/README.md, and Plan.md D25 for why it is
+          allowed to.
+    cmds:
+      - 'test -d {{.RENDER_VERIFY}}/node_modules || npm install --prefix {{.RENDER_VERIFY}}'
+      - node {{.RENDER_VERIFY}}/verify.mjs {{.RENDER_ARGS}}
 
   # ---- ci -------------------------------------------------------------------
   #

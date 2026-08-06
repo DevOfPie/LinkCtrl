@@ -1,0 +1,15 @@
+{
+  "name": "linkctrl-render-verify",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Browser harness for the rendered-geometry claims M26.5 makes about the header popovers. Verification only — never a build or runtime dependency of LinkCtrl (Plan.md D25).",
+  "type": "module",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "scripts": {
+    "verify": "node verify.mjs",
+    "install-browsers": "playwright install --with-deps chromium firefox webkit"
+  },
+  "dependencies": {
+    "playwright": "1.62.1"
+  }
+}
