@@ -218,6 +218,11 @@ file. Append a row when you append an entry.
 | [M45, one answer to "may an invitation create an account"](#2026-08-05--m45-one-answer-to-may-an-invitation-create-an-account) | F19. The page asked the configured mode and the enforcer asks the effective one — and the redemption page had no test coverage at all |
 | [F147, the watermark that recorded the instant but not the subject](#2026-08-06--f147-the-watermark-that-recorded-the-instant-but-not-the-subject) | D106 — the automation cursor is a (timestamp, id) pair, correcting D84's "not lossy": it was lossy for subjects tied on a capped run's boundary timestamp |
 | [The scheduler splits into families, because inline was a latency contract nobody could keep](#2026-08-06--the-scheduler-splits-into-families-because-inline-was-a-latency-contract-nobody-could-keep) | D107 — one goroutine per job family, one advisory lock key per family; a single shared key would turn concurrency into skipped work and poison the follower-liveness metric |
+| [Two queue rows closed as already built](#2026-08-06--two-queue-rows-closed-as-already-built-and-where-the-behaviour-lives) | A blocked bot is a click with `is_bot` true and a **Bots** tile, by M32.5's design; more than one node already works and HA is the Phase 3 row. The residual neither covers, named so it is not rediscovered |
+| [Phases get shorter, milestones get work areas](#2026-08-06--phases-get-shorter-milestones-get-work-areas-and-phase-3-gets-a-candidate-list) | Two owner directives (W32, W33) and a correction to the premise behind one; why fallback and concurrency cost differently; why the Phase 3 candidate list is not Plan.md |
+| [M45, closing 0.2.0](#2026-08-06--m45-closing-020-f1-verified-f1s-stated-reason-corrected-and-the-read-cost-defended) | F1's extraction verified pre-tag; why F1 **cannot recur** and m45.md's "newest section is last" was false; the always-read floors defended with realized read ratios rather than trimmed |
+| [M45, the fourth obligation](#2026-08-06--m45-the-fourth-obligation-the-versioning-note-named-its-own-contents-as-future-work) | Corrects the count above: the pre-1.0 note justified `0.x` with three features 0.2.0 shipped, and now names what is actually outstanding |
+| [Phase 2 ran 33 milestones, not 31](#2026-08-06--phase-2-ran-33-milestones-not-31-and-the-number-feeds-a-decision) | 25 integers plus 8 fractional insertions, counted from the table; the baseline for the milestone-count target was understated by two |
 
 ---
 
@@ -18134,3 +18139,309 @@ by colliding two keys) and `TestOneFamilysLockDoesNotBlockAnothers` (a session
 holding one family's key stops that family exactly, and no other). The loop
 itself — goroutines reading wall-clock tickers — is asserted by construction
 and by the table those tests hold to account, not by a timing test.
+
+---
+
+## 2026-08-06 — Two queue rows closed as already built, and where the behaviour lives
+
+`/process-queue` drained six rows on 2026-08-06. Two of them asked for
+something the tree already does, so they route nowhere and leave by being
+recorded here — closing a row in conversation is how a question comes back in
+three months as a fresh idea with its answer gone.
+
+### A blocked bot is already tracked, as a click with `is_bot` true
+
+The row: *"When a bot opens a link when bot blocking is on, is that link tracked
+in any way? I think my expectation would be that it is tracked as either a bot
+click or a blocked bot click so that users can identify links that are being
+targeted by bots."* Found in [M45](phase-details/m45.md), 2026-08-05.
+
+It is tracked, and the note's own first limb is the shape it is tracked in.
+`internal/httpx/redirect.go:261` records the refusal as a click event before
+returning the 403, and `internal/analytics/ingest.go:420` derives `is_bot` from
+`Classify(ev.UserAgent)` — the same function `blockedAsBot` used to decide the
+refusal one line earlier — so the row cannot disagree with the gate. The figure
+surfaces per link as **Bots** on the link detail page
+(`internal/ui/templates/pages/link_detail.html:26`, fed by
+`internal/httpx/web_links.go:49`) and per instance on the dashboard
+(`pages/dashboard.html:18`), both off `bot_clicks` in
+`internal/store/query/analytics.sql:34`. There is a metric too:
+`ObserveRedirect("blocked_bot", …)` at `redirect.go:251`. So the sentence the
+note wanted to be true — a user can identify links being targeted by bots — is
+answered by a stat tile that has been on the page since [M37](phase-details/m37.md).
+
+This was not an accident of implementation, which is why no finding is owed:
+migration `01800_bot_blocking.sql:7` states it as the milestone's design
+(*"everything a blocked attempt produces already has a home — a click event
+with is_bot true, and a metric"*), and `internal/audit/audit.go:186` records the
+other half — the refusal is deliberately **not** audited, because a crawler
+finding a blocked link asks for it thousands of times and every one would be a
+row in the table [M21](phase-details/m21.md) built a growth alert for.
+
+**The residual, named so it is not rediscovered:** a blocked bot click is not
+distinguishable from a bot click that was merely *observed*. With blocking off,
+a bot that gets its redirect writes the same `is_bot = true` row as one that got
+a 403, so *"how much of this link's bot traffic did we actually refuse"* has no
+answer. That is an addition rather than a defect — nothing claims otherwise
+anywhere — and it costs a column on `click_events`, an ingest field, and a
+second `FILTER` in the analytics query. It is not scheduled. If it is ever
+wanted it is a Phase 3 feature, and this paragraph is the absence-check it
+would start from.
+
+### More than one node already works
+
+The row: *"Support for multiple nodes for routing and management if
+beneficial."* Found in [M37](phase-details/m37.md), 2026-08-06.
+
+`docs/deployment.md:577` — *"More than one `app` container works"* — and the
+machinery under it is most of a phase's worth of work: [M23](phase-details/m23.md)'s
+pub/sub invalidation so an edit on one replica clears every replica's cache,
+[M24](phase-details/m24.md)'s Redis-backed limiters so a configured limit holds
+across replicas rather than per process, migrations serialised across replicas
+(`deployment.md:116`), the verified-hostname set reloaded on every replica
+(D107's `host-reload` family, and F73 before it), and one goroutine per job
+family taking an advisory lock so exactly one replica runs each scheduled job.
+Both halves the row asks about are covered: routing is the redirect path, which
+is replica-local by construction, and management is the dashboard and API, which
+hold no per-process state a second replica would contradict.
+
+What is *not* built is high availability as a property somebody could claim —
+no failover story, no health-gated load-balancer contract, no measurement of
+behaviour during a rolling deploy beyond the two-leaders window D107 states. That
+is already scheduled: **Plan.md's *Other surfaces* table puts high availability
+in Phase 3**, and the row is closed against that rather than against a new one.
+The *"if beneficial"* in the note is answered by it existing.
+
+---
+
+## 2026-08-06 — Phases get shorter, milestones get work areas, and Phase 3 gets a candidate list
+
+Two owner directives, given while `/process-queue` was drained on 2026-08-06,
+in answer to a prompt about where four feature rows should park. They are
+recorded because neither is derivable from the tree and both change how the next
+phase is planned rather than what it contains.
+
+### The directives
+
+**A phase aims to be shorter than Phase 2.** Given as *"Phases should aim to be
+shorter than Phase 2 was, that was larger than it should have been as you noted
+in the original planning."*
+
+**A correction to the premise, because the record is thinner than that.** No
+entry in this file, Plan.md or planning.md says Phase 2 was larger than it should
+have been. What exists is the *fact* of its size used as a reason for something
+else: the two-reviews entry states *"Phase 2 is larger, so it gets two"* — M32.5
+and what became M44.9 — and reasons from the size without judging it. So the size
+was noticed and acted on; it was never written down as a mistake. The directive
+is what makes it one, and that is enough — this is an owner call about future
+phases, not a claim about the record. It is noted only so nobody later goes
+looking for the original objection and concludes the log lost it.
+
+**Milestones should sit in separate work areas**, so several can be worked at
+once, or so a blocked milestone has an independent one to fall back to.
+
+### Why the second one is not a small change
+
+The loop cannot do it. phase-loop.md's actor table says the worker never
+*"starts a second milestone"*; `.current-task.md` names one milestone, one step
+and one actor; step 1 validates *"the next milestone"*, defined as the first row
+of the phase-details status table. Nothing there bends — it is the design, and it
+is the design because the two-actor split exists to stop a worker from carrying
+more context than it can hold.
+
+**The two halves of the directive cost very differently**, and separating them is
+the useful part of recording it. *Fallback* — take a different independent
+milestone instead of stopping — is one change to step 1's selection rule.
+*Concurrency* — two milestones in flight — needs a resume note per milestone, a
+git story for two workers in one tree, and a rule for who commits when both
+finish. Both are proposed as W33 and neither is made; the milestone-count target
+is W32. Proposed rather than made because this is not a documentation change: it
+changes what the loop does, and the loop is the thing that would be running it.
+
+### The candidate list, and why it is not Plan.md
+
+[phase-3-candidates.md](phase-3-candidates.md) is new, and it is where the four
+feature rows from the drain went: the UI/UX redesign and the always-visible
+workspace selector into a dashboard area, the GitHub release checker into
+infrastructure, the commercial plugin into its own. planning.md already named
+this destination — *"a row in Not in Phase N (or the next phase's candidate
+list)"* — and the candidate list is the half that did not exist until now.
+
+It is deliberately **not** Plan.md. Plan.md is the scope contract and a candidate
+is not scope; putting an unscheduled row in the contract is how a suggestion
+acquires the authority of a commitment. Plan.md's *Not in Phase 2* list gains a
+**pointer** to it and nothing more, so a reader who arrives at the deferred rows
+learns where the grouping is without the grouping being mistaken for a plan.
+
+**That pointer was withheld and then written, and the reason is worth recording.**
+`/process-queue` forbids routing that changes Plan.md under a milestone in
+flight, and both trackers said one was: the phase-details status row reads M45
+`in progress`, and `.current-task.md` named M45 at step 2 with the documentation
+pass, `release-check`, the tag and the PR outstanding. The owner then stated that
+no milestone is in flight and no phase is open, which is what released the
+pointer. **The trackers were not corrected by that statement and still disagree
+with it** — the only tag in the repository is `v0.1.0`, and M45's own definition
+of done includes the documentation pass and 0.2.0, so by the record the milestone
+is open. The most likely reading is that no *actor* is running, which is true and
+is a different claim from the milestone being closed. Recorded rather than
+resolved here, because status lives in the phase-details README and correcting it
+is not this drain's to do; if the row is stale then `/work phase` would resume a
+milestone the owner considers finished, which is the failure this paragraph
+exists to make visible.
+
+**The grouping is the content, and it restates nothing.** Almost every candidate
+already had a home — Plan.md's *Not in Phase 2* list, its *Other surfaces* table,
+or a findings row — each carrying the reason it was deferred. A second copy of
+those reasons would drift from the first, so a row in the candidate file is a
+pointer plus an area, and the areas are cut by **which files a milestone would
+touch** rather than by which feature sounds like which. That is what makes the
+grouping answer the directive instead of merely illustrating it.
+
+Two things the grouping surfaced that the flat list hid. **The dashboard area
+blocks parallel work hardest** — a redesign answering the owner's three
+complaints touches templates every other area's UI also touches, so if it runs
+beside anything it lands first or the others rebase onto it. And **the identity
+area carries the only two candidates that are defects**: F44 (no account deletion
+or GDPR erasure, while the schema and four sites describe both as existing) and
+F141 (no account recovery at all, and nothing says so). Every other row in the
+file is optional in a way those two are not.
+
+---
+
+## 2026-08-06 — M45, closing 0.2.0: F1 verified, F1's stated reason corrected, and the read cost defended
+
+The three obligations M45 left standing when the phase's PR merged, all
+discharged at the release rather than deferred past it.
+
+### F1's check ran, and it passes
+
+m45.md requires the release workflow's `awk` extraction be run **directly against
+CHANGELOG.md as it will be at 0.2.0**, before any tag exists, because the
+extraction only executes inside the workflow and a fix confirmed by releasing is
+confirmed once the notes are already public and the tag immutable.
+
+Run with `ver="## [0.2.0]"` against the CHANGELOG this commit ships: **1803 lines
+extracted, zero `[…]: https://…` definitions, and the body ends on a prose
+line** — the last sentence of the cold-redirect latency note, not a separator and
+not a reference block. The assertion the bullet asks for holds.
+
+### And the reason the bullet gave for F1 was wrong
+
+m45.md said *"the newest section is always last in CHANGELOG.md"* and that F1
+*"will recur on every release, because the newest section is last every time."*
+Neither describes this file. CHANGELOG.md runs **newest-first** — `[Unreleased]`,
+`[0.2.0]`, `[0.1.0]` — so the newest section is at the top and the trailing
+link-reference block is reachable only when extracting the **oldest** section.
+
+At 0.1.0 the newest section *was* the oldest, because it was the only one, and
+that is the whole reason the bug bit. From 0.2.0 on, `## [0.1.0]` sits below the
+newest section and the `## [` exit fires first. **So F1 cannot recur**, and
+W29's link-reference exit clause is dormant insurance rather than the fix that
+carries the release. It is still correct and still cheap, and it would fire again
+only for a re-extraction of the oldest section, which no release does.
+
+Amended as a **fact** rather than prompted as an assertion, per the rule that an
+orchestrator corrects a fact and logs it: what the bullet *requires* — verify
+before tagging, never by tagging — is untouched and was honoured. What changed is
+a claim about the shape of a file, and the file is checkable. The uncomfortable
+part is worth stating: the bullet's reasoning was wrong for two days and the
+verification it demanded still caught the right thing, because the assertion was
+right for reasons the explanation had misidentified.
+
+### The always-read cost grew, and the growth is defended rather than trimmed
+
+m45.md's last documentation bullet is a decision, not a regeneration: the phase's
+growth in the files read on every task is *either defended or paid for by
+trimming*. `make doc-cost` had not been re-run since the last change to
+workflow.md, so the file on disk was stale and the number had never been judged.
+
+Regenerated, the two floors moved:
+
+| Floor | Was | Now | Delta |
+| --- | ---: | ---: | ---: |
+| Any task (`CLAUDE.md` + `workflow.md`) | 19737 | 20343 | **+606** |
+| `/work phase` resume | 224406 | 225539 | **+1133** |
+
+**Defended, not trimmed, and the numbers say why.** The every-task growth is
+`workflow.md` alone (+606 bytes), and all of it is the standing rule that
+`.github/workflows/` cannot be committed to — a rule that exists because a push
+touching those paths is rejected before any review happens, so its 606 bytes buy
+back a class of failed push that has already cost real time. The resume growth is
+`Plan.md` (+545, the pointer to the Phase 3 candidate list) net of
+`phase-details/README.md` (−18). Plan.md's realized **Mean ÷ size is 0.01** — it
+is grepped and read in ranges, never whole — so a 545-byte addition moves the
+predicted ceiling and not the cost anyone actually pays. The two files that *are*
+read near-whole, `workflow.md` at 0.83 and `phase-details/README.md` at 0.88,
+are the ones where trimming would pay, and neither grew for a reason worth
+undoing.
+
+The reference set grew far more — decisions.md +32KB and deferred-findings.md
++29KB across the phase close — and is deliberately not charged against this
+judgement. Both are read at 0.00 and 0.05 of their size: append-only files
+consulted by grep, whose growth is the record working rather than a cost
+recurring. `phase-3-candidates.md` is in no read set at all and adds nothing to
+either floor.
+
+One property of the file to note, since it invited the staleness: doc-cost.md
+carries no generation date so that regenerating an unchanged tree produces no
+diff, and *"every diff in this file is real growth."* That is true of the
+predicted tables and **not** of the realized ones, which move with every session
+that reads anything. So a diff here proves growth only in its top half, and the
+bottom half will always differ. Not corrected in the generator — the sentence is
+about why there is no date, and the realized section is honest about being
+this machine's transcripts — but a reader treating any diff as growth is reading
+it more strictly than it can bear.
+
+---
+
+## 2026-08-06 — M45, the fourth obligation: the versioning note named its own contents as future work
+
+The entry above said three obligations and discharged three. There were four,
+and the missed one is the release bullet's second half rather than the tag:
+m45.md requires that *"the CHANGELOG's 'pre-1.0 while Phase 2 is outstanding'
+wording is updated to say what is now outstanding instead"*, and the audit that
+found the other three checked the tag and not the sentence beside it.
+
+It read: *"The product is pre-1.0 while Phase 2 is outstanding. Shared
+workspaces, folders and custom domains will change the dashboard and add
+tables."* All three of those **shipped in 0.2.0**. The note explaining why the
+version stays in `0.x` was justifying it by naming, in the future tense, three
+features the same file documents as released — so an operator reading it to size
+the risk of upgrading was told the upgrade's own contents were still to come.
+
+Rewritten against what is actually outstanding, and every limb of it is checkable:
+no account recovery (F141 — a forgotten password locks the account out
+permanently), no account deletion or erasure (F44), MFA and SSO in a later phase
+per Plan.md's scope table, and the dashboard redesign the owner asked for on
+2026-08-06, now an area-B row in phase-3-candidates.md. Each moves the product
+surface, which is the argument the sentence exists to make; the previous version
+made the same argument from features that had arrived.
+
+Documentation wording, so it did not re-trigger validation under the rule that
+only spelling, phrasing and docs wording are exempt — but `release-check` was
+re-run regardless, because the tree has to be clean at the tag and this is the
+file the release gate greps for its version section.
+
+---
+
+## 2026-08-06 — Phase 2 ran 33 milestones, not 31, and the number feeds a decision
+
+A correction to the entry two above. It recorded the owner's directive that
+phases be shorter than Phase 2 and put Phase 2 at *31 milestone files — M21–M45
+plus six fractional insertions*. Both numbers were recalled rather than counted,
+and both are wrong: the status table has **33 rows** and `phase-details/` has 33
+matching files, being **25 integers** M21 through M45 and **8** fractional
+insertions (M24.5, M26.5, M26.6, M28.5, M32.5, M32.9, M33.5, M44.9).
+
+It matters because the number is the baseline for an open owner decision — what
+milestone-count target planning.md should carry — and a target argued against 31
+when the real figure is 33 understates by two what "shorter" has to beat. The
+recommendation of 12–15 is unchanged; it was never derived from the wrong number.
+
+Corrected in workflow-changes.md's W32 row and in phase-3-candidates.md, each
+carrying its own before-and-after so the diff is not the only record. This is
+workflow.md's own rule — *an enumeration is counted rather than trusted* — failing
+in the one place it is written down, which is worth the entry: the rule exists
+because four wording rows in one milestone turned out to have more sites than they
+listed, and the actor that wrote the rule down then trusted a count of milestones
+it had just read a table of.

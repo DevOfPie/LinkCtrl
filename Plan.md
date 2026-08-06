@@ -745,6 +745,14 @@ The *why* for each is in decisions.md.
 
 ### Not in Phase 2
 
+Every row below carries the reason it was deferred, and that reason lives here
+and nowhere else. What this list does *not* say is which of them belong together:
+[phase-3-candidates.md](docs/build-notes/phase-3-candidates.md) groups the ones
+Phase 3 might take by **work area**, cut by which files a milestone would touch,
+so more than one can be worked at a time or a blocked one has somewhere to fall
+back to (owner directive, 2026-08-06). It schedules nothing and restates nothing —
+a row there is a pointer back to this list plus an area.
+
 - MFA, OAuth, OIDC, SSO, SCIM — Phase 3 by the scope table.
 - **An API key that reaches more than one organization.** Owner-directed on
   2026-08-05, after [F75](docs/build-notes/deferred-findings.md): a key should be
