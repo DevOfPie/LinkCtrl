@@ -14,6 +14,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/store/pgerr"
 )
 
 // Per-domain ownership (M39).
@@ -291,7 +292,7 @@ func (s *Service) RegisterDomain(
 	if err != nil {
 		// The unique index is the real guarantee; the check above only makes
 		// this rare and makes the ordinary refusal a sentence.
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			return nil, domain.ValidationErrors{hostnameTakenError(hostname)}
 		}
 		return nil, fmt.Errorf("register domain: %w", err)
@@ -348,7 +349,7 @@ func (s *Service) RenameDomain(
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrNotFound
 		}
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			return nil, domain.ValidationErrors{hostnameTakenError(hostname)}
 		}
 		return nil, fmt.Errorf("rename domain: %w", err)

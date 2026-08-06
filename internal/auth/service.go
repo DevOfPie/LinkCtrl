@@ -17,6 +17,7 @@ import (
 
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/store/pgerr"
 )
 
 var (
@@ -268,7 +269,7 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*Identity, er
 		EmailVerifiedAt: verifiedAt(in.IsFirstUser),
 	})
 	if err != nil {
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			return nil, ErrEmailTaken
 		}
 		return nil, fmt.Errorf("create user: %w", err)
@@ -837,9 +838,4 @@ func slugify(s string) string {
 		s = strings.Trim(s[:32], "-")
 	}
 	return s
-}
-
-func isUniqueViolation(err error) bool {
-	var pgErr interface{ SQLState() string }
-	return errors.As(err, &pgErr) && pgErr.SQLState() == "23505"
 }

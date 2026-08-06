@@ -13,6 +13,7 @@ import (
 
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/store/pgerr"
 )
 
 // Rotation, per decision D9.
@@ -311,7 +312,7 @@ func (s *APIKeyService) insertSuccessor(
 		row, err := s.q.WithTx(sp).CreateAPIKey(ctx, params)
 		if err != nil {
 			_ = sp.Rollback(ctx)
-			if isUniqueViolation(err) && attempt < 2 {
+			if pgerr.IsUniqueViolation(err) && attempt < 2 {
 				continue
 			}
 			return zero, "", fmt.Errorf("create successor key: %w", err)

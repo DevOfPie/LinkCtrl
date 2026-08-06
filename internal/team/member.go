@@ -13,6 +13,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/store/pgerr"
 )
 
 // Member is one membership as an administrator sees it.
@@ -365,7 +366,7 @@ func (s *Service) Grant(ctx context.Context, actor *auth.Identity, in GrantInput
 		WorkspaceID:    &wsID,
 	})
 	if err != nil {
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			return nil, domain.ValidationErrors{{
 				Field: "workspace_id", Code: "already_granted",
 				Message: "that person already has a role in that workspace; remove it first to change it",

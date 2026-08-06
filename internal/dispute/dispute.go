@@ -50,7 +50,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
@@ -59,6 +58,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/store/pgerr"
 )
 
 // PermReview guards reading the queue: listing it, counting it, inspecting what
@@ -373,7 +373,7 @@ func (s *Service) File(ctx context.Context, actor *auth.Identity, rawURL string)
 
 	row, err := s.q.InsertDestinationDispute(ctx, params)
 	if err != nil {
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			// Either index can raise this, and the message covers both without
 			// saying which — the honest reading of the second one is that the
 			// decision is queued rather than the destination, because an open
@@ -922,11 +922,6 @@ func actorID(actor *auth.Identity) *uuid.UUID {
 	}
 	id := actor.UserID
 	return &id
-}
-
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.SQLState() == "23505"
 }
 
 // cursor is a position in the (created_at DESC, id DESC) ordering.

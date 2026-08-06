@@ -333,8 +333,3 @@ func canInWorkspace(
 	}
 	return false, nil
 }
-
-func isUniqueViolation(err error) bool {
-	var pgErr interface{ SQLState() string }
-	return errors.As(err, &pgErr) && pgErr.SQLState() == "23505"
-}

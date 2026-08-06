@@ -11,6 +11,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/store/pgerr"
 )
 
 // Folders (M38).
@@ -178,7 +179,7 @@ func (s *Service) CreateFolder(
 		// The index is the real guarantee for the name: two creates into an
 		// empty spot of the tree hold no locks against each other, and one of
 		// them lands here. The check above only makes this rare.
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			return nil, domain.ValidationErrors{folderNameTaken(name)}
 		}
 		return nil, fmt.Errorf("create folder: %w", err)
@@ -224,7 +225,7 @@ func (s *Service) RenameFolder(
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrNotFound
 		}
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			return nil, domain.ValidationErrors{folderNameTaken(name)}
 		}
 		return nil, fmt.Errorf("rename folder: %w", err)
@@ -290,7 +291,7 @@ func (s *Service) MoveFolder(
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrNotFound
 		}
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			return nil, domain.ValidationErrors{folderNameTaken(current.Name)}
 		}
 		return nil, fmt.Errorf("move folder: %w", err)

@@ -13,6 +13,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/store/pgerr"
 )
 
 // maxWorkspaceName bounds a name at something a heading can hold. Far above any
@@ -122,7 +123,7 @@ func (s *Service) CreateWorkspace(
 		Slug:           slug,
 	})
 	if err != nil {
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			return nil, nameTaken()
 		}
 		return nil, fmt.Errorf("create workspace: %w", err)
@@ -169,7 +170,7 @@ func (s *Service) RenameWorkspace(
 		ID: ws.ID, OrganizationID: actor.OrgID, Name: name, Slug: slug,
 	})
 	if err != nil {
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			return nil, nameTaken()
 		}
 		return nil, fmt.Errorf("rename workspace: %w", err)

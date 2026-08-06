@@ -42,6 +42,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/store/pgerr"
 )
 
 // Mode is how open this instance is to new accounts.
@@ -403,7 +404,7 @@ func (s *Service) Verify(ctx context.Context, token string) (*Verified, error) {
 		EmailVerifiedAt: &now,
 	})
 	if err != nil {
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			// The address acquired an account while this link was in somebody's
 			// inbox — most likely they were invited and joined. Not a generic
 			// refusal: they have proven they read mail there, so telling them
@@ -455,9 +456,4 @@ func (s *Service) PurgeLapsed(ctx context.Context) (int64, error) {
 // linkFor builds the verification URL.
 func (s *Service) linkFor(token string) string {
 	return strings.TrimSuffix(s.cfg.AppURL, "/") + "/verify/" + token
-}
-
-func isUniqueViolation(err error) bool {
-	var pgErr interface{ SQLState() string }
-	return errors.As(err, &pgErr) && pgErr.SQLState() == "23505"
 }

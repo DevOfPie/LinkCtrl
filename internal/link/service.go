@@ -21,6 +21,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/feed"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/store/pgerr"
 )
 
 // Permissions this service enforces. Named constants so a typo is a compile
@@ -511,7 +512,7 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 		// The unique index is the real guarantee; the pre-check only makes
 		// this rare. A user-supplied alias that collides is a 409, while a
 		// generated one that collides is a bug worth surfacing as such.
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			if in.Alias != "" {
 				return nil, aliasTakenError(code, dom)
 			}
@@ -761,7 +762,7 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 		ClearCampaign:    in.ClearCampaign,
 	})
 	if err != nil {
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			return nil, fmt.Errorf("%w: alias is already in use", domain.ErrConflict)
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -1190,7 +1191,7 @@ func (s *Service) applyTags(ctx context.Context, q *dbgen.Queries, wsID, linkID 
 			})
 			// A concurrent create is fine: re-read the winner rather than
 			// failing the whole link creation over a tag race.
-			if err != nil && isUniqueViolation(err) {
+			if err != nil && pgerr.IsUniqueViolation(err) {
 				tag, err = q.GetTagByName(ctx, dbgen.GetTagByNameParams{WorkspaceID: wsID, Lower: name})
 			}
 		}
@@ -1305,11 +1306,6 @@ func decodeCursor(s string) (cursor, error) {
 		return cursor{}, err
 	}
 	return cursor{Sort: parts[1], CreatedAt: at, Clicks: clicks, ID: id}, nil
-}
-
-func isUniqueViolation(err error) bool {
-	var pgErr interface{ SQLState() string }
-	return errors.As(err, &pgErr) && pgErr.SQLState() == "23505"
 }
 
 // schemeOf takes the scheme from the configured link base URL.

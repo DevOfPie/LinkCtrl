@@ -20,6 +20,7 @@ import (
 
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/store/pgerr"
 )
 
 // Permissions API key management itself requires.
@@ -480,7 +481,7 @@ func (s *APIKeyService) Create(ctx context.Context, actor *Identity, in CreateAP
 			// 40 bits of public id makes this vanishingly rare, but the unique
 			// index is what guarantees one prefix resolves to one key, so a
 			// collision has to be retried rather than surfaced.
-			if isUniqueViolation(err) && attempt < 2 {
+			if pgerr.IsUniqueViolation(err) && attempt < 2 {
 				continue
 			}
 			return nil, fmt.Errorf("create api key: %w", err)

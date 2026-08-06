@@ -46,6 +46,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/store/pgerr"
 )
 
 // PermWrite guards issuing, listing and revoking invitations. M27 is its first
@@ -397,7 +398,7 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 		ExpiresAt:      time.Now().Add(s.cfg.TTL),
 	})
 	if err != nil {
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			return nil, domain.ValidationErrors{{
 				Field: "email", Code: "outstanding",
 				Message: "an invitation for that address is already outstanding; revoke it first",
@@ -738,7 +739,7 @@ func (s *Service) Redeem(ctx context.Context, in RedeemInput) (*Redeemed, error)
 		}
 		id, err := s.createUser(ctx, q, email, in.Name, in.Password)
 		if err != nil {
-			if isUniqueViolation(err) {
+			if pgerr.IsUniqueViolation(err) {
 				// Two redemptions of the same address racing. The loser refuses
 				// rather than retrying, and the invitation is still unspent.
 				return nil, refuse("account was created concurrently")
@@ -811,7 +812,7 @@ func (s *Service) Redeem(ctx context.Context, in RedeemInput) (*Redeemed, error)
 		RoleID:         inv.RoleID,
 		WorkspaceID:    nil,
 	}); err != nil {
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			return nil, refuse("membership already exists")
 		}
 		return nil, fmt.Errorf("create membership: %w", err)
@@ -995,9 +996,4 @@ func statusOf(revoked, redeemed *time.Time, expires, now time.Time) string {
 	default:
 		return StatusPending
 	}
-}
-
-func isUniqueViolation(err error) bool {
-	var pgErr interface{ SQLState() string }
-	return errors.As(err, &pgErr) && pgErr.SQLState() == "23505"
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/store/pgerr"
 )
 
 // Campaigns (M41).
@@ -152,7 +153,7 @@ func (s *Service) CreateCampaign(
 		// The index is the real guarantee; nothing above checks the slug against
 		// the existing rows, because this is the check and it is one round trip
 		// rather than two.
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			return nil, domain.ValidationErrors{campaignSlugTaken(slug)}
 		}
 		return nil, fmt.Errorf("create campaign: %w", err)
@@ -231,7 +232,7 @@ func (s *Service) UpdateCampaign(
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrNotFound
 		}
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			taken := current.Slug
 			if params.Slug != nil {
 				taken = *params.Slug
