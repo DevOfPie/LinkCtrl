@@ -178,7 +178,28 @@ var takeSHA = goredis.NewScript(takeScript)
 // connection is free, and a limiter that can be dodged that way is not a
 // limiter. The deadline that matters is enforced by the timer below anyway.
 func (s *Shared) take(rate, burst, cost float64, ttl time.Duration, key string) (allowed bool, retry time.Duration, answered bool) {
-	if s == nil || !s.breaker.allow() {
+	if s == nil {
+		return false, 0, false
+	}
+	if !s.breaker.allow() {
+		// A breaker refusal is a fallback and must count as one. The caller
+		// treats "not answered" as "decide from the local bucket", so every
+		// request that lands here is a locally decided request — exactly what
+		// the fallbacks counter promises to measure. Until this counted, an
+		// outage grew the counter only by the calls actually dispatched: the
+		// failures that opened the breaker, then one probe per cooldown. The
+		// runbook's rate() alert still fired off those probes, but the
+		// magnitude was fiction — a fixed trickle per limiter per replica
+		// whatever the traffic, so an operator dividing the fallback rate by
+		// the request rate to size the degradation was dividing by noise.
+		//
+		// Deliberately not routed through fail(): recordFailure would count the
+		// breaker's own refusals as fresh failures, and with any request more
+		// often than the cooldown, each one would push openUntil another
+		// cooldown away — starving the probe the half-open state exists to
+		// admit, and turning an outage the breaker recovers from in seconds
+		// into one it never re-tests.
+		s.fallbacks.Add(1)
 		return false, 0, false
 	}
 

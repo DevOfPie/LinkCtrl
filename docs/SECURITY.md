@@ -130,8 +130,9 @@ and templates. Until it exists, switching blocking on is a decision to accept
 that cost, which is why the default is off and why enforcing it for a whole
 domain is behind a separate permission.
 
-**Rate limits fail open, and only one of the three is still per instance.** The
-credential and API limits are shared across replicas through Redis since 0.2.0,
+**Rate limits fail open, and only the 404-probe limiter is still per
+instance.** The credential, API, link-password and blocked-audit limits are
+shared across replicas through Redis since 0.2.0,
 so the configured number is the number whatever the replica count — until Redis
 stops answering, at which point each replica falls back to its own in-memory
 bucket and the limit becomes per instance again, which is the fail-open direction

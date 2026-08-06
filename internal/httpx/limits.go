@@ -105,11 +105,21 @@ func NewLimiters(cfg config.Config, rdb *goredis.Client, log *slog.Logger) Limit
 // Disabled limits are omitted rather than passed as nil pointers: a nil pointer
 // in an interface is not a nil interface, so a disabled limiter would otherwise
 // be collected as a working one reporting zeros.
+//
+// A limiter left out of this map is worse than one reporting zeros: it emits no
+// series at all — no tracked keys, no overflows, no fallbacks — and absence is
+// indistinguishable from health on a dashboard. BlockedAudit was absent here
+// from the milestone that added it, so the audit-flood it exists to bound was
+// invisible to the runbook's overflow alert; the Stats test now holds this map
+// to the struct's own field count so the next limiter cannot vanish the same
+// way. BlockedAudit meters through AllowKey rather than middleware and never
+// refuses a request, so it has no rate_limited_total series — that is
+// structural, and these three bookkeeping series are the only view of it.
 func (l Limiters) Stats() map[string]observability.LimiterStats {
-	out := make(map[string]observability.LimiterStats, 4)
+	out := make(map[string]observability.LimiterStats, 5)
 	for name, lim := range map[string]*ratelimit.Limiter{
 		"login": l.Login, "api": l.API, "redirect_404": l.NotFound,
-		"link_password": l.LinkPassword,
+		"link_password": l.LinkPassword, "blocked_audit": l.BlockedAudit,
 	} {
 		if lim != nil {
 			out[name] = lim

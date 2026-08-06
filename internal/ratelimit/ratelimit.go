@@ -12,14 +12,14 @@
 // is N times the configured one.
 //
 // **M24 added a shared mode, and this paragraph said otherwise until 0.2.0**
-// (F38). `shared.go` — in this package — backs the *credential* and *API*
-// limiters with a Redis token bucket, so those two are shared across replicas
-// and fall back to these in-memory buckets only when Redis does not answer. The
-// 404-probe limiter is the one that stays plain, and `limits.go` says
-// "deliberately not shared" beside it for the reason above: it guards the
-// redirect path. So the per-instance multiplication described here is true of
-// the 404 limiter, true of every limiter while Redis is unreachable, and not
-// true of the credential and API limiters on a healthy instance.
+// (F38). `shared.go` — in this package — backs every limiter constructed with
+// a Shared option (`limits.go` names them) with a Redis token bucket, shared
+// across replicas and falling back to these in-memory buckets only when Redis
+// does not answer. The 404-probe limiter is the one that stays plain, and
+// `limits.go` says "deliberately not shared" beside it for the reason above:
+// it guards the redirect path. So the per-instance multiplication described
+// here is true of the 404 limiter, true of every limiter while Redis is
+// unreachable, and not true of a Shared-backed limiter on a healthy instance.
 //
 // IPv6 is keyed by /64, not by address. A single host is routinely handed a
 // whole /64, so a per-address key would let one machine present an effectively
