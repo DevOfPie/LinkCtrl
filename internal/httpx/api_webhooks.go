@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"math"
 	"net/http"
 	"strconv"
 
@@ -173,12 +174,19 @@ func (a *LinkAPI) ListWebhookDeliveries(w http.ResponseWriter, r *http.Request) 
 		WriteError(w, r, err)
 		return
 	}
-	limit := 0
+	var limit int32
 	if raw := r.URL.Query().Get("limit"); raw != "" {
-		limit, _ = strconv.Atoi(raw)
+		// Range-checked before narrowing, the same trap as the link list:
+		// ?limit=4294967297 would otherwise truncate to int32(1) and answer one
+		// delivery, and ?limit=2147483648 would wrap to a negative int32.
+		// Out-of-range values fall through to the service clamp against
+		// domain.MaxWebhookDeliveryPage rather than erroring.
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= math.MaxInt32 {
+			limit = int32(n) //nolint:gosec // G109: range-checked on the line above
+		}
+
 	}
-	//nolint:gosec // G115: bounded by the service against domain.MaxWebhookDeliveryPage.
-	deliveries, err := a.Links.WebhookDeliveries(r.Context(), IdentityFrom(r.Context()), id, int32(limit))
+	deliveries, err := a.Links.WebhookDeliveries(r.Context(), IdentityFrom(r.Context()), id, limit)
 	if err != nil {
 		WriteError(w, r, err)
 		return
