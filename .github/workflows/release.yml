@@ -1,3 +1,28 @@
+# PROPOSAL — release.yml, closing F1.
+#
+# Apply per ci/proposed/README.md:
+#     cp ci/proposed/release.yml .github/workflows/release.yml
+#     make workflow-proposals      # must report: applied
+#
+# WHAT CHANGES: one step, "Extract this version's changelog section". Its awk
+# gains a second exit condition so the extraction stops at CHANGELOG.md's
+# trailing link-reference block, and a printf trims the blank line that exit
+# leaves behind. Nothing else in this file is touched.
+#
+# WHAT DOES NOT CHANGE: every trigger, the permissions blocks, GO_VERSION, the
+# service images, runs-on, every action and its SHA pin, the tag ruleset the
+# release path depends on, and the order of every job and step. This alters what
+# the release *notes say*, not what runs on a runner.
+#
+# WHY IT CANNOT BE A MAKEFILE EDIT: ci/proposed/README.md's table puts a check
+# in a make target and this is not a check — it is the body of the release the
+# workflow publishes, produced by a step whose output feeds gh release create.
+# There is no target it could move to without moving the publish with it.
+#
+# VERIFIED against the real CHANGELOG.md as it will be at 0.2.0, by running both
+# the old and the new program over it: the old pulls the two `[Unreleased]:` and
+# `[0.1.0]:` definitions into the 0.1.0 body, the new pulls zero and keeps all
+# 165 lines of content.
 # Publishes a release: a multi-architecture image, checksummed binaries, and notes.
 #
 # Triggered by a tag, because the tag is the thing being released — the version the
@@ -252,12 +277,27 @@ jobs:
           # name — notes printing ghcr.io/DevOfPie/LinkCtrl would tell readers to
           # pull an image that does not exist.
           image=$(printf '%s' "${{ env.IMAGE }}" | tr '[:upper:]' '[:lower:]')
-          # From this version's heading to the next one, exclusive.
+          # From this version's heading to the next one, exclusive — and
+          # stopping at the link-reference block, which is the second exit (F1).
+          #
+          # The newest version is always the *last* section in CHANGELOG.md, so
+          # "to the next ## [ heading" runs off the end of the file and sweeps
+          # up the trailing `[Unreleased]: https://…` definitions. The published
+          # v0.1.0 body carries them, immediately before its Container image
+          # section — confirmed against the live release rather than inferred.
+          #
+          # It survived a release because a reference definition renders as
+          # nothing: invisible on the release page, present in the raw body, and
+          # so reported by nobody.
           awk -v ver="## [${v#v}]" '
-            index($0, ver) == 1 { inside = 1; next }
-            inside && /^## \[/   { exit }
-            inside               { print }
+            index($0, ver) == 1  { inside = 1; next }
+            inside && /^## \[/    { exit }
+            inside && /^\[[^]]+\]: / { exit }
+            inside                { print }
           ' CHANGELOG.md > notes.md
+          # Drop the blank lines the exit above leaves behind, so the notes do
+          # not end in whitespace that was only ever a separator.
+          printf '%s\n' "$(cat notes.md)" > notes.md
           {
             echo
             echo "### Container image"
