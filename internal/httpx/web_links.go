@@ -947,7 +947,11 @@ func (h *Web) LinkSign(w http.ResponseWriter, r *http.Request) {
 				"The signature lifetime could not be read.")
 			return
 		}
-		ttl = time.Duration(hours) * time.Hour
+		// Saturated, not multiplied raw: the form's min/max live in the
+		// browser, and hours large enough to wrap the nanosecond product could
+		// otherwise come out beneath the service's ceiling. Pinning them just
+		// past it lets the service refuse with its own out_of_range message.
+		ttl = saturateDuration(int64(hours), time.Hour, link.MaxSignatureTTL)
 	}
 
 	signed, err := h.Links.Sign(r.Context(), IdentityFrom(r.Context()), id, ttl)

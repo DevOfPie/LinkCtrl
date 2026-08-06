@@ -327,31 +327,10 @@ func (a *LinkAPI) Sign(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, r, err)
 		return
 	}
-	var req struct {
-		// TTLSeconds is how long the signature stays valid. Absent takes the
-		// default; anything above the ceiling is refused rather than clamped, so
-		// a caller asking for a year is told they did not get one.
-		TTLSeconds *int64 `json:"ttl_seconds"`
-	}
-	// An empty body is the ordinary case here — "sign this, I do not care for
-	// how long" — so it is not the validation error decodeJSON makes of it
-	// everywhere else.
-	if r.ContentLength > 0 {
-		if err := decodeJSON(w, r, &req); err != nil {
-			WriteError(w, r, err)
-			return
-		}
-	}
-	var ttl time.Duration
-	if req.TTLSeconds != nil {
-		if *req.TTLSeconds <= 0 {
-			WriteError(w, r, domain.ValidationErrors{{
-				Field: "ttl_seconds", Code: "out_of_range",
-				Message: "ttl_seconds must be positive",
-			}})
-			return
-		}
-		ttl = time.Duration(*req.TTLSeconds) * time.Second
+	ttl, err := parseSignTTL(w, r)
+	if err != nil {
+		WriteError(w, r, err)
+		return
 	}
 
 	signed, err := a.Links.Sign(r.Context(), IdentityFrom(r.Context()), id, ttl)
@@ -439,6 +418,71 @@ func (a *LinkAPI) Me(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- helpers ----------------------------------------------------------------
+
+// parseSignTTL reads the optional ttl_seconds a signing request may carry.
+//
+// Zero with a nil error means "the caller named no lifetime": the service
+// substitutes DefaultSignatureTTL, and that substitution belongs there, next to
+// the ceiling it pairs with.
+func parseSignTTL(w http.ResponseWriter, r *http.Request) (time.Duration, error) {
+	var req struct {
+		// TTLSeconds is how long the signature stays valid. Absent takes the
+		// default; anything above the ceiling is refused rather than clamped, so
+		// a caller asking for a year is told they did not get one.
+		TTLSeconds *int64 `json:"ttl_seconds"`
+	}
+	// An empty body is the ordinary case here — "sign this, I do not care for
+	// how long" — so it is not the validation error decodeJSON makes of it
+	// everywhere else. The gate is `!= 0` and not `> 0` because a chunked
+	// request carries ContentLength == -1 while still carrying a body: `> 0`
+	// would throw that body away and sign with the default, telling the caller
+	// their ttl was honoured when it was never read. The cost is that a chunked
+	// request with a genuinely empty body now draws decodeJSON's empty-body
+	// refusal instead of the default — the same trade Rotate already makes.
+	if r.ContentLength != 0 {
+		if err := decodeJSON(w, r, &req); err != nil {
+			return 0, err
+		}
+	}
+	if req.TTLSeconds == nil {
+		return 0, nil
+	}
+	if *req.TTLSeconds <= 0 {
+		return 0, domain.ValidationErrors{{
+			Field: "ttl_seconds", Code: "out_of_range",
+			Message: "ttl_seconds must be positive",
+		}}
+	}
+	return saturateDuration(*req.TTLSeconds, time.Second, link.MaxSignatureTTL), nil
+}
+
+// saturateDuration converts a caller-supplied count of units into a
+// time.Duration without letting the multiplication wrap.
+//
+// A time.Duration is an int64 of nanoseconds, so `count * unit` wraps mod 2^64
+// once the product passes ~292 years, and a wrapped product can land anywhere:
+// a few hundred milliseconds, a negative number, exactly zero. Every one of
+// those slips past a range check that runs after the conversion — a negative or
+// zero product reads as "no value named" and silently takes the default, and a
+// small positive one can sit inside the accepted band, so a caller asking for
+// 2^55 seconds would be granted something without ever being told no.
+//
+// The guard therefore runs on the count, before any multiplication. A count
+// whose product would land past the ceiling — including every count that would
+// wrap — is pinned to one unit beyond the ceiling, on whichever side of zero
+// the count pointed. Deliberately not an error: the service that owns the range
+// owns its message too, and a pinned value draws that service's canonical
+// out_of_range refusal rather than a second copy of it maintained here.
+func saturateDuration(count int64, unit, ceiling time.Duration) time.Duration {
+	limit := int64(ceiling / unit)
+	switch {
+	case count > limit:
+		return ceiling + unit
+	case count < -limit:
+		return -ceiling - unit
+	}
+	return time.Duration(count) * unit
+}
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)

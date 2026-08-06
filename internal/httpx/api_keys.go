@@ -94,7 +94,7 @@ func (a *KeyAPI) Rotate(w http.ResponseWriter, r *http.Request) {
 
 	in := auth.RotateAPIKeyInput{Scopes: req.Scopes}
 	if req.GraceSeconds != nil {
-		in.Grace = time.Duration(*req.GraceSeconds) * time.Second
+		in.Grace = rotateGrace(*req.GraceSeconds)
 	}
 
 	rotated, err := a.Keys.Rotate(r.Context(), IdentityFrom(r.Context()), in)
@@ -103,6 +103,16 @@ func (a *KeyAPI) Rotate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	WriteJSON(w, http.StatusCreated, rotated)
+}
+
+// rotateGrace converts the request's grace_seconds into the duration the
+// service's band check judges. The band itself — floor, ceiling, zero-means-
+// default — lives in internal/auth and is not repeated here; saturating at the
+// ceiling is what keeps that true for a count so large the multiplication
+// would wrap, which could otherwise land inside the band or at the exact zero
+// that means "use the default".
+func rotateGrace(seconds int) time.Duration {
+	return saturateDuration(int64(seconds), time.Second, auth.MaxRotationGrace)
 }
 
 func (a *KeyAPI) Revoke(w http.ResponseWriter, r *http.Request) {
