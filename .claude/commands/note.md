@@ -16,6 +16,11 @@ not to use.
 `$ARGUMENTS` is the note. It may begin with a type when the owner already knows
 it — `--issue`, `--feature`, `--task` — and usually will not.
 
+`--discuss` may accompany any of them, or stand alone. It marks the note as
+wanting a conversation **before** the row acquires a type, and it is the one
+thing this command cannot infer: from the wording, a note the owner wants to
+think about is indistinguishable from one they have already decided.
+
 | Type | Is |
 | --- | --- |
 | `issue` | a change to existing function or design |
@@ -63,6 +68,19 @@ note plainly contradicts what the milestone in flight is building. The question
 mark is load-bearing: it is a flag for the orchestrator to judge at the next
 step boundary, not a claim, and never a reason for this command to stop
 anything.
+
+Append `· discuss` when `--discuss` was given, and **only** then — unlike
+`blocking?`, which this command may add from what the note says, `discuss` is
+the owner's word and is never inferred. It carries no question mark because it
+asserts nothing about the tree: it records a request, and
+[`/process-queue`](process-queue.md) is where the request is met. Both markers
+can appear on one row, in either order; they answer different questions —
+`blocking?` asks whether the work in flight is wrong, `discuss` asks for the
+owner's thinking before the row is typed.
+
+Marking a row changes nothing about this command. It still classifies nothing,
+reads no tree and asks no question — `--discuss` is a request written down, not
+a conversation started.
 
 ## Then
 

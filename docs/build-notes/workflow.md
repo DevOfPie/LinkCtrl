@@ -66,7 +66,9 @@ verify. The owner decides scope; planning.md decides everything else.
 does not classify, does not read the tree, does not touch the milestone in
 flight. A line believed to block the current work is marked `blocking?` — the
 *orchestrator* judges that at the next step boundary, never the capturing actor
-and never a worker.
+and never a worker. A line the owner wants to think about *before* it is typed is
+marked `discuss` (`/note --discuss`); unlike `blocking?` it is never inferred,
+and it makes `/process-queue` prompt where it would otherwise classify.
 
 `/process-queue` drains it, at a milestone boundary and nowhere else: classify
 what arrived unclassified, then verify every classification and **prompt on any

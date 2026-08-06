@@ -227,6 +227,7 @@ file. Append a row when you append an entry.
 | [Six process rows approved](#2026-08-06--six-process-rows-approved-and-the-two-answers-that-cost-something) | W13 W1 W16 W23 W14 W33-fallback approved and W8 deliberately not; why judging doc-cost twice is one rule and one pointer; why fallback on an unanswered prompt is a weakening the owner bought knowingly |
 | [W13, and the bytes it spends to judge bytes](#2026-08-06--w13-and-the-bytes-it-spends-to-judge-bytes) | The `X.9` doc-cost audit; why the definition lives in the non-delegated section instead of gaining a delegation exception; why the recurring cost is the one to judge |
 | [A bullet is spent; a rule recurs](#2026-08-06--a-bullet-is-spent-a-rule-recurs) | W1 made: the documentation pass judges growth as well as regenerating it; why scheduling a recurring rule as a milestone bullet discharges the row without creating the rule |
+| [The marker that buys back a decision](#2026-08-06--the-marker-that-buys-back-a-decision) | W16 made: `/note --discuss`; why the teeth are in the drain and not in the capture; why classification is cheap to perform and hard to undo |
 
 ---
 
@@ -18706,5 +18707,60 @@ about that is the tracker both rows live in.
 The row also gains a sentence the old one lacked: *on record is not answered
 for*. The number was in the diff for a whole phase and obliged nobody, and that
 is the failure being fixed, not the absence of a measurement.
+
+Recorded with no milestone number, per the convention for a process change.
+
+---
+
+## 2026-08-06 — The marker that buys back a decision
+
+`/note` is deliberately inert. It captures and returns; it classifies nothing,
+reads no tree, asks nothing. The first time anybody reasons about a row is
+`/process-queue`, which classifies, verifies and routes in one pass. That is
+right for almost every note, and W16 names the case where it is wrong: the owner
+sometimes wants to think **with** somebody before the row acquires a type, and by
+the time routing runs it already has one.
+
+**The asymmetry is the whole argument.** Classification is cheap to perform and
+expensive to undo — not because editing a row is hard, but because once a note is
+typed, the conversation about it is a conversation about the type. *Is this
+really an issue?* is a different question from *what is this?*, and the second
+one is no longer available. `/process-queue` even has a whole step for the first
+question, the verify pass, and its dispute table is entirely about arguing with a
+type that already exists.
+
+### The teeth are at the drain, not at the capture
+
+`--discuss` writes `· discuss` on the row and stops. That preserves the property
+`/note` exists for: capture that costs anything is capture the owner learns not
+to use, and a flag that started a conversation would cost exactly what the
+command refuses to cost.
+
+`/process-queue` is where the marker means something. A `discuss` row skips
+classification entirely: the tree is read for it, and then the owner is prompted
+with the note, what the tree says, and the types it could be — the standard
+prompt format, because reading ahead is not an excuse for a thinner one. Their
+answer types it. From there it routes like any other row.
+
+The rule says explicitly that **being obvious is not an exemption**, which is the
+sentence the command would otherwise be tempted past. An obvious row is the
+cheapest possible conversation; the marker means the owner wanted one, and an
+actor deciding it was unnecessary is the *ask, never assume* failure wearing a
+helpful face.
+
+### Why it is not `blocking?`
+
+The queue already had a marker, and it is the opposite kind. `blocking?` may be
+*inferred* by the capturing actor, carries a question mark because it asserts
+something about the tree that may be wrong, and is the orchestrator's to judge
+and to drop. `discuss` is never inferred, carries no question mark because it
+asserts nothing, and is never dropped on the orchestrator's judgement. They also
+answer different questions — whether the work in flight is wrong, versus whether
+the owner wants to think first — so a row can carry both.
+
+**The cost, plainly:** a drain that used to be one pass now stops for a prompt per
+marked row, and the owner has to be present for it. That is what the row bought,
+and the marker is opt-in precisely so the cost is only paid where it was asked
+for.
 
 Recorded with no milestone number, per the convention for a process change.

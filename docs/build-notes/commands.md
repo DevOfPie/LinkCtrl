@@ -94,16 +94,18 @@ report — so that an unchosen stop costs effort and never knowledge.
 
 ### `note`
 
-**Given.** Free text, optionally prefixed with a type.
+**Given.** Free text, optionally prefixed with a type, and optionally marked for
+discussion.
 
 **Decides.** Nothing. This is the property the command exists for: it does not
 classify, does not read the tree, does not search for prior art, and does not
 touch the work in flight. Capture that costs anything is capture the owner
-learns not to use.
+learns not to use. Marking a note for discussion does not weaken this: it writes
+down a request, and the conversation happens at the drain.
 
-**Must not.** Infer a type that was not given. A guess written into the file is
-indistinguishable from the owner's own answer once the context that made it is
-gone.
+**Must not.** Infer a type that was not given, or a discussion marker that was
+not given. A guess written into the file is indistinguishable from the owner's
+own answer once the context that made it is gone.
 
 **Authority.** [workflow.md](workflow.md#something-is-noticed-and-now-is-not-the-time).
 
@@ -116,12 +118,15 @@ unit of work in flight.
 
 **Decides.** A type per row — a change to existing function, an addition of new
 function, or a change to process — and a destination for each. Both against the
-tree rather than against the row's wording.
+tree rather than against the row's wording. A row marked for discussion is the
+exception: it gets the tree read for it and then a prompt, and the owner's answer
+is what types it.
 
 **Must not.** Run inside a build step; routing writes to files a unit in flight
 must not find changing under it. Reclassify a row the owner typed a type for on
-its own judgement. Let a row leave the capture file into anything other than a
-tracked destination.
+its own judgement. Type a row the owner marked for discussion, however obvious it
+looks. Let a row leave the capture file into anything other than a tracked
+destination.
 
 **Authority.** [workflow.md](workflow.md#something-is-noticed-and-now-is-not-the-time),
 and [planning.md](planning.md) for anything routed as new function.

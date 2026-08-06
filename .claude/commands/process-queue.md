@@ -23,6 +23,17 @@ Move each row to **Classified** with its type. A row you cannot classify from
 what it says is not a hard row — it is an underspecified one. **Prompt**, do not
 guess, and leave it under Unclassified until answered.
 
+**A row marked `discuss` is not classified here at all.** The owner asked to
+think about it before it acquires a type, and this step is exactly where that
+would be taken away from them — classification is cheap to perform and hard to
+undo, because by the time routing runs the row already has a type and the
+conversation is about that type instead of about the note. So: read the tree for
+it, then **prompt** with what the note says, what the tree says, and the types it
+could be, per the prompt-format rule in
+[workflow.md](../../docs/build-notes/workflow.md#standing-rules). The owner's
+answer is what types it. Being obvious is not an exemption — an obvious row is
+the cheapest possible conversation, and the marker means they wanted one.
+
 ## 2. Verify
 
 Then re-read every row under **Classified**, including the ones the owner typed
@@ -59,6 +70,13 @@ A `blocking?` flag is *yours* to judge, here and at no earlier point. Blocking
 means the milestone in flight would build something the note makes wrong. If it
 is: stop, report, and prompt — the milestone is the thing that pauses, not this
 command. If it is not: drop the flag and route normally, and say that you did.
+
+A `discuss` marker is **not** yours to judge and is never dropped on your own
+judgement. It routes once the owner has answered step 1's prompt, exactly like
+any other row, carrying whatever type they gave it; unanswered, it stays in the
+queue while the rest route. The marker leaves the row when the row leaves the
+queue, and the report says which destination it went to — a conversation is not
+a destination.
 
 ## 4. Close out
 
