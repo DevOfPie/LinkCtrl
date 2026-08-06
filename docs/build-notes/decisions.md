@@ -226,6 +226,7 @@ file. Append a row when you append an entry.
 | [The size target is fifteen](#2026-08-06--the-size-target-is-fifteen-and-the-rule-says-what-it-costs) | W32 made: under sixteen milestone files, insertions counted, revisitable; why past-it is a conversation; why the target gives before a milestone's reviewability does |
 | [Six process rows approved](#2026-08-06--six-process-rows-approved-and-the-two-answers-that-cost-something) | W13 W1 W16 W23 W14 W33-fallback approved and W8 deliberately not; why judging doc-cost twice is one rule and one pointer; why fallback on an unanswered prompt is a weakening the owner bought knowingly |
 | [W13, and the bytes it spends to judge bytes](#2026-08-06--w13-and-the-bytes-it-spends-to-judge-bytes) | The `X.9` doc-cost audit; why the definition lives in the non-delegated section instead of gaining a delegation exception; why the recurring cost is the one to judge |
+| [A bullet is spent; a rule recurs](#2026-08-06--a-bullet-is-spent-a-rule-recurs) | W1 made: the documentation pass judges growth as well as regenerating it; why scheduling a recurring rule as a milestone bullet discharges the row without creating the rule |
 
 ---
 
@@ -18666,5 +18667,44 @@ these bytes were bought or borrowed. `scripts/doc-cost.sh` is deliberately not
 changed here — its known modelling error stays exactly as it is, because
 adjusting what it measures between phases would make the phases incomparable, and
 comparability is the whole value of the record.
+
+Recorded with no milestone number, per the convention for a process change.
+
+---
+
+## 2026-08-06 — A bullet is spent; a rule recurs
+
+W1 asked for the phase's documentation pass to judge the always-read contract's
+growth. It was approved on 2026-07-31 and *scheduled into M45 as a bullet rather
+than left here* — which felt like making it, and was not.
+
+A milestone bullet is discharged when the milestone lands. M45 ran `make
+doc-cost`, judged the growth, defended the floors and closed. Then the milestone
+was `done`, the bullet was spent, and workflow.md's documentation-pass table
+still said the same thing it had said before: *regenerated*. The obligation
+existed for exactly one phase and left nothing behind. The row sat in *Proposed*
+marked approved with nothing left to make, which is why it took a deliberate
+re-read of the backlog to notice it at all.
+
+**The general shape, worth more than this row:** scheduling a recurring rule into
+a milestone satisfies the tracker without creating the rule. A milestone is a
+one-shot by construction — it has a definition of done and then it is done — so
+anything that must happen *every* phase belongs in the file that every phase
+reads. The tracker cannot catch this, because from its side an approved row that
+was scheduled looks identical to an approved row that was made.
+
+### What changed, and what deliberately did not
+
+workflow.md's `doc-cost.md` row now says regenerated **and judged**, defend or
+trim, and links [phase-loop.md](phase-loop.md#two-milestones-that-do-not-end-like-the-others)
+for what judging means. It does not restate the definition, and the restraint is
+the point: the same judgement now has two obligations — the `X.9` review, where
+growth is still cheap to reverse, and the phase close, where the number is final
+— and exactly one definition. A second copy would drift, and the file that warns
+about that is the tracker both rows live in.
+
+The row also gains a sentence the old one lacked: *on record is not answered
+for*. The number was in the diff for a whole phase and obliged nobody, and that
+is the failure being fixed, not the absence of a measurement.
 
 Recorded with no milestone number, per the convention for a process change.

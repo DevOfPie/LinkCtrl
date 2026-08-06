@@ -211,7 +211,7 @@ phase touched.
 | `docs/*.md` | Configuration, usage, operations, deployment, CLI, releasing — every documented behaviour still behaves that way |
 | `docs/build-notes/decisions.md` | Append-only. Never edit an entry; a later entry corrects an earlier one |
 | `docs/build-notes/upcoming-decisions.md` | Answered entries removed, their answers in decisions.md with `D` numbers; entries for milestones now built are gone |
-| `docs/build-notes/doc-cost.md` | Regenerated (`make doc-cost`), so the phase's recurring read cost is on record and its growth is in the diff |
+| `docs/build-notes/doc-cost.md` | Regenerated (`make doc-cost`) **and judged** — defend the growth or trim to pay for it, which [phase-loop.md](phase-loop.md#two-milestones-that-do-not-end-like-the-others) defines and this row does not restate. On record is not answered for: the number was in the diff for a whole phase and obliged nobody |
 | `docs/SECURITY.md` | New defences, new gaps, new operator responsibilities |
 | `docs/build-notes/workflow.md` | This file. Rules learned this phase |
 | `docs/build-notes/phase-loop.md` | The loop that ran this phase, and where it needed a human anyway |
