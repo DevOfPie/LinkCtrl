@@ -58,3 +58,9 @@ node_modules/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Agent worktrees. A worktree is a checkout of this repository inside itself, so
+# committing one embeds a git repository in the tree — a clone gets an empty
+# directory and no way to fill it. They are session scratch and survive nothing,
+# which is the property .queue.md and .current-task.md are ignored for.
+.claude/worktrees/
