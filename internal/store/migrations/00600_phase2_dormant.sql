@@ -136,9 +136,12 @@ CREATE INDEX notifications_user_unread_idx
 --
 -- actor_user_id has no foreign key on purpose: an audit record must survive
 -- the deletion of the user it refers to, and actor_label is a snapshot so the
--- record stays readable. GDPR erasure overwrites the label rather than
--- deleting the row, since audit records of actions are retained under
--- legitimate interest.
+-- record stays readable. Erasure **would** overwrite the label rather than
+-- delete the row, since audit records of actions are retained under legitimate
+-- interest — that is the design, and it is not built: no erasure routine exists
+-- anywhere in this product (F44). Written in the present tense here until 0.2.0,
+-- which is one of the five sites that made an absent feature read as a shipped
+-- one.
 CREATE TABLE audit_logs (
     id            uuid        NOT NULL,
     occurred_at   timestamptz NOT NULL,

@@ -8,14 +8,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
+	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
+	"github.com/DevOfPie/LinkCtrl/internal/gate"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/postgres"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
+	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 )
 
 // The demo dataset. Distinct from `lctl seed`, which exists to make the redirect
@@ -41,6 +45,7 @@ type demoLink struct {
 	alias, url, title, desc string
 	tags                    []string
 	forwardQuery            bool
+	forwardPath             bool
 	// weight is relative daily traffic. 0 means the link exists and is never
 	// clicked, which is a state worth showing.
 	weight int
@@ -61,8 +66,8 @@ func demoCatalogue() []demoLink {
 			title: "Introducing LinkCtrl 0.1", desc: "Launch announcement, shared everywhere at once.",
 			tags: []string{"marketing", "blog"}, weight: 50, from: 29, spikeDay: 14, spikeMult: 7, age: 32},
 		{alias: "handbook", url: "https://example.com/docs", title: "Documentation home",
-			desc: "The link that goes in every support reply.",
-			tags: []string{"docs"}, weight: 42, from: 29, age: 44},
+			desc: "Path forwarding on: /handbook/api/quickstart reaches the destination's own /api/quickstart.",
+			tags: []string{"docs"}, forwardPath: true, weight: 42, from: 29, age: 44},
 		{alias: "quickstart", url: "https://example.com/docs/quickstart", title: "API quickstart",
 			tags: []string{"docs", "dev"}, weight: 24, from: 29, age: 40},
 		{alias: "pricing-2026", url: "https://example.com/pricing", title: "Pricing",
@@ -127,15 +132,32 @@ func demoCmd(args []string) error {
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: lctl demo [flags]
 
-Fills an empty instance with a workspace worth looking at: around twenty links
-with titles, tags and destinations, and a month of click history with weekday
-seasonality, a launch spike, bots, and every status the dashboard can render —
-including an archived link, an expired campaign and one in the trash.
+Fills an empty instance with an installation worth looking at.
 
-Links are created through the same service call the REST API uses, so the data
-cannot describe a state the product could not reach. Click history is written
-directly, because the redirect path can only produce traffic for right now; every
-column matches what the ingester would have written.
+Two workspaces: the first with around twenty links, their titles, tags and
+destinations, and a month of click history with weekday seasonality, a launch
+spike, bots, and every status the dashboard can render — an archived link, an
+expired campaign, one in the trash; the second with a handful of its own, so the
+workspace switcher has something to switch between.
+
+Around that, what Phase 2 added: two more accounts and their memberships, an
+outstanding invitation and two redeemed ones, an inbox with unread items, an
+audit trail spanning several actions, a blocked destination, a dispute in each
+of its three states, and bot blocking switched on for exactly one link.
+
+Everything is created through the same service calls the dashboard and the REST
+API make, so the data cannot describe a state the product could not reach. Click
+history is written directly, because the redirect path can only produce traffic
+for right now; every column matches what the ingester would have written.
+
+No mailer is needed and none is used: the invitation it leaves outstanding is
+reachable by the link printed below. No reputation feed is enabled, so no
+destination reaches a third party for a reputation check. It does register
+webhooks, which is the other way a destination leaves and the one no operator
+setting turns off, so a link created on a demo instance queues a delivery
+carrying its destination — to a .example hostname that never resolves, so
+nobody receives it. The instance's own /feeds page says so.
+LINKCTRL_SIGNUP_MODE is not read and not changed.
 
 For load testing rather than looking at, use `+"`lctl seed`"+` instead.
 
@@ -181,6 +203,81 @@ type demoOptions struct {
 	prng   uint64
 }
 
+// demoActor resolves who the demo is seeded as, and — the part that matters —
+// where.
+//
+// Not plain auth.IdentityForEmail. That answers "where would this person land if
+// they signed in", and the answer is a *preference*: the switcher M25 built
+// records it whenever somebody clicks through the demo, and a run that stops
+// between the seeder entering the second workspace and leaving it records it
+// too. The demo dataset must not move when that changes.
+//
+// It moved once, and the failure is the reason this function exists. demoReset
+// scopes its link, tag and destination deletes to the actor's workspace while
+// everything else it removes is scoped to the organization. An actor resolving
+// into some other workspace therefore does not seed a harmless second copy of
+// the demo: it commits a reset that takes away the accounts, the second
+// workspace and the click history while leaving the catalogue standing, and then
+// the first link it creates collides with the copy of itself the reset walked
+// past — alias uniqueness is per domain (00300_links.sql), not per workspace.
+// `make demo-update` failed exactly that way at M36, and the reset had already
+// committed by the time it did.
+//
+// The stable answer is the organization's oldest live workspace: the one the
+// account was given when it claimed the instance, and where every previous run
+// therefore put the catalogue. That is also ResolveWorkspaceForUser's own last
+// tiebreak — this makes it unconditional instead of reachable only when no
+// preference is set.
+func demoActor(ctx context.Context, pool *pgxpool.Pool, authSvc *auth.Service,
+	email string,
+) (*auth.Identity, error) {
+	actor, err := authSvc.IdentityForEmail(ctx, email)
+	if err != nil {
+		return nil, fmt.Errorf("resolve user %s: %w", email, err)
+	}
+	// D36: an account can belong to no organization at all. Nothing can be
+	// seeded for one, and the failure belongs to whatever asks for a workspace
+	// next rather than here.
+	if actor.OrgID == uuid.Nil {
+		return actor, nil
+	}
+
+	var wsID uuid.UUID
+	const oldest = `
+		SELECT id FROM workspaces
+		 WHERE organization_id = $1 AND deleted_at IS NULL
+		 ORDER BY created_at, id
+		 LIMIT 1`
+	if err := pool.QueryRow(ctx, oldest, actor.OrgID).Scan(&wsID); err != nil {
+		return nil, fmt.Errorf("find the demo workspace for %s: %w", email, err)
+	}
+	if actor.WorkspaceID == wsID {
+		return actor, nil
+	}
+
+	// Same deliberate step around SwitchWorkspace that demoSeeder.refresh and
+	// demoSeeder.actAs take, and for the same reason: that call is session-only
+	// by design, and there is no session here.
+	if _, err := dbgen.New(pool).SetLastWorkspaceForUser(ctx, dbgen.SetLastWorkspaceForUserParams{
+		UserID: actor.UserID, WorkspaceID: wsID,
+	}); err != nil {
+		return nil, fmt.Errorf("place %s in the demo workspace: %w", email, err)
+	}
+	if actor, err = authSvc.IdentityForEmail(ctx, email); err != nil {
+		return nil, fmt.Errorf("resolve user %s: %w", email, err)
+	}
+	if actor.WorkspaceID != wsID {
+		// Reachable one way: the account has pinned a default workspace, which
+		// outranks last-used. Refusing is the point — the alternative is the
+		// half-reset above, which destroys data and reports success.
+		return nil, fmt.Errorf(
+			"%s resolves into workspace %s, but the demo's own workspace is %s; "+
+				"unpin the default workspace on that account before seeding",
+			email, actor.WorkspaceID, wsID)
+	}
+	return actor, nil
+}
+
 func demoSeed(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, opt demoOptions) error {
 	authSvc := auth.NewService(pool, auth.ServiceConfig{
 		Params: auth.Params{
@@ -198,18 +295,24 @@ func demoSeed(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, opt de
 				"or pass --user: %w", err)
 		}
 	}
-	actor, err := authSvc.IdentityForEmail(ctx, email)
+	actor, err := demoActor(ctx, pool, authSvc, email)
 	if err != nil {
-		return fmt.Errorf("resolve user %s: %w", email, err)
+		return err
 	}
 
 	catalogue := demoCatalogue()
 
 	if opt.reset {
-		if err := demoReset(ctx, pool, actor.WorkspaceID.String(), catalogue); err != nil {
+		if err := demoReset(ctx, pool, actor, catalogue); err != nil {
 			return err
 		}
 		fmt.Fprintln(os.Stderr, "reset: previous demo data removed")
+		// The reset deleted the second workspace, and with it whatever the last
+		// run pinned as this account's last-used one. Re-resolving keeps the
+		// identity below pointing at a workspace that still exists.
+		if actor, err = demoActor(ctx, pool, authSvc, email); err != nil {
+			return err
+		}
 	}
 
 	// The backfill reaches into last month, and an insert with no matching
@@ -225,10 +328,10 @@ func demoSeed(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, opt de
 		fmt.Fprintf(os.Stderr, "created %d partitions covering the demo range\n", created)
 	}
 
-	linkSvc := link.NewService(pool, link.Config{
-		Policy:  link.DefaultDestinationPolicy(),
-		BaseURL: cfg.LinkOrigin(),
-	})
+	auditSvc := audit.NewService(pool)
+	gateSvc := gate.NewService(pool, gate.Config{Hasher: authSvc.Hasher()})
+	linkSvc := link.NewService(pool,
+		demoLinkConfig(cfg, auditSvc, authSvc.Hasher(), gateSvc))
 
 	ids, err := demoCreateLinks(ctx, pool, linkSvc, actor, catalogue, now)
 	if err != nil {
@@ -241,6 +344,17 @@ func demoSeed(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, opt de
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "clicks: %d\n", clicks)
+
+	// Everything Phase 2 added. Before the rollup below, because the second
+	// workspace writes click events of its own and a rollup that ran first would
+	// leave its analytics pages empty.
+	seeder, err := newDemoSeeder(pool, cfg, authSvc, linkSvc, gateSvc, actor, opt, now)
+	if err != nil {
+		return err
+	}
+	if err := seeder.run(ctx, catalogue, ids); err != nil {
+		return err
+	}
 
 	// Roll the whole window up. The application's job only ever recomputes
 	// yesterday and today, because that is all live traffic can change;

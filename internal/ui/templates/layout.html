@@ -1,5 +1,5 @@
 {{define "layout"}}<!doctype html>
-<html lang="en" class="h-full">
+<html lang="en" class="h-full"{{if .Theme}} data-theme="{{.Theme}}"{{end}}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,23 +8,37 @@
   <link rel="icon" href="{{asset "favicon.svg"}}" type="image/svg+xml">
   <script src="{{asset "js/htmx.min.js"}}" defer></script>
 </head>
-<body class="min-h-full bg-slate-50 text-slate-900 antialiased">
+<body class="min-h-full bg-surface text-ink antialiased">
 {{if .Identity}}
-<header class="border-b border-slate-200 bg-white">
+<header class="border-b border-line bg-raised">
   <nav class="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
-    <a href="/dashboard" class="flex items-center gap-2 font-semibold tracking-tight text-slate-900">
-      <svg viewBox="0 0 24 24" class="h-5 w-5 fill-indigo-600" aria-hidden="true"><path d="M10.6 13.4a1 1 0 0 1 0-1.4l3-3a1 1 0 0 1 1.4 1.4l-3 3a1 1 0 0 1-1.4 0Zm-2.2 5.1a4 4 0 0 1-2.9-6.8l2.2-2.2a1 1 0 1 1 1.4 1.4l-2.2 2.2a2 2 0 0 0 2.9 2.9l2.2-2.2a1 1 0 1 1 1.4 1.4l-2.2 2.2a4 4 0 0 1-2.8 1.1Zm7.2-7.2a1 1 0 0 1-.7-1.7l2.2-2.2a2 2 0 0 0-2.9-2.9L12 6.7a1 1 0 1 1-1.4-1.4l2.2-2.2a4 4 0 0 1 5.7 5.7l-2.2 2.2a1 1 0 0 1-.7.3Z"/></svg>
+    <a href="/dashboard" class="flex items-center gap-2 font-semibold tracking-tight text-ink">
+      <svg viewBox="0 0 24 24" class="h-5 w-5 fill-accent" aria-hidden="true"><path d="M10.6 13.4a1 1 0 0 1 0-1.4l3-3a1 1 0 0 1 1.4 1.4l-3 3a1 1 0 0 1-1.4 0Zm-2.2 5.1a4 4 0 0 1-2.9-6.8l2.2-2.2a1 1 0 1 1 1.4 1.4l-2.2 2.2a2 2 0 0 0 2.9 2.9l2.2-2.2a1 1 0 1 1 1.4 1.4l-2.2 2.2a4 4 0 0 1-2.8 1.1Zm7.2-7.2a1 1 0 0 1-.7-1.7l2.2-2.2a2 2 0 0 0-2.9-2.9L12 6.7a1 1 0 1 1-1.4-1.4l2.2-2.2a4 4 0 0 1 5.7 5.7l-2.2 2.2a1 1 0 0 1-.7.3Z"/></svg>
       LinkCtrl
     </a>
+    {{/* The three destinations, drawn only for somebody who has an organization
+         to spend them in. An account whose only organization was deleted keeps
+         its account and belongs to nothing (D36); every link here leads to a
+         page that would send it straight back to the one it is on, and a nav
+         made entirely of redirects reads as a broken product rather than as an
+         empty state. The count is still exactly three whenever it draws at all,
+         which is what TestTopLevelNavHoldsThreeDestinations holds. */}}
+    {{if .HasOrganization}}
     {{template "navlink" (dict "Href" "/dashboard" "Label" "Dashboard" "Active" (eq .Nav "dashboard"))}}
     {{template "navlink" (dict "Href" "/links" "Label" "Links" "Active" (eq .Nav "links"))}}
     {{template "navlink" (dict "Href" "/keys" "Label" "API keys" "Active" (eq .Nav "keys"))}}
-    {{template "navlink" (dict "Href" "/account" "Label" "Account" "Active" (eq .Nav "account"))}}
-    <div class="ml-auto flex items-center gap-3">
-      <span class="hidden text-sm text-slate-500 sm:inline">{{.Identity.Email}}</span>
-      <form method="post" action="/logout">
-        <button type="submit" class="rounded-md px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-900">Sign out</button>
-      </form>
+    {{end}}
+    <div class="ml-auto flex items-center gap-2">
+      {{template "workspace_switch" .}}
+      {{/* Gated like the identity menu's own entries, and for the same reason
+           (F47). The bell's View all goes to /notifications, which sits behind
+           RequireOrganization and 303s straight back — so an account belonging
+           to nothing was offered the one control in this header that leads
+           nowhere. It is also the likeliest holder of unread notifications:
+           deleting an organization needs the owner role, and owners are the
+           recipient class for audit growth, invitations and disputes. */}}
+      {{if .HasOrganization}}{{template "notification_bell" .}}{{end}}
+      {{template "identity_menu" .}}
     </div>
   </nav>
 </header>

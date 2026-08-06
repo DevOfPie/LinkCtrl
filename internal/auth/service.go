@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
+	"net/mail"
 	"net/netip"
 	"regexp"
 	"strings"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/store/pgerr"
 )
 
 var (
@@ -37,6 +40,15 @@ type Identity struct {
 	OrgID       uuid.UUID
 	SessionID   uuid.UUID
 	Role        string
+	// RoleRank orders roles against each other: lower binds tighter, so owner
+	// (10) outranks admin (20) outranks editor (30) outranks viewer (40).
+	//
+	// Carried on the identity rather than looked up where it is needed because
+	// it is a property of who the actor is, exactly like Role, and the first
+	// consumer — the invitation role ceiling (D28) — must not be able to reach
+	// the wrong membership by asking a second time. It fails closed: an identity
+	// whose role could not be resolved gets NoRoleRank, which outranks nothing.
+	RoleRank int32
 	// APIKeyID is set when the request authenticated with an API key instead
 	// of a session cookie. Services consult it for the few operations that
 	// must require an interactive sign-in; everything else is deliberately
@@ -149,9 +161,31 @@ func NormalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
 
+// ValidateEmail is the gate on every path that writes an address: creating the
+// first account, issuing an invitation, and starting a registration. It is not
+// on the login path, where the address is compared and never sent to.
+//
+// The regex above is permissive on purpose, and the second check is what stops
+// permissive becoming unsendable. `net/mail.ParseAddress` is the parser the
+// mailer itself uses, so an address that passes the pattern and fails the parser
+// is one this product will accept, store, and then fail to send to — which is
+// what F53 was: nine forms including `a<b@c.de`, `a,b@c.de` and
+// `user@exa(mple.com` matched the pattern, committed a `pending_registrations`
+// row, and then answered 500 from the enqueue, a status the API does not
+// declare. Checking here rather than in signup closes it for invitations too,
+// which reach the same enqueue through a different door.
+//
+// Strictly a narrowing: every address the parser accepts and the pattern does
+// not — `Barry Gibbs <bg@example.com>` is the shape — is still refused, because
+// the pattern runs first and because a display-name form is not the address
+// somebody typed.
 func ValidateEmail(email string) error {
 	e := NormalizeEmail(email)
 	if e == "" || len(e) > 320 || !emailPattern.MatchString(e) {
+		return ErrInvalidEmail
+	}
+	parsed, err := mail.ParseAddress(e)
+	if err != nil || parsed.Address != e {
 		return ErrInvalidEmail
 	}
 	return nil
@@ -235,49 +269,37 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*Identity, er
 		EmailVerifiedAt: verifiedAt(in.IsFirstUser),
 	})
 	if err != nil {
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			return nil, ErrEmailTaken
 		}
 		return nil, fmt.Errorf("create user: %w", err)
 	}
 
-	orgID := uuid.Must(uuid.NewV7())
-	org, err := q.CreateOrganization(ctx, dbgen.CreateOrganizationParams{
-		ID:         orgID,
-		Name:       name,
-		Slug:       slugify(name) + "-" + orgID.String()[:8],
-		IsPersonal: true,
-	})
+	org, ws, err := ProvisionOrganization(ctx, q, user.ID, name, true)
 	if err != nil {
-		return nil, fmt.Errorf("create organization: %w", err)
+		return nil, err
 	}
 
-	wsID := uuid.Must(uuid.NewV7())
-	ws, err := q.CreateWorkspace(ctx, dbgen.CreateWorkspaceParams{
-		ID:             wsID,
-		OrganizationID: org.ID,
-		Name:           "Default",
-		Slug:           "default",
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create workspace: %w", err)
-	}
-
-	ownerRole, err := q.GetRoleBySlug(ctx, "owner")
-	if err != nil {
-		return nil, fmt.Errorf("look up owner role: %w", err)
-	}
-
-	// workspace_id is NULL: the membership covers every workspace in the
-	// organization, which is what a personal organization always wants.
-	if _, err := q.CreateMembership(ctx, dbgen.CreateMembershipParams{
-		ID:             uuid.Must(uuid.NewV7()),
-		UserID:         user.ID,
-		OrganizationID: org.ID,
-		RoleID:         ownerRole.ID,
-		WorkspaceID:    nil,
-	}); err != nil {
-		return nil, fmt.Errorf("create membership: %w", err)
+	// The setup account becomes the instance-level principal (D98), here and
+	// nowhere else on this path — `Register` without IsFirstUser is ordinary
+	// self-serve registration, and conferring instance reach there would rebuild
+	// F15 exactly: under LINKCTRL_SIGNUP_MODE=open, one registration would make
+	// a stranger the person who moderates every organization's destinations.
+	//
+	// This is the right home for it because it is the only place in the product
+	// where "this account is the instance's" is already established rather than
+	// assumed. The branch above holds an advisory lock and re-counts users inside
+	// this transaction, so exactly one account can ever take it — and the comment
+	// on EmailVerifiedAt says what that account is: somebody who had filesystem or
+	// deploy access to reach the setup page. That is the claim to the box; every
+	// other account has a claim to a tenant.
+	//
+	// In the same transaction, so an instance is never observable in the state
+	// where it has been claimed and has nobody who can administer it.
+	if in.IsFirstUser {
+		if err := grantInstancePrincipal(ctx, q, user.ID); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -303,9 +325,28 @@ type LoginResult struct {
 
 // Login authenticates and starts a session.
 //
-// Every failure returns ErrInvalidCredentials regardless of cause — unknown
-// email, wrong password, no local password set. Distinguishing them tells an
-// attacker which addresses are registered.
+// **Every failure is answered identically, and every failure costs the same.**
+// Unknown address, wrong password, no local password set, suspended account, and
+// an account already locked out by repeated failures are one answer to whoever
+// asked, and each spends one argon2 verification on the way. Distinguishing any
+// of them — by problem type, by status, by prose, or by how long the refusal
+// takes — tells a stranger which addresses are registered.
+//
+// The errors below stay distinct because the process wants them: a lockout is a
+// different operational event from a typo, and a test can assert it. What must
+// not differ is what a caller sees, so the two boundaries that answer a person
+// collapse them — internal/httpx/problem.go for the API, internal/httpx/web.go
+// for the sign-in form. That split is the one ErrAccountInactive has always had.
+//
+// Finding F92 is why both halves are spelled out here. ErrAccountLocked used to
+// reach the API as its own problem type and a 429, so the fifth wrong password
+// against a registered address answered differently from the fifth against an
+// unregistered one — unauthenticated, on the shipped `closed` default, where the
+// registration oracle is refused before any lookup, and inside LOGIN_RATE_PER_MIN
+// so the per-address limiter never masked it. It also returned before any
+// verification, which made it *fast* where every other refusal pays a hash; a fix
+// that equalised the status and not the work would have left the question
+// answerable with a stopwatch.
 func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error) {
 	email := NormalizeEmail(in.Email)
 
@@ -321,6 +362,13 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 	}
 
 	if user.LockedUntil != nil && user.LockedUntil.After(time.Now()) {
+		// Spend the verification this branch is about to skip. Without it a
+		// locked account refuses in one database round trip where every other
+		// refusal costs an argon2 hash, and that gap answers "is this address
+		// registered?" on its own — five wrong passwords, then time the sixth.
+		// The lockout still holds whatever the password was: this buys the
+		// timing back, not an early exit.
+		s.hasher.DummyVerify(in.Password)
 		return nil, ErrAccountLocked
 	}
 	if user.Status != "active" {
@@ -365,10 +413,20 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 		return nil, fmt.Errorf("record login: %w", err)
 	}
 
-	ws, err := s.q.GetDefaultWorkspaceForUser(ctx, user.ID)
-	if err != nil {
-		return nil, fmt.Errorf("resolve workspace: %w", err)
+	// No session id: this is the request that creates one. So a sign-in starts
+	// at the pinned default, or at the last workspace used, and the session
+	// carries that from its first row rather than being corrected afterwards.
+	//
+	// An account that belongs to nothing signs in anyway (D36). The session is
+	// created with no workspace, which is a value the column already permits —
+	// sessions.workspace_id is nullable and is SET NULL when a workspace is
+	// deleted, so a signed-in browser was always going to reach this state; what
+	// changes here is that signing in can start in it.
+	ws, err := s.resolveWorkspace(ctx, user.ID, nil, nil)
+	if err != nil && !errors.Is(err, ErrNoWorkspace) {
+		return nil, err
 	}
+	orphaned := errors.Is(err, ErrNoWorkspace)
 
 	token, hash, err := NewSessionToken()
 	if err != nil {
@@ -377,19 +435,29 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 	expires := time.Now().Add(s.ttl.Absolute)
 
 	ipPrefix := AnonymizeIP(in.IP)
-	session, err := s.q.CreateSession(ctx, dbgen.CreateSessionParams{
+	params := dbgen.CreateSessionParams{
 		ID:        uuid.Must(uuid.NewV7()),
 		UserID:    user.ID,
 		TokenHash: hash,
 		IpPrefix:  nullable(ipPrefix),
 		UserAgent: nullable(truncate(in.UserAgent, 512)),
 		ExpiresAt: expires,
-	})
+	}
+	if !orphaned {
+		params.WorkspaceID = &ws.ID
+	}
+	session, err := s.q.CreateSession(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
 	}
 
-	identity, err := s.identityFor(ctx, user.ID, user.Email, user.Name, ws.ID, ws.OrganizationID)
+	var identity *Identity
+	if orphaned {
+		identity, err = s.identityWithoutOrganization(ctx, user.ID, user.Email, user.Name)
+	} else {
+		identity, err = s.identityFor(
+			ctx, user.ID, user.Email, user.Name, ws.ID, ws.OrganizationID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -425,9 +493,18 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*Identity, er
 		return nil, ErrAccountInactive
 	}
 
-	ws, err := s.q.GetDefaultWorkspaceForUser(ctx, row.UserID)
-	if err != nil {
-		return nil, fmt.Errorf("resolve workspace: %w", err)
+	// The session's id is passed, so wherever this browser last switched to wins
+	// over the account-level preference. That is the difference between "where
+	// do I start" and "where am I now", and it is why the two are stored apart.
+	//
+	// This is the line D36 is really about. Every authenticated request in the
+	// product passes through here, so treating "belongs to nothing" as a failure
+	// would turn one owner's tenancy teardown into an authentication outage for
+	// the person it orphaned — they would be unable to sign in and therefore
+	// unable to create the organization the product wants to offer them.
+	ws, err := s.resolveWorkspace(ctx, row.UserID, &row.ID, nil)
+	if err != nil && !errors.Is(err, ErrNoWorkspace) {
+		return nil, err
 	}
 
 	// last_seen_at drives idle expiry, but writing on every request would turn
@@ -437,7 +514,13 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*Identity, er
 		_ = s.q.TouchSession(ctx, row.ID)
 	}
 
-	identity, err := s.identityFor(ctx, row.UserID, row.Email, row.Name, ws.ID, ws.OrganizationID)
+	var identity *Identity
+	if errors.Is(err, ErrNoWorkspace) {
+		identity, err = s.identityWithoutOrganization(ctx, row.UserID, row.Email, row.Name)
+	} else {
+		identity, err = s.identityFor(
+			ctx, row.UserID, row.Email, row.Name, ws.ID, ws.OrganizationID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -461,9 +544,14 @@ func (s *Service) IdentityForEmail(ctx context.Context, email string) (*Identity
 	if user.Status != "active" {
 		return nil, ErrAccountInactive
 	}
-	ws, err := s.q.GetDefaultWorkspaceForUser(ctx, user.ID)
+	// No session, so the account's own preference decides: the CLI acts where
+	// the person would land if they signed in — including, since D36, nowhere.
+	ws, err := s.resolveWorkspace(ctx, user.ID, nil, nil)
+	if errors.Is(err, ErrNoWorkspace) {
+		return s.identityWithoutOrganization(ctx, user.ID, user.Email, user.Name)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("resolve workspace: %w", err)
+		return nil, err
 	}
 	return s.identityFor(ctx, user.ID, user.Email, user.Name, ws.ID, ws.OrganizationID)
 }
@@ -534,12 +622,15 @@ func (s *Service) identityFor(ctx context.Context, userID uuid.UUID, email, name
 	for _, p := range perms {
 		set[p] = struct{}{}
 	}
+	if err := s.addInstanceGrants(ctx, userID, set); err != nil {
+		return nil, err
+	}
 
-	role := ""
+	role, rank := "", int32(NoRoleRank)
 	if r, err := s.q.GetUserRoleInWorkspace(ctx, dbgen.GetUserRoleInWorkspaceParams{
 		UserID: userID, ID: wsID,
 	}); err == nil {
-		role = r.Slug
+		role, rank = r.Slug, r.Rank
 	}
 
 	return &Identity{
@@ -549,9 +640,89 @@ func (s *Service) identityFor(ctx context.Context, userID uuid.UUID, email, name
 		WorkspaceID: wsID,
 		OrgID:       orgID,
 		Role:        role,
+		RoleRank:    rank,
 		permissions: set,
 	}, nil
 }
+
+// identityWithoutOrganization is who an account is when it belongs to nothing.
+//
+// Everything tenancy-shaped is zero: no workspace, no organization, no role, and
+// no permission that came from a membership, so Can answers false for every one
+// of those and every service call refuses on the check it already makes. That is
+// the whole enforcement — there is no second authorization path for this state,
+// and the one operation that must remain reachable from it (creating a first
+// organization) opens its own door, at its own call site, where a reader can see
+// it. See team.CreateOrganization and D36.
+//
+// **Instance grants survive it**, and that is the point of them (D98). An
+// instance-level permission is held over the box rather than through a tenancy,
+// so an operator whose only organization was deleted must not stop being able to
+// review the instance's disputes — the alternative is that a tenancy teardown
+// silently strands the queue, which is a sharper version of the finding this
+// principal exists to close.
+//
+// RoleRank is NoRoleRank rather than zero for the reason the constant explains:
+// rank counts downward in authority, so a zero here would read as outranking the
+// owner role.
+//
+// A method rather than a function since D98, because there is now exactly one
+// thing to load and it is not reached through any tenancy.
+func (s *Service) identityWithoutOrganization(
+	ctx context.Context, userID uuid.UUID, email, name string,
+) (*Identity, error) {
+	set := map[string]struct{}{}
+	if err := s.addInstanceGrants(ctx, userID, set); err != nil {
+		return nil, err
+	}
+	return &Identity{
+		UserID:      userID,
+		Email:       email,
+		Name:        name,
+		RoleRank:    NoRoleRank,
+		permissions: set,
+	}, nil
+}
+
+// addInstanceGrants folds a user's instance-level permissions into a set that
+// already holds whatever their memberships granted.
+//
+// A union, never a replacement, and the two sources are deliberately
+// indistinguishable afterwards: Identity.Can is the one evaluator, and a second
+// "but is it an instance permission?" question asked at a call site is how the
+// grants would drift out of step with the map that says which of them a key may
+// hold.
+//
+// The instance permissions themselves are enumerated in migration 03400 and
+// granted to no role, so this is the only way any of them reaches an identity.
+func (s *Service) addInstanceGrants(
+	ctx context.Context, userID uuid.UUID, into map[string]struct{},
+) error {
+	grants, err := s.q.ListInstanceGrants(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("load instance grants: %w", err)
+	}
+	for _, g := range grants {
+		into[g] = struct{}{}
+	}
+	return nil
+}
+
+// HasOrganization reports whether this identity belongs to an organization.
+//
+// False is a real, reachable state since D36 — an account whose only
+// organization was deleted keeps its account and loses its tenancy — and it is
+// what the dashboard reads to send somebody to the page that offers them one.
+// It is an affordance, never the enforcement: what such an identity may do is
+// decided by its empty permission set, like everybody else's.
+func (i *Identity) HasOrganization() bool { return i != nil && i.OrgID != uuid.Nil }
+
+// NoRoleRank is the rank of an identity whose role could not be resolved.
+//
+// math.MaxInt32 and not zero, and that choice is the whole safety property:
+// rank counts *downward* in authority, so a zero would read as outranking the
+// owner role. Anything comparing ranks fails closed against this value.
+const NoRoleRank = math.MaxInt32
 
 func verifiedAt(yes bool) *time.Time {
 	if !yes {
@@ -575,7 +746,86 @@ func truncate(s string, n int) string {
 	return s[:n]
 }
 
+// ProvisionOrganization creates an organization, its first workspace and an
+// owner membership for one user, inside the caller's transaction.
+//
+// Exported and taking a *dbgen.Queries rather than being a method, because two
+// packages provision tenancy and there must not be two implementations of it.
+// Registration calls it for the personal organization every account starts with
+// (is_personal true); internal/team calls it for an organization somebody
+// deliberately creates (is_personal false). The tenancy invariants — an
+// organization always has a workspace, and always has an owner, both written in
+// the same transaction as the row that needs them — are stated once, here.
+//
+// The caller owns the transaction and the commit. That is what lets registration
+// create the user in the same one, and what keeps this function unable to leave
+// a half-provisioned organization behind.
+func ProvisionOrganization(
+	ctx context.Context, q *dbgen.Queries, userID uuid.UUID, name string, isPersonal bool,
+) (dbgen.Organization, dbgen.Workspace, error) {
+	var (
+		org dbgen.Organization
+		ws  dbgen.Workspace
+	)
+
+	orgID := uuid.Must(uuid.NewV7())
+	// A suffix from the id, because organization slugs are unique instance-wide
+	// and names are not: two people called "Acme" must both be able to exist.
+	//
+	// The **last** twelve hex characters, not the first eight. A UUIDv7 begins
+	// with the timestamp, and the leading eight characters are the top 32 bits
+	// of a 48-bit millisecond clock — which means they change once every 65
+	// seconds and are identical for everything created inside that window. Two
+	// organizations of the same name created a few seconds apart therefore
+	// produced the same slug and the second one failed on the unique index, as a
+	// 500 rather than as anything a caller could act on. The trailing group is
+	// the random half of a v7, so it does not have that property.
+	org, err := q.CreateOrganization(ctx, dbgen.CreateOrganizationParams{
+		ID:         orgID,
+		Name:       name,
+		Slug:       Slugify(name) + "-" + orgID.String()[24:],
+		IsPersonal: isPersonal,
+	})
+	if err != nil {
+		return org, ws, fmt.Errorf("create organization: %w", err)
+	}
+
+	ws, err = q.CreateWorkspace(ctx, dbgen.CreateWorkspaceParams{
+		ID:             uuid.Must(uuid.NewV7()),
+		OrganizationID: org.ID,
+		Name:           "Default",
+		Slug:           "default",
+	})
+	if err != nil {
+		return org, ws, fmt.Errorf("create workspace: %w", err)
+	}
+
+	ownerRole, err := q.GetRoleBySlug(ctx, "owner")
+	if err != nil {
+		return org, ws, fmt.Errorf("look up owner role: %w", err)
+	}
+
+	// workspace_id is NULL: the membership covers every workspace in the
+	// organization, which is what the person who just created it always wants.
+	if _, err := q.CreateMembership(ctx, dbgen.CreateMembershipParams{
+		ID:             uuid.Must(uuid.NewV7()),
+		UserID:         userID,
+		OrganizationID: org.ID,
+		RoleID:         ownerRole.ID,
+		WorkspaceID:    nil,
+	}); err != nil {
+		return org, ws, fmt.Errorf("create membership: %w", err)
+	}
+
+	return org, ws, nil
+}
+
 var nonSlug = regexp.MustCompile(`[^a-z0-9]+`)
+
+// Slugify reduces a name to the URL-safe form the tenancy tables store beside
+// it. Exported because workspace renaming derives a slug the same way, and a
+// second implementation would be a second answer to "what is this called".
+func Slugify(s string) string { return slugify(s) }
 
 func slugify(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
@@ -588,9 +838,4 @@ func slugify(s string) string {
 		s = strings.Trim(s[:32], "-")
 	}
 	return s
-}
-
-func isUniqueViolation(err error) bool {
-	var pgErr interface{ SQLState() string }
-	return errors.As(err, &pgErr) && pgErr.SQLState() == "23505"
 }

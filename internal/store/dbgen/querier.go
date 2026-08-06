@@ -12,50 +12,730 @@ import (
 )
 
 type Querier interface {
+	//
+	// Fails pending rows on an instance that has no relay to send them.
+	//
+	// The outbox has one guard against unbounded growth — PurgeFinishedMail — and it
+	// takes only `status <> 'pending'`, which is correct while a mailer exists:
+	// Drain claims every pending row and moves it to sent or, after five attempts,
+	// failed, and the lease recovers rows a crash interrupted. So nothing stays
+	// pending, and nothing needs to.
+	//
+	// Clearing SMTP_HOST on an instance that had one breaks that. The mailer becomes
+	// nil, so the drain does not run; the rows enqueued before the change stay
+	// pending; and the purge skips them by design. They are then invisible — nothing
+	// but CountPendingMail reads them — and permanent (F52).
+	//
+	// Failing rather than deleting, so the record of what was attempted survives its
+	// retention window like every other finished row, and reaches PurgeFinishedMail
+	// by the normal path rather than by a second delete. The body goes for the same
+	// reason MarkMailFailed drops it: a message that will never be sent should not
+	// keep holding what it was going to say.
+	//
+	// Bounded by the same window rather than run eagerly, because an operator who
+	// clears SMTP_HOST by mistake and puts it back the same afternoon should still
+	// get their queue delivered. Only the caller decides when this applies: it runs
+	// on the no-mailer path and nowhere else.
+	AbandonUnsendableMail(ctx context.Context, maxAgeDays int32) (int64, error)
 	ArchiveLink(ctx context.Context, arg ArchiveLinkParams) (Link, error)
+	//
+	// The archive an automation performs. Idempotent: a link already archived comes
+	// back unchanged rather than erroring, so a rule whose window overlapped an
+	// interactive archive does not fail its whole firing over it.
+	//
+	// Not `ArchiveLink`, and the difference is the missing actor. Every interactive
+	// archive is authorized against a signed-in identity in internal/link; this one
+	// is authorized by the rule, which was itself created by somebody holding
+	// `automation.write`. Scoped to the workspace in the statement, so a rule can
+	// only ever reach its own tenant's links.
+	//
+	// **`expires_at` is not touched**, and that is load-bearing rather than
+	// incidental: moving it would make the link-expired trigger match this link
+	// again on the next run, which is the self-feeding cycle the vocabulary is
+	// arranged to make impossible.
+	ArchiveLinkByAutomation(ctx context.Context, arg ArchiveLinkByAutomationParams) (ArchiveLinkByAutomationRow, error)
 	AttachTag(ctx context.Context, arg AttachTagParams) error
+	//
+	// The compare-and-set that fires a rule. **This is the loop guard.**
+	//
+	// The watermark is advanced *before* the actions run, and only if it is still
+	// exactly where the match query saw it. Two things follow, and both are
+	// deliberate:
+	//
+	//   * A rule cannot fire twice for one subject. The window the next run reads
+	//     starts after the subject that was just handled, so the match set that
+	//     produced this firing can never be produced again.
+	//   * A second replica that briefly believes it is the leader loses the race
+	//     rather than duplicating the firing — the same reasoning D77 gives for
+	//     claiming a webhook delivery with FOR UPDATE SKIP LOCKED under the advisory
+	//     lock, and the same reason: an advisory lock is released the instant its
+	//     holder dies, so a moment of overlap is possible and has to cost nothing.
+	//
+	// The trade this direction makes is that a process killed between the claim and
+	// the actions loses that firing rather than repeating it. That is the right way
+	// round for an instruction that archives links and sends events: a missed
+	// notification is recoverable by looking, and a rule that archived the same
+	// links twice would be one nobody could trust to run unattended.
+	//
+	// `IS NOT DISTINCT FROM` rather than `=`, so a rule whose watermark is NULL —
+	// the timestamp half only reachable by a row written outside this product, the
+	// subject half on every rule that has not fired since 03600 — compares correctly
+	// instead of never matching.
+	//
+	// Both halves are set and both halves are compared. The pair is one position in
+	// the match order — the last subject a firing handled — and a claim that moved
+	// one half against a stale reading of the other would hand two racing replicas
+	// two different positions for the same firing.
+	ClaimAutomationRule(ctx context.Context, arg ClaimAutomationRuleParams) (int64, error)
+	//
+	// One batch of due mail, claimed rather than merely selected.
+	//
+	// The UPDATE is what makes the claim: it spends the attempt and leases the row
+	// forward, in one statement, before anything is sent. Two consequences, and
+	// both are the point:
+	//
+	//   * A process killed between claiming and sending leaves a row that comes
+	//     back on its own when the lease expires, instead of one stuck pending.
+	//   * A crash loop is bounded. Counting the attempt at send time would let a
+	//     process that dies mid-send retry the same message forever.
+	//
+	// FOR UPDATE SKIP LOCKED inside the subquery keeps two drainers from claiming
+	// the same row. Leadership already keeps a second replica out of this job, but
+	// leadership is an advisory lock released when its holder dies, so a moment of
+	// overlap is possible; skip-locked makes that moment cost nothing rather than
+	// send a message twice.
+	//
+	// Ordered oldest first, so a backlog drains in the order it was queued.
+	ClaimDueMail(ctx context.Context, arg ClaimDueMailParams) ([]ClaimDueMailRow, error)
+	//
+	// One batch of due deliveries, claimed rather than merely selected — the exact
+	// shape ClaimDueMail uses, and for the same two reasons:
+	//
+	//   * The UPDATE spends the attempt and leases the row forward before anything
+	//     is sent, so a process killed mid-delivery leaves a row that comes back on
+	//     its own instead of one stuck pending.
+	//   * A crash loop is bounded. Counting the attempt at send time would let a
+	//     process that dies mid-send retry the same delivery forever.
+	//
+	// FOR UPDATE SKIP LOCKED inside the subquery is the claim mechanism this
+	// milestone had to choose (see decisions.md). Leadership already keeps a second
+	// replica out of the job, but leadership is an advisory lock released when its
+	// holder dies, so a moment of overlap is possible; skip-locked makes that moment
+	// cost nothing rather than deliver the same event twice.
+	//
+	// The webhook's URL and secret are joined in here rather than fetched per row:
+	// the drainer needs both for every claimed delivery, and N+1 round trips to
+	// assemble a batch of network calls is the wrong shape.
+	ClaimDueWebhookDeliveries(ctx context.Context, arg ClaimDueWebhookDeliveriesParams) ([]ClaimDueWebhookDeliveriesRow, error)
+	// Spend one click of a one-time or max-click link's durable budget.
+	//
+	// **One statement, and that is the whole of the concurrency argument.** Two
+	// requests for the last click of a one-time link arrive at the same instant on
+	// different replicas; both reach here; Postgres serialises them on the row lock
+	// the ON CONFLICT path takes, so the second one re-evaluates its WHERE against
+	// the first one's committed value and matches nothing. A read-then-write in Go,
+	// or even a SELECT ... FOR UPDATE followed by an UPDATE, would need a
+	// transaction the caller could forget to open; there is no such transaction to
+	// forget here because the statement is the transaction.
+	//
+	// The insert races too: two requests for the *first* click of the same link both
+	// try to INSERT, one wins, the loser takes the DO UPDATE branch and is evaluated
+	// against the winner's row. That is why the limit test lives in the conflict
+	// clause rather than only in the VALUES.
+	//
+	// Returns no row when the budget is spent, which the caller reads as 410. That
+	// is deliberately the same shape as "no such link": the caller has a snapshot
+	// already and does not need this query to tell it the link exists.
+	//
+	// click_limit is 1 for a one-time link, max_clicks otherwise, the smaller of the
+	// two when both are set. A limit below one can never match, which is correct: a
+	// link nobody may follow.
+	ConsumeClickBudget(ctx context.Context, arg ConsumeClickBudgetParams) (ConsumeClickBudgetRow, error)
+	// Spends a registration. Conditional on it still being unspent, so this could
+	// not succeed twice even without the lock above; zero rows rolls the
+	// transaction back.
+	ConsumePendingRegistration(ctx context.Context, id uuid.UUID) (int64, error)
+	CountAutomationRules(ctx context.Context, workspaceID uuid.UUID) (int64, error)
+	CountCampaigns(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	CountClickEvents(ctx context.Context, workspaceID uuid.UUID) (int64, error)
+	//
+	// How many of this workspace's registrations actually receive a destination
+	// somebody typed. The `/feeds` disclosure is built on it (M45, F135).
+	//
+	// **The predicate is the fan-out's predicate, deliberately.**
+	// EnqueueWebhookDeliveries below queues a row for `w.enabled AND event =
+	// ANY(w.events)`, so asking the same two conditions with the destination-carrying
+	// events as the set is asking *would anything have been queued* rather than
+	// guessing at it. A disclosure built on a looser test would warn about a
+	// registration that receives nothing; one built on a tighter test would reassure
+	// a workspace whose URLs are being posted somewhere.
+	//
+	// The event names come from the caller (domain.WebhookDestinationEvents) rather
+	// than being written out here, because which payloads carry a destination is a
+	// fact about internal/link's payload builders and must not be restated in a
+	// second place that can drift from them.
+	//
+	// Cost: the same partial index the fan-out uses, `webhooks_workspace_idx ...
+	// WHERE enabled` (00600), over at most MaxWebhooksPerWorkspace rows. It is read
+	// on a dashboard page and on GET /api/v1/feeds, neither of which is the redirect
+	// path.
+	CountDestinationWebhooks(ctx context.Context, arg CountDestinationWebhooksParams) (int64, error)
+	CountFolders(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	// Only issued when the caller explicitly asks for a total, because counting
 	// costs a scan the common page load should not pay for.
 	CountLinks(ctx context.Context, arg CountLinksParams) (int64, error)
+	// What deletion is refused for. Zero on every registered hostname today, because
+	// nothing serves one and links are created on the default domain — the guard is
+	// here so that it is already true when M40 makes it reachable.
+	CountLinksOnDomain(ctx context.Context, domainID uuid.UUID) (int64, error)
+	// Whether the person at this address is already in this organization.
+	//
+	// Asked at creation, where the actor holds members.write on the organization
+	// and could read its member list anyway, so answering it discloses nothing they
+	// could not already see. Redemption asks the same question of a user id it has
+	// already resolved, and answers it with the same generic refusal as every other
+	// failure.
+	CountMembershipsForEmail(ctx context.Context, arg CountMembershipsForEmailParams) (int64, error)
+	CountMembershipsForUser(ctx context.Context, arg CountMembershipsForUserParams) (int64, error)
+	// What the queue's heading says there is to do. Served by the partial unique
+	// index, whose predicate this matches exactly.
+	CountOpenDestinationDisputes(ctx context.Context) (int64, error)
+	// What D37 refuses an organization deletion on, and it is deliberately the same
+	// shape as CountWorkspaceLinks one level up.
+	//
+	// Archived links count, soft-deleted ones do not — the reasoning is D32's and is
+	// written out there. What is new here is *why the org level asks the question at
+	// all*: cascading through these links would make D32 bypassable by deleting one
+	// level up, which turns a rule into a speed bump. So the organization refuses on
+	// exactly the rows its workspaces would refuse on.
+	CountOrganizationLinks(ctx context.Context, organizationID uuid.UUID) (int64, error)
+	// Whether this is the organization's last workspace.
+	//
+	// Deleting it would leave every member of the organization resolving into no
+	// workspace at all, which `ResolveWorkspaceForUser` reports as a broken instance
+	// rather than as an empty state — so the account could not authenticate. Guarded
+	// for the same reason the last owner is.
+	CountOrganizationWorkspaces(ctx context.Context, organizationID uuid.UUID) (int64, error)
+	CountPendingMail(ctx context.Context) (int64, error)
+	CountPendingWebhookDeliveries(ctx context.Context) (int64, error)
+	//
+	// The re-notify guard. A threshold that is still crossed is still crossed on
+	// the next run an hour later, and a notification per hour forever is how an
+	// inbox becomes something people stop reading — which would cost exactly the
+	// warning D5 depends on.
+	CountRecentNotificationsOfKind(ctx context.Context, arg CountRecentNotificationsOfKindParams) (int64, error)
+	// Read before an insert, to enforce the per-link ceiling. Counts every kind,
+	// not only 'match': the ceiling exists because the whole list travels inside
+	// the cached snapshot and is walked in order on the redirect path, and M36's
+	// rows will be in that list too.
+	CountRoutingRules(ctx context.Context, linkID uuid.UUID) (int64, error)
+	//
+	// Served by notifications_user_unread_idx, the partial index the table already
+	// ships with: the WHERE clause here has to match the index's predicate exactly
+	// or this becomes a sequential scan on every page render in the dashboard.
+	//
+	// **Both halves of the workspace predicate are load-bearing** (D102, F105).
+	// `workspace_id = @workspace_id` alone hides every organization-level
+	// notification, because disputes and audit-growth write NULL — the reader would
+	// lose exactly the notifications that are not about any one workspace. And the
+	// clause has to be identical here and in ListUnreadNotificationPreview below, or
+	// the badge and the list it previews disagree while one of them stops using the
+	// index.
+	CountUnreadNotifications(ctx context.Context, arg CountUnreadNotificationsParams) (int64, error)
+	// Whether an account belongs to anything at all.
+	//
+	// Read by exactly one caller: the first-organization path (D36). An account with
+	// no membership holds no role and therefore no `orgs.create`, so without this
+	// the prompt to create an organization would lead somewhere it is refused. This
+	// is a check on **present state** — how many memberships exist right now — and
+	// not on how the account was made, which is the distinction D16 was drawing when
+	// it made the permission a grant rather than a provenance test.
+	CountUserMemberships(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Users, sessions and tenancy provisioning.
 	// Drives the first-run setup flow: /setup exists only while this is zero.
 	CountUsers(ctx context.Context) (int64, error)
+	// Whether an address already has an account, for the signup form.
+	//
+	// Counted rather than selected: the caller needs the answer and nothing else,
+	// and returning the row would put somebody else's name and hash in a variable
+	// that only ever gets compared against zero.
+	CountUsersByEmail(ctx context.Context, email string) (int64, error)
+	CountWebhooks(ctx context.Context, workspaceID uuid.UUID) (int64, error)
+	// How many hostnames this workspace has registered, which is what the
+	// per-workspace cap is applied to (M40, reopened).
+	//
+	// Every undeleted row, verified or not, because what the cap bounds is the work
+	// a registration creates: one outbound DNS lookup per hostname per pass, against
+	// a nameserver the registrant chooses. An unverified hostname costs exactly the
+	// same lookup as a verified one, so counting only the verified ones would bound
+	// the wrong number.
+	CountWorkspaceDomains(ctx context.Context, workspaceID *uuid.UUID) (int64, error)
+	// What D32 refuses a workspace deletion on.
+	//
+	// Soft-deleted links are excluded on purpose. `links`, `tags` and `folders` all
+	// cascade from `workspaces`, so the guard is in front of a real cascade — but a
+	// link the owner already deleted is one they cannot delete again, and counting
+	// it would leave the workspace undeletable until the purge job ran, with nothing
+	// the person could do about it. Archived links **are** counted: an archived link
+	// keeps its alias and its click history, so cascading it away would be silent
+	// data loss dressed as tidying up.
+	CountWorkspaceLinks(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	// API keys and the permission vocabulary their scopes are drawn from.
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error)
+	// Automation rules and their evaluation (M43).
+	//
+	// Two halves that never meet in one statement, the shape webhooks.sql already
+	// has. The rule half is workspace-scoped and reached from the dashboard and the
+	// API; the evaluation half is reached only by the scheduler and deliberately
+	// carries no workspace parameter in its first query — a run that filtered by
+	// tenant would evaluate in tenant order, and the fairness this needs is
+	// least-recently-looked-at first across the instance.
+	//
+	// **`last_fired_at` is a watermark, not a diagnostic — and it is half of one.**
+	// Every match query below orders by (event time, id) and takes the window that
+	// opens strictly after the pair `(@after, @after_subject)` and closes at
+	// `@until`. The pair, not the instant alone: a capped fetch can stop part-way
+	// through subjects sharing one timestamp, and a lower bound that carries only
+	// the timestamp cannot re-enter that tie group — it either skips the tied
+	// remainder forever (strict `>`) or re-fires what was already handled (`>=`).
+	// `last_fired_subject_id` (03600) is the id half. What the watermark is *for* is
+	// unchanged: a subject is matched once, the watermark moves past it, and no
+	// later run can see it again. Removing the advance turns every rule into a
+	// runaway that fires on the same subject on every tick.
+	//
+	// **`last_checked_at` is the scheduler's cursor, and it is a different fact.**
+	// When a rule was last *looked at*, whether or not it fired. It orders the due
+	// query and bounds no window; the watermark bounds every window and orders
+	// nothing. Ordering on the watermark is what F83 was — it moves only when a rule
+	// fires, so an idle rule held the head of the queue permanently and the
+	// hundred-and-first enabled rule on an instance was never evaluated at all
+	// (03100).
+	//
+	// `last_fired_at` is set at creation rather than left NULL. A NULL watermark on
+	// a rule created today would mean "every link that ever expired", so the first
+	// run of a brand-new rule would fire for the entire history of the workspace.
+	//
+	// `last_checked_at` is left NULL and travels back with the row, as it does in
+	// every statement below. NULL sorts first in the due query, so a rule somebody
+	// just wrote is looked at on the next tick instead of waiting for its turn — and
+	// carrying the column in the projection is what keeps these four statements
+	// returning the table's own row type rather than four near-identical structs.
+	//
+	// `last_fired_subject_id` is left NULL for the same projection reason and one of
+	// its own: a rule that has never fired has no boundary subject, and NULL is read
+	// by the evaluator as "the arming instant is fully spent" — the same strict `>`
+	// a timestamp-only watermark meant.
+	CreateAutomationRule(ctx context.Context, arg CreateAutomationRuleParams) (AutomationRule, error)
+	// Campaigns and QR codes (M41).
+	//
+	// Both tables were created dormant by 00600 and woken by 02700. They share this
+	// file because they share a milestone and neither is large enough to be worth
+	// its own; nothing else connects them.
+	//
+	// **A campaign is soft-deleted and a QR style is not.** The asymmetry is
+	// deliberate. A campaign names a body of work whose links keep their history
+	// after it ends, and `links.campaign_id` is ON DELETE SET NULL, so a hard delete
+	// would unlabel every link the moment somebody tidied up a finished campaign —
+	// exactly the failure the folder migration (02400) argues against. `deleted_at`
+	// keeps the row, and every statement here filters on it. A QR style is a
+	// rendering preference with nothing to restore: deleting it returns the link's
+	// code to the default style, which is the state every link starts in.
+	CreateCampaign(ctx context.Context, arg CreateCampaignParams) (Campaign, error)
 	CreateDestination(ctx context.Context, arg CreateDestinationParams) (Destination, error)
+	// Domain ownership and registration (M39).
+	//
+	// The settings queries for the instance default live in links.sql, where they
+	// were written when there was exactly one domain. These are the ones that exist
+	// because there can now be more than one, and every statement here reads or
+	// writes the *ownership* columns rather than the serving ones — nothing on a
+	// registered hostname is served until M40 verifies it.
+	//
+	// Ownership is never decided in SQL. Every write below is by id, and
+	// link.Service reads the row first and judges the actor against it, so the
+	// refusal is a sentence naming whose domain it is rather than a statement that
+	// silently affected no rows. ListDomains is the exception, and it is a read: it
+	// is scoped by the actor's organization and workspace because a list is only
+	// ever the caller's own.
+	// Registered, and deliberately unverified: verified_at stays NULL and
+	// ssl_status stays at its 'none' default. is_default is never set here — there
+	// is one instance default and 00700 seeded it.
+	//
+	// The challenge token is minted here (M40) rather than lazily on the first
+	// verification attempt, so the page that tells somebody which DNS record to
+	// publish can do it the moment they register — the alternative is a page that
+	// asks them to come back.
+	// **The bot policy is inherited from the instance default (F89).** It is
+	// instance-wide, and a hostname registered after the operator turned blocking on
+	// would otherwise start at the column defaults and reopen the hole propagating
+	// the setting closes. Read from the default row rather than passed in, so there
+	// is no argument a caller can get wrong and no second place the two settings can
+	// disagree. Both subqueries read the same row; if the seeded default were ever
+	// missing they COALESCE to false together, which is a state the CHECK accepts.
+	CreateDomain(ctx context.Context, arg CreateDomainParams) (Domain, error)
+	// Folders (M38).
+	//
+	// **There is no recursive SQL here, and that is a decision rather than an
+	// omission.** A folder tree is naturally a WITH RECURSIVE walk, and the walk was
+	// written first; it was replaced by ListFolders, which reads the workspace's
+	// folders flat and lets internal/link assemble the tree in Go. Three reasons,
+	// in the order they matter:
+	//
+	//   - The interesting rules are not "who are my children". They are "may this
+	//     move happen" — a folder may never become its own descendant — and "how
+	//     deep would the result be". Both are walks over the same set, and running
+	//     them as three more recursive CTEs would put the milestone's two named
+	//     failure modes in three places where only integration tests can reach them.
+	//     In Go they are one function with a unit test that does not need Postgres.
+	//   - The set is small by construction. The depth cap is
+	//     domain.MaxFolderDepth, the sibling-name rule stops a tree fanning out by
+	//     accident, and this is a structure a person curates by hand.
+	//   - A recursive CTE over a table with no cycle constraint runs forever if the
+	//     data ever holds one. The Go walk carries a visited set and stops.
+	//
+	// Deleting a folder is a real DELETE (see migration 02400): `parent_id ON DELETE
+	// CASCADE` takes the subtree and `links.folder_id ON DELETE SET NULL` unfiles
+	// every link in any part of it. Every statement below still filters on
+	// `deleted_at IS NULL`, so the partial indexes serve them and a later decision
+	// to soft-delete does not silently resurrect rows.
+	CreateFolder(ctx context.Context, arg CreateFolderParams) (Folder, error)
+	// Invitations: issuing, listing, revoking and redeeming (M27).
+	CreateInvitation(ctx context.Context, arg CreateInvitationParams) (Invitation, error)
 	// Links, destinations and tags.
 	CreateLink(ctx context.Context, arg CreateLinkParams) (Link, error)
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
 	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (Organization, error)
+	// Self-serve signup: the registrations waiting on an address to be proven
+	// (M29). The mode itself is `LINKCTRL_SIGNUP_MODE` and is never read from the
+	// database (D38), so nothing here answers what the instance admits.
+	CreatePendingRegistration(ctx context.Context, arg CreatePendingRegistrationParams) (PendingRegistration, error)
+	// Routing rules (M34).
+	//
+	// Every query here filters on kind = 'match'. That is not defensive coding: the
+	// column's CHECK also permits weighted, sequential and fallback, which are
+	// M36's, and a query that read every kind would start behaving differently the
+	// day those rows first exist — silently, on the redirect path. The filter means
+	// M36 has to write its own reads, which is the correct amount of work for a
+	// milestone that adds a new evaluation model.
+	//
+	// Rule *targets* are ordinary `destinations` rows. A rule therefore costs two
+	// writes and the destination is what carries the URL, its host, and the M30
+	// tier check the service applied before either row existed.
+	CreateRoutingRule(ctx context.Context, arg CreateRoutingRuleParams) (RoutingRule, error)
+	// A rule's target. Position is above zero so it can never be mistaken for the
+	// link's own destination, which Phase 1 put at position 0 and which
+	// `links.primary_destination_id` points at.
+	CreateRuleDestination(ctx context.Context, arg CreateRuleDestinationParams) (Destination, error)
 	// ON CONFLICT DO NOTHING returns no row when another replica inserted first,
 	// which the caller detects and re-reads. Two replicas using different salts
 	// for the same day would split every visitor in two.
 	CreateSalt(ctx context.Context, arg CreateSaltParams) ([]byte, error)
+	// workspace_id is written at sign-in rather than left for the first switch, so
+	// a session says where it is from its first row. Resolution would answer the
+	// same either way — a NULL simply falls through to the user's preference — but
+	// a switcher that only takes effect after the first switch is a switcher whose
+	// state is unreadable until somebody uses it.
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	// --- tags -------------------------------------------------------------------
 	CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	// A variant's target, with its weight. The same row CreateRuleDestination
+	// writes, plus the one column that makes it an arm rather than a target: 00300
+	// has carried `weight` since Phase 1 with a comment naming this milestone.
+	CreateVariantDestination(ctx context.Context, arg CreateVariantDestinationParams) (Destination, error)
+	// --- split testing (M36) -----------------------------------------------------
+	//
+	// A variant is a rule row of kind weighted, sequential or fallback, pointing at
+	// its own `destinations` row exactly as a match rule's target does. So the
+	// writes below are the same two writes, and the M30 tier check the service
+	// applied before either row existed is the same check.
+	//
+	// Every query here excludes `match` for the reason every query above requires
+	// it: the two management surfaces address disjoint sets of rows, so a rule id
+	// handed to the wrong endpoint finds nothing rather than editing a rule of a
+	// kind the caller was not looking at.
+	// Priority is fixed at the column default and never read for a variant: arms are
+	// chosen, not matched in order, and a priority on one would be a number the
+	// dashboard shows and nothing obeys. Creation order is what orders a rotation,
+	// which is what ListVariantRules sorts by.
+	CreateVariantRule(ctx context.Context, arg CreateVariantRuleParams) (RoutingRule, error)
+	// Webhooks and their delivery queue (M42).
+	//
+	// Two halves that never meet in one statement. The registration half is
+	// workspace-scoped and reached from the dashboard and the API; the delivery half
+	// is scoped to nothing but time and is reached only by the scheduler. Every
+	// query below belongs to exactly one of them, and the delivery half deliberately
+	// carries no workspace parameter — a drainer that filtered by tenant would
+	// deliver in tenant order, and the queue is fair or it is a queue somebody's
+	// backlog can starve.
+	CreateWebhook(ctx context.Context, arg CreateWebhookParams) (CreateWebhookRow, error)
 	CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error)
+	// Records a decision, and only on a dispute nobody has decided yet.
+	//
+	// The `status = 'open'` predicate is the concurrency control: two owners
+	// clicking allow and uphold on the same row produce one decision and one
+	// no-rows, rather than a last-writer-wins that leaves the audit record and the
+	// blocklist disagreeing about what happened.
+	DecideDestinationDispute(ctx context.Context, arg DecideDestinationDisputeParams) (DestinationDispute, error)
+	DeleteAutomationRule(ctx context.Context, arg DeleteAutomationRuleParams) (int64, error)
+	// Removes one host from the low-confidence runtime list.
+	//
+	// The only deletion in this program that is not a reconciliation, and the only
+	// one an `allow` decision performs. Scoped to an exact host — the row the
+	// dispute recorded when it was filed and the queue displayed on the button — so
+	// a decision about 'login.evil.example' cannot take 'evil.example' off the list
+	// by accident. It can take it off deliberately, and routinely does: 'evil.example'
+	// is what refused 'login.evil.example', and lifting anything else would leave the
+	// destination refused. What 03300 changed is that the owner is now told which of
+	// the two they are deciding about, and that the answer cannot move between the
+	// filing and the click.
+	//
+	// It cannot reach the other two tiers, and there is nothing to scope against
+	// them: the embedded list is a compiled file and the unappealable tier has no
+	// row anywhere. That is the structural half of "decisions act only on the
+	// runtime low-confidence list".
+	DeleteBlockedDestination(ctx context.Context, host string) (int64, error)
+	// Soft. The links keep their history; `links.campaign_id` is cleared by the
+	// statement below rather than by a cascade, because a cascade would fire on a
+	// hard delete this statement never performs.
+	DeleteCampaign(ctx context.Context, arg DeleteCampaignParams) (int64, error)
 	// Reaper. Revoked rows are kept briefly so "sign out everywhere" is visible in
 	// the session list before it disappears.
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
+	// A real DELETE. The two foreign keys 00300 wrote are what make it safe:
+	// descendants cascade, and every link in the subtree has its folder_id set to
+	// NULL. Nothing here touches `links`, and nothing here may: the moment this
+	// statement grows a link delete, deleting a container starts deleting content.
+	DeleteFolder(ctx context.Context, arg DeleteFolderParams) (int64, error)
+	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (int64, error)
+	// A real delete, not a soft one, and everything in 00200/00300/00500/01200 that
+	// references it cascades: workspaces and everything under them, memberships,
+	// invitations, API keys, and any custom domain.
+	//
+	// Two things deliberately do not. `audit_logs.organization_id` carries no
+	// foreign key, so the trail this organization wrote survives the row it
+	// describes — a tenancy teardown that erased its own record is the one shape an
+	// audit log must not have. And the instance default domain has
+	// `organization_id IS NULL`, so it and the `reserved_aliases` rows keyed to it
+	// are untouched.
+	DeleteOrganization(ctx context.Context, id uuid.UUID) (int64, error)
+	//
+	// The three analytics rollups belonging to an organization's workspaces.
+	//
+	// They carry `workspace_id` with no foreign key — a deliberate choice recorded
+	// at 00400, so a rollup job never blocks on a tenancy write and a partition drop
+	// never has to consider them — and the cost of that choice is that nothing
+	// cascades them. `link_click_daily`, `link_dimension_daily` and
+	// `workspace_click_daily` therefore outlived the tenancy they describe, while
+	// DeleteOrganization's own doc said the audit trail was all that survived (F106).
+	//
+	// Run *before* the organization is deleted, and that ordering is required rather
+	// than tidy: the workspaces are what name these rows, and the cascade takes the
+	// workspaces. After the delete there is nothing left to select them by.
+	//
+	// Not a security fix. Every reader scopes to a live workspace_id, so these rows
+	// are unreachable rather than exposed; what they are is stale aggregate data
+	// with no owner, and a sentence that was not true.
+	DeleteOrganizationRollups(ctx context.Context, organizationID uuid.UUID) (int64, error)
+	// Clears whatever is outstanding for an address so a fresh attempt can take the
+	// slot.
+	//
+	// Superseding rather than refusing, because the ordinary reason somebody
+	// registers twice is that the first mail never arrived. The old token stops
+	// working at the same moment, which is what makes this safe: there is never
+	// more than one live link per address.
+	DeleteOutstandingRegistration(ctx context.Context, email string) (int64, error)
+	// Returns the link's code to the default style. A hard delete, because a style
+	// row holds nothing but the preference being withdrawn.
+	DeleteQRCode(ctx context.Context, arg DeleteQRCodeParams) (int64, error)
 	// Reaper. Kept long enough to be visible in the key list after revocation, and
 	// long enough for the audit question above to be answerable.
 	DeleteRevokedAPIKeys(ctx context.Context) (int64, error)
+	// Returns the destination so the caller can remove it in the same transaction.
+	// A rule target left behind would be an orphan row nothing reads and nothing
+	// can reach, accumulating one per deleted rule for the life of the link.
+	DeleteRoutingRule(ctx context.Context, arg DeleteRoutingRuleParams) (*uuid.UUID, error)
+	// A hard delete, not the soft delete `deleted_at` exists for. Nothing reports
+	// on a rule target and nothing can restore a deleted rule, so a tombstone here
+	// would be a row that only ever grows the table.
+	// The NOT EXISTS is a guard rather than a branch anything takes: only rule
+	// targets reach this query. It is here because the one row this must never
+	// delete is the link's own destination, and the cost of being wrong about that
+	// is a link that redirects nowhere.
+	DeleteRuleDestination(ctx context.Context, arg DeleteRuleDestinationParams) error
+	// Retires environment entries the operator has since removed.
+	//
+	// Scoped to source = 'env' and nothing else. A restart must never delete what an
+	// owner decided in the review queue, nor the shortener hosts seeded by
+	// migration, which is the one way a boot-time reconciliation could quietly undo
+	// a decision somebody made.
+	DeleteStaleEnvBlockedDestinations(ctx context.Context, keep []string) (int64, error)
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
+	DeleteVariantRule(ctx context.Context, arg DeleteVariantRuleParams) (*uuid.UUID, error)
+	//
+	// The deliveries go with it, by the ON DELETE CASCADE 00600 declared. A webhook
+	// that has been removed and a delivery log that still names it would be a record
+	// of where events *used to* go, which is a different and less useful thing than
+	// the record of where they go.
+	DeleteWebhook(ctx context.Context, arg DeleteWebhookParams) (int64, error)
+	// A real delete, not a soft one, and that is the decision D32 guards.
+	//
+	// `links`, `tags` and `folders` cascade from here (00300_links.sql). Soft
+	// deleting instead would leave those rows behind and their aliases still
+	// serving redirects out of a workspace the dashboard says is gone, which is a
+	// worse outcome than the cascade — so the guard goes in front of the delete and
+	// the delete is honest about what it does.
+	DeleteWorkspace(ctx context.Context, arg DeleteWorkspaceParams) (int64, error)
 	DetachAllTags(ctx context.Context, linkID uuid.UUID) error
+	// The mail outbox. Queued on the request path, drained by the scheduler.
+	//
+	// The message is stored rendered. Nothing here re-renders from a template, so a
+	// later template change cannot rewrite a mail somebody is already waiting for.
+	EnqueueMail(ctx context.Context, arg EnqueueMailParams) error
+	// --- the queue ---------------------------------------------------------------
+	//
+	// One statement fans one event out to every webhook that asked for it.
+	//
+	// This runs inside a link write, so its cost on a workspace with no webhooks has
+	// to be one indexed lookup that returns nothing — which is what the partial index
+	// `webhooks_workspace_idx ... WHERE enabled` (00600) makes it.
+	//
+	// The payload is rendered by the caller and stored rendered, for the reason the
+	// mail outbox stores its body rendered (D23): a change to what an event looks
+	// like must not rewrite an event that was already queued, and a row has to stay
+	// readable after the code that produced it is gone.
+	//
+	// gen_random_uuid() rather than a v7 generated in Go, because the number of rows
+	// is not known until the SELECT runs. Nothing orders deliveries by id — the queue
+	// orders by next_attempt_at — so the time-sortability v7 buys is not spent here.
+	EnqueueWebhookDeliveries(ctx context.Context, arg EnqueueWebhookDeliveriesParams) (int64, error)
+	// Mint the secret if it is not there, and return whichever one is authoritative.
+	//
+	// COALESCE rather than a read-then-write, so two people asking for a signed URL
+	// at the same moment cannot end up with signatures made under different keys:
+	// the second UPDATE sees the first one's committed value and keeps it. The
+	// caller generates the candidate bytes, because a random source belongs in the
+	// application rather than in an extension this schema does not require.
+	EnsureWorkspaceSigningSecret(ctx context.Context, arg EnsureWorkspaceSigningSecretParams) ([]byte, error)
 	// The verification lookup, on the unique prefix index, joined with the user so
 	// authentication is one round trip. Revoked and expired keys are returned
 	// rather than filtered out: the caller distinguishes them so the response can
 	// say which it was, and a deleted user's key resolves to no row at all.
+	//
+	// grace_expires_at comes back for the same reason revoked_at does: a rotated
+	// predecessor stops verifying when its window closes, and that refusal is
+	// decided here rather than by the housekeeping job that later writes revoked_at.
+	//
+	// owner_is_member is the membership the key leans on, asked here so that
+	// authentication stays one round trip. A key acts *as its owner*, and an owner
+	// with no membership covering the key's scope has no authority for it to act
+	// with — so the credential is invalid rather than merely powerless. The
+	// predicate matches GetUserPermissions exactly: an organization-wide membership
+	// covers every workspace, a workspace-scoped one covers its own, and an
+	// organization-wide key is covered only by an organization-wide membership,
+	// because NULL = NULL is not true.
+	//
+	// Returned as a column rather than joined into the WHERE clause for the reason
+	// revoked and expired keys are returned rather than filtered: the caller decides
+	// what each state means, and a refusal a reader can see beside the others is
+	// worth more than a row that silently fails to exist.
 	GetAPIKeyByPrefix(ctx context.Context, prefix string) (GetAPIKeyByPrefixRow, error)
-	// The instance's link domain and where its root points. Phase 1 has exactly one
-	// default domain; Phase 2 gives a workspace its own and this gains a filter.
-	GetDefaultDomainSettings(ctx context.Context) (GetDefaultDomainSettingsRow, error)
-	// The workspace a user lands in with no explicit selection. Ordered so the
-	// result is deterministic rather than whatever the planner returns first.
-	GetDefaultWorkspaceForUser(ctx context.Context, userID uuid.UUID) (Workspace, error)
+	// The predecessor, locked, so two rotations of one key serialize instead of
+	// racing.
+	//
+	// FOR UPDATE rather than an optimistic conditional write: the loser of a race
+	// should be told "this key has already been rotated" by the check that follows,
+	// which is a sentence somebody can act on, not have its transaction rolled back
+	// by a unique-index violation on a column it never named.
+	//
+	// owner_is_member and owner_status come back for the reason revoked_at does:
+	// they are re-read here, under the lock, so a membership removed or an account
+	// deactivated between authentication and this statement wins. Without them a
+	// removal racing a rotation leaves behind a successor the removal was meant to
+	// kill, on a chain that can rotate again. A soft-deleted account reads
+	// 'deleted' rather than NULL, so the one comparison at the call site covers it
+	// and no branch depends on a scan of an absent row.
+	GetAPIKeyForRotation(ctx context.Context, id uuid.UUID) (GetAPIKeyForRotationRow, error)
+	GetAutomationRule(ctx context.Context, arg GetAutomationRuleParams) (AutomationRule, error)
+	// Reads one entry by its exact host.
+	//
+	// The decision path's read, and deliberately not MatchBlockedDestination: that
+	// one walks a host and every parent of it and answers with the longest match,
+	// which is the right question when *judging* a destination and the wrong one
+	// when acting on a dispute. The dispute already names the row it is about —
+	// destination_disputes.blocked_host, written when it was filed — so the only
+	// thing left to ask is whether that row is still there and who owns it (03300).
+	//
+	// No rows means the entry has gone since the dispute was filed, which the caller
+	// reports rather than papering over: an allow that deleted nothing must not be
+	// recorded as one that did.
+	GetBlockedDestination(ctx context.Context, host string) (GetBlockedDestinationRow, error)
+	GetBuiltinRoleBySlug(ctx context.Context, slug string) (GetBuiltinRoleBySlugRow, error)
+	// Workspace-scoped like GetLink and GetFolder, and for the same reason: the
+	// wrong workspace returns no rows rather than a row the caller must remember to
+	// reject.
+	GetCampaign(ctx context.Context, arg GetCampaignParams) (Campaign, error)
+	// What the dashboard shows beside a gated link. Never on the redirect path.
+	GetClickBudget(ctx context.Context, linkID uuid.UUID) (GetClickBudgetRow, error)
+	// One domain's settings and where its root points.
+	//
+	// **The filter its own comment promised** (M40). It read `WHERE is_default`,
+	// which was the whole truth while an instance had exactly one domain and became
+	// a way of asking the wrong row the moment it had several: a verified custom
+	// hostname has a root of its own, and reading its settings through a predicate
+	// that can only ever return the default would answer about somebody else's
+	// hostname.
+	//
+	// Not scoped by owner, like every other statement addressed by id in this
+	// schema. link.Service has already judged the actor against the row.
+	GetDefaultDomainSettings(ctx context.Context, domainID uuid.UUID) (GetDefaultDomainSettingsRow, error)
+	GetDestinationDispute(ctx context.Context, id uuid.UUID) (GetDestinationDisputeRow, error)
+	// One domain's bot policy, by id.
+	//
+	// Read on the management path only, and only when a link's own setting is being
+	// changed: the service has to know whether the domain enforces before it can
+	// tell the caller their `off` will not be honoured. The redirect path never
+	// runs this — it gets the same two columns from ResolveAliasForRedirect's join,
+	// which is the whole reason that join exists.
+	GetDomainBotSettings(ctx context.Context, id uuid.UUID) (GetDomainBotSettingsRow, error)
+	// Matches domains_hostname_key exactly — lower(hostname) among the undeleted —
+	// so the availability check and the unique index cannot disagree about which
+	// names collide.
+	GetDomainByHostname(ctx context.Context, lower string) (Domain, error)
+	// The row the ownership check is made against, so it carries both owner columns.
+	GetDomainByID(ctx context.Context, id uuid.UUID) (Domain, error)
+	// Workspace-scoped like GetLink, and for the same reason: the wrong workspace
+	// returns no rows rather than a row the caller must remember to reject. This is
+	// also the only check that a link is being filed into a folder of its own
+	// workspace — `links.folder_id` has a foreign key to `folders(id)` and nothing
+	// in it mentions tenancy.
+	GetFolder(ctx context.Context, arg GetFolderParams) (Folder, error)
+	// Redemption's only lookup, and the row it locks.
+	//
+	// FOR UPDATE OF i serializes two redemptions of the same token: the second
+	// blocks until the first commits and then reads redeemed_at set, so single-use
+	// is enforced by the database rather than by a check-then-act in Go. The joined
+	// tables are not locked — they are read for their labels, and locking a role
+	// row would block every other invite that names it.
+	//
+	// Expiry and revocation are deliberately NOT in the WHERE clause. The caller
+	// has to tell "no such token" from "expired" apart to decide what to log, and
+	// it answers all of them identically to the person redeeming (decision D27).
+	GetInvitationByTokenHash(ctx context.Context, tokenHash []byte) (GetInvitationByTokenHashRow, error)
+	// How long ago each job last succeeded, in seconds.
+	//
+	// Read from the database rather than kept in the process, and that is the whole
+	// point of it. `linkctrl_job_last_success_timestamp_seconds` is set by whichever
+	// replica ran the job and resets to absent on restart, so on a multi-replica
+	// deployment it answers differently depending on which one Prometheus scraped
+	// and it forgets everything a rolling deploy touched. job_state is shared, so
+	// every replica reports the same number and a restart does not make a stalled
+	// job look healthy.
+	//
+	// A job that has never succeeded is excluded rather than reported as infinitely
+	// stale. Inventing a series for it would make every fresh instance look broken
+	// for its first few seconds, and an absent series is what the alert recipe in
+	// docs/operations.md is written against.
+	GetJobStaleness(ctx context.Context) ([]GetJobStalenessRow, error)
 	// --- job bookkeeping ---------------------------------------------------------
 	// The point a job is known to have completed through. Rollups recompute rather
 	// than accumulate, so this is not a correctness dependency for a run that
@@ -71,13 +751,76 @@ type Querier interface {
 	GetLink(ctx context.Context, arg GetLinkParams) (Link, error)
 	GetLinkByAlias(ctx context.Context, arg GetLinkByAliasParams) (Link, error)
 	GetLinkDimensions(ctx context.Context, arg GetLinkDimensionsParams) ([]GetLinkDimensionsRow, error)
+	// The gates a link can put in front of its destination (M35).
+	//
+	// Three of these run on the redirect path and one does not, and the split is
+	// what keeps the gates off the budget of every link that does not use them.
+	// Nothing here is consulted for a link whose snapshot says it is ungated; the
+	// snapshot carries the flags, the flags decide, and only then does anything
+	// below execute.
+	// The argon2id hash, read only on the password-submit path.
+	//
+	// **The cached snapshot never carries this.** It carries a bare boolean, so a
+	// Redis dump — or a snapshot payload logged by accident — cannot yield an
+	// offline cracking target for every password link on the instance. The price is
+	// this query, and it is paid once per submitted password rather than once per
+	// visit: a GET that renders the challenge never runs it, and a link with no
+	// password never reaches it.
+	//
+	// Addressed by link id rather than by alias, because the id came out of the
+	// snapshot the resolver already produced and re-deriving it from the alias would
+	// be a second lookup of a row we have already identified.
+	GetLinkPasswordHash(ctx context.Context, id uuid.UUID) (*string, error)
 	// Reads the rollup, never the raw events. This is what keeps analytics under
 	// the 2s target as click_events grows into the tens of millions.
 	GetLinkStats(ctx context.Context, arg GetLinkStatsParams) ([]GetLinkStatsRow, error)
 	GetLinkTags(ctx context.Context, linkID uuid.UUID) ([]GetLinkTagsRow, error)
+	// One membership, scoped by organization so an id from elsewhere is
+	// indistinguishable from one that never existed.
+	//
+	// FOR UPDATE OF m: every caller is about to re-role or delete this row, and the
+	// rank check that decides whether they may is read from it. Without the lock,
+	// two administrators acting at once could each read a state the other is
+	// changing — the check-then-act that the last-owner refusal exists to prevent.
+	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
+	// The organization being deleted, read after LockOrganizations has locked it.
+	//
+	// Its name and slug are read here because the audit record has to carry them:
+	// once the row is gone that record is the only remaining trace of what was
+	// deleted, exactly as it is for a workspace.
+	GetOrganization(ctx context.Context, id uuid.UUID) (Organization, error)
+	// Whether a user is in an organization at all, for the grant path:
+	// workspace-scoped access is given to somebody who is already a member, and
+	// this is what establishes that.
+	//
+	// **Any** membership counts, organization-wide or workspace-scoped. Requiring
+	// an organization-wide one would be a dead end: somebody left holding only a
+	// workspace-scoped membership could never be given a second workspace, because
+	// re-inviting them is refused as already-a-member. Under D31 every grant adds,
+	// so widening a scoped member to a second workspace is the same kind of act as
+	// the first grant was.
+	//
+	// The organization-wide row wins the tiebreak so the label and role this
+	// returns are the person's broadest, which is what a control naming them should
+	// show.
+	GetOrganizationMember(ctx context.Context, arg GetOrganizationMemberParams) (GetOrganizationMemberRow, error)
+	// What to call the organization in an invitation. A primary-key lookup on a
+	// path that is already writing a row, rather than carrying a name on every
+	// identity for the one surface that needs it.
+	GetOrganizationName(ctx context.Context, id uuid.UUID) (string, error)
+	// Verification's lookup, inside the transaction that spends the row.
+	//
+	// FOR UPDATE, so two clicks on the same link serialize and the second sees the
+	// row the first consumed.
+	GetPendingRegistrationByTokenHash(ctx context.Context, tokenHash []byte) (PendingRegistration, error)
+	// The stored style for a link's code, or no rows for a link that has never been
+	// styled. No rows is not an error: it means the default style, which is what
+	// every link's code is drawn with until somebody changes it.
+	GetQRCode(ctx context.Context, arg GetQRCodeParams) (QrCode, error)
 	// The live-activity feed. Bounded and index-backed on (link_id, occurred_at).
 	GetRecentClicks(ctx context.Context, arg GetRecentClicksParams) ([]GetRecentClicksRow, error)
 	GetRoleBySlug(ctx context.Context, slug string) (Role, error)
+	GetRoutingRule(ctx context.Context, arg GetRoutingRuleParams) (GetRoutingRuleRow, error)
 	// Analytics: salts, rollups and reads.
 	GetSalt(ctx context.Context, validOn time.Time) ([]byte, error)
 	// Joined with the user so validating a session is one round trip on a path
@@ -97,13 +840,111 @@ type Querier interface {
 	// in the organization, which is what Phase 1 always creates.
 	GetUserPermissions(ctx context.Context, arg GetUserPermissionsParams) ([]string, error)
 	GetUserRoleInWorkspace(ctx context.Context, arg GetUserRoleInWorkspaceParams) (GetUserRoleInWorkspaceRow, error)
-	GetWorkspaceDefaultDomain(ctx context.Context) (GetWorkspaceDefaultDomainRow, error)
+	GetVariantRule(ctx context.Context, arg GetVariantRuleParams) (GetVariantRuleRow, error)
+	GetWebhook(ctx context.Context, arg GetWebhookParams) (GetWebhookRow, error)
+	// The hostname a new link goes on when the caller names none.
+	//
+	// **This is the filter the name promised and the query never had** (M40). It
+	// read `WHERE is_default` with no workspace argument at all, so every workspace
+	// on the instance got the same answer and the word "workspace" in the name was
+	// describing an intention rather than a predicate.
+	//
+	// A workspace's own *verified* hostname wins over the instance default, which is
+	// what registering one is for; the instance default is the fallback and is what
+	// every workspace without one still gets, unchanged. Organization-owned
+	// hostnames sit between the two — every workspace in the organization may use
+	// one, so it is more specific than the instance and less than a workspace's own.
+	//
+	// **Verified only.** An unverified hostname is not a routing target, so putting
+	// a link on it would mint a short URL that resolves nowhere; the ordering below
+	// cannot reach one because the WHERE clause has already excluded it.
+	//
+	// Ties are broken by verified_at then id, so the answer is stable: a workspace
+	// that verifies a second hostname does not silently move its new links onto it.
+	// organization_id and workspace_id are selected because they are the domain's
+	// *scope*, and the scope is what decides whether an alias collision on it could
+	// involve a workspace the caller cannot see. A refusal that cannot tell a shared
+	// namespace from a private one has to be worded for the worst case or say
+	// nothing useful at all (F23).
+	GetWorkspaceDefaultDomain(ctx context.Context, arg GetWorkspaceDefaultDomainParams) (GetWorkspaceDefaultDomainRow, error)
+	// One workspace, scoped by organization so an id belonging to another tenant is
+	// indistinguishable from one that does not exist.
+	//
+	// FOR UPDATE: both callers — rename and delete — are about to write this row or
+	// the rows that cascade from it, and delete reads a link count that must not
+	// change underneath the decision.
+	GetWorkspaceInOrganization(ctx context.Context, arg GetWorkspaceInOrganizationParams) (Workspace, error)
+	// The HMAC key for one workspace, read on the redirect path only for links whose
+	// snapshot says they require a signature — and cached in process by the caller,
+	// so a signed link costs one query per workspace per process rather than one per
+	// request. NULL means the workspace has never minted one, which means nothing
+	// in it can carry a valid signature.
+	GetWorkspaceSigningSecret(ctx context.Context, id uuid.UUID) ([]byte, error)
 	GetWorkspaceStats(ctx context.Context, arg GetWorkspaceStatsParams) ([]GetWorkspaceStatsRow, error)
 	// Summing daily uniques over-counts anyone visiting on more than one day.
 	// Reported as "unique visitors per day, summed" in the UI rather than
 	// presented as a distinct-person count, because the exact figure cannot be
 	// recovered once the salts are purged. That is the intended trade.
 	GetWorkspaceTotals(ctx context.Context, arg GetWorkspaceTotalsParams) (GetWorkspaceTotalsRow, error)
+	// Confer one instance-level permission on one account.
+	//
+	// Idempotent. Re-conferring what somebody already holds is the ordinary result
+	// of two administrators doing the same obvious thing, and it must not turn into
+	// an error that reads like a refusal; the original granted_by and granted_at
+	// stand, because the first grant is the one that happened.
+	//
+	// It returns the row count for a reason that has nothing to do with idempotence:
+	// the SELECT finds no row for a slug that does not exist, so a typo would confer
+	// nothing and report success. On the setup path that means an instance that has
+	// been claimed and has nobody who can administer it, which is the one outcome
+	// this whole table exists to prevent. The caller distinguishes 0 from 1 by
+	// reading the count against a permission it already knows the account did not
+	// hold; see internal/auth's grantInstancePrincipal.
+	GrantInstancePermission(ctx context.Context, arg GrantInstancePermissionParams) (int64, error)
+	// Whether the instance owner has allowed this host (M32).
+	//
+	// Read at exactly one call site — internal/link's feed step — and that
+	// confinement is the whole safety argument. It suppresses the third-party
+	// reputation feed for a host the owner already decided about, which is what
+	// makes a feed verdict owner-overridable without 01500 growing the allow column
+	// it deliberately does not have.
+	//
+	// It cannot widen anything else. The three tiers above the feed have all
+	// returned by the time this runs, and M31 refuses to file a dispute about any
+	// refusal but a low-confidence one, so no row here can carry an unappealable or
+	// embedded-tier reason code to be read as permission.
+	//
+	// Equality rather than the blocklist's candidate walk: allowing 'evil.example'
+	// says nothing about 'login.evil.example', and 01700's partial index matches
+	// this predicate exactly.
+	HostHasAllowedDispute(ctx context.Context, host string) (bool, error)
+	// Audit log. Append-only: there is no update and no delete here, and that is the
+	// point of the table. Rows leave only when retention drops a whole partition.
+	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) error
+	// Blocked-attempt disputes (M31).
+	//
+	// Read and written on the management path only. Like the blocklist it argues
+	// with, nothing here is reachable from the redirect tree: a dispute is about
+	// what may be *stored*, and a link that was refused at creation never became a
+	// row for a visitor to resolve.
+	// Files one dispute.
+	//
+	// Two unique partial indexes decide whether this is a duplicate, and both do it
+	// in the database rather than in a check-then-insert two requests can both pass.
+	// 01600's is on (host) WHERE status = 'open' — one open dispute per host as
+	// typed. 03300's is on (blocked_host) WHERE status = 'open' AND blocked_host
+	// <> '' — one open dispute per *blocklist row*, so a caller cannot put the same
+	// decision in front of the owner once per subdomain of it.
+	//
+	// @blocked_host is the row the refusal matched, which is routinely a parent of
+	// @host. Empty when the rule is computed from the URL rather than held on the
+	// list, and the second index skips those: every one of them would carry the same
+	// key, and one open homograph dispute must not lock out every other.
+	InsertDestinationDispute(ctx context.Context, arg InsertDestinationDisputeParams) (DestinationDispute, error)
+	// Notifications. The table shipped dormant in 00600; nothing here adds a
+	// column, per the rule that a dormant table's structure goes in its jsonb until
+	// the feature that needs a column arrives. `data` carries whatever a kind needs.
+	InsertNotification(ctx context.Context, arg InsertNotificationParams) error
 	// Consulted by BOTH create paths — generated aliases before insert, and
 	// user-supplied aliases as validation — and by alias changes.
 	//
@@ -116,7 +957,175 @@ type Querier interface {
 	// Revoked keys are included. "Which keys existed and when were they revoked"
 	// is the question asked after an incident, so they are listed until the reaper
 	// removes them.
+	//
+	// workspace_id is selected because NULL is a state the owner chose (M44): a key
+	// bound to one workspace and a key valid across the organization look identical
+	// without it.
 	ListAPIKeysForUser(ctx context.Context, arg ListAPIKeysForUserParams) ([]ListAPIKeysForUserRow, error)
+	//
+	// Newest first, keyed on (occurred_at, id) so the cursor is a position rather
+	// than an offset: an event written while a reader is paginating shifts every
+	// offset by one, and a keyset cursor is unaffected by it.
+	//
+	// The row-comparison predicate is what makes that hold. Comparing the columns
+	// separately -- occurred_at < c OR (occurred_at = c AND id < i) -- is the same
+	// logic, and the planner does not always recognise it as a range scan on the
+	// (organization_id, occurred_at DESC) index.
+	//
+	// Scoped by organization, never by the workspace the reader happens to be
+	// *acting in*: an audit log that narrowed itself to the current workspace would
+	// hide exactly the actions worth reviewing. That is M21's argument and it still
+	// holds; what it never said is that the reader's own authority does not bound
+	// the rows either.
+	//
+	// It does now (F31). `org_wide` is true when the reader holds audit.read from an
+	// organization-wide membership, which is the only membership that reaches the
+	// organization-wide scope (auth.MembershipAuthority, D44) — such a reader sees
+	// every row, exactly as before. A reader whose audit.read comes only from
+	// workspace-scoped memberships sees the rows of those workspaces and nothing
+	// else, because a workspace-scoped membership grants authority over its own
+	// workspace and not over the organization.
+	//
+	// Rows with a NULL workspace_id are organization-level acts, and `= ANY` is
+	// false against NULL, so a workspace-scoped reader does not see them. That is
+	// the same asymmetry MembershipAuthority.In(nil) enforces for writes, arriving
+	// here for reads.
+	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error)
+	ListAutomationRules(ctx context.Context, workspaceID uuid.UUID) ([]AutomationRule, error)
+	// The four seeded roles, most powerful first. Feeds the invite form's role
+	// choices, filtered by the inviter's own rank in the service (decision D28).
+	ListBuiltinRoles(ctx context.Context) ([]ListBuiltinRolesRow, error)
+	// Every campaign in the workspace, with how many live links carry it.
+	//
+	// The count is a grouped scan of links_campaign_idx rather than a correlated
+	// subquery per campaign, exactly as ListFolders counts filed links: a workspace
+	// with many campaigns costs one pass instead of one index probe each.
+	//
+	// Unpaginated, and bounded instead by domain.MaxCampaignsPerWorkspace. A
+	// campaign list is a picker as much as it is a page — the link form offers it —
+	// and a picker that paginates is a picker nobody can choose from.
+	ListCampaigns(ctx context.Context, workspaceID uuid.UUID) ([]ListCampaignsRow, error)
+	// The queue, newest first, keyset on (created_at, id).
+	//
+	// Instance-wide rather than scoped to the reader's organization, because the
+	// list a decision acts on is instance-wide (01500) and a queue narrower than the
+	// authority it exercises would hide rows the reader is nonetheless deciding for.
+	// The permission is what bounds who sees it.
+	//
+	// @open_only lets the page show the work and the archive from one query, which
+	// is the same shape ListNotifications' unread filter has.
+	//
+	// The LEFT JOIN carries the blocklist entry's **source**, which is what decides
+	// whether an allow can do anything (F42). `liftableRules` says the *rule* is
+	// list-backed; it does not say the entry behind this particular refusal is one
+	// a decision may delete. An `env`-sourced entry comes from
+	// LINKCTRL_DESTINATION_BLOCKLIST and is rewritten at every boot, so removing it
+	// would be undone by the next restart and `entryToLift` refuses — while the page
+	// drew the Allow button from the rule alone and the operator found out by
+	// clicking. LEFT, because a refusal computed from the URL has no entry at all
+	// and must stay in the queue.
+	ListDestinationDisputes(ctx context.Context, arg ListDestinationDisputesParams) ([]ListDestinationDisputesRow, error)
+	// Every domain the caller may use: the instance default, whatever their
+	// organization owns, and whatever their own workspace owns.
+	//
+	// Another workspace's hostname is absent rather than present and unmanageable.
+	// A list that showed it would disclose which hostnames a neighbouring workspace
+	// has registered, and the registration is the only thing there is to disclose at
+	// this milestone.
+	//
+	// Ordered default-first, then by hostname: the default is the one every link is
+	// on today, so it belongs at the top rather than wherever its placeholder name
+	// happens to sort.
+	ListDomains(ctx context.Context, arg ListDomainsParams) ([]ListDomainsRow, error)
+	// --- evaluation --------------------------------------------------------------
+	//
+	// The rules one run considers, least recently looked at first.
+	//
+	// Bounded by the caller at domain.AutomationRulesPerRun, and ordered so the cap
+	// starves nobody — which is a claim this statement can now make, because
+	// `last_checked_at` moves for **every** rule a run reached and not only for the
+	// ones that fired. The rules a capped run skipped keep the older cursor and go
+	// first next time. A cap without this order would evaluate whichever workspace
+	// happened to sort first, forever.
+	//
+	// **Ordering on `last_fired_at` is what F83 was**, and the difference is not
+	// cosmetic: that column moves only on a firing, idle is exactly what keeps it
+	// old, and so the hundred oldest were a fixed set and rule 101 was never
+	// evaluated on any run. The two columns are separate facts and 03100 separates
+	// them.
+	//
+	// The organization is joined in here rather than fetched per rule, because every
+	// rule that fires with a `notify` action needs it and N+1 lookups to assemble a
+	// batch is the wrong shape. Walks automation_rules_due_idx, as rebuilt by 03100.
+	ListDueAutomationRules(ctx context.Context, rowLimit int32) ([]ListDueAutomationRulesRow, error)
+	// Every folder in the workspace, with how many links are filed directly in it.
+	//
+	// Flat and unordered by structure: the caller builds the tree. Sorted by name so
+	// that the assembled tree's sibling order is stable, and by id after it so two
+	// names that fold to the same string under a collation cannot swap between page
+	// loads.
+	//
+	// The count is a grouped scan of links_folder_idx rather than a correlated
+	// subquery per folder, so a workspace with many folders costs one pass instead
+	// of one index probe each. It counts links filed *directly* here — a parent does
+	// not report its children's links, because the number beside a folder has to
+	// mean the same thing as the number of rows the list shows when you click it.
+	ListFolders(ctx context.Context, workspaceID uuid.UUID) ([]ListFoldersRow, error)
+	//
+	// The instance-wide audit surface (F36, D98). Rows with no organization at all:
+	// an act that changed every tenant and belongs to none of them.
+	//
+	// A separate statement rather than a predicate bolted onto the one above, for
+	// two reasons that point the same way. The query above rides
+	// audit_logs_org_time_idx as a range scan; an OR reaching NULL organizations
+	// would turn it into a bitmap scan and a sort on a table designed to grow
+	// forever. And the surface is genuinely separate: it is read by the instance
+	// principal under audit.read.instance, not by whoever happens to hold audit.read
+	// in some organization, so merging the two would mean deciding per row which
+	// permission had authorized it.
+	//
+	// Same keyset shape, so a client that paginates the organization log paginates
+	// this one.
+	ListInstanceAuditLogs(ctx context.Context, arg ListInstanceAuditLogsParams) ([]AuditLog, error)
+	// Who holds one instance-level permission, with enough of the account to name
+	// them on the page that confers it.
+	//
+	// Soft-deleted accounts are filtered rather than shown as inert: a grant to an
+	// account that cannot authenticate is not reach, and listing it invites somebody
+	// to revoke a row that was already doing nothing.
+	ListInstanceGrantHolders(ctx context.Context, permission string) ([]ListInstanceGrantHoldersRow, error)
+	// Instance-level grants: what a person may do to the instance rather than to a
+	// tenant (D98). Every statement here joins `permissions` on the slug instead of
+	// taking a permission id, so the slugs stay the vocabulary the Go code speaks
+	// and no caller has to carry a uuid literal around.
+	// Every instance-level permission one person holds.
+	//
+	// Read on every identity resolution, beside GetUserPermissions, which is why it
+	// is keyed on the user alone and returns slugs: the caller folds it into the
+	// same set and Identity.Can cannot tell the two sources apart. It deliberately
+	// does not join workspaces or memberships — an instance grant is not reached
+	// through a tenancy, and an account that belongs to no organization at all (D36)
+	// keeps whatever it holds here.
+	ListInstanceGrants(ctx context.Context, userID uuid.UUID) ([]string, error)
+	// The administrator's list, newest first.
+	//
+	// No pagination and no cursor. An organization's outstanding invitations are a
+	// handful of rows by construction, and redeemed ones stop accumulating the
+	// moment people join; the link list's machinery here would be a page that
+	// cannot fill.
+	//
+	// The inviter is joined as a label rather than an id, for the same reason the
+	// audit log stores one: the row has to stay readable after that account is
+	// gone, and the LEFT JOIN is what lets it.
+	ListInvitations(ctx context.Context, organizationID uuid.UUID) ([]ListInvitationsRow, error)
+	// Every destination a link has, for the per-destination breakdown to name.
+	//
+	// Includes the link's own destination at position 0, because a click recorded
+	// before the link had a split — or on a link whose split was later removed —
+	// carries a NULL destination_id and is attributed to exactly that row. A
+	// breakdown that could not name it would be a chart with an unlabelled bar
+	// holding most of the traffic.
+	ListLinkDestinations(ctx context.Context, arg ListLinkDestinationsParams) ([]ListLinkDestinationsRow, error)
 	// Keyset pagination over (created_at, id).
 	//
 	// The cursor is a composite so ordering is total: created_at alone is not
@@ -134,17 +1143,219 @@ type Querier interface {
 	// than by id, and every tag came back carrying another tag's name. One
 	// subquery, one ORDER BY, both columns.
 	ListLinks(ctx context.Context, arg ListLinksParams) ([]ListLinksRow, error)
+	// Membership management: who is in an organization, at what rank, and where
+	// that rank reaches (M28).
+	//
+	// The rows these statements read and write are the ones 00200 has carried since
+	// Phase 1. Nothing here is new schema; what is new is that a person can change
+	// them, which is why every write is scoped by organization_id as well as by id.
+	// Every membership in an organization, most powerful first.
+	//
+	// One row per membership, not per user. A user holding an organization-wide
+	// membership and a workspace-scoped one appears twice, and that is the shape the
+	// page has to show: under D31 the two rows *add*, and collapsing them into one
+	// would hide the second grant behind the first.
+	//
+	// The workspace name is joined rather than looked up per row, and is NULL for an
+	// organization-wide membership — which is what the absence of a workspace_id
+	// means, and the distinction the list is read for.
+	//
+	// Not paginated. An organization's membership is a handful of rows by
+	// construction, exactly as its invitations are.
+	ListMembers(ctx context.Context, organizationID uuid.UUID) ([]ListMembersRow, error)
+	// Every membership one user holds in an organization, with the rank it carries
+	// and whether the role behind it grants a named permission.
+	//
+	// This is the authorization side of the sentence LockOrganizationOwners states
+	// just above: **a workspace-scoped membership grants authority over its own
+	// workspace, not over the organization.** The evaluator answers a different
+	// question — what may this person do in the workspace they are *acting in* —
+	// by taking the union of every matching membership and the lowest rank among
+	// them (D31), which is right for an object that lives in a workspace and wrong
+	// for one that spans the organization. A workspace-scoped admin resolved into
+	// their own workspace otherwise carries rank 20 against an organization-wide
+	// membership their membership does not reach at all, and F27 walked exactly
+	// that: one dropdown on /members turned them into an organization-wide admin.
+	//
+	// So the rows come back unfolded, one per membership, and the caller keeps the
+	// ones that reach the scope of the object being written. A membership scoped to
+	// a deleted workspace reaches nothing, matching GetUserPermissions.
+	//
+	// The permission is a parameter rather than a join in Go because the answer is
+	// per role, not per membership: two memberships at the same role give the same
+	// answer, and asking the database means the grant is read from
+	// role_permissions — the same table the evaluator reads — rather than from a
+	// second list of which roles hold what.
+	ListMembershipAuthority(ctx context.Context, arg ListMembershipAuthorityParams) ([]ListMembershipAuthorityRow, error)
+	//
+	// Newest first, keyset on (created_at, id). Same shape as the audit log and the
+	// link list: an offset shifts under a notification arriving mid-page, and a new
+	// notification arriving is the normal case here rather than the rare one.
+	ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]Notification, error)
+	//
+	// Every organization on the instance. Phase 1 has exactly one; this is written
+	// as a list because M28 makes that untrue and a job that notified only the
+	// first organization would then be silently wrong for every other.
+	ListOrganizationIDs(ctx context.Context) ([]uuid.UUID, error)
+	// Registered hostnames that are not being served, oldest check first.
+	//
+	// Included deliberately, and second. Somebody who registers a hostname and
+	// publishes the record should not have to come back and press a button — the
+	// on-demand check exists for the person who does not want to wait, not because
+	// waiting is the only other option. What they may now have to wait for is a pass
+	// with room left after the serving class, which is the price of the serving class
+	// never waiting for them.
+	ListPendingDomainsForVerification(ctx context.Context, rowLimit int32) ([]ListPendingDomainsForVerificationRow, error)
 	// The scope vocabulary. Scopes are validated against the permissions table
 	// rather than a list in Go, so RBAC and API keys cannot drift apart.
 	ListPermissionSlugs(ctx context.Context) ([]string, error)
+	// The management list: every rule on a link, enabled or not, in the order the
+	// redirect path would evaluate them.
+	//
+	// Ordered by (priority, created_at) rather than by priority alone. Priority is
+	// not unique, and two rules that tie have to be evaluated in a defined order or
+	// the same request resolves differently on two replicas. Creation order is the
+	// tiebreak because it is the only one a person can predict from the list they
+	// are looking at.
+	//
+	// Workspace-scoped in the WHERE like every other management read, so a rule
+	// belonging to another tenant returns no rows rather than a row the caller has
+	// to remember to reject.
+	ListRoutingRules(ctx context.Context, arg ListRoutingRulesParams) ([]ListRoutingRulesRow, error)
+	// The re-verification job's work list, in two classes (M40, reopened).
+	//
+	// **One queue could be starved, and the thing it starved was the hard stop.**
+	// The job walked a single list ordered `verification_checked_at NULLS FIRST`,
+	// which is the right order for one class and fatal across both: `RenameDomain`
+	// writes that column back to NULL, so a workspace renaming its rows in a loop
+	// kept them at the head of the queue for ever, while a *serving* hostname — which
+	// always carries a watermark, because a check is what made it serve — sorted last
+	// and was never reached. The only mechanism that takes a lapsed or hijacked
+	// hostname out of service therefore stopped running instance-wide, while every
+	// pass logged healthy counts.
+	//
+	// Splitting on `verified_at` closes it exactly, because a rename un-verifies:
+	// churn can only ever crowd the *pending* class, and the class whose checks can
+	// stop serving is drawn separately and walked first. Neither statement reads a
+	// NULL `verification_checked_at` as anything but "not checked yet" — it is what a
+	// live renamed row carries, and treating it as abandonment would delete the
+	// registration of anybody mid-cut-over.
+	// Hostnames this instance is serving, oldest check first.
+	//
+	// Walked first and given the whole budget it needs, because these are the rows
+	// where a failing check has a consequence: the grace window runs against them and
+	// `UnverifyDomain` ends it. A pass that runs out of time must run out of it on
+	// the class where the cost of waiting is another hour of not-yet-serving, not on
+	// the class where it is another hour of serving a name whose DNS is gone.
+	ListServingDomainsForVerification(ctx context.Context, rowLimit int32) ([]ListServingDomainsForVerificationRow, error)
 	// Counts l.id, not lt.link_id. The join onto links is what excludes trashed
 	// links, but counting the link_tags column ignored it: a LEFT JOIN keeps the
 	// link_tags row when its link is soft-deleted, so the count included trashed
 	// links for the whole 30-day window and the tag list disagreed with the link
 	// list it filters.
 	ListTags(ctx context.Context, workspaceID uuid.UUID) ([]ListTagsRow, error)
+	//
+	// The whole of the header's notification lookup: the newest unread rows the bell
+	// previews, and the unread total the badge shows, in one round trip.
+	//
+	// Two shapes already in this file, composed rather than a third one. The
+	// predicate is CountUnreadNotifications' predicate character for character, so
+	// notifications_user_unread_idx still serves it; the ordering is
+	// ListNotifications' ordering, so the preview is the same "newest first" the
+	// page shows.
+	//
+	// `count(*) OVER ()` is what makes it one query instead of two. Window functions
+	// are evaluated before LIMIT, so the count is every unread row rather than the
+	// handful returned — which is the only reason the badge can keep being exact
+	// while the preview stays bounded. A page render costs one notification query
+	// here, as it did when it cost a bare count.
+	ListUnreadNotificationPreview(ctx context.Context, arg ListUnreadNotificationPreviewParams) ([]ListUnreadNotificationPreviewRow, error)
 	ListUserSessions(ctx context.Context, userID uuid.UUID) ([]ListUserSessionsRow, error)
 	ListUsers(ctx context.Context) ([]ListUsersRow, error)
+	//
+	// Who to tell about something that concerns the organization rather than a
+	// person. Active users only: a deactivated account cannot sign in to read it.
+	//
+	// **Scoped, because a membership is** (D44). The sentence LockOrganizationOwners
+	// states in members.sql applies here word for word: a workspace-scoped owner
+	// membership grants ownership of one workspace, not of the organization. So the
+	// recipients are the organization-wide rows, plus — when the news belongs to a
+	// workspace — the rows scoped to *that* workspace, because news about their
+	// workspace is theirs to hear.
+	//
+	// Two arms rather than one predicate, and that is the whole correction. Adding
+	// `m.workspace_id IS NULL` alone is the smaller diff and the wrong recipient
+	// set: it silences a workspace-scoped owner about their own workspace, which is
+	// exactly what a caller passing a workspace id means to tell them about. A NULL
+	// @workspace_id is news that belongs to no workspace, and the second arm
+	// matches nothing then, which is what the organization-wide callers want.
+	//
+	// r.organization_id IS NULL for the reason LockOrganizationOwners carries it:
+	// 'owner' names a built-in role, and a tenant's custom role of the same slug is
+	// a different role.
+	//
+	// DISTINCT because the arms overlap. One person may hold both an
+	// organization-wide owner membership and an owner membership scoped to this
+	// workspace — that pair is precisely how the defect was reachable — and a
+	// recipient list naming them twice would write two inbox rows and send two
+	// mails.
+	//
+	// The address comes back with the id because both deliveries address the same
+	// person: the inbox row is keyed by user, the mail by address, and looking the
+	// second one up separately would mean a query per recipient.
+	ListUsersWithRoleInOrg(ctx context.Context, arg ListUsersWithRoleInOrgParams) ([]ListUsersWithRoleInOrgRow, error)
+	// A link's whole split, including the disabled arms and the fallback, in
+	// rotation order.
+	//
+	// Ordered by the destination's position rather than by created_at: position is
+	// assigned once, from NextRuleDestinationPosition, and is the only ordering that
+	// a person reading the list can predict and that a rotation can be explained
+	// against. Two arms created in the same transaction cannot tie on it.
+	ListVariantRules(ctx context.Context, arg ListVariantRulesParams) ([]ListVariantRulesRow, error)
+	// Verification and serving (M40).
+	//
+	// The gate this milestone exists for is one column: `verified_at`. Nothing below
+	// lets a hostname be served without it, and the two statements that clear it —
+	// UnverifyDomain here, RenameDomain above — are the only ways serving stops.
+	// Everything the host router may resolve aliases on, which is the whole of what
+	// the in-process hostname cache holds.
+	//
+	// **`verified_at IS NOT NULL` is the gate.** A registered-but-unverified
+	// hostname is absent from this result, so it is absent from the cache, so the
+	// router has nothing to match a Host header against and the request lands on
+	// ops-only 404. There is no second predicate anywhere that could disagree with
+	// this one, because there is no second query.
+	//
+	// The instance default is excluded: it is matched on `is_default` at boot and
+	// serves through the ordinary link host, and including it here would give one
+	// hostname two routes into the redirect tree.
+	//
+	// Hostnames are lowered here as well as at lookup. `HostCache.Reload` runs each
+	// one through `config.HostOnly`, which is what a Host header is spelled with, so
+	// the two sides cannot disagree even if this SELECT stops lowering.
+	ListVerifiedDomains(ctx context.Context) ([]ListVerifiedDomainsRow, error)
+	//
+	// One webhook's recent attempts, newest first, for the panel and the API. Bounded
+	// by the caller: this is a log, and a page that renders all of it renders a log.
+	ListWebhookDeliveries(ctx context.Context, arg ListWebhookDeliveriesParams) ([]ListWebhookDeliveriesRow, error)
+	//
+	// The secret is not selected. It is written once and read only by the signer, so
+	// nothing that renders a page or answers the API can leak it by accident.
+	ListWebhooks(ctx context.Context, workspaceID uuid.UUID) ([]ListWebhooksRow, error)
+	// The workspace switcher: what a user may act in, and what they have chosen.
+	//
+	// Resolution itself is in auth.sql, because it is identity, not a feature.
+	// These are the reads and writes the switcher and its account setting need.
+	// Every workspace a user may act in, with the organization it belongs to.
+	//
+	// DISTINCT because a user can hold both an organization-wide membership and a
+	// workspace-scoped one in the same organization, which the unique index
+	// permits; without it the switcher would list a workspace twice.
+	//
+	// is_default is carried here rather than fetched separately so a page render
+	// costs one query: the nav switcher needs the list, the account setting needs
+	// the list plus which entry is pinned, and neither should cost two round trips.
+	ListWorkspacesForUser(ctx context.Context, userID uuid.UUID) ([]ListWorkspacesForUserRow, error)
 	// Serializes the setup flow's count-then-create.
 	//
 	// Both setup surfaces read CountUsers and then, in a separate transaction,
@@ -162,6 +1373,376 @@ type Querier interface {
 	//
 	//     SELECT pg_advisory_xact_lock(7810213058373316608);
 	LockFirstUserSetup(ctx context.Context) error
+	//
+	// The link row, locked, for a guard whose decision is a count.
+	//
+	// A count cannot be locked, so `SELECT count(*)` as a ceiling check is a
+	// check-then-act: two writers each read a state the other is changing, and both
+	// pass a limit neither would pass alone. This is `LockOrganizations`' pattern at
+	// the link level — take the lock on the parent, make the decision inside the
+	// transaction that writes, and let the second writer block until the first
+	// commits and then re-read what it left behind.
+	//
+	// Locking the *link* rather than the rules is what makes it work with nothing to
+	// lock in the empty case. Postgres takes `FOR KEY SHARE` on a parent when a row
+	// referencing it is inserted, and that conflicts with `FOR UPDATE` — so a locked
+	// link cannot acquire a routing rule or a split arm while the guard is deciding,
+	// including the first one, where a lock on the rules would have had no rows to
+	// take (F67).
+	//
+	// Returns the id alone: the caller already has the link, and this exists for its
+	// lock rather than for its columns. No workspace parameter, for the same reason
+	// — every caller has already been through GetLink, which is workspace-scoped, so
+	// adding one here would be a second tenancy check in a statement whose job is
+	// serialization.
+	LockLink(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	// The organization's owner memberships, locked.
+	//
+	// Organization-wide only: a workspace-scoped owner membership grants ownership
+	// of one workspace, not of the organization, so counting it would let the last
+	// real owner be removed while a workspace-scoped row stood in for them.
+	//
+	// Rows rather than a count, because a count cannot be locked. Taken before any
+	// removal or demotion of an owner, so two concurrent administrators cannot each
+	// observe two owners and each remove one.
+	LockOrganizationOwners(ctx context.Context, organizationID uuid.UUID) ([]uuid.UUID, error)
+	// The organization's workspaces, locked, so no link can be created in one while
+	// the link guard below is counting.
+	//
+	// Ordered for the same deadlock reason as LockOrganizations.
+	LockOrganizationWorkspaces(ctx context.Context, organizationID uuid.UUID) ([]uuid.UUID, error)
+	// Organization teardown (M28.5).
+	//
+	// Every statement here is either a guard or the delete it guards. The delete is
+	// one line; the guards are the milestone.
+	//
+	// **Locking, and why each of these returns rows rather than a count.** A count
+	// cannot be locked, so a guard written as `SELECT count(*)` is a check-then-act:
+	// two administrators acting at once each read a state the other is changing.
+	// The pattern is `LockOrganizationOwners`' — select the rows the decision is
+	// made on `FOR UPDATE`, count them in Go, and let the second transaction block
+	// until the first commits and then re-read what it left behind. Postgres also
+	// gives this a second effect that is the point of it here: inserting a row that
+	// references a locked parent takes `FOR KEY SHARE` on that parent, which
+	// conflicts with `FOR UPDATE` — so a locked organization cannot acquire a new
+	// workspace, and a locked workspace cannot acquire a new link, while the guard
+	// is deciding.
+	// Every live organization on the instance, locked, for the refusal that stops
+	// the last one being deleted.
+	//
+	// Instance-wide rather than scoped, because that is what the rule is about: an
+	// instance with no organization has no path back that does not involve SQL, the
+	// same argument that refuses the last owner and the last workspace.
+	//
+	// `ORDER BY id` is load-bearing rather than cosmetic. Two concurrent deletions
+	// of different organizations both take this lock, and taking a set of row locks
+	// in a different order in each transaction is a deadlock; a fixed order makes it
+	// a wait instead. It is also why this runs *before* the target row is read —
+	// the target is inside this set, so it is already locked by the time anything
+	// else touches it.
+	LockOrganizations(ctx context.Context) ([]uuid.UUID, error)
+	//
+	// Every folder in a workspace, locked, for a decision made over the whole tree.
+	//
+	// `MoveFolder`'s refusals are computed in Go from a tree read a moment earlier —
+	// *is the new parent inside the subtree being moved* cannot be written as a
+	// column check — so the read and the write have to be one transaction or two
+	// concurrent moves each decide against a tree the other is changing. Moving A
+	// under B while B moves under A passes both checks and produces the cycle M38
+	// says can never exist (F108).
+	//
+	// The whole workspace rather than the two rows involved, because the predicate
+	// is over the whole tree: a cycle can run through folders neither move names.
+	// Workspaces are small enough for that to be one indexed read.
+	//
+	// `ORDER BY id` is load-bearing rather than cosmetic, and it is
+	// `LockOrganizations`' reasoning: two transactions taking the same set of row
+	// locks in different orders deadlock, and a fixed order makes it a wait instead.
+	//
+	// Returns ids alone. The caller reads the tree it decides on through
+	// ListFolders inside the same transaction; this exists for its lock.
+	LockWorkspaceFolders(ctx context.Context, workspaceID uuid.UUID) ([]uuid.UUID, error)
+	// Closes the predecessor: names its successor and sets the far edge of the
+	// grace window.
+	//
+	// `successor_id IS NULL` in the WHERE clause is belt to the FOR UPDATE braces.
+	// The lock is what serializes; this is what makes the second writer a no-op
+	// rather than a silent overwrite if the lock is ever dropped from the read.
+	MarkAPIKeyRotated(ctx context.Context, arg MarkAPIKeyRotatedParams) (int64, error)
+	MarkAllNotificationsRead(ctx context.Context, userID uuid.UUID) (int64, error)
+	//
+	// The cursor advance, for the rules one run actually looked at.
+	//
+	// One statement per run rather than one per rule, so the whole of the fairness
+	// mechanism costs a single indexed update however many rules were considered —
+	// the per-run bound m43.md asks for is a product of four constants plus this.
+	//
+	// **It writes `last_checked_at` and nothing else.** Not `last_fired_at`: a rule
+	// that matched nothing, or matched less than its threshold, has not fired, and
+	// moving its watermark would discard the subjects already inside its window.
+	// Not `updated_at` either — this is the scheduler's bookkeeping rather than an
+	// edit somebody made, and touching it would make every rule on the instance look
+	// edited once a minute.
+	//
+	// Rules whose evaluation *failed* are in the list on purpose. A rule with a
+	// corrupt `actions` column errors on every pass; leaving its cursor where it was
+	// would park it at the head of the queue forever, which is F83 again with a
+	// different cause.
+	MarkAutomationRulesChecked(ctx context.Context, arg MarkAutomationRulesCheckedParams) error
+	// Caddy asked whether to obtain a certificate for this hostname and was told
+	// yes. Guarded on 'pending' so it is one write per verification rather than one
+	// per handshake: the ask endpoint is public and unauthenticated, and a statement
+	// it could run on every request would be a write amplifier anybody can pull.
+	MarkDomainTLSActive(ctx context.Context, id uuid.UUID) (int64, error)
+	// A failed check, and deliberately *not* a stop.
+	//
+	// verified_at is untouched: a domain that is serving goes on serving while the
+	// grace window runs (D70). What this records is that the window has started —
+	// COALESCE keeps the first failure's timestamp, so a run of failures anchors on
+	// when the run began rather than sliding forward with every poll, which would
+	// make the window unreachable.
+	//
+	// **The hostname and the token are in the predicate for the reason
+	// MarkDomainVerified carries them (M40, reopened; F131).** This is the same
+	// read-check-write, over the same gap held open by the same nameserver, and the
+	// rename that commits inside it is the same rename. What a late write lands here
+	// is smaller than what it lands there and it is not nothing: a
+	// `verification_error` sentence naming the *old* hostname, shown on the Domains
+	// page against the new one, and a `verification_checked_at` the new name never
+	// earned — which moves the row out of the head of the pending queue that
+	// `verificationWorkList` orders NULLs first, so the name nobody has checked is
+	// checked later than it should be. Predicating on what was proved makes the late
+	// write affect zero rows, and the caller treats that as the conflict it is.
+	//
+	// It also closes the statement below transitively on the job's path. A failed
+	// check that finds no row to land on returns before UnverifyDomain is reached, so
+	// the grace window cannot expire against a hostname this pass never checked —
+	// UnverifyDomain's own `verified_at IS NOT NULL` was already refusing that write,
+	// and now nothing gets that far to be refused.
+	MarkDomainVerificationFailed(ctx context.Context, arg MarkDomainVerificationFailedParams) (Domain, error)
+	// A successful check, written only onto the row that was actually checked.
+	//
+	// **The hostname and the token are in the predicate because they are what was
+	// proved (M40, reopened).** Verification reads a row, resolves DNS against the
+	// hostname it read — seconds, against a nameserver the registrant runs — and then
+	// writes here. `RenameDomain` is concurrently reachable and clears `verified_at`;
+	// an unconditional write landing after it would fill exactly that NULL through
+	// the COALESCE below and start serving a name nobody proved, up to and including
+	// one of the instance's own hosts. Predicating on `hostname` and
+	// `verification_token` makes the late write affect **zero rows** instead, and the
+	// caller treats that as the conflict it is.
+	//
+	// A transaction around the read and the write would not have closed this: the
+	// rename commits in the gap between two separate transactions, so there is
+	// nothing for it to serialise against. `FOR UPDATE` across the lookup would have,
+	// by pinning a row lock for the DNS timeout inside a job that walks a batch —
+	// which is a different outage.
+	//
+	// Sets verified_at only when it is not already set, so a domain that has been
+	// serving for a month does not have its start date rewritten every hour — the
+	// column answers "since when has this been served", and a re-check is not a new
+	// answer.
+	//
+	// ssl_status moves to 'pending': the app never speaks ACME (decision D3), so the
+	// most it can say is that it will now answer Caddy's on-demand ask for this
+	// hostname. 'active' is written by that ask endpoint, once, when it is first
+	// consulted.
+	//
+	// The failing streak is cleared unconditionally, which is D70's "a successful
+	// check at any point resets the count".
+	MarkDomainVerified(ctx context.Context, arg MarkDomainVerifiedParams) (Domain, error)
+	// The single-use write. Conditional on the invite still being redeemable, so
+	// even without the lock above this could not be spent twice.
+	MarkInvitationRedeemed(ctx context.Context, arg MarkInvitationRedeemedParams) (int64, error)
+	//
+	// Retry exhausted. Terminal, and deliberately not deleted — a row that says
+	// what was attempted and why it never arrived is the whole point of an outbox
+	// over an in-memory retry loop.
+	//
+	// Blanked for F32's reason, and the failed case is the one that needs it most: a
+	// message that never arrived is one whose token is still unspent, and this row
+	// would otherwise hold it for thirty days against an invitation that lives seven.
+	// The retry path deliberately does not blank — a row still being retried is
+	// pending, and it has to keep the message it is going to send.
+	MarkMailFailed(ctx context.Context, arg MarkMailFailedParams) error
+	//
+	// A failure that will be tried again. The error is kept verbatim: it is what an
+	// operator reads when somebody reports that mail never arrived.
+	//
+	// Replaces the lease ClaimDueMail set with the real backoff for this attempt,
+	// and does not touch attempts — the claim already spent it.
+	//
+	// Seconds rather than an interval parameter, matching the lockout query in
+	// auth.sql: an interval maps to pgtype.Interval, which would put a driver type
+	// in the service layer's signature for no benefit.
+	MarkMailRetry(ctx context.Context, arg MarkMailRetryParams) error
+	//
+	// attempts is not touched: ClaimDueMail already spent it.
+	//
+	// The body is blanked here, in the same statement that marks the row sent
+	// (finding F32). Two of the templates this phase ships carry a single-use token
+	// in their body, and a delivered message is one whose token has reached the only
+	// person entitled to it — keeping a copy afterwards is keeping a redeemable
+	// credential in clear for the retention window. Folded into this UPDATE rather
+	// than done after it, so there is no crash window in which a row is sent and
+	// still carries the token, and so `mail_outbox_finished_body_scrubbed` cannot be
+	// passed by a caller that forgets. What an operator reads afterwards —
+	// recipient, subject, kind, attempts, last_error — is untouched.
+	MarkMailSent(ctx context.Context, id uuid.UUID) error
+	//
+	// Scoped by user_id as well as id, so someone else's notification is a
+	// zero-row update rather than a 403 that confirms the id exists.
+	//
+	// read_at is only set once. Marking an already-read notification is a no-op
+	// rather than a fresh timestamp, so "when did you first see this" survives a
+	// double click.
+	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (int64, error)
+	//
+	// Retry exhausted. Terminal, and deliberately not deleted: a row saying what was
+	// attempted, how many times, and what the receiver said is the whole reason this
+	// is a table rather than an in-memory retry loop.
+	MarkWebhookAbandoned(ctx context.Context, arg MarkWebhookAbandonedParams) error
+	//
+	// attempts is not touched: the claim already spent it.
+	MarkWebhookDelivered(ctx context.Context, arg MarkWebhookDeliveredParams) error
+	//
+	// A failure that will be tried again. Replaces the lease the claim set with the
+	// real backoff for this attempt, and does not touch attempts.
+	//
+	// response_code is nullable and stays NULL when there was no response at all,
+	// which is what tells a refused connection apart from a receiver answering 500.
+	MarkWebhookRetry(ctx context.Context, arg MarkWebhookRetryParams) error
+	// The low-confidence destination blocklist (M30).
+	//
+	// Read on the management path only. The redirect tree never touches this table:
+	// blocking decides what may be stored, not what may be served, and putting a
+	// query here on the hot path would buy nothing a link that was refused at
+	// creation does not already have.
+	// Whether any of a host's label-boundary suffixes is on the list.
+	//
+	// The caller passes the full host and every parent of it — a.b.example becomes
+	// {a.b.example, b.example, example} — so the label-boundary rule is enforced by
+	// what is asked for rather than by a pattern match, and the whole question is
+	// one index probe. Longest first in the caller, and ORDER BY length here, so a
+	// specific entry wins over the parent it sits under and the reason an operator
+	// reads is the one they wrote for that host.
+	//
+	// The source comes back because it decides which rule the refusal reports: a
+	// seeded shortener says shortener_chain and everything else says
+	// operator_blocklist. One row rather than one query per source — a host that is
+	// both listed by the operator and a known shortener is one refusal, and the
+	// more specific entry is the longer one, which this already returns.
+	MatchBlockedDestination(ctx context.Context, candidates []string) (MatchBlockedDestinationRow, error)
+	//
+	// Links whose durable click budget ran out inside the window (M35).
+	//
+	// `link_click_budget.exhausted_at` is stamped in the same transaction that
+	// spends the last click, so it is an exact event time. `links.click_count` is
+	// not, and 02100 says out loud that it must never be an authorization input;
+	// it is not one here either.
+	//
+	// Walks link_click_budget_exhausted_idx (02100) — declared DESC, read forward,
+	// which Postgres serves from the same index backwards.
+	//
+	// The lower bound is the composite watermark, in the same range-plus-tiebreak
+	// spelling MatchExpiredLinks explains. Ties on `exhausted_at` are rarer here
+	// than on expiry — each stamp is its own transaction — but two budgets spent in
+	// the same microsecond are not impossible, and the cursor costs nothing.
+	MatchExhaustedBudgets(ctx context.Context, arg MatchExhaustedBudgetsParams) ([]MatchExhaustedBudgetsRow, error)
+	//
+	// Links whose expiry fell inside this rule's window.
+	//
+	// **No status filter, on purpose.** `archive_link` is one of the actions a rule
+	// may take, so a trigger that excluded archived links would shrink its own match
+	// set when it fired — a rule feeding off its own effect, which is exactly what
+	// domain/automation.go's TriggerReads/ActionWrites declaration says cannot
+	// happen. `links_expiry_idx` (00300) is unusable here for that reason: its
+	// predicate carries `status = 'active'`. 02900 adds automation_links_expiry_idx,
+	// which does not.
+	//
+	// Soft-deleted links are excluded, and that exclusion is safe for the opposite
+	// reason: nothing an automation does writes `deleted_at`.
+	//
+	// The lower bound is the composite watermark, and its spelling is deliberate:
+	// `expires_at >= @after` plus a tiebreak is the same predicate as
+	// `(expires_at, id) > (@after, @after_subject)`, written so the planner keeps a
+	// single range condition to walk automation_links_expiry_idx with and applies
+	// the tiebreak as a filter on the handful of boundary rows. Strict `>` on the
+	// timestamp alone is the shape this replaces, and it was lossy: a capped fetch
+	// that stopped inside a group of links sharing one expiry — bulk creation makes
+	// those routine — left the tied remainder outside every later window, forever.
+	MatchExpiredLinks(ctx context.Context, arg MatchExpiredLinksParams) ([]MatchExpiredLinksRow, error)
+	//
+	// Administrative events of one action inside the window.
+	//
+	// The blocked-attempt trigger's source, and it reads the audit log because that
+	// is the only durable trace a refusal leaves — `blocked_destinations` (01500) is
+	// the operator's blocklist, not a record of attempts against it.
+	//
+	// The action is a parameter with exactly one caller, which passes
+	// domain.TriggerDestinationBlocked. The three names for that event — the
+	// trigger, the audit action and the webhook event — are the same string, and
+	// TestTheBlockedVocabularyIsOneWord holds them together.
+	//
+	// Walks audit_logs_workspace_action_idx (02900).
+	//
+	// The lower bound is the composite watermark, in the same range-plus-tiebreak
+	// spelling MatchExpiredLinks explains. `occurred_at` carries whatever instant
+	// the recorder was handed, so a burst of refusals in one transaction shares a
+	// timestamp the way bulk-created links share an expiry.
+	MatchWorkspaceAuditEvents(ctx context.Context, arg MatchWorkspaceAuditEventsParams) ([]MatchWorkspaceAuditEventsRow, error)
+	// The parent is set outright rather than COALESCEd, because NULL is a
+	// destination here: it means the root. A partial-update idiom would make
+	// "move to the top level" unexpressible.
+	MoveFolder(ctx context.Context, arg MoveFolderParams) (Folder, error)
+	// The next free position above the primary. COALESCE so the first rule on a
+	// link lands at 1 rather than at NULL.
+	NextRuleDestinationPosition(ctx context.Context, linkID uuid.UUID) (int32, error)
+	// Advance a link's sequential rotation and return the position it advanced to
+	// (M36, D8).
+	//
+	// The same table, the same upsert shape and the same concurrency argument as
+	// ConsumeClickBudget: the statement is the transaction, two replicas serialise
+	// on the row lock the ON CONFLICT path takes, and the loser is evaluated against
+	// the winner's committed value. That is what makes the order strict *globally*
+	// rather than per process — an in-memory counter would give each replica its own
+	// rotation and "sequential" would mean "sequential here", which is a support
+	// ticket rather than a feature.
+	//
+	// A different column from `consumed` on purpose. A rotation advances; a budget
+	// is spent and refuses when it runs out. Sharing one number would let a
+	// sequential arm consume a one-time link's single click on its way to being
+	// chosen, and the gate that runs afterwards would find the link already spent.
+	//
+	// Unconditional: there is no limit to reach, so unlike ConsumeClickBudget this
+	// always returns a row. The write lands only on links that actually carry a
+	// sequential arm, which is the cost D8 accepts and the reason every other link
+	// keeps the unchanged fast path.
+	NextVariantRotation(ctx context.Context, arg NextVariantRotationParams) (int64, error)
+	// The same lookup without the lock, for rendering the redemption page.
+	//
+	// A GET must not take a row lock: the page is served to anybody holding the
+	// link, and a locking read there would let a stranger hold a write lock on the
+	// row by opening a page.
+	PeekInvitationByTokenHash(ctx context.Context, tokenHash []byte) (PeekInvitationByTokenHashRow, error)
+	// Read a link's rotation without advancing it (F100).
+	//
+	// The read-only twin of NextVariantRotation, and it exists for one caller:
+	// HEAD. A link checker or an unfurler probing a sequentially split link used to
+	// advance the durable counter on every probe, re-phasing every subsequent
+	// visitor's arm — and because HEAD writes no click event, the per-destination
+	// breakdown could not show why the arms were uneven.
+	//
+	// Returning early on HEAD is *not* the fix: a HEAD would then answer the link's
+	// own destination while a GET answers an arm, so a checker would validate a URL
+	// no visitor is ever sent to. HEAD has to choose the same arm the next GET
+	// would, which is what this reads.
+	//
+	// The same shape as Budget, which reads a click allowance without spending it
+	// for exactly the same caller and the same reason. No row means no click has
+	// landed yet, and the caller treats that as position 1 — the first arm, which is
+	// what the first visitor will get.
+	PeekVariantRotation(ctx context.Context, arg PeekVariantRotationParams) (int64, error)
 	// The end of the trash window: hard-delete links whose purge_after has passed.
 	//
 	// One statement, so the reservation and the deletion cannot be separated by a
@@ -179,6 +1760,30 @@ type Querier interface {
 	// The de-identification step. Once the salt is gone the day's hashes cannot be
 	// linked back to an address.
 	PurgeExpiredSalts(ctx context.Context) (int64, error)
+	//
+	// Sent and failed rows past the retention window. The outbox is a record of
+	// what was attempted, not an archive: without this the table is the one thing
+	// in the schema that grows forever with no window and no metric, which is the
+	// shape D5 and M21 exist to avoid repeating.
+	//
+	// It is a retention window and not a secrecy control. The rows it deletes lost
+	// their bodies when they finished; this is what stops the record of *that* piling
+	// up. Lowering it would not shorten any credential's exposure.
+	PurgeFinishedMail(ctx context.Context, maxAgeDays int32) (int64, error)
+	//
+	// Delivered and abandoned rows past the retention window. The delivery log is a
+	// record of what was attempted, not an archive; without this it is a table that
+	// grows forever with one row per link write per webhook, which is the shape D5
+	// and M21 exist to stop repeating.
+	PurgeFinishedWebhookDeliveries(ctx context.Context, maxAgeDays int32) (int64, error)
+	// The sweep. Removes registrations nobody completed, and consumed rows whose
+	// account has long since been created.
+	//
+	// Both, because neither is a record of anything: an account that exists is
+	// evidence enough that its address was proven, and the audit log carries what
+	// happened. This table is a waiting room, not an archive — the one shape it
+	// must not have is the unbounded growth D5 and M21 exist to stop repeating.
+	PurgeLapsedRegistrations(ctx context.Context, keepDays int32) (int64, error)
 	// Returns the new count so the caller can apply the lockout policy without a
 	// second round trip and without a read-modify-write race between two
 	// concurrent attempts.
@@ -192,13 +1797,73 @@ type Querier interface {
 	// applies to.
 	RecordFailedLogin(ctx context.Context, arg RecordFailedLoginParams) (RecordFailedLoginRow, error)
 	// Keeps the watermark where it was: a failed run has not covered its window,
-	// and advancing past it would turn one bad run into permanent gaps.
+	// and advancing past it would turn one bad run into permanent gaps. Keeps
+	// last_success_at where it was for the same reason — the last success is a fact
+	// about the past that a later failure does not change, and it is what the
+	// staleness gauge measures against.
 	RecordJobFailure(ctx context.Context, arg RecordJobFailureParams) error
 	RecordSuccessfulLogin(ctx context.Context, id uuid.UUID) error
+	// The hostname is the only thing a registration has to change, and it is
+	// changeable only while nothing serves it; see decisions.md, D69.
+	//
+	// Not scoped by owner. The caller has already been judged against the row read
+	// by GetDomainByID, and repeating the predicate here would turn a 403 into a
+	// 404 for anybody who got past that check by a route this file cannot see.
+	//
+	// **A rename un-verifies (M40), and that is the bullet D69 deferred to here.**
+	// The proof of control is a TXT record published under the *old* name and says
+	// nothing about the new one, so carrying verified_at across would let a
+	// workspace verify a name it controls and then rename the row to one it does
+	// not. The token is minted afresh for the same reason: the old value is
+	// published in somebody else's zone.
+	RenameDomain(ctx context.Context, arg RenameDomainParams) (Domain, error)
+	RenameFolder(ctx context.Context, arg RenameFolderParams) (Folder, error)
+	// Name and slug move together. The slug is derived from the name by the caller
+	// rather than kept as a separate field somebody can edit into disagreement with
+	// it, and the partial unique index on (organization_id, lower(slug)) is what
+	// refuses a collision.
+	RenameWorkspace(ctx context.Context, arg RenameWorkspaceParams) (Workspace, error)
 	// Called before purging a link that has clicks. The alias is in the wild — on
 	// printed material and in other people's bookmarks — so handing it to a new
 	// destination would be a redirect hijack.
 	ReserveAlias(ctx context.Context, arg ReserveAliasParams) error
+	// The organization-level half of the same reservation, and it exists for the
+	// same reason the link guard exists one level up: an organization-level cascade
+	// that behaved differently from a workspace-level one would make the rule
+	// bypassable by deleting one level up.
+	//
+	// The rationale is written out in full beside
+	// ReserveWorkspaceTraffickedAliases; only the reach differs. Note what is
+	// deliberately *not* filtered here: workspaces are joined without
+	// `deleted_at IS NULL`, unlike CountOrganizationLinks, because this statement
+	// follows what the cascade takes rather than what the guard counted, and the
+	// cascade takes every workspace of the organization.
+	ReserveOrganizationTraffickedAliases(ctx context.Context, organizationID uuid.UUID) error
+	// Run immediately before DeleteWorkspace, in the same transaction, because the
+	// cascade below is the third way a link lets go of its alias and it was the one
+	// that let go for free (F28).
+	//
+	// CountWorkspaceLinks excludes soft-deleted links deliberately — counting them
+	// would leave a workspace undeletable until the purge job ran — so a workspace
+	// reaching the delete may still hold trashed links, for up to the trash window.
+	// The cascade hard-deletes them without the purge job ever seeing them, and
+	// `IsAliasTaken` then stops finding the row: an alias that was on printed
+	// material yesterday is claimable by anyone on the instance today.
+	//
+	// `click_count > 0` is PurgeExpiredLinks' threshold, and the rename path's, and
+	// it is the same threshold on purpose: three paths that release an alias must
+	// not hold three opinions about what "in the wild" means. Aliases that never
+	// received a click are released, per the reserved_aliases rationale.
+	//
+	// No deleted_at predicate, and FOR UPDATE, for one reason between them. The
+	// guard above has already established there are no live links, so this selects
+	// exactly the trashed ones — unless a row stopped being trashed after the count
+	// ran, which today takes a hand-written UPDATE because nothing in the product
+	// un-trashes a link (`RestoreLink` restores an *archived* one and requires
+	// `deleted_at IS NULL`). The statement follows what the cascade will take
+	// rather than what the guard counted, so such a row is reserved rather than
+	// skipped, and the lock makes it wait rather than slip between the two.
+	ReserveWorkspaceTraffickedAliases(ctx context.Context, workspaceID uuid.UUID) error
 	// The redirect hot path.
 	//
 	// Everything here runs under a 20ms budget on the dedicated redirect pool.
@@ -214,6 +1879,54 @@ type Querier interface {
 	// distinguish 404 (unknown or archived) from 410 (expired) and can cache a
 	// negative result. Filtering here would make every non-serving state look
 	// identical.
+	//
+	// The one join this query has, and the rule above is why it reads the way it
+	// does. M32.5 needs the domain's bot-blocking settings on the redirect path,
+	// and the alternative — a second lookup, or a second cache with its own
+	// invalidation — would put either an extra round trip or an extra staleness
+	// window on the hottest path in the product. This is neither: `domain_id` is
+	// the domains primary key, the table holds one row on every deployment built so
+	// far, and the two booleans ride home inside the round trip that was happening
+	// anyway. The cached snapshot then carries them, so a cache hit answers the
+	// whole question — link policy and domain policy together — without asking
+	// anything.
+	//
+	// No `d.deleted_at IS NULL` here, deliberately. A soft-deleted domain row still
+	// joins, which is exactly the behaviour this query had before the join existed;
+	// adding the filter would silently turn every link on such a domain into a 404,
+	// which is a change nobody asked this milestone to make.
+	//
+	// The lateral is M34's, and it obeys the same rule the domain join does: the
+	// routing rules a link carries have to be in the snapshot, and the alternatives
+	// are a second query on every cache miss or a second cache with its own
+	// invalidation. This is neither. It is an index probe on
+	// `routing_rules_link_idx` — partial on `enabled`, keyed on (link_id,
+	// priority) — which finds nothing at all for the overwhelming majority of
+	// links, because a link with no rules is the default and always will be.
+	// Nothing about it runs on a cache *hit*: by then the rules are already inside
+	// the snapshot.
+	//
+	// The rules come back as one jsonb array, already in evaluation order, because
+	// ordering them here is free and ordering them in Go would mean the sort that
+	// decides which destination a visitor gets lived somewhere other than the query
+	// that reads them. The keys are spelled out rather than short: this is the
+	// database's own vocabulary, and the compact spelling the cached snapshot uses
+	// is the Go type's business.
+	//
+	// M36 widened the lateral to every kind and left it a single probe, which is the
+	// property worth protecting: a link's match rules and its split arms live in one
+	// table, on one index, and asking for them separately would double the cost of
+	// the only lookup a cache miss makes. The ordering carries both vocabularies at
+	// once. `rr.kind <> 'match'` sorts false before true, so M34's rules come first
+	// and keep their (priority, created_at) order exactly; the arms follow in
+	// `dest.position` order, which is what a rotation is explained against and what
+	// the dashboard lists. `created_at` remains the last tiebreak so the order is
+	// total whatever else ties.
+	//
+	// `id` and `weight` are new here. The id is what a click is attributed to —
+	// click_events.destination_id — and the weight is the arm's share; both have to
+	// be in the snapshot because reading either at request time would be the query
+	// this design exists to avoid.
 	ResolveAliasForRedirect(ctx context.Context, arg ResolveAliasForRedirectParams) (ResolveAliasForRedirectRow, error)
 	// Read once at boot and cached. The default domain is matched on the flag
 	// rather than on a hostname string, so it never has to agree with
@@ -222,18 +1935,128 @@ type Querier interface {
 	// PHASE 2: custom domains. Present now because the cache key is already
 	// host-scoped, so enabling it later needs no key change.
 	ResolveDomainByHostname(ctx context.Context, lower string) (ResolveDomainByHostnameRow, error)
+	// The workspace a request acts in, and the only place that question is
+	// answered. Every identity — session, API key, CLI — comes through here.
+	//
+	// The precedence is the ORDER BY and nothing else, so there is one statement of
+	// it rather than one per caller:
+	//
+	//   1. the session's own current workspace, for a request that has a session
+	//   2. the workspace the user pinned as their default
+	//   3. the workspace they used last
+	//   4. the oldest workspace they are a member of
+	//
+	// Each rung is a tiebreak on the one above, so a user with a single membership
+	// ties on all four and lands where they always did. That is what makes the
+	// switcher a no-op for every instance that exists today.
+	//
+	// Membership is the WHERE clause, not the ordering, so a preference pointing at
+	// a workspace the user has been removed from — or one that has been deleted —
+	// cannot win. It simply stops matching and the next rung answers.
+	//
+	// session_id is optional. NULL leaves the LEFT JOIN unmatched and rung 1 dead,
+	// which is right for a login (the session does not exist yet), the CLI, and an
+	// API key. The join also requires the session to belong to this user, so a
+	// borrowed id resolves nothing.
+	//
+	// organization_id is optional too, and it is a *bound* rather than a rung: it
+	// narrows which workspaces are candidates without touching the precedence. Only
+	// one caller passes it, and the reason is M44. An organization-wide API key is a
+	// row with a NULL workspace_id, which means "every workspace in **the
+	// organization** the key belongs to" — and without this clause the precedence
+	// would happily rank a workspace in some *other* organization the owner also
+	// belongs to, because membership is the only filter and a person's pinned
+	// default is a property of the person rather than of the tenancy. The key would
+	// then act in a tenant it was never issued for. Every other caller passes NULL
+	// and resolves exactly as it always did.
+	//
+	// The organization's own deleted_at is checked as well as the workspace's, and
+	// the two are not the same check. ListWorkspacesForUser has always filtered
+	// both; this statement filtered only the workspace, so a workspace under a
+	// soft-deleted organization could be resolved *into* and never *listed* — the
+	// switcher would mark nothing selected, and a browser would show the first
+	// entry while the session acted somewhere else. Latent rather than live, and
+	// deliberately fixed anyway: DeleteOrganization is a hard DELETE today and
+	// nothing in the tree sets organizations.deleted_at, so the two queries agree
+	// in practice and would stop agreeing the moment anything soft-deletes an
+	// organization. The asymmetry is invisible from either statement alone, which
+	// is the reason it survived to be found by review rather than by a user (F25).
+	ResolveWorkspaceForUser(ctx context.Context, arg ResolveWorkspaceForUserParams) (Workspace, error)
 	RestoreLink(ctx context.Context, arg RestoreLinkParams) (Link, error)
 	// Idempotent: revoking an already-revoked key keeps the original timestamp and
 	// still reports one row, so a repeated call is a success rather than a 404
 	// while a genuinely unknown id is still distinguishable.
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (int64, error)
+	// The administrator's revoke, keyed on the organization instead of on the
+	// owner.
+	//
+	// RevokeAPIKey above is a person disabling their own credential and is the
+	// normal path. This one exists because there was otherwise no path at all: a key
+	// belonging to somebody else could be *seen* — the rotation records are
+	// organization-scoped — and not stopped, so an administrator holding an incident
+	// had to wait for its owner. Scoped by organization rather than by workspace
+	// because a key is issued into an organization and its id is what an audit
+	// record hands the reader.
+	//
+	// Returns the owner and the prefix rather than a row count, because this write
+	// is audited and the record has to name whose credential was stopped. No row
+	// means an id from another organization or none at all, and both answer the same
+	// way at the call site.
+	RevokeAPIKeyInOrganization(ctx context.Context, arg RevokeAPIKeyInOrganizationParams) (RevokeAPIKeyInOrganizationRow, error)
 	// Used on password change. Anyone who had the old password must be logged out,
 	// which is the entire point of changing it.
 	// keep_session is optional: pass NULL to revoke everything, or the current
 	// session's id to leave the browser the user is changing their password in
 	// still signed in.
 	RevokeAllUserSessions(ctx context.Context, arg RevokeAllUserSessionsParams) error
+	// Withdraw one instance-level permission from one account.
+	//
+	// Returns the row count so the caller can tell "withdrawn" from "they never held
+	// it" without a read first. Which permissions may travel this path at all is
+	// decided in Go, not here: instance.admin is deliberately not one of them.
+	RevokeInstancePermission(ctx context.Context, arg RevokeInstancePermissionParams) (int64, error)
+	// Scoped by organization as well as id, so an id from another organization is
+	// indistinguishable from one that does not exist: both change zero rows.
+	//
+	// Already-revoked and already-redeemed are excluded rather than tolerated. A
+	// redeemed invite has produced a member, and reporting "revoked" for it would
+	// claim something the tree does not support.
+	RevokeInvitation(ctx context.Context, arg RevokeInvitationParams) (int64, error)
+	// Auto-revocation, from housekeeping.
+	//
+	// revoked_at is set to the moment the window closed rather than to now(), so
+	// the list says when the key stopped working instead of when the job noticed.
+	// Nothing depends on this running: authentication already refuses a key past
+	// grace_expires_at. What this buys is a key list that agrees with the behaviour.
+	RevokeLapsedAPIKeyGraces(ctx context.Context) (int64, error)
+	// Clears an expired invite out of the outstanding slot so a replacement can be
+	// issued.
+	//
+	// The partial unique index cannot exclude expired rows — `now()` is not
+	// immutable, so Postgres will not index on it — which means an invite that
+	// lapsed still occupies the address. This runs immediately before the insert,
+	// in the same transaction, and touches nothing that is still redeemable.
+	RevokeLapsedInvitation(ctx context.Context, arg RevokeLapsedInvitationParams) (int64, error)
 	RevokeSession(ctx context.Context, id uuid.UUID) error
+	// The per-destination breakdown a split test is read from (M36).
+	//
+	// A pass of its own rather than a seventh row in RollupDimensionDaily's LATERAL
+	// VALUES, and the reason is cost rather than tidiness. That expansion runs for
+	// every click on the instance; adding a row to it would grow the sort and the
+	// upsert count by a sixth, permanently, for a column that is NULL on every link
+	// that runs no split test. Here the `destination_id IS NOT NULL` filter is served
+	// by the partial index migration 02200 creates, so on an instance with no split
+	// tests this reads an empty index and writes nothing.
+	//
+	// The value is the destination id as text, into the same `link_dimension_daily`
+	// table under the dimension name `destination`, so the breakdown is capped,
+	// rolled up and read by exactly the query every other breakdown is read by. The
+	// reader resolves ids to URLs; storing the URL here instead would freeze it at
+	// the moment of the rollup and make an edited destination look like two.
+	//
+	// Bots excluded, like every other dimension: a split test scored on crawler
+	// traffic is a split test with a wrong answer.
+	RollupDestinationDaily(ctx context.Context, arg RollupDestinationDailyParams) error
 	// Every dimension in one pass over click_events.
 	//
 	// This was six UNION ALL branches, one per dimension, reading the same rows six
@@ -261,11 +2084,69 @@ type Querier interface {
 	// any retry.
 	RollupLinkDaily(ctx context.Context, arg RollupLinkDailyParams) error
 	RollupWorkspaceDaily(ctx context.Context, arg RollupWorkspaceDailyParams) error
+	RotateWebhookSecret(ctx context.Context, arg RotateWebhookSecretParams) error
+	// Both switches at once, because they are one setting with two halves and the
+	// CHECK in 01800 refuses the combination that writing them separately would pass
+	// through on the way. That applies row by row, so a propagation that touched one
+	// column would be refused by the constraint on the way out.
+	//
+	// **Every undeleted domain, not only the default (F89).** This was
+	// `WHERE is_default` until M45, which was the whole truth while the instance
+	// default was the only domain there was. M40 added verified custom hostnames and
+	// `ResolveAliasForRedirect` reads the policy from the link's *own* domain row, so
+	// an operator who turned blocking on — even enforced — got no blocking on any
+	// link served on a custom hostname, and any workspace could open that hole for
+	// itself by registering one. Plan.md's "the domain's setting is instance-wide" is
+	// the claim being restored, and this is what makes it true.
+	//
+	// **Every updated row comes back, not just the default**, because each one is a
+	// cache invalidation the caller owes: a snapshot carries its domain's policy so
+	// the redirect path needs no second lookup, so every cached alias under every
+	// domain touched here is now wrong. The default is marked rather than sorted for,
+	// since it is the row the settings surfaces read and the hostname they name.
+	SetBotBlockingForEveryDomain(ctx context.Context, arg SetBotBlockingForEveryDomainParams) ([]SetBotBlockingForEveryDomainRow, error)
 	// NULL clears it, which restores the 404 the root answered before anyone set
 	// anything.
 	SetDefaultDomainRootRedirect(ctx context.Context, rootRedirectUrl *string) (SetDefaultDomainRootRedirectRow, error)
+	// Pins a workspace as where new sessions start, or clears the pin.
+	//
+	// NULL is a real value here and means "follow last-used", which is the default
+	// the control offers. Clearing therefore needs no membership check; setting
+	// needs the same one as above.
+	SetDefaultWorkspaceForUser(ctx context.Context, arg SetDefaultWorkspaceForUserParams) (int64, error)
+	// Where a verified hostname's own root sends a visitor (M40).
+	//
+	// The same column 00800 added for the instance default, addressed by id instead
+	// of by `is_default`. A custom hostname is a bare domain somebody will type, and
+	// answering 404 there is a choice its owner should get to make rather than
+	// inherit from the instance.
+	//
+	// NULL clears it, restoring the 404.
+	SetDomainRootRedirect(ctx context.Context, arg SetDomainRootRedirectParams) (Domain, error)
+	// Runs only after the rollup returned without error, which is what makes
+	// last_success_at mean what its name says. last_run_at cannot: RecordJobFailure
+	// stamps it too, so a job failing on every tick would report itself fresh
+	// forever and the staleness alert would never fire.
 	SetJobWatermark(ctx context.Context, arg SetJobWatermarkParams) error
+	// Remembers a selection, and refuses one the user is not entitled to.
+	//
+	// The membership check is in the statement rather than in a preceding SELECT so
+	// there is no window between the two. Zero rows means "not yours or not there",
+	// which the caller reports as not-found: a workspace id must not be probeable
+	// for existence.
+	SetLastWorkspaceForUser(ctx context.Context, arg SetLastWorkspaceForUserParams) (int64, error)
 	SetPrimaryDestination(ctx context.Context, arg SetPrimaryDestinationParams) error
+	// Moves one session, and only the session that asked.
+	//
+	// Scoped by user_id as well as id so a session id from elsewhere cannot be
+	// repointed, and revoked sessions are excluded because moving one would be
+	// writing to a credential that no longer authenticates.
+	SetSessionWorkspace(ctx context.Context, arg SetSessionWorkspaceParams) (int64, error)
+	// Soft, unlike a folder. A domain is the namespace its links' aliases live in
+	// and `links.domain_id` is NOT NULL with no cascade, so a hard delete is refused
+	// by the database the moment one link exists; a soft delete keeps the row that
+	// every historic click event and reserved alias still points at.
+	SoftDeleteDomain(ctx context.Context, id uuid.UUID) (int64, error)
 	// Soft delete with a purge deadline rather than an immediate DELETE. Restoring
 	// a link someone deleted by accident is a common request, and the alias stays
 	// reserved while the row exists.
@@ -280,13 +2161,103 @@ type Querier interface {
 	// the caller, because writing on every request would turn a read-mostly path
 	// into a write on the hottest authenticated query.
 	TouchSession(ctx context.Context, id uuid.UUID) error
+	// Takes every link out of a deleted campaign.
+	//
+	// Run in the same transaction as DeleteCampaign. Without it the links keep an id
+	// pointing at a row no query returns, which is a link filtered by a campaign
+	// that is not in the campaign list — the invisible-rows failure 02400 describes
+	// for folders, in the one place the schema does not prevent it.
+	UnassignCampaignLinks(ctx context.Context, arg UnassignCampaignLinksParams) (int64, error)
+	// The end of the grace window, and the only place serving stops on its own.
+	//
+	// `verified_at` is cleared, so the next ListVerifiedDomains does not return the
+	// row, so every replica's host cache drops it and the hostname goes back to
+	// ops-only 404. ssl_status goes with it: this instance will stop answering
+	// Caddy's ask for the name, which is the other half of no longer serving it.
+	//
+	// The failing streak is *kept*. The page has to be able to say "this stopped
+	// being served at 03:00 because it had been failing since yesterday", and
+	// clearing the anchor here would throw away the only record of why.
+	UnverifyDomain(ctx context.Context, arg UnverifyDomainParams) (Domain, error)
+	//
+	// Partial: a NULL parameter leaves its column alone, the shape every other
+	// update in this schema has.
+	//
+	// **Re-arming is in this statement and not a second one.** A rule switched from
+	// disabled to enabled has its watermark moved to the arming instant, so a rule
+	// that was off for a month does not fire for a month of backlog the moment
+	// somebody flips the switch. Switching one *off* leaves the watermark where it
+	// is, because a disabled rule is not evaluated at all and the value is what a
+	// reader is shown.
+	//
+	// The re-arm resets **both halves** of the watermark. The pair describes one
+	// position in the match order, and a stale subject id beside a fresh instant
+	// would describe a position that never existed — one that admits subjects tied
+	// on the arming instant whose ids happen to sort above the old boundary. NULL is
+	// the "instant fully spent" spelling, the same one creation uses.
+	UpdateAutomationRule(ctx context.Context, arg UpdateAutomationRuleParams) (AutomationRule, error)
+	// Partial update through COALESCE, like UpdateLink. The two schedule bounds are
+	// three-valued through their own clear flags, because "leave the end date alone"
+	// and "this campaign no longer ends" are different requests and one nullable
+	// parameter cannot express both.
+	UpdateCampaign(ctx context.Context, arg UpdateCampaignParams) (Campaign, error)
 	// The trigger on destinations mirrors this into links.primary_url, so the hot
 	// path never joins.
+	//
+	// Narrowed to the *primary* destination by M34, and the narrowing is the point
+	// rather than tidying. Until routing rules existed a link had exactly one
+	// destination row, so matching on link_id alone matched it; a rule target is a
+	// second row on the same link, and this query would have rewritten every one of
+	// them to the link's own URL the next time somebody edited the link. Every rule
+	// on the link would silently start pointing at the same place, which is
+	// indistinguishable from the rules having stopped working.
+	//
+	// Matched through links.primary_destination_id rather than through `position =
+	// 0`, because that column is what the sync trigger keys on and what the rest of
+	// the schema treats as the authority. Two definitions of "the primary" is how
+	// they come to disagree.
 	UpdateDestinationURL(ctx context.Context, arg UpdateDestinationURLParams) error
 	// COALESCE with sqlc.narg gives partial update: a NULL argument leaves the
 	// column alone, so PATCH semantics need no dynamic SQL.
 	UpdateLink(ctx context.Context, arg UpdateLinkParams) (Link, error)
+	// Scoped by organization as well as id, so the authorization decision the
+	// service made cannot be applied to a row in another tenant.
+	UpdateMembershipRole(ctx context.Context, arg UpdateMembershipRoleParams) (int64, error)
+	// Partial update, same COALESCE-with-narg shape as UpdateLink. The destination
+	// is not here: changing where a rule points is a write to its `destinations`
+	// row, so that the URL, its host and the tier check that accepted it stay in
+	// one place.
+	UpdateRoutingRule(ctx context.Context, arg UpdateRoutingRuleParams) (RoutingRule, error)
+	// Scoped to one destination id, unlike UpdateDestinationURL. A rule target and
+	// the link's own destination are two rows on the same link now, and the wrong
+	// one of these two queries would move both.
+	UpdateRuleDestinationURL(ctx context.Context, arg UpdateRuleDestinationURLParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	// The URL, the weight, or both. Scoped to one destination id for the reason
+	// UpdateRuleDestinationURL is: a link's own destination and its arms are rows in
+	// the same table on the same link.
+	UpdateVariantDestination(ctx context.Context, arg UpdateVariantDestinationParams) error
+	// Only the enabled flag, because that is the only thing on the rule row a
+	// variant has. A weight is a write to the destination; a kind is not editable at
+	// all, since changing one arm's kind would mix two kinds on a link and the
+	// service refuses that outright.
+	UpdateVariantRule(ctx context.Context, arg UpdateVariantRuleParams) (RoutingRule, error)
+	//
+	// Partial: a NULL parameter leaves its column alone. Same shape as every other
+	// update in this schema, so "absent" and "empty" stay different — an empty
+	// events array is a real request to subscribe to nothing.
+	UpdateWebhook(ctx context.Context, arg UpdateWebhookParams) (UpdateWebhookRow, error)
+	// Writes one entry from LINKCTRL_DESTINATION_BLOCKLIST at boot.
+	//
+	// ON CONFLICT DO UPDATE rather than DO NOTHING: an operator who moves a host
+	// into their environment expects the environment to own it from then on, and a
+	// row left claiming it came from a review would send M31 looking for a review
+	// that never happened. created_at is left alone, because the entry is the same
+	// entry it was before the restart.
+	UpsertEnvBlockedDestination(ctx context.Context, arg UpsertEnvBlockedDestinationParams) error
+	// One row per link, which qr_codes_link_key (02700) is what makes true. Without
+	// the unique index this is two concurrent inserts and a link with two styles.
+	UpsertQRCode(ctx context.Context, arg UpsertQRCodeParams) (QrCode, error)
 }
 
 var _ Querier = (*Queries)(nil)

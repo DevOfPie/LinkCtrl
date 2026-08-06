@@ -252,12 +252,27 @@ jobs:
           # name — notes printing ghcr.io/DevOfPie/LinkCtrl would tell readers to
           # pull an image that does not exist.
           image=$(printf '%s' "${{ env.IMAGE }}" | tr '[:upper:]' '[:lower:]')
-          # From this version's heading to the next one, exclusive.
+          # From this version's heading to the next one, exclusive — and
+          # stopping at the link-reference block, which is the second exit (F1).
+          #
+          # The newest version is always the *last* section in CHANGELOG.md, so
+          # "to the next ## [ heading" runs off the end of the file and sweeps
+          # up the trailing `[Unreleased]: https://…` definitions. The published
+          # v0.1.0 body carries them, immediately before its Container image
+          # section — confirmed against the live release rather than inferred.
+          #
+          # It survived a release because a reference definition renders as
+          # nothing: invisible on the release page, present in the raw body, and
+          # so reported by nobody.
           awk -v ver="## [${v#v}]" '
-            index($0, ver) == 1 { inside = 1; next }
-            inside && /^## \[/   { exit }
-            inside               { print }
+            index($0, ver) == 1  { inside = 1; next }
+            inside && /^## \[/    { exit }
+            inside && /^\[[^]]+\]: / { exit }
+            inside                { print }
           ' CHANGELOG.md > notes.md
+          # Drop the blank lines the exit above leaves behind, so the notes do
+          # not end in whitespace that was only ever a separator.
+          printf '%s\n' "$(cat notes.md)" > notes.md
           {
             echo
             echo "### Container image"

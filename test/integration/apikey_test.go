@@ -5,12 +5,14 @@ package integration
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
+	"github.com/DevOfPie/LinkCtrl/internal/domain"
 )
 
 // testPepper is the HMAC pepper for the test key service. Length matters: the
@@ -511,12 +513,16 @@ func TestRevokingAnotherUsersKeyIsNotFound(t *testing.T) {
 	f.setupOwner()
 	key := f.createKey("owners-key", "links.read")
 
-	// A second account, whose own role also permits key management.
-	resp := f.do(http.MethodPost, "/api/v1/auth/register", map[string]string{
-		"email": "other@example.com", "name": "Other", "password": "a-sufficiently-long-password",
-	})
-	_ = resp.Body.Close()
-	resp = f.do(http.MethodPost, "/api/v1/auth/login", map[string]string{
+	// A second account, whose own role also permits key management. Made through
+	// the service rather than through POST /auth/register: since M29 that
+	// endpoint mails a verification link and creates nothing, and what this test
+	// needs is a second account, not a second registration.
+	if _, err := f.auth.Register(t.Context(), auth.RegisterInput{
+		Email: "other@example.com", Name: "Other", Password: "a-sufficiently-long-password",
+	}); err != nil {
+		t.Fatalf("register the second account: %v", err)
+	}
+	resp := f.do(http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"email": "other@example.com", "password": "a-sufficiently-long-password",
 	})
 	_ = resp.Body.Close()
@@ -535,5 +541,135 @@ func TestRevokingAnotherUsersKeyIsNotFound(t *testing.T) {
 	if resp2.StatusCode != http.StatusOK {
 		t.Errorf("the owner's key returned %d after a stranger tried to revoke it, want 200",
 			resp2.StatusCode)
+	}
+}
+
+// An administrator who removes somebody from an organization reasonably believes
+// their credentials into it are inert. They were not.
+//
+// The key kept authenticating, because nothing on the way in asked whether its
+// owner still held a membership: the identity resolved with the organization and
+// the workspace on it and an empty permission set, which is a state the session
+// path has asserted against since M28.5. Empty is not the same as absent, and the
+// difference was reachable — CreateOrganization opens a door for an actor with no
+// memberships at all, and rotation renewed the credential from the row's stored
+// scopes rather than from what its owner could still do, so the chain had no end.
+func TestAKeyDiesWithTheMembershipItActsThrough(t *testing.T) {
+	f := newAPI(t)
+	f.setupOwner()
+
+	key := f.createKey("outlives-its-owner", "links.read")
+
+	// The control: it works before the removal, so what changes below is the
+	// membership and nothing else.
+	if resp := f.doWithKey(key.Key, http.MethodGet, "/api/v1/links", nil); resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
+		t.Fatalf("the premise did not hold: the key returned %d before the removal", resp.StatusCode)
+	} else {
+		_ = resp.Body.Close()
+	}
+
+	// Removal is what RemoveMember does: the membership goes, the account stays.
+	if _, err := f.pool.Exec(t.Context(), `DELETE FROM memberships`); err != nil {
+		t.Fatal(err)
+	}
+
+	// 401 rather than 403. The credential resolves to no authority at all, so
+	// "invalid" is the honest answer — which is what the comment on the
+	// organization-wide branch of the same function has said since M44, applied
+	// only where Create could never produce it.
+	for _, c := range []struct {
+		what, method, path string
+		body               any
+	}{
+		{"reading links", http.MethodGet, "/api/v1/links", nil},
+		{"rotating itself", http.MethodPost, "/api/v1/api-keys/rotate", map[string]any{}},
+		// The door F43 found by sweeping every route: CreateOrganization skips
+		// orgs.create for an actor with no memberships (D36), and a removed
+		// member has none — so a key scoped to links.read alone could create an
+		// organization and own it.
+		{"creating an organization", http.MethodPost, "/api/v1/organizations",
+			map[string]any{"name": "By an orphan"}},
+	} {
+		resp := f.doWithKey(key.Key, c.method, c.path, c.body)
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("%s with an orphaned key returned %d, want 401", c.what, resp.StatusCode)
+		}
+		_ = resp.Body.Close()
+	}
+	// The rows, not the statuses: a refusal that writes anyway passes every
+	// assertion above.
+	var orgs, successors int64
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT (SELECT count(*) FROM organizations WHERE name = 'By an orphan'),
+		        (SELECT count(*) FROM api_keys WHERE successor_id IS NOT NULL)`,
+	).Scan(&orgs, &successors); err != nil {
+		t.Fatal(err)
+	}
+	if orgs != 0 {
+		t.Error("an orphaned key created an organization")
+	}
+	if successors != 0 {
+		t.Error("an orphaned key rotated into a successor")
+	}
+}
+
+// The other half of the same sentence: an administrator needs a way to stop a
+// key, and until now the only person who could was the person holding it.
+//
+// Removing the member is the blunt answer and it is now a real one, but it costs
+// somebody their membership to stop one leaked credential. This is the direct
+// path — and it is bounded the way every organization-wide act is (D44), so
+// holding apikeys.write in one workspace does not reach a key issued into the
+// organization.
+func TestAnOrganizationWideAdminRevokesSomebodyElsesKey(t *testing.T) {
+	e := newEscalation(t)
+	bob := e.member(t, "bob-with-a-key@example.com", "admin")
+
+	key, err := e.keys.Create(t.Context(), bob, auth.CreateAPIKeyInput{
+		Name: "bobs-key", Scopes: []string{"links.read"},
+	})
+	if err != nil {
+		t.Fatalf("mint bob's key: %v", err)
+	}
+
+	// Alice holds apikeys.write — she resolves as an admin inside Marketing —
+	// and does not hold it organization-wide. Not-found rather than forbidden,
+	// so an id stays unprobeable by somebody who may not act on it.
+	if err := e.keys.Revoke(t.Context(), e.alice, key.ID); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("a workspace-scoped admin revoked a key issued into the organization: %v", err)
+	}
+	if _, err := e.keys.Authenticate(t.Context(), key.Key); err != nil {
+		t.Fatalf("the key stopped working after a refused revoke: %v", err)
+	}
+
+	if err := e.keys.Revoke(t.Context(), e.owner, key.ID); err != nil {
+		t.Fatalf("an organization-wide owner could not revoke a key in their organization: %v", err)
+	}
+	if _, err := e.keys.Authenticate(t.Context(), key.Key); !errors.Is(err, auth.ErrAPIKeyInvalid) {
+		t.Errorf("the revoked key still authenticates: %v", err)
+	}
+
+	// Audited, unlike revoking your own key. The vocabulary's reason for leaving
+	// revocation out was that the person is the record; here the owner of the
+	// credential was not present.
+	if n := e.count(t, `
+		SELECT count(*) FROM audit_logs
+		 WHERE action = 'apikey.revoked' AND target_id = $1
+		   AND metadata->>'owner_id' = $2`, key.ID, bob.UserID.String()); n != 1 {
+		t.Errorf("%d apikey.revoked records name bob's key, want 1", n)
+	}
+
+	// A key of another organization's is still not found, so this is scoped and
+	// not a blanket administrative reach.
+	outsider := e.otherOrganization(t)
+	theirs, err := e.keys.Create(t.Context(), outsider, auth.CreateAPIKeyInput{
+		Name: "theirs", Scopes: []string{"links.read"},
+	})
+	if err != nil {
+		t.Fatalf("mint the outsider's key: %v", err)
+	}
+	if err := e.keys.Revoke(t.Context(), e.owner, theirs.ID); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("an owner revoked a key belonging to another organization: %v", err)
 	}
 }

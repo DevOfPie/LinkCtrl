@@ -1,0 +1,207 @@
+{{define "content"}}
+<div class="mb-6 flex items-baseline justify-between">
+  <h1 class="text-xl font-semibold tracking-tight">Webhooks</h1>
+  <a href="/links" class="text-sm font-medium text-accent-ink hover:underline">Links →</a>
+</div>
+
+{{template "webhook_panel" .}}
+{{end}}
+
+{{/* The whole page below the heading, and the htmx swap target.
+
+     One target rather than several, for the reason the campaigns page gives:
+     every write here can change more than one half — registering changes the
+     list AND empties the form AND reveals a secret, toggling changes a row's
+     state, and a refusal has to appear above all of it. */}}
+{{define "webhook_panel"}}
+<div id="webhook-panel">
+  {{template "flash_ok" .Notice}}
+  {{template "flash_error" .Error}}
+
+  {{/* The signing secret, shown exactly once and never again.
+
+       It is in the rendered response rather than behind a redirect on purpose:
+       a secret in a query string is a secret in the browser history and in
+       every access log between here and the browser. */}}
+  {{if .Secret}}
+  <div class="mb-6 rounded-lg border border-accent bg-accent-soft p-6">
+    <h2 class="text-sm font-medium text-ink">Signing secret</h2>
+    <p class="mt-1 text-xs text-muted">Copy it now. It is shown once and nothing can read it back &mdash; if it is lost, rotate.</p>
+    <code class="mt-3 block overflow-x-auto rounded-md border border-line-strong bg-raised px-3 py-2 font-mono text-sm text-ink">{{.Secret}}</code>
+  </div>
+  {{end}}
+
+  {{if .CanWrite}}
+  <div class="mb-6 rounded-lg border border-line bg-raised p-6">
+    <h2 class="mb-4 text-sm font-medium text-ink">Register a webhook</h2>
+    <form method="post" action="/webhooks" hx-post="/webhooks" hx-target="#webhook-panel" hx-swap="outerHTML"
+          class="grid gap-4">
+      <div>
+        <label for="webhook-url" class="block text-sm font-medium text-ink">Endpoint URL</label>
+        <input id="webhook-url" name="url" type="url" required maxlength="2048" value="{{.FormURL}}"
+               placeholder="https://example.com/hooks/linkctrl"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      </div>
+      <div>
+        <label for="webhook-description" class="block text-sm font-medium text-ink">Description <span class="text-subtle">(optional)</span></label>
+        <input id="webhook-description" name="description" type="text" maxlength="200" value="{{.FormDescription}}"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      </div>
+      <fieldset>
+        <legend class="block text-sm font-medium text-ink">Events</legend>
+        <div class="mt-2 grid gap-2 sm:grid-cols-2">
+          {{range .Events}}
+          <label class="flex items-center gap-2 text-sm text-ink">
+            <input type="checkbox" name="events" value="{{.Name}}" {{if .Checked}}checked{{end}}
+                   class="rounded border-line-strong text-accent focus:ring-accent">
+            <code class="text-xs">{{.Name}}</code>
+          </label>
+          {{end}}
+        </div>
+      </fieldset>
+      <div>
+        <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Register</button>
+      </div>
+    </form>
+    <p class="mt-3 text-xs text-subtle">
+      Each event is POSTed as JSON and signed with this webhook's secret &mdash; the header is <code>X-LinkCtrl-Signature</code>, and the scheme is written out in <code>docs/usage.md</code>. A failed delivery is retried up to {{.MaxAttempts}} times over about an hour (61 minutes), then abandoned; the log is kept for {{.Retention}} days. Up to {{.MaxWebhooks}} fit in a workspace.
+    </p>
+    <p class="mt-2 text-xs text-subtle">
+      <strong>The endpoint must be publicly routable.</strong> A URL naming a private, loopback or link-local address is refused when you register it, and the address it resolves to is checked again every time this server opens the connection &mdash; so a name that later points somewhere private is not delivered to either.
+    </p>
+  </div>
+  {{end}}
+
+  <div class="rounded-lg border border-line bg-raised p-6">
+    {{if .Rows}}
+    <ul class="divide-y divide-line">
+      {{range .Rows}}
+      <li class="py-4 first:pt-0 last:pb-0">
+        <div class="flex flex-wrap items-baseline gap-2">
+          <code class="max-w-full overflow-x-auto text-sm text-ink">{{.URL}}</code>
+          {{if .Enabled}}
+          <span class="rounded-full bg-ok-soft px-2 py-0.5 text-xs font-medium text-ok-ink">enabled</span>
+          {{else}}
+          <span class="rounded-full bg-sunken px-2 py-0.5 text-xs font-medium text-subtle">paused</span>
+          {{end}}
+          <span class="text-xs text-subtle">since {{.CreatedAt}}</span>
+          <div class="ml-auto flex flex-wrap items-center gap-2">
+            <a href="/webhooks?log={{.ID}}" hx-get="/webhooks?log={{.ID}}" hx-target="#webhook-panel"
+               hx-select="#webhook-panel" hx-swap="outerHTML" hx-push-url="true"
+               class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-surface">Deliveries</a>
+            {{if $.CanWrite}}
+            <a href="/webhooks?edit={{.ID}}" hx-get="/webhooks?edit={{.ID}}" hx-target="#webhook-panel"
+               hx-select="#webhook-panel" hx-swap="outerHTML" hx-push-url="true"
+               class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-surface">Edit</a>
+            <form method="post" action="/webhooks/{{.ID}}/toggle"
+                  hx-post="/webhooks/{{.ID}}/toggle" hx-target="#webhook-panel" hx-swap="outerHTML">
+              <button type="submit" class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-surface">{{if .Enabled}}Pause{{else}}Resume{{end}}</button>
+            </form>
+            <form method="post" action="/webhooks/{{.ID}}/rotate"
+                  hx-post="/webhooks/{{.ID}}/rotate" hx-target="#webhook-panel" hx-swap="outerHTML">
+              <button type="submit" class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-surface">Rotate secret</button>
+            </form>
+            <form method="post" action="/webhooks/{{.ID}}/delete"
+                  hx-post="/webhooks/{{.ID}}/delete" hx-target="#webhook-panel" hx-swap="outerHTML">
+              <button type="submit" class="rounded-md border border-danger-line px-2 py-1 text-xs font-medium text-danger-ink hover:bg-danger-soft">Delete</button>
+            </form>
+            {{end}}
+          </div>
+        </div>
+        {{if .Description}}<p class="mt-1 text-xs text-muted">{{.Description}}</p>{{end}}
+        <p class="mt-1 flex flex-wrap gap-1">
+          {{range .Events}}<code class="rounded bg-sunken px-1.5 py-0.5 text-xs text-muted">{{.}}</code>{{end}}
+        </p>
+
+        {{/* The delivery log, open only for the row somebody asked for. It is
+             on this page rather than one of its own because a webhook that has
+             stopped working changes nothing a workspace can otherwise see:
+             without the status, the attempt count and the response code, "we
+             stopped getting events" is unanswerable from the dashboard. */}}
+        {{if .ShowLog}}
+        <div class="mt-3 overflow-x-auto rounded-md border border-line-strong bg-sunken p-4">
+          {{if .Deliveries}}
+          <table class="w-full text-left text-xs">
+            <thead class="text-subtle">
+              <tr>
+                <th class="pb-2 pr-4 font-medium">Event</th>
+                <th class="pb-2 pr-4 font-medium">Status</th>
+                <th class="pb-2 pr-4 font-medium">Attempts</th>
+                <th class="pb-2 pr-4 font-medium">Response</th>
+                <th class="pb-2 pr-4 font-medium">Queued</th>
+                <th class="pb-2 font-medium">Next</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-line">
+              {{range .Deliveries}}
+              <tr>
+                <td class="py-1.5 pr-4"><code>{{.Event}}</code></td>
+                <td class="py-1.5 pr-4 {{if .OK}}text-ok-ink{{else}}text-muted{{end}}">{{.Status}}</td>
+                <td class="py-1.5 pr-4 text-muted">{{.Attempts}}</td>
+                <td class="py-1.5 pr-4 text-muted">{{.Code}}</td>
+                <td class="py-1.5 pr-4 text-muted">{{.When}}</td>
+                <td class="py-1.5 text-muted">{{.Next}}</td>
+              </tr>
+              {{if .Error}}
+              <tr><td colspan="6" class="pb-2 text-xs text-danger-ink">{{.Error}}</td></tr>
+              {{end}}
+              {{end}}
+            </tbody>
+          </table>
+          {{else}}
+          <p class="text-xs text-subtle">Nothing has been delivered yet. A delivery appears here as soon as something happens that this webhook subscribes to.</p>
+          {{end}}
+          <p class="mt-3">
+            <a href="/webhooks" hx-get="/webhooks" hx-target="#webhook-panel" hx-select="#webhook-panel"
+               hx-swap="outerHTML" hx-push-url="true"
+               class="text-xs font-medium text-muted hover:text-ink">Close</a>
+          </p>
+        </div>
+        {{end}}
+
+        {{/* The editor, open only for the row somebody asked to edit. */}}
+        {{if and .Editing $.CanWrite}}
+        <form method="post" action="/webhooks/{{.ID}}"
+              hx-post="/webhooks/{{.ID}}" hx-target="#webhook-panel" hx-swap="outerHTML"
+              class="mt-3 grid gap-3 rounded-md border border-line-strong bg-sunken p-4">
+          <div>
+            <label for="edit-url-{{.ID}}" class="block text-xs font-medium text-ink">Endpoint URL</label>
+            <input id="edit-url-{{.ID}}" name="url" type="url" required maxlength="2048" value="{{.URL}}"
+                   class="mt-1 block w-full rounded-md border border-line-strong px-2 py-1.5 text-sm focus:border-accent focus:outline-none">
+          </div>
+          <div>
+            <label for="edit-desc-{{.ID}}" class="block text-xs font-medium text-ink">Description</label>
+            <input id="edit-desc-{{.ID}}" name="description" type="text" maxlength="200" value="{{.Description}}"
+                   class="mt-1 block w-full rounded-md border border-line-strong px-2 py-1.5 text-sm focus:border-accent focus:outline-none">
+          </div>
+          <fieldset>
+            <legend class="block text-xs font-medium text-ink">Events</legend>
+            <div class="mt-2 grid gap-2 sm:grid-cols-2">
+              {{range .EventChoices}}
+              <label class="flex items-center gap-2 text-sm text-ink">
+                <input type="checkbox" name="events" value="{{.Name}}" {{if .Checked}}checked{{end}}
+                       class="rounded border-line-strong text-accent focus:ring-accent">
+                <code class="text-xs">{{.Name}}</code>
+              </label>
+              {{end}}
+            </div>
+          </fieldset>
+          <div class="flex items-center gap-2">
+            <button type="submit" class="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-accent-hover">Save</button>
+            <a href="/webhooks" hx-get="/webhooks" hx-target="#webhook-panel" hx-select="#webhook-panel"
+               hx-swap="outerHTML" hx-push-url="true"
+               class="rounded-md px-3 py-1.5 text-sm font-medium text-muted hover:bg-surface hover:text-ink">Cancel</a>
+          </div>
+        </form>
+        {{end}}
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <div class="rounded-md border border-dashed border-line py-12 text-center text-sm text-subtle">
+      {{if .CanRead}}No webhooks yet{{if .CanWrite}} &mdash; register the first one above{{end}}.{{else}}Webhooks are managed by this workspace's owners and administrators.{{end}}
+    </div>
+    {{end}}
+  </div>
+</div>
+{{end}}

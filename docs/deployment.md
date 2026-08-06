@@ -209,6 +209,179 @@ Two things not to forward:
   public by default, which is usually what you want; the switch is there for
   instances that should describe nothing.
 
+## Custom domains
+
+A workspace can register a hostname of its own and serve its short links on it.
+Two things have to be true before that happens, and this section is both of them.
+
+### What the application does, and what it does not
+
+LinkCtrl **never speaks ACME**. It obtains no certificates, contacts no
+certificate authority, and holds no account key. Certificates for custom
+hostnames are your proxy's, exactly as the certificates for your own hostnames
+are. All this application does is answer one question — *should you get a
+certificate for this name?* — and it answers yes only for hostnames a workspace
+has proved it controls.
+
+What it does do is **verify control by DNS**, on a cadence, and stop serving a
+hostname whose proof has gone away.
+
+### The customer's half
+
+A workspace registers `go.customer.example` on the Domains page. LinkCtrl shows
+them one TXT record. They publish it, and point the hostname at this instance:
+
+```
+_linkctrl-challenge.go.customer.example.  IN  TXT  "b7f0…"      # from the page
+go.customer.example.                      IN  CNAME  lnk.example.com.
+```
+
+Then they press **Check DNS**. Until that check passes, a request arriving with
+`Host: go.customer.example` gets the operational 404 and nothing else — no link,
+no dashboard, and never a redirect to your own hostname. **That gap is the whole
+point**: without it, anybody who pointed a hostname at your address could serve
+short links on it.
+
+Afterwards, the header is matched by the hostname alone: `go.customer.example`,
+`go.customer.example.` and `go.customer.example:8443` all name the same verified
+hostname and are served identically. That is not true of `BASE_URL`,
+`APP_BASE_URL` and `LINK_BASE_URL` — a non-default port there is part of the
+hostname you configured, so a deployment may serve the dashboard and short links
+on one name and two ports and they stay two trees.
+
+### Your half: on-demand TLS
+
+Caddy asks LinkCtrl before obtaining a certificate for a name it was not
+configured with. Add the `ask` endpoint and an on-demand site block:
+
+```caddyfile
+{
+	on_demand_tls {
+		# LinkCtrl answers 200 for a verified custom hostname and 404 for
+		# everything else. Without this, Caddy would obtain a certificate for
+		# any name pointed at this address — which is the abuse `ask` exists to
+		# prevent, and the reason this endpoint answers for verified domains
+		# only.
+		ask http://localhost:8080/tls-check
+	}
+}
+
+# Your own hostnames, configured statically, exactly as before.
+manage.example.com, lnk.example.com {
+	encode zstd gzip
+	reverse_proxy localhost:8080 {
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
+
+# Everything else: certificates on demand, subject to the ask above.
+https:// {
+	tls {
+		on_demand
+	}
+	encode zstd gzip
+	reverse_proxy localhost:8080 {
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
+```
+
+The `ask` endpoint is unauthenticated by necessity — it is consulted during a TLS
+handshake, before any application request exists. It reads an in-process map,
+performs at most one write per verification, and discloses only whether a name is
+already being served publicly. **Do not expose it through the proxy**: Caddy
+reaches it on the loopback address, and nothing else needs to.
+
+Confirm it before trusting the setup:
+
+```sh
+curl -so /dev/null -w '%{http_code}\n' 'http://localhost:8080/tls-check?domain=go.customer.example'
+# 200 once verified, 404 before that and for any name this instance does not serve
+```
+
+`ssl_status` on the domain row says what this instance knows, which is not much
+and is not meant to be: `none` before verification, `pending` once it will answer
+the ask, `active` once the ask has been answered. The certificate itself is your
+proxy's and its state lives there.
+
+### Re-verification, and what happens when a record is deleted
+
+**Every registered hostname is re-checked hourly.** The check runs on one replica
+at a time — its own Postgres advisory lock; each job family holds one — while
+*serving* the hostnames is decided by an in-process set on every replica, kept in
+step through Redis pub/sub. That is why an un-verification takes effect
+everywhere within moments rather than on whichever replica happened to run the
+job.
+
+When a check fails:
+
+| When | What happens |
+| --- | --- |
+| The first failed check | The domain is marked failing and **the owning workspace's owners are notified**, with the time serving stops. **Links keep working.** |
+| Any successful check | The failing state is cleared and the clock is reset. Nothing was interrupted. |
+| **24 hours** of continuous failure | **Serving stops.** `verified_at` is cleared, the hostname goes back to the operational 404 on every replica, the workspace is notified again, and a `domain.unverified` record is written to the audit log. |
+
+**One day, checked hourly** — so a hostname must fail twenty-four consecutive
+checks before its links go dark. That is deliberate on both sides. A single
+failed DNS poll is weak evidence: one resolver hiccup or a brief nameserver
+outage would otherwise take a paying customer's links down with no human in the
+loop. And the window is a real deadline rather than a warning that repeats: for
+as long as it runs, this instance is serving a hostname whose DNS its owner may
+already have lost, and a grace period that never expires is not a grace period.
+
+Both numbers are yours to change:
+
+```sh
+LINKCTRL_DOMAIN_VERIFY_INTERVAL=1h    # how often every registered hostname is re-checked
+LINKCTRL_DOMAIN_VERIFY_GRACE=24h      # how long a failing hostname keeps serving
+```
+
+Setting the interval to `0` switches the periodic pass off entirely and leaves
+verification on-demand only — which also means a hostname that stops verifying
+keeps serving indefinitely. Do that only if something else is watching.
+
+**A pass checks the hostnames you are serving first.**
+`LINKCTRL_DOMAIN_VERIFY_BATCH` bounds how many hostnames one pass looks at;
+serving hostnames are drawn first and take what they need of it, and
+registrations that are not yet served take what is left. The stop above can
+therefore be delayed only by other serving hostnames, never by a pile of
+registrations — anybody with an account can create those, and renaming one puts
+it back at the front of the queue. Raising the batch does not help with a slow
+nameserver and makes this worse: it is more lookups inside the same pass, each
+able to block for `LINKCTRL_DOMAIN_VERIFY_DNS_TIMEOUT`.
+
+**A workspace may register at most twenty-five hostnames.** Every registration is
+a recurring DNS lookup this instance owes, aimed at a nameserver the registrant
+chose, so the cap bounds the work one workspace can create for everyone else. It
+is a constant rather than a setting, and a workspace that reaches it is told to
+remove a hostname it no longer serves.
+
+Two changes take effect immediately and do not wait for the window, because
+neither is a failed check:
+
+- **Renaming a hostname un-verifies it.** The published record proves control of
+  the old name and says nothing about the new one. A fresh token is minted, and
+  the domain serves nothing until the new record is published and checked. A
+  rename that lands *while* a check is in flight makes that check verify nothing
+  and say so — it proved control of a name the row no longer carries, and the
+  remedy is to check again.
+- **Removing a hostname** stops it being served everywhere at once. Removal is
+  refused while any link is on the domain, because every one of them would stop
+  resolving.
+
+### If a customer says their links stopped working
+
+1. Read the domain's row on their Domains page. It names the record it expected
+   and what the last check actually found.
+2. Check it yourself: `dig +short TXT _linkctrl-challenge.go.customer.example`.
+3. If the record is there and correct, re-check from the page — verification
+   resumes serving immediately, with no waiting period in either direction.
+4. `docker compose logs app | grep 'custom domain verification'` shows what each
+   hourly pass concluded, and the audit log holds `domain.verified` and
+   `domain.unverified` with timestamps.
+
 ## 4. Claim the instance
 
 Visit `https://links.example.com`. A fresh instance redirects to a setup form
@@ -230,9 +403,16 @@ curl -sS -X POST https://links.example.com/api/v1/auth/setup \
   -d '{"email":"you@example.com","name":"You","password":"a-long-passphrase"}'
 ```
 
-`SIGNUP_MODE=closed` (the default) means nobody else can register. The setup
-endpoint is exempt — otherwise a closed instance could never create its first
-account — and it closes the moment it succeeds.
+`SIGNUP_MODE=closed` (the default) means nobody else can register, and nothing
+inside the running instance changes that — there is no runtime toggle, so
+leaving it at `closed` settles the question until somebody edits this file. The
+setup endpoint is exempt, otherwise a closed instance could never create its
+first account, and it closes the moment it succeeds.
+
+To let people in later, set `SIGNUP_MODE` here and restart. `open` additionally
+needs `LINKCTRL_SMTP_HOST`, since public registration confirms the address by
+email before creating the account; without a relay the instance stays at
+invitation-only and says so in the log at boot.
 
 ## 5. Back it up
 
@@ -380,21 +560,44 @@ Worth knowing so you do not spend an afternoon re-adding it:
   UTC offset, leaving gaps that silently swallow rows.
 - Redis runs with no persistence and `allkeys-lru`. Any key may vanish at any
   moment, which is exactly what the design assumes.
+- **If you point `LINKCTRL_REDIS_URL` at a managed Redis, turn persistence off
+  there too.** The shipped compose file is memory-only and this is only a
+  question once you move off it. The shared rate limiter keys on the client
+  address — the full address for IPv4, a `/64` for IPv6 — for the length of the
+  limiter's window, 120 seconds by default. That is not a column and no address
+  is stored in Postgres, which is the product's stance; it does mean a managed
+  service with RDB or AOF snapshots enabled by default writes client addresses
+  to disk on somebody else's infrastructure, on a retention schedule you did not
+  choose. Anonymising the IPv4 side is not an option the product can take: a
+  `/24` key would let one host exhaust the budget of 255 neighbours.
 - Log files rotate at 10 MB × 3 per service.
 
 ## Scaling, honestly
 
-Phase 1 is designed for one app instance, and one limitation decides it:
-**cache invalidation is single-replica.** Editing a link clears the cache on the
-replica that handled the edit; other replicas serve the old destination until
-the entry's TTL expires (`REDIRECT_TTL`, 24h by default). Phase 2 adds pub/sub.
+More than one `app` container works. Each replica keeps its own in-process cache
+in front of Redis, and invalidations are broadcast on a Redis pub/sub channel, so
+an edit on one replica clears every replica's copy rather than only the one that
+handled it. That was the limitation that made 0.1.0 a single-instance product.
 
-Until then:
+What to know before running several:
 
-- Run one `app` container. It is a Go binary serving cached redirects; that goes
-  a long way.
-- If you must run more, lower `REDIRECT_TTL` to bound the staleness window and
-  accept that edits take up to that long to reach every replica.
+- **Redis stops being only a cache.** It is still optional for correctness — with
+  it down, redirects resolve from Postgres and edits still apply — but it is what
+  carries invalidations between replicas. Without it, each replica serves its own
+  cached copy until `REDIRECT_TTL` expires, which is the 0.1.0 behaviour.
+- **A replica that loses the subscription flushes its caches, then flushes again
+  when it reconnects.** Pub/sub does not replay, so it cannot know what it
+  missed. Expect a brief cold cache after a Redis restart, on every replica at
+  once. This covers a Redis that stalls as well as one that goes away: the
+  subscriber bounds its read with `REDIS_SUBSCRIBER_READ_TIMEOUT` and makes
+  Redis answer a probe before it accepts silence as *nothing has changed*.
+- **The credential and API rate limits are shared across replicas; the
+  404-probe limit is not.** Since 0.2.0 the first two go through Redis, so the
+  configured number holds however many replicas are running — and falls back to
+  per-replica buckets whenever Redis does not answer, which is the fail-open
+  direction the cache-is-optional rule requires. The 404-probe limiter stays per
+  instance permanently, because it guards the redirect path: N replicas allow
+  roughly N times its configured limit.
 - Vertical growth first: Postgres `shared_buffers` and the two pool sizes
   (`DB_MAX_CONNS`, `DB_REDIRECT_MAX_CONNS`) are the knobs that matter. Keep
   their total under the server's `max_connections`; startup refuses to run when

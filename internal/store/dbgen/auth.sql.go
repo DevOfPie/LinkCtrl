@@ -96,20 +96,26 @@ func (q *Queries) CreateOrganization(ctx context.Context, arg CreateOrganization
 }
 
 const createSession = `-- name: CreateSession :one
-INSERT INTO sessions (id, user_id, token_hash, ip_prefix, user_agent, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, token_hash, ip_prefix, user_agent, created_at, last_seen_at, expires_at, revoked_at
+INSERT INTO sessions (id, user_id, token_hash, ip_prefix, user_agent, expires_at, workspace_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, user_id, token_hash, ip_prefix, user_agent, created_at, last_seen_at, expires_at, revoked_at, workspace_id
 `
 
 type CreateSessionParams struct {
-	ID        uuid.UUID
-	UserID    uuid.UUID
-	TokenHash []byte
-	IpPrefix  *string
-	UserAgent *string
-	ExpiresAt time.Time
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	TokenHash   []byte
+	IpPrefix    *string
+	UserAgent   *string
+	ExpiresAt   time.Time
+	WorkspaceID *uuid.UUID
 }
 
+// workspace_id is written at sign-in rather than left for the first switch, so
+// a session says where it is from its first row. Resolution would answer the
+// same either way — a NULL simply falls through to the user's preference — but
+// a switcher that only takes effect after the first switch is a switcher whose
+// state is unreadable until somebody uses it.
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error) {
 	row := q.db.QueryRow(ctx, createSession,
 		arg.ID,
@@ -118,6 +124,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		arg.IpPrefix,
 		arg.UserAgent,
 		arg.ExpiresAt,
+		arg.WorkspaceID,
 	)
 	var i Session
 	err := row.Scan(
@@ -130,6 +137,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		&i.LastSeenAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.WorkspaceID,
 	)
 	return i, err
 }
@@ -137,7 +145,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, email, name, password_hash, status, email_verified_at)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, email, email_lower, email_verified_at, name, password_hash, status, failed_login_count, locked_until, mfa_secret, mfa_enabled_at, anonymized_at, last_login_at, created_at, updated_at, deleted_at
+RETURNING id, email, email_lower, email_verified_at, name, password_hash, status, failed_login_count, locked_until, mfa_secret, mfa_enabled_at, anonymized_at, last_login_at, created_at, updated_at, deleted_at, default_workspace_id, last_workspace_id
 `
 
 type CreateUserParams struct {
@@ -176,6 +184,8 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.DefaultWorkspaceID,
+		&i.LastWorkspaceID,
 	)
 	return i, err
 }
@@ -183,7 +193,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 const createWorkspace = `-- name: CreateWorkspace :one
 INSERT INTO workspaces (id, organization_id, name, slug)
 VALUES ($1, $2, $3, $4)
-RETURNING id, organization_id, name, slug, analytics_retention_days, created_at, updated_at, deleted_at
+RETURNING id, organization_id, name, slug, analytics_retention_days, created_at, updated_at, deleted_at, signing_secret
 `
 
 type CreateWorkspaceParams struct {
@@ -210,6 +220,7 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.SigningSecret,
 	)
 	return i, err
 }
@@ -228,34 +239,6 @@ func (q *Queries) DeleteExpiredSessions(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const getDefaultWorkspaceForUser = `-- name: GetDefaultWorkspaceForUser :one
-SELECT w.id, w.organization_id, w.name, w.slug, w.analytics_retention_days, w.created_at, w.updated_at, w.deleted_at
-FROM workspaces w
-JOIN memberships m ON m.organization_id = w.organization_id
-WHERE m.user_id = $1
-  AND w.deleted_at IS NULL
-ORDER BY w.created_at, w.id
-LIMIT 1
-`
-
-// The workspace a user lands in with no explicit selection. Ordered so the
-// result is deterministic rather than whatever the planner returns first.
-func (q *Queries) GetDefaultWorkspaceForUser(ctx context.Context, userID uuid.UUID) (Workspace, error) {
-	row := q.db.QueryRow(ctx, getDefaultWorkspaceForUser, userID)
-	var i Workspace
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.Name,
-		&i.Slug,
-		&i.AnalyticsRetentionDays,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return i, err
 }
 
 const getRoleBySlug = `-- name: GetRoleBySlug :one
@@ -323,7 +306,7 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, email_lower, email_verified_at, name, password_hash, status, failed_login_count, locked_until, mfa_secret, mfa_enabled_at, anonymized_at, last_login_at, created_at, updated_at, deleted_at FROM users
+SELECT id, email, email_lower, email_verified_at, name, password_hash, status, failed_login_count, locked_until, mfa_secret, mfa_enabled_at, anonymized_at, last_login_at, created_at, updated_at, deleted_at, default_workspace_id, last_workspace_id FROM users
 WHERE email_lower = lower($1::text)
   AND deleted_at IS NULL
 `
@@ -350,12 +333,14 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.DefaultWorkspaceID,
+		&i.LastWorkspaceID,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, email_lower, email_verified_at, name, password_hash, status, failed_login_count, locked_until, mfa_secret, mfa_enabled_at, anonymized_at, last_login_at, created_at, updated_at, deleted_at FROM users WHERE id = $1 AND deleted_at IS NULL
+SELECT id, email, email_lower, email_verified_at, name, password_hash, status, failed_login_count, locked_until, mfa_secret, mfa_enabled_at, anonymized_at, last_login_at, created_at, updated_at, deleted_at, default_workspace_id, last_workspace_id FROM users WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -378,6 +363,8 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.DefaultWorkspaceID,
+		&i.LastWorkspaceID,
 	)
 	return i, err
 }
@@ -633,6 +620,102 @@ UPDATE users
 func (q *Queries) RecordSuccessfulLogin(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, recordSuccessfulLogin, id)
 	return err
+}
+
+const resolveWorkspaceForUser = `-- name: ResolveWorkspaceForUser :one
+SELECT w.id, w.organization_id, w.name, w.slug, w.analytics_retention_days, w.created_at, w.updated_at, w.deleted_at, w.signing_secret
+FROM workspaces w
+JOIN organizations o ON o.id = w.organization_id
+JOIN memberships m ON m.organization_id = w.organization_id
+JOIN users u       ON u.id = m.user_id
+LEFT JOIN sessions s ON s.id = $1::uuid
+                    AND s.user_id = m.user_id
+                    AND s.revoked_at IS NULL
+WHERE m.user_id = $2
+  AND w.deleted_at IS NULL
+  AND o.deleted_at IS NULL
+  AND ($3::uuid IS NULL
+       OR w.organization_id = $3::uuid)
+  -- A NULL memberships.workspace_id covers every workspace in the organization;
+  -- a set one covers exactly that workspace. Same rule GetUserPermissions
+  -- applies, so a user can never resolve into a workspace they hold no
+  -- permissions in. No-op today, where every membership is organization-wide.
+  AND (m.workspace_id IS NULL OR m.workspace_id = w.id)
+ORDER BY
+    (w.id IS NOT DISTINCT FROM s.workspace_id)          DESC,
+    (w.id IS NOT DISTINCT FROM u.default_workspace_id)  DESC,
+    (w.id IS NOT DISTINCT FROM u.last_workspace_id)     DESC,
+    w.created_at, w.id
+LIMIT 1
+`
+
+type ResolveWorkspaceForUserParams struct {
+	SessionID      *uuid.UUID
+	UserID         uuid.UUID
+	OrganizationID *uuid.UUID
+}
+
+// The workspace a request acts in, and the only place that question is
+// answered. Every identity — session, API key, CLI — comes through here.
+//
+// The precedence is the ORDER BY and nothing else, so there is one statement of
+// it rather than one per caller:
+//
+//  1. the session's own current workspace, for a request that has a session
+//  2. the workspace the user pinned as their default
+//  3. the workspace they used last
+//  4. the oldest workspace they are a member of
+//
+// Each rung is a tiebreak on the one above, so a user with a single membership
+// ties on all four and lands where they always did. That is what makes the
+// switcher a no-op for every instance that exists today.
+//
+// Membership is the WHERE clause, not the ordering, so a preference pointing at
+// a workspace the user has been removed from — or one that has been deleted —
+// cannot win. It simply stops matching and the next rung answers.
+//
+// session_id is optional. NULL leaves the LEFT JOIN unmatched and rung 1 dead,
+// which is right for a login (the session does not exist yet), the CLI, and an
+// API key. The join also requires the session to belong to this user, so a
+// borrowed id resolves nothing.
+//
+// organization_id is optional too, and it is a *bound* rather than a rung: it
+// narrows which workspaces are candidates without touching the precedence. Only
+// one caller passes it, and the reason is M44. An organization-wide API key is a
+// row with a NULL workspace_id, which means "every workspace in **the
+// organization** the key belongs to" — and without this clause the precedence
+// would happily rank a workspace in some *other* organization the owner also
+// belongs to, because membership is the only filter and a person's pinned
+// default is a property of the person rather than of the tenancy. The key would
+// then act in a tenant it was never issued for. Every other caller passes NULL
+// and resolves exactly as it always did.
+//
+// The organization's own deleted_at is checked as well as the workspace's, and
+// the two are not the same check. ListWorkspacesForUser has always filtered
+// both; this statement filtered only the workspace, so a workspace under a
+// soft-deleted organization could be resolved *into* and never *listed* — the
+// switcher would mark nothing selected, and a browser would show the first
+// entry while the session acted somewhere else. Latent rather than live, and
+// deliberately fixed anyway: DeleteOrganization is a hard DELETE today and
+// nothing in the tree sets organizations.deleted_at, so the two queries agree
+// in practice and would stop agreeing the moment anything soft-deletes an
+// organization. The asymmetry is invisible from either statement alone, which
+// is the reason it survived to be found by review rather than by a user (F25).
+func (q *Queries) ResolveWorkspaceForUser(ctx context.Context, arg ResolveWorkspaceForUserParams) (Workspace, error) {
+	row := q.db.QueryRow(ctx, resolveWorkspaceForUser, arg.SessionID, arg.UserID, arg.OrganizationID)
+	var i Workspace
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Slug,
+		&i.AnalyticsRetentionDays,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.SigningSecret,
+	)
+	return i, err
 }
 
 const revokeAllUserSessions = `-- name: RevokeAllUserSessions :exec

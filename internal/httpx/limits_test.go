@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"testing"
 
+	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/ratelimit"
 )
 
@@ -34,6 +36,39 @@ type marker struct{}
 
 func (marker) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// Every limiter the struct carries appears in Stats, under the label the
+// runbook knows it by.
+//
+// A limiter missing from Stats does not report zeros — it emits no series at
+// all, for tracked keys, overflows and fallbacks alike, so the runbook's
+// overflow alert simply cannot see it. That is how blocked_audit shipped
+// unwatched: the limiter worked, and nothing reported whether it still could.
+// The expected count is taken from the struct by reflection rather than written
+// here, deliberately — a literal count is a fact nothing keeps true (F69), and
+// the struct is the one thing a new limiter cannot be added without touching.
+func TestStatsCarriesEveryLimiterTheStructDoes(t *testing.T) {
+	var cfg config.Config
+	cfg.Auth.LoginRatePerMin = 1
+	cfg.Auth.APIRatePerMin = 1
+	cfg.Redirect.NotFoundLimit = 1
+	cfg.Redirect.PasswordLimit = 1
+	l := NewLimiters(cfg, nil, nil)
+
+	stats := l.Stats()
+	if want := reflect.TypeOf(l).NumField(); len(stats) != want {
+		t.Errorf("Stats() carries %d limiters for a struct with %d; the missing "+
+			"ones emit no series for any bookkeeping metric", len(stats), want)
+	}
+	for _, name := range []string{
+		"login", "api", "redirect_404", "link_password", "blocked_audit",
+	} {
+		if _, ok := stats[name]; !ok {
+			t.Errorf("Stats() is missing %q: its tracked-keys, overflow and "+
+				"fallback series do not exist, and absence reads as health", name)
+		}
+	}
 }
 
 // A nil limiter must return the handler untouched, not a wrapper that always
@@ -75,8 +110,9 @@ func TestRateLimitRefusesWithProblemAndRetryAfter(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}
-	// Distinct from account-locked, which is also a 429. A client cannot retry
-	// sensibly if the two are indistinguishable.
+	// The only 429 this API produces, since F92 folded account-locked into the
+	// ordinary sign-in refusal. A client that cannot recognise this one cannot
+	// honour Retry-After.
 	if p.Type != problemBase+"rate-limited" {
 		t.Errorf("problem type = %q, want %srate-limited", p.Type, problemBase)
 	}

@@ -156,6 +156,9 @@ type LimiterStats interface {
 	// Overflows counts requests allowed because the key table was full — the
 	// number that says the limiter has stopped limiting.
 	Overflows() int64
+	// Fallbacks counts decisions this replica made locally because the shared
+	// limiter did not answer. Always zero for a limiter with no shared backing.
+	Fallbacks() int64
 }
 
 type limiterCollector struct {
@@ -163,13 +166,13 @@ type limiterCollector struct {
 
 	keys      *prometheus.Desc
 	overflows *prometheus.Desc
+	fallbacks *prometheus.Desc
 }
 
 // NewLimiterCollector reports the named limiters' bookkeeping.
 //
-// Neither series is about throttling — linkctrl_rate_limited_total covers that.
-// These two answer a different question: is the limiter still able to do its
-// job. A climbing overflow count means it is not, and that failure is otherwise
+// None of these is about throttling — linkctrl_rate_limited_total covers that.
+// They answer a different question: is the limiter still able to do its job. A climbing overflow count means it is not, and that failure is otherwise
 // completely silent, because the design choice on a full table is to allow the
 // request.
 //
@@ -187,12 +190,16 @@ func NewLimiterCollector(limiters map[string]LimiterStats) prometheus.Collector 
 		overflows: prometheus.NewDesc(ns+"overflow_total",
 			"Requests allowed without being counted because the key table was full. Nonzero means the limit is no longer being enforced.",
 			label, nil),
+		fallbacks: prometheus.NewDesc(ns+"fallback_total",
+			"Decisions made from this replica's own buckets because the shared limiter did not answer. Movement means the configured limit is being enforced per replica rather than across them.",
+			label, nil),
 	}
 }
 
 func (c *limiterCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.keys
 	ch <- c.overflows
+	ch <- c.fallbacks
 }
 
 func (c *limiterCollector) Collect(ch chan<- prometheus.Metric) {
@@ -202,5 +209,11 @@ func (c *limiterCollector) Collect(ch chan<- prometheus.Metric) {
 		}
 		ch <- prometheus.MustNewConstMetric(c.keys, prometheus.GaugeValue, float64(l.Len()), name)
 		ch <- prometheus.MustNewConstMetric(c.overflows, prometheus.CounterValue, float64(l.Overflows()), name)
+		// A counter, not a gauge, so the runbook can alert on a *rate*. The row
+		// this replaces told an operator to watch a number that "stays
+		// unchanged", which is not an expression — and `Fallbacks()` is
+		// monotonic, so a threshold alert on the value latches forever after one
+		// transient blip (F102).
+		ch <- prometheus.MustNewConstMetric(c.fallbacks, prometheus.CounterValue, float64(l.Fallbacks()), name)
 	}
 }

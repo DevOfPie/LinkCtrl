@@ -1,0 +1,118 @@
+{{define "content"}}
+<div class="mb-6">
+  <h1 class="text-xl font-semibold tracking-tight">Workspaces</h1>
+  <p class="mt-1 text-sm text-muted">A workspace holds links, tags and folders. Everything in this organization lives in one of them, and the switcher in the header moves you between them.</p>
+</div>
+
+{{template "flash_ok" .Notice}}
+{{template "flash_error" .Error}}
+
+{{if .CanWrite}}
+<div class="mb-6 rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-4 text-sm font-medium text-ink">New workspace</h2>
+  <form method="post" action="/workspaces" class="flex flex-wrap items-end gap-3">
+    <div class="grow">
+      <label for="name" class="block text-sm font-medium text-ink">Name</label>
+      <input id="name" name="name" type="text" required maxlength="80" placeholder="Marketing" value="{{.Form.Name}}"
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      {{template "field_error" (index .FieldErrors "name")}}
+    </div>
+    <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Create workspace</button>
+  </form>
+</div>
+{{end}}
+
+<div class="rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-4 text-sm font-medium text-ink">In this organization</h2>
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="border-b border-line text-left text-xs uppercase tracking-wide text-subtle">
+        <th class="py-2 pr-4 font-medium">Name</th>
+        <th class="py-2 pr-4 font-medium">Slug</th>
+        <th class="py-2 font-medium"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{/* OrgWorkspaces, not Workspaces: the shell owns that name for the
+           switcher and a page field would shadow it everywhere, layout
+           included. */}}
+      {{range .OrgWorkspaces}}
+      <tr class="border-b border-line">
+        <td class="py-3 pr-4">
+          {{if and $.CanWrite .Manageable}}
+          <form method="post" action="/workspaces/{{.ID}}/rename" class="flex items-center gap-1">
+            <input name="name" type="text" required maxlength="80" value="{{.Name}}" aria-label="Name of {{.Name}}"
+                   class="w-48 rounded-md border border-line-strong bg-raised px-2 py-1 text-sm text-ink focus:border-accent focus:outline-none">
+            <button type="submit" class="rounded-md px-2 py-1 text-sm text-muted hover:bg-sunken hover:text-ink">Rename</button>
+          </form>
+          {{else}}<span class="font-medium">{{.Name}}</span>{{end}}
+          {{if .Current}}<span class="ml-1 text-xs text-subtle">(you are here)</span>{{end}}
+        </td>
+        <td class="py-3 pr-4 font-mono text-muted">{{.Slug}}</td>
+        <td class="py-3 text-right">
+          {{if and $.CanWrite .Manageable}}
+          {{/* Deleting a workspace cascades every link, tag and folder in it,
+               and there is no trash to restore from — so the service refuses
+               while it still holds any link at all, archived ones included
+               (D32). The confirmation says what the refusal will not have to. */}}
+          <form method="post" action="/workspaces/{{.ID}}/delete"
+                hx-post="/workspaces/{{.ID}}/delete"
+                hx-confirm="Delete {{.Name}}? This cannot be undone. It is refused while the workspace still holds any link.">
+            <button type="submit" class="text-sm font-medium text-danger-ink hover:underline">Delete</button>
+          </form>
+          {{end}}
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+
+{{if .CanCreateOrganization}}
+<div class="mt-6 rounded-lg border border-line bg-raised p-6">
+  <h2 class="text-sm font-medium text-ink">New organization</h2>
+  <p class="mt-1 text-sm text-muted">A separate organization with its own members, workspaces and links. You become its owner, and you will be moved into it.</p>
+  <form method="post" action="/organizations" class="mt-4 flex flex-wrap items-end gap-3">
+    <div class="grow">
+      <label for="organization_name" class="block text-sm font-medium text-ink">Name</label>
+      <input id="organization_name" name="name" type="text" required maxlength="80" placeholder="Acme" value="{{.Form.OrganizationName}}"
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      {{template "field_error" (index .OrgFieldErrors "name")}}
+    </div>
+    <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Create organization</button>
+  </form>
+</div>
+{{end}}
+
+{{if .CanDeleteOrganization}}
+{{/* Deleting the organization. `org.delete` is held by the owner role alone and
+     this is the first thing it has ever gated.
+
+     The confirmation says every irreversible thing it does, because there is no
+     soft delete, no trash and no export to fall back on — M28.5 leaves all
+     three out deliberately, so the sentence below is the entire safety net. It
+     also states the refusal in advance: an organization holding any link
+     declines (D37), and hearing that before clicking is worth more than hearing
+     it after. */}}
+<div class="mt-6 rounded-lg border border-danger-line bg-raised p-6">
+  <h2 class="text-sm font-medium text-danger-ink">Delete this organization</h2>
+  <p class="mt-1 text-sm text-muted">
+    Deletes {{if .OrganizationName}}<span class="font-medium text-ink">{{.OrganizationName}}</span>{{else}}this organization{{end}}
+    and everything in it: every workspace, every membership, every outstanding
+    invitation and every API key issued in it. There is no undo, no trash and no
+    export.
+  </p>
+  <p class="mt-1 text-sm text-muted">
+    It is refused while any workspace still holds a link, archived ones included,
+    and while this is the only organization on the instance. Everyone who belongs
+    to nothing else afterwards keeps their account and is asked to create an
+    organization of their own next time they sign in.
+  </p>
+  <form method="post" action="/organizations/{{.OrganizationID}}/delete" class="mt-4"
+        hx-post="/organizations/{{.OrganizationID}}/delete"
+        hx-confirm="Delete {{if .OrganizationName}}{{.OrganizationName}}{{else}}this organization{{end}}? Every workspace, membership, invitation and API key in it goes with it. This cannot be undone.">
+    <button type="submit" class="rounded-md border border-danger-line px-4 py-2 text-sm font-medium text-danger-ink hover:bg-danger-soft">Delete organization</button>
+  </form>
+</div>
+{{end}}
+{{end}}

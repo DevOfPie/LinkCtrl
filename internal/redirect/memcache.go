@@ -2,6 +2,7 @@ package redirect
 
 import (
 	"hash/maphash"
+	"strings"
 	"sync"
 	"time"
 )
@@ -105,6 +106,47 @@ func (c *memCache) delete(key string) {
 	s.mu.Lock()
 	delete(s.entries, key)
 	s.mu.Unlock()
+}
+
+// deletePrefix drops every entry whose key starts with prefix.
+//
+// One caller: a domain-level setting change, which alters the answer for every
+// alias underneath it at once. It walks all thirty-two shards under their write
+// locks rather than being given the keys, because the keys are exactly what
+// nobody has — the cache holds whichever aliases happened to be asked for, and
+// the list of links on the domain is neither the same set nor knowable here.
+//
+// Bounded by MemCacheSize, not by the number of links: at the default that is
+// ten thousand string comparisons on an administrative action.
+func (c *memCache) deletePrefix(prefix string) {
+	for _, s := range c.shards {
+		s.mu.Lock()
+		for k := range s.entries {
+			if strings.HasPrefix(k, prefix) {
+				delete(s.entries, k)
+			}
+		}
+		s.mu.Unlock()
+	}
+}
+
+// flush empties every shard.
+//
+// Used when this process cannot know what it missed — a pub/sub subscriber that
+// lost its connection and reconnected. Redis pub/sub does not replay, so the
+// invalidations published during the gap are unrecoverable and, worse, this
+// process cannot know which keys they named. Dropping everything ends the stale
+// window at the reconnect instead of at each entry's TTL (decision D20).
+//
+// The cost is a cold tier after a Redis blip, which is latency on an optional
+// dependency. The alternative is serving a destination the owner already
+// changed, which is correctness.
+func (c *memCache) flush() {
+	for _, s := range c.shards {
+		s.mu.Lock()
+		clear(s.entries)
+		s.mu.Unlock()
+	}
 }
 
 // reap drops expired entries. Caller must hold the write lock.

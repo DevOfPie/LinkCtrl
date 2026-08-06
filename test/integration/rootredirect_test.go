@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 )
 
@@ -100,19 +101,66 @@ func TestRootRedirectRefusesDangerousDestinations(t *testing.T) {
 	}
 }
 
-// It is a domains.write decision, not a links one: this is where every visitor
-// who trims a short link back to its domain ends up.
-func TestRootRedirectNeedsDomainsWrite(t *testing.T) {
+// The root of the instance default domain is the instance principal's, and an
+// organization owner holding domains.write is refused.
+//
+// This test used to demote the owner to editor and assert that domains.write was
+// what mattered. That is no longer the claim, and the change is F70: the
+// instance default is the hostname every workspace's links are served on until
+// it registers its own, and `domains.write` is a *role* permission granted to
+// owner and admin — so on a multi-organization instance every organization's
+// owner could repoint it, and under SIGNUP_MODE=open one registration reaches
+// that. D100 moved it to `domains.write.instance`, which reaches a person only
+// through instance_grants.
+//
+// The identity below is a full organization **owner** holding domains.write.
+// That is the point: the permission it holds is the one that used to be enough.
+func TestTheInstanceRootIsThePrincipalsAndNotAnOrganizationOwners(t *testing.T) {
 	f := newSplit(t)
 
-	editor := f.identityWithout(link.PermDomainsWrite)
-	if _, err := f.links.SetRootRedirect(t.Context(), editor, "https://example.com/x"); err == nil {
-		t.Fatal("an identity without domains.write set the root redirect")
+	// The fixture's owner registered first, so the setup path made them the
+	// instance principal. Taking that away leaves an ordinary organization
+	// owner, which is what every other account on a multi-tenant instance is.
+	if _, err := f.pool.Exec(t.Context(),
+		`DELETE FROM instance_grants WHERE user_id = $1`, f.owner.UserID); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := f.auth.IdentityForEmail(t.Context(), splitOwnerEmail)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !owner.Can(link.PermDomainsWrite) {
+		t.Fatal("the identity lost domains.write as well; this test would prove nothing, " +
+			"because being refused would no longer say anything about the instance permission")
+	}
+	if owner.Can(auth.PermDomainsWriteInstance) {
+		t.Fatal("the identity still holds domains.write.instance after its grants were removed")
 	}
 
-	// Reading is not gated the same way: the value is public to anyone who
-	// visits the bare domain.
-	if _, err := f.links.DomainSettings(t.Context(), editor); err != nil {
+	if _, err := f.links.SetRootRedirect(t.Context(), owner, "https://example.com/x"); err == nil {
+		t.Error("an organization owner repointed the instance default domain's root. " +
+			"That is F70: the hostname every workspace's links are served on, " +
+			"administered by anybody who registered on an open instance")
+	}
+	if _, err := f.links.SetBotBlocking(t.Context(), owner, true, false); err == nil {
+		t.Error("an organization owner changed the instance default domain's bot policy")
+	}
+
+	// Reading is not gated the same way and must not become so: the value is
+	// public to anyone who visits the bare domain, and the links page shows the
+	// hostname beside every link.
+	if _, err := f.links.DomainSettings(t.Context(), owner); err != nil {
 		t.Errorf("reading domain settings needed more than links.read: %v", err)
+	}
+
+	// And the principal, who is what this permission exists for, still can.
+	grantInstanceScope(t, f.pool, f.owner.UserID, auth.PermDomainsWriteInstance)
+	principal, err := f.auth.IdentityForEmail(t.Context(), splitOwnerEmail)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.links.SetRootRedirect(t.Context(), principal, "https://example.com/x"); err != nil {
+		t.Errorf("the holder of %s could not set the root redirect: %v",
+			auth.PermDomainsWriteInstance, err)
 	}
 }

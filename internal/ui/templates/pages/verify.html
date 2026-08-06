@@ -1,0 +1,23 @@
+{{define "content"}}
+<div class="mx-auto mt-16 max-w-sm">
+  <div class="mb-8 text-center">
+    <h1 class="text-2xl font-semibold tracking-tight">Confirm your address</h1>
+    <p class="mt-1 text-sm text-muted">The last step before your account exists</p>
+  </div>
+  <div class="rounded-lg border border-line bg-raised p-6 shadow-sm">
+    {{template "flash_error" .Error}}
+    {{if not .Error}}
+    {{/* A button rather than the link acting on its own. Mail clients and
+         security scanners fetch the URLs in a message, and a GET that created
+         an account would let one of them finish somebody else's registration
+         before they had read the mail. */}}
+    <p class="text-sm text-muted">Confirming creates your account, with an organization and a workspace of your own. You will then sign in with the password you chose.</p>
+    <form method="post" action="/verify/{{.Token}}" class="mt-4">
+      <button type="submit" class="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Confirm and create my account</button>
+    </form>
+    {{else}}
+    <a href="/login" class="text-sm font-medium text-accent-ink hover:underline">Back to sign in</a>
+    {{end}}
+  </div>
+</div>
+{{end}}

@@ -1,0 +1,127 @@
+{{define "content"}}
+<div class="mb-6 flex items-baseline justify-between">
+  <h1 class="text-xl font-semibold tracking-tight">Domains</h1>
+  <a href="/links" class="text-sm font-medium text-accent-ink hover:underline">Links →</a>
+</div>
+
+{{template "domain_panel" .}}
+{{end}}
+
+{{/* The whole page below the heading, and the htmx swap target.
+
+     One target rather than two: registering a hostname changes the list AND
+     clears the form, and a refusal has to appear above both. */}}
+{{define "domain_panel"}}
+<div id="domain-panel">
+  {{template "flash_ok" .Notice}}
+  {{template "flash_error" .Error}}
+
+  {{/* The standing caveat, above the form rather than beside a row.
+
+       Registering a hostname is the moment somebody expects their links to
+       start working on it, and the honest answer is still that they will not
+       until the DNS record is published. Saying it once, before the form, is
+       what keeps the page from being a promise the product does not keep. */}}
+  <div class="mb-6 rounded-lg border border-line bg-sunken p-4">
+    <p class="text-sm text-ink">A registered hostname belongs to this workspace and <span class="font-medium">is not served until it is verified</span>. Publish the TXT record shown on its row, point the hostname at this instance, then check it. Links keep using the instance's default domain until then.</p>
+  </div>
+
+  {{if .CanRegister}}
+  <div class="mb-6 rounded-lg border border-line bg-raised p-6">
+    <h2 class="mb-4 text-sm font-medium text-ink">Register a hostname</h2>
+    <form method="post" action="/domains" hx-post="/domains" hx-target="#domain-panel" hx-swap="outerHTML"
+          class="grid gap-4 sm:grid-cols-[1fr_auto]">
+      <div>
+        <label for="domain-hostname" class="block text-sm font-medium text-ink">Hostname</label>
+        <input id="domain-hostname" name="hostname" type="text" required maxlength="253"
+               placeholder="go.example.com" value="{{.FormHostname}}"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      </div>
+      <div class="flex items-end">
+        <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Register</button>
+      </div>
+    </form>
+    <p class="mt-3 text-xs text-subtle">The hostname on its own — no scheme, no path. One workspace owns a hostname: its aliases are one namespace, so it cannot be shared with another workspace.</p>
+  </div>
+  {{end}}
+
+  <div class="rounded-lg border border-line bg-raised p-6">
+    {{if .Rows}}
+    <ul class="space-y-1">
+      {{range .Rows}}
+      <li class="flex flex-wrap items-center gap-2 rounded-md px-2 py-2 hover:bg-surface">
+        <span class="text-sm font-medium text-ink">{{.Hostname}}</span>
+        {{if .IsDefault}}
+        <span class="rounded-full border border-line-strong px-2 py-0.5 text-xs text-muted">Default</span>
+        {{end}}
+        <span class="text-xs text-subtle">{{.ScopeLabel}}</span>
+        {{if .Verified}}
+        <span class="text-xs text-ok-ink">Verified — links are served here</span>
+        {{else}}
+        <span class="text-xs text-muted">Not verified — no links served here</span>
+        {{end}}
+        <span class="text-xs text-subtle">{{fmtInt .LinkCount}} links</span>
+
+        {{if .Manageable}}
+        <div class="ml-auto flex flex-wrap items-center gap-2">
+          <form method="post" action="/domains/{{.ID}}" class="flex items-center gap-1"
+                hx-post="/domains/{{.ID}}" hx-target="#domain-panel" hx-swap="outerHTML">
+            <label class="sr-only" for="rename-{{.ID}}">Change {{.Hostname}}</label>
+            <input id="rename-{{.ID}}" name="hostname" type="text" required maxlength="253" value="{{.Hostname}}"
+                   class="w-56 rounded-md border border-line-strong px-2 py-1 text-xs focus:border-accent focus:outline-none">
+            <button type="submit" class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-surface">Change</button>
+          </form>
+          <form method="post" action="/domains/{{.ID}}/verify"
+                hx-post="/domains/{{.ID}}/verify" hx-target="#domain-panel" hx-swap="outerHTML">
+            <button type="submit" class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-surface">Check DNS</button>
+          </form>
+          <form method="post" action="/domains/{{.ID}}/delete"
+                hx-post="/domains/{{.ID}}/delete" hx-target="#domain-panel" hx-swap="outerHTML">
+            <button type="submit" class="rounded-md border border-danger-line px-2 py-1 text-xs font-medium text-danger-ink hover:bg-danger-soft">Remove</button>
+          </form>
+        </div>
+        {{end}}
+
+        {{/* The challenge and the state of the last check, on the row rather
+             than behind a link. Somebody who has just registered a hostname is
+             looking for exactly two strings, and a page that made them click to
+             find them would be a page that adds a step to the only task it has. */}}
+        {{if .RecordName}}
+        <div class="w-full space-y-2 border-t border-line pt-2">
+          <p class="text-xs text-subtle">Publish this DNS record, then press Check DNS:</p>
+          <pre class="overflow-x-auto rounded-md border border-line bg-sunken px-3 py-2 text-xs text-ink">{{.RecordName}}  IN  TXT  "{{.RecordData}}"</pre>
+          {{if .CheckError}}
+          <p class="text-xs text-danger-ink">Last check: {{.CheckError}}</p>
+          {{end}}
+          {{if .StopsAt}}
+          <p class="text-xs text-danger-ink">Links on this hostname stop being served at {{.StopsAt}} unless the record comes back.</p>
+          {{end}}
+          {{if .SSLLabel}}
+          <p class="text-xs text-subtle">{{.SSLLabel}}</p>
+          {{end}}
+          {{if and .Verified .Manageable}}
+          {{/* The hostname's own root. Offered only once it is verified,
+               because on an unverified name it would be a setting with no
+               effect — the service refuses it for the same reason. */}}
+          <form method="post" action="/domains/{{.ID}}/root-redirect" class="flex flex-wrap items-center gap-1"
+                hx-post="/domains/{{.ID}}/root-redirect" hx-target="#domain-panel" hx-swap="outerHTML">
+            <label class="text-xs text-subtle" for="root-{{.ID}}">https://{{.Hostname}}/ goes to</label>
+            <input id="root-{{.ID}}" name="root_redirect_url" type="url" maxlength="2048"
+                   placeholder="nothing — answers 404" value="{{.RootRedirectURL}}"
+                   class="w-72 rounded-md border border-line-strong px-2 py-1 text-xs focus:border-accent focus:outline-none">
+            <button type="submit" class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-surface">Save</button>
+          </form>
+          {{end}}
+        </div>
+        {{end}}
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <div class="rounded-md border border-dashed border-line py-12 text-center text-sm text-subtle">
+      No domains{{if .CanRegister}} — register the first one above{{end}}.
+    </div>
+    {{end}}
+  </div>
+</div>
+{{end}}

@@ -1,0 +1,224 @@
+{{/* The review queue.
+
+     THIS PAGE RENDERS A URL A STRANGER CHOSE, TO THE PERSON WHO ADMINISTERS THE
+     INSTANCE. Two rules hold, and both are asserted against the rendered HTML by
+     TestTheQueueNeverRendersADisputedDestinationAsALink:
+
+       1. The destination and the host appear DEFANGED. They arrive that way —
+          internal/dispute defangs on the way in and on the way out — so this
+          template neither performs nor can forget the transformation. It is
+          written in a <code> block with `select-all break-all`, so somebody who
+          genuinely needs the value can copy it deliberately.
+
+       2. NEITHER IS EVER AN ANCHOR, and never reaches any other attribute a
+          browser resolves — no href, no src, no action, no formaction, no
+          background. The only URLs in this page are the two decision endpoints
+          and the paging link, all of them local literals.
+
+     There is no preview, no screenshot, no favicon and no "is it still up"
+     check, here or behind here. A fetch would be exactly the SSRF the
+     destination validator exists to refuse, arriving as a convenience feature.
+
+     Allow is drawn only when .Liftable. A punycode homograph or credentials in
+     the URL are computed from the destination every time it is judged, so there
+     is no blocklist row to remove and no row anybody may add — the honest
+     options for one of those are uphold, or a change to the rule.
+
+     .Host AND .BlockedHost ARE DIFFERENT VALUES AND BOTH ARE SHOWN. The list
+     matches on label boundaries, so somebody refused at login.evil.example was
+     refused by the row that says evil.example, and that row — instance-wide — is
+     what Allow deletes. Rendering only the first is what F33 was: a queue that
+     showed one host while the button acted on another. .BlockedHost is empty for
+     a rule with no row behind it, which is every rule Allow is not drawn for
+     plus a feed verdict, where the decision itself is the override. */}}
+{{define "content"}}
+<div class="mb-6 flex items-start justify-between gap-4">
+  <div>
+    <h1 class="text-xl font-semibold tracking-tight">Blocked destinations</h1>
+    <p class="mt-1 text-sm text-muted">
+      Somebody was refused when they tried to create a link, and has asked you to look.
+      Destinations here are shown defanged and are never links: this instance does not
+      fetch them, and neither should you without knowing what you are opening.
+    </p>
+  </div>
+  <div class="shrink-0 text-right">
+    <p class="text-2xl font-semibold text-ink">{{fmtInt .OpenCount}}</p>
+    <p class="text-xs uppercase tracking-wide text-subtle">waiting</p>
+  </div>
+</div>
+
+{{template "flash_ok" .Notice}}
+{{template "flash_error" .Error}}
+
+<div class="mb-4 flex items-center gap-4 text-sm">
+  {{if .OpenOnly}}
+  <span class="font-medium text-accent-ink">Waiting</span>
+  <a href="/disputes?all=1" class="font-medium text-muted hover:text-ink">Everything</a>
+  {{else}}
+  <a href="/disputes" class="font-medium text-muted hover:text-ink">Waiting</a>
+  <span class="font-medium text-accent-ink">Everything</span>
+  {{end}}
+</div>
+
+{{if .Items}}
+<ul class="space-y-3">
+  {{range .Items}}
+  <li class="rounded-lg border {{if eq .Status "open"}}border-accent-line bg-accent-soft{{else}}border-line bg-raised{{end}} p-4">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div class="min-w-0">
+        <p class="text-xs uppercase tracking-wide text-subtle">Host</p>
+        {{/* Defanged, inert, and deliberately not a link. */}}
+        <code class="mt-0.5 block select-all break-all font-mono text-sm text-ink">{{.Host}}</code>
+
+        {{if .BlockedHost}}
+        {{/* The row a decision acts on, which is a parent of the host above
+             whenever somebody was refused by a subdomain of a listed entry.
+             Shown for decided disputes too: it is the record of what went. */}}
+        <p class="mt-3 text-xs uppercase tracking-wide text-subtle">Blocklist entry</p>
+        <code class="mt-0.5 block select-all break-all font-mono text-sm text-ink">{{.BlockedHost}}</code>
+        {{if ne .BlockedHost .Host}}
+        <p class="mt-1 text-xs text-muted">
+          The refusal came from this entry, not from the host above. Allowing removes
+          it for every workspace on this instance.
+        </p>
+        {{end}}
+        {{end}}
+
+        <p class="mt-3 text-xs uppercase tracking-wide text-subtle">Attempted destination</p>
+        <code class="mt-0.5 block select-all break-all font-mono text-xs text-muted">{{.Destination}}</code>
+
+        <p class="mt-3 text-xs text-subtle">
+          Refused as <span class="font-mono">{{.ReasonCode}}</span>
+          · asked by {{.FiledBy}}
+          · {{.CreatedAt.Format "2 Jan 2006, 15:04"}} UTC
+        </p>
+        {{if and (eq .Status "open") (not .Liftable)}}
+        <p class="mt-2 text-xs text-warn-ink">
+          This refusal is computed from the destination rather than held as a blocklist entry,
+          so there is nothing to remove. Uphold it, or change the rule that produces it.
+        </p>
+        {{end}}
+      </div>
+
+      <div class="flex shrink-0 items-center gap-2">
+        {{/* $.CanDecide, not .CanDecide: inside this range the dot is one
+             dispute. The buttons are drawn only for somebody holding
+             destinations.decide, which is the deciding half of the permission
+             D98 split in two (M45). Somebody holding only the reading half sees
+             the queue and no controls, which is what the API answers them too —
+             the gate is in the service, and this only avoids offering a button
+             that would be refused. */}}
+        {{if and (eq .Status "open") $.CanDecide}}
+        {{if .Liftable}}
+        {{/* Both branches of the confirmation are literals in this template. The
+             entry itself is rendered in the body above rather than interpolated
+             here, so the row's values stay out of every attribute — which is
+             what the attribute scan in ui's tests is able to check. */}}
+        <form method="post" action="/disputes/{{.ID}}/allow"
+              hx-post="/disputes/{{.ID}}/allow"
+              hx-confirm="Allow this destination for every workspace on this instance? {{if .BlockedHost}}The blocklist entry shown on this dispute is deleted.{{else}}Nothing is deleted: the decision itself is the override.{{end}}">
+          <button type="submit" class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Allow</button>
+        </form>
+        {{end}}
+        <form method="post" action="/disputes/{{.ID}}/uphold">
+          <button type="submit" class="rounded-md border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-surface">Uphold</button>
+        </form>
+        {{else if eq .Status "open"}}
+        <span class="{{statusBadge "pending"}}">waiting</span>
+        {{else if eq .Status "allowed"}}
+        <span class="{{statusBadge "active"}}">allowed</span>
+        {{else}}
+        <span class="{{statusBadge "disabled"}}">upheld</span>
+        {{end}}
+      </div>
+    </div>
+    {{if .DecidedAt}}
+    <p class="mt-3 border-t border-line pt-2 text-xs text-subtle">
+      Decided by {{if .DecidedBy}}{{.DecidedBy}}{{else}}—{{end}} on {{datetime .DecidedAt}}
+    </p>
+    {{end}}
+  </li>
+  {{end}}
+</ul>
+
+{{if .NextCursor}}
+<div class="mt-6">
+  <a href="/disputes?{{if not .OpenOnly}}all=1&amp;{{end}}cursor={{.NextCursor}}" class="text-sm font-medium text-accent-ink hover:text-accent-ink">Older disputes →</a>
+</div>
+{{end}}
+
+{{else}}
+<div class="rounded-lg border border-line bg-raised p-8 text-center">
+  <p class="text-sm text-muted">Nothing to review.</p>
+  <p class="mt-1 text-sm text-subtle">
+    A dispute appears here when somebody is refused by a low-confidence rule — the
+    operator blocklist, a known URL shortener, a rule computed from the URL itself,
+    or a third-party reputation feed if this instance has one — and asks for a
+    second look. The curated list and the private-address refusals never reach this
+    page.
+  </p>
+</div>
+{{end}}
+
+{{/* The reviewer roster (M45, D98).
+
+     Drawn only for the instance-level principal — instance.admin — and never for
+     a reviewer they appointed. That is D98's delegation bound: the principal may
+     confer instance-level review, and a holder of it may not confer it onwards,
+     or the first delegatee appoints the next and the bound is gone in two hops.
+     The section is absent rather than disabled, because who else administers the
+     instance is not a reviewer's business either.
+
+     There is no scope picker. What a grant confers is enumerated in Go
+     (auth.InstanceGrantable) and a form that could name a scope could name
+     instance.admin, which is the one thing this must not be able to hand over. */}}
+{{if .CanAdminister}}
+<section class="mt-10 border-t border-line pt-6">
+  <h2 class="text-base font-semibold tracking-tight">Who reviews disputes</h2>
+  <p class="mt-1 text-sm text-muted">
+    This queue is instance-wide: a decision here changes what every workspace on this
+    instance may link to. Only the accounts listed below can see it, and only you can
+    change that list — somebody you appoint reviews disputes, and cannot appoint
+    anybody else.
+  </p>
+
+  <ul class="mt-4 space-y-2">
+    {{range .Reviewers}}
+    <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-raised px-4 py-3">
+      <div class="min-w-0">
+        <p class="truncate text-sm font-medium text-ink">{{.Email}}</p>
+        <p class="mt-0.5 text-xs text-subtle">
+          {{.Name}} · appointed {{.GrantedAt.Format "2 Jan 2006"}}
+          {{if not .GrantedBy}}· when this instance was claimed{{end}}
+          {{if not .CanDecide}}· can read the queue but not decide{{end}}
+        </p>
+      </div>
+      {{if ne .UserID $.Identity.UserID}}
+      <form method="post" action="/disputes/reviewers/{{.UserID}}/revoke"
+            hx-post="/disputes/reviewers/{{.UserID}}/revoke"
+            hx-confirm="Withdraw instance-level review from this account? They keep every permission their own organization gives them.">
+        <button type="submit" class="rounded-md border border-line-strong px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface">Withdraw</button>
+      </form>
+      {{else}}
+      <span class="text-xs text-subtle">you</span>
+      {{end}}
+    </li>
+    {{end}}
+  </ul>
+
+  <form method="post" action="/disputes/reviewers" class="mt-4 flex flex-wrap items-end gap-3">
+    <div class="min-w-0 grow">
+      <label for="reviewer-email" class="block text-sm font-medium text-ink">Appoint a reviewer</label>
+      <input id="reviewer-email" name="email" type="email" required autocomplete="off"
+             placeholder="somebody@example.com"
+             class="mt-1 block w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-subtle">
+      <p class="mt-1 text-xs text-subtle">
+        They need an account on this instance already. Appointing somebody grants nothing
+        inside your organization, and nothing inside theirs.
+      </p>
+    </div>
+    <button type="submit" class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Appoint</button>
+  </form>
+</section>
+{{end}}
+{{end}}

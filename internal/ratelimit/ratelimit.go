@@ -2,18 +2,33 @@
 //
 // Four properties shaped it, and each is a trade rather than an oversight.
 //
-// It is in-memory and per-instance, not backed by Redis. The surfaces being
-// protected include the redirect path, whose entire budget is 20ms, so spending
-// a network round trip to decide whether to allow a request would cost more
-// than the limit saves. Redis is also optional at runtime by design, and a
-// limiter that stops limiting when the cache goes away is worse than one whose
-// numbers are per-instance. The consequence is stated rather than hidden: with
-// N replicas the effective limit is N times the configured one.
+// It is in-memory and per-instance **by default**, and that is the shape this
+// package was built in. The surfaces being protected include the redirect path,
+// whose entire budget is 20ms, so spending a network round trip to decide
+// whether to allow a request would cost more than the limit saves. Redis is also
+// optional at runtime by design, and a limiter that stops limiting when the
+// cache goes away is worse than one whose numbers are per-instance. The
+// consequence is stated rather than hidden: with N replicas the effective limit
+// is N times the configured one.
 //
-// IPv6 is keyed by /64, not by address. A single host is routinely handed a /64
-// or larger, so a per-address key would let one machine present an effectively
+// **M24 added a shared mode, and this paragraph said otherwise until 0.2.0**
+// (F38). `shared.go` — in this package — backs every limiter constructed with
+// a Shared option (`limits.go` names them) with a Redis token bucket, shared
+// across replicas and falling back to these in-memory buckets only when Redis
+// does not answer. The 404-probe limiter is the one that stays plain, and
+// `limits.go` says "deliberately not shared" beside it for the reason above:
+// it guards the redirect path. So the per-instance multiplication described
+// here is true of the 404 limiter, true of every limiter while Redis is
+// unreachable, and not true of a Shared-backed limiter on a healthy instance.
+//
+// IPv6 is keyed by /64, not by address. A single host is routinely handed a
+// whole /64, so a per-address key would let one machine present an effectively
 // unlimited number of identities — defeating the limit and growing the table
-// without bound while doing it.
+// without bound while doing it. /64 is a floor rather than the whole answer: a
+// site delegated a shorter prefix, /56 or /48, holds 256 or 65536 distinct /64s
+// and gets a bucket for each. Keying coarser than /64 would close that at the
+// price F57 ruled out on the v4 side, where a wider key lets one abusive host
+// throttle its neighbours.
 //
 // It fails open. When the key table is full and a sweep cannot free room, the
 // request is allowed and a counter increments. A limiter is abuse mitigation,
@@ -73,6 +88,12 @@ type Options struct {
 
 	// Now overrides the clock, for tests.
 	Now func() time.Time
+
+	// Shared makes this limit apply across replicas. Nil keeps it per process,
+	// which is what every limit was before M24 and what the 404-probe limiter
+	// stays: sharing that one would put a network round trip on the redirect
+	// path and make an optional dependency load-bearing.
+	Shared *Shared
 }
 
 // bucket is one key's allowance. Refill is computed from `last` when the bucket
@@ -97,6 +118,8 @@ type Limiter struct {
 	burst     float64
 	maxShard  int
 	now       func() time.Time
+
+	shared *Shared
 
 	seed   maphash.Seed
 	shards [shardCount]shard
@@ -126,6 +149,7 @@ func New(perMinute int, opts Options) *Limiter {
 	}
 
 	l := &Limiter{
+		shared:    opts.Shared,
 		perSecond: float64(perMinute) / 60,
 		burst:     float64(opts.Burst),
 		// Rounded up so a small MaxKeys still leaves every shard room for one.
@@ -142,7 +166,30 @@ func New(perMinute int, opts Options) *Limiter {
 // Allow consumes one token, reporting whether the request may proceed and, if
 // not, how long until it could.
 func (l *Limiter) Allow(addr netip.Addr) (bool, time.Duration) {
-	return l.take(addr, true)
+	return l.takeKey(Key(addr), true)
+}
+
+// AllowKey is Allow against something that is not an address.
+//
+// Added by M35 for the one limit that has to be keyed on the *resource* rather
+// than on the client: guesses at a link's password, driven through many
+// visitors' browsers, spread across as many addresses as there are visitors and
+// slip under a per-address bucket entirely (D54). Keying the same limiter on the
+// alias closes that, and the two limbs are checked together — an attacker has to
+// stay under both.
+//
+// Deliberately the same buckets, the same sweep and the same Redis script the
+// address-keyed limit uses. A second mechanism would be a second thing to get
+// wrong, and the shared limiter M24 built already takes a string key: `Key` was
+// only ever how an address became one.
+//
+// The caller is responsible for a key that cannot collide with an address —
+// prefix it — because both live in one table.
+func (l *Limiter) AllowKey(key string) (bool, time.Duration) {
+	if key == "" {
+		key = invalidKey
+	}
+	return l.takeKey(key, true)
 }
 
 // Check reports whether a token is available without consuming one.
@@ -151,20 +198,85 @@ func (l *Limiter) Allow(addr netip.Addr) (bool, time.Duration) {
 // path checks before resolving an alias and charges only for a miss, so a
 // working short link never spends a token.
 func (l *Limiter) Check(addr netip.Addr) (bool, time.Duration) {
-	return l.take(addr, false)
+	return l.takeKey(Key(addr), false)
+}
+
+// RefundKey hands one token back to a keyed bucket.
+//
+// For a caller that has to spend before it knows whether it should have. The
+// link-password gate is the one: both limbs are consumed before the form is
+// parsed, deliberately, so that timing cannot say which limb refused — and that
+// left a link with more than `burst` legitimate visitors in a burst throttling
+// itself with no attacker present (F115). A correct password refunds the alias
+// limb, which touches neither D53 nor D54: the per-alias keying that stops
+// distributed guessing is unchanged, and what is given back is only ever a token
+// spent by somebody who proved they had the password.
+//
+// The address limb is deliberately **not** refunded. A visitor typing the right
+// password is still traffic from that address, and the per-address limb is what
+// bounds one machine grinding a wordlist.
+//
+// Never above burst: the shared script clamps, and so does the local bucket.
+func (l *Limiter) RefundKey(key string) {
+	if l == nil {
+		return
+	}
+	if key == "" {
+		key = invalidKey
+	}
+	if l.shared != nil {
+		ttl := time.Duration(l.burst/l.perSecond*float64(time.Second)) + time.Minute
+		if _, _, answered := l.shared.take(l.perSecond, l.burst, -1, ttl, key); answered {
+			return
+		}
+	}
+	l.refundLocal(key)
+}
+
+// refundLocal gives a token back to this process's own bucket.
+//
+// Only a bucket that already exists. Creating one to refund into would be
+// inventing credit nobody spent, and an absent bucket is a full one anyway.
+func (l *Limiter) refundLocal(k string) {
+	sh := &l.shards[l.shardFor(k)]
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	if b, ok := sh.m[k]; ok {
+		b.tokens = math.Min(l.burst, b.tokens+1)
+	}
 }
 
 // Charge consumes a token if one is available, ignoring the answer.
 func (l *Limiter) Charge(addr netip.Addr) {
-	l.take(addr, true)
+	l.takeKey(Key(addr), true)
 }
 
-func (l *Limiter) take(addr netip.Addr, consume bool) (bool, time.Duration) {
+// takeKey is the whole limiter. Everything above is a way of arriving at a key.
+func (l *Limiter) takeKey(k string, consume bool) (bool, time.Duration) {
 	if l == nil {
 		return true, 0
 	}
 
-	k := Key(addr)
+	// The shared decision first, when there is one. It is authoritative because
+	// it is the only one that sees the other replicas; the local bucket below
+	// is what answers when Redis does not.
+	//
+	// Only a consumed take goes to Redis. Check-then-Charge exists for the
+	// redirect path, which is deliberately not shared, so a non-consuming
+	// shared read would be a round trip nothing asks for.
+	//
+	// A shared answer returns without touching the local bucket, so the local
+	// one is full at the moment Redis fails and a client gets one fresh burst
+	// on failover. That is the fail-open direction, and the alternative —
+	// spending both on every request — would make the local bucket useless as a
+	// fallback by keeping it permanently empty.
+	if consume && l.shared != nil {
+		ttl := time.Duration(l.burst/l.perSecond*float64(time.Second)) + time.Minute
+		if ok, retry, answered := l.shared.take(l.perSecond, l.burst, 1, ttl, k); answered {
+			return ok, retry
+		}
+	}
+
 	now := l.now()
 	sh := &l.shards[l.shardFor(k)]
 
@@ -259,13 +371,36 @@ func (l *Limiter) Overflows() int64 {
 	return l.overflows.Load()
 }
 
+// Fallbacks counts requests this limiter decided locally because the shared
+// limiter did not answer.
+//
+// Zero on a limiter with no shared backing, and zero on a shared one while Redis
+// is healthy — which is what makes it readable: any movement means this replica
+// is enforcing its own numbers rather than the instance's, and the configured
+// limit has silently become per-replica.
+//
+// It exists because the tracked-keys gauge cannot say this. A healthy shared
+// limiter never writes its local table, so `Len()` reads zero and is
+// indistinguishable from no traffic — an operator watching it could not tell a
+// working shared limit from a fallen-back one, on the two limiters whose entire
+// justification for a Redis round trip is that per-replica multiplication is
+// unacceptable (F102).
+func (l *Limiter) Fallbacks() int64 {
+	if l == nil || l.shared == nil {
+		return 0
+	}
+	return l.shared.Fallbacks()
+}
+
 // Key folds an address to its rate-limiting identity: the full address for
 // IPv4, the /64 prefix for IPv6.
 //
 // The IPv6 case is the one that matters. Handing out /64s to single hosts is
 // normal, so per-address keying would let one machine rotate through more
 // identities than the table could ever hold — the limit would silently stop
-// applying to precisely the client working hardest to evade it.
+// applying to precisely the client working hardest to evade it. It does not
+// follow that a /64 is one customer: a site delegated a /56 or a /48 keeps a
+// key per /64 inside it, which the package comment explains is deliberate.
 func Key(addr netip.Addr) string {
 	if !addr.IsValid() {
 		return invalidKey

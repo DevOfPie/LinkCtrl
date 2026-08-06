@@ -22,6 +22,7 @@ openapi
 swagger
 healthz
 readyz
+tls-check
 livez
 metrics
 debug
@@ -36,6 +37,11 @@ forgot
 reset
 verify
 invite
+invites
+disputes
+dispute
+feeds
+feed
 oauth
 auth
 callback
@@ -96,6 +102,7 @@ automation
 notification
 notifications
 audit
+theme
 key
 keys
 apikey

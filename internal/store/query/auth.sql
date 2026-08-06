@@ -108,20 +108,86 @@ RETURNING *;
 -- name: GetRoleBySlug :one
 SELECT * FROM roles WHERE slug = $1 AND organization_id IS NULL;
 
--- name: GetDefaultWorkspaceForUser :one
--- The workspace a user lands in with no explicit selection. Ordered so the
--- result is deterministic rather than whatever the planner returns first.
+-- name: ResolveWorkspaceForUser :one
+-- The workspace a request acts in, and the only place that question is
+-- answered. Every identity — session, API key, CLI — comes through here.
+--
+-- The precedence is the ORDER BY and nothing else, so there is one statement of
+-- it rather than one per caller:
+--
+--   1. the session's own current workspace, for a request that has a session
+--   2. the workspace the user pinned as their default
+--   3. the workspace they used last
+--   4. the oldest workspace they are a member of
+--
+-- Each rung is a tiebreak on the one above, so a user with a single membership
+-- ties on all four and lands where they always did. That is what makes the
+-- switcher a no-op for every instance that exists today.
+--
+-- Membership is the WHERE clause, not the ordering, so a preference pointing at
+-- a workspace the user has been removed from — or one that has been deleted —
+-- cannot win. It simply stops matching and the next rung answers.
+--
+-- session_id is optional. NULL leaves the LEFT JOIN unmatched and rung 1 dead,
+-- which is right for a login (the session does not exist yet), the CLI, and an
+-- API key. The join also requires the session to belong to this user, so a
+-- borrowed id resolves nothing.
+--
+-- organization_id is optional too, and it is a *bound* rather than a rung: it
+-- narrows which workspaces are candidates without touching the precedence. Only
+-- one caller passes it, and the reason is M44. An organization-wide API key is a
+-- row with a NULL workspace_id, which means "every workspace in **the
+-- organization** the key belongs to" — and without this clause the precedence
+-- would happily rank a workspace in some *other* organization the owner also
+-- belongs to, because membership is the only filter and a person's pinned
+-- default is a property of the person rather than of the tenancy. The key would
+-- then act in a tenant it was never issued for. Every other caller passes NULL
+-- and resolves exactly as it always did.
+--
+-- The organization's own deleted_at is checked as well as the workspace's, and
+-- the two are not the same check. ListWorkspacesForUser has always filtered
+-- both; this statement filtered only the workspace, so a workspace under a
+-- soft-deleted organization could be resolved *into* and never *listed* — the
+-- switcher would mark nothing selected, and a browser would show the first
+-- entry while the session acted somewhere else. Latent rather than live, and
+-- deliberately fixed anyway: DeleteOrganization is a hard DELETE today and
+-- nothing in the tree sets organizations.deleted_at, so the two queries agree
+-- in practice and would stop agreeing the moment anything soft-deletes an
+-- organization. The asymmetry is invisible from either statement alone, which
+-- is the reason it survived to be found by review rather than by a user (F25).
 SELECT w.*
 FROM workspaces w
+JOIN organizations o ON o.id = w.organization_id
 JOIN memberships m ON m.organization_id = w.organization_id
-WHERE m.user_id = $1
+JOIN users u       ON u.id = m.user_id
+LEFT JOIN sessions s ON s.id = sqlc.narg(session_id)::uuid
+                    AND s.user_id = m.user_id
+                    AND s.revoked_at IS NULL
+WHERE m.user_id = sqlc.arg(user_id)
   AND w.deleted_at IS NULL
-ORDER BY w.created_at, w.id
+  AND o.deleted_at IS NULL
+  AND (sqlc.narg(organization_id)::uuid IS NULL
+       OR w.organization_id = sqlc.narg(organization_id)::uuid)
+  -- A NULL memberships.workspace_id covers every workspace in the organization;
+  -- a set one covers exactly that workspace. Same rule GetUserPermissions
+  -- applies, so a user can never resolve into a workspace they hold no
+  -- permissions in. No-op today, where every membership is organization-wide.
+  AND (m.workspace_id IS NULL OR m.workspace_id = w.id)
+ORDER BY
+    (w.id IS NOT DISTINCT FROM s.workspace_id)          DESC,
+    (w.id IS NOT DISTINCT FROM u.default_workspace_id)  DESC,
+    (w.id IS NOT DISTINCT FROM u.last_workspace_id)     DESC,
+    w.created_at, w.id
 LIMIT 1;
 
 -- name: CreateSession :one
-INSERT INTO sessions (id, user_id, token_hash, ip_prefix, user_agent, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
+-- workspace_id is written at sign-in rather than left for the first switch, so
+-- a session says where it is from its first row. Resolution would answer the
+-- same either way — a NULL simply falls through to the user's preference — but
+-- a switcher that only takes effect after the first switch is a switcher whose
+-- state is unreadable until somebody uses it.
+INSERT INTO sessions (id, user_id, token_hash, ip_prefix, user_agent, expires_at, workspace_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 
 -- name: GetSessionByTokenHash :one

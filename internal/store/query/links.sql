@@ -3,8 +3,10 @@
 -- name: CreateLink :one
 INSERT INTO links (
     id, workspace_id, domain_id, alias, primary_url,
-    title, description, status, expires_at, created_by, forward_query
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    title, description, status, expires_at, created_by, forward_query,
+    forward_path, password_hash, max_clicks, one_time, require_signature,
+    folder_id, campaign_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 RETURNING *;
 
 -- name: CreateDestination :one
@@ -37,6 +39,34 @@ UPDATE links
                             ELSE COALESCE(sqlc.narg(expires_at), expires_at) END,
        alias         = COALESCE(sqlc.narg(alias), alias),
        forward_query = COALESCE(sqlc.narg(forward_query), forward_query),
+       forward_path  = COALESCE(sqlc.narg(forward_path), forward_path),
+       bot_blocking  = COALESCE(sqlc.narg(bot_blocking), bot_blocking),
+       -- The gates (M35). Each is three-valued through its own pair of
+       -- arguments, because "leave it alone" and "remove it" are different
+       -- requests and a nullable column cannot express both with one nullable
+       -- parameter. clear_password wins over password_hash for the same reason
+       -- clear_expiry wins over expires_at, and the order is the same.
+       password_hash = CASE WHEN sqlc.arg(clear_password)::boolean THEN NULL
+                            ELSE COALESCE(sqlc.narg(password_hash), password_hash) END,
+       max_clicks    = CASE WHEN sqlc.arg(clear_max_clicks)::boolean THEN NULL
+                            ELSE COALESCE(sqlc.narg(max_clicks), max_clicks) END,
+       one_time      = COALESCE(sqlc.narg(one_time), one_time),
+       require_signature = COALESCE(sqlc.narg(require_signature), require_signature),
+       -- Which folder the link is filed in (M38). Three-valued for the reason
+       -- the gates above are: "leave it where it is" and "take it out of every
+       -- folder" are different requests, and a nullable column cannot express
+       -- both through one nullable parameter. The service has already checked
+       -- that the folder belongs to this workspace — the foreign key does not,
+       -- because it points at folders(id) and says nothing about tenancy.
+       folder_id     = CASE WHEN sqlc.arg(clear_folder)::boolean THEN NULL
+                            ELSE COALESCE(sqlc.narg(folder_id), folder_id) END,
+       -- Which campaign the link belongs to (M41). Three-valued for the reason
+       -- the folder above is, and the third state is the one that matters: a
+       -- link joins a campaign by mistake as easily as it joins one on purpose,
+       -- and without clear_campaign the only way out would be to delete the
+       -- campaign, which would take every other link with it.
+       campaign_id   = CASE WHEN sqlc.arg(clear_campaign)::boolean THEN NULL
+                            ELSE COALESCE(sqlc.narg(campaign_id), campaign_id) END,
        updated_at    = now()
  WHERE id = sqlc.arg(id) AND workspace_id = sqlc.arg(workspace_id) AND deleted_at IS NULL
 RETURNING *;
@@ -44,9 +74,26 @@ RETURNING *;
 -- name: UpdateDestinationURL :exec
 -- The trigger on destinations mirrors this into links.primary_url, so the hot
 -- path never joins.
-UPDATE destinations
+--
+-- Narrowed to the *primary* destination by M34, and the narrowing is the point
+-- rather than tidying. Until routing rules existed a link had exactly one
+-- destination row, so matching on link_id alone matched it; a rule target is a
+-- second row on the same link, and this query would have rewritten every one of
+-- them to the link's own URL the next time somebody edited the link. Every rule
+-- on the link would silently start pointing at the same place, which is
+-- indistinguishable from the rules having stopped working.
+--
+-- Matched through links.primary_destination_id rather than through `position =
+-- 0`, because that column is what the sync trigger keys on and what the rest of
+-- the schema treats as the authority. Two definitions of "the primary" is how
+-- they come to disagree.
+UPDATE destinations d
    SET url = $3, url_host = $4, updated_at = now()
- WHERE link_id = $1 AND workspace_id = $2 AND deleted_at IS NULL;
+  FROM links l
+ WHERE l.id = $1
+   AND l.workspace_id = $2
+   AND d.id = l.primary_destination_id
+   AND d.deleted_at IS NULL;
 
 -- name: ArchiveLink :one
 UPDATE links
@@ -124,6 +171,29 @@ WHERE l.workspace_id = sqlc.arg(workspace_id)
        OR EXISTS (SELECT 1 FROM link_tags lt
                    WHERE lt.link_id = l.id
                      AND lt.tag_id = ANY(sqlc.narg(tag_ids)::uuid[])))
+  -- The folder filter (M38), in two halves because "no filter" and "the links
+  -- that are in no folder" are different questions and a nullable id can only
+  -- ask one of them. `unfiled` is the second; without it there is no way to find
+  -- the links that were never filed, which is the state every link starts in.
+  --
+  -- One folder, not its subtree. The number this filter returns has to be the
+  -- number shown beside the folder on the tree page, and a parent that reported
+  -- its descendants' links would disagree with it — and would put a recursive
+  -- walk inside the dashboard's hottest query to do so.
+  AND (NOT sqlc.arg(unfiled)::boolean OR l.folder_id IS NULL)
+  AND (sqlc.narg(folder_id)::uuid IS NULL OR l.folder_id = sqlc.narg(folder_id)::uuid)
+  -- The campaign filter (M41), in two halves for the reason the folder pair
+  -- above is: "no filter" and "the links in no campaign" are different
+  -- questions. `uncampaigned` is what the campaigns page links to when somebody
+  -- asks which links are not attributed to anything yet, which is the question
+  -- every campaign list eventually raises.
+  AND (NOT sqlc.arg(uncampaigned)::boolean OR l.campaign_id IS NULL)
+  AND (sqlc.narg(campaign_id)::uuid IS NULL OR l.campaign_id = sqlc.narg(campaign_id)::uuid)
+  -- Which hostname the link is served on (M40). One filter and no `unhosted`
+  -- half, unlike the folder pair above: `links.domain_id` is NOT NULL, so there
+  -- is no third state to ask about — every link is on exactly one domain, and
+  -- "no filter" is the only other question there is.
+  AND (sqlc.narg(domain_id)::uuid IS NULL OR l.domain_id = sqlc.narg(domain_id)::uuid)
   -- Keyset pagination only works if the predicate compares the same tuple the
   -- ORDER BY sorts on. It did not: every sort filtered on (created_at, id)
   -- while 'clicks' ordered by click_count, so page 2 dropped rows that belonged
@@ -177,7 +247,21 @@ WHERE l.workspace_id = sqlc.arg(workspace_id)
   AND (sqlc.narg(tag_ids)::uuid[] IS NULL
        OR EXISTS (SELECT 1 FROM link_tags lt
                    WHERE lt.link_id = l.id
-                     AND lt.tag_id = ANY(sqlc.narg(tag_ids)::uuid[])));
+                     AND lt.tag_id = ANY(sqlc.narg(tag_ids)::uuid[])))
+  -- Must mirror ListLinks exactly, for the reason the tag filter above says in
+  -- full: a folder-filtered page whose total counted the whole workspace would
+  -- read "3 of 40 links" under a list of every link in one folder.
+  AND (NOT sqlc.arg(unfiled)::boolean OR l.folder_id IS NULL)
+  AND (sqlc.narg(folder_id)::uuid IS NULL OR l.folder_id = sqlc.narg(folder_id)::uuid)
+  -- Must mirror ListLinks exactly (M41), for the reason the folder pair above
+  -- says in full: a campaign-filtered page whose total counted the workspace
+  -- would read "5 of 40 links" over a list of five.
+  AND (NOT sqlc.arg(uncampaigned)::boolean OR l.campaign_id IS NULL)
+  AND (sqlc.narg(campaign_id)::uuid IS NULL OR l.campaign_id = sqlc.narg(campaign_id)::uuid)
+  -- Must mirror ListLinks exactly, for the reason the two filters above say in
+  -- full: a page filtered to one hostname whose total counted every domain
+  -- would read "4 of 40 links" over a list of four.
+  AND (sqlc.narg(domain_id)::uuid IS NULL OR l.domain_id = sqlc.narg(domain_id)::uuid);
 
 -- name: GetLinkTags :many
 SELECT t.id, t.name, t.color
@@ -265,13 +349,72 @@ ON CONFLICT DO NOTHING;
 DELETE FROM link_tags WHERE link_id = $1;
 
 -- name: GetWorkspaceDefaultDomain :one
-SELECT id, hostname FROM domains WHERE is_default AND deleted_at IS NULL;
+-- The hostname a new link goes on when the caller names none.
+--
+-- **This is the filter the name promised and the query never had** (M40). It
+-- read `WHERE is_default` with no workspace argument at all, so every workspace
+-- on the instance got the same answer and the word "workspace" in the name was
+-- describing an intention rather than a predicate.
+--
+-- A workspace's own *verified* hostname wins over the instance default, which is
+-- what registering one is for; the instance default is the fallback and is what
+-- every workspace without one still gets, unchanged. Organization-owned
+-- hostnames sit between the two — every workspace in the organization may use
+-- one, so it is more specific than the instance and less than a workspace's own.
+--
+-- **Verified only.** An unverified hostname is not a routing target, so putting
+-- a link on it would mint a short URL that resolves nowhere; the ordering below
+-- cannot reach one because the WHERE clause has already excluded it.
+--
+-- Ties are broken by verified_at then id, so the answer is stable: a workspace
+-- that verifies a second hostname does not silently move its new links onto it.
+-- organization_id and workspace_id are selected because they are the domain's
+-- *scope*, and the scope is what decides whether an alias collision on it could
+-- involve a workspace the caller cannot see. A refusal that cannot tell a shared
+-- namespace from a private one has to be worded for the worst case or say
+-- nothing useful at all (F23).
+SELECT id, hostname, organization_id, workspace_id FROM domains
+WHERE deleted_at IS NULL
+  AND (
+        is_default
+     OR (verified_at IS NOT NULL AND workspace_id = sqlc.arg(workspace_id))
+     OR (verified_at IS NOT NULL AND workspace_id IS NULL
+         AND organization_id = sqlc.arg(organization_id))
+      )
+ORDER BY
+    CASE WHEN workspace_id = sqlc.arg(workspace_id) THEN 0
+         WHEN NOT is_default                        THEN 1
+         ELSE 2 END,
+    verified_at, id
+LIMIT 1;
 
 -- name: GetDefaultDomainSettings :one
--- The instance's link domain and where its root points. Phase 1 has exactly one
--- default domain; Phase 2 gives a workspace its own and this gains a filter.
-SELECT id, hostname, root_redirect_url FROM domains
-WHERE is_default AND deleted_at IS NULL;
+-- One domain's settings and where its root points.
+--
+-- **The filter its own comment promised** (M40). It read `WHERE is_default`,
+-- which was the whole truth while an instance had exactly one domain and became
+-- a way of asking the wrong row the moment it had several: a verified custom
+-- hostname has a root of its own, and reading its settings through a predicate
+-- that can only ever return the default would answer about somebody else's
+-- hostname.
+--
+-- Not scoped by owner, like every other statement addressed by id in this
+-- schema. link.Service has already judged the actor against the row.
+SELECT id, hostname, root_redirect_url, block_bots, block_bots_enforced
+FROM domains
+WHERE id = sqlc.arg(domain_id) AND deleted_at IS NULL;
+
+-- name: GetDomainBotSettings :one
+-- One domain's bot policy, by id.
+--
+-- Read on the management path only, and only when a link's own setting is being
+-- changed: the service has to know whether the domain enforces before it can
+-- tell the caller their `off` will not be honoured. The redirect path never
+-- runs this — it gets the same two columns from ResolveAliasForRedirect's join,
+-- which is the whole reason that join exists.
+SELECT id, hostname, block_bots, block_bots_enforced
+FROM domains
+WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: SetDefaultDomainRootRedirect :one
 -- NULL clears it, which restores the 404 the root answered before anyone set
@@ -279,4 +422,61 @@ WHERE is_default AND deleted_at IS NULL;
 UPDATE domains
    SET root_redirect_url = sqlc.narg(root_redirect_url), updated_at = now()
  WHERE is_default AND deleted_at IS NULL
-RETURNING id, hostname, root_redirect_url;
+RETURNING id, hostname, root_redirect_url, block_bots, block_bots_enforced;
+
+-- name: SetBotBlockingForEveryDomain :many
+-- Both switches at once, because they are one setting with two halves and the
+-- CHECK in 01800 refuses the combination that writing them separately would pass
+-- through on the way. That applies row by row, so a propagation that touched one
+-- column would be refused by the constraint on the way out.
+--
+-- **Every undeleted domain, not only the default (F89).** This was
+-- `WHERE is_default` until M45, which was the whole truth while the instance
+-- default was the only domain there was. M40 added verified custom hostnames and
+-- `ResolveAliasForRedirect` reads the policy from the link's *own* domain row, so
+-- an operator who turned blocking on — even enforced — got no blocking on any
+-- link served on a custom hostname, and any workspace could open that hole for
+-- itself by registering one. Plan.md's "the domain's setting is instance-wide" is
+-- the claim being restored, and this is what makes it true.
+--
+-- **Every updated row comes back, not just the default**, because each one is a
+-- cache invalidation the caller owes: a snapshot carries its domain's policy so
+-- the redirect path needs no second lookup, so every cached alias under every
+-- domain touched here is now wrong. The default is marked rather than sorted for,
+-- since it is the row the settings surfaces read and the hostname they name.
+WITH updated AS (
+    UPDATE domains
+       SET block_bots          = sqlc.arg(block_bots)::boolean,
+           block_bots_enforced = sqlc.arg(block_bots_enforced)::boolean,
+           updated_at          = now()
+     WHERE deleted_at IS NULL
+    RETURNING id, hostname, root_redirect_url, block_bots, block_bots_enforced, is_default
+)
+SELECT id, hostname, root_redirect_url, block_bots, block_bots_enforced, is_default
+FROM updated
+ORDER BY is_default DESC, hostname;
+
+-- name: LockLink :one
+--
+-- The link row, locked, for a guard whose decision is a count.
+--
+-- A count cannot be locked, so `SELECT count(*)` as a ceiling check is a
+-- check-then-act: two writers each read a state the other is changing, and both
+-- pass a limit neither would pass alone. This is `LockOrganizations`' pattern at
+-- the link level — take the lock on the parent, make the decision inside the
+-- transaction that writes, and let the second writer block until the first
+-- commits and then re-read what it left behind.
+--
+-- Locking the *link* rather than the rules is what makes it work with nothing to
+-- lock in the empty case. Postgres takes `FOR KEY SHARE` on a parent when a row
+-- referencing it is inserted, and that conflicts with `FOR UPDATE` — so a locked
+-- link cannot acquire a routing rule or a split arm while the guard is deciding,
+-- including the first one, where a lock on the rules would have had no rows to
+-- take (F67).
+--
+-- Returns the id alone: the caller already has the link, and this exists for its
+-- lock rather than for its columns. No workspace parameter, for the same reason
+-- — every caller has already been through GetLink, which is workspace-scoped, so
+-- adding one here would be a second tenancy check in a statement whose job is
+-- serialization.
+SELECT id FROM links WHERE id = $1 AND deleted_at IS NULL FOR UPDATE;

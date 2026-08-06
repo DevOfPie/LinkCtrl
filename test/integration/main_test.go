@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/store"
@@ -114,7 +115,16 @@ func ensureTemplate() error {
 }
 
 // newDB returns an isolated database cloned from the template.
-func newDB(t *testing.T) *pgxpool.Pool {
+func newDB(t *testing.T) *pgxpool.Pool { return newTracedDB(t, nil) }
+
+// newTracedDB is newDB with a query tracer attached, for the tests that assert
+// how many queries a thing costs rather than what it answers.
+//
+// The tracer sits on the connection config rather than wrapping the service,
+// because the claim being tested is about the round trips that actually reach
+// Postgres. A counter around a Go method would still pass if the method below it
+// quietly issued two.
+func newTracedDB(t *testing.T, tracer pgx.QueryTracer) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
 
@@ -130,7 +140,12 @@ func newDB(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("clone template: %v", err)
 	}
 
-	pool, err := pgxpool.New(ctx, dsnFor(name))
+	cfg, err := pgxpool.ParseConfig(dsnFor(name))
+	if err != nil {
+		t.Fatalf("parse test DSN: %v", err)
+	}
+	cfg.ConnConfig.Tracer = tracer
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		t.Fatalf("connect to test database: %v", err)
 	}

@@ -1,0 +1,102 @@
+{{define "content"}}
+<div class="mb-6">
+  <h1 class="text-xl font-semibold tracking-tight">Invitations</h1>
+  <p class="mt-1 text-sm text-muted">An invitation adds somebody to this organization. It is tied to the address you send it to, works once, and can be revoked until it is used.</p>
+</div>
+
+{{template "flash_ok" .Notice}}
+{{template "flash_error" .Error}}
+
+{{if .Created}}
+<div class="mb-6 rounded-lg border border-ok-line bg-ok-soft p-6">
+  <h2 class="text-sm font-medium text-ok-ink">Invitation created for {{.Created.Email}}</h2>
+  <p class="mt-1 text-sm text-ok-ink">
+    {{if .Created.Emailed}}It has been queued for delivery to that address. The link is below as well, in case it does not arrive.
+    {{else}}No mail relay is configured on this instance, so nothing was sent. Copy this link and give it to them yourself.{{end}}
+  </p>
+  {{/* The only time the token exists. It is not stored — only its hash is — so
+       leaving this page loses it, and re-issuing means revoking and inviting
+       again. Same shape as a newly minted API key, for the same reason. */}}
+  <p class="mt-3 select-all break-all rounded-md border border-ok-line bg-raised px-3 py-2 font-mono text-sm">{{.Created.URL}}</p>
+  <p class="mt-2 text-xs text-ok-ink">Shown once. Only a hash is stored, so this link cannot be recovered later.</p>
+</div>
+{{end}}
+
+{{if .RoleOptions}}
+<div class="mb-6 rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-4 text-sm font-medium text-ink">Invite somebody</h2>
+  <form method="post" action="/invites" class="space-y-4">
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div>
+        <label for="email" class="block text-sm font-medium text-ink">Email</label>
+        <input id="email" name="email" type="email" required autocomplete="off" placeholder="colleague@example.com" value="{{.Form.Email}}"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        {{template "field_error" (index .FieldErrors "email")}}
+      </div>
+      <div>
+        <label for="role" class="block text-sm font-medium text-ink">Role</label>
+        {{/* Only roles at or below the inviter's own rank are listed, so an
+             admin cannot offer owner. The service refuses it again on the way
+             in — this select is the affordance, not the control. */}}
+        <select id="role" name="role" class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm">
+          {{range .RoleOptions}}
+          <option value="{{.Slug}}"{{if eq $.Form.Role .Slug}} selected{{end}}>{{.Name}} — {{.Description}}</option>
+          {{end}}
+        </select>
+        {{template "field_error" (index .FieldErrors "role")}}
+      </div>
+    </div>
+    {{if not .MailConfigured}}
+    <p class="text-xs text-subtle">No mail relay is configured, so nothing is sent. You will be given a link to pass on.</p>
+    {{end}}
+    <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Send invitation</button>
+  </form>
+</div>
+{{end}}
+
+<div class="rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-4 text-sm font-medium text-ink">Invitations</h2>
+  {{if .Invitations}}
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="border-b border-line text-left text-xs uppercase tracking-wide text-subtle">
+        <th class="py-2 pr-4 font-medium">Address</th>
+        <th class="py-2 pr-4 font-medium">Role</th>
+        <th class="py-2 pr-4 font-medium">Invited by</th>
+        <th class="py-2 pr-4 font-medium">Expires</th>
+        <th class="py-2 pr-4 font-medium">State</th>
+        <th class="py-2 font-medium"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Invitations}}
+      <tr class="border-b border-line">
+        <td class="py-3 pr-4 font-medium">{{.Email}}</td>
+        <td class="py-3 pr-4 text-muted">{{.Role}}</td>
+        <td class="py-3 pr-4 text-muted">{{if .InvitedBy}}{{.InvitedBy}}{{else}}—{{end}}</td>
+        <td class="py-3 pr-4 text-muted">{{.ExpiresAt.Format "2 Jan 2006, 15:04"}} UTC</td>
+        <td class="py-3 pr-4">
+          {{if eq .Status "redeemed"}}<span class="{{statusBadge "active"}}">accepted</span>
+          {{else if eq .Status "revoked"}}<span class="{{statusBadge "disabled"}}">revoked</span>
+          {{else if eq .Status "expired"}}<span class="{{statusBadge "expired"}}">expired</span>
+          {{else}}<span class="{{statusBadge "active"}}">pending</span>{{end}}
+        </td>
+        <td class="py-3 text-right">
+          {{if eq .Status "pending"}}
+          {{/* hx-post so hx-confirm is honoured; see the note in link_detail.html. */}}
+          <form method="post" action="/invites/{{.ID}}/revoke"
+                hx-post="/invites/{{.ID}}/revoke"
+                hx-confirm="Revoke the invitation to {{.Email}}? Their link stops working immediately.">
+            <button type="submit" class="text-sm font-medium text-danger-ink hover:underline">Revoke</button>
+          </form>
+          {{end}}
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  <p class="py-6 text-center text-sm text-subtle">Nobody has been invited yet.</p>
+  {{end}}
+</div>
+{{end}}

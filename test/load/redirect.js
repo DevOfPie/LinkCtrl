@@ -39,6 +39,13 @@ const redirectTime = new Trend('redirect_duration', true);
 // the two invocations.
 const PHASE = __ENV.PHASE || 'slo';
 
+// SUFFIX appends extra path segments to every measured request, so the run can
+// exercise deep-link path forwarding (M33) rather than only the bare alias.
+// Empty by default, which leaves every earlier measurement's request shape
+// exactly as it was — the seeded links must have forward_path on for a
+// non-empty value to answer 302 rather than 404.
+const SUFFIX = __ENV.SUFFIX || '';
+
 // Arrival-rate executor for the measurement, not a VU loop: the target is a
 // request rate, and a fixed VU count would quietly reduce throughput as latency
 // rose — exactly when the number matters.
@@ -96,7 +103,7 @@ export function measure() {
     ? Math.floor(Math.random() * HOT)
     : Math.floor(Math.random() * TOTAL);
 
-  const res = http.get(`${BASE}/${aliasFor(n)}`, {
+  const res = http.get(`${BASE}/${aliasFor(n)}${SUFFIX}`, {
     redirects: 0,
     tags: { phase: 'slo' },
   });

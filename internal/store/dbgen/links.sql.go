@@ -16,7 +16,7 @@ const archiveLink = `-- name: ArchiveLink :one
 UPDATE links
    SET status = 'archived', archived_at = now(), updated_at = now()
  WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
-RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id
+RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path, require_signature
 `
 
 type ArchiveLinkParams struct {
@@ -53,6 +53,9 @@ func (q *Queries) ArchiveLink(ctx context.Context, arg ArchiveLinkParams) (Link,
 		&i.PurgeAfter,
 		&i.SearchVector,
 		&i.CampaignID,
+		&i.BotBlocking,
+		&i.ForwardPath,
+		&i.RequireSignature,
 	)
 	return i, err
 }
@@ -101,13 +104,32 @@ WHERE l.workspace_id = $1
        OR EXISTS (SELECT 1 FROM link_tags lt
                    WHERE lt.link_id = l.id
                      AND lt.tag_id = ANY($4::uuid[])))
+  -- Must mirror ListLinks exactly, for the reason the tag filter above says in
+  -- full: a folder-filtered page whose total counted the whole workspace would
+  -- read "3 of 40 links" under a list of every link in one folder.
+  AND (NOT $5::boolean OR l.folder_id IS NULL)
+  AND ($6::uuid IS NULL OR l.folder_id = $6::uuid)
+  -- Must mirror ListLinks exactly (M41), for the reason the folder pair above
+  -- says in full: a campaign-filtered page whose total counted the workspace
+  -- would read "5 of 40 links" over a list of five.
+  AND (NOT $7::boolean OR l.campaign_id IS NULL)
+  AND ($8::uuid IS NULL OR l.campaign_id = $8::uuid)
+  -- Must mirror ListLinks exactly, for the reason the two filters above say in
+  -- full: a page filtered to one hostname whose total counted every domain
+  -- would read "4 of 40 links" over a list of four.
+  AND ($9::uuid IS NULL OR l.domain_id = $9::uuid)
 `
 
 type CountLinksParams struct {
-	WorkspaceID uuid.UUID
-	Status      *string
-	Search      *string
-	TagIds      []uuid.UUID
+	WorkspaceID  uuid.UUID
+	Status       *string
+	Search       *string
+	TagIds       []uuid.UUID
+	Unfiled      bool
+	FolderID     *uuid.UUID
+	Uncampaigned bool
+	CampaignID   *uuid.UUID
+	DomainID     *uuid.UUID
 }
 
 // Only issued when the caller explicitly asks for a total, because counting
@@ -118,6 +140,11 @@ func (q *Queries) CountLinks(ctx context.Context, arg CountLinksParams) (int64, 
 		arg.Status,
 		arg.Search,
 		arg.TagIds,
+		arg.Unfiled,
+		arg.FolderID,
+		arg.Uncampaigned,
+		arg.CampaignID,
+		arg.DomainID,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -167,23 +194,32 @@ const createLink = `-- name: CreateLink :one
 
 INSERT INTO links (
     id, workspace_id, domain_id, alias, primary_url,
-    title, description, status, expires_at, created_by, forward_query
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id
+    title, description, status, expires_at, created_by, forward_query,
+    forward_path, password_hash, max_clicks, one_time, require_signature,
+    folder_id, campaign_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path, require_signature
 `
 
 type CreateLinkParams struct {
-	ID           uuid.UUID
-	WorkspaceID  uuid.UUID
-	DomainID     uuid.UUID
-	Alias        string
-	PrimaryUrl   string
-	Title        string
-	Description  string
-	Status       string
-	ExpiresAt    *time.Time
-	CreatedBy    *uuid.UUID
-	ForwardQuery bool
+	ID               uuid.UUID
+	WorkspaceID      uuid.UUID
+	DomainID         uuid.UUID
+	Alias            string
+	PrimaryUrl       string
+	Title            string
+	Description      string
+	Status           string
+	ExpiresAt        *time.Time
+	CreatedBy        *uuid.UUID
+	ForwardQuery     bool
+	ForwardPath      bool
+	PasswordHash     *string
+	MaxClicks        *int64
+	OneTime          bool
+	RequireSignature bool
+	FolderID         *uuid.UUID
+	CampaignID       *uuid.UUID
 }
 
 // Links, destinations and tags.
@@ -200,6 +236,13 @@ func (q *Queries) CreateLink(ctx context.Context, arg CreateLinkParams) (Link, e
 		arg.ExpiresAt,
 		arg.CreatedBy,
 		arg.ForwardQuery,
+		arg.ForwardPath,
+		arg.PasswordHash,
+		arg.MaxClicks,
+		arg.OneTime,
+		arg.RequireSignature,
+		arg.FolderID,
+		arg.CampaignID,
 	)
 	var i Link
 	err := row.Scan(
@@ -228,6 +271,9 @@ func (q *Queries) CreateLink(ctx context.Context, arg CreateLinkParams) (Link, e
 		&i.PurgeAfter,
 		&i.SearchVector,
 		&i.CampaignID,
+		&i.BotBlocking,
+		&i.ForwardPath,
+		&i.RequireSignature,
 	)
 	return i, err
 }
@@ -292,27 +338,77 @@ func (q *Queries) DetachAllTags(ctx context.Context, linkID uuid.UUID) error {
 }
 
 const getDefaultDomainSettings = `-- name: GetDefaultDomainSettings :one
-SELECT id, hostname, root_redirect_url FROM domains
-WHERE is_default AND deleted_at IS NULL
+SELECT id, hostname, root_redirect_url, block_bots, block_bots_enforced
+FROM domains
+WHERE id = $1 AND deleted_at IS NULL
 `
 
 type GetDefaultDomainSettingsRow struct {
-	ID              uuid.UUID
-	Hostname        string
-	RootRedirectUrl *string
+	ID                uuid.UUID
+	Hostname          string
+	RootRedirectUrl   *string
+	BlockBots         bool
+	BlockBotsEnforced bool
 }
 
-// The instance's link domain and where its root points. Phase 1 has exactly one
-// default domain; Phase 2 gives a workspace its own and this gains a filter.
-func (q *Queries) GetDefaultDomainSettings(ctx context.Context) (GetDefaultDomainSettingsRow, error) {
-	row := q.db.QueryRow(ctx, getDefaultDomainSettings)
+// One domain's settings and where its root points.
+//
+// **The filter its own comment promised** (M40). It read `WHERE is_default`,
+// which was the whole truth while an instance had exactly one domain and became
+// a way of asking the wrong row the moment it had several: a verified custom
+// hostname has a root of its own, and reading its settings through a predicate
+// that can only ever return the default would answer about somebody else's
+// hostname.
+//
+// Not scoped by owner, like every other statement addressed by id in this
+// schema. link.Service has already judged the actor against the row.
+func (q *Queries) GetDefaultDomainSettings(ctx context.Context, domainID uuid.UUID) (GetDefaultDomainSettingsRow, error) {
+	row := q.db.QueryRow(ctx, getDefaultDomainSettings, domainID)
 	var i GetDefaultDomainSettingsRow
-	err := row.Scan(&i.ID, &i.Hostname, &i.RootRedirectUrl)
+	err := row.Scan(
+		&i.ID,
+		&i.Hostname,
+		&i.RootRedirectUrl,
+		&i.BlockBots,
+		&i.BlockBotsEnforced,
+	)
+	return i, err
+}
+
+const getDomainBotSettings = `-- name: GetDomainBotSettings :one
+SELECT id, hostname, block_bots, block_bots_enforced
+FROM domains
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+type GetDomainBotSettingsRow struct {
+	ID                uuid.UUID
+	Hostname          string
+	BlockBots         bool
+	BlockBotsEnforced bool
+}
+
+// One domain's bot policy, by id.
+//
+// Read on the management path only, and only when a link's own setting is being
+// changed: the service has to know whether the domain enforces before it can
+// tell the caller their `off` will not be honoured. The redirect path never
+// runs this — it gets the same two columns from ResolveAliasForRedirect's join,
+// which is the whole reason that join exists.
+func (q *Queries) GetDomainBotSettings(ctx context.Context, id uuid.UUID) (GetDomainBotSettingsRow, error) {
+	row := q.db.QueryRow(ctx, getDomainBotSettings, id)
+	var i GetDomainBotSettingsRow
+	err := row.Scan(
+		&i.ID,
+		&i.Hostname,
+		&i.BlockBots,
+		&i.BlockBotsEnforced,
+	)
 	return i, err
 }
 
 const getLink = `-- name: GetLink :one
-SELECT id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id FROM links
+SELECT id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path, require_signature FROM links
 WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
 `
 
@@ -354,12 +450,15 @@ func (q *Queries) GetLink(ctx context.Context, arg GetLinkParams) (Link, error) 
 		&i.PurgeAfter,
 		&i.SearchVector,
 		&i.CampaignID,
+		&i.BotBlocking,
+		&i.ForwardPath,
+		&i.RequireSignature,
 	)
 	return i, err
 }
 
 const getLinkByAlias = `-- name: GetLinkByAlias :one
-SELECT id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id FROM links
+SELECT id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path, require_signature FROM links
 WHERE domain_id = $1 AND alias = $2 AND deleted_at IS NULL
 `
 
@@ -397,6 +496,9 @@ func (q *Queries) GetLinkByAlias(ctx context.Context, arg GetLinkByAliasParams) 
 		&i.PurgeAfter,
 		&i.SearchVector,
 		&i.CampaignID,
+		&i.BotBlocking,
+		&i.ForwardPath,
+		&i.RequireSignature,
 	)
 	return i, err
 }
@@ -457,24 +559,73 @@ func (q *Queries) GetTagByName(ctx context.Context, arg GetTagByNameParams) (Tag
 }
 
 const getWorkspaceDefaultDomain = `-- name: GetWorkspaceDefaultDomain :one
-SELECT id, hostname FROM domains WHERE is_default AND deleted_at IS NULL
+SELECT id, hostname, organization_id, workspace_id FROM domains
+WHERE deleted_at IS NULL
+  AND (
+        is_default
+     OR (verified_at IS NOT NULL AND workspace_id = $1)
+     OR (verified_at IS NOT NULL AND workspace_id IS NULL
+         AND organization_id = $2)
+      )
+ORDER BY
+    CASE WHEN workspace_id = $1 THEN 0
+         WHEN NOT is_default                        THEN 1
+         ELSE 2 END,
+    verified_at, id
+LIMIT 1
 `
 
-type GetWorkspaceDefaultDomainRow struct {
-	ID       uuid.UUID
-	Hostname string
+type GetWorkspaceDefaultDomainParams struct {
+	WorkspaceID    *uuid.UUID
+	OrganizationID *uuid.UUID
 }
 
-func (q *Queries) GetWorkspaceDefaultDomain(ctx context.Context) (GetWorkspaceDefaultDomainRow, error) {
-	row := q.db.QueryRow(ctx, getWorkspaceDefaultDomain)
+type GetWorkspaceDefaultDomainRow struct {
+	ID             uuid.UUID
+	Hostname       string
+	OrganizationID *uuid.UUID
+	WorkspaceID    *uuid.UUID
+}
+
+// The hostname a new link goes on when the caller names none.
+//
+// **This is the filter the name promised and the query never had** (M40). It
+// read `WHERE is_default` with no workspace argument at all, so every workspace
+// on the instance got the same answer and the word "workspace" in the name was
+// describing an intention rather than a predicate.
+//
+// A workspace's own *verified* hostname wins over the instance default, which is
+// what registering one is for; the instance default is the fallback and is what
+// every workspace without one still gets, unchanged. Organization-owned
+// hostnames sit between the two — every workspace in the organization may use
+// one, so it is more specific than the instance and less than a workspace's own.
+//
+// **Verified only.** An unverified hostname is not a routing target, so putting
+// a link on it would mint a short URL that resolves nowhere; the ordering below
+// cannot reach one because the WHERE clause has already excluded it.
+//
+// Ties are broken by verified_at then id, so the answer is stable: a workspace
+// that verifies a second hostname does not silently move its new links onto it.
+// organization_id and workspace_id are selected because they are the domain's
+// *scope*, and the scope is what decides whether an alias collision on it could
+// involve a workspace the caller cannot see. A refusal that cannot tell a shared
+// namespace from a private one has to be worded for the worst case or say
+// nothing useful at all (F23).
+func (q *Queries) GetWorkspaceDefaultDomain(ctx context.Context, arg GetWorkspaceDefaultDomainParams) (GetWorkspaceDefaultDomainRow, error) {
+	row := q.db.QueryRow(ctx, getWorkspaceDefaultDomain, arg.WorkspaceID, arg.OrganizationID)
 	var i GetWorkspaceDefaultDomainRow
-	err := row.Scan(&i.ID, &i.Hostname)
+	err := row.Scan(
+		&i.ID,
+		&i.Hostname,
+		&i.OrganizationID,
+		&i.WorkspaceID,
+	)
 	return i, err
 }
 
 const listLinks = `-- name: ListLinks :many
 SELECT
-    l.id, l.workspace_id, l.domain_id, l.folder_id, l.alias, l.primary_url, l.primary_destination_id, l.title, l.description, l.status, l.expires_at, l.password_hash, l.max_clicks, l.one_time, l.forward_query, l.click_count, l.last_click_at, l.created_by, l.created_at, l.updated_at, l.archived_at, l.deleted_at, l.purge_after, l.search_vector, l.campaign_id,
+    l.id, l.workspace_id, l.domain_id, l.folder_id, l.alias, l.primary_url, l.primary_destination_id, l.title, l.description, l.status, l.expires_at, l.password_hash, l.max_clicks, l.one_time, l.forward_query, l.click_count, l.last_click_at, l.created_by, l.created_at, l.updated_at, l.archived_at, l.deleted_at, l.purge_after, l.search_vector, l.campaign_id, l.bot_blocking, l.forward_path, l.require_signature,
     COALESCE(tg.names, ARRAY[]::text[])::text[] AS tag_names,
     COALESCE(tg.ids, ARRAY[]::text[])::text[]   AS tag_ids
 FROM links l
@@ -509,6 +660,29 @@ WHERE l.workspace_id = $1
        OR EXISTS (SELECT 1 FROM link_tags lt
                    WHERE lt.link_id = l.id
                      AND lt.tag_id = ANY($4::uuid[])))
+  -- The folder filter (M38), in two halves because "no filter" and "the links
+  -- that are in no folder" are different questions and a nullable id can only
+  -- ask one of them. ` + "`" + `unfiled` + "`" + ` is the second; without it there is no way to find
+  -- the links that were never filed, which is the state every link starts in.
+  --
+  -- One folder, not its subtree. The number this filter returns has to be the
+  -- number shown beside the folder on the tree page, and a parent that reported
+  -- its descendants' links would disagree with it — and would put a recursive
+  -- walk inside the dashboard's hottest query to do so.
+  AND (NOT $5::boolean OR l.folder_id IS NULL)
+  AND ($6::uuid IS NULL OR l.folder_id = $6::uuid)
+  -- The campaign filter (M41), in two halves for the reason the folder pair
+  -- above is: "no filter" and "the links in no campaign" are different
+  -- questions. ` + "`" + `uncampaigned` + "`" + ` is what the campaigns page links to when somebody
+  -- asks which links are not attributed to anything yet, which is the question
+  -- every campaign list eventually raises.
+  AND (NOT $7::boolean OR l.campaign_id IS NULL)
+  AND ($8::uuid IS NULL OR l.campaign_id = $8::uuid)
+  -- Which hostname the link is served on (M40). One filter and no ` + "`" + `unhosted` + "`" + `
+  -- half, unlike the folder pair above: ` + "`" + `links.domain_id` + "`" + ` is NOT NULL, so there
+  -- is no third state to ask about — every link is on exactly one domain, and
+  -- "no filter" is the only other question there is.
+  AND ($9::uuid IS NULL OR l.domain_id = $9::uuid)
   -- Keyset pagination only works if the predicate compares the same tuple the
   -- ORDER BY sorts on. It did not: every sort filtered on (created_at, id)
   -- while 'clicks' ordered by click_count, so page 2 dropped rows that belonged
@@ -516,23 +690,23 @@ WHERE l.workspace_id = $1
   -- correspondingly-named ORDER BY key, and the id tiebreaker matches its
   -- direction — 'oldest' ascends, so its tiebreaker ascends too.
   AND (
-        $5::uuid IS NULL
-        OR ($6::text = 'oldest'
-              AND (l.created_at, l.id) > ($7::timestamptz, $5::uuid))
-        OR ($6::text = 'clicks'
-              AND (l.click_count, l.id) < ($8::bigint, $5::uuid))
-        OR ($6::text NOT IN ('oldest','clicks')
-              AND (l.created_at, l.id) < ($7::timestamptz, $5::uuid))
+        $10::uuid IS NULL
+        OR ($11::text = 'oldest'
+              AND (l.created_at, l.id) > ($12::timestamptz, $10::uuid))
+        OR ($11::text = 'clicks'
+              AND (l.click_count, l.id) < ($13::bigint, $10::uuid))
+        OR ($11::text NOT IN ('oldest','clicks')
+              AND (l.created_at, l.id) < ($12::timestamptz, $10::uuid))
       )
 ORDER BY
-    CASE WHEN $6::text = 'oldest' THEN l.created_at END ASC,
-    CASE WHEN $6::text = 'clicks' THEN l.click_count END DESC,
-    CASE WHEN $6::text NOT IN ('oldest','clicks') THEN l.created_at END DESC,
+    CASE WHEN $11::text = 'oldest' THEN l.created_at END ASC,
+    CASE WHEN $11::text = 'clicks' THEN l.click_count END DESC,
+    CASE WHEN $11::text NOT IN ('oldest','clicks') THEN l.created_at END DESC,
     -- Ascending tiebreaker for the ascending sort. For the others this key is
     -- NULL on every row, so it ties and the DESC key below decides.
-    CASE WHEN $6::text = 'oldest' THEN l.id END ASC,
+    CASE WHEN $11::text = 'oldest' THEN l.id END ASC,
     l.id DESC
-LIMIT $9
+LIMIT $14
 `
 
 type ListLinksParams struct {
@@ -540,6 +714,11 @@ type ListLinksParams struct {
 	Status        *string
 	Search        *string
 	TagIds        []uuid.UUID
+	Unfiled       bool
+	FolderID      *uuid.UUID
+	Uncampaigned  bool
+	CampaignID    *uuid.UUID
+	DomainID      *uuid.UUID
 	CursorID      *uuid.UUID
 	Sort          string
 	CursorCreated *time.Time
@@ -573,6 +752,9 @@ type ListLinksRow struct {
 	PurgeAfter           *time.Time
 	SearchVector         interface{}
 	CampaignID           *uuid.UUID
+	BotBlocking          string
+	ForwardPath          bool
+	RequireSignature     bool
 	TagNames             []string
 	TagIds               []string
 }
@@ -599,6 +781,11 @@ func (q *Queries) ListLinks(ctx context.Context, arg ListLinksParams) ([]ListLin
 		arg.Status,
 		arg.Search,
 		arg.TagIds,
+		arg.Unfiled,
+		arg.FolderID,
+		arg.Uncampaigned,
+		arg.CampaignID,
+		arg.DomainID,
 		arg.CursorID,
 		arg.Sort,
 		arg.CursorCreated,
@@ -638,6 +825,9 @@ func (q *Queries) ListLinks(ctx context.Context, arg ListLinksParams) ([]ListLin
 			&i.PurgeAfter,
 			&i.SearchVector,
 			&i.CampaignID,
+			&i.BotBlocking,
+			&i.ForwardPath,
+			&i.RequireSignature,
 			&i.TagNames,
 			&i.TagIds,
 		); err != nil {
@@ -700,6 +890,38 @@ func (q *Queries) ListTags(ctx context.Context, workspaceID uuid.UUID) ([]ListTa
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockLink = `-- name: LockLink :one
+SELECT id FROM links WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
+`
+
+// The link row, locked, for a guard whose decision is a count.
+//
+// A count cannot be locked, so `SELECT count(*)` as a ceiling check is a
+// check-then-act: two writers each read a state the other is changing, and both
+// pass a limit neither would pass alone. This is `LockOrganizations`' pattern at
+// the link level — take the lock on the parent, make the decision inside the
+// transaction that writes, and let the second writer block until the first
+// commits and then re-read what it left behind.
+//
+// Locking the *link* rather than the rules is what makes it work with nothing to
+// lock in the empty case. Postgres takes `FOR KEY SHARE` on a parent when a row
+// referencing it is inserted, and that conflicts with `FOR UPDATE` — so a locked
+// link cannot acquire a routing rule or a split arm while the guard is deciding,
+// including the first one, where a lock on the rules would have had no rows to
+// take (F67).
+//
+// Returns the id alone: the caller already has the link, and this exists for its
+// lock rather than for its columns. No workspace parameter, for the same reason
+// — every caller has already been through GetLink, which is workspace-scoped, so
+// adding one here would be a second tenancy check in a statement whose job is
+// serialization.
+func (q *Queries) LockLink(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockLink, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
 }
 
 const purgeExpiredLinks = `-- name: PurgeExpiredLinks :many
@@ -788,7 +1010,7 @@ const restoreLink = `-- name: RestoreLink :one
 UPDATE links
    SET status = 'active', archived_at = NULL, updated_at = now()
  WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
-RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id
+RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path, require_signature
 `
 
 type RestoreLinkParams struct {
@@ -825,21 +1047,100 @@ func (q *Queries) RestoreLink(ctx context.Context, arg RestoreLinkParams) (Link,
 		&i.PurgeAfter,
 		&i.SearchVector,
 		&i.CampaignID,
+		&i.BotBlocking,
+		&i.ForwardPath,
+		&i.RequireSignature,
 	)
 	return i, err
+}
+
+const setBotBlockingForEveryDomain = `-- name: SetBotBlockingForEveryDomain :many
+WITH updated AS (
+    UPDATE domains
+       SET block_bots          = $1::boolean,
+           block_bots_enforced = $2::boolean,
+           updated_at          = now()
+     WHERE deleted_at IS NULL
+    RETURNING id, hostname, root_redirect_url, block_bots, block_bots_enforced, is_default
+)
+SELECT id, hostname, root_redirect_url, block_bots, block_bots_enforced, is_default
+FROM updated
+ORDER BY is_default DESC, hostname
+`
+
+type SetBotBlockingForEveryDomainParams struct {
+	BlockBots         bool
+	BlockBotsEnforced bool
+}
+
+type SetBotBlockingForEveryDomainRow struct {
+	ID                uuid.UUID
+	Hostname          string
+	RootRedirectUrl   *string
+	BlockBots         bool
+	BlockBotsEnforced bool
+	IsDefault         bool
+}
+
+// Both switches at once, because they are one setting with two halves and the
+// CHECK in 01800 refuses the combination that writing them separately would pass
+// through on the way. That applies row by row, so a propagation that touched one
+// column would be refused by the constraint on the way out.
+//
+// **Every undeleted domain, not only the default (F89).** This was
+// `WHERE is_default` until M45, which was the whole truth while the instance
+// default was the only domain there was. M40 added verified custom hostnames and
+// `ResolveAliasForRedirect` reads the policy from the link's *own* domain row, so
+// an operator who turned blocking on — even enforced — got no blocking on any
+// link served on a custom hostname, and any workspace could open that hole for
+// itself by registering one. Plan.md's "the domain's setting is instance-wide" is
+// the claim being restored, and this is what makes it true.
+//
+// **Every updated row comes back, not just the default**, because each one is a
+// cache invalidation the caller owes: a snapshot carries its domain's policy so
+// the redirect path needs no second lookup, so every cached alias under every
+// domain touched here is now wrong. The default is marked rather than sorted for,
+// since it is the row the settings surfaces read and the hostname they name.
+func (q *Queries) SetBotBlockingForEveryDomain(ctx context.Context, arg SetBotBlockingForEveryDomainParams) ([]SetBotBlockingForEveryDomainRow, error) {
+	rows, err := q.db.Query(ctx, setBotBlockingForEveryDomain, arg.BlockBots, arg.BlockBotsEnforced)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SetBotBlockingForEveryDomainRow{}
+	for rows.Next() {
+		var i SetBotBlockingForEveryDomainRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Hostname,
+			&i.RootRedirectUrl,
+			&i.BlockBots,
+			&i.BlockBotsEnforced,
+			&i.IsDefault,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const setDefaultDomainRootRedirect = `-- name: SetDefaultDomainRootRedirect :one
 UPDATE domains
    SET root_redirect_url = $1, updated_at = now()
  WHERE is_default AND deleted_at IS NULL
-RETURNING id, hostname, root_redirect_url
+RETURNING id, hostname, root_redirect_url, block_bots, block_bots_enforced
 `
 
 type SetDefaultDomainRootRedirectRow struct {
-	ID              uuid.UUID
-	Hostname        string
-	RootRedirectUrl *string
+	ID                uuid.UUID
+	Hostname          string
+	RootRedirectUrl   *string
+	BlockBots         bool
+	BlockBotsEnforced bool
 }
 
 // NULL clears it, which restores the 404 the root answered before anyone set
@@ -847,7 +1148,13 @@ type SetDefaultDomainRootRedirectRow struct {
 func (q *Queries) SetDefaultDomainRootRedirect(ctx context.Context, rootRedirectUrl *string) (SetDefaultDomainRootRedirectRow, error) {
 	row := q.db.QueryRow(ctx, setDefaultDomainRootRedirect, rootRedirectUrl)
 	var i SetDefaultDomainRootRedirectRow
-	err := row.Scan(&i.ID, &i.Hostname, &i.RootRedirectUrl)
+	err := row.Scan(
+		&i.ID,
+		&i.Hostname,
+		&i.RootRedirectUrl,
+		&i.BlockBots,
+		&i.BlockBotsEnforced,
+	)
 	return i, err
 }
 
@@ -903,13 +1210,17 @@ func (q *Queries) SoftDeleteLink(ctx context.Context, arg SoftDeleteLinkParams) 
 }
 
 const updateDestinationURL = `-- name: UpdateDestinationURL :exec
-UPDATE destinations
+UPDATE destinations d
    SET url = $3, url_host = $4, updated_at = now()
- WHERE link_id = $1 AND workspace_id = $2 AND deleted_at IS NULL
+  FROM links l
+ WHERE l.id = $1
+   AND l.workspace_id = $2
+   AND d.id = l.primary_destination_id
+   AND d.deleted_at IS NULL
 `
 
 type UpdateDestinationURLParams struct {
-	LinkID      uuid.UUID
+	ID          uuid.UUID
 	WorkspaceID uuid.UUID
 	Url         string
 	UrlHost     string
@@ -917,9 +1228,22 @@ type UpdateDestinationURLParams struct {
 
 // The trigger on destinations mirrors this into links.primary_url, so the hot
 // path never joins.
+//
+// Narrowed to the *primary* destination by M34, and the narrowing is the point
+// rather than tidying. Until routing rules existed a link had exactly one
+// destination row, so matching on link_id alone matched it; a rule target is a
+// second row on the same link, and this query would have rewritten every one of
+// them to the link's own URL the next time somebody edited the link. Every rule
+// on the link would silently start pointing at the same place, which is
+// indistinguishable from the rules having stopped working.
+//
+// Matched through links.primary_destination_id rather than through `position =
+// 0`, because that column is what the sync trigger keys on and what the rest of
+// the schema treats as the authority. Two definitions of "the primary" is how
+// they come to disagree.
 func (q *Queries) UpdateDestinationURL(ctx context.Context, arg UpdateDestinationURLParams) error {
 	_, err := q.db.Exec(ctx, updateDestinationURL,
-		arg.LinkID,
+		arg.ID,
 		arg.WorkspaceID,
 		arg.Url,
 		arg.UrlHost,
@@ -935,20 +1259,60 @@ UPDATE links
                             ELSE COALESCE($4, expires_at) END,
        alias         = COALESCE($5, alias),
        forward_query = COALESCE($6, forward_query),
+       forward_path  = COALESCE($7, forward_path),
+       bot_blocking  = COALESCE($8, bot_blocking),
+       -- The gates (M35). Each is three-valued through its own pair of
+       -- arguments, because "leave it alone" and "remove it" are different
+       -- requests and a nullable column cannot express both with one nullable
+       -- parameter. clear_password wins over password_hash for the same reason
+       -- clear_expiry wins over expires_at, and the order is the same.
+       password_hash = CASE WHEN $9::boolean THEN NULL
+                            ELSE COALESCE($10, password_hash) END,
+       max_clicks    = CASE WHEN $11::boolean THEN NULL
+                            ELSE COALESCE($12, max_clicks) END,
+       one_time      = COALESCE($13, one_time),
+       require_signature = COALESCE($14, require_signature),
+       -- Which folder the link is filed in (M38). Three-valued for the reason
+       -- the gates above are: "leave it where it is" and "take it out of every
+       -- folder" are different requests, and a nullable column cannot express
+       -- both through one nullable parameter. The service has already checked
+       -- that the folder belongs to this workspace — the foreign key does not,
+       -- because it points at folders(id) and says nothing about tenancy.
+       folder_id     = CASE WHEN $15::boolean THEN NULL
+                            ELSE COALESCE($16, folder_id) END,
+       -- Which campaign the link belongs to (M41). Three-valued for the reason
+       -- the folder above is, and the third state is the one that matters: a
+       -- link joins a campaign by mistake as easily as it joins one on purpose,
+       -- and without clear_campaign the only way out would be to delete the
+       -- campaign, which would take every other link with it.
+       campaign_id   = CASE WHEN $17::boolean THEN NULL
+                            ELSE COALESCE($18, campaign_id) END,
        updated_at    = now()
- WHERE id = $7 AND workspace_id = $8 AND deleted_at IS NULL
-RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id
+ WHERE id = $19 AND workspace_id = $20 AND deleted_at IS NULL
+RETURNING id, workspace_id, domain_id, folder_id, alias, primary_url, primary_destination_id, title, description, status, expires_at, password_hash, max_clicks, one_time, forward_query, click_count, last_click_at, created_by, created_at, updated_at, archived_at, deleted_at, purge_after, search_vector, campaign_id, bot_blocking, forward_path, require_signature
 `
 
 type UpdateLinkParams struct {
-	Title        *string
-	Description  *string
-	ClearExpiry  bool
-	ExpiresAt    *time.Time
-	Alias        *string
-	ForwardQuery *bool
-	ID           uuid.UUID
-	WorkspaceID  uuid.UUID
+	Title            *string
+	Description      *string
+	ClearExpiry      bool
+	ExpiresAt        *time.Time
+	Alias            *string
+	ForwardQuery     *bool
+	ForwardPath      *bool
+	BotBlocking      *string
+	ClearPassword    bool
+	PasswordHash     *string
+	ClearMaxClicks   bool
+	MaxClicks        *int64
+	OneTime          *bool
+	RequireSignature *bool
+	ClearFolder      bool
+	FolderID         *uuid.UUID
+	ClearCampaign    bool
+	CampaignID       *uuid.UUID
+	ID               uuid.UUID
+	WorkspaceID      uuid.UUID
 }
 
 // COALESCE with sqlc.narg gives partial update: a NULL argument leaves the
@@ -961,6 +1325,18 @@ func (q *Queries) UpdateLink(ctx context.Context, arg UpdateLinkParams) (Link, e
 		arg.ExpiresAt,
 		arg.Alias,
 		arg.ForwardQuery,
+		arg.ForwardPath,
+		arg.BotBlocking,
+		arg.ClearPassword,
+		arg.PasswordHash,
+		arg.ClearMaxClicks,
+		arg.MaxClicks,
+		arg.OneTime,
+		arg.RequireSignature,
+		arg.ClearFolder,
+		arg.FolderID,
+		arg.ClearCampaign,
+		arg.CampaignID,
 		arg.ID,
 		arg.WorkspaceID,
 	)
@@ -991,6 +1367,9 @@ func (q *Queries) UpdateLink(ctx context.Context, arg UpdateLinkParams) (Link, e
 		&i.PurgeAfter,
 		&i.SearchVector,
 		&i.CampaignID,
+		&i.BotBlocking,
+		&i.ForwardPath,
+		&i.RequireSignature,
 	)
 	return i, err
 }

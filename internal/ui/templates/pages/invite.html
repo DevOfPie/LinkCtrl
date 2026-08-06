@@ -1,0 +1,59 @@
+{{define "content"}}
+{{/* The public half of the invitation surface. No session required, and none
+     assumed: whoever opens this may have no account at all, which is the whole
+     point of the page.
+
+     It names the organization and the role, and deliberately never the address
+     the invitation was issued to. Printing that would hand somebody who picked
+     the link out of a forwarded message the one thing they need to redeem it,
+     which is exactly what binding an invitation to an address is for (D27). The
+     person it was meant for knows which address they were invited at; the
+     person it was not does not. */}}
+<div class="mx-auto max-w-md">
+  {{if .Valid}}
+  <div class="rounded-lg border border-line bg-raised p-6">
+    <h1 class="text-lg font-semibold tracking-tight">Join {{.Offer.OrganizationName}}</h1>
+    <p class="mt-1 text-sm text-muted">You have been invited as <span class="font-medium text-ink">{{.Offer.Role}}</span>. This invitation stops working on {{.Offer.ExpiresAt.Format "2 Jan 2006, 15:04"}} UTC.</p>
+
+    {{template "flash_error" .Error}}
+
+    <form method="post" action="/invite/{{.Token}}" class="mt-4 space-y-4">
+      <div>
+        <label for="email" class="block text-sm font-medium text-ink">Email</label>
+        <input id="email" name="email" type="email" required autocomplete="username" value="{{.Form.Email}}"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        <p class="mt-1 text-xs text-subtle">The address this invitation was sent to. It only works for that one.</p>
+        {{template "field_error" (index .FieldErrors "email")}}
+      </div>
+      {{if .NewAccounts}}
+      <div>
+        <label for="name" class="block text-sm font-medium text-ink">Name <span class="font-normal text-subtle">(only if you are creating an account)</span></label>
+        <input id="name" name="name" type="text" autocomplete="name" value="{{.Form.Name}}"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      </div>
+      {{end}}
+      <div>
+        <label for="password" class="block text-sm font-medium text-ink">Password</label>
+        <input id="password" name="password" type="password" required autocomplete="current-password"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        <p class="mt-1 text-xs text-subtle">
+          {{if .NewAccounts}}If you already have an account, use its password — accepting adds this organization to it. If you do not, this becomes your password, and it must be at least 12 characters.
+          {{else}}Use the password for your existing account. This instance is not accepting new registrations, so an invitation can only add an account that already exists.{{end}}
+        </p>
+        {{template "field_error" (index .FieldErrors "password")}}
+      </div>
+      <button type="submit" class="w-full rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Accept invitation</button>
+    </form>
+  </div>
+  {{else}}
+  {{/* One page for every unredeemable invitation — expired, revoked, already
+       used, or never real. Saying which would answer a question about somebody
+       else's invitation. */}}
+  <div class="rounded-lg border border-line bg-raised p-6 text-center">
+    <h1 class="text-lg font-semibold tracking-tight">This invitation is not valid</h1>
+    <p class="mt-2 text-sm text-muted">It may have expired, been revoked, or already been used. Ask whoever invited you to send a new one.</p>
+    <p class="mt-4"><a href="/login" class="text-sm font-medium text-accent-ink hover:underline">Sign in</a></p>
+  </div>
+  {{end}}
+</div>
+{{end}}

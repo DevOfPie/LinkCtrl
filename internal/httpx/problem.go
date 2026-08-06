@@ -9,6 +9,7 @@ import (
 
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 )
 
@@ -76,6 +77,16 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 			Status: http.StatusConflict, Detail: err.Error(),
 		})
 
+	case errors.Is(err, domain.ErrUnavailable):
+		// 503 rather than 500: the caller did nothing wrong and the operation may
+		// well work later, or on a replica configured with the dependency this one
+		// is missing. Retry-After is deliberately absent — nothing here knows when
+		// the capability will appear.
+		WriteProblem(w, r, Problem{
+			Type: problemBase + "unavailable", Title: "Temporarily unavailable",
+			Status: http.StatusServiceUnavailable, Detail: err.Error(),
+		})
+
 	case errors.Is(err, domain.ErrForbidden):
 		// The detail names the missing permission. That is deliberate: the
 		// caller is already authenticated, so telling them which permission
@@ -105,32 +116,52 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 			Detail: "The API key is unknown, revoked, expired, or malformed.",
 		})
 
-	case errors.Is(err, auth.ErrInvalidCredentials):
+	case errors.Is(err, auth.ErrAPIKeyAlreadyRotated):
+		// Deliberately *not* folded into the invalid-key answer above. The
+		// caller holding this key just authenticated with it, so it is neither
+		// unknown nor leaked-and-probing; it has simply already been replaced
+		// and whoever asked has lost the successor. Answering 401 would send an
+		// automated rotation into a retry loop against a credential that is
+		// working perfectly well.
+		WriteProblem(w, r, Problem{
+			Type: problemBase + "api-key-already-rotated", Title: "Already rotated",
+			Status: http.StatusConflict,
+			Detail: "This key has already been rotated into a successor. A key rotates once; " +
+				"if the successor's token was lost, revoke this key and mint a new one from a session.",
+		})
+
+	// One answer for every credential failure: unknown address, wrong password,
+	// no local password, suspended account, and an account locked out by
+	// repeated failures. Same type, same status, same body, every time.
+	//
+	// ErrAccountInactive was folded in first, and the reason given then holds
+	// unchanged for the rest of them: login already refuses to say whether an
+	// address is registered, so telling an unauthenticated caller "this account
+	// exists but is suspended" — or "this account exists, and you have just
+	// locked it" — gives back exactly what that refusal withholds. Unmapped,
+	// inactive returned a 500 and an error-level log line per attempt, which was
+	// both a worse answer and a louder oracle.
+	//
+	// ErrAccountLocked is finding F92, and it is the same mistake one branch
+	// down: it carried its own problem type and a 429, so five wrong passwords
+	// against a registered address answered differently from five against an
+	// unregistered one. Five fits inside LOGIN_RATE_PER_MIN, and the limiter's
+	// own refusal is a third type, so the states were tellable apart by anybody
+	// with a list of addresses and no credential at all — and the target paid a
+	// lockout for being asked about.
+	//
+	// The detail says no more than it did. Sign-in's own refusal explains the
+	// lockout (writeSignInRefused, api_auth.go); this mapping also answers
+	// POST /api/v1/auth/password, where no lockout exists and the sentence would be
+	// untrue.
+	case errors.Is(err, auth.ErrInvalidCredentials),
+		errors.Is(err, auth.ErrAccountInactive),
+		errors.Is(err, auth.ErrAccountLocked):
 		WriteProblem(w, r, Problem{
 			Type: problemBase + "invalid-credentials", Title: "Invalid credentials",
 			Status: http.StatusUnauthorized,
 			// Same message whatever the cause; see auth.Login.
 			Detail: "The email or password is incorrect.",
-		})
-
-	case errors.Is(err, auth.ErrAccountInactive):
-		// Deliberately identical to the invalid-credentials response, and not
-		// its own type. Login already refuses to say whether an address is
-		// registered; telling an unauthenticated caller "this account exists
-		// but is suspended" gives back exactly what that refusal withholds.
-		// Unmapped, this returned a 500 and an error-level log line per
-		// attempt, which is both a worse answer and a louder oracle.
-		WriteProblem(w, r, Problem{
-			Type: problemBase + "invalid-credentials", Title: "Invalid credentials",
-			Status: http.StatusUnauthorized,
-			Detail: "The email or password is incorrect.",
-		})
-
-	case errors.Is(err, auth.ErrAccountLocked):
-		WriteProblem(w, r, Problem{
-			Type: problemBase + "account-locked", Title: "Account temporarily locked",
-			Status: http.StatusTooManyRequests,
-			Detail: "Too many failed sign-in attempts. Try again shortly.",
 		})
 
 	case errors.Is(err, auth.ErrEmailTaken):
@@ -152,6 +183,25 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 				Field: "email", Code: "invalid",
 				Message: "that does not look like an email address",
 			}},
+		})
+
+	case errors.Is(err, invite.ErrNotRedeemable):
+		// One answer for every redemption failure: unknown token, expired,
+		// revoked, already spent, wrong address, wrong password, already a
+		// member, or an address with no account on a closed instance. Same
+		// status, same body, every time — the service already spends the same
+		// argon2 work on each of them, and a status code that differed would
+		// undo that (D27, and M27's no-enumeration bullet).
+		//
+		// 404 rather than 403: the token identifies the thing being asked for,
+		// and refusing to say whether it exists is exactly what "not found"
+		// means. A 403 would concede that it does.
+		WriteProblem(w, r, Problem{
+			Type:   problemBase + "invitation-not-redeemable",
+			Title:  "Invitation cannot be redeemed",
+			Status: http.StatusNotFound,
+			Detail: "This invitation is not valid. It may have expired, been " +
+				"revoked, or already been used — or the details do not match it.",
 		})
 
 	case errors.Is(err, domain.ErrNotImplemented):

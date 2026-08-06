@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
@@ -21,13 +22,23 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
+// pgxExecutor is the one method the reset statements need, so a helper can be
+// handed the transaction rather than the pool and cannot commit it.
+type pgxExecutor interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
 // demoReset removes the previous demo dataset.
 //
-// Scoped to this workspace and to the catalogue's own aliases, so it cannot
-// delete links somebody added by hand. Click events are truncated wholesale
-// because they carry no marker distinguishing demo rows from real ones — which
-// is why the command refuses to run against production without --force.
-func demoReset(ctx context.Context, pool *pgxpool.Pool, workspaceID string, cat []demoLink) error {
+// Scoped to this workspace, to the catalogue's own aliases and to the demo
+// organization, so it cannot delete links somebody added by hand. Click events
+// are truncated wholesale because they carry no marker distinguishing demo rows
+// from real ones — which is why the command refuses to run against production
+// without --force.
+//
+// Every row the Phase 2 seeding writes is removed here too, in demoResetPhase2.
+// That is what makes `make demo-update` idempotent: run twice, the same demo.
+func demoReset(ctx context.Context, pool *pgxpool.Pool, actor *auth.Identity, cat []demoLink) error {
 	aliases := make([]string, 0, len(cat))
 	for _, d := range cat {
 		if d.alias != "" {
@@ -40,25 +51,44 @@ func demoReset(ctx context.Context, pool *pgxpool.Pool, workspaceID string, cat 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	// **Every statement here is scoped to the organization**, and that uniformity
+	// is the point rather than a widening.
+	//
+	// These three used to be scoped to `actor.WorkspaceID` while the rollups
+	// below, the click events and everything in demoResetPhase2 were scoped to
+	// the organization. An actor resolving into any *other* workspace of the same
+	// organization therefore committed a half-reset — the links left standing,
+	// their analytics wiped — and reported success. M36 removed the reachable
+	// path to that state; it did not remove the asymmetry, which is what makes it
+	// a defect waiting for the demo to gain a third workspace (F68).
+	//
+	// The organization is the right scope on its own terms: the demo has two
+	// workspaces already, the catalogue is seeded across them, and every other
+	// statement in this function had already reached that conclusion.
+	//
 	// Generated-alias links have no stable name to match on, so they are found
 	// by their destination instead.
 	const del = `
 		DELETE FROM links
-		 WHERE workspace_id = $1
+		 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)
 		   AND (alias = ANY($2::text[])
 		        OR primary_url IN ('https://example.com/whitepaper/short-links.pdf',
 		                           'https://example.com/webinars/replay'))`
 	if _, err := tx.Exec(ctx, `DELETE FROM link_tags WHERE link_id IN (
-			SELECT id FROM links WHERE workspace_id = $1 AND alias = ANY($2::text[]))`,
-		workspaceID, aliases); err != nil {
+			SELECT id FROM links
+			 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)
+			   AND alias = ANY($2::text[]))`,
+		actor.OrgID, aliases); err != nil {
 		return fmt.Errorf("reset tags: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM destinations WHERE link_id IN (
-			SELECT id FROM links WHERE workspace_id = $1 AND alias = ANY($2::text[]))`,
-		workspaceID, aliases); err != nil {
+			SELECT id FROM links
+			 WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)
+			   AND alias = ANY($2::text[]))`,
+		actor.OrgID, aliases); err != nil {
 		return fmt.Errorf("reset destinations: %w", err)
 	}
-	if _, err := tx.Exec(ctx, del, workspaceID, aliases); err != nil {
+	if _, err := tx.Exec(ctx, del, actor.OrgID, aliases); err != nil {
 		return fmt.Errorf("reset links: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM reserved_aliases WHERE alias = ANY($1::text[])`,
@@ -68,10 +98,17 @@ func demoReset(ctx context.Context, pool *pgxpool.Pool, workspaceID string, cat 
 	if _, err := tx.Exec(ctx, `TRUNCATE click_events`); err != nil {
 		return fmt.Errorf("reset clicks: %w", err)
 	}
+	// Scoped to the organization rather than to one workspace, because the demo
+	// now has two and the rollup tables carry no foreign key that would take the
+	// second one's rows with it.
 	for _, t := range []string{"link_click_daily", "link_dimension_daily", "workspace_click_daily"} {
-		if _, err := tx.Exec(ctx, `DELETE FROM `+t+` WHERE workspace_id = $1`, workspaceID); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM `+t+` WHERE workspace_id IN (
+				SELECT id FROM workspaces WHERE organization_id = $1)`, actor.OrgID); err != nil {
 			return fmt.Errorf("reset %s: %w", t, err)
 		}
+	}
+	if err := demoResetPhase2(ctx, tx, actor.OrgID, actor.UserID); err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }
@@ -87,6 +124,7 @@ func demoCreateLinks(ctx context.Context, pool *pgxpool.Pool, svc *link.Service,
 		in := link.CreateInput{
 			URL: d.url, Alias: d.alias, Title: d.title,
 			Description: d.desc, Tags: d.tags, ForwardQuery: d.forwardQuery,
+			ForwardPath: d.forwardPath,
 		}
 		// The webinar expires while the demo is still current, which is the
 		// state the form describes; the sale expires in the past, which no API
@@ -276,33 +314,42 @@ func demoAgent(vidx int) (device, browser, os string) {
 	return device, browser, os
 }
 
-// demoClicks writes the click history with COPY and returns how many rows it
-// wrote.
-func demoClicks(ctx context.Context, pool *pgxpool.Pool, workspaceID string,
-	cat []demoLink, ids map[int]uuid.UUID, opt demoOptions, now time.Time,
-) (int64, error) {
+// demoClickRow is one backfilled click, before it reaches the database.
+type demoClickRow struct {
+	linkID         uuid.UUID
+	at             time.Time
+	hash           []byte
+	country        string
+	device         string
+	browser        string
+	os             string
+	lang, referrer string
+	isBot          bool
+	latency        int32
+}
+
+// demoClickRows generates the click history.
+//
+// Pure, and separated from the COPY below for that reason: the history is the
+// one part of the demo that two runs can disagree about, so the property
+// `lctl demo --reset` has to have — run it again, get the same demo — is
+// asserted directly against this function rather than by seeding twice and
+// comparing row counts.
+func demoClickRows(cat []demoLink, ids map[int]uuid.UUID, opt demoOptions, now time.Time) []demoClickRow {
 	// Deterministic on purpose: two runs with the same --seed produce the same
 	// dataset, so a screenshot and a bug report describe the same instance.
 	rng := rand.New(rand.NewPCG(opt.prng, 0x9E3779B97F4A7C15)) //nolint:gosec // G404: demo data, determinism wanted
-	wsID, err := uuid.Parse(workspaceID)
-	if err != nil {
-		return 0, err
-	}
 
-	type row struct {
-		linkID         uuid.UUID
-		at             time.Time
-		hash           []byte
-		country        string
-		device         string
-		browser        string
-		os             string
-		lang, referrer string
-		isBot          bool
-		latency        int32
-	}
-	var rows []row
+	var rows []demoClickRow
 
+	// Today is only partly over, so some of the clicks generated for it land in
+	// the future and are not written. The cutoff for that is the top of the
+	// current hour rather than the instant itself, so that every run within the
+	// same hour drops exactly the same clicks and generates exactly the same
+	// history — which is what makes two runs minutes apart produce the same demo
+	// (F71, F74). The cost is that the newest hour of traffic is missing, out of
+	// thirty days of it.
+	cutoff := now.Truncate(time.Hour)
 	midnight := now.Truncate(24 * time.Hour)
 	for i, d := range cat {
 		if d.weight == 0 {
@@ -338,18 +385,26 @@ func demoClicks(ctx context.Context, pool *pgxpool.Pool, workspaceID string,
 					Add(time.Duration(demoHours[rng.IntN(len(demoHours))]) * time.Hour).
 					Add(time.Duration(rng.IntN(60)) * time.Minute).
 					Add(time.Duration(rng.IntN(60)) * time.Second)
-				if at.After(now) {
+				// Every draw for this click is made before the click can be
+				// discarded, so a discarded one costs the same draws as a kept
+				// one. Skipping them shifted the shared PRNG stream, and every
+				// link and day generated afterwards then differed — which is
+				// how dropping a single click changed the total by hundreds in
+				// either direction (F74).
+				country := demoCountries[rng.IntN(len(demoCountries))]
+				referrer := demoReferrers[rng.IntN(len(demoReferrers))]
+				latency := int32(200 + rng.IntN(2600)) //nolint:gosec // bounded
+				if at.After(cutoff) {
 					continue
 				}
-				country := demoCountries[rng.IntN(len(demoCountries))]
 				device, browser, os := demoAgent(vidx)
-				rows = append(rows, row{
+				rows = append(rows, demoClickRow{
 					linkID: linkID, at: at,
 					hash:    demoVisitorHash(day, vidx, false),
 					country: country, device: device, browser: browser, os: os,
 					lang:     demoLanguage(country),
-					referrer: demoReferrers[rng.IntN(len(demoReferrers))],
-					latency:  int32(200 + rng.IntN(2600)), //nolint:gosec // bounded
+					referrer: referrer,
+					latency:  latency,
 				})
 			}
 
@@ -362,25 +417,41 @@ func demoClicks(ctx context.Context, pool *pgxpool.Pool, workspaceID string,
 					Add(time.Duration(rng.IntN(24)) * time.Hour).
 					Add(time.Duration(rng.IntN(60)) * time.Minute).
 					Add(time.Duration(rng.IntN(60)) * time.Second)
-				if at.After(now) {
-					continue
-				}
+				// Drawn before the discard, for the reason above.
 				browser, os := "Other", "Other"
 				if rng.IntN(10) >= 8 {
 					browser, os = "Chrome", "Linux"
 				}
-				rows = append(rows, row{
+				country := demoCountries[rng.IntN(len(demoCountries))]
+				latency := int32(200 + rng.IntN(1800)) //nolint:gosec // bounded
+				if at.After(cutoff) {
+					continue
+				}
+				rows = append(rows, demoClickRow{
 					linkID: linkID, at: at,
 					hash:    demoVisitorHash(day, vidx, true),
-					country: demoCountries[rng.IntN(len(demoCountries))],
+					country: country,
 					device:  "bot", browser: browser, os: os,
 					// Crawlers send neither.
 					lang: "", referrer: "",
-					isBot: true, latency: int32(200 + rng.IntN(1800)), //nolint:gosec // bounded
+					isBot: true, latency: latency,
 				})
 			}
 		}
 	}
+	return rows
+}
+
+// demoClicks writes the click history with COPY and returns how many rows it
+// wrote.
+func demoClicks(ctx context.Context, pool *pgxpool.Pool, workspaceID string,
+	cat []demoLink, ids map[int]uuid.UUID, opt demoOptions, now time.Time,
+) (int64, error) {
+	wsID, err := uuid.Parse(workspaceID)
+	if err != nil {
+		return 0, err
+	}
+	rows := demoClickRows(cat, ids, opt, now)
 
 	copied, err := pool.CopyFrom(ctx,
 		pgx.Identifier{"click_events"},

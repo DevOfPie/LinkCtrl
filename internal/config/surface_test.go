@@ -89,8 +89,15 @@ func TestEnvExampleAdvertisesNothingUnread(t *testing.T) {
 	}
 	// Variables the compose file consumes rather than the binary. These are
 	// named here so adding one is a deliberate act.
+	//
+	// LINKCTRL_ENV_PATH is spelled that way rather than _ENV_FILE because a
+	// trailing _FILE means something else here — the mounted-secret convention
+	// resolved before parsing — and the check below skips every name carrying
+	// it. A compose-only variable would have slipped in unnamed.
 	for _, name := range []string{
 		"LINKCTRL_TAG", "LINKCTRL_HTTP_PORT",
+		"LINKCTRL_IMAGE", "LINKCTRL_ENV_PATH",
+		"LINKCTRL_RESTART", "LINKCTRL_METRICS_PORT",
 	} {
 		read[name] = true
 	}

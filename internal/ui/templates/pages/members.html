@@ -1,0 +1,119 @@
+{{define "content"}}
+<div class="mb-6">
+  <h1 class="text-xl font-semibold tracking-tight">Members</h1>
+  <p class="mt-1 text-sm text-muted">Everybody in this organization, and what their role reaches. You can change or remove people whose role is below your own; owners can change any of them, except the last owner.</p>
+</div>
+
+{{template "flash_ok" .Notice}}
+{{template "flash_error" .Error}}
+
+{{/* OrgWorkspaces, not Workspaces: the shell owns that name for the switcher
+     and a page field would shadow it everywhere, layout included.
+
+     On this page it is the workspaces the reader may grant access in, already
+     filtered by loadMembersPage. Offering the rest is what made F27's
+     self-grant a dropdown pick, and an empty list removes the form rather than
+     drawing an empty select. */}}
+{{if and .CanWrite .OrgWorkspaces}}
+<div class="mb-6 rounded-lg border border-line bg-raised p-6">
+  <h2 class="text-sm font-medium text-ink">Give somebody access to one workspace</h2>
+  {{/* D31's mitigation, written where the person doing it will read it. A
+       workspace-scoped membership is a union with whatever else they hold, so
+       it can only widen their access — "org admin, viewer in finance" is not
+       expressible, and a control that let somebody believe otherwise would
+       surprise in the direction of granting more than they meant. */}}
+  <p class="mt-1 text-sm text-muted">This <span class="font-medium text-ink">adds</span> a role in one workspace on top of what they already have. It never takes anything away, and it cannot narrow somebody to a single workspace.</p>
+  <form method="post" action="/members" class="mt-4 space-y-4">
+    <div class="grid gap-4 sm:grid-cols-3">
+      <div>
+        <label for="user_id" class="block text-sm font-medium text-ink">Member</label>
+        <select id="user_id" name="user_id" class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm">
+          {{range .GrantTargets}}
+          <option value="{{.UserID}}">{{.Email}} ({{.Role}})</option>
+          {{end}}
+        </select>
+        {{template "field_error" (index .FieldErrors "user_id")}}
+      </div>
+      <div>
+        <label for="workspace_id" class="block text-sm font-medium text-ink">Workspace</label>
+        <select id="workspace_id" name="workspace_id" class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm">
+          {{range .OrgWorkspaces}}
+          <option value="{{.ID}}">{{.Name}}</option>
+          {{end}}
+        </select>
+        {{template "field_error" (index .FieldErrors "workspace_id")}}
+      </div>
+      <div>
+        <label for="grant_role" class="block text-sm font-medium text-ink">Role there</label>
+        <select id="grant_role" name="role" class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm">
+          {{range .RoleOptions}}
+          <option value="{{.Slug}}">{{.Name}}</option>
+          {{end}}
+        </select>
+        {{template "field_error" (index .FieldErrors "role")}}
+      </div>
+    </div>
+    <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Grant access</button>
+  </form>
+</div>
+{{end}}
+
+<div class="rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-4 text-sm font-medium text-ink">Memberships</h2>
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="border-b border-line text-left text-xs uppercase tracking-wide text-subtle">
+        <th class="py-2 pr-4 font-medium">Person</th>
+        <th class="py-2 pr-4 font-medium">Role</th>
+        <th class="py-2 pr-4 font-medium">Reaches</th>
+        <th class="py-2 pr-4 font-medium">Since</th>
+        <th class="py-2 font-medium"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Members}}
+      <tr class="border-b border-line">
+        <td class="py-3 pr-4">
+          <span class="font-medium">{{.Email}}</span>
+          {{if .IsSelf}}<span class="ml-1 text-xs text-subtle">(you)</span>{{end}}
+          {{if .Name}}<span class="block text-xs text-subtle">{{.Name}}</span>{{end}}
+        </td>
+        <td class="py-3 pr-4">
+          {{if $.CanWrite}}{{if .Manageable}}
+          {{/* The select and its button are one form per row. A change handler
+               would need script, and the CSP forbids inline script for reasons
+               a convenience does not outweigh — the same trade the workspace
+               switcher makes. */}}
+          <form method="post" action="/members/{{.ID}}/role" class="flex items-center gap-1">
+            <select name="role" aria-label="Role for {{.Email}}"
+                    class="rounded-md border border-line-strong bg-raised px-2 py-1 text-sm text-ink">
+              {{$current := .Role}}
+              {{range $.RoleOptions}}
+              <option value="{{.Slug}}"{{if eq $current .Slug}} selected{{end}}>{{.Name}}</option>
+              {{end}}
+            </select>
+            <button type="submit" class="rounded-md px-2 py-1 text-sm text-muted hover:bg-sunken hover:text-ink">Change</button>
+          </form>
+          {{else}}<span class="text-muted">{{.Role}}</span>{{end}}
+          {{else}}<span class="text-muted">{{.Role}}</span>{{end}}
+        </td>
+        <td class="py-3 pr-4 text-muted">
+          {{if .WorkspaceID}}{{if .WorkspaceName}}{{.WorkspaceName}}{{else}}one workspace{{end}}{{else}}every workspace{{end}}
+        </td>
+        <td class="py-3 pr-4 text-muted">{{.CreatedAt.Format "2 Jan 2006"}}</td>
+        <td class="py-3 text-right">
+          {{if and $.CanWrite .Manageable}}
+          {{/* hx-post so hx-confirm is honoured; see the note in link_detail.html. */}}
+          <form method="post" action="/members/{{.ID}}/remove"
+                hx-post="/members/{{.ID}}/remove"
+                hx-confirm="Remove {{.Email}}? Their account and links stay; only this membership goes.">
+            <button type="submit" class="text-sm font-medium text-danger-ink hover:underline">Remove</button>
+          </form>
+          {{end}}
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}

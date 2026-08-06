@@ -48,6 +48,10 @@ type Renderer struct {
 	pages  map[string]*template.Template
 	assets map[string]asset
 	names  []string
+	// Mail bodies, kept in their own set because they are text/template rather
+	// than html/template and must not be reachable from a page. See mail.go.
+	mail      map[string]*textTemplate
+	mailNames []string
 }
 
 type asset struct {
@@ -100,6 +104,10 @@ func New() (*Renderer, error) {
 		r.names = append(r.names, name)
 	}
 	sort.Strings(r.names)
+
+	if err := r.loadMail(); err != nil {
+		return nil, err
+	}
 
 	return r, nil
 }

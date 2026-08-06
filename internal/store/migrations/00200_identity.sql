@@ -32,9 +32,20 @@ CREATE TABLE users (
     mfa_secret        text,
     mfa_enabled_at    timestamptz,
 
-    -- Set by the GDPR erasure routine. Distinct from deleted_at: erasure
-    -- scrubs identifying fields while keeping the row so foreign keys and
-    -- audit records stay intact.
+    -- **Dormant. Nothing writes this column, and no erasure routine exists.**
+    --
+    -- The shape it was designed for stands: erasure would scrub identifying
+    -- fields while keeping the row, so foreign keys and audit records stay
+    -- intact, which is what distinguishes it from deleted_at. But the sentence
+    -- here read "Set by the GDPR erasure routine" in the present tense from the
+    -- first migration onward, and there has never been such a routine — no
+    -- writer, no query, no CLI command, and `users` appears in none of the
+    -- fourteen DELETE statements in this schema (F44).
+    --
+    -- Four lines above, mfa_secret is marked "Phase 3". This file knew how to
+    -- mark something forward-looking and did not do it here, which is the whole
+    -- of the finding: the absence was never a recorded deferral, it was a gap
+    -- that read as a feature.
     anonymized_at     timestamptz,
 
     last_login_at     timestamptz,
@@ -53,7 +64,9 @@ CREATE TABLE organizations (
     -- Row-level regional routing is explicitly not attempted.
     data_region text        NOT NULL DEFAULT 'default',
     -- True for the organization auto-created at registration. Distinguishes
-    -- "your own space" from a real shared organization in Phase 2.
+    -- "your own space" from a real shared organization — which Phase 2 built,
+    -- so this is a distinction the product now makes rather than one it was
+    -- going to.
     is_personal boolean     NOT NULL DEFAULT false,
     created_at  timestamptz NOT NULL DEFAULT now(),
     updated_at  timestamptz NOT NULL DEFAULT now(),
@@ -95,8 +108,10 @@ CREATE TABLE roles (
     name        text        NOT NULL,
     description text        NOT NULL DEFAULT '',
     is_builtin  boolean     NOT NULL DEFAULT false,
-    -- Lower binds tighter. Used to resolve the effective role when a user
-    -- holds more than one, which cannot happen in Phase 1 but will in Phase 2.
+    -- Lower binds tighter. Resolves the effective role when a user holds more
+    -- than one, which Phase 1 could not produce and Phase 2 does: a
+    -- workspace-scoped membership adds a second matching row (D31, D44), and
+    -- the lowest rank among them wins.
     rank        int         NOT NULL DEFAULT 100,
     created_at  timestamptz NOT NULL DEFAULT now()
 );

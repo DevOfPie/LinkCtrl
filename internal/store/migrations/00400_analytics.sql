@@ -9,6 +9,13 @@
 -- consequence is that the largest table in the system holds no personal data
 -- and is out of scope for subject-access and erasure requests entirely.
 --
+-- That says nothing about whether such requests can be *served*, and until 0.2.0
+-- it read as though it did. **This product has no erasure mechanism at all**
+-- (F44): the tables that do hold addresses — users, destination_disputes —
+-- have no deletion path, and `anonymized_at` in 00200 has no writer. The claim
+-- above is about this table's contents and is true of them; it is not a claim
+-- that the other tables are in scope and handled.
+--
 -- NOTE: no CREATE TABLE ... PARTITION OF appears in this file, by rule.
 -- sqlc emits a duplicate junk model for every child partition it sees, so
 -- partitions would add a dead struct to generated code every month. They are
@@ -35,13 +42,23 @@ CREATE TABLE click_events (
     workspace_id  uuid        NOT NULL,
     occurred_at   timestamptz NOT NULL,
 
-    -- HMAC(salt_of_the_day, ip || user_agent || workspace_id). Per-workspace
-    -- salting means the same person is not correlatable across workspaces.
+    -- HMAC(salt_of_the_day, ip || user_agent || workspace_id). The workspace is
+    -- in the message, not in the key: analytics_salts is one row per day, shared
+    -- by every workspace on the instance. That is still what stops the same
+    -- person being correlated across two of them — the derived hashes differ, so
+    -- one workspace's analytics cannot be joined against another's — while the
+    -- salt does the other job, making a day's hashes irreversible once purged.
     visitor_hash  bytea,
-    -- Dormant. Intended as "first time this visitor_hash was seen for this link
-    -- today", for Phase 2's new-versus-returning split. Nothing computes it and
-    -- nothing reads it, so it is always false; deriving it at ingest would cost
-    -- a lookup per click for a number no surface shows.
+    -- Dormant, and it stayed dormant through Phase 2 (D12). Intended as "first
+    -- time this visitor_hash was seen for this link today", for a
+    -- new-versus-returning split. Nothing computes it and nothing reads it, so
+    -- it is always false; deriving it at ingest would cost a lookup per click
+    -- for a number no surface shows.
+    --
+    -- This said "for Phase 2's split" until 0.2.0, which read as scheduled work
+    -- rather than as a column waiting for a reason. It is under partition
+    -- maintenance and retention like every other column here, so whenever
+    -- something does write it, those guarantees already apply.
     is_first_visit boolean    NOT NULL DEFAULT false,
 
     country       text,

@@ -19,27 +19,55 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
+
+	// The IANA timezone database, embedded in the binary (M34).
+	//
+	// A routing rule's time window carries an IANA name — "Europe/London" —
+	// rather than an offset, because an offset is wrong twice a year. Resolving
+	// that name needs zoneinfo, and the runtime looks for it on the filesystem:
+	// present in this project's distroless base, absent from `scratch`, and
+	// absent from a great many images an operator might rebuild on. A rule that
+	// silently fell back to UTC because of the base image somebody chose would
+	// fire an hour late for half the year with nothing anywhere saying why.
+	//
+	// The cost is about 450KB of binary. That is a fair price for a rule
+	// evaluating the same way wherever it runs.
+	_ "time/tzdata"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/alias"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
+	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
+	"github.com/DevOfPie/LinkCtrl/internal/automation"
 	"github.com/DevOfPie/LinkCtrl/internal/build"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
+	"github.com/DevOfPie/LinkCtrl/internal/dispute"
+	"github.com/DevOfPie/LinkCtrl/internal/dnsx"
+	"github.com/DevOfPie/LinkCtrl/internal/feed"
+	"github.com/DevOfPie/LinkCtrl/internal/gate"
 	"github.com/DevOfPie/LinkCtrl/internal/geoip"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
+	"github.com/DevOfPie/LinkCtrl/internal/instance"
+	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
+	"github.com/DevOfPie/LinkCtrl/internal/mail"
+	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/httpserver"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/postgres"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/redis"
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
+	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/team"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
+	"github.com/DevOfPie/LinkCtrl/internal/webhook"
 )
 
 func main() {
@@ -227,7 +255,7 @@ func run(cfg config.Config, _ io.Writer) error {
 	// Request limits. Built once here and shared: the router enforces two of
 	// them, the redirect handler the third, and the collector reports on all
 	// three, so none of them re-derives a limit from configuration.
-	limits := httpx.NewLimiters(cfg)
+	limits := httpx.NewLimiters(cfg, rdb, log)
 	metrics.Register(observability.NewLimiterCollector(limits.Stats()))
 	for name, on := range map[string]bool{
 		"login":        limits.Login != nil,
@@ -241,6 +269,16 @@ func run(cfg config.Config, _ io.Writer) error {
 		}
 	}
 
+	// One policy, shared by both places a password can be guessed at. Sign-in is
+	// the obvious one; redeeming an invitation is the other, because it
+	// authenticates an existing account before adding the membership. Built once
+	// rather than twice so the two cannot drift into an instance whose lockout
+	// covers one door (F51).
+	lockout := auth.LockoutPolicy{
+		Threshold: cfg.Auth.LockoutThreshold,
+		Window:    15 * time.Minute,
+	}
+
 	authSvc := auth.NewService(pools.App, auth.ServiceConfig{
 		Params: auth.Params{
 			MemoryKiB:   cfg.Auth.Argon2MemoryKiB,
@@ -251,15 +289,20 @@ func run(cfg config.Config, _ io.Writer) error {
 			Absolute: cfg.Auth.SessionAbsoluteTTL,
 			Idle:     cfg.Auth.SessionIdleTTL,
 		},
-		Lockout: auth.LockoutPolicy{
-			Threshold: cfg.Auth.LockoutThreshold,
-			Window:    15 * time.Minute,
-		},
+		Lockout: lockout,
 	})
+
+	// Built here rather than at the other services' construction point below
+	// because the key service needs it and the key service is built first — the
+	// dashboard and every API handler resolve their identity through it.
+	auditSvc := audit.NewService(pools.App)
 
 	keySvc, err := auth.NewAPIKeyService(pools.App, authSvc, auth.APIKeyConfig{
 		Pepper: []byte(cfg.APIKeyPepper.Reveal()),
-		Logger: log,
+		// Rotation is the one key operation no human is present for, so it is the
+		// one that has to leave a record (M44).
+		Auditor: auditSvc,
+		Logger:  log,
 	})
 	if err != nil {
 		return err
@@ -270,11 +313,12 @@ func run(cfg config.Config, _ io.Writer) error {
 	// query on the application pool cannot leave a redirect waiting to acquire
 	// a connection.
 	resolver := redirect.NewResolver(pools.Redirect, rdb, redirect.Options{
-		TTL:          cfg.Redirect.TTL,
-		NegativeTTL:  cfg.Redirect.NegativeTTL,
-		RedisTimeout: cfg.Redis.ReadTimeout,
-		DBTimeout:    cfg.Redirect.Timeout,
-		Logger:       log,
+		TTL:              cfg.Redirect.TTL,
+		NegativeTTL:      cfg.Redirect.NegativeTTL,
+		RedisTimeout:     cfg.Redis.ReadTimeout,
+		InvalidateBudget: cfg.Redis.InvalidateBudget,
+		DBTimeout:        cfg.Redirect.Timeout,
+		Logger:           log,
 	})
 
 	// Created before the service and completed after it: the handler reads
@@ -283,12 +327,252 @@ func run(cfg config.Config, _ io.Writer) error {
 	// on the service, so neither side has to know the other exists first.
 	rootRedirect := &httpx.RootRedirect{Status: cfg.Redirect.DefaultStatus}
 
+	// The verified-hostname set (M40). On the application pool rather than the
+	// redirect one: it is loaded at boot and on invalidation, never on a
+	// request, and a reload must not compete for the small pool a redirect
+	// acquires from.
+	//
+	// It is the whole of the custom-domain gate on the serving side — the router
+	// resolves an alias on a Host header if and only if this map holds it, and
+	// the one query that fills it filters on `verified_at`.
+	hostCache := redirect.NewHostCache(pools.App, log)
+
+	// The audit log is constructed above, beside the key service — emission is a
+	// dependency the emitting features are built against, not something added to
+	// them afterwards, and key rotation is one of the emitters.
+
+	// The inbox. Its first consumer is the audit-growth warning in the job
+	// runner below, which is why it is built here rather than beside the API.
+	notifySvc := notify.NewService(pools.App)
+
+	// The dashboard's templates, and the mail bodies with them. Parsing happens
+	// here, at boot: a template error fails startup rather than the first
+	// request to reach that page, or the first mail nobody is watching for.
+	//
+	// Before the mailer rather than beside the router, because the mailer
+	// renders through it.
+	renderer, err := ui.New()
+	if err != nil {
+		return fmt.Errorf("parse dashboard templates: %w", err)
+	}
+	// A missing stylesheet is a degraded start, not a failed one — the pages
+	// still work unstyled. Loud in the log, because the fix is one command.
+	for _, name := range renderer.MissingAssets() {
+		log.Warn("embedded asset missing; the dashboard will render unstyled",
+			slog.String("asset", name),
+			slog.String("fix", "run `make css` (or `task css`) before `go build`"))
+	}
+
+	// The mailer. Optional and off unless SMTP_HOST is set, so an instance that
+	// configures nothing behaves exactly as it did before this existed: no
+	// sender, no job, and a nil Enqueuer at every consumer.
+	var mailSvc *mail.Service
+	if cfg.SMTP.Enabled() {
+		sender, err := mail.NewSMTPSender(mail.SMTPOptions{
+			Host:     cfg.SMTP.Host,
+			Port:     cfg.SMTP.Port,
+			Username: cfg.SMTP.Username,
+			Password: cfg.SMTP.Password.Reveal(),
+			From:     cfg.SMTP.From,
+			TLS:      cfg.SMTP.TLS,
+			Timeout:  cfg.SMTP.Timeout,
+		})
+		if err != nil {
+			return err
+		}
+		// Connection details are checked once, here, by greeting the relay and
+		// hanging up. A wrong host, a closed port or a rejected password is
+		// reported by the process that could have told you, instead of showing
+		// up weeks later as an invitation that never arrived.
+		//
+		// A warning and not a fatal error, for the same reason Redis is: the
+		// relay being down is not a reason for a link shortener to stop serving
+		// redirects, and anything queued meanwhile is retried from the outbox.
+		// A *configuration* mistake is still fatal — config.Validate refuses an
+		// unparseable sender or credentials that would go over the wire in
+		// clear — so this is only ever about reachability.
+		if err := sender.Verify(ctx); err != nil {
+			log.Error("smtp relay did not accept a connection at startup; "+
+				"queued mail will be retried until it does",
+				slog.String("relay", sender.Addr()),
+				slog.String("tls", cfg.SMTP.TLS),
+				slog.Any("error", err))
+		} else {
+			log.Info("smtp relay reachable",
+				slog.String("relay", sender.Addr()),
+				slog.String("tls", cfg.SMTP.TLS),
+				slog.Bool("authenticated", cfg.SMTP.Username != ""))
+		}
+
+		mailSvc, err = mail.NewService(pools.App, mail.Config{
+			Renderer: renderer, Sender: sender, Logger: log,
+		})
+		if err != nil {
+			return err
+		}
+		notifySvc = notifySvc.WithMail(mailSvc, cfg.AppOrigin())
+	} else {
+		log.Info("mail disabled (LINKCTRL_SMTP_HOST is empty); " +
+			"notifications are delivered in the dashboard only")
+	}
+
+	// Whether this instance accepts new accounts, and by which paths.
+	//
+	// Built before invitations because both answer to the same mode. It is
+	// LINKCTRL_SIGNUP_MODE and nothing else (D38) — no stored toggle, nothing a
+	// session can move — with one derivation on top: a nil mailer lowers `open`
+	// to `invite`, because there is then no way to verify an address (D1). The
+	// string conversion is safe by construction, since config validation has
+	// already refused anything but the three words this type also uses.
+	signupSvc, err := signup.NewService(pools.App, signup.Config{
+		Mode:   signup.Mode(cfg.Auth.SignupMode),
+		AppURL: cfg.AppOrigin(),
+		Hasher: authSvc.Hasher(),
+		Mail:   signupMailer(mailSvc),
+	})
+	if err != nil {
+		return err
+	}
+	// Said once, at boot, because it is the one way an operator can configure
+	// open sign-ups and not get them. The signup page refuses on GET, but
+	// nobody watches for a page they are not being shown.
+	if signupSvc.Configured() == signup.Open && signupSvc.Effective() != signup.Open {
+		log.Warn("LINKCTRL_SIGNUP_MODE is open but no mailer is configured; "+
+			"public registration verifies an address by email, so sign-ups are invitation-only",
+			slog.String("effective_signup_mode", string(signupSvc.Effective())))
+	}
+
+	// Invitations. Built after the mailer, because whether one exists is the
+	// whole difference between "we emailed it" and "copy this link" — and a nil
+	// Enqueuer here is the mail-free instance, not an error.
+	//
+	// NewAccounts follows the effective signup mode and is computed here rather
+	// than passed as the mode, so the service reads a property of what it may do
+	// instead of re-deciding what a configuration word means (D7).
+	inviteSvc, err := invite.NewService(pools.App, invite.Config{
+		AppURL:      cfg.AppOrigin(),
+		TTL:         cfg.Auth.InviteTTL,
+		NewAccounts: signupSvc.Effective().AdmitsNewAccounts(),
+		Hasher:      authSvc.Hasher(),
+		Lockout:     lockout,
+		Audit:       auditSvc,
+		Notify:      notifySvc,
+		Mail:        inviteMailer(mailSvc),
+		Log:         log,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Member management, workspace lifecycle and organization creation. The
+	// other half of invitations: one decides who may join, the other what
+	// happens to them afterwards.
+	teamSvc := team.NewService(pools.App, team.Config{Audit: auditSvc, Log: log})
+
+	// The opt-in reputation feed (M32). Off unless LINKCTRL_FEED_URL names one,
+	// which is the default, and off means there is no client — not a client with
+	// a false flag in it.
+	//
+	// The nil is assigned into the interface deliberately and only when a client
+	// exists. A typed nil stored in link.Config.Feed would be a non-nil
+	// interface holding nothing, and the guard that keeps destinations on this
+	// box is `s.feed == nil`.
+	var feedChecker link.FeedChecker
+	feedClient, err := feed.New(feed.Config{
+		Name:         cfg.Feed.Name,
+		URL:          cfg.Feed.URL,
+		Method:       strings.ToUpper(cfg.Feed.Method),
+		Param:        cfg.Feed.Param,
+		AuthHeader:   cfg.Feed.AuthHeader,
+		AuthToken:    cfg.Feed.AuthToken.Reveal(),
+		VerdictField: cfg.Feed.VerdictField,
+		Timeout:      cfg.Feed.Timeout,
+	})
+	if err != nil {
+		return fmt.Errorf("configure reputation feed: %w", err)
+	}
+	if feedClient != nil {
+		feedChecker = feedClient
+		// Said at boot, at info, and worded as what it does rather than as what
+		// was configured. An operator who inherits a box should be able to find
+		// this in the first screen of its log: it is the one *setting* on this
+		// instance that sends its users' data somewhere else.
+		log.Info("reputation feed enabled; destinations are sent to a third party "+
+			"when a link is created, edited, or a refusal is disputed",
+			slog.String("feed", feedClient.Name()),
+			slog.String("endpoint", feedClient.Endpoint()),
+			slog.Duration("timeout", cfg.Feed.Timeout),
+			slog.String("disclosed_at", cfg.AppOrigin()+"/feeds"))
+	} else {
+		// Scoped to the feed, and it did not used to be. This line said "no
+		// destination leaves this instance", which is a claim about the whole
+		// instance made from one operator setting — and a workspace webhook,
+		// which no setting here turns off, makes it false. Boot is the wrong
+		// place to answer for the second channel anyway: registrations are rows
+		// that change while the process runs, so /feeds answers per request and
+		// this answers for the setting it is about.
+		log.Info("no reputation feed configured (LINKCTRL_FEED_URL is empty); " +
+			"no destination is sent to a third party for a reputation check. " +
+			"Webhooks are the other way out and are a workspace's to register; " +
+			"each workspace's answer is at /feeds")
+	}
+
+	// The gates (M35). On the application pool rather than the redirect pool,
+	// and that is not an oversight. Most of what this service does is reached
+	// only by a link Gated() is true for — the password hash, the click budget,
+	// the signing secret — but not all of it, and the exception is the reason to
+	// keep it here rather than an argument for moving it: M36 hung the
+	// sequential split's Rotate off the same service, and a split link is not
+	// gated, so this pool is on the redirect path for that link class on every
+	// hit. Both durable-counter writes go to link_click_budget, one row per
+	// link, so concurrent requests for the same link serialise on its lock —
+	// docs/slo.md measures the sequential column at a 3.1ms median with k6
+	// unable to hold the offered rate. On the small pool the redirect path
+	// guards for itself, a burst of password submissions or one hot split would
+	// hold connections for milliseconds at a time and stall every ordinary
+	// redirect behind them.
+	//
+	// REDIRECT_TIMEOUT is handed over as the per-query budget (F96). It is the
+	// same number the resolver takes for its own fallback query, and it is the
+	// right one for the same reason: these calls are reached from the redirect
+	// tree, and nothing else bounds them — RequestTimeout wraps the application
+	// handler and not that one.
+	gateSvc := gate.NewService(pools.App, gate.Config{
+		Hasher:    authSvc.Hasher(),
+		DBTimeout: cfg.Redirect.Timeout,
+	})
+
+	// Outbound webhooks (M42). Built before the link service, because the link
+	// service holds it as the thing it hands events to.
+	//
+	// Always built, unlike the mailer and the feed: there is no operator switch,
+	// because a webhook is registered by a workspace rather than enabled by the
+	// operator. What the two numbers here decide is how long one delivery may
+	// take and how long the log of what was attempted is kept.
+	//
+	// Its delivery client dials addresses somebody with a workspace chose, so it
+	// carries a dialer that re-checks the resolved address at connect and
+	// follows no redirect. See internal/webhook/client.go.
+	webhookSvc := webhook.NewService(pools.App, webhook.Config{
+		Timeout:       cfg.Webhooks.Timeout,
+		RetentionDays: cfg.Webhooks.RetentionDays,
+		Logger:        log,
+		Observer:      metrics,
+	})
+
 	linkSvc := link.NewService(pools.App, link.Config{
+		// Bounds the audit rows one actor can provoke by being refused, per
+		// refusal code (F14). Built with every other limit rather than here, so
+		// the composition root hands one value to the router and the service
+		// instead of two that can drift.
+		BlockedAuditLimit: limits.BlockedAudit,
+		// The unappealable tier is not configured here and cannot be: private
+		// and metadata addresses are refused unconditionally, and the scheme
+		// list is confined by config validation to a subset of http,https. What
+		// remains is a length bound.
 		Policy: link.DestinationPolicy{
-			Schemes:             cfg.Alias.DestSchemes,
-			MaxLength:           cfg.Alias.DestMaxLength,
-			BlockPrivateIPs:     cfg.Alias.DestBlockPrivateIPs,
-			BlockedHostSuffixes: cfg.Alias.DestBlocklist,
+			Schemes:   cfg.Alias.DestSchemes,
+			MaxLength: cfg.Alias.DestMaxLength,
 		},
 		Aliases: alias.Policy{
 			ReservedExtra: cfg.Alias.ReservedExtra,
@@ -308,9 +592,111 @@ func run(cfg config.Config, _ io.Writer) error {
 		// The root-redirect setting is refused unless short links have a
 		// hostname of their own, where "/" is not the dashboard.
 		SplitHosts: cfg.SplitHosts(),
-		RootCache:  rootRedirect,
+		// Wrapped so a root-redirect change clears this process's copy and
+		// tells every other replica to clear theirs.
+		RootCache: redirect.BroadcastRootInvalidator{Local: rootRedirect, Publisher: resolver},
+		Audit:     auditSvc,
+		// Consulted last and only on a destination every built-in tier
+		// accepted, so the protection an operator gets with no feed configured
+		// is the protection they keep when one stops answering.
+		Feed:        feedChecker,
+		FeedMetrics: metrics,
+		// The gates (M35). The hasher is the account hasher, deliberately: a
+		// link password lands in the same database dump an account password
+		// does, so it gets the same argon2 parameters rather than a cheaper set
+		// justified by being "only" a link.
+		Hasher: authSvc.Hasher(),
+		Gates:  gateSvc,
+		// Custom domains (M40). The resolver is the host's own, bounded per
+		// lookup; the invalidator is the pair that refreshes this replica and
+		// tells the others; and the notifier is what makes D70's grace window
+		// fair rather than arbitrary — the workspace hears at the first failed
+		// check, not at the stop.
+		DNS: dnsx.Resolver{Timeout: cfg.Domains.VerifyDNSTimeout},
+		Hosts: redirect.BroadcastHostInvalidator{
+			Local: hostCache, Publisher: resolver,
+		},
+		DomainNotify: notifySvc,
+		VerifyGrace:  cfg.Domains.VerifyGrace,
+		// Webhook events (M42). A link write queues one row per subscribed
+		// webhook and returns; nothing dials anything on the request path.
+		Events: webhookSvc,
+		Log:    log,
 	})
-	rootRedirect.Load = linkSvc.LoadRootRedirect
+	// On the **redirect** pool, not the application one. This is the only path
+	// on the redirect tree that reads Postgres during a request, and the pool
+	// above it exists so a slow analytics query cannot leave a redirect waiting
+	// for a connection. It read through linkSvc — an application-pool service —
+	// until F48, which is the guarantee stated at the pool's own construction
+	// being quietly untrue for one URL.
+	rootRedirectQ := dbgen.New(pools.Redirect)
+	rootRedirect.Load = func(ctx context.Context) (string, error) {
+		return link.LoadRootRedirectWith(ctx, rootRedirectQ)
+	}
+	// A rename changes the hostname a short URL is built from, and that string is
+	// cached per process. The same signal that reloads the verified set drops it,
+	// so a rename on one replica reaches the URLs every other one prints.
+	hostCache.OnReload = linkSvc.ForgetHostnames
+
+	// LINKCTRL_DESTINATION_BLOCKLIST becomes rows, once per boot.
+	//
+	// Before the listener opens, because a link created in the window between
+	// accepting requests and reconciling the list is a link the operator's own
+	// blocklist did not see. Fatal on failure for the same reason: an instance
+	// that came up with a stale blocklist is one whose refusals do not match its
+	// configuration, and it is better to not start than to be quietly wrong
+	// about what it refuses.
+	if err := linkSvc.SeedBlocklist(ctx, cfg.Alias.DestBlocklist); err != nil {
+		return fmt.Errorf("seed destination blocklist: %w", err)
+	}
+
+	// The appeal path for that list, and the queue an owner works through.
+	//
+	// It takes the link service as its judge rather than re-deriving anything:
+	// which tier refused a destination has exactly one answer in this program,
+	// and a second evaluator here would be a second answer waiting to disagree.
+	disputeSvc, err := dispute.NewService(pools.App, dispute.Config{
+		Judge:  linkSvc,
+		Audit:  auditSvc,
+		Notify: notifySvc,
+		Log:    log,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Who administers the instance rather than a tenant in it (D98). It writes
+	// the two grants and nothing else — the grants themselves are rows, so an
+	// instance whose principal was conferred by migration 03400 or by the setup
+	// flow is administered whether or not this service is ever constructed.
+	instanceSvc := instance.NewService(pools.App, instance.Config{
+		Audit: auditSvc,
+		Log:   log,
+	})
+
+	// The other half of invalidation: this replica hearing what the others
+	// published. Off the request path entirely — it only ever deletes from the
+	// in-process tiers — and a nil Redis client makes Run return immediately,
+	// which is the cache-disabled deployment falling back to TTL staleness.
+	//
+	// Started before the listener so a redirect served in the first moments of
+	// this process's life is not served from a tier nothing is watching.
+	// Root is the plain cache, deliberately not the broadcasting wrapper above.
+	// Handing the wrapper to the subscriber would make every received root
+	// invalidation publish another one, and every replica would answer every
+	// other replica's message forever.
+	//
+	// ReadTimeout is what stops silence being mistaken for freshness: the read
+	// is bounded so that a Redis holding the connection open and answering
+	// nothing gets noticed, rather than blocking here for the rest of the
+	// entry TTL (F30).
+	subscriber := &redirect.Subscriber{
+		Redis: rdb, Resolver: resolver, Root: rootRedirect, Hosts: hostCache, Log: log,
+		ReadTimeout: cfg.Redis.SubscriberReadTimeout,
+	}
+	subCtx, stopSubscriber := context.WithCancel(context.WithoutCancel(ctx))
+	defer stopSubscriber()
+	go subscriber.Run(subCtx)
 
 	// Resolved once at boot. A per-request lookup would add a query to the
 	// path the whole cache design exists to keep short.
@@ -318,6 +704,16 @@ func run(cfg config.Config, _ io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("resolve default domain: %w", err)
 	}
+
+	// The verified set, before the listener opens. Fatal on failure rather than
+	// degraded: the cache fails closed, so a process that started without it
+	// would answer the operational 404 on every custom hostname it is supposed
+	// to serve — an outage that looks exactly like the domains having been
+	// unverified. Refusing to start says what actually happened.
+	if err := hostCache.Reload(ctx); err != nil {
+		return fmt.Errorf("load verified domains: %w", err)
+	}
+	log.Info("verified custom domains loaded", slog.Int("hostnames", hostCache.Size()))
 
 	// Geographic enrichment, if an operator supplied a database. Opened before
 	// the ingester because the ingester needs it, and opened rather than trusted:
@@ -356,12 +752,53 @@ func run(cfg config.Config, _ io.Writer) error {
 	if geo.Enabled() {
 		ingestCfg.Geo = geo
 	}
+
+	// The within-day returning-visitor set (M34). Nil without Redis, and then
+	// every visitor reads as new — the documented degradation, not a silent one.
+	returning := analytics.NewReturningSet(rdb, salts, cfg.Redis.ReadTimeout, log)
+	ingestCfg.Returning = returning
+
+	// Today's salt, loaded before the listener opens.
+	//
+	// The returning-visitor check on the redirect path reads the salt cache
+	// without being allowed to fall through to Postgres, because M34 claims rule
+	// evaluation adds no database query per request. Warming it here is what
+	// makes that claim cost nothing: without it, a process that had just started
+	// would answer "not returning" to everybody until its first click batch
+	// flushed. Failure is logged and not fatal — a missing salt degrades one
+	// condition, and refusing to boot over it would be worse than the
+	// degradation.
+	if _, err := salts.For(ctx, time.Now()); err != nil {
+		log.Warn("could not warm today's analytics salt; returning-visitor rules "+
+			"will treat every visitor as new until the first click batch flushes",
+			slog.Any("error", err))
+	}
+
 	ingester := analytics.NewIngester(pools.App, salts, ingestCfg)
 	ingester.Start()
 	metrics.Register(observability.NewIngestCollector(ingester))
 
+	// Automation rules (M43). Built after the link service, because it is the
+	// link service it hands an archive to — the one-way graph internal/webhook
+	// already has, in the other direction.
+	//
+	// Always built and always wired into the scheduler, with no operator switch:
+	// a rule is a workspace's instruction, not an operator's feature. What
+	// switches it off is the workspace having no enabled rules, which costs one
+	// indexed query per minute that returns nothing.
+	automationSvc := automation.NewService(pools.App, automation.Config{
+		Links:    linkSvc,
+		Notifier: notifySvc,
+		Events:   webhookSvc,
+		Audit:    auditSvc,
+		Logger:   log,
+		Observer: metrics,
+	})
+
 	roller := analytics.NewRoller(pools.App, log)
-	jobs := newJobRunner(pools.App, salts, roller, log, metrics, cfg.Analytics.RetentionDays)
+	jobs := newJobRunner(pools.App, salts, roller, log, metrics, notifySvc, mailSvc, signupSvc,
+		linkSvc, webhookSvc, automationSvc, hostCache, cfg.Domains,
+		cfg.Analytics.RetentionDays, cfg.Audit.RetentionDays, cfg.Audit.SizeWarnBytes)
 	jobs.start(ctx)
 	defer jobs.stop()
 
@@ -374,25 +811,24 @@ func run(cfg config.Config, _ io.Writer) error {
 		Recorder:        clickRecorder{ingester: ingester},
 		Metrics:         metrics,
 		NotFoundLimiter: limits.NotFound,
+		// The gates (M35). Consulted only for a link whose snapshot says it is
+		// gated, which is no link at all on a default instance.
+		Gates:           gateSvc,
+		PasswordLimiter: limits.LinkPassword,
+		// Routing rules (M34). Assigned only when there is a database, for the
+		// same reason ingestCfg.Geo is: a nil *geoip.Resolver in an interface is
+		// not a nil interface, and the handler's "is geography available" check
+		// would then rest on the resolver's nil-tolerance rather than saying what
+		// it means.
+		Returning: returning,
+	}
+	if geo.Enabled() {
+		redirectHandler.Geo = geo
 	}
 
 	if needsSetup, err := authSvc.NeedsSetup(ctx); err == nil && needsSetup {
 		log.Warn("no users exist; claim this instance with " +
 			"POST " + httpx.APIPrefix + "/auth/setup")
-	}
-
-	// The dashboard. Template parsing happens here, at boot: a template error
-	// fails startup rather than the first request to reach that page.
-	renderer, err := ui.New()
-	if err != nil {
-		return fmt.Errorf("parse dashboard templates: %w", err)
-	}
-	// A missing stylesheet is a degraded start, not a failed one — the pages
-	// still work unstyled. Loud in the log, because the fix is one command.
-	for _, name := range renderer.MissingAssets() {
-		log.Warn("embedded asset missing; the dashboard will render unstyled",
-			slog.String("asset", name),
-			slog.String("fix", "run `make css` (or `task css`) before `go build`"))
 	}
 
 	stats := analytics.NewReader(pools.App)
@@ -401,12 +837,34 @@ func run(cfg config.Config, _ io.Writer) error {
 		Config: cfg, Health: health, Auth: authSvc, Keys: keySvc,
 		Links: linkSvc, Redirect: redirectHandler,
 		RootRedirect: rootRedirect,
-		Stats:        stats,
-		Metrics:      metrics,
-		Limits:       limits,
+		// Custom domains (M40). Hosts is the gate: a Host header reaches the
+		// redirect tree only if this map holds it.
+		Hosts:      hostCache,
+		DomainRoot: &httpx.DomainRootRedirect{Status: cfg.Redirect.DefaultStatus},
+		TLSAsk: &httpx.TLSAsk{
+			Hosts: hostCache,
+			Activate: func(ctx context.Context, d redirect.VerifiedDomain) {
+				if _, err := dbgen.New(pools.App).MarkDomainTLSActive(ctx, d.ID); err != nil {
+					log.Debug("could not record that the TLS ask was answered",
+						slog.String("hostname", d.Hostname), slog.Any("error", err))
+				}
+			},
+		},
+		Stats:    stats,
+		Audit:    auditSvc,
+		Notify:   notifySvc,
+		Invites:  inviteSvc,
+		Team:     teamSvc,
+		Signup:   signupSvc,
+		Disputes: disputeSvc,
+		Instance: instanceSvc,
+		Metrics:  metrics,
+		Limits:   limits,
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
-			Links: linkSvc, Stats: stats,
+			Links: linkSvc, Stats: stats, Notify: notifySvc, Invites: inviteSvc,
+			Team: teamSvc, Signup: signupSvc, Disputes: disputeSvc,
+			Instance: instanceSvc,
 		},
 	})
 
@@ -521,4 +979,28 @@ func healthcheck(args []string) error {
 		return fmt.Errorf("readyz returned %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// inviteMailer hands the outbox to the invitation service, or nothing at all.
+//
+// A typed nil pointer inside an interface is not a nil interface, so passing
+// mailSvc straight through on a mail-free instance would give the service an
+// Enqueuer that is non-nil and panics on first use — and the first use is
+// somebody being invited. This is the one place that conversion happens.
+func inviteMailer(m *mail.Service) invite.Enqueuer {
+	if m == nil {
+		return nil
+	}
+	return m
+}
+
+// signupMailer is inviteMailer for the signup service, and exists for exactly
+// the same typed-nil reason. It matters more here: a nil Enqueuer is what drops
+// the signup ceiling to `invite` (D1), so getting this conversion wrong would
+// offer open sign-ups on an instance that cannot verify an address.
+func signupMailer(m *mail.Service) signup.Enqueuer {
+	if m == nil {
+		return nil
+	}
+	return m
 }

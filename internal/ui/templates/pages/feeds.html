@@ -1,0 +1,216 @@
+{{/* What this instance, and this workspace, do with your destinations.
+
+     THIS PAGE IS READ-ONLY, AND THAT IS A DECISION RATHER THAN A STYLE. D40.
+
+     There is no <form> here, no <button>, no <input>, and no path in this
+     product that would accept one: TestTheDisclosurePageAcceptsNoWrite asserts
+     both halves — that the rendered HTML contains no control, and that every
+     unsafe method against /feeds and /api/v1/feeds is refused.
+
+     D38 removed the ability to CHANGE instance-wide settings from the
+     dashboard, because this product has no instance-level principal — under
+     open signup, every stranger who registers owns an organization. Reading is
+     not changing. Being told what an instance does with your destinations is
+     not a privilege that needs a principal, which is why this page is drawn for
+     every signed-in user and gated on no permission at all.
+
+     The risk this page carries is not the page. It is that the next
+     instance-wide setting wants a row here, and the one after that wants a
+     toggle beside the row, at which point D38 has been reversed by nobody in
+     particular. The test is the mechanism that makes such a reversal an
+     explicit act.
+
+     The wording is the deliverable as much as the code is (m32.md, Risks). An
+     operator who switches this on without understanding it has been failed by
+     this page. So it says four things plainly and in this order: which third
+     party, what is sent, when it is sent, and who can change it.
+
+     TWO CHANNELS, ENUMERATED RATHER THAN SUMMARISED. M45, F135. This page
+     shipped saying "No destination leaves this instance" in a green panel to
+     every signed-in user whenever no feed was configured, which a registered
+     webhook made false — and it had no data to condition on, because the
+     disclosure knew only about the feed. It now reads both channels and states
+     each one's answer in every state, on purpose: a page that enumerates the
+     ways out cannot be quietly falsified by a third one the way a page that
+     summarises them was. A channel added later that is not a section here is a
+     visible gap.
+
+     The two are not the same kind of claim and the wording must not blur them.
+     The feed is the OPERATOR'S and is instance-wide, so "no feed is configured"
+     is true of everybody on this instance. A webhook is a WORKSPACE'S, so
+     "nothing is registered" is true of the workspace being viewed and says
+     nothing whatever about the one next door. Hence "you" and "this workspace"
+     in the webhook leg, and "this instance" only where the feed is the
+     subject. */}}
+{{define "content"}}
+<div class="mb-6">
+  <h1 class="text-xl font-semibold tracking-tight">Reputation feeds and webhooks</h1>
+  <p class="mt-1 text-sm text-muted">
+    What this instance, and this workspace, do with the destinations you point
+    links at.
+  </p>
+</div>
+
+{{if or .Disclosure.Enabled .Disclosure.Webhooks.Receiving}}
+<div class="rounded-lg border border-warn-line bg-warn-soft p-6">
+  <p class="text-sm font-medium text-warn-ink">
+    Destinations you type here are sent somewhere else.
+  </p>
+  {{if .Disclosure.Enabled}}
+  <p class="mt-2 text-sm text-warn-ink">
+    The operator of this instance has switched on a reputation feed. Every time a
+    destination is checked, the address you typed is sent to
+    <span class="font-medium">{{.Disclosure.Name}}</span>, which answers whether it
+    believes that destination is malicious.
+  </p>
+  {{end}}
+  {{if .Disclosure.Webhooks.Receiving}}
+  <p class="mt-2 text-sm text-warn-ink">
+    An administrator of <span class="font-medium">this workspace</span> has
+    registered {{if eq .Disclosure.Webhooks.Count 1}}a webhook{{else}}{{.Disclosure.Webhooks.Count}}
+    webhooks{{end}}, so this instance posts the workspace's link events to an
+    address they chose — and those events carry the destination. That is this
+    workspace's own doing rather than the operator's, and it says nothing about
+    any other workspace on this instance.
+  </p>
+  {{end}}
+</div>
+{{else}}
+<div class="rounded-lg border border-ok-line bg-ok-soft p-6">
+  <p class="text-sm font-medium text-ok-ink">
+    Nothing you point a link at leaves this instance.
+  </p>
+  <p class="mt-2 text-sm text-ok-ink">
+    No reputation feed is configured, which is how this product ships, and this
+    workspace has registered no webhook that would receive a destination. Every
+    check this instance makes about a destination is made here, against a list
+    compiled into the binary, a list held in this instance's own database, and
+    rules that read the URL's own text.
+  </p>
+</div>
+{{end}}
+
+{{/* The two channels, each answered in both directions, in every state. */}}
+<div class="mt-6 rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-4 text-sm font-medium text-ink">
+    The reputation feed — the operator's, and instance-wide
+  </h2>
+  {{if .Disclosure.Enabled}}
+  <dl class="space-y-4 text-sm">
+    <div>
+      <dt class="text-muted">Who it goes to</dt>
+      <dd class="mt-0.5 font-medium text-ink">{{.Disclosure.Name}}</dd>
+      {{/* Deliberately not an anchor. The endpoint is a third party's address
+           and this page is about not sending people places without telling
+           them; a click target here would be exactly that, one layer up. */}}
+      <dd class="mt-0.5 break-all font-mono text-xs text-subtle">{{.Disclosure.Endpoint}}</dd>
+    </div>
+    <div>
+      <dt class="text-muted">What is sent</dt>
+      <dd class="mt-0.5 text-ink">
+        The destination URL, and nothing else. No account, no address, no
+        workspace, no name for this instance — the request carries the URL and
+        the operator's own credential for that feed.
+      </dd>
+    </div>
+    <div>
+      <dt class="text-muted">When it is sent</dt>
+      <dd class="mt-0.5 text-ink">
+        Whenever a destination is checked: creating a link, editing one, setting
+        the link domain's root redirect, and asking for a refusal to be
+        reviewed. Nothing is sent when a visitor follows a link, and existing
+        links are never re-checked in the background.
+      </dd>
+    </div>
+    <div>
+      <dt class="text-muted">What the answer does</dt>
+      <dd class="mt-0.5 text-ink">
+        A feed is a low-confidence signal and nothing more. It is asked last,
+        only about destinations this instance's own checks already accepted, and
+        a refusal it produces can be disputed like any other — the instance
+        owner can overrule it, and doing so also stops that host being sent
+        again. If the feed does not answer, the destination is accepted:
+        the built-in checks work with the feed off, erroring, or unreachable.
+      </dd>
+    </div>
+    <div>
+      <dt class="text-muted">Who can change it</dt>
+      <dd class="mt-0.5 text-ink">
+        Only the operator, by editing this instance's configuration and
+        restarting it. There is no setting on this page, and no request to this
+        product can switch a feed on or off.
+      </dd>
+    </div>
+    <div>
+      <dt class="text-muted">Request</dt>
+      <dd class="mt-0.5 font-mono text-xs text-subtle">
+        {{.Disclosure.Method}} · times out after {{.Disclosure.TimeoutSeconds}}s
+      </dd>
+    </div>
+  </dl>
+  {{else}}
+  <p class="text-sm text-muted">
+    None is configured, which is the shipped default: no destination on this
+    instance is sent to a third party for a reputation check, whichever workspace
+    it belongs to. An operator can switch one on. If they do, this section names
+    the feed and says what is sent to it, and the banner above turns into a
+    warning. Only the operator can make that change, by editing this instance's
+    configuration; nothing in this dashboard and no API call can.
+  </p>
+  {{end}}
+</div>
+
+<div class="mt-6 rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-4 text-sm font-medium text-ink">
+    Webhooks — this workspace's, and not the operator's
+  </h2>
+  {{if .Disclosure.Webhooks.Receiving}}
+  <dl class="space-y-4 text-sm">
+    <div>
+      <dt class="text-muted">How many receive a destination</dt>
+      <dd class="mt-0.5 font-medium text-ink">{{.Disclosure.Webhooks.Count}}</dd>
+      {{/* The addresses are not here. Who this workspace posts to is behind
+           webhooks.read; that a destination leaves is owed to everybody whose
+           destinations they are. See link.WebhookDisclosure. */}}
+      <dd class="mt-0.5 text-xs text-subtle">
+        Registrations that are switched on and subscribed to at least one event
+        carrying a destination. The addresses are on
+        <a class="underline hover:no-underline" href="/webhooks">Webhooks</a>, to
+        those who may read them.
+      </dd>
+    </div>
+    <div>
+      <dt class="text-muted">What is sent</dt>
+      <dd class="mt-0.5 text-ink">
+        A link created, edited, archived, restored or deleted carries that link's
+        destination exactly as it was typed. A destination this instance refused
+        carries the attempted address defanged — still the address, written so
+        that nothing turns it back into a live link by accident. An automation
+        rule firing carries neither.
+      </dd>
+    </div>
+    <div>
+      <dt class="text-muted">Who can change it</dt>
+      <dd class="mt-0.5 text-ink">
+        An owner or an administrator of this workspace, from
+        <a class="underline hover:no-underline" href="/webhooks">Webhooks</a> —
+        not the operator, who has no setting that turns this off, and not an API
+        key, which cannot hold the permission that registers one. A registration
+        switched off, or subscribed only to events carrying no destination, stops
+        counting here the moment it changes.
+      </dd>
+    </div>
+  </dl>
+  {{else}}
+  <p class="text-sm text-muted">
+    This workspace has registered none that would receive a destination, so
+    nothing you point a link at is posted anywhere on its behalf. An owner or
+    administrator here can register one at any time, from
+    <a class="underline hover:no-underline" href="/webhooks">Webhooks</a>; this
+    section and the banner above say so as soon as they do. The operator has no
+    part in it and no switch that prevents it, and another workspace's
+    registrations are its own business and not described here.
+  </p>
+  {{end}}
+</div>
+{{end}}

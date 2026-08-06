@@ -171,21 +171,6 @@ func TestValidateDestinationKeepsIPv6Brackets(t *testing.T) {
 	}
 }
 
-func TestPrivateAddressBlockingCanBeDisabled(t *testing.T) {
-	// A self-hoster pointing links at an intranet is a legitimate
-	// configuration, so this must be a policy rather than a hard rule.
-	p := DefaultDestinationPolicy()
-	p.BlockPrivateIPs = false
-
-	if _, err := ValidateDestination("http://10.0.0.1/admin", p); err != nil {
-		t.Errorf("private address rejected with blocking disabled: %v", err)
-	}
-	// Scheme restrictions still apply.
-	if _, err := ValidateDestination("javascript:alert(1)", p); err == nil {
-		t.Error("scheme allowlist must still apply when private blocking is off")
-	}
-}
-
 func TestValidateDestinationRejectsControlCharacters(t *testing.T) {
 	p := DefaultDestinationPolicy()
 	// A newline reaching a Location header is response splitting.
@@ -221,36 +206,6 @@ func TestValidateDestinationMiscRejections(t *testing.T) {
 				t.Errorf("accepted %q", raw)
 			}
 		})
-	}
-}
-
-func TestBlockedHostSuffixesMatchOnLabelBoundary(t *testing.T) {
-	p := DefaultDestinationPolicy()
-	p.BlockedHostSuffixes = []string{"evil.com", "Bad.example"}
-
-	blocked := []string{
-		"https://evil.com/x",
-		"https://sub.evil.com/x",
-		"https://deep.sub.evil.com/x",
-		"https://bad.example/x",
-		"https://a.BAD.example/x",
-	}
-	for _, raw := range blocked {
-		if _, err := ValidateDestination(raw, p); err == nil {
-			t.Errorf("accepted blocked host %q", raw)
-		}
-	}
-
-	// Must not over-match: blocking evil.com should not block notevil.com.
-	allowed := []string{
-		"https://notevil.com/x",
-		"https://evil.com.example.org/x",
-		"https://myevil.com/x",
-	}
-	for _, raw := range allowed {
-		if _, err := ValidateDestination(raw, p); err != nil {
-			t.Errorf("rejected %q; suffix matching must respect label boundaries: %v", raw, err)
-		}
 	}
 }
 

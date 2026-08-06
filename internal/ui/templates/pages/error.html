@@ -1,13 +1,13 @@
 {{define "content"}}
 <div class="mx-auto mt-24 max-w-md text-center">
-  <p class="text-sm font-medium text-indigo-600">{{.Code}}</p>
+  <p class="text-sm font-medium text-accent-ink">{{.Code}}</p>
   <h1 class="mt-2 text-2xl font-semibold tracking-tight">{{.Heading}}</h1>
-  <p class="mt-2 text-sm text-slate-500">{{.Message}}</p>
+  <p class="mt-2 text-sm text-muted">{{.Message}}</p>
   <div class="mt-6">
     {{if .Identity}}
-    <a href="/dashboard" class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Back to dashboard</a>
+    <a href="/dashboard" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Back to dashboard</a>
     {{else}}
-    <a href="/login" class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Sign in</a>
+    <a href="/login" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Sign in</a>
     {{end}}
   </div>
 </div>

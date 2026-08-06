@@ -13,6 +13,9 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/DevOfPie/LinkCtrl/internal/alias"
+	"github.com/DevOfPie/LinkCtrl/internal/analytics"
+	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/gate"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/ratelimit"
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
@@ -23,6 +26,19 @@ var notFoundPage []byte
 
 //go:embed static/410.html
 var gonePage []byte
+
+// blockedPage is what a refused bot receives (M32.5).
+//
+// Embedded, so it is bytes in the binary before main runs — the strongest form
+// of "pre-rendered at init" available, and the reason the refusal costs no
+// template execution on a tree that has never rendered one. It is a fixed page
+// that names no alias and no destination: a refusal echoing either would make
+// the shortener a confirmation oracle for which short codes are real and where
+// they point, which is precisely what a crawler asking ten thousand times is
+// trying to find out.
+//
+//go:embed static/403.html
+var blockedPage []byte
 
 // RedirectHandler serves GET|HEAD /{alias}.
 //
@@ -50,6 +66,21 @@ type RedirectHandler struct {
 	// number the target names is the time to resolve and answer.
 	Metrics *observability.Metrics
 
+	// Geo resolves a country, region or city for routing rules (M34).
+	//
+	// Optional, and nil on every instance that has not supplied a MaxMind
+	// database — which is the default. A geographic rule on such an instance
+	// never matches, which is the same answer an address in nobody's range gets,
+	// and is documented rather than silently treated as "matches everybody".
+	//
+	// Never consulted for a link with no rules, and never for a rule that does
+	// not ask: see redirect_rules.go.
+	Geo GeoResolver
+
+	// Returning is the within-day returning-visitor set (M34). Optional; nil
+	// means every visitor reads as new.
+	Returning *analytics.ReturningSet
+
 	// NotFoundLimiter throttles addresses that keep asking for aliases which do
 	// not exist. Optional; nil disables it and costs nothing.
 	//
@@ -58,6 +89,24 @@ type RedirectHandler struct {
 	// its own audience — and middleware cannot tell a hit from a miss without
 	// intercepting the response.
 	NotFoundLimiter *ratelimit.Limiter
+
+	// Gates answers the questions a gated link asks Postgres (M35): does this
+	// password match, does this signature verify, is there budget left.
+	//
+	// Nil means the gates cannot be enforced, and a *gated* link then answers 503
+	// rather than redirecting — see passGates. An ungated link never consults it,
+	// which is why nil is a valid configuration for a process that only ever
+	// serves ordinary links.
+	Gates Gatekeeper
+
+	// PasswordLimiter throttles guesses at a link password, per address and per
+	// alias (D54). Optional; nil disables it.
+	//
+	// It is the shared limiter M24 built rather than a mechanism of its own, so
+	// a guess costs the same Redis token bucket a login attempt does — and falls
+	// back to this instance's own buckets when Redis is unavailable, which makes
+	// the protection best-effort rather than a guarantee.
+	PasswordLimiter *ratelimit.Limiter
 
 	counter atomic.Int64
 }
@@ -94,12 +143,40 @@ type ClickEvent struct {
 	Referrer    string
 	Language    string
 	LatencyUS   int32
+
+	// Source is the resolved `?src=` value (M41), empty for every request that
+	// did not carry a recognised one. When set it replaces the referrer host on
+	// the stored click — a QR scan sends no Referer, so the column is otherwise
+	// empty and the click is indistinguishable from a typed URL.
+	Source string
+
+	// TrackReturning asks the click pipeline to remember this visitor in the
+	// within-day returning-visitor set (M34).
+	TrackReturning bool
+
+	// DestinationID is the destinations row this click was sent to (M36). The
+	// zero uuid means the link's own destination, which is where every click on
+	// a link with no rules and no split goes.
+	DestinationID uuid.UUID
 }
 
 func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	code := strings.TrimSpace(r.PathValue("alias"))
 	canonical := alias.Canonical(code)
+
+	// Which alias namespace this request is in (M40).
+	//
+	// The default host resolves against the domain read once at boot, exactly as
+	// before. A verified custom hostname resolves against its own domain, and the
+	// router has already looked it up — from an in-process map, with no query —
+	// so this is a context read rather than a second resolution. Alias uniqueness
+	// is (domain_id, alias), so this one value is what makes two hostnames two
+	// namespaces instead of one shared one.
+	domainID := h.DomainID
+	if d, ok := CustomDomainFrom(r.Context()); ok {
+		domainID = d.ID
+	}
 
 	// Anything that cannot be a stored alias is refused on shape, before the
 	// limiter, the cache or the database is touched. A scanner spraying paths
@@ -126,7 +203,7 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// keeps working for the cost of one map lookup, and an alias nobody is
 		// using cannot be turned into a database query by asking for it again.
 		// This is the whole reason the limit does not simply refuse the request.
-		cached, ok := h.Resolver.ResolveCached(h.DomainID, canonical)
+		cached, ok := h.Resolver.ResolveCached(domainID, canonical)
 		if !ok || cached.Snapshot.NotFound {
 			h.Metrics.ObserveRedirect("throttled", "rejected", time.Since(start))
 			// Counted under the same series as the other limits, not only as a
@@ -139,7 +216,7 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		res = cached
 	} else {
-		resolved, err := h.Resolver.Resolve(r.Context(), h.DomainID, canonical)
+		resolved, err := h.Resolver.Resolve(r.Context(), domainID, canonical)
 		if err != nil {
 			// Unavailable, not 404. The load test made the difference concrete: a
 			// resolution failure here is overwhelmingly a timeout under load, and
@@ -150,7 +227,7 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			//
 			// Not charged to the probe limit either: the failure is ours, and
 			// throttling someone for it would turn a database blip into a block.
-			h.Logger.Error("redirect resolution failed",
+			h.log().Error("redirect resolution failed",
 				slog.String("alias", canonical), slog.Any("error", err))
 			h.Metrics.ObserveRedirect("error", "none", time.Since(start))
 			h.unavailable(w, r)
@@ -159,7 +236,139 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		res = resolved
 	}
 
+	// The bot gate (M32.5), and it runs before Decide deliberately.
+	//
+	// Answering the same refusal whatever state the link is in is what keeps
+	// blocking from becoming a better enumeration oracle than the 404 path
+	// already is: a crawler that could tell an active blocked link (403) from an
+	// expired one (410) would learn something from being refused. It learns
+	// nothing instead.
+	//
+	// Not charged to the probe limiter either. The alias exists — asking for it
+	// is not probing, and the client is being refused for what it is rather than
+	// for what it asked.
+	if blockedAsBot(res.Snapshot, r.UserAgent()) {
+		h.Metrics.ObserveRedirect("blocked_bot", string(res.Source), time.Since(start))
+		h.blocked(w, r)
+		// Counted, never audited. The audit log is for administrative change,
+		// and a crawler hitting one link ten thousand times would write ten
+		// thousand rows into the table M21 built a growth alert for. It is
+		// already a click with is_bot true — the recorder derives that from the
+		// same Classify call this gate used — so the traffic is visible where
+		// traffic is read.
+		// No destination: the request was refused before one was chosen, so the
+		// click is attributed to the link rather than to any of its arms.
+		h.record(r, res.Snapshot, start, uuid.Nil, false)
+		return
+	}
+
 	outcome := res.Snapshot.Decide(start)
+
+	// The boundary of D53's one POST.
+	//
+	// The mux registers POST on "/{alias}" because password verification needs
+	// somewhere to go, and this is where that permission stops: an alias that
+	// asks no question answers the same 405 the method filter used to. Placed
+	// after Decide so a POST to an expired or unknown alias still gets 410 or
+	// 404 rather than a method complaint about a link that is not there.
+	if r.Method == http.MethodPost && outcome == redirect.OutcomeRedirect &&
+		!res.Snapshot.HasPassword {
+		h.Metrics.ObserveRedirect("method_not_allowed", string(res.Source), time.Since(start))
+		h.methodNotAllowed(w, r)
+		return
+	}
+
+	// Deep-link path forwarding (M33), and the decision has to happen here
+	// rather than beside the Location line below, because the metric is
+	// recorded in between: converting the outcome after observing it would put
+	// a 404 in the "redirect" series.
+	//
+	// A multi-segment request the link cannot forward is a miss, not a redirect
+	// to the bare destination. Answering the destination anyway would mean
+	// /{alias}/anything-at-all resolved for every link on the instance, which
+	// turns one alias into an unbounded set of URLs that all go somewhere the
+	// owner did not point them.
+	//
+	// forwardable also refuses a remainder it cannot join safely — see
+	// appendPath — and refusing lands here rather than silently dropping the
+	// path, for the same reason: a visitor who asked for /{alias}/a/../b must
+	// not be sent somewhere else without being told.
+	// Routing rules (M34), and they run here — after Decide, before the path is
+	// joined — because both neighbours depend on it.
+	//
+	// After Decide, because a rule must not resurrect a link that is expired,
+	// archived or disabled. The rule chooses *where* an active link sends
+	// somebody; whether it sends anybody at all is the link's own state, and a
+	// rule that could override that would be a way to keep serving a link its
+	// owner had switched off.
+	//
+	// Before the join, because deep-link forwarding appends the visitor's extra
+	// segments to whichever destination is actually being used. Joining onto the
+	// link's own URL and then swapping the destination underneath would send
+	// /{alias}/pricing to the rule's destination *without* the /pricing, which
+	// is a URL nobody asked for.
+	//
+	// Split testing (M36) sits inside the same block, after the match rules and
+	// before the join, because it answers the same question they do and its
+	// answer is joined onto in the same way. The order between them is
+	// first-match-wins: a rule that named this visitor beats a split that would
+	// have divided them, because the rule is a statement about *who* and the
+	// split is a statement about *how many*. A fallback arm is last of all and
+	// stands in for the link's own destination, which is what makes switching it
+	// off a reversible act rather than an edit to the link.
+	var target string
+	var destID uuid.UUID
+	if outcome == redirect.OutcomeRedirect {
+		destination := res.Snapshot.URL
+		switch routed, ok := h.route(r, res.Snapshot, start); {
+		case ok:
+			destination, destID = routed.URL, routed.ID
+		default:
+			sp := h.split(r, res.Snapshot, canonical)
+			switch {
+			case sp.failed:
+				// The rotation could not be advanced. 503 rather than an
+				// arbitrary arm, for the reason redirect_split.go states.
+				h.Metrics.ObserveRedirect("error", string(res.Source), time.Since(start))
+				h.unavailable(w, r)
+				return
+			case sp.chosen:
+				destination, destID = sp.choice.URL, sp.choice.ID
+			default:
+				if fb, has := res.Snapshot.Fallback(); has {
+					destination, destID = fb.URL, fb.ID
+				}
+			}
+		}
+		joined, ok := forwardable(res.Snapshot, destination, r)
+		if !ok {
+			outcome = redirect.OutcomeNotFound
+		}
+		target = joined
+	}
+
+	// The gates (M35), and they run here — after the destination is known,
+	// before anything is written.
+	//
+	// After, because a deep link this alias cannot forward is a 404 and must not
+	// spend a one-time link's single click on its way to being refused. Before,
+	// because the whole point of a gate is that the 302 does not happen until it
+	// has passed.
+	//
+	// `Gated()` is false for every link on a default instance, so this is one
+	// boolean expression over fields already in hand and nothing else.
+	//
+	// `domainID` is handed over rather than read off the handler inside: the
+	// signature's MAC and the password bucket are both keyed on which namespace
+	// this alias was resolved in, and the boot default is the wrong answer for
+	// every request that arrived on a verified custom hostname.
+	if outcome == redirect.OutcomeRedirect && res.Snapshot.Gated() {
+		if g := h.passGates(w, r, res.Snapshot, canonical, domainID); g.answered {
+			h.Metrics.ObserveRedirect(g.label, string(res.Source), time.Since(start))
+			return
+		}
+	}
+
 	// Observed here, before the response is written, so the measurement covers
 	// resolution and decision rather than however long a client takes to read
 	// the body. Writing an empty 302 is a syscall on an already-open socket.
@@ -170,10 +379,35 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Not charged to the probe limit: the alias really exists, so asking for
 		// it is not probing. A link checker following a dead link is not abuse.
 		h.gone(w, r)
+		// Recorded, and this is D101 rather than an oversight corrected.
+		//
+		// Until 0.2.0 an expired or archived link recorded nothing here — while
+		// the bot gate above recorded a *blocked* request to the same link,
+		// because it answers before Decide runs. So whether identical traffic
+		// was counted depended on a setting about **responses**, and the same
+		// crawler was a click on a link with blocking on and nothing on a link
+		// with it off. The rule now has no exception to remember: a request that
+		// reached a real link is recorded, whatever the link's state made the
+		// answer.
+		//
+		// No destination, for the reason the gate gives: nothing was chosen.
+		// `record` is a no-op on HEAD and on a nil recorder, and this branch is
+		// reached only when the alias resolved, so there is always a link to
+		// attribute to.
+		h.record(r, res.Snapshot, start, uuid.Nil, false)
 		return
 	case redirect.OutcomeNotFound:
 		h.chargeProbe(r)
 		h.notFound(w, r)
+		// Only when a real link is behind it. This branch answers two different
+		// things: an alias that does not exist — a negative cache entry, most of
+		// this tree's traffic, and there is nothing to attribute a click to —
+		// and a link that exists but was asked for a path it cannot forward.
+		// The second is a request that reached a link, so D101 covers it; the
+		// first is not.
+		if !res.Snapshot.NotFound {
+			h.record(r, res.Snapshot, start, uuid.Nil, false)
+		}
 		return
 	case redirect.OutcomeRedirect:
 		// Falls through to the redirect below. Listed rather than left to a
@@ -182,37 +416,149 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// being treated as "redirect anyway".
 	}
 
-	target := res.Snapshot.URL
 	if res.Snapshot.ForwardQuery && r.URL.RawQuery != "" {
-		target = appendQuery(target, r.URL.RawQuery)
+		// The signature parameters are addressed to this server and stop here
+		// (M35). Forwarding them would hand whoever runs the destination a URL
+		// they can replay against this link until it expires, which is a
+		// capability the workspace issued to one recipient. StripSignature
+		// returns the query untouched when it carries neither parameter, which
+		// is every request to every link that is not signature-gated.
+		if raw := gate.StripSignature(r.URL.RawQuery); raw != "" {
+			target = appendQuery(target, raw)
+		}
 	}
 
 	// 302, never 301. Links are editable by design, so a permanent redirect
 	// would be cached by browsers and intermediaries and keep sending traffic
 	// to the old destination long after an edit — with no way to recall it.
 	// no-store for the same reason.
-	h.Location(w, target, h.status())
-
-	if h.Recorder != nil && r.Method != http.MethodHead {
-		h.Recorder.Record(ClickEvent{
-			LinkID:      res.Snapshot.LinkID,
-			WorkspaceID: res.Snapshot.WorkspaceID,
-			OccurredAt:  start,
-			IP:          clientIPString(r),
-			UserAgent:   r.UserAgent(),
-			Referrer:    r.Referer(),
-			Language:    r.Header.Get("Accept-Language"),
-			LatencyUS:   latencyUS(time.Since(start)),
-		})
-	}
+	h.Location(w, target, h.redirectStatus(r))
+	h.record(r, res.Snapshot, start, destID, true)
 
 	if h.LogSample > 0 && h.counter.Add(1)%h.LogSample == 0 {
-		h.Logger.Info("redirect",
+		h.log().Info("redirect",
 			slog.String("alias", canonical),
 			slog.String("source", string(res.Source)),
 			slog.Int64("duration_us", time.Since(start).Microseconds()),
 		)
 	}
+}
+
+// blockedAsBot reports whether this request is an automated client the link
+// refuses (M32.5).
+//
+// Two string comparisons when blocking is off, which is every link on a default
+// instance, and one pass over the user agent when it is on. Nothing here reads
+// the database, the cache or the session: both settings arrived inside the
+// snapshot the resolver had already produced.
+//
+// The two halves are separate on purpose. domain.BlocksBots is the only place
+// precedence is decided, for the redirect path and the management surfaces
+// alike; analytics.Classify is the same pure function the click recorder uses,
+// called rather than copied, so what gets blocked cannot drift from what gets
+// counted as a bot. A second classifier here would produce exactly that drift,
+// silently, and the analytics would go on insisting the refused traffic was
+// human.
+//
+// Order matters for cost, not for correctness: the policy check is cheap and
+// usually false, so Classify runs only on links that actually block.
+func blockedAsBot(snap *redirect.Snapshot, ua string) bool {
+	if snap == nil || snap.NotFound {
+		return false
+	}
+	if !domain.BlocksBots(snap.BotPolicy, snap.DomainBotPolicy) {
+		return false
+	}
+	return analytics.Classify(ua).IsBot
+}
+
+// record hands a click to the recorder, if there is one.
+//
+// Shared by the redirect and the refusal so the two cannot drift into
+// disagreeing about what a click event carries. HEAD is excluded in both: it is
+// a client asking about the link rather than following it, and counting it
+// would inflate every figure a link's owner reads.
+//
+// reachedDestination says whether this response actually sent the visitor
+// somewhere. It changes nothing about the click itself — a request that reached
+// a real link is recorded identically whatever the answer, which is D101 —
+// it decides only whether the visitor may enter the returning-visitor set.
+func (h *RedirectHandler) record(
+	r *http.Request, snap *redirect.Snapshot, start time.Time, destID uuid.UUID,
+	reachedDestination bool,
+) {
+	if h.Recorder == nil || snap == nil || r.Method == http.MethodHead {
+		return
+	}
+	h.Recorder.Record(ClickEvent{
+		LinkID: snap.LinkID,
+		// Which destination served this click (M36). The zero uuid means the
+		// link's own destination, and is what every click on every link without
+		// rules carries — see the column comment in migration 02200.
+		DestinationID: destID,
+		WorkspaceID:   snap.WorkspaceID,
+		OccurredAt:    start,
+		IP:            clientIPString(r),
+		UserAgent:     r.UserAgent(),
+		Referrer:      r.Referer(),
+		// Where the visitor came from when the browser cannot say (M41). Read
+		// from the raw query without parsing it: the substring test is false for
+		// every request to every link that is not a QR scan, which is nearly all
+		// of them, and `r.URL.Query()` allocates a map the 20ms budget should
+		// not pay for on a path that would throw it away.
+		Source:    clickSource(r.URL.RawQuery),
+		Language:  r.Header.Get("Accept-Language"),
+		LatencyUS: latencyUS(time.Since(start)),
+		// The within-day returning-visitor set is maintained by the ingester, for
+		// the links that need it, and this flag is how it finds out which (M34).
+		// Deciding it here rather than in the pipeline is what keeps the pipeline
+		// from having to ask the database which links carry such a rule.
+		//
+		// Armed only by a visit that reached a destination. The set is the
+		// record of who this link has actually served, and the refusals that
+		// share this function — a blocked bot, a 410, a deep link the link
+		// cannot forward — count their clicks without writing it. A refusal
+		// that marked the visitor would make a later new-visitor rule miss
+		// that visitor's first real visit, and route somebody the link has
+		// never served as though it had. The gate refusals never reach record
+		// at all, so no refusal anywhere brands anybody.
+		TrackReturning: reachedDestination && tracksReturning(snap),
+	})
+}
+
+// clickSource pulls a recognised `?src=` value out of a raw query string (M41).
+//
+// **It parses nothing unless the parameter is there.** `strings.Contains` on the
+// raw string is one scan with no allocation and is false for every request that
+// is not a QR scan; only a request that could carry the parameter pays for
+// `url.ParseQuery`. That is the same shape gate.StripSignature uses, and for the
+// same reason: this runs on every redirect, inside a 20ms budget.
+//
+// An unparseable query is not an error here. A malformed query string is the
+// visitor's problem and it does not stop a redirect, so it simply attributes
+// nothing.
+func clickSource(rawQuery string) string {
+	if rawQuery == "" || !strings.Contains(rawQuery, domain.ClickSourceParam+"=") {
+		return ""
+	}
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return ""
+	}
+	src, ok := domain.ClickSource(values.Get(domain.ClickSourceParam))
+	if !ok {
+		return ""
+	}
+	return src
+}
+
+// blocked refuses an automated client.
+//
+// The same headers and the same shape as the other error pages, and a body that
+// is fixed at compile time. There is no branch on which state the link was in,
+// because there is no state to reveal.
+func (h *RedirectHandler) blocked(w http.ResponseWriter, r *http.Request) {
+	h.errorPage(w, r, http.StatusForbidden, blockedPage)
 }
 
 // Location writes the redirect response.
@@ -232,6 +578,29 @@ func (h *RedirectHandler) status() int {
 	return h.Status
 }
 
+// redirectStatus is the status this particular request is answered with.
+//
+// It is the instance's configured one for every request except the one that
+// arrived as a POST, and that exception is not a preference. A POST reaches this
+// line by exactly one route: a link password that verified. Everything else that
+// POSTs an alias is answered 405 above, so `r.Method == POST` here *is* the
+// password branch.
+//
+// **303, unconditionally, and not the configured status.** `REDIRECT_DEFAULT_STATUS`
+// admits 307, which RFC 9110 §15.4.8 forbids a user agent from changing the
+// method on — so a browser that had just POSTed `password=<secret>` to the
+// challenge form re-sent that body to the link's destination, a third-party host
+// the operator does not control. 303 is the one redirect status that *mandates*
+// a GET, so the body stops here whatever the instance is configured for. Not a
+// special case for 307: any future method-preserving status would be the same
+// disclosure, and this branch has no reason to forward a method at all.
+func (h *RedirectHandler) redirectStatus(r *http.Request) int {
+	if r.Method == http.MethodPost {
+		return http.StatusSeeOther
+	}
+	return h.status()
+}
+
 // probeStatus reports whether this address has spent its 404 allowance.
 //
 // Nothing happens at all when the limit is off — not even a context lookup — so
@@ -240,7 +609,7 @@ func (h *RedirectHandler) probeStatus(r *http.Request) (bool, time.Duration) {
 	if h.NotFoundLimiter == nil {
 		return false, 0
 	}
-	ok, retry := h.NotFoundLimiter.Check(ClientIPFrom(r.Context()))
+	ok, retry := h.NotFoundLimiter.Check(ClientIPFrom(r.Context())) //nolint:contextcheck // deliberate: see ratelimit.Shared.take
 	return !ok, retry
 }
 
@@ -254,7 +623,7 @@ func (h *RedirectHandler) chargeProbe(r *http.Request) {
 	if h.NotFoundLimiter == nil {
 		return
 	}
-	h.NotFoundLimiter.Charge(ClientIPFrom(r.Context()))
+	h.NotFoundLimiter.Charge(ClientIPFrom(r.Context())) //nolint:contextcheck // deliberate: see ratelimit.Shared.take
 }
 
 // tooManyRequests refuses a request from an address that has been probing.
@@ -316,6 +685,13 @@ func (h *RedirectHandler) errorPage(w http.ResponseWriter, r *http.Request, stat
 	// The redirect tree is outside the security-header chain, so every response
 	// it writes sets nosniff itself — the same rule writeTooManyRequests
 	// documents for the API limiter's refusals.
+	//
+	// *Writes* is the operative word, and until 0.2.0 it was doing more work
+	// than it looked. `ServeMux` answers its own path-cleaning redirect with an
+	// HTML body, and no handler here is involved in that one, so the invariant
+	// held for every response this project produces and not for every response
+	// the tree produces (F64). `alwaysNosniff` in router.go now covers the
+	// difference; this line stays because a handler must not depend on it.
 	head.Set("X-Content-Type-Options", "nosniff")
 	// Error pages must never be indexed: a shortener accumulates thousands of
 	// dead aliases, and letting a crawler index them is pure noise.
@@ -342,6 +718,151 @@ func latencyUS(d time.Duration) int32 {
 		return math.MaxInt32
 	}
 	return int32(us)
+}
+
+// forwardable produces the destination for this request, and reports whether
+// there is one at all (M33).
+//
+// Three answers, and the middle one is the milestone:
+//
+//   - A bare /{alias}. The destination is the destination, exactly as before
+//     this existed.
+//   - Anything after the alias, forwarding off. Nothing to serve: reported
+//     false, and the caller turns it into the ordinary miss. That includes a
+//     bare trailing slash, which has answered 404 for as long as the redirect
+//     tree has existed — TestRedirectMatrix names the case — and which this
+//     milestone was not asked to change.
+//   - Anything after the alias, forwarding on. Joined onto the destination, or
+//     refused if it cannot be joined safely. An empty remainder joins to the
+//     destination's own root — /{alias}/ is the top of the forwarded subtree
+//     rather than a separate case.
+//
+// The remainder is taken from EscapedPath and never from PathValue("rest").
+// ServeMux unescapes a wildcard before storing it, so PathValue turns
+// /a/x%2Fy into "x/y" and /a/a%3Fb into "a?b" — feed that to the joiner and a
+// visitor can split a segment in two, or inject a query the destination never
+// had. EscapedPath is the bytes as they arrived, and net/url guarantees it
+// carries no raw '?', '#' or space, which is what makes appending it safe.
+// The destination is passed in rather than read off the snapshot, because M34
+// made "the destination" a question with more than one answer: a routing rule
+// may have chosen one, and the visitor's extra segments belong on whichever one
+// is actually being served.
+func forwardable(snap *redirect.Snapshot, destination string, r *http.Request) (string, bool) {
+	if snap == nil {
+		return "", false
+	}
+	rest, deep := pathRemainder(r.URL.EscapedPath())
+	if !deep {
+		return destination, true
+	}
+	if !snap.ForwardPath {
+		return "", false
+	}
+	return appendPath(destination, rest)
+}
+
+// pathRemainder returns whatever follows the alias segment, still escaped, and
+// whether there was a separator at all.
+//
+// The two are not the same question: "/abc" and "/abc/" both have an empty
+// remainder, and only the second one is a request for something beneath the
+// alias.
+//
+// Sliced out of the escaped path rather than read back from the router,
+// because the alias segment may itself be percent-encoded and the two
+// spellings must not have to agree.
+func pathRemainder(escaped string) (string, bool) {
+	trimmed := strings.TrimPrefix(escaped, "/")
+	i := strings.IndexByte(trimmed, '/')
+	if i < 0 {
+		return "", false
+	}
+	return trimmed[i+1:], true
+}
+
+// appendPath joins a visitor's extra path segments onto the destination.
+//
+// The escaped remainder is concatenated verbatim and the result's Path and
+// RawPath are set together, so url.URL.String emits the bytes that arrived
+// instead of re-encoding them. This is the same rule appendRaw follows for the
+// query half: a destination the parser cannot round-trip must not be rewritten
+// on its way past.
+//
+// The origin cannot move, and that is structural rather than checked. Nothing
+// here touches u.Scheme or u.Host, the joined path always begins with a single
+// '/', and the remainder is never resolved as a reference — url.ResolveReference
+// would turn a remainder of "//evil.example" into a different host, which is
+// precisely the shape the property test refutes.
+func appendPath(target, rest string) (string, bool) {
+	if !joinable(rest) {
+		return "", false
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		return "", false
+	}
+	joined := strings.TrimSuffix(u.EscapedPath(), "/") + "/" + rest
+	unescaped, err := url.PathUnescape(joined)
+	if err != nil {
+		return "", false
+	}
+	u.Path, u.RawPath = unescaped, joined
+	return u.String(), true
+}
+
+// joinable reports whether a remainder may be appended at all.
+//
+// Dot segments are refused rather than resolved. A browser normalizes them
+// before it asks for anything — and the URL standard counts "%2e" and "%2E" as
+// dots too, which is how one reaches us at all: ServeMux cleans the escaped
+// path and redirects, so the literal spellings never arrive and only the
+// encoded ones do.
+//
+// Refusing is the whole point. Resolving would let /{alias}/../../secret walk
+// out of the subtree the owner pointed at, and silently dropping the segments
+// would send the visitor somewhere they did not ask for while looking like it
+// worked. A 404 says what happened.
+// MaxForwardedPath and MaxForwardedSegments bound a deep-link remainder.
+//
+// With forward_path on, everything after the alias is visitor-controlled and
+// nothing between the router and the joiner looked at its size: `MaxHeaderBytes`
+// is unset, so the ceiling was net/http's 1 MiB default, and a cache hit is
+// deliberately never charged to the 404-probe limiter. `joinable` walks every
+// segment calling `url.PathUnescape`, then the concatenation, the unescape of
+// the join and `u.String()` each copy the whole remainder — roughly five passes
+// over up to a megabyte, on a request that touches no database (F116).
+//
+// **Both bounds, because either alone misses it.** Length alone leaves the
+// per-segment cost, which is driven by segment *count*: a 40 KiB path of twenty
+// thousand empty segments is twenty thousand `PathUnescape` calls under any
+// sane length cap. Count alone leaves one enormous segment.
+//
+// Generous on purpose. The longest thing a real deep link forwards is a path a
+// human or a CMS produced, and these are two orders of magnitude above that —
+// this is an amplification bound, not a validation rule.
+const (
+	MaxForwardedPath     = 4096
+	MaxForwardedSegments = 64
+)
+
+func joinable(rest string) bool {
+	// Refused through the same not-forwardable path as a dot segment, which
+	// answers the ordinary 404. Inventing a 414 here would put a new status on a
+	// tree whose header invariants F64 shows are already fragile, and would tell
+	// a prober something the 404 does not.
+	if len(rest) > MaxForwardedPath || strings.Count(rest, "/") >= MaxForwardedSegments {
+		return false
+	}
+	for seg := range strings.SplitSeq(rest, "/") {
+		decoded, err := url.PathUnescape(seg)
+		if err != nil {
+			return false
+		}
+		if decoded == "." || decoded == ".." {
+			return false
+		}
+	}
+	return true
 }
 
 // appendQuery merges the incoming query string into the destination.

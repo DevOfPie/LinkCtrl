@@ -1,0 +1,21 @@
+Subject: Your disputed destination was {{.Status}}
+
+Hello {{.Name}},
+
+You asked the owner of {{.Instance}} to look again at a destination this
+instance refused. They have, and the answer is: {{.Status}}.
+
+The host, written so that nothing in this message can turn it into a link:
+
+    {{.Host}}
+
+It was refused under {{.ReasonCode}}.
+
+{{.Outcome}}
+
+The same notice is in your dashboard inbox, with the rest of the detail:
+
+    {{.AppURL}}/notifications
+
+--
+LinkCtrl

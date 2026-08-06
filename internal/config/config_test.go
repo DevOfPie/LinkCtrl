@@ -248,6 +248,10 @@ func TestValidateIndividualRules(t *testing.T) {
 		{"negative 404 limit", map[string]string{"LINKCTRL_REDIRECT_404_RATE_LIMIT": "-1"}, "REDIRECT_404_RATE_LIMIT"},
 
 		{"negative retention", map[string]string{"LINKCTRL_ANALYTICS_RETENTION_DAYS": "-1"}, "ANALYTICS_RETENTION_DAYS"},
+		// A negative audit window reads as "unlimited" and would silently be
+		// treated as "keep forever", which is the same behaviour as 0 by luck
+		// rather than by contract. The operator who typed it meant something.
+		{"negative audit retention", map[string]string{"LINKCTRL_AUDIT_RETENTION_DAYS": "-1"}, "AUDIT_RETENTION_DAYS"},
 		{"missing geoip file", map[string]string{"LINKCTRL_GEOIP_MMDB_PATH": "/nope/missing.mmdb"}, "GEOIP_MMDB_PATH"},
 
 		{"alias too short", map[string]string{"LINKCTRL_ALIAS_LENGTH": "2"}, "ALIAS_LENGTH"},
@@ -260,6 +264,65 @@ func TestValidateIndividualRules(t *testing.T) {
 		{"shutdown exceeds grace period", map[string]string{
 			"LINKCTRL_SHUTDOWN_DRAIN_DELAY": "20s", "LINKCTRL_SHUTDOWN_TIMEOUT": "20s",
 		}, "stop_grace_period"},
+
+		// The mailer. Every one of these is only reachable once SMTP_HOST is
+		// set, which is what TestMailerIsOffAndSilentByDefault holds the other
+		// side of.
+		{"mailer with no sender", map[string]string{
+			"LINKCTRL_SMTP_HOST": "smtp.example.com",
+		}, "SMTP_FROM"},
+		{"mailer with an unparseable sender", map[string]string{
+			"LINKCTRL_SMTP_HOST": "smtp.example.com", "LINKCTRL_SMTP_FROM": "not an address",
+		}, "SMTP_FROM"},
+		{"unknown tls mode", map[string]string{
+			"LINKCTRL_SMTP_HOST": "smtp.example.com", "LINKCTRL_SMTP_FROM": "l@example.com",
+			"LINKCTRL_SMTP_TLS": "ssl",
+		}, "SMTP_TLS"},
+		{"port out of range", map[string]string{
+			"LINKCTRL_SMTP_HOST": "smtp.example.com", "LINKCTRL_SMTP_FROM": "l@example.com",
+			"LINKCTRL_SMTP_PORT": "70000",
+		}, "SMTP_PORT"},
+		{"a username with no password", map[string]string{
+			"LINKCTRL_SMTP_HOST": "smtp.example.com", "LINKCTRL_SMTP_FROM": "l@example.com",
+			"LINKCTRL_SMTP_USERNAME": "postmaster",
+		}, "set both or neither"},
+		{"a password with no username", map[string]string{
+			"LINKCTRL_SMTP_HOST": "smtp.example.com", "LINKCTRL_SMTP_FROM": "l@example.com",
+			"LINKCTRL_SMTP_PASSWORD": "hunter2",
+		}, "set both or neither"},
+		// Credentials over an unencrypted connection are refused rather than
+		// warned about: Go's own SMTP client refuses PLAIN in clear too, so
+		// accepting it here would only move the failure to the first send.
+		{"credentials without encryption", map[string]string{
+			"LINKCTRL_SMTP_HOST": "smtp.example.com", "LINKCTRL_SMTP_FROM": "l@example.com",
+			"LINKCTRL_SMTP_USERNAME": "postmaster", "LINKCTRL_SMTP_PASSWORD": "hunter2",
+			"LINKCTRL_SMTP_TLS": "none",
+		}, "in clear"},
+		{"zero timeout", map[string]string{
+			"LINKCTRL_SMTP_HOST": "smtp.example.com", "LINKCTRL_SMTP_FROM": "l@example.com",
+			"LINKCTRL_SMTP_TIMEOUT": "0s",
+		}, "SMTP_TIMEOUT"},
+
+		// The feed. Refusing a credential written into FEED_URL is finding F35,
+		// and it is a refusal rather than a redaction on purpose: Go sends
+		// userinfo as Basic auth, so it works, and /feeds is shown to every
+		// signed-in user by design (D40). Both spellings, because the one with
+		// no password is the one a "just put the key in the URL" reading of an
+		// API's documentation produces.
+		{"a credential in the feed url", map[string]string{
+			"LINKCTRL_FEED_URL":  "https://apikey:SUPERSECRET@feed.example.com/v1/check",
+			"LINKCTRL_FEED_NAME": "Example Reputation",
+		}, "must not carry a username or password"},
+		{"a bare username in the feed url", map[string]string{
+			"LINKCTRL_FEED_URL":  "https://SUPERSECRET@feed.example.com/v1/check",
+			"LINKCTRL_FEED_NAME": "Example Reputation",
+		}, "must not carry a username or password"},
+		// The pre-existing rule, kept beside it: the two checks now share a
+		// branch, and a refactor that drops one would otherwise be invisible.
+		{"a feed url in clear", map[string]string{
+			"LINKCTRL_FEED_URL":  "http://feed.example.com/v1/check",
+			"LINKCTRL_FEED_NAME": "Example Reputation",
+		}, "must use https"},
 	}
 
 	for _, tc := range tests {
@@ -278,6 +341,119 @@ func TestValidateIndividualRules(t *testing.T) {
 				t.Errorf("error does not mention %q.\nGot: %v", tc.wantMention, err)
 			}
 		})
+	}
+}
+
+// M26's headline claim, at the configuration layer: an instance that sets
+// nothing has no mailer, and none of the mailer's rules can refuse its boot.
+//
+// The second half matters as much as the first. Every SMTP rule sits inside the
+// Enabled guard, so a default instance must parse cleanly even with values that
+// would be refused outright once a host is named — otherwise "off by default"
+// would mean "off, unless you left something in your .env".
+func TestMailerIsOffAndSilentByDefault(t *testing.T) {
+	setEnv(t, validEnv())
+
+	c, err := Parse()
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if c.SMTP.Enabled() {
+		t.Error("SMTP is enabled on a configuration that names no host")
+	}
+
+	// Values that are errors once a host is set, on an instance with no host.
+	env := validEnv()
+	env["LINKCTRL_SMTP_TLS"] = "ssl"
+	env["LINKCTRL_SMTP_FROM"] = "not an address"
+	env["LINKCTRL_SMTP_USERNAME"] = "postmaster"
+	setEnv(t, env)
+
+	c, err = Parse()
+	if err != nil {
+		t.Fatalf("mailer settings refused a boot on an instance with no SMTP_HOST: %v", err)
+	}
+	if c.SMTP.Enabled() {
+		t.Error("SMTP is enabled without a host")
+	}
+}
+
+// The whole supported surface, accepted. A configuration that a self-hoster
+// would actually write must parse, or every rule above is only proving that the
+// mailer is hard to switch on.
+func TestMailerAcceptsEachSupportedMode(t *testing.T) {
+	for _, mode := range []string{SMTPStartTLS, SMTPImplicit} {
+		t.Run(mode, func(t *testing.T) {
+			env := validEnv()
+			env["LINKCTRL_SMTP_HOST"] = "smtp.example.com"
+			env["LINKCTRL_SMTP_PORT"] = "465"
+			env["LINKCTRL_SMTP_FROM"] = "LinkCtrl <links@example.com>"
+			env["LINKCTRL_SMTP_USERNAME"] = "postmaster"
+			env["LINKCTRL_SMTP_PASSWORD"] = "hunter2"
+			env["LINKCTRL_SMTP_TLS"] = mode
+			setEnv(t, env)
+
+			c, err := Parse()
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if !c.SMTP.Enabled() {
+				t.Fatal("SMTP is not enabled with a host set")
+			}
+			if got := c.SMTP.Addr(); got != "smtp.example.com:465" {
+				t.Errorf("Addr() = %q", got)
+			}
+			// The password is a Secret, so a config dump or a formatted panic
+			// cannot print it. Same treatment as the database DSN and the
+			// API-key pepper, and worth asserting rather than assuming.
+			dumped := fmt.Sprintf("%v %#v", c.SMTP, c.SMTP) +
+				fmt.Sprintf(" %v %q %#v", c.SMTP.Password, c.SMTP.Password, c.SMTP.Password)
+			if strings.Contains(dumped, "hunter2") {
+				t.Error("the SMTP password printed itself")
+			}
+			if c.SMTP.Password.Reveal() != "hunter2" {
+				t.Error("the SMTP password did not survive parsing")
+			}
+		})
+	}
+
+	// A relay that wants no encryption and no credentials — a local postfix, a
+	// mailhog in development — is a legitimate configuration and must parse.
+	env := validEnv()
+	env["LINKCTRL_SMTP_HOST"] = "localhost"
+	env["LINKCTRL_SMTP_PORT"] = "1025"
+	env["LINKCTRL_SMTP_FROM"] = "links@example.com"
+	env["LINKCTRL_SMTP_TLS"] = SMTPNone
+	setEnv(t, env)
+	if _, err := Parse(); err != nil {
+		t.Errorf("Parse refused an unauthenticated local relay: %v", err)
+	}
+}
+
+// SMTP_PASSWORD was in Removed through Phase 1, because there was no mail
+// feature to authenticate to. M26 built one, so the variable is read again and
+// the entry had to go — a warning that a variable does nothing, on an instance
+// where it does something, is the exact defect the Removed list exists to
+// prevent, arriving from the other side.
+func TestSMTPPasswordIsNoLongerReportedAsRemoved(t *testing.T) {
+	if _, ok := Removed["SMTP_PASSWORD"]; ok {
+		t.Fatal("SMTP_PASSWORD is still listed as removed, but Parse reads it")
+	}
+
+	env := validEnv()
+	env["LINKCTRL_SMTP_HOST"] = "smtp.example.com"
+	env["LINKCTRL_SMTP_FROM"] = "links@example.com"
+	env["LINKCTRL_SMTP_USERNAME"] = "postmaster"
+	env["LINKCTRL_SMTP_PASSWORD"] = "hunter2"
+	setEnv(t, env)
+
+	if _, err := Parse(); err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	for _, w := range RemovedInUse() {
+		if strings.Contains(w, "SMTP_PASSWORD") {
+			t.Errorf("startup would warn that a variable it reads is unread: %q", w)
+		}
 	}
 }
 
@@ -443,5 +619,32 @@ func TestSecretHelpers(t *testing.T) {
 	}
 	if got := Secret("abcde").Len(); got != 5 {
 		t.Errorf("Len() = %d, want 5", got)
+	}
+}
+
+// The audit window must default to 0, and 0 must mean keep forever.
+//
+// This is decision D5 expressed as a test rather than as prose. The failure it
+// guards against is an upgrade that starts deleting audit history an operator
+// assumed permanent — silent, irreversible, and discovered only when somebody
+// goes looking for a record that is no longer there. A default borrowed from
+// ANALYTICS_RETENTION_DAYS, or a "sensible" non-zero value added later, is
+// exactly that failure.
+func TestAuditRetentionDefaultsToKeepingEverything(t *testing.T) {
+	setEnv(t, validEnv())
+
+	c, err := Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Audit.RetentionDays != 0 {
+		t.Errorf("AUDIT_RETENTION_DAYS defaults to %d, want 0: an instance nobody "+
+			"configured must never delete audit history (D5)", c.Audit.RetentionDays)
+	}
+	// And it is its own setting. Sharing the analytics window would delete the
+	// audit trail on a number chosen for click events.
+	if c.Analytics.RetentionDays == c.Audit.RetentionDays {
+		t.Error("the audit and analytics windows have the same default; they are " +
+			"separate policies and the whole point is that their defaults differ")
 	}
 }

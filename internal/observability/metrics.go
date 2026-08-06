@@ -33,8 +33,16 @@ type Metrics struct {
 
 	throttled *prometheus.CounterVec
 
-	jobRuns    *prometheus.CounterVec
-	jobLastRun *prometheus.GaugeVec
+	jobRuns      *prometheus.CounterVec
+	jobLastRun   *prometheus.GaugeVec
+	jobStaleness *prometheus.GaugeVec
+
+	auditBytes prometheus.Gauge
+
+	feedChecks *prometheus.CounterVec
+
+	webhookDeliveries *prometheus.CounterVec
+	automationFirings *prometheus.CounterVec
 }
 
 // redirectBuckets straddle the 20ms cached-redirect target, densely below it
@@ -102,6 +110,86 @@ func NewMetrics() *Metrics {
 			Name: "linkctrl_job_last_success_timestamp_seconds",
 			Help: "Unix time of each job's last success. Absent means it has never succeeded.",
 		}, []string{"job"}),
+
+		// The durable counterpart of the gauge above, and the one M37's split
+		// cadence needs. jobLastRun is process-local: it is set by whichever
+		// replica ran the job, it is absent on the others, and it is forgotten on
+		// restart — so on a rolling deploy a stalled job reads as healthy on
+		// whichever replica happens to be scraped. This one is read out of
+		// job_state, which every replica shares and no restart clears.
+		//
+		// Seconds-since rather than a timestamp because the thing being alerted on
+		// is an age, and an age computed in PromQL against a clock that is not the
+		// database's is an age with two clocks in it.
+		jobStaleness: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "linkctrl_rollup_staleness_seconds",
+			Help: "Seconds since each background job last succeeded, as recorded in " +
+				"job_state and therefore shared by every replica. A job that has " +
+				"never succeeded has no series at all.",
+		}, []string{"job"}),
+
+		auditBytes: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "linkctrl_audit_log_bytes",
+			Help: "On-disk size of audit_logs across every partition, including indexes. " +
+				"Audit retention defaults to keeping everything, so this only ever grows until AUDIT_RETENTION_DAYS is set.",
+		}),
+
+		// The opt-in reputation feed (M32). Absent entirely on a default
+		// instance, because nothing increments it until a feed is configured —
+		// which makes the series itself the answer to "is this box sending
+		// destinations anywhere".
+		//
+		// `error` is the label that matters operationally: a feed failure fails
+		// open to the built-in tiers, so an outage at the third party is
+		// invisible in the product's behaviour and visible only here.
+		feedChecks: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "linkctrl_destination_feed_checks_total",
+			Help: "Third-party reputation feed checks by result: clean, malicious, " +
+				"error (the feed did not answer usefully; the check fails open), or " +
+				"skipped (the instance owner has allowed that host).",
+		}, []string{"result"}),
+
+		// Webhook delivery (M42). Two bounded labels and no third, which is what
+		// M13's cardinality rule buys here: `outcome` is one of four words and
+		// `status` is one of five classes, so the whole metric is at most twenty
+		// series however many webhooks exist on the instance.
+		//
+		// A URL label is the obvious thing to want and the thing that must not
+		// be here. Registrations are chosen by users, there is no ceiling on how
+		// many distinct hosts they name across an instance, and a label with
+		// that property is a way for anybody with a workspace to grow the
+		// scrape. Which webhook failed is a question the delivery log answers,
+		// per workspace, where it belongs.
+		//
+		// `status="none"` is the interesting one: no response at all — a refused
+		// connection, a timeout, or this instance declining to open the socket
+		// because the name resolved somewhere private.
+		webhookDeliveries: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "linkctrl_webhook_deliveries_total",
+			Help: "Webhook delivery attempts by outcome (delivered, retry, abandoned) " +
+				"and HTTP status class (2xx, 3xx, 4xx, 5xx, or none when there was no response).",
+		}, []string{"outcome", "status"}),
+
+		// Automation firings (M43). Two bounded labels for the same reason, and
+		// the bound is tighter: `trigger` is one of three names from a closed
+		// vocabulary and `outcome` is one of two words, so the whole metric is
+		// six series however many rules exist.
+		//
+		// A rule name is the obvious thing to want and the thing that must not be
+		// here — rules are named by users and there is no ceiling on how many
+		// distinct names an instance accumulates. Which rule fired is a question
+		// the audit log answers, per workspace, where it belongs.
+		//
+		// Counting only firings and not evaluations is deliberate. A rule that
+		// matched nothing is the expected case on every tick, and a counter that
+		// incremented for it would be a counter whose rate says how often the
+		// scheduler ran rather than how much automation is happening.
+		automationFirings: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "linkctrl_automation_firings_total",
+			Help: "Automation rule firings by trigger (link.expired, link.max_clicks, " +
+				"destination.blocked) and outcome (fired, or partial when at least one " +
+				"action failed).",
+		}, []string{"trigger", "outcome"}),
 	}
 
 	buildInfo := prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -115,7 +203,11 @@ func NewMetrics() *Metrics {
 		m.httpRequests, m.httpDuration,
 		m.redirectDuration, m.redirects,
 		m.throttled,
-		m.jobRuns, m.jobLastRun,
+		m.jobRuns, m.jobLastRun, m.jobStaleness,
+		m.auditBytes,
+		m.feedChecks,
+		m.webhookDeliveries,
+		m.automationFirings,
 		buildInfo,
 		// Go runtime and process collectors: memory, goroutines, GC, file
 		// descriptors, CPU. Free, standard, and the first thing anyone asks
@@ -179,11 +271,47 @@ const (
 	SurfaceOps      Surface = "ops"
 )
 
-// webPrefixes are the dashboard's own paths. Anything not matched here, not
-// under /api or /static, and not an operational endpoint is a short link.
+// webPrefixes are the dashboard's own paths, and they are **not** maintained by
+// hand any more.
+//
+// They were, and the list stopped being updated after Phase 1 while eleven
+// dashboard routes were added beside it — so `/notifications`, `/workspaces`,
+// `/members`, `/invites`, `/organizations`, `/signup`, `/disputes` and the rest
+// all fell through to the classifier's default and were counted as **redirects**
+// (F16). Nothing was served differently; what was wrong was the numbers an
+// operator reads, because `surface="redirect"` mixed short-link traffic under a
+// 20ms budget with dashboard page loads under a 250ms one.
+//
+// The fix is not a longer list. `SetWebPaths` is called at boot with what the
+// application mux was actually handed, so this cannot drift from the routes
+// again — a hand-written second copy of a list that already exists is the defect
+// rather than the omission. The value here is the Phase 1 set, kept only as the
+// answer before boot and for callers with no router: a test, or the classifier
+// invoked directly.
 var webPrefixes = []string{
 	"/login", "/logout", "/setup", "/dashboard", "/docs",
 	"/links", "/keys", "/account",
+}
+
+// SetWebPaths replaces the dashboard path set with the routes the application
+// mux was given.
+//
+// Called once at boot, before any request is served. Paths arrive as the mux
+// spells them — an exact path like `/login`, or a subtree like `/links/` — and
+// both are reduced to the prefix form this classifier matches on. The root
+// pattern is dropped because `/` is handled explicitly below.
+func SetWebPaths(paths []string) {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		p = strings.TrimSuffix(p, "/")
+		if p == "" || strings.HasPrefix(p, "/{") {
+			continue
+		}
+		out = append(out, p)
+	}
+	if len(out) > 0 {
+		webPrefixes = out
+	}
 }
 
 // ClassifySurface maps a request path to its surface.
@@ -343,4 +471,79 @@ func (m *Metrics) ObserveJobSkipped(job string) {
 		return
 	}
 	m.jobRuns.WithLabelValues(job, "skipped").Inc()
+}
+
+// SetJobStaleness records how long ago a job last succeeded.
+//
+// Set by every replica, like SetAuditLogBytes and for the same reason: this is
+// an observation of shared state rather than work that must happen once, and a
+// gauge only the leader wrote would make an alert depend on which replica the
+// scrape reached.
+func (m *Metrics) SetJobStaleness(job string, seconds float64) {
+	if m == nil {
+		return
+	}
+	m.jobStaleness.WithLabelValues(job).Set(seconds)
+}
+
+// SetAuditLogBytes records the audit log's on-disk size.
+//
+// A plain gauge rather than a collector that queries at scrape time, because
+// /metrics has to keep answering while the database is unwell — it is the
+// endpoint an operator scrapes to find out that it is. The cost is that the
+// value is up to an hour stale, which does not matter for a series whose whole
+// purpose is a growth trend measured in days.
+//
+// Set by every replica, not only the job leader. A gauge only the leader wrote
+// would read as zero on every follower, so whether an alert fired would depend
+// on which replica answered the scrape.
+func (m *Metrics) SetAuditLogBytes(n int64) {
+	if m == nil {
+		return
+	}
+	m.auditBytes.Set(float64(n))
+}
+
+// --- reputation feeds --------------------------------------------------------
+
+// ObserveFeedCheck records one third-party reputation check.
+//
+// The count is what makes a failing feed observable at all. A check that errors
+// fails open to the built-in tiers by design, so the destination is accepted and
+// nothing in the product's behaviour says the feed stopped answering — an
+// operator who enabled a feed and is relying on it would otherwise find out by
+// noticing nothing was ever refused.
+func (m *Metrics) ObserveFeedCheck(result string) {
+	if m == nil {
+		return
+	}
+	m.feedChecks.WithLabelValues(result).Inc()
+}
+
+// --- webhooks ----------------------------------------------------------------
+
+// ObserveWebhookDelivery records one delivery attempt (M42).
+//
+// Both labels come from a closed vocabulary the caller computes: internal/webhook
+// reduces an HTTP code to its class before calling, so nothing user-chosen can
+// reach a label from here. See the metric's definition for why that matters.
+func (m *Metrics) ObserveWebhookDelivery(outcome, status string) {
+	if m == nil {
+		return
+	}
+	m.webhookDeliveries.WithLabelValues(outcome, status).Inc()
+}
+
+// --- automation --------------------------------------------------------------
+
+// ObserveAutomationFiring records one rule firing (M43).
+//
+// Called once per firing, not once per subject and not once per evaluation: the
+// question this answers is "how much is the scheduler doing on somebody's
+// behalf", and a rule that matched forty links did one thing.
+func (m *Metrics) ObserveAutomationFiring(trigger, outcome string) {
+	if m == nil {
+		return
+	}
+	m.automationFirings.WithLabelValues(trigger, outcome).Inc()
 }

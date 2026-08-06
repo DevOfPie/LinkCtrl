@@ -1,11 +1,13 @@
 package httpx
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/signup"
 )
 
 // AuthAPI serves the JSON authentication endpoints.
@@ -15,7 +17,11 @@ import (
 // form first and retrofitting an endpoint is how that criterion gets broken;
 // the forms will post to these same service calls.
 type AuthAPI struct {
-	Auth   *auth.Service
+	Auth *auth.Service
+	// Signup owns registration since M29: whether this instance accepts one at
+	// all, and the two halves of an accepted one. Nil refuses every
+	// registration, which is the direction an unwired dependency has to fail in.
+	Signup *signup.Service
 	Config config.Config
 }
 
@@ -59,15 +65,20 @@ func (a *AuthAPI) Setup(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Register creates an account, subject to SIGNUP_MODE.
+// Register starts a public registration, subject to the instance's effective
+// signup mode.
+//
+// `invite` is not open registration and never was: it admits accounts through
+// POST /invitations/redeem, where an administrator named the address first. This
+// endpoint is *public* signup, so anything but `open` refuses here.
+//
+// 202 rather than 201, and the change is the milestone's point. Nothing exists
+// when this returns — no user, no organization, no workspace — because under D1
+// the address is proven before the account is usable, and the strongest form of
+// that is an account which does not exist yet. The verification link creates it.
 func (a *AuthAPI) Register(w http.ResponseWriter, r *http.Request) {
-	if a.Config.Auth.SignupMode != config.SignupOpen {
-		// Invite mode is Phase 2; until then anything but open is closed.
-		WriteProblem(w, r, Problem{
-			Type: problemBase + "signup-closed", Title: "Registration is closed",
-			Status: http.StatusForbidden,
-			Detail: "This instance does not accept public registration.",
-		})
+	if a.Signup == nil {
+		writeSignupClosed(w, r)
 		return
 	}
 
@@ -77,16 +88,77 @@ func (a *AuthAPI) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := a.Auth.Register(r.Context(), auth.RegisterInput{
+	out, err := a.Signup.Register(r.Context(), signup.RegisterInput{
 		Email: req.Email, Name: req.Name, Password: req.Password,
 	})
 	if err != nil {
+		if errors.Is(err, signup.ErrClosed) {
+			writeSignupClosed(w, r)
+			return
+		}
 		WriteError(w, r, err)
 		return
 	}
-	WriteJSON(w, http.StatusCreated, map[string]any{
-		"user_id": id.UserID, "email": id.Email, "workspace_id": id.WorkspaceID,
+	WriteJSON(w, http.StatusAccepted, map[string]any{
+		"email":      out.Email,
+		"status":     "verification_sent",
+		"expires_at": out.ExpiresAt,
 	})
+}
+
+// writeSignupClosed is the one refusal both registration surfaces give when the
+// effective mode is not `open`.
+//
+// It says nothing about *why* — whether `LINKCTRL_SIGNUP_MODE` is lower or
+// there is no mailer to verify an address with. Both are the operator's
+// business and neither is a stranger's, and distinguishing them would describe
+// how the instance is configured to whoever asked.
+func writeSignupClosed(w http.ResponseWriter, r *http.Request) {
+	WriteProblem(w, r, Problem{
+		Type: problemBase + "signup-closed", Title: "Registration is closed",
+		Status: http.StatusForbidden,
+		Detail: "This instance does not accept public registration.",
+	})
+}
+
+// SignInRefusedDetail is the body every failed sign-in gets, on both surfaces.
+//
+// One string rather than two so the API and the form cannot drift into saying
+// different things, which is half of what finding F92 was: the API's answer and
+// the browser's prose disagreed about whether an account existed, and fixing
+// either alone leaves the other one answering.
+//
+// **The lockout is named unconditionally**, and that is the point of the second
+// sentence rather than a hedge. It is identical whether or not the address is
+// registered and whether or not a lockout is in force, so it discloses nothing —
+// while somebody certain they typed their own password correctly is told why
+// waiting is the thing that helps. Without it, the price of closing the oracle is
+// that a real user spends their own lockout being told they cannot type.
+const SignInRefusedDetail = "The email or password is incorrect. Repeated failures " +
+	"lock an account for a while; if this one is yours, wait a few minutes before " +
+	"trying again."
+
+// writeSignInRefused is the one refusal every sign-in failure gets.
+//
+// Its own writer rather than the generic mapping in WriteError because the detail
+// above names the lockout, and `invalid-credentials` also answers
+// POST /api/v1/auth/password — where nothing locks and the sentence would be a lie.
+// The status, type and title are exactly what WriteError produces for all three
+// errors, so a caller that has never read this cannot tell which wrote it.
+func writeSignInRefused(w http.ResponseWriter, r *http.Request) {
+	WriteProblem(w, r, Problem{
+		Type: problemBase + "invalid-credentials", Title: "Invalid credentials",
+		Status: http.StatusUnauthorized,
+		Detail: SignInRefusedDetail,
+	})
+}
+
+// isCredentialFailure reports whether err is one of the sign-in refusals that
+// must be indistinguishable from each other (F92).
+func isCredentialFailure(err error) bool {
+	return errors.Is(err, auth.ErrInvalidCredentials) ||
+		errors.Is(err, auth.ErrAccountInactive) ||
+		errors.Is(err, auth.ErrAccountLocked)
 }
 
 func (a *AuthAPI) Login(w http.ResponseWriter, r *http.Request) {
@@ -103,6 +175,10 @@ func (a *AuthAPI) Login(w http.ResponseWriter, r *http.Request) {
 		UserAgent: r.UserAgent(),
 	})
 	if err != nil {
+		if isCredentialFailure(err) {
+			writeSignInRefused(w, r)
+			return
+		}
 		WriteError(w, r, err)
 		return
 	}

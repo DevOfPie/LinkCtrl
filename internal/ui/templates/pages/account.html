@@ -6,48 +6,48 @@
 {{template "flash_ok" .Notice}}
 {{template "flash_error" .Error}}
 
-<div class="rounded-lg border border-slate-200 bg-white p-6">
-  <h2 class="mb-4 text-sm font-medium text-slate-900">Profile</h2>
+<div class="rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-4 text-sm font-medium text-ink">Profile</h2>
   <dl class="grid gap-4 text-sm sm:grid-cols-3">
     <div>
-      <dt class="text-slate-500">Name</dt>
+      <dt class="text-muted">Name</dt>
       <dd class="mt-0.5 font-medium">{{.Identity.Name}}</dd>
     </div>
     <div>
-      <dt class="text-slate-500">Email</dt>
+      <dt class="text-muted">Email</dt>
       <dd class="mt-0.5 font-medium">{{.Identity.Email}}</dd>
     </div>
     <div>
-      <dt class="text-slate-500">Role</dt>
+      <dt class="text-muted">Role</dt>
       <dd class="mt-0.5 font-medium">{{.Identity.Role}}</dd>
     </div>
   </dl>
 </div>
 
 {{if .ShowDomain}}
-<div class="mt-6 max-w-2xl rounded-lg border border-slate-200 bg-white p-6">
-  <h2 class="mb-1 text-sm font-medium text-slate-900">Link domain</h2>
-  <p class="mb-4 text-sm text-slate-500">
-    Short links are served on <span class="font-medium text-slate-700">{{.LinkHost}}</span>.
+<div class="mt-6 max-w-2xl rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-1 text-sm font-medium text-ink">Link domain</h2>
+  <p class="mb-4 text-sm text-muted">
+    Short links are served on <span class="font-medium text-ink">{{.LinkHost}}</span>.
     Someone who trims a short link back to that domain lands on its root, which
     answers <span class="font-mono text-xs">404</span> unless you point it somewhere.
   </p>
   {{if .CanEditDomain}}
   <form method="post" action="/account/domain" class="space-y-4">
     <div>
-      <label for="root_redirect_url" class="block text-sm font-medium text-slate-700">Root redirects to</label>
+      <label for="root_redirect_url" class="block text-sm font-medium text-ink">Root redirects to</label>
       <input id="root_redirect_url" name="root_redirect_url" type="url" inputmode="url"
              value="{{.RootRedirectURL}}" placeholder="https://example.com"
-             class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
-      {{with index .FieldErrors "root_redirect_url"}}<p class="mt-1 text-sm text-rose-600">{{.}}</p>{{end}}
-      <p class="mt-1 text-xs text-slate-500">Leave empty to keep answering 404. Changes take effect immediately.</p>
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      {{with index .FieldErrors "root_redirect_url"}}<p class="mt-1 text-sm text-danger-ink">{{.}}</p>{{end}}
+      <p class="mt-1 text-xs text-muted">Leave empty to keep answering 404. Changes take effect immediately.</p>
     </div>
     <button type="submit"
-            class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500">Save</button>
+            class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Save</button>
   </form>
   {{else}}
-  <p class="text-sm text-slate-500">
-    {{if .RootRedirectURL}}Currently redirects to <span class="font-medium text-slate-700">{{.RootRedirectURL}}</span>.
+  <p class="text-sm text-muted">
+    {{if .RootRedirectURL}}Currently redirects to <span class="font-medium text-ink">{{.RootRedirectURL}}</span>.
     {{else}}Not set.{{end}}
     Changing it needs the <span class="font-mono text-xs">domains.write</span> permission.
   </p>
@@ -55,28 +55,111 @@
 </div>
 {{end}}
 
-<div class="mt-6 max-w-md rounded-lg border border-slate-200 bg-white p-6">
-  <h2 class="mb-1 text-sm font-medium text-slate-900">Change password</h2>
-  <p class="mb-4 text-sm text-slate-500">Every other session is signed out; this browser stays signed in.</p>
+{{if .ShowBots}}
+<div class="mt-6 max-w-2xl rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-1 text-sm font-medium text-ink">Bot blocking</h2>
+  <p class="mb-4 text-sm text-muted">
+    Automated clients asking for a short link on
+    <span class="font-medium text-ink">{{.BotHost}}</span> can be refused with a
+    <span class="font-mono text-xs">403</span> instead of being redirected. Every link
+    follows this unless its owner says otherwise; enforcing it takes that choice away
+    from them.
+  </p>
+  <p class="mb-4 text-sm text-warn-ink">
+    Detection is the same user-agent heuristic the click statistics use. It treats a
+    missing user agent as a bot and matches on substrings including
+    <span class="font-mono text-xs">preview</span>,
+    <span class="font-mono text-xs">monitor</span> and
+    <span class="font-mono text-xs">checker</span>, and its false-positive rate has never
+    been measured. A person it misjudges gets the 403 with no way past it and no notice
+    to the link's owner.
+  </p>
+  {{if .CanEditDomain}}
+  <form method="post" action="/account/bots" class="space-y-4">
+    <label class="flex items-start gap-2 text-sm text-ink">
+      <input type="checkbox" name="block_bots" value="1" class="mt-0.5 rounded border-line-strong"
+             {{if .BlockBots}}checked{{end}}>
+      <span>Block bots on this domain
+        <span class="block text-xs text-subtle">Applies to every link that has not chosen for itself.</span>
+      </span>
+    </label>
+    <label class="flex items-start gap-2 text-sm text-ink">
+      <input type="checkbox" name="block_bots_enforced" value="1" class="mt-0.5 rounded border-line-strong"
+             {{if .BlockBotsEnforced}}checked{{end}}>
+      <span>Enforce it
+        <span class="block text-xs text-subtle">Every link blocks, including ones set to allow. Requires blocking to be on.</span>
+      </span>
+    </label>
+    {{with index .FieldErrors "block_bots_enforced"}}<p class="text-sm text-danger-ink">{{.}}</p>{{end}}
+    <button type="submit"
+            class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Save</button>
+  </form>
+  {{else}}
+  <p class="text-sm text-muted">
+    {{if .BlockBotsEnforced}}Enforced for every link on this domain.
+    {{else if .BlockBots}}On by default; a link may still allow bots.
+    {{else}}Off.{{end}}
+    Changing it needs the <span class="font-mono text-xs">domains.write</span> permission.
+  </p>
+  {{end}}
+</div>
+{{end}}
+
+{{if .Workspaces}}
+<div class="mt-6 max-w-2xl rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-1 text-sm font-medium text-ink">Default workspace</h2>
+  <p class="mb-4 text-sm text-muted">
+    Where a new sign-in starts. <span class="font-medium text-ink">Last-Used</span>
+    follows whichever workspace you were in most recently; pin one instead if you
+    would rather always begin in the same place. Either way, switching from the
+    header moves this browser for the rest of the session.
+  </p>
+  <form method="post" action="/workspace/default" class="flex flex-wrap items-center gap-2">
+    <select name="workspace_id" aria-label="Default workspace"
+            class="rounded-md border border-line-strong bg-raised px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none">
+      <option value=""{{if not .WorkspacePinned}} selected{{end}}>Last-Used</option>
+      {{range .Workspaces}}
+      <option value="{{.ID}}"{{if .Default}} selected{{end}}>{{.OrganizationName}} · {{.Name}}</option>
+      {{end}}
+    </select>
+    <button type="submit"
+            class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Save</button>
+  </form>
+</div>
+{{end}}
+
+<div class="mt-6 max-w-2xl rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-1 text-sm font-medium text-ink">Appearance</h2>
+  <p class="mb-4 text-sm text-muted">
+    Choosing System follows whatever this device is set to. The choice is stored
+    in this browser rather than on your account, so it applies before you sign in
+    and two browsers signed in as you may differ.
+  </p>
+  {{template "theme_switch" .}}
+</div>
+
+<div class="mt-6 max-w-md rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-1 text-sm font-medium text-ink">Change password</h2>
+  <p class="mb-4 text-sm text-muted">Every other session is signed out; this browser stays signed in.</p>
   <form method="post" action="/account/password" class="space-y-4">
     <div>
-      <label for="current_password" class="block text-sm font-medium text-slate-700">Current password</label>
+      <label for="current_password" class="block text-sm font-medium text-ink">Current password</label>
       <input id="current_password" name="current_password" type="password" required autocomplete="current-password"
-             class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
     </div>
     <div>
-      <label for="new_password" class="block text-sm font-medium text-slate-700">New password</label>
+      <label for="new_password" class="block text-sm font-medium text-ink">New password</label>
       <input id="new_password" name="new_password" type="password" required minlength="12" autocomplete="new-password"
-             class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
       {{template "field_error" (index .FieldErrors "new_password")}}
     </div>
     <div>
-      <label for="confirm_password" class="block text-sm font-medium text-slate-700">Confirm new password</label>
+      <label for="confirm_password" class="block text-sm font-medium text-ink">Confirm new password</label>
       <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password"
-             class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
       {{template "field_error" (index .FieldErrors "confirm_password")}}
     </div>
-    <button type="submit" class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Change password</button>
+    <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Change password</button>
   </form>
 </div>
 {{end}}

@@ -1,0 +1,52 @@
+{{define "content"}}
+<div class="mb-6 flex items-start justify-between gap-4">
+  <div>
+    <h1 class="text-xl font-semibold tracking-tight">Notifications</h1>
+    <p class="mt-1 text-sm text-muted">Things this instance wanted you to know about. Nothing is sent by email until a mailer is configured.</p>
+  </div>
+  {{if .Unread}}
+  <form method="post" action="/notifications/read">
+    <button type="submit" class="rounded-md border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-surface">Mark all read</button>
+  </form>
+  {{end}}
+</div>
+
+{{template "flash_ok" .Notice}}
+{{template "flash_error" .Error}}
+
+{{if .Items}}
+<ul class="space-y-3">
+  {{range .Items}}
+  <li class="rounded-lg border {{if .ReadAt}}border-line bg-raised{{else}}border-accent-line bg-accent-soft{{end}} p-4">
+    <div class="flex items-start justify-between gap-4">
+      <div class="min-w-0">
+        <h2 class="text-sm font-medium text-ink">
+          {{if not .ReadAt}}<span class="mr-1.5 inline-block h-2 w-2 rounded-full bg-accent align-middle" aria-label="Unread"></span>{{end}}
+          {{.Title}}
+        </h2>
+        {{if .Body}}<p class="mt-1 text-sm text-muted">{{.Body}}</p>{{end}}
+        <p class="mt-2 text-xs text-subtle">{{.CreatedAt.Format "2 Jan 2006, 15:04"}} UTC · {{.Kind}}</p>
+      </div>
+      {{if not .ReadAt}}
+      <form method="post" action="/notifications/{{.ID}}/read">
+        <button type="submit" class="shrink-0 rounded-md px-2 py-1 text-sm text-muted hover:bg-sunken hover:text-ink">Mark read</button>
+      </form>
+      {{end}}
+    </div>
+  </li>
+  {{end}}
+</ul>
+
+{{if .NextCursor}}
+<div class="mt-6">
+  <a href="/notifications?cursor={{.NextCursor}}" class="text-sm font-medium text-accent-ink hover:text-accent-ink">Older notifications →</a>
+</div>
+{{end}}
+
+{{else}}
+<div class="rounded-lg border border-line bg-raised p-8 text-center">
+  <p class="text-sm text-muted">Nothing here.</p>
+  <p class="mt-1 text-sm text-subtle">Notifications appear when something needs your attention — an audit log outgrowing its disk, for instance.</p>
+</div>
+{{end}}
+{{end}}

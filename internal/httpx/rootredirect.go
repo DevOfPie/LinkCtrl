@@ -32,11 +32,17 @@ type RootRedirect struct {
 	// cannot be recalled — and it applies most strongly to this destination,
 	// which is the one most likely to be repointed later.
 	Status int
+	// LoadTimeout bounds one refill; see DefaultRootLoadTimeout.
+	LoadTimeout time.Duration
 
 	mu       sync.RWMutex
 	url      string
 	loadedAt time.Time
 	valid    bool
+	// load admits one refill at a time. Separate from mu because the read it
+	// guards is long relative to the field writes mu guards, and holding a
+	// write lock across a database call would block every cache *hit* too.
+	load sync.Mutex
 }
 
 // InvalidateRoot drops the cached value.
@@ -53,7 +59,32 @@ func (h *RootRedirect) ttl() time.Duration {
 	return h.TTL
 }
 
+// DefaultRootLoadTimeout bounds one refill when LoadTimeout is zero.
+//
+// It exists because this handler is mounted on the redirect mux, which
+// deliberately has no `RequestTimeout` — that middleware lives in `appHandler`,
+// and the redirect tree is outside it. So until F48 the only bound on this read
+// was the server's 30s `WriteTimeout`, on the one redirect-tree path that talks
+// to Postgres on a request.
+const DefaultRootLoadTimeout = 2 * time.Second
+
+func (h *RootRedirect) loadTimeout() time.Duration {
+	if h.LoadTimeout <= 0 {
+		return DefaultRootLoadTimeout
+	}
+	return h.LoadTimeout
+}
+
 // current returns the cached destination, refreshing when stale.
+//
+// One refill at a time, and everybody else waits for it. M23's subscriber calls
+// InvalidateRoot from `flush()` on every (re-)establishment including the first,
+// so a miss here is fleet-simultaneous rather than staggered: without the
+// exclusion below, every in-flight request on every replica issues its own query
+// for a value that changes approximately never. The query is an indexed lookup
+// on a table holding one row, so this is cheap rather than critical — but it is
+// cheap in both directions, and the herd is the shape the invalidation design
+// guarantees rather than one that needs bad luck.
 func (h *RootRedirect) current(ctx context.Context) (string, error) {
 	h.mu.RLock()
 	if h.valid && time.Since(h.loadedAt) < h.ttl() {
@@ -63,7 +94,25 @@ func (h *RootRedirect) current(ctx context.Context) (string, error) {
 	}
 	h.mu.RUnlock()
 
-	url, err := h.Load(ctx)
+	h.load.Lock()
+	defer h.load.Unlock()
+
+	// Re-check under the load lock. Whoever held it may have just refilled, in
+	// which case this request is a hit that arrived a moment early.
+	h.mu.RLock()
+	if h.valid && time.Since(h.loadedAt) < h.ttl() {
+		url := h.url
+		h.mu.RUnlock()
+		return url, nil
+	}
+	h.mu.RUnlock()
+
+	// The caller's context is a request's, so cancellation still propagates; the
+	// timeout is what the mux does not supply.
+	lctx, cancel := context.WithTimeout(ctx, h.loadTimeout())
+	defer cancel()
+
+	url, err := h.Load(lctx)
 	if err != nil {
 		return "", err
 	}

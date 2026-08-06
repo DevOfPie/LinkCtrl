@@ -5,8 +5,10 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,9 +16,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/alias"
+	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/feed"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/store/pgerr"
 )
 
 // Permissions this service enforces. Named constants so a typo is a compile
@@ -39,8 +44,16 @@ const TrashRetentionDays = 30
 
 // Invalidator clears cached snapshots when a link changes. The redirect cache
 // implements it in M7; a nil Invalidator is valid and means "no cache".
+//
+// InvalidateDomain is the M32.5 addition and it is on the same interface rather
+// than a second one, because a caller that holds a cache it can only half
+// invalidate is a caller that will eventually forget which half. It clears
+// every alias on the domain, which is what a domain-level setting change
+// requires: the cached snapshot carries the domain's bot policy so the redirect
+// path needs no second lookup, and the bill for that arrives here.
 type Invalidator interface {
 	InvalidateAlias(ctx context.Context, domainID uuid.UUID, alias string)
+	InvalidateDomain(ctx context.Context, domainID uuid.UUID)
 }
 
 type Service struct {
@@ -54,6 +67,84 @@ type Service struct {
 	// root-redirect setting is meaningless without one.
 	splitHosts bool
 	rootCache  RootInvalidator
+	// audit records administrative changes. Nil is valid and means nothing is
+	// recorded — the CLI and most tests run that way.
+	audit audit.Recorder
+	// blockedAuditLimit bounds the one audited action a caller can provoke at
+	// will. Nil is unbounded; see Config.BlockedAuditLimit.
+	blockedAuditLimit KeyLimiter
+	// feed is the opt-in third-party reputation check (M32). Nil on every
+	// instance that has not named a feed, which is the default, and nil is what
+	// the *operator's* half of "no destination leaves the box" is made of: there
+	// is no client to call and no flag whose false branch could be missed. The
+	// workspace's half is a webhook registration and is a row rather than a
+	// field — see DestinationDisclosure.
+	feed FeedChecker
+	// feedMetrics counts feed checks. Nil counts nothing.
+	feedMetrics FeedObserver
+	// hasher turns a link password into an argon2id hash (M35). Nil refuses to
+	// set one rather than storing it in the clear, which is the direction a
+	// missing dependency has to fail in.
+	hasher *auth.Hasher
+	// gates reads the durable click budget and mints workspace signing secrets
+	// (M35). Nil leaves the budget unreported and signing unavailable; the CLI
+	// and several tests run that way.
+	gates GateReader
+	// dns answers the custom-domain challenge (M40). Nil refuses to verify
+	// anything rather than pretending a hostname passed, which is the direction
+	// a missing dependency has to fail in when the thing it decides is whether
+	// an alias namespace is served on somebody's public hostname.
+	dns TXTLookup
+	// hosts broadcasts a change to the verified set, so no replica goes on
+	// serving a domain this one has just unverified. Nil means this process is
+	// alone, which is the CLI and most tests.
+	hosts HostInvalidator
+	// domainNotify warns a workspace before its hostname stops being served.
+	// Nil warns nobody and the grace window still runs.
+	domainNotify DomainNotifier
+	// verifyGraceWindow is D70's bounded patience. Zero means the default; it is
+	// never "no window", because an unset knob must not turn one DNS hiccup into
+	// an outage.
+	verifyGraceWindow time.Duration
+	// linkScheme is http or https, taken from BaseURL, for the short URLs built
+	// on a custom hostname. A custom domain has a hostname and no scheme of its
+	// own, and guessing https would print a URL that does not work on a
+	// development instance.
+	linkScheme string
+	// events hands link-lifecycle and blocked-attempt events to the webhook
+	// queue (M42). Nil emits nothing, which is the CLI, most tests, and any
+	// process that is not running the scheduler — and nil is a nil interface
+	// rather than a flag, so there is no false branch anybody could miss.
+	events WebhookEmitter
+	// hostnames caches domain id to hostname for building short URLs off the
+	// default domain. Bounded by the number of domains and dropped on rename.
+	hostnames sync.Map
+	log       *slog.Logger
+}
+
+// WebhookEmitter queues one event for every webhook subscribed to it.
+//
+// Declared here rather than imported so internal/link never depends on
+// internal/webhook — the same one-way shape Invalidator, FeedChecker and
+// DomainNotifier already have. internal/webhook.Service satisfies it.
+//
+// It returns nothing, and that is deliberate. Emitting is a consequence of a
+// change that has already been committed; a link write that failed because a
+// notification could not be queued would be a link write held hostage by an
+// integration.
+type WebhookEmitter interface {
+	Emit(ctx context.Context, workspaceID uuid.UUID, event string, data map[string]any)
+}
+
+// GateReader is what the management surfaces need from internal/gate: the exact
+// budget a gated link has spent, and the workspace key a signed URL is made
+// with.
+//
+// An interface rather than the concrete service, so internal/link does not
+// import a package that imports it back through the redirect path.
+type GateReader interface {
+	Budget(ctx context.Context, linkID uuid.UUID) (int64, *time.Time, error)
+	EnsureSecret(ctx context.Context, workspaceID uuid.UUID) ([]byte, error)
 }
 
 // RootInvalidator drops the cached root redirect when it changes. Nil is valid
@@ -73,9 +164,62 @@ type Config struct {
 	// when false, because there the root is the dashboard.
 	SplitHosts bool
 	RootCache  RootInvalidator
+	// Audit records administrative changes. Nil records nothing.
+	Audit audit.Recorder
+	// BlockedAuditLimit bounds how often one actor can make the *same* refusal
+	// write an audit row. Nil leaves the write unbounded, which is the shipped
+	// M30 behaviour and what a runner built without a limiter gets.
+	//
+	// It exists because `destination.blocked` is the one audited action that
+	// records something which did **not** happen: every other one is bounded by
+	// a state change somebody had the authority to make, and this one is bounded
+	// by how fast a caller can be refused. A holder of an ordinary editor role
+	// could loop `POST /api/v1/links` with `http://127.0.0.1/` and add a row per
+	// request, each carrying up to 2 KiB of defanged URL, on an instance whose
+	// audit retention defaults to keep-forever (F14).
+	//
+	// **Keyed per actor *and per reason*, which is the part that matters.** A
+	// per-actor bound alone would let somebody bury the refusal that mattered
+	// under a flood of a different one — the attacker chooses the noise, so the
+	// budget has to be per-reason or it is a suppression tool. A refusal code
+	// nobody has provoked before is therefore always recorded, whatever else is
+	// being hammered.
+	BlockedAuditLimit KeyLimiter
+	// Feed is the opt-in third-party reputation check. Nil is the default and
+	// the only state in which this program sends nothing anywhere; see
+	// Service.askFeed and docs/build-notes/decisions.md, D40.
+	Feed FeedChecker
+	// FeedMetrics counts feed checks, including the failures that fail open.
+	// Nil counts nothing.
+	FeedMetrics FeedObserver
+	// Hasher hashes link passwords (M35). Nil refuses to set one.
+	Hasher *auth.Hasher
+	// Gates reads the durable click budget and the workspace signing secret
+	// (M35). Nil leaves both unavailable.
+	Gates GateReader
+	// DNS answers the custom-domain challenge (M40). Nil refuses verification.
+	DNS TXTLookup
+	// Hosts broadcasts a change to the verified hostname set across replicas.
+	// Nil keeps the change local, which is the pre-pub/sub behaviour.
+	Hosts HostInvalidator
+	// DomainNotify warns a workspace whose hostname is failing verification.
+	// Nil warns nobody.
+	DomainNotify DomainNotifier
+	// VerifyGrace is how long a failing hostname keeps serving (D70). Zero uses
+	// DefaultVerifyGrace.
+	VerifyGrace time.Duration
+	// Events queues webhook deliveries (M42). Nil emits nothing.
+	Events WebhookEmitter
+	// Log receives the warning when an audit write fails. Nil uses the default
+	// logger, so a dropped record is never silent.
+	Log *slog.Logger
 }
 
 func NewService(pool *pgxpool.Pool, cfg Config) *Service {
+	log := cfg.Log
+	if log == nil {
+		log = slog.Default()
+	}
 	return &Service{
 		pool:    pool,
 		q:       dbgen.New(pool),
@@ -84,9 +228,111 @@ func NewService(pool *pgxpool.Pool, cfg Config) *Service {
 		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
 		cache:   cfg.Cache,
 
-		splitHosts: cfg.SplitHosts,
-		rootCache:  cfg.RootCache,
+		splitHosts:        cfg.SplitHosts,
+		rootCache:         cfg.RootCache,
+		audit:             cfg.Audit,
+		blockedAuditLimit: cfg.BlockedAuditLimit,
+		feed:              cfg.Feed,
+		feedMetrics:       cfg.FeedMetrics,
+		hasher:            cfg.Hasher,
+		gates:             cfg.Gates,
+
+		dns:               cfg.DNS,
+		hosts:             cfg.Hosts,
+		domainNotify:      cfg.DomainNotify,
+		verifyGraceWindow: cfg.VerifyGrace,
+		events:            cfg.Events,
+		linkScheme:        schemeOf(cfg.BaseURL),
+		log:               log,
 	}
+}
+
+// DestinationDisclosure is what happens to the destinations an actor's workspace
+// submits, as the `/feeds` page and `GET /api/v1/feeds` print it.
+//
+// **Two channels, and they are not the same kind of thing.** The reputation feed
+// is the operator's, instance-wide, and off unless somebody set `FEED_URL`.
+// Outbound webhooks are a *workspace's*, registered by anybody holding
+// `webhooks.write` there, with no operator switch anywhere in the path
+// (internal/config: "there is no switch: webhooks are a workspace feature rather
+// than an operator one"). One page answers both because one question is being
+// asked — *does what I type here go anywhere* — and until M45 it answered only
+// half of it, in a green panel, to every signed-in user (F135).
+//
+// The feed half stays instance-scoped and the webhook half is scoped to the
+// actor's own workspace. Neither half may be read as the other: this instance
+// having no feed says nothing about the workspace next door's webhooks, and this
+// workspace having no webhook says nothing about anybody else's.
+type DestinationDisclosure struct {
+	// Embedded rather than a named field, so every field the feed disclosure has
+	// always published stays exactly where an API client already found it, and
+	// the new channel arrives as an addition rather than as a reshuffle. The
+	// template reads .Disclosure.Enabled unchanged for the same reason.
+	feed.Disclosure
+	// Webhooks is the workspace's own channel.
+	Webhooks WebhookDisclosure `json:"webhooks"`
+}
+
+// WebhookDisclosure is how much of a workspace's own egress it is being told
+// about.
+//
+// No URL, no name, no id. Who a workspace sends its events to is behind
+// `webhooks.read`, and this page is behind nothing at all — what every member is
+// owed is whether their destinations leave, not the registry of where to. The
+// number is here because "a webhook is registered" and "four are" are different
+// facts to somebody about to go and ask an administrator.
+type WebhookDisclosure struct {
+	// Receiving is true when at least one enabled registration in this workspace
+	// is subscribed to an event whose payload carries a destination.
+	//
+	// A boolean beside a count is not redundancy. The page and any client would
+	// otherwise each re-derive the predicate from `Count > 0`, and the first one
+	// to get it wrong renders the green panel — so the predicate is computed once,
+	// here, and published.
+	Receiving bool `json:"receiving"`
+	// Count is how many such registrations there are. Not how many exist: a
+	// disabled one and one subscribed only to `automation.fired` receive no
+	// destination and are not counted.
+	Count int64 `json:"count"`
+}
+
+// DestinationDisclosure answers, for this actor's workspace, what leaves.
+//
+// The feed half reads the service's own checker rather than the configuration
+// the checker was built from, so the page cannot describe a feed the service is
+// not using. The webhook half is one indexed count — it has to be a query,
+// because a registration is a row somebody wrote and not a process-wide setting,
+// and the two callers are a dashboard page and a JSON GET. Neither is the
+// redirect path, which reaches none of this: nothing here is on the hot path and
+// the cost is one round trip on a page that already makes several.
+//
+// **It returns an error rather than a partial answer.** A disclosure assembled
+// from a failed read would report `Receiving: false`, which is the green panel —
+// so the page fails instead, and says nothing rather than something reassuring
+// and unchecked.
+func (s *Service) DestinationDisclosure(
+	ctx context.Context, actor *auth.Identity,
+) (DestinationDisclosure, error) {
+	out := DestinationDisclosure{}
+	if s.feed != nil {
+		out.Disclosure = s.feed.Describe()
+	}
+	// No workspace, no workspace webhook. An account that belongs to nothing is a
+	// state D36 made legitimate, and `workspaces.id` is a foreign key, so no row
+	// can carry the nil workspace: skipping the query answers exactly what asking
+	// would, and does it without a nil identity reaching a parameter.
+	if actor == nil || actor.WorkspaceID == uuid.Nil {
+		return out, nil
+	}
+	n, err := s.q.CountDestinationWebhooks(ctx, dbgen.CountDestinationWebhooksParams{
+		WorkspaceID: actor.WorkspaceID,
+		Events:      domain.WebhookDestinationEvents,
+	})
+	if err != nil {
+		return DestinationDisclosure{}, fmt.Errorf("count destination webhooks: %w", err)
+	}
+	out.Webhooks = WebhookDisclosure{Receiving: n > 0, Count: n}
+	return out, nil
 }
 
 // CreateInput describes a new link.
@@ -100,13 +346,42 @@ type CreateInput struct {
 	// ForwardQuery merges the visitor's query string into the destination.
 	// Off by default; the destination's own parameters always win on conflict.
 	ForwardQuery bool
+	// ForwardPath appends the visitor's extra path segments to the destination.
+	// Off by default: with it on the alias answers every path beneath itself,
+	// and that is a decision about the link's whole namespace rather than about
+	// one URL.
+	ForwardPath bool
 
-	// Phase 2 fields. Accepted by the parser so the API can reject them with a
-	// specific message rather than ignoring them silently, which would look
-	// like the feature works.
-	Password  string
-	MaxClicks *int64
-	OneTime   bool
+	// FolderID files the new link (M38). Nil leaves it unfiled, which is where
+	// every link created before folders existed still is.
+	FolderID *uuid.UUID
+
+	// CampaignID labels the new link (M41). Nil leaves it unlabelled. A folder
+	// and a campaign are different questions — where the link lives and what it
+	// is for — so a link may carry both, one or neither.
+	CampaignID *uuid.UUID
+
+	// DomainID names the hostname the link is served on (M40). Nil takes the
+	// workspace's own default, which is the instance default until the workspace
+	// has verified a hostname of its own.
+	//
+	// It must be a domain this workspace may use *and* verified. Both halves are
+	// checked, and the second is the one that matters: a link on an unverified
+	// hostname would be a short URL the product handed somebody that resolves
+	// nowhere, on a name this instance has no evidence they control.
+	DomainID *uuid.UUID
+
+	// The gates (M35). Each is off unless asked for, so a link created without
+	// them is byte-for-byte the link this service created before they existed.
+	//
+	// Password is write-only in every direction: it is hashed here and nothing
+	// reads it back. MaxClicks and OneTime are the same gate with different
+	// numbers — see gate.ClickLimit — and RequireSignature refuses any request
+	// without a valid HMAC for the alias.
+	Password         string
+	MaxClicks        *int64
+	OneTime          bool
+	RequireSignature bool
 }
 
 // Create makes a link, generating an alias when none is supplied.
@@ -117,21 +392,26 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 
 	var errs domain.ValidationErrors
 
-	// Phase 2 guards. Refusing loudly beats accepting and doing nothing.
+	// The gates (M35). Hashing happens before the transaction, because argon2id
+	// is deliberately expensive and holding a transaction open across ~100ms of
+	// key derivation would put the create path's cost onto every other writer.
+	var passwordHash *string
 	if in.Password != "" {
-		errs = append(errs, domain.FieldError{
-			Field: "password", Code: "not_implemented",
-			Message: "password-protected links are not available in this version",
-		})
+		hashed, perr := s.hashLinkPassword(in.Password)
+		if perr != nil {
+			var ve domain.ValidationErrors
+			if errors.As(perr, &ve) {
+				errs = append(errs, ve...)
+			} else {
+				return nil, perr
+			}
+		} else {
+			passwordHash = &hashed
+		}
 	}
-	if in.MaxClicks != nil || in.OneTime {
-		errs = append(errs, domain.FieldError{
-			Field: "max_clicks", Code: "not_implemented",
-			Message: "click-limited and one-time links are not available in this version",
-		})
-	}
+	errs = append(errs, validateClickLimit(in.MaxClicks)...)
 
-	normalizedURL, err := ValidateDestination(in.URL, s.policy)
+	normalizedURL, err := s.checkDestination(ctx, actor, in.URL, surfaceLinkCreate)
 	if err != nil {
 		var ve domain.ValidationErrors
 		if errors.As(err, &ve) {
@@ -147,14 +427,16 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 			Message: "expiry must be in the future",
 		})
 	}
+	errs = append(errs, s.resolveFolder(ctx, actor.WorkspaceID, in.FolderID)...)
+	errs = append(errs, s.resolveCampaign(ctx, actor.WorkspaceID, in.CampaignID)...)
 
 	if len(errs) > 0 {
 		return nil, errs
 	}
 
-	dom, err := s.q.GetWorkspaceDefaultDomain(ctx)
+	dom, err := s.resolveTargetDomain(ctx, actor, in.DomainID)
 	if err != nil {
-		return nil, fmt.Errorf("resolve default domain: %w", err)
+		return nil, err
 	}
 
 	// Resolve the alias before opening a transaction, so a long generation
@@ -185,7 +467,7 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 		}); err != nil {
 			return nil, fmt.Errorf("check alias: %w", err)
 		} else if taken {
-			return nil, fmt.Errorf("%w: alias %q is already in use", domain.ErrConflict, code)
+			return nil, aliasTakenError(code, dom)
 		}
 	} else {
 		code, err = s.aliases.Generate(ctx, func(ctx context.Context, candidate string) (bool, error) {
@@ -207,25 +489,32 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 
 	linkID := uuid.Must(uuid.NewV7())
 	row, err := q.CreateLink(ctx, dbgen.CreateLinkParams{
-		ID:           linkID,
-		WorkspaceID:  actor.WorkspaceID,
-		DomainID:     dom.ID,
-		Alias:        code,
-		PrimaryUrl:   normalizedURL,
-		Title:        in.Title,
-		Description:  in.Description,
-		Status:       string(domain.StatusActive),
-		ExpiresAt:    in.ExpiresAt,
-		CreatedBy:    &actor.UserID,
-		ForwardQuery: in.ForwardQuery,
+		ID:               linkID,
+		WorkspaceID:      actor.WorkspaceID,
+		DomainID:         dom.ID,
+		Alias:            code,
+		PrimaryUrl:       normalizedURL,
+		Title:            in.Title,
+		Description:      in.Description,
+		Status:           string(domain.StatusActive),
+		ExpiresAt:        in.ExpiresAt,
+		CreatedBy:        &actor.UserID,
+		ForwardQuery:     in.ForwardQuery,
+		ForwardPath:      in.ForwardPath,
+		PasswordHash:     passwordHash,
+		MaxClicks:        in.MaxClicks,
+		OneTime:          in.OneTime,
+		RequireSignature: in.RequireSignature,
+		FolderID:         in.FolderID,
+		CampaignID:       in.CampaignID,
 	})
 	if err != nil {
 		// The unique index is the real guarantee; the pre-check only makes
 		// this rare. A user-supplied alias that collides is a 409, while a
 		// generated one that collides is a bug worth surfacing as such.
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			if in.Alias != "" {
-				return nil, fmt.Errorf("%w: alias %q is already in use", domain.ErrConflict, code)
+				return nil, aliasTakenError(code, dom)
 			}
 			return nil, fmt.Errorf("%w: generated alias collided", domain.ErrConflict)
 		}
@@ -264,7 +553,11 @@ func (s *Service) Create(ctx context.Context, actor *auth.Identity, in CreateInp
 		s.cache.InvalidateAlias(ctx, dom.ID, code)
 	}
 
-	return s.toDomain(row, tags), nil
+	// After the commit and after the cache clear, so a receiver that fetches the
+	// short URL on this event finds it working (M42).
+	created := s.toDomain(ctx, row, tags)
+	s.emitLink(ctx, domain.EventLinkCreated, created)
+	return created, nil
 }
 
 // UpdateInput is a partial update; nil fields are left unchanged.
@@ -277,6 +570,40 @@ type UpdateInput struct {
 	ClearExpiry  bool
 	Tags         *[]string
 	ForwardQuery *bool
+	ForwardPath  *bool
+	// BotBlocking is the link's own answer to "refuse automated clients":
+	// inherit, on, or off. Nil leaves it alone, which is what the dashboard form
+	// sends when the domain enforces and the control is disabled.
+	BotBlocking *domain.BotPolicy
+
+	// Which folder the link is filed in (M38). Three states, exactly as the
+	// expiry and the password have: nil leaves it where it is, an id files it
+	// there, and ClearFolder takes it out of every folder. A form's "no folder"
+	// option is the third, and without it a link could be filed and never
+	// unfiled.
+	FolderID    *uuid.UUID
+	ClearFolder bool
+
+	// Which campaign the link belongs to (M41). Three states for the reason the
+	// folder above has them, and the third is the one that matters: without
+	// ClearCampaign the only way out of a campaign joined by mistake would be to
+	// delete the campaign, which would take every other link with it.
+	CampaignID    *uuid.UUID
+	ClearCampaign bool
+
+	// The gates (M35). Two of them need three states rather than two, because
+	// "leave the password alone" and "remove the password" are different
+	// requests and a form that posts an empty box means the first: nobody can
+	// re-type a password they cannot read, so an empty field has to be "no
+	// change" or every save would clear the gate.
+	//
+	// Clearing is therefore explicit, exactly as ClearExpiry already is.
+	Password         *string
+	ClearPassword    bool
+	MaxClicks        *int64
+	ClearMaxClicks   bool
+	OneTime          *bool
+	RequireSignature *bool
 }
 
 func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID, in UpdateInput) (*domain.Link, error) {
@@ -295,7 +622,7 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 	var errs domain.ValidationErrors
 	var normalizedURL string
 	if in.URL != nil {
-		normalizedURL, err = ValidateDestination(*in.URL, s.policy)
+		normalizedURL, err = s.checkDestination(ctx, actor, *in.URL, surfaceLinkUpdate)
 		if err != nil {
 			var ve domain.ValidationErrors
 			if errors.As(err, &ve) {
@@ -328,7 +655,17 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 			}); err != nil {
 				return nil, fmt.Errorf("check alias: %w", err)
 			} else if taken {
-				return nil, fmt.Errorf("%w: alias %q is already in use", domain.ErrConflict, code)
+				// The link's current domain, reloaded for its scope. The rename
+				// path has the id and not the row, and the refusal has to know
+				// whether the namespace is shared before it can say so (F23).
+				d, derr := s.q.GetDomainByID(ctx, existing.DomainID)
+				if derr != nil {
+					return nil, fmt.Errorf("read domain: %w", derr)
+				}
+				return nil, aliasTakenError(code, targetDomain{
+					ID: d.ID, Hostname: d.Hostname,
+					OrganizationID: d.OrganizationID, WorkspaceID: d.WorkspaceID,
+				})
 			}
 			newAlias = &code
 		}
@@ -339,6 +676,57 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 			Field: "expires_at", Code: "in_past", Message: "expiry must be in the future",
 		})
 	}
+
+	// The gates (M35). Same order as Create, and hashed outside the transaction
+	// for the same reason.
+	var passwordHash *string
+	if in.Password != nil && *in.Password != "" {
+		hashed, perr := s.hashLinkPassword(*in.Password)
+		if perr != nil {
+			var ve domain.ValidationErrors
+			if errors.As(perr, &ve) {
+				errs = append(errs, ve...)
+			} else {
+				return nil, perr
+			}
+		} else {
+			passwordHash = &hashed
+		}
+	}
+	errs = append(errs, validateClickLimit(in.MaxClicks)...)
+	if !in.ClearFolder {
+		errs = append(errs, s.resolveFolder(ctx, actor.WorkspaceID, in.FolderID)...)
+		errs = append(errs, s.resolveCampaign(ctx, actor.WorkspaceID, in.CampaignID)...)
+	}
+
+	// The bot-blocking setting, and the one refusal it carries.
+	//
+	// An enforcing domain overrides a link that says off, and the override is
+	// already unconditional in domain.BlocksBots — so accepting the value here
+	// would store a setting that does nothing and tell the caller it worked.
+	// That is the failure mode this refusal exists for: somebody turns bot
+	// blocking off for their link, the API says 200, and bots keep being
+	// refused with nothing anywhere explaining why.
+	var newPolicy *string
+	if in.BotBlocking != nil {
+		dom, derr := s.q.GetDomainBotSettings(ctx, existing.DomainID)
+		if derr != nil {
+			return nil, fmt.Errorf("read domain bot settings: %w", derr)
+		}
+		policy := domain.DomainBots(dom.BlockBots, dom.BlockBotsEnforced)
+		switch {
+		case *in.BotBlocking == domain.BotAllow && domain.BotPolicyLocked(policy):
+			errs = append(errs, domain.FieldError{
+				Field: "bot_blocking", Code: "domain_enforced",
+				Message: "bot blocking is enforced for every link on " + dom.Hostname +
+					" and cannot be turned off per link",
+			})
+		default:
+			v := string(*in.BotBlocking)
+			newPolicy = &v
+		}
+	}
+
 	if len(errs) > 0 {
 		return nil, errs
 	}
@@ -359,9 +747,22 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 		ClearExpiry:  in.ClearExpiry,
 		Alias:        newAlias,
 		ForwardQuery: in.ForwardQuery,
+		ForwardPath:  in.ForwardPath,
+		BotBlocking:  newPolicy,
+
+		PasswordHash:     passwordHash,
+		ClearPassword:    in.ClearPassword,
+		MaxClicks:        in.MaxClicks,
+		ClearMaxClicks:   in.ClearMaxClicks,
+		OneTime:          in.OneTime,
+		RequireSignature: in.RequireSignature,
+		FolderID:         in.FolderID,
+		ClearFolder:      in.ClearFolder,
+		CampaignID:       in.CampaignID,
+		ClearCampaign:    in.ClearCampaign,
 	})
 	if err != nil {
-		if isUniqueViolation(err) {
+		if pgerr.IsUniqueViolation(err) {
 			return nil, fmt.Errorf("%w: alias is already in use", domain.ErrConflict)
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -397,7 +798,7 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 		// links.primary_url. Editing the destination without changing the
 		// alias is the core promise of the product, so this path matters.
 		if err := q.UpdateDestinationURL(ctx, dbgen.UpdateDestinationURLParams{
-			LinkID: id, WorkspaceID: actor.WorkspaceID,
+			ID: id, WorkspaceID: actor.WorkspaceID,
 			Url: normalizedURL, UrlHost: HostOf(normalizedURL),
 		}); err != nil {
 			return nil, fmt.Errorf("update destination: %w", err)
@@ -432,7 +833,32 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 		}
 	}
 
-	return s.toDomain(row, tags), nil
+	// Who decided this link would refuse automated clients, and when.
+	//
+	// Recorded only when the value actually moved: a form that posts every field
+	// re-sends the current setting on every save, and a log where most entries
+	// say nothing changed is a log nobody reads. This is the administrative half
+	// of the feature and it is the half the audit trail is for — the refusals
+	// themselves are traffic, and are counted rather than recorded.
+	if s.audit != nil && newPolicy != nil && *newPolicy != existing.BotBlocking {
+		if err := s.audit.Record(ctx, actor, audit.Event{
+			Action:     audit.ActionLinkBotBlockingChanged,
+			TargetType: "link",
+			TargetID:   &row.ID,
+			Metadata: map[string]any{
+				"alias": row.Alias,
+				"from":  existing.BotBlocking,
+				"to":    *newPolicy,
+			},
+		}); err != nil {
+			s.log.Warn("bot blocking changed but the audit record was not written",
+				slog.String("alias", row.Alias), slog.Any("error", err))
+		}
+	}
+
+	updated := s.toDomain(ctx, row, tags)
+	s.emitLink(ctx, domain.EventLinkUpdated, updated)
+	return updated, nil
 }
 
 func (s *Service) Get(ctx context.Context, actor *auth.Identity, id uuid.UUID) (*domain.Link, error) {
@@ -450,7 +876,9 @@ func (s *Service) Get(ctx context.Context, actor *auth.Identity, id uuid.UUID) (
 	if err != nil {
 		return nil, err
 	}
-	return s.toDomain(row, tags), nil
+	// One link, so the exact click budget is affordable here in a way it is not
+	// on the list (M35).
+	return s.withBudget(ctx, s.toDomain(ctx, row, tags)), nil
 }
 
 // List returns a keyset-paginated page of links.
@@ -493,6 +921,28 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 	if len(f.TagIDs) > 0 {
 		params.TagIds = f.TagIDs
 	}
+	// Unfiled wins over a named folder, because a request asking for both has
+	// contradicted itself and "the links in this folder that are in no folder"
+	// has exactly one honest answer.
+	if f.Unfiled {
+		params.Unfiled = true
+	} else {
+		params.FolderID = f.FolderID
+	}
+	// The campaign filter (M41), resolved exactly as the folder pair above is
+	// and for the same reason.
+	if f.Uncampaigned {
+		params.Uncampaigned = true
+	} else {
+		params.CampaignID = f.CampaignID
+	}
+	// Which hostname the links are served on (M40). Not validated against what
+	// this workspace owns: the query is already scoped to the workspace, so an
+	// id naming somebody else's domain returns an empty page rather than a
+	// refusal — and returning a refusal would confirm the id names a real
+	// hostname, which is the one thing another workspace's domain must not tell
+	// this one.
+	params.DomainID = f.DomainID
 	if f.Cursor != "" {
 		cur, err := decodeCursor(f.Cursor)
 		if err != nil {
@@ -540,10 +990,12 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 		}
 		// ListLinksRow is flat rather than embedding dbgen.Link, because the
 		// aggregated tag columns are part of the same select.
-		page.Items = append(page.Items, *s.toDomain(dbgen.Link{
+		page.Items = append(page.Items, *s.toDomain(ctx, dbgen.Link{
 			ID:           r.ID,
 			WorkspaceID:  r.WorkspaceID,
 			DomainID:     r.DomainID,
+			FolderID:     r.FolderID,
+			CampaignID:   r.CampaignID,
 			Alias:        r.Alias,
 			PrimaryUrl:   r.PrimaryUrl,
 			Title:        r.Title,
@@ -551,11 +1003,19 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 			Status:       r.Status,
 			ExpiresAt:    r.ExpiresAt,
 			ForwardQuery: r.ForwardQuery,
-			ClickCount:   r.ClickCount,
-			LastClickAt:  r.LastClickAt,
-			CreatedAt:    r.CreatedAt,
-			UpdatedAt:    r.UpdatedAt,
-			ArchivedAt:   r.ArchivedAt,
+			ForwardPath:  r.ForwardPath,
+			BotBlocking:  r.BotBlocking,
+			// The gates, so a list can mark a gated link instead of showing it
+			// as though it were open (M35).
+			PasswordHash:     r.PasswordHash,
+			MaxClicks:        r.MaxClicks,
+			OneTime:          r.OneTime,
+			RequireSignature: r.RequireSignature,
+			ClickCount:       r.ClickCount,
+			LastClickAt:      r.LastClickAt,
+			CreatedAt:        r.CreatedAt,
+			UpdatedAt:        r.UpdatedAt,
+			ArchivedAt:       r.ArchivedAt,
 		}, tags))
 	}
 	if page.HasMore && len(page.Items) > 0 {
@@ -570,7 +1030,12 @@ func (s *Service) List(ctx context.Context, actor *auth.Identity, f domain.LinkF
 			Search:      params.Search,
 			// The same filter the page itself used, or the total describes a
 			// different set of links than the items beside it.
-			TagIds: params.TagIds,
+			TagIds:       params.TagIds,
+			Unfiled:      params.Unfiled,
+			FolderID:     params.FolderID,
+			Uncampaigned: params.Uncampaigned,
+			CampaignID:   params.CampaignID,
+			DomainID:     params.DomainID,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("count links: %w", err)
@@ -615,13 +1080,37 @@ func (s *Service) setArchived(ctx context.Context, actor *auth.Identity, id uuid
 	if err != nil {
 		return nil, err
 	}
-	return s.toDomain(row, tags), nil
+	// Two events rather than one with a flag: archiving is reversible, and a
+	// receiver reconciling state has to know which direction it moved (M42).
+	moved := s.toDomain(ctx, row, tags)
+	event := domain.EventLinkRestored
+	if archive {
+		event = domain.EventLinkArchived
+	}
+	s.emitLink(ctx, event, moved)
+	return moved, nil
 }
 
 // Delete soft-deletes a link, keeping it restorable for TrashRetentionDays.
 func (s *Service) Delete(ctx context.Context, actor *auth.Identity, id uuid.UUID) error {
 	if !actor.Can(PermDelete) {
 		return fmt.Errorf("%w: deleting links requires %s", domain.ErrForbidden, PermDelete)
+	}
+
+	// Read before deleting, and only when something is listening. SoftDeleteLink
+	// returns the alias and the domain — enough to invalidate the cache and
+	// nothing like enough for an event payload, and a `link.deleted` carrying a
+	// different set of fields from every other link event would be a published
+	// interface that changes shape depending on which event it is. One indexed
+	// read on an interactive delete buys that consistency; a process with no
+	// webhook service does not pay it at all.
+	var deleted *domain.Link
+	if s.events != nil {
+		if existing, err := s.q.GetLink(ctx, dbgen.GetLinkParams{
+			ID: id, WorkspaceID: actor.WorkspaceID,
+		}); err == nil {
+			deleted = s.toDomain(ctx, existing, nil)
+		}
 	}
 
 	row, err := s.q.SoftDeleteLink(ctx, dbgen.SoftDeleteLinkParams{
@@ -637,6 +1126,10 @@ func (s *Service) Delete(ctx context.Context, actor *auth.Identity, id uuid.UUID
 	if s.cache != nil {
 		s.cache.InvalidateAlias(ctx, row.DomainID, row.Alias)
 	}
+	// The soft delete a person performed, which starts the recovery window. Not
+	// the purge at the end of it — the scheduler tidying up thirty days later is
+	// not a second deletion, and a receiver told twice would double-count (M42).
+	s.emitLink(ctx, domain.EventLinkDeleted, deleted)
 	return nil
 }
 
@@ -698,7 +1191,7 @@ func (s *Service) applyTags(ctx context.Context, q *dbgen.Queries, wsID, linkID 
 			})
 			// A concurrent create is fine: re-read the winner rather than
 			// failing the whole link creation over a tag race.
-			if err != nil && isUniqueViolation(err) {
+			if err != nil && pgerr.IsUniqueViolation(err) {
 				tag, err = q.GetTagByName(ctx, dbgen.GetTagByNameParams{WorkspaceID: wsID, Lower: name})
 			}
 		}
@@ -728,7 +1221,7 @@ func (s *Service) loadTags(ctx context.Context, q *dbgen.Queries, linkID uuid.UU
 	return out, nil
 }
 
-func (s *Service) toDomain(l dbgen.Link, tags []domain.Tag) *domain.Link {
+func (s *Service) toDomain(ctx context.Context, l dbgen.Link, tags []domain.Tag) *domain.Link {
 	if tags == nil {
 		tags = []domain.Tag{}
 	}
@@ -736,7 +1229,7 @@ func (s *Service) toDomain(l dbgen.Link, tags []domain.Tag) *domain.Link {
 		ID:          l.ID,
 		WorkspaceID: l.WorkspaceID,
 		Alias:       l.Alias,
-		ShortURL:    s.baseURL + "/" + l.Alias,
+		ShortURL:    s.shortURL(ctx, l.DomainID, l.Alias),
 		URL:         l.PrimaryUrl,
 		Title:       l.Title,
 		Description: l.Description,
@@ -746,13 +1239,24 @@ func (s *Service) toDomain(l dbgen.Link, tags []domain.Tag) *domain.Link {
 		Status: domain.EffectiveStatus(
 			domain.LinkStatus(l.Status), l.ExpiresAt, time.Now()),
 		Tags:         tags,
+		FolderID:     l.FolderID,
+		CampaignID:   l.CampaignID,
 		ForwardQuery: l.ForwardQuery,
-		ExpiresAt:    l.ExpiresAt,
-		ClickCount:   l.ClickCount,
-		LastClickAt:  l.LastClickAt,
-		CreatedAt:    l.CreatedAt,
-		UpdatedAt:    l.UpdatedAt,
-		ArchivedAt:   l.ArchivedAt,
+		ForwardPath:  l.ForwardPath,
+		BotBlocking:  domain.BotPolicy(l.BotBlocking),
+		// The gates, and the password reduced to a boolean on the way out. The
+		// hash is in `l` and stops here: nothing in this project hands one to a
+		// caller, however privileged.
+		HasPassword:      l.PasswordHash != nil && *l.PasswordHash != "",
+		MaxClicks:        l.MaxClicks,
+		OneTime:          l.OneTime,
+		RequireSignature: l.RequireSignature,
+		ExpiresAt:        l.ExpiresAt,
+		ClickCount:       l.ClickCount,
+		LastClickAt:      l.LastClickAt,
+		CreatedAt:        l.CreatedAt,
+		UpdatedAt:        l.UpdatedAt,
+		ArchivedAt:       l.ArchivedAt,
 	}
 }
 
@@ -804,7 +1308,234 @@ func decodeCursor(s string) (cursor, error) {
 	return cursor{Sort: parts[1], CreatedAt: at, Clicks: clicks, ID: id}, nil
 }
 
-func isUniqueViolation(err error) bool {
-	var pgErr interface{ SQLState() string }
-	return errors.As(err, &pgErr) && pgErr.SQLState() == "23505"
+// schemeOf takes the scheme from the configured link base URL.
+//
+// A custom hostname is a name and nothing else: the row has no scheme, and
+// hard-coding https would print a short URL that does not work on a development
+// instance served over http. Whatever the operator configured for their own link
+// host is the honest answer for a hostname served by the same listener.
+func schemeOf(baseURL string) string {
+	if strings.HasPrefix(strings.ToLower(baseURL), "http://") {
+		return "http"
+	}
+	return "https"
+}
+
+// shortURL is the public URL of a link, on whichever hostname it lives.
+//
+// Off the default domain it is the configured link base URL, exactly as it was
+// before custom domains existed. On a custom domain it is that domain's
+// hostname, because a link created on go.acme.com whose short_url named the
+// instance's own host would be a link the product told you to publish at the
+// wrong address.
+func (s *Service) shortURL(ctx context.Context, domainID uuid.UUID, alias string) string {
+	built, err := s.shortURLStrict(ctx, domainID, alias)
+	if err != nil {
+		// Described with the instance's own host rather than not at all — see
+		// hostnameFor. This is the fallback that is right for a *description* of a
+		// link and wrong for a capability minted against one, which is why Sign
+		// takes the strict form instead.
+		return s.baseURL + "/" + alias
+	}
+	return built
+}
+
+// shortURLStrict is shortURL for the callers that must not be handed a guess.
+//
+// The difference is one case: a domain row that could not be read. shortURL
+// prints the instance's own host and carries on, because a list page describing
+// twenty-five links should not fail over one unreadable row. A signed URL is not
+// a description — it is a capability, addressed to a hostname — and printing the
+// wrong hostname there does not merely mislead: the default domain is shared
+// across workspaces and alias uniqueness is `(domain_id, alias)`, so the URL can
+// resolve a *different* workspace's link and send the recipient to a stranger's
+// destination. An unreadable row is an error here.
+func (s *Service) shortURLStrict(ctx context.Context, domainID uuid.UUID, alias string) (string, error) {
+	host, ok := s.hostnameFor(ctx, domainID)
+	if !ok {
+		return "", fmt.Errorf("resolve the hostname of domain %s", domainID)
+	}
+	if host == "" {
+		return s.baseURL + "/" + alias, nil
+	}
+	return s.linkScheme + "://" + host + "/" + alias, nil
+}
+
+// hostnameFor resolves a domain id to its hostname, and reports whether the
+// domain could be read at all. "" with ok is the instance default.
+//
+// **The second return is the whole point of the signature.** Before it, "" meant
+// both "this is the instance default, whose public name is LINK_BASE_URL" and
+// "the row could not be read" — one value for a correct answer and for no
+// answer, which every caller then had to treat as the correct one.
+//
+// Cached in the process, because it is consulted once per link on every list
+// page and the answer changes only when somebody renames a domain — which drops
+// the entry here and broadcasts, so the other replicas drop theirs too. Empty
+// for the instance default deliberately: that domain's hostname is a placeholder
+// the resolver never reads (00700), and its public name is LINK_BASE_URL.
+//
+// A read failure caches nothing and reports not-ok, and what each caller does
+// with that is the caller's decision rather than this function's.
+func (s *Service) hostnameFor(ctx context.Context, domainID uuid.UUID) (string, bool) {
+	if v, ok := s.hostnames.Load(domainID); ok {
+		host, _ := v.(string)
+		return host, true
+	}
+	row, err := s.q.GetDomainByID(ctx, domainID)
+	if err != nil {
+		return "", false
+	}
+	host := ""
+	if !row.IsDefault {
+		host = strings.ToLower(row.Hostname)
+	}
+	s.hostnames.Store(domainID, host)
+	return host, true
+}
+
+// ForgetHostnames drops the id-to-hostname cache.
+//
+// Wired to the same signal that reloads the verified-hostname set, so a rename
+// on one replica reaches the short URLs printed by every other one. Without it a
+// renamed domain would keep being advertised under its old name until the
+// process restarted — a stale string in the one field whose whole job is to be
+// copied and pasted.
+func (s *Service) ForgetHostnames() {
+	s.hostnames.Range(func(k, _ any) bool {
+		s.hostnames.Delete(k)
+		return true
+	})
+}
+
+// targetDomain is the hostname a new link will be created on.
+type targetDomain struct {
+	ID       uuid.UUID
+	Hostname string
+	// OrganizationID and WorkspaceID carry the domain's scope, which is what
+	// decides whether an alias collision on it could involve a workspace the
+	// caller cannot see (F23). Both nil is the instance default — shared by
+	// every workspace that has not registered one; organization set and
+	// workspace nil is shared within one organization; workspace set is the
+	// workspace's own namespace and nothing outside it can collide.
+	OrganizationID *uuid.UUID
+	WorkspaceID    *uuid.UUID
+}
+
+// resolveTargetDomain decides which hostname a new link lands on.
+//
+// Two paths and one rule. With no domain named, the workspace's own default —
+// which is its verified hostname if it has one, and the instance default
+// otherwise; GetWorkspaceDefaultDomain is where that ordering lives, and this
+// milestone is where it gained the workspace argument its name always claimed.
+//
+// With one named, it must be a domain the actor may use and it must be verified.
+// The ownership check is the same one M39 wrote, reused rather than restated:
+// the instance default is usable by everybody, an organization's domain by its
+// members, a workspace's by that workspace. The verification check is M40's, and
+// it is the reason this function exists rather than the id being passed
+// straight through — a link created on an unverified hostname is a short URL
+// that cannot resolve, minted on a name nobody has proved they hold.
+func (s *Service) resolveTargetDomain(
+	ctx context.Context, actor *auth.Identity, id *uuid.UUID,
+) (targetDomain, error) {
+	if id == nil {
+		wsID, orgID := actor.WorkspaceID, actor.OrgID
+		row, err := s.q.GetWorkspaceDefaultDomain(ctx, dbgen.GetWorkspaceDefaultDomainParams{
+			WorkspaceID: &wsID, OrganizationID: &orgID,
+		})
+		if err != nil {
+			return targetDomain{}, fmt.Errorf("resolve default domain: %w", err)
+		}
+		return targetDomain{
+			ID: row.ID, Hostname: row.Hostname,
+			OrganizationID: row.OrganizationID, WorkspaceID: row.WorkspaceID,
+		}, nil
+	}
+
+	row, err := s.q.GetDomainByID(ctx, *id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return targetDomain{}, domain.ValidationErrors{{
+				Field: "domain_id", Code: "not_found",
+				Message: "no such domain",
+			}}
+		}
+		return targetDomain{}, fmt.Errorf("read domain: %w", err)
+	}
+	// Usable, not administrable. Creating a link on a hostname is what every
+	// member of the workspace does; renaming or removing it needs
+	// domains.write, and requiring that here would mean only admins could
+	// create links once a workspace had its own hostname.
+	usable := row.IsDefault ||
+		(row.WorkspaceID != nil && *row.WorkspaceID == actor.WorkspaceID) ||
+		(row.WorkspaceID == nil && row.OrganizationID != nil && *row.OrganizationID == actor.OrgID)
+	if !usable {
+		return targetDomain{}, fmt.Errorf("%w: that hostname belongs to another workspace",
+			domain.ErrForbidden)
+	}
+	if !row.IsDefault && row.VerifiedAt == nil {
+		return targetDomain{}, domain.ValidationErrors{{
+			Field: "domain_id", Code: "unverified",
+			Message: row.Hostname + " is not verified yet, so nothing is served on it; " +
+				"publish its DNS record and verify it before putting links there",
+		}}
+	}
+	return targetDomain{
+		ID: row.ID, Hostname: row.Hostname,
+		OrganizationID: row.OrganizationID, WorkspaceID: row.WorkspaceID,
+	}, nil
+}
+
+// KeyLimiter is the slice of internal/ratelimit this package needs.
+//
+// Declared here rather than imported so a test satisfies it with a counter, and
+// so "no limiter configured" is a nil interface rather than a flag every call
+// site has to remember to check — the same shape Enqueuer takes in
+// internal/invite.
+type KeyLimiter interface {
+	// AllowKey reports whether this key has budget left, and consumes one unit
+	// when it does. The duration is how long until the next unit, and is unused
+	// here: a suppressed audit row is not retried and nobody is being told to
+	// wait for it.
+	AllowKey(key string) (bool, time.Duration)
+}
+
+// aliasTakenError is the refusal a caller gets when an alias is not available.
+//
+// One function for all three sites, and one *message* whatever the cause — a
+// live link, a trashed one still inside its window, or a reserved alias. Which
+// of them applies is not the caller's business, and the sites already said so;
+// this makes it structural rather than three literals that agree today.
+//
+// **It also names the namespace, which is what F23 is about.** Alias uniqueness
+// is per domain, so on a shared domain a refusal tells a member of one workspace
+// that *something* holds that name in a workspace they may not be able to see.
+// That disclosure cannot be removed — a 409 and a 201 are distinguishable
+// whatever either says — so what is fixed is the silence around it: the message
+// now explains that the namespace belongs to the domain rather than to the
+// workspace, and says how to stop sharing one.
+//
+// Bounded rather than instance-wide, which is what M39 and M40 changed and what
+// this wording has to keep true. A workspace serving its own verified hostname
+// has its own alias namespace and a collision there really is its own; the
+// shared case is the instance default, and the organization-owned hostname that
+// an organization's workspaces share. So the extra sentence appears only when
+// the domain is actually shared, rather than warning about a tenancy boundary
+// that is not being crossed.
+func aliasTakenError(code string, dom targetDomain) error {
+	if dom.WorkspaceID != nil {
+		// This workspace's own hostname. Nothing outside it can hold the name.
+		return fmt.Errorf("%w: alias %q is already in use", domain.ErrConflict, code)
+	}
+	scope := "every workspace on this instance that has not registered a domain of its own"
+	if dom.OrganizationID != nil {
+		scope = "every workspace in this organization that uses this domain"
+	}
+	return fmt.Errorf(
+		"%w: alias %q is already in use on %s. Aliases are unique per domain, and "+
+			"this one is shared by %s — so the name may be held by a link outside "+
+			"this workspace. Register a domain for this workspace to get an alias "+
+			"namespace of its own",
+		domain.ErrConflict, code, dom.Hostname, scope)
 }

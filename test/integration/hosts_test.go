@@ -47,26 +47,6 @@ type splitFixture struct {
 	auth     *auth.Service
 }
 
-// identityWithout demotes the owner to a role that does not hold the permission
-// and re-resolves them, which is how the product actually produces such a user —
-// hand-building an Identity would test a shape the RBAC evaluator never emits.
-func (f *splitFixture) identityWithout(perm string) *auth.Identity {
-	f.t.Helper()
-	if _, err := f.pool.Exec(f.t.Context(),
-		`UPDATE memberships SET role_id = (SELECT id FROM roles WHERE slug = 'editor')
-		  WHERE user_id = $1`, f.owner.UserID); err != nil {
-		f.t.Fatal(err)
-	}
-	id, err := f.auth.IdentityForEmail(f.t.Context(), splitOwnerEmail)
-	if err != nil {
-		f.t.Fatal(err)
-	}
-	if id.Can(perm) {
-		f.t.Fatalf("the demoted identity still holds %s; this test would prove nothing", perm)
-	}
-	return id
-}
-
 // splitConfig builds a real Config through Parse, because the split is decided
 // by unexported parsed origins that a hand-built struct cannot set — the same
 // reason a test cannot accidentally half-enable it.

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
@@ -20,6 +21,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
+	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
 )
 
@@ -33,9 +35,12 @@ type webFixture struct {
 	pool   *pgxpool.Pool
 }
 
-func newWeb(t *testing.T) *webFixture {
+func newWeb(t *testing.T) *webFixture { return newWebOn(t, newDB(t)) }
+
+// newWebOn is newWeb against a database the caller made, for the tests that need
+// something attached to the pool — a query tracer, say — before the app uses it.
+func newWebOn(t *testing.T, pool *pgxpool.Pool) *webFixture {
 	t.Helper()
-	pool := newDB(t)
 
 	cfg := config.Config{
 		AppEnv:        config.Development,
@@ -49,6 +54,11 @@ func newWeb(t *testing.T) *webFixture {
 	authSvc := auth.NewService(pool, auth.ServiceConfig{
 		Params: fastParams,
 		TTL:    auth.SessionTTL{Absolute: cfg.Auth.SessionAbsoluteTTL, Idle: cfg.Auth.SessionIdleTTL},
+		// The shipped default, wired as main.go wires it. Left unset this is
+		// zero, which the service reads as "no lockout" — so a fixture without
+		// it lets a test about what a locked account answers pass by never
+		// locking one (finding F92).
+		Lockout: auth.LockoutPolicy{Threshold: 5, Window: 15 * time.Minute},
 	})
 	keySvc, err := auth.NewAPIKeyService(pool, authSvc, auth.APIKeyConfig{Pepper: testPepper})
 	if err != nil {
@@ -59,6 +69,7 @@ func newWeb(t *testing.T) *webFixture {
 		BaseURL: cfg.BaseURL,
 	})
 	stats := analytics.NewReader(pool)
+	notifySvc := notify.NewService(pool)
 
 	renderer, err := ui.New()
 	if err != nil {
@@ -72,9 +83,10 @@ func newWeb(t *testing.T) *webFixture {
 		Keys:   keySvc,
 		Links:  linkSvc,
 		Stats:  stats,
+		Notify: notifySvc,
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
-			Links: linkSvc, Stats: stats,
+			Links: linkSvc, Stats: stats, Notify: notifySvc,
 		},
 	}))
 	t.Cleanup(srv.Close)
@@ -563,5 +575,64 @@ func TestWebStaticAssetsAndHeaders(t *testing.T) {
 	}
 	if cc := login.Header.Get("Cache-Control"); cc != "no-store" {
 		t.Errorf("page Cache-Control = %q, want no-store", cc)
+	}
+}
+
+// TestTheLinkPageNamesTheDomainTheLinkIsServedOn is F89's second half.
+//
+// The bot control's explanation read `DomainSettings` — the instance default's
+// row — for every link, whatever hostname the link is actually served on. So a
+// link on a verified custom hostname (M40) had a control enabled or disabled by
+// another domain's policy, and the sentence beneath it named a hostname the link
+// is not served on. The API's own refusal has always read the link's own domain
+// (`Update`, via `GetDomainBotSettings`), so the two surfaces m32.5.md says are
+// "asserted by test at both surfaces" disagreed.
+//
+// The hostname is what this asserts rather than the policy, because the policy is
+// instance-wide and therefore the same on both rows by construction — the
+// hostname is the part that differs on a state this product actually produces.
+func TestTheLinkPageNamesTheDomainTheLinkIsServedOn(t *testing.T) {
+	f := newWeb(t)
+	f.claim()
+	path := f.createLink("https://example.com/onhost", "onhost")
+
+	// A verified hostname owned by this workspace, and the link moved onto it.
+	// Written directly because this test is about which row the page reads, and
+	// registering and verifying a hostname is custom_domains_test.go's subject.
+	const hostname = "go.page.test"
+	var linkID, workspaceID, orgID uuid.UUID
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT l.id, l.workspace_id, w.organization_id
+		   FROM links l JOIN workspaces w ON w.id = l.workspace_id
+		  WHERE l.alias = 'onhost'`).
+		Scan(&linkID, &workspaceID, &orgID); err != nil {
+		t.Fatalf("read the link: %v", err)
+	}
+	// Both owner columns, because domains_ownership_states refuses a workspace
+	// without the organization it implies.
+	if _, err := f.pool.Exec(t.Context(), `
+		WITH d AS (
+		    INSERT INTO domains (id, organization_id, workspace_id, hostname,
+		                         verification_token, verified_at, ssl_status)
+		    VALUES (gen_random_uuid(), $1, $2, $3, 'tok', now(), 'active')
+		    RETURNING id
+		)
+		UPDATE links SET domain_id = (SELECT id FROM d) WHERE id = $4`,
+		orgID, workspaceID, hostname, linkID); err != nil {
+		t.Fatalf("put the link on a custom hostname: %v", err)
+	}
+
+	body := f.body(f.get(path, nil))
+	if !strings.Contains(body, hostname) {
+		t.Errorf("the link detail page does not name %q, the hostname the link is "+
+			"served on", hostname)
+	}
+	// 'default' is the placeholder 00700 seeds the instance default with, and it
+	// is what the page named for every link.
+	if strings.Contains(body, "every link on default") ||
+		strings.Contains(body, "because default ") ||
+		strings.Contains(body, "what default does today") {
+		t.Errorf("the link detail page explains the bot control in terms of the "+
+			"instance default domain for a link served on %q", hostname)
 	}
 }

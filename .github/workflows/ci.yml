@@ -4,6 +4,12 @@
 # file adds the parts that do: integration tests against a real Postgres and Redis,
 # and a container build. If the two ever disagree, this file is what gates a merge,
 # so keep the Makefile in step with it rather than the other way round.
+#
+# Every step here is a make target. What a step *does* therefore lives in the
+# Makefile, which is writable by whoever is building this repository; what a step
+# *is* — the triggers, the permissions block, the service images, the pinned
+# actions — lives here, and changing it needs the owner. That split is the whole
+# point of the file, and ci/proposed/README.md is where it is argued.
 
 name: CI
 
@@ -42,55 +48,12 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
 
-      - name: Verify the vendored assets against their pinned checksums
-        # verify-assets, not `make htmx swagger-ui`: those repair a mismatch and
-        # exit 0, so this step passed on any tampered blob it could re-download.
-        run: make verify-assets
-
-      - name: Build the stylesheet
-        run: make css
-
-      - name: Build
-        run: make build
-
-      - name: Confirm the binaries report the version they were built with
-        run: |
-          set -eux
-          ./bin/linkctrl version
-          ./bin/lctl version
-          # A stamped build reporting "commit unknown" means the ldflags path is
-          # broken, which is invisible until someone needs the version.
-          for bin in ./bin/linkctrl ./bin/lctl; do
-            if "$bin" version | grep -q 'commit unknown'; then
-              echo "$bin was built without its version stamp" >&2
-              exit 1
-            fi
-          done
-
-      - name: Vet
-        run: go vet ./...
-
-      - name: Unit tests with the race detector
-        run: go test -race -count=1 ./...
-
-      - name: OpenAPI document matches the registered routes
-        run: go test -count=1 -run TestOpenAPI ./internal/httpx/
-
-      - name: Modules are tidy
-        run: |
-          go mod tidy
-          git diff --exit-code -- go.mod go.sum
-
-      - name: Generated code matches its source
-        # Must match the version stamped into internal/store/dbgen, which sqlc
-        # writes into every file it emits. A mismatch fails this step on the
-        # comment alone, with the rest of the diff empty — which is what it did
-        # the first time this workflow ever ran, having been pinned a minor
-        # version behind the committed output since it was written.
-        run: |
-          go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
-          sqlc generate
-          git diff --exit-code -- internal/store/dbgen
+      # Vendored assets verified against their pinned checksums, stylesheet,
+      # build, version stamp, vet, unit tests under -race, the OpenAPI parity
+      # test, module tidiness, and generated code matching its source. Adding a
+      # tenth check means editing the Makefile, not this file.
+      - name: Build and check
+        run: make ci-build
 
   lint:
     name: Lint
@@ -101,10 +64,13 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
-      # The stylesheet is embedded, so the package does not compile without it and
-      # the linter cannot type-check anything that imports internal/ui.
-      - name: Build the stylesheet
-        run: make htmx swagger-ui css
+
+      # shellcheck over scripts/, then the assets — the stylesheet is embedded, so
+      # the package does not compile without it and the linter cannot type-check
+      # anything that imports internal/ui.
+      - name: Shell scripts and assets
+        run: make ci-lint
+
       # Action major matters here: v6 and earlier run only golangci-lint v1.x and
       # refuse the v2 config schema this repository uses — the job would fail on
       # every run. v7 is where the action gained v2 support.
@@ -152,25 +118,16 @@ jobs:
       - name: Build the stylesheet
         run: make htmx swagger-ui css
 
-      - name: The database session really is UTC
-        # Partition bounds on a timestamptz resolve against the session timezone at
-        # DDL time, so a non-UTC session silently creates partitions offset by its
-        # own offset and leaves gaps that swallow rows. The application refuses to
-        # start in that state; asserting it here means a CI-only difference cannot
-        # produce a green run that hides it.
-        run: |
-          set -eu
-          tz=$(psql "$DSN" -tAc "SHOW timezone" | tr -d '[:space:]')
-          test "$tz" = "UTC" || { echo "session timezone is '$tz', not UTC" >&2; exit 1; }
-        env:
-          DSN: postgres://linkctrl:ci-password@localhost:5432/linkctrl?sslmode=disable
-          PGPASSWORD: ci-password
-
+      # Asserts the session timezone is UTC before running anything, then runs the
+      # suite. Both variables are required by the target rather than defaulted:
+      # without LINKCTRL_REDIS_URL the Redis tier tests skip and the job is green
+      # for three tests that never ran.
       - name: Integration tests with the race detector
-        run: go test -tags=integration -race -count=1 ./test/integration/
+        run: make ci-integration
         env:
           TEST_DATABASE_URL: postgres://linkctrl:ci-password@localhost:5432/linkctrl?sslmode=disable
           LINKCTRL_REDIS_URL: redis://localhost:6379/0
+          PGPASSWORD: ci-password
 
   image:
     name: Container image
@@ -213,10 +170,4 @@ jobs:
           cache-from: type=gha
 
       - name: The image answers for itself
-        run: |
-          set -eux
-          docker run --rm linkctrl:ci version
-          docker run --rm --entrypoint /lctl linkctrl:ci version
-          # A stamped image reporting "dev" means the build args did not reach the
-          # ldflags, which nothing else in CI would notice.
-          docker run --rm linkctrl:ci version | grep -q 'linkctrl ci'
+        run: make ci-image-smoke

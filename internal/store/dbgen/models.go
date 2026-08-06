@@ -30,6 +30,9 @@ type ApiKey struct {
 	ExpiresAt      *time.Time
 	RevokedAt      *time.Time
 	CreatedAt      time.Time
+	RotatedAt      *time.Time
+	GraceExpiresAt *time.Time
+	SuccessorID    *uuid.UUID
 }
 
 type AuditLog struct {
@@ -48,16 +51,26 @@ type AuditLog struct {
 }
 
 type AutomationRule struct {
-	ID            uuid.UUID
-	WorkspaceID   uuid.UUID
-	Name          string
-	Trigger       string
-	TriggerConfig []byte
-	Actions       []byte
-	Enabled       bool
-	LastFiredAt   *time.Time
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID                 uuid.UUID
+	WorkspaceID        uuid.UUID
+	Name               string
+	Trigger            string
+	TriggerConfig      []byte
+	Actions            []byte
+	Enabled            bool
+	LastFiredAt        *time.Time
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	LastCheckedAt      *time.Time
+	LastFiredSubjectID *uuid.UUID
+}
+
+type BlockedDestination struct {
+	Host      string
+	Source    string
+	Reason    string
+	CreatedAt time.Time
+	CreatedBy *uuid.UUID
 }
 
 type Campaign struct {
@@ -75,22 +88,23 @@ type Campaign struct {
 }
 
 type ClickEvent struct {
-	ID           uuid.UUID
-	LinkID       uuid.UUID
-	WorkspaceID  uuid.UUID
-	OccurredAt   time.Time
-	VisitorHash  []byte
-	IsFirstVisit bool
-	Country      *string
-	Region       *string
-	City         *string
-	Device       *string
-	Browser      *string
-	Os           *string
-	Language     *string
-	ReferrerHost *string
-	IsBot        bool
-	LatencyUs    *int32
+	ID            uuid.UUID
+	LinkID        uuid.UUID
+	WorkspaceID   uuid.UUID
+	OccurredAt    time.Time
+	VisitorHash   []byte
+	IsFirstVisit  bool
+	Country       *string
+	Region        *string
+	City          *string
+	Device        *string
+	Browser       *string
+	Os            *string
+	Language      *string
+	ReferrerHost  *string
+	IsBot         bool
+	LatencyUs     *int32
+	DestinationID *uuid.UUID
 }
 
 type Destination struct {
@@ -107,17 +121,41 @@ type Destination struct {
 	DeletedAt   *time.Time
 }
 
+type DestinationDispute struct {
+	ID             uuid.UUID
+	Host           string
+	UrlDefanged    string
+	ReasonCode     string
+	Status         string
+	OrganizationID *uuid.UUID
+	WorkspaceID    *uuid.UUID
+	CreatedBy      *uuid.UUID
+	CreatedByLabel string
+	CreatedAt      time.Time
+	DecidedBy      *uuid.UUID
+	DecidedByLabel string
+	DecidedAt      *time.Time
+	BlockedHost    string
+}
+
 type Domain struct {
-	ID              uuid.UUID
-	OrganizationID  *uuid.UUID
-	Hostname        string
-	IsDefault       bool
-	VerifiedAt      *time.Time
-	SslStatus       string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	DeletedAt       *time.Time
-	RootRedirectUrl *string
+	ID                       uuid.UUID
+	OrganizationID           *uuid.UUID
+	Hostname                 string
+	IsDefault                bool
+	VerifiedAt               *time.Time
+	SslStatus                string
+	CreatedAt                time.Time
+	UpdatedAt                time.Time
+	DeletedAt                *time.Time
+	RootRedirectUrl          *string
+	BlockBots                bool
+	BlockBotsEnforced        bool
+	WorkspaceID              *uuid.UUID
+	VerificationToken        *string
+	VerificationCheckedAt    *time.Time
+	VerificationFailingSince *time.Time
+	VerificationError        *string
 }
 
 type Folder struct {
@@ -130,12 +168,35 @@ type Folder struct {
 	DeletedAt   *time.Time
 }
 
+type InstanceGrant struct {
+	UserID       uuid.UUID
+	PermissionID uuid.UUID
+	GrantedBy    *uuid.UUID
+	GrantedAt    time.Time
+}
+
+type Invitation struct {
+	ID             uuid.UUID
+	OrganizationID uuid.UUID
+	Email          string
+	EmailLower     *string
+	RoleID         uuid.UUID
+	TokenHash      []byte
+	InvitedBy      *uuid.UUID
+	CreatedAt      time.Time
+	ExpiresAt      time.Time
+	RevokedAt      *time.Time
+	RedeemedAt     *time.Time
+	RedeemedBy     *uuid.UUID
+}
+
 type JobState struct {
-	Job       string
-	LastRunAt *time.Time
-	Watermark *time.Time
-	LastError *string
-	UpdatedAt time.Time
+	Job           string
+	LastRunAt     *time.Time
+	Watermark     *time.Time
+	LastError     *string
+	UpdatedAt     time.Time
+	LastSuccessAt *time.Time
 }
 
 type Link struct {
@@ -164,6 +225,19 @@ type Link struct {
 	PurgeAfter           *time.Time
 	SearchVector         interface{}
 	CampaignID           *uuid.UUID
+	BotBlocking          string
+	ForwardPath          bool
+	RequireSignature     bool
+}
+
+type LinkClickBudget struct {
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+	Consumed    int64
+	ExhaustedAt *time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	Rotation    int64
 }
 
 type LinkClickDaily struct {
@@ -190,6 +264,20 @@ type LinkTag struct {
 	LinkID      uuid.UUID
 	TagID       uuid.UUID
 	WorkspaceID uuid.UUID
+}
+
+type MailOutbox struct {
+	ID            uuid.UUID
+	Recipient     string
+	Subject       string
+	Body          string
+	Kind          string
+	Status        string
+	Attempts      int32
+	NextAttemptAt time.Time
+	LastError     string
+	CreatedAt     time.Time
+	SentAt        *time.Time
 }
 
 type Membership struct {
@@ -225,6 +313,18 @@ type Organization struct {
 	DeletedAt  *time.Time
 }
 
+type PendingRegistration struct {
+	ID           uuid.UUID
+	Email        string
+	EmailLower   *string
+	Name         string
+	PasswordHash string
+	TokenHash    []byte
+	CreatedAt    time.Time
+	ExpiresAt    time.Time
+	ConsumedAt   *time.Time
+}
+
 type Permission struct {
 	ID          uuid.UUID
 	Slug        string
@@ -236,7 +336,6 @@ type QrCode struct {
 	LinkID      uuid.UUID
 	WorkspaceID uuid.UUID
 	Style       []byte
-	ScanCount   int64
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
@@ -278,15 +377,16 @@ type RoutingRule struct {
 }
 
 type Session struct {
-	ID         uuid.UUID
-	UserID     uuid.UUID
-	TokenHash  []byte
-	IpPrefix   *string
-	UserAgent  *string
-	CreatedAt  time.Time
-	LastSeenAt time.Time
-	ExpiresAt  time.Time
-	RevokedAt  *time.Time
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	TokenHash   []byte
+	IpPrefix    *string
+	UserAgent   *string
+	CreatedAt   time.Time
+	LastSeenAt  time.Time
+	ExpiresAt   time.Time
+	RevokedAt   *time.Time
+	WorkspaceID *uuid.UUID
 }
 
 type Tag struct {
@@ -298,22 +398,24 @@ type Tag struct {
 }
 
 type User struct {
-	ID               uuid.UUID
-	Email            string
-	EmailLower       *string
-	EmailVerifiedAt  *time.Time
-	Name             string
-	PasswordHash     *string
-	Status           string
-	FailedLoginCount int32
-	LockedUntil      *time.Time
-	MfaSecret        *string
-	MfaEnabledAt     *time.Time
-	AnonymizedAt     *time.Time
-	LastLoginAt      *time.Time
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	DeletedAt        *time.Time
+	ID                 uuid.UUID
+	Email              string
+	EmailLower         *string
+	EmailVerifiedAt    *time.Time
+	Name               string
+	PasswordHash       *string
+	Status             string
+	FailedLoginCount   int32
+	LockedUntil        *time.Time
+	MfaSecret          *string
+	MfaEnabledAt       *time.Time
+	AnonymizedAt       *time.Time
+	LastLoginAt        *time.Time
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	DeletedAt          *time.Time
+	DefaultWorkspaceID *uuid.UUID
+	LastWorkspaceID    *uuid.UUID
 }
 
 type Visitor struct {
@@ -334,6 +436,8 @@ type Webhook struct {
 	Enabled      bool
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+	Events       []string
+	Description  string
 }
 
 type WebhookDelivery struct {
@@ -347,6 +451,7 @@ type WebhookDelivery struct {
 	NextAttemptAt *time.Time
 	CreatedAt     time.Time
 	CompletedAt   *time.Time
+	LastError     string
 }
 
 type Workspace struct {
@@ -358,6 +463,7 @@ type Workspace struct {
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
 	DeletedAt              *time.Time
+	SigningSecret          []byte
 }
 
 type WorkspaceClickDaily struct {

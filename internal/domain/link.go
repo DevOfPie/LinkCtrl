@@ -17,9 +17,13 @@ import (
 // Sentinel errors. Handlers map these to status codes in exactly one place, so
 // a service can signal "not found" without knowing about HTTP.
 var (
-	ErrNotFound     = errors.New("not found")
-	ErrConflict     = errors.New("conflict")
-	ErrForbidden    = errors.New("forbidden")
+	ErrNotFound  = errors.New("not found")
+	ErrConflict  = errors.New("conflict")
+	ErrForbidden = errors.New("forbidden")
+	// ErrUnavailable is a dependency this process does not have, rather than a
+	// refusal. It maps to 503: the caller did nothing wrong and asking again
+	// somewhere else, or later, may work.
+	ErrUnavailable  = errors.New("unavailable")
 	ErrUnauthorized = errors.New("unauthorized")
 	ErrValidation   = errors.New("validation failed")
 	// ErrNotImplemented marks Phase 2 fields that exist in the schema and are
@@ -114,16 +118,69 @@ type Link struct {
 	Status      LinkStatus `json:"status"`
 	Tags        []Tag      `json:"tags"`
 
+	// FolderID is where the link is filed (M38), or nil for a link in no folder
+	// — which every link starts as and most stay.
+	//
+	// The id and not the name. A name here would be right on the day it was
+	// written and stale the moment somebody renamed the folder, and the only
+	// callers that want one — the dashboard's list and detail pages — have
+	// already loaded the tree to draw their folder controls, so they resolve it
+	// from that. An API client that wants names asks GET /folders once rather
+	// than being sent a copy on every row of every page.
+	FolderID *uuid.UUID `json:"folder_id,omitempty"`
+
+	// CampaignID is the campaign this link belongs to (M41), or nil. The id and
+	// not the name, for exactly the reason FolderID gives above.
+	//
+	// A campaign and a folder are different questions and a link answers both:
+	// a folder is where the link lives and a campaign is what it is for, so a
+	// launch link filed under Product can still belong to Summer 2026.
+	CampaignID *uuid.UUID `json:"campaign_id,omitempty"`
+
 	// ForwardQuery merges the incoming query string into the destination on
 	// redirect. Off by default: destinations were configured deliberately, and
 	// most callers do not expect ?utm_source to reach them.
 	ForwardQuery bool `json:"forward_query"`
 
+	// ForwardPath appends the visitor's extra path segments to the destination,
+	// so /{alias}/reviews reaches the destination's own /reviews. Off by
+	// default, and for a sharper reason than ForwardQuery: with it on, one
+	// alias answers an unbounded set of URLs rather than one.
+	ForwardPath bool `json:"forward_path"`
+
+	// BotBlocking is this link's own setting, not the answer. What is actually
+	// in effect depends on the domain above it, and only domain.BlocksBots
+	// decides that — reporting the resolved boolean here instead would be a
+	// second answer that a reader could compare against the first.
+	BotBlocking BotPolicy `json:"bot_blocking"`
+
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+
+	// The gates (M35). What a link demands before it will redirect anybody.
+	//
+	// **HasPassword, never the password and never its hash.** A management API
+	// that returned either would make every reader of a link a reader of its
+	// secret, and the whole point of hashing it is that nothing can hand it back.
+	// Setting one is a write-only field on the request types.
+	HasPassword bool `json:"has_password"`
+	// MaxClicks caps how often the link may be followed; OneTime is the same
+	// gate fixed at one. Both are the *limit*, never the remaining budget —
+	// that is a durable counter reported separately, because a number this
+	// struct carried would be a snapshot of a value that moves on every click.
+	MaxClicks *int64 `json:"max_clicks,omitempty"`
+	OneTime   bool   `json:"one_time"`
+	// RequireSignature refuses any request that does not carry a valid,
+	// unexpired HMAC signature for this alias.
+	RequireSignature bool `json:"require_signature"`
+	// ClicksConsumed is how much of the budget has been spent, and it is exact —
+	// unlike ClickCount below. Populated only where the caller asked for one
+	// link rather than a page of them, because it is a second query per link.
+	ClicksConsumed *int64 `json:"clicks_consumed,omitempty"`
 
 	// Approximate: updated in batches with the click events, so it lags by up
 	// to one flush interval and can lose a batch on an unclean shutdown.
-	// Nothing that must be exact may read it.
+	// Nothing that must be exact may read it. **Deliberately not the counter the
+	// max-click gate reads** — see internal/gate and migration 02100.
 	ClickCount  int64      `json:"click_count"`
 	LastClickAt *time.Time `json:"last_click_at,omitempty"`
 
@@ -164,9 +221,26 @@ const (
 
 // LinkFilter describes a link query.
 type LinkFilter struct {
-	WorkspaceID  uuid.UUID
-	Search       string
-	TagIDs       []uuid.UUID
+	WorkspaceID uuid.UUID
+	Search      string
+	TagIDs      []uuid.UUID
+	// FolderID narrows to one folder (M38). Unfiled narrows to the links that
+	// are in none, which is a different question from "no filter" and cannot be
+	// asked with a nil id. Setting both is Unfiled winning, because a request
+	// naming a folder *and* asking for the unfiled ones has contradicted itself
+	// and the empty answer is the honest one.
+	FolderID *uuid.UUID
+	Unfiled  bool
+	// CampaignID narrows to one campaign (M41). Uncampaigned narrows to the
+	// links carrying none, and the pair works exactly as the folder pair above
+	// does, including which one wins when a request asks for both.
+	CampaignID   *uuid.UUID
+	Uncampaigned bool
+	// DomainID narrows to the links served on one hostname (M40). Nil is no
+	// filter. There is no `unhosted` counterpart, unlike the folder pair above:
+	// links.domain_id is NOT NULL, so every link is on exactly one domain and
+	// there is no third state to ask about.
+	DomainID     *uuid.UUID
 	Status       LinkStatus
 	Sort         LinkSort
 	Cursor       string

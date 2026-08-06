@@ -1,0 +1,66 @@
+{{define "worldmap"}}
+{{- /* Takes (dict "Map" ui.WorldMap "Base" string "List" string).
+
+       Base is the page URL with its window already on it, so the metric toggle
+       does not have to know how the window is spelled. List is the anchor of
+       the ranked list, which stays one click from here: the map answers "where
+       from", and only the list answers "exactly how many".
+
+       Pure SVG. Geometry and fill classes are computed in Go — see
+       internal/ui/choropleth.go — because the CSP forbids inline styles and a
+       template cannot build a class name Tailwind will find. */ -}}
+<div class="rounded-lg border border-line bg-raised p-6">
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <h2 class="text-sm font-medium text-ink">Where the clicks came from</h2>
+    <div class="flex flex-wrap items-center gap-3 text-sm">
+      <div class="flex gap-1">
+        <a href="{{.Base}}&amp;geo=clicks"
+           class="{{if eq .Map.Metric "visitors"}}rounded-md px-2 py-1 text-muted hover:bg-sunken{{else}}rounded-md bg-accent-soft px-2 py-1 font-medium text-accent-ink{{end}}">Clicks</a>
+        <a href="{{.Base}}&amp;geo=visitors"
+           class="{{if eq .Map.Metric "visitors"}}rounded-md bg-accent-soft px-2 py-1 font-medium text-accent-ink{{else}}rounded-md px-2 py-1 text-muted hover:bg-sunken{{end}}">Unique visitors</a>
+      </div>
+      <a href="{{.List}}" class="text-accent-ink hover:underline">Exact numbers →</a>
+    </div>
+  </div>
+
+  {{if .Map.Unavailable}}
+  {{- /* No GeoIP database. The map is not drawn at all, and the sentence is the
+         one the ranked list has always used — a world uniformly coloured
+         "unknown" would be a picture of nothing that looks like a picture of
+         something. */ -}}
+  <p class="text-sm text-subtle">{{.Map.Unavailable}}</p>
+  {{else if not .Map.Countries}}
+  <p class="text-sm text-subtle">No clicks resolved to a country in this window.</p>
+  {{else}}
+  <svg viewBox="{{.Map.ViewBox}}" class="w-full" role="img"
+       aria-label="World map shaded by {{.Map.MetricLabel}} per country">
+    <g fill-rule="{{.Map.FillRule}}" class="stroke-line" stroke-width="0.4">
+      {{range .Map.Shapes}}<path d="{{.Path}}" class="{{.Class}}"><title>{{.Title}}</title></path>{{end}}
+    </g>
+  </svg>
+
+  <div class="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-muted">
+    <div class="flex items-center gap-2">
+      <span>0</span>
+      <svg viewBox="0 0 100 8" preserveAspectRatio="none" class="h-2 w-32" aria-hidden="true">
+        <rect x="0" y="0" width="16" height="8" class="fill-sunken"/>
+        {{range $i, $b := .Map.Legend}}<rect x="{{add 16 (mul $i 16)}}" y="0" width="16" height="8" class="{{$b.Class}}"/>{{end}}
+      </svg>
+      <span>{{fmtInt .Map.Max}} {{.Map.MetricLabel}}</span>
+    </div>
+    <p>{{.Map.Countries}} {{if eq .Map.Countries 1}}country{{else}}countries{{end}}</p>
+  </div>
+
+  {{if .Map.Unmapped}}
+  {{- /* A GeoIP database resolves territories this map has no shape for — Hong
+         Kong, Monaco, small islands. Saying so is what stops the map and the
+         ranked list quietly disagreeing about a total. */ -}}
+  <p class="mt-2 text-xs text-subtle">Counted but not drawn, because the map has no shape for them: {{range $i, $c := .Map.Unmapped}}{{if $i}}, {{end}}{{$c}}{{end}}.</p>
+  {{end}}
+
+  {{if .Map.Caveat}}
+  <p class="mt-2 text-xs text-subtle">{{.Map.Caveat}}</p>
+  {{end}}
+  {{end}}
+</div>
+{{end}}

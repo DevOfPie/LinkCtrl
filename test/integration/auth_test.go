@@ -7,9 +7,13 @@
 package integration
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
 	"net/netip"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -32,6 +36,24 @@ import (
 // policy itself is covered by unit tests.
 var fastParams = auth.Params{MemoryKiB: 19 * 1024, Iterations: 1, Parallelism: 1, SaltLength: 16, KeyLength: 32}
 
+// grantInstanceScope confers one instance-level permission on an account.
+//
+// Fixtures register their owner with auth.Register rather than claiming the
+// instance through /auth/setup, so they get an ordinary organization owner and
+// not the instance principal. Since D100 that distinction reaches the instance
+// default domain's settings, so a test whose subject is something else — the
+// audit record, the destination tiers — says so here rather than being rewritten
+// around a guard it is not about.
+func grantInstanceScope(t *testing.T, pool *pgxpool.Pool, userID uuid.UUID, scope string) {
+	t.Helper()
+	if _, err := pool.Exec(t.Context(),
+		`INSERT INTO instance_grants (user_id, permission_id)
+		 SELECT $1, id FROM permissions WHERE slug = $2
+		 ON CONFLICT DO NOTHING`, userID, scope); err != nil {
+		t.Fatalf("grant %s: %v", scope, err)
+	}
+}
+
 func newService(pool *pgxpool.Pool) *auth.Service {
 	return auth.NewService(pool, auth.ServiceConfig{
 		Params:  fastParams,
@@ -53,8 +75,29 @@ func TestMigrationsProduceExpectedSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tables != 31 {
-		t.Errorf("got %d tables, want 31 (all 20 Plan.md entities)", tables)
+	// 31 was the Phase 1 count: all 20 Plan.md entities, plus the join and
+	// support tables they need. Seven Phase 2 tables have been added since, and
+	// none of them is an entity: mail_outbox is the delivery queue decision D23
+	// chose over an in-memory retry, invitations is the grant M27 issues,
+	// pending_registrations is M29's waiting room — a self-serve registration
+	// that has not proven its address yet, which is why no account exists for
+	// it — blocked_destinations is M30's low-confidence blocklist, the one tier
+	// of three that is meant to change without a rebuild,
+	// destination_disputes is M31's appeal against exactly that list, and
+	// link_click_budget is M35's durable click counter — a table rather than a
+	// column on `links` because `links.click_count` is approximate by design and
+	// gating on it would make a lossy asynchronous counter into an
+	// authorization boundary. And instance_grants is M45's instance-level
+	// principal (D98) — a permission held by a person over the whole instance
+	// rather than through a membership, which is the one thing this schema had no
+	// way to express and the reason F15, F31 and F36 all bottomed out at D38.
+	// Each is live and typed rather than dormant jsonb, because the feature that
+	// reads it arrived in the same commit. The number moves and the sentence says
+	// why, rather than the count silently growing whenever somebody adds a table.
+	if tables != 38 {
+		t.Errorf("got %d tables, want 38 (all 20 Plan.md entities, plus mail_outbox, "+
+			"invitations, pending_registrations, blocked_destinations, "+
+			"destination_disputes, link_click_budget and instance_grants)", tables)
 	}
 
 	// The UTC guarantee the partition scheme depends on.
@@ -279,6 +322,172 @@ func TestAccountLocksAfterRepeatedFailures(t *testing.T) {
 	}
 	if d := time.Until(*lockedUntil); d > 20*time.Minute {
 		t.Errorf("lockout lasts %s, which is long enough to be a denial of service", d)
+	}
+}
+
+// ─── Finding F92: a lockout must not be a registration oracle ────────────────
+
+// signInRefusal is everything a caller can see of a refused sign-in.
+type signInRefusal struct {
+	Status int    `json:"-"`
+	Type   string `json:"type"`
+	Title  string `json:"title"`
+	Detail string `json:"detail"`
+}
+
+// signInAPI posts one credential pair to the JSON endpoint and returns the
+// refusal whole, so a difference in any visible field fails rather than only the
+// field somebody remembered to compare.
+func (f *webFixture) signInAPI(email, password string) signInRefusal {
+	f.t.Helper()
+	body, err := json.Marshal(map[string]string{"email": email, "password": password})
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	req, err := http.NewRequestWithContext(f.t.Context(), http.MethodPost,
+		f.server.URL+"/api/v1/auth/login", bytes.NewReader(body))
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := f.client.Do(req)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	out := signInRefusal{Status: resp.StatusCode}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		f.t.Fatalf("decode problem document: %v", err)
+	}
+	return out
+}
+
+// TestSignInAnswersALockedAccountLikeAnUnregisteredOne is finding F92.
+//
+// Sign-in used to tell an unauthenticated stranger whether an address had an
+// account here, and the price of asking was five wrong passwords. The fifth
+// against a registered address came back `429 …/problems/account-locked`; five
+// against an unregistered one came back `401 …/problems/invalid-credentials`.
+// Five fits inside LOGIN_RATE_PER_MIN, so the per-address limiter never masked
+// it, and the limiter's own refusal carries a third type — so all three states
+// were tellable apart with no credential at all, on the shipped `closed` default
+// where the registration endpoint refuses before it ever looks an address up.
+// Asking also cost the target a lockout, which made it a cheap denial of service
+// against a known address as well as an oracle.
+//
+// Both surfaces are asserted here because fixing one is the trap the row named:
+// mapping the error to a 401 closes the API and leaves the form saying *the
+// account is locked briefly* in prose, and whoever wants to know only has to ask
+// the surface that still answers.
+func TestSignInAnswersALockedAccountLikeAnUnregisteredOne(t *testing.T) {
+	f := newWeb(t)
+	f.claim()
+	// Signed out first: claim() leaves a session in the jar, and a sign-in
+	// attempt carrying one is not the state a stranger is in.
+	f.body(f.postForm("/logout", url.Values{}, nil))
+
+	const known, unknown = "owner@example.com", "nobody@example.com"
+	const wrong = "wrong-but-long-enough"
+
+	// The threshold, attempt by attempt, so the comparison covers the fifth —
+	// which is the one that used to change its answer — and not only the total.
+	for attempt := 1; attempt <= 5; attempt++ {
+		gotKnown := f.signInAPI(known, wrong)
+		gotUnknown := f.signInAPI(unknown, wrong)
+		if gotKnown != gotUnknown {
+			t.Errorf("attempt %d: a registered address answers %+v where an "+
+				"unregistered one answers %+v — the difference is the answer to "+
+				"\"does this address have an account here?\"",
+				attempt, gotKnown, gotUnknown)
+		}
+		if gotKnown.Status != http.StatusUnauthorized {
+			t.Errorf("attempt %d returned %d, want 401: a sign-in refusal is a 401 "+
+				"whatever caused it, and a 429 here is both the oracle and a "+
+				"client being told to back off for somebody else's guessing",
+				attempt, gotKnown.Status)
+		}
+	}
+
+	// Now locked. The strongest case: the *correct* password against an account
+	// that is locked out must be indistinguishable from the correct password
+	// against nothing at all.
+	if got, want := f.signInAPI(known, webPassword), f.signInAPI(unknown, webPassword); got != want {
+		t.Errorf("with the right password, a locked account answers %+v and an "+
+			"unregistered address answers %+v", got, want)
+	}
+
+	// And the form, which is where the prose lives.
+	page := func(email string) string {
+		resp := f.postForm("/login", url.Values{"email": {email}, "password": {wrong}}, nil)
+		if resp.StatusCode != http.StatusUnauthorized {
+			f.t.Fatalf("the sign-in form returned %d for %s, want 401", resp.StatusCode, email)
+		}
+		body := f.body(resp)
+		// The only thing that legitimately differs is the address echoed back
+		// into the form's value attribute, so it is normalized away rather than
+		// excluded from the comparison — anything else that differs is a leak.
+		return strings.ReplaceAll(body, email, "<the address that was submitted>")
+	}
+	if lockedPage, unknownPage := page(known), page(unknown); lockedPage != unknownPage {
+		t.Errorf("the sign-in form renders a different page for a locked account "+
+			"than for an unregistered address; the API answering identically is "+
+			"worth nothing while the prose still says which is which\n"+
+			"locked page length %d, unknown page length %d",
+			len(lockedPage), len(unknownPage))
+	}
+}
+
+// TestALockedAccountCostsTheSameAsAnUnregisteredOne is F92's second leak, and
+// the reason equalising the status alone would not have closed it.
+//
+// The locked branch returned before any verification, so it answered in one
+// database round trip where the unknown-address path pays a dummy argon2 — the
+// same question, asked with a stopwatch instead of a status code.
+//
+// Shaped like TestDummyVerifyCostsTheSameAsARealOne and bounded as generously,
+// for its reason: this is a timing test on a shared machine, and what it has to
+// catch is an order-of-magnitude gap rather than a few percent.
+func TestALockedAccountCostsTheSameAsAnUnregisteredOne(t *testing.T) {
+	pool := newDB(t)
+	svc := newService(pool)
+	ctx := context.Background()
+
+	const email, password = "timing@example.com", "a-sufficiently-long-password"
+	if _, err := svc.Register(ctx, auth.RegisterInput{Email: email, Password: password}); err != nil {
+		t.Fatal(err)
+	}
+	for range 5 {
+		_, _ = svc.Login(ctx, auth.LoginInput{Email: email, Password: "wrong-but-long-enough"})
+	}
+	if _, err := svc.Login(ctx, auth.LoginInput{Email: email, Password: password}); !errors.Is(err, auth.ErrAccountLocked) {
+		t.Fatalf("the account under test is not locked: %v", err)
+	}
+
+	// Warm up, so the first allocation does not skew the comparison.
+	_, _ = svc.Login(ctx, auth.LoginInput{Email: "nobody@example.com", Password: password})
+	_, _ = svc.Login(ctx, auth.LoginInput{Email: email, Password: password})
+
+	const runs = 5
+	var locked, unknown time.Duration
+	for range runs {
+		start := time.Now()
+		_, _ = svc.Login(ctx, auth.LoginInput{Email: "nobody@example.com", Password: password})
+		unknown += time.Since(start)
+
+		start = time.Now()
+		_, _ = svc.Login(ctx, auth.LoginInput{Email: email, Password: password})
+		locked += time.Since(start)
+	}
+	locked /= runs
+	unknown /= runs
+
+	if ratio := float64(locked) / float64(unknown); ratio < 0.25 || ratio > 4.0 {
+		t.Errorf("a locked account refuses in %s where an unregistered address "+
+			"takes %s (ratio %.2f); the gap is the same account-enumeration oracle "+
+			"the status code used to be, answerable with a stopwatch",
+			locked, unknown, ratio)
 	}
 }
 

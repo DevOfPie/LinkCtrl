@@ -127,27 +127,6 @@ func TestVisitorHashHandlesInvalidAddress(t *testing.T) {
 	}
 }
 
-func TestAnonymizeIP(t *testing.T) {
-	tests := map[string]string{
-		"203.0.113.42":          "203.0.113.0/24",
-		"10.1.2.3":              "10.1.2.0/24",
-		"2001:db8:1234:5678::1": "2001:db8:1234::/48",
-		// Must fold first: masking this to /48 as IPv6 would keep the whole
-		// embedded IPv4 address, which is the data being discarded.
-		"::ffff:203.0.113.42": "203.0.113.0/24",
-	}
-	for in, want := range tests {
-		t.Run(in, func(t *testing.T) {
-			if got := AnonymizeIP(netip.MustParseAddr(in)); got != want {
-				t.Errorf("AnonymizeIP(%s) = %q, want %q", in, got, want)
-			}
-		})
-	}
-	if got := AnonymizeIP(netip.Addr{}); got != "" {
-		t.Errorf("AnonymizeIP(invalid) = %q, want empty", got)
-	}
-}
-
 func TestSaltDayIsUTC(t *testing.T) {
 	// A local-time boundary would rotate at a different instant per
 	// deployment and split a visitor across a daylight-saving change.

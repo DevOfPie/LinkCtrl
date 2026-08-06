@@ -16,15 +16,15 @@ import (
 // PartitionedTables are the RANGE-partitioned tables. All are keyed on a
 // timestamptz and partitioned by month.
 //
-// Two of the three are dormant in Phase 1: nothing writes visitors at all, and
-// audit_logs has a table but no behavior. They are maintained anyway, and that
-// is deliberate rather than an oversight. The cost is one to_regclass check per
-// table per month — the partition already exists on all but one run an hour.
-// The benefit is that the day something does write to them, partitions exist
-// and retention already applies. The alternative fails in the direction that
-// matters: rows landing in the default partition, which retention never drops,
-// so dormant tables would quietly become the one place raw visitor data is kept
-// forever.
+// Maintaining partitions for a table nothing writes to yet is deliberate rather
+// than an oversight, and it paid off here. audit_logs was maintained through the
+// whole of Phase 1 with no writer; when M21 gave it one, partitions already
+// existed for every month and no backfill was needed. `visitors` is still in
+// that position. The cost is one to_regclass check per table per month — the
+// partition already exists on all but one run an hour. The alternative fails in
+// the direction that matters: rows landing in the default partition, which
+// retention never drops, so a dormant table would quietly become the one place
+// data is kept forever.
 var PartitionedTables = []string{"click_events", "visitors", "audit_logs"}
 
 // EnsurePartitions creates monthly partitions for the current month and the
@@ -145,26 +145,52 @@ func ensurePartition(ctx context.Context, pool *pgxpool.Pool, table, name string
 	return true, nil
 }
 
-// RetainedTables are the partitioned tables that the analytics retention window
+// AnalyticsTables are the partitioned tables the analytics retention window
 // applies to.
 //
 // audit_logs is partitioned identically and is deliberately not here. Audit
 // retention is a different policy from analytics retention — the reason to keep
 // an audit trail is that someone may need to ask what happened a long time
 // afterwards — and quietly deleting it on the analytics setting would be a
-// surprise of exactly the wrong kind. It grows until Phase 2 gives it a policy
-// of its own.
-var RetainedTables = []string{"click_events", "visitors"}
+// surprise of exactly the wrong kind. It has its own window; see
+// RetentionPolicy.
+var AnalyticsTables = []string{"click_events", "visitors"}
+
+// AuditTable is the audit log, retained under its own window.
+const AuditTable = "audit_logs"
+
+// RetentionPolicy maps a partitioned table to the number of days its data is
+// kept. Zero or less keeps that table forever, matching the configuration
+// contract that 0 means "forever".
+//
+// A map rather than one number and a list of tables, because the two policies
+// have different defaults and answer to different settings: 395 days from
+// ANALYTICS_RETENTION_DAYS, and forever from AUDIT_RETENTION_DAYS. Expressing
+// that as a single window over a table list was how audit_logs came to be
+// exempt-by-omission, which worked only for as long as there was exactly one
+// window.
+type RetentionPolicy map[string]int
+
+// NewRetentionPolicy builds the policy from the two configured windows.
+func NewRetentionPolicy(analyticsDays, auditDays int) RetentionPolicy {
+	p := RetentionPolicy{AuditTable: auditDays}
+	for _, t := range AnalyticsTables {
+		p[t] = analyticsDays
+	}
+	return p
+}
 
 // partitionMonth matches the names EnsurePartitions creates. Anything else is
 // left alone: a partition this code did not create is not one it should drop.
 var partitionMonth = regexp.MustCompile(`^(.+)_(\d{4})_(\d{2})$`)
 
 // DropExpiredPartitions drops monthly partitions whose entire range is older
-// than the retention window, and reports what it dropped.
+// than their table's retention window, and reports what it dropped.
 //
-// A retentionDays of zero or less keeps everything, matching the configuration
-// contract that 0 means "forever".
+// A window of zero or less keeps that table forever, matching the configuration
+// contract that 0 means "forever". A table absent from the policy is never
+// touched at all, which is what keeps a partitioned table added later from
+// silently inheriting somebody else's window.
 //
 // Retention is enforced at month granularity, and only when the newest row a
 // partition could hold is already outside the window. The alternative — deleting
@@ -177,15 +203,18 @@ var partitionMonth = regexp.MustCompile(`^(.+)_(\d{4})_(\d{2})$`)
 //
 // Daily rollups live in their own unpartitioned tables and are untouched, so
 // historical charts keep working after the raw events are gone.
-func DropExpiredPartitions(ctx context.Context, pool *pgxpool.Pool, retentionDays int, now time.Time) ([]string, error) {
-	if retentionDays <= 0 {
-		return nil, nil
-	}
-	cutoff := now.UTC().AddDate(0, 0, -retentionDays)
-
+func DropExpiredPartitions(ctx context.Context, pool *pgxpool.Pool, policy RetentionPolicy, now time.Time) ([]string, error) {
 	var dropped []string
 	var errs []error
-	for _, table := range RetainedTables {
+	// Iterated in a fixed order rather than over the map, so a run that drops
+	// several tables' partitions logs them the same way every time.
+	for _, table := range PartitionedTables {
+		retentionDays, governed := policy[table]
+		if !governed || retentionDays <= 0 {
+			continue
+		}
+		cutoff := now.UTC().AddDate(0, 0, -retentionDays)
+
 		names, err := expiredPartitions(ctx, pool, table, cutoff)
 		if err != nil {
 			errs = append(errs, err)
@@ -299,6 +328,35 @@ func dropPartition(ctx context.Context, pool *pgxpool.Pool, name string) error {
 func PartitionName(table string, at time.Time) string {
 	at = at.UTC()
 	return fmt.Sprintf("%s_%04d_%02d", table, at.Year(), int(at.Month()))
+}
+
+// PartitionedTableBytes reports the on-disk size of a partitioned table:
+// every partition, including indexes and TOAST.
+//
+// This exists because the audit log's retention default is "keep forever", and
+// that default is only defensible if the growth it permits is visible. An
+// operator who never sets AUDIT_RETENTION_DAYS has chosen unbounded growth, and
+// they should find that out from a graph rather than from a full disk.
+//
+// Summed over the partitions rather than read from the parent: a partitioned
+// table has no storage of its own, so pg_total_relation_size on the parent
+// answers 0 no matter how much data is underneath it.
+//
+// Catalogue and free-space-map arithmetic only — no scan of the table — so this
+// stays cheap on the table it is most needed for.
+func PartitionedTableBytes(ctx context.Context, pool *pgxpool.Pool, table string) (int64, error) {
+	var bytes int64
+	err := pool.QueryRow(ctx, `
+		SELECT coalesce(sum(pg_total_relation_size(c.oid)), 0)::bigint
+		  FROM pg_inherits i
+		  JOIN pg_class c ON c.oid = i.inhrelid
+		  JOIN pg_class p ON p.oid = i.inhparent
+		 WHERE p.relname = $1
+		   AND c.relispartition`, table).Scan(&bytes)
+	if err != nil {
+		return 0, fmt.Errorf("size of %s: %w", table, err)
+	}
+	return bytes, nil
 }
 
 // DefaultPartitionCounts reports how many rows sit in each default partition.

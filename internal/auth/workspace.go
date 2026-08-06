@@ -1,0 +1,213 @@
+package auth
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+)
+
+// Workspace is one entry in the switcher.
+//
+// Deliberately not the database row: the switcher needs a label and two flags,
+// and handing the whole workspace out would put analytics retention and soft
+// deletion on a JSON surface nobody asked for.
+type Workspace struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+	Slug string    `json:"slug"`
+	// Organization is carried because a workspace name is only unique inside
+	// one. Two organizations both calling a workspace "Marketing" is normal, and
+	// a switcher that showed the workspace name alone would be unreadable.
+	OrganizationID   uuid.UUID `json:"organization_id"`
+	OrganizationName string    `json:"organization_name"`
+	IsPersonal       bool      `json:"is_personal"`
+	// Current is where this request is acting. Computed against the identity
+	// rather than stored, because "current" is a property of the request.
+	Current bool `json:"current"`
+	// Default marks the pinned workspace: where a new session starts. No entry
+	// carries it when the user is on last-used, which is the default state.
+	Default bool `json:"default"`
+}
+
+// ErrNoWorkspace reports that an account belongs to no organization, and so
+// resolves into no workspace.
+//
+// It is a state, not a fault, and that is the whole of D36. Until organization
+// deletion existed this could not be reached — registration provisions a
+// membership in the same transaction as the user — so resolveWorkspace called it
+// a broken instance and every caller propagated the error. Deleting the last
+// organization somebody belongs to now produces it deliberately, on an account
+// that is otherwise entirely intact, and an availability path reached by every
+// authenticated request must not treat that as a failure.
+//
+// Callers turn it into an identity that holds nothing rather than into an error:
+// see identityWithoutOrganization. It stays an error value so that a caller
+// which has *not* been taught about it fails loudly instead of silently acting
+// with a zero workspace id.
+var ErrNoWorkspace = errors.New("auth: account belongs to no organization")
+
+// resolveWorkspace answers "which workspace is this user acting in", and is the
+// only path by which that question is answered.
+//
+// One function, four callers — login, session authentication, the CLI's
+// identity lookup, and an API key that names no workspace of its own. Before
+// this milestone each of them called the same query directly, which was fine
+// while the answer was "the oldest one"; with a preference and a switcher in
+// play, four call sites would be four chances for one of them to keep resolving
+// the old way, and the bug would only appear once somebody held two
+// memberships. Everything about the precedence lives in the query.
+//
+// sessionID is nil for the three callers that have no session.
+//
+// orgID is nil for everything except an organization-wide API key (M44), and it
+// bounds the answer rather than ordering it. Such a key means "every workspace in
+// **the organization it belongs to**", and a person's pinned default is a
+// property of the person: without the bound, a key issued in one organization
+// would resolve into another one its owner also belongs to. Passing nil here is
+// the behaviour every other caller has always had, which is what keeps this one
+// function the only statement of the precedence.
+func (s *Service) resolveWorkspace(
+	ctx context.Context, userID uuid.UUID, sessionID *uuid.UUID, orgID *uuid.UUID,
+) (dbgen.Workspace, error) {
+	ws, err := s.q.ResolveWorkspaceForUser(ctx, dbgen.ResolveWorkspaceForUserParams{
+		UserID:         userID,
+		SessionID:      sessionID,
+		OrganizationID: orgID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ws, ErrNoWorkspace
+		}
+		return ws, fmt.Errorf("resolve workspace: %w", err)
+	}
+	return ws, nil
+}
+
+// Workspaces lists what the actor may switch to, newest information first: the
+// current one is flagged, and so is the pinned default if there is one.
+//
+// Readable with any credential, including an API key. There is no permission
+// for it because it exposes nothing but the caller's own memberships, which is
+// the same reason the notification inbox has none.
+//
+// A key is bounded to the organization it was issued for, and a session is not.
+// That is the difference between a person and a credential rather than a
+// difference in trust: the switcher's whole job is to cross organizations, so a
+// browser has to see all of them, while M44 spent an organization_id parameter
+// specifically so a key could not *act* in a tenant it was never issued for. A
+// key reading the list of every tenant its owner belongs to is the same bound
+// missing from the read — the names and slugs of organizations whose data the
+// key cannot touch, disclosed to whoever holds it. The filter is here and not in
+// ListWorkspacesForUser because that query serves the switcher too, and adding
+// the predicate there would break the one caller that must cross (F103).
+func (s *Service) Workspaces(ctx context.Context, actor *Identity) ([]Workspace, error) {
+	if actor == nil {
+		return nil, domain.ErrUnauthorized
+	}
+	rows, err := s.q.ListWorkspacesForUser(ctx, actor.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("list workspaces: %w", err)
+	}
+	out := make([]Workspace, 0, len(rows))
+	for _, r := range rows {
+		if actor.IsAPIKey() && r.OrganizationID != actor.OrgID {
+			continue
+		}
+		out = append(out, Workspace{
+			ID:               r.ID,
+			Name:             r.Name,
+			Slug:             r.Slug,
+			OrganizationID:   r.OrganizationID,
+			OrganizationName: r.OrganizationName,
+			IsPersonal:       r.IsPersonal,
+			Current:          r.ID == actor.WorkspaceID,
+			Default:          r.IsDefault,
+		})
+	}
+	return out, nil
+}
+
+// SwitchWorkspace moves the caller's session, and remembers the choice.
+//
+// Two writes in one transaction, because they mean different things and both
+// have to happen: the session moves so the next request is already in the new
+// workspace, and the user's last-used is updated so the next *session* starts
+// there too. Half of that would be a switcher that either forgets on sign-in or
+// does not take effect until one.
+//
+// Requires a session, like changing a password does, and for two reasons rather
+// than one. Half of what it does needs a session id: SetSessionWorkspace moves
+// the caller's own session, and a key has none to move. The other half writes
+// users.last_workspace_id, which is a property of the person — a key doing that
+// would repoint where its owner's next sign-in lands, a side effect on somebody
+// else's browser from a credential that cannot see it.
+//
+// What is *not* a reason is that a key would leave its own requests alone. A
+// workspace-scoped key acts where its row says, but an organization-wide one
+// (M44) names no workspace and comes through resolveWorkspace above like a
+// login, so last_workspace_id decides for it too whenever its owner has pinned
+// no default.
+func (s *Service) SwitchWorkspace(ctx context.Context, actor *Identity, workspaceID uuid.UUID) error {
+	if err := requireSessionActor(actor, "switching workspace"); err != nil {
+		return err
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+
+	n, err := q.SetLastWorkspaceForUser(ctx, dbgen.SetLastWorkspaceForUserParams{
+		UserID: actor.UserID, WorkspaceID: workspaceID,
+	})
+	if err != nil {
+		return fmt.Errorf("remember workspace: %w", err)
+	}
+	if n == 0 {
+		// Not a member, or no such workspace. One answer for both, so an id
+		// cannot be probed for existence.
+		return domain.ErrNotFound
+	}
+
+	if _, err := q.SetSessionWorkspace(ctx, dbgen.SetSessionWorkspaceParams{
+		SessionID: actor.SessionID, UserID: actor.UserID, WorkspaceID: workspaceID,
+	}); err != nil {
+		return fmt.Errorf("move session: %w", err)
+	}
+
+	return tx.Commit(ctx)
+}
+
+// SetDefaultWorkspace pins where new sessions start, or clears the pin.
+//
+// nil means "follow last-used", which is what the control offers as its first
+// option and what every account is on until somebody chooses otherwise (D22).
+// The derived behaviour stays the default; this exists for the person it
+// annoys.
+//
+// Session-only for the same reason as SwitchWorkspace: it is an account
+// preference, and a leaked key must not be able to decide where its owner's
+// browser lands.
+func (s *Service) SetDefaultWorkspace(ctx context.Context, actor *Identity, workspaceID *uuid.UUID) error {
+	if err := requireSessionActor(actor, "setting the default workspace"); err != nil {
+		return err
+	}
+	n, err := s.q.SetDefaultWorkspaceForUser(ctx, dbgen.SetDefaultWorkspaceForUserParams{
+		UserID: actor.UserID, WorkspaceID: workspaceID,
+	})
+	if err != nil {
+		return fmt.Errorf("set default workspace: %w", err)
+	}
+	if n == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}

@@ -1,0 +1,175 @@
+{{define "content"}}
+<div class="mb-6 flex items-baseline justify-between">
+  <h1 class="text-xl font-semibold tracking-tight">Automation</h1>
+  <a href="/links" class="text-sm font-medium text-accent-ink hover:underline">Links →</a>
+</div>
+
+{{template "automation_panel" .}}
+{{end}}
+
+{{/* The whole page below the heading, and the htmx swap target.
+
+     One target rather than several, for the reason the webhooks page gives:
+     every write here can change more than one half — creating changes the list
+     AND empties the form, toggling changes a row's state, and a refusal has to
+     appear above all of it. */}}
+{{define "automation_panel"}}
+<div id="automation-panel">
+  {{template "flash_ok" .Notice}}
+  {{template "flash_error" .Error}}
+
+  {{if .CanWrite}}
+  <div class="mb-6 rounded-lg border border-line bg-raised p-6">
+    <h2 class="mb-4 text-sm font-medium text-ink">Create a rule</h2>
+    <form method="post" action="/automation" hx-post="/automation" hx-target="#automation-panel" hx-swap="outerHTML"
+          class="grid gap-4">
+      <div>
+        <label for="rule-name" class="block text-sm font-medium text-ink">Name</label>
+        <input id="rule-name" name="name" type="text" required maxlength="120" value="{{.FormName}}"
+               placeholder="Tell me when a campaign link expires"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      </div>
+      <fieldset>
+        <legend class="block text-sm font-medium text-ink">When</legend>
+        <div class="mt-2 grid gap-2 sm:grid-cols-3">
+          {{range .Triggers}}
+          <label class="flex items-center gap-2 text-sm text-ink">
+            <input type="radio" name="trigger" value="{{.Name}}" {{if .Checked}}checked{{end}} required
+                   class="border-line-strong text-accent focus:ring-accent">
+            <code class="text-xs">{{.Name}}</code>
+          </label>
+          {{end}}
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend class="block text-sm font-medium text-ink">Do</legend>
+        <div class="mt-2 grid gap-2 sm:grid-cols-3">
+          {{range .Actions}}
+          <label class="flex items-center gap-2 text-sm text-ink">
+            <input type="checkbox" name="actions" value="{{.Name}}" {{if .Checked}}checked{{end}}
+                   class="rounded border-line-strong text-accent focus:ring-accent">
+            <code class="text-xs">{{.Name}}</code>
+          </label>
+          {{end}}
+        </div>
+        <p class="mt-2 text-xs text-subtle"><code>archive_link</code> needs a trigger with a link in it, so it is refused on <code>destination.blocked</code>.</p>
+      </fieldset>
+      <div>
+        <label for="rule-min-count" class="block text-sm font-medium text-ink">Fire after <span class="text-subtle">(subjects)</span></label>
+        <input id="rule-min-count" name="min_count" type="number" min="1" max="{{.MatchesPerRule}}" value="{{if .FormMinCount}}{{.FormMinCount}}{{else}}1{{end}}"
+               class="mt-1 block w-24 rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        <p class="mt-1 text-xs text-subtle">Nothing is discarded while the count is unmet &mdash; matches accumulate until the threshold is reached.</p>
+      </div>
+      <div>
+        <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Create</button>
+      </div>
+    </form>
+    <p class="mt-3 text-xs text-subtle">
+      <strong>A rule acts on what happens after it exists.</strong> Creating one arms it at the current instant, and pausing and resuming one re-arms it, so nothing fires for a backlog nobody asked about.
+    </p>
+    <p class="mt-2 text-xs text-subtle">
+      Rules are evaluated on the scheduler, never on a request &mdash; roughly every {{.IntervalMins}} minute(s), up to {{.RulesPerRun}} rules a run and {{.MatchesPerRule}} subjects a rule. A rule that matches more is not skipped: the remainder is picked up on the next run. Up to {{.MaxRules}} rules fit in a workspace, with at most {{.MaxActions}} actions each.
+    </p>
+  </div>
+  {{end}}
+
+  <div class="rounded-lg border border-line bg-raised p-6">
+    {{if .Rows}}
+    <ul class="divide-y divide-line">
+      {{range .Rows}}
+      <li class="py-4 first:pt-0 last:pb-0">
+        <div class="flex flex-wrap items-baseline gap-2">
+          <span class="text-sm font-medium text-ink">{{.Name}}</span>
+          {{if .Enabled}}
+          <span class="rounded-full bg-ok-soft px-2 py-0.5 text-xs font-medium text-ok-ink">enabled</span>
+          {{else}}
+          <span class="rounded-full bg-sunken px-2 py-0.5 text-xs font-medium text-subtle">paused</span>
+          {{end}}
+          <span class="text-xs text-subtle">since {{.CreatedAt}}</span>
+          <div class="ml-auto flex flex-wrap items-center gap-2">
+            {{if $.CanWrite}}
+            <a href="/automation?edit={{.ID}}" hx-get="/automation?edit={{.ID}}" hx-target="#automation-panel"
+               hx-select="#automation-panel" hx-swap="outerHTML" hx-push-url="true"
+               class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-surface">Edit</a>
+            <form method="post" action="/automation/{{.ID}}/toggle"
+                  hx-post="/automation/{{.ID}}/toggle" hx-target="#automation-panel" hx-swap="outerHTML">
+              <button type="submit" class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-surface">{{if .Enabled}}Pause{{else}}Resume{{end}}</button>
+            </form>
+            <form method="post" action="/automation/{{.ID}}/delete"
+                  hx-post="/automation/{{.ID}}/delete" hx-target="#automation-panel" hx-swap="outerHTML">
+              <button type="submit" class="rounded-md border border-danger-line px-2 py-1 text-xs font-medium text-danger-ink hover:bg-danger-soft">Delete</button>
+            </form>
+            {{end}}
+          </div>
+        </div>
+        <p class="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted">
+          <span class="text-subtle">when</span>
+          <code class="rounded bg-sunken px-1.5 py-0.5">{{.Trigger}}</code>
+          {{if gt .MinCount 1}}<span class="text-subtle">after {{.MinCount}}</span>{{end}}
+          <span class="text-subtle">do</span>
+          {{range .Actions}}<code class="rounded bg-sunken px-1.5 py-0.5">{{.}}</code>{{end}}
+        </p>
+        {{/* The watermark, named for what it is. It is the instant a rule has
+             already seen up to, so a rule armed a moment ago and a rule that
+             fired a moment ago show the same value — and saying "last fired or
+             armed" is the honest way to render one field that means both. */}}
+        <p class="mt-1 text-xs text-subtle">Last fired or armed: {{.LastFired}} UTC</p>
+
+        {{/* The editor, open only for the row somebody asked to edit. */}}
+        {{if and .Editing $.CanWrite}}
+        <form method="post" action="/automation/{{.ID}}"
+              hx-post="/automation/{{.ID}}" hx-target="#automation-panel" hx-swap="outerHTML"
+              class="mt-3 grid gap-3 rounded-md border border-line-strong bg-sunken p-4">
+          <div>
+            <label for="edit-name-{{.ID}}" class="block text-xs font-medium text-ink">Name</label>
+            <input id="edit-name-{{.ID}}" name="name" type="text" required maxlength="120" value="{{.Name}}"
+                   class="mt-1 block w-full rounded-md border border-line-strong px-2 py-1.5 text-sm focus:border-accent focus:outline-none">
+          </div>
+          <fieldset>
+            <legend class="block text-xs font-medium text-ink">When</legend>
+            <div class="mt-2 grid gap-2 sm:grid-cols-3">
+              {{range .TriggerChoices}}
+              <label class="flex items-center gap-2 text-sm text-ink">
+                <input type="radio" name="trigger" value="{{.Name}}" {{if .Checked}}checked{{end}} required
+                       class="border-line-strong text-accent focus:ring-accent">
+                <code class="text-xs">{{.Name}}</code>
+              </label>
+              {{end}}
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend class="block text-xs font-medium text-ink">Do</legend>
+            <div class="mt-2 grid gap-2 sm:grid-cols-3">
+              {{range .ActionChoices}}
+              <label class="flex items-center gap-2 text-sm text-ink">
+                <input type="checkbox" name="actions" value="{{.Name}}" {{if .Checked}}checked{{end}}
+                       class="rounded border-line-strong text-accent focus:ring-accent">
+                <code class="text-xs">{{.Name}}</code>
+              </label>
+              {{end}}
+            </div>
+          </fieldset>
+          <div>
+            <label for="edit-min-{{.ID}}" class="block text-xs font-medium text-ink">Fire after</label>
+            <input id="edit-min-{{.ID}}" name="min_count" type="number" min="1" max="{{$.MatchesPerRule}}" value="{{.MinCount}}"
+                   class="mt-1 block w-24 rounded-md border border-line-strong px-2 py-1.5 text-sm focus:border-accent focus:outline-none">
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="submit" class="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-accent-hover">Save</button>
+            <a href="/automation" hx-get="/automation" hx-target="#automation-panel" hx-select="#automation-panel"
+               hx-swap="outerHTML" hx-push-url="true"
+               class="rounded-md px-3 py-1.5 text-sm font-medium text-muted hover:bg-surface hover:text-ink">Cancel</a>
+          </div>
+        </form>
+        {{end}}
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <div class="rounded-md border border-dashed border-line py-12 text-center text-sm text-subtle">
+      {{if .CanRead}}No automation rules yet{{if .CanWrite}} &mdash; create the first one above{{end}}.{{else}}Automation rules are managed by this workspace's owners and administrators.{{end}}
+    </div>
+    {{end}}
+  </div>
+</div>
+{{end}}

@@ -3,6 +3,7 @@ module github.com/DevOfPie/LinkCtrl
 go 1.26.5
 
 require (
+	github.com/boombuler/barcode v1.1.0
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/getkin/kin-openapi v0.145.0
 	github.com/google/uuid v1.6.0
@@ -13,6 +14,7 @@ require (
 	github.com/prometheus/client_golang v1.24.1
 	github.com/redis/go-redis/v9 v9.21.0
 	golang.org/x/crypto v0.54.0
+	golang.org/x/net v0.57.0
 	golang.org/x/sync v0.22.0
 	gopkg.in/yaml.v3 v3.0.1
 )
