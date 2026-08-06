@@ -67,13 +67,32 @@ type HostCache struct {
 	// be serving an alias namespace on the strength of nothing.
 	ready atomic.Bool
 
-	// reload collapses concurrent reload requests. A burst of invalidations —
-	// a job unverifying several domains in one pass — must cost one query, not
-	// one per message.
-	reloading atomic.Bool
-	// pending records that a reload arrived while one was already running, so
-	// the running one repeats rather than the change being lost.
-	pending atomic.Bool
+	// One reload worker at a time, and no arming lost: `running` says a worker
+	// goroutine exists, `pending` says the verified set changed and no
+	// completed load has observed it yet. A burst of invalidations — a job
+	// unverifying several domains in one pass — collapses into the one bit and
+	// costs one query, not one per message.
+	//
+	// Guarded by a mutex rather than held as two independent atomics, and the
+	// reason is the worker's exit. Deciding "nothing is pending" and giving up
+	// `running` must be one indivisible step: as separate atomics there is a
+	// legal schedule — worker reads pending false and leaves its loop, a
+	// caller stores pending true, the caller reads running still true and
+	// returns trusting the worker to look again, the worker's deferred release
+	// fires — whose terminal state is pending armed with nobody left to serve
+	// it. On a quiet instance nothing ever re-triggers, so a revoked hostname
+	// keeps being served indefinitely. Under the mutex a caller can only ever
+	// observe "worker present, its next check will see my arming" or "no
+	// worker, I start one"; the stranded third state cannot be reached.
+	schedMu sync.Mutex
+	running bool
+	pending bool
+
+	// load is how Reload obtains the next set. Nil means Postgres, which is
+	// the only production value; tests substitute it because what they pin
+	// down is the scheduling around Reload — collapse, retry, the worker's
+	// exit — and none of that should need a database to be observable.
+	load func(context.Context) (map[string]VerifiedDomain, error)
 
 	// OnReload runs after every successful load, including the first.
 	//
@@ -148,9 +167,30 @@ func (c *HostCache) Reload(ctx context.Context) error {
 	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), hostLoadTimeout)
 	defer cancel()
 
-	rows, err := dbgen.New(c.pool).ListVerifiedDomains(rctx)
+	load := c.load
+	if load == nil {
+		load = c.loadFromDB
+	}
+	next, err := load(rctx)
 	if err != nil {
-		return fmt.Errorf("load verified domains: %w", err)
+		return err
+	}
+
+	c.mu.Lock()
+	c.hosts = next
+	c.mu.Unlock()
+	c.ready.Store(true)
+	if c.OnReload != nil {
+		c.OnReload()
+	}
+	return nil
+}
+
+// loadFromDB is Reload's production loader: the whole verified set, one query.
+func (c *HostCache) loadFromDB(ctx context.Context) (map[string]VerifiedDomain, error) {
+	rows, err := dbgen.New(c.pool).ListVerifiedDomains(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load verified domains: %w", err)
 	}
 	next := make(map[string]VerifiedDomain, len(rows))
 	for _, r := range rows {
@@ -165,15 +205,7 @@ func (c *HostCache) Reload(ctx context.Context) error {
 		// reached.
 		next[config.HostOnly(r.Hostname)] = d
 	}
-
-	c.mu.Lock()
-	c.hosts = next
-	c.mu.Unlock()
-	c.ready.Store(true)
-	if c.OnReload != nil {
-		c.OnReload()
-	}
-	return nil
+	return next, nil
 }
 
 // Refresh reloads in the background, collapsing a burst into one query.
@@ -185,24 +217,65 @@ func (c *HostCache) Refresh(ctx context.Context) {
 	if c == nil {
 		return
 	}
-	c.pending.Store(true)
-	if !c.reloading.CompareAndSwap(false, true) {
-		// A reload is already running and will see the pending flag.
+	c.schedMu.Lock()
+	c.pending = true
+	if c.running {
+		// A worker exists, and under this mutex that is a guarantee, not a
+		// hope: the worker only stops running inside the same critical section
+		// in which it confirms pending is clear, so the arming above either
+		// meets the worker's next check or this branch was never taken.
+		c.schedMu.Unlock()
 		return
 	}
-	base := context.WithoutCancel(ctx)
-	go func() {
-		defer c.reloading.Store(false)
-		for c.pending.CompareAndSwap(true, false) {
-			if err := c.Reload(base); err != nil {
-				c.log.Error("could not reload the verified-hostname cache; this "+
-					"replica may keep serving a domain that has been unverified, "+
-					"or may not yet serve one that has just been verified",
-					slog.Any("error", err))
-				return
-			}
+	c.running = true
+	c.schedMu.Unlock()
+	// The caller's context rides along untouched: Reload detaches and bounds
+	// itself per call (WithoutCancel + hostLoadTimeout), so the subscriber's
+	// read loop cancelling does not cancel a reload, and no unbounded detached
+	// context is ever handed onward.
+	go c.reloadWorker(ctx)
+}
+
+// reloadWorker drains the pending bit — one load per arming — and retires.
+// A named method rather than a closure so a test can run the exit path to
+// completion on its own goroutine and prove an armed bit is never abandoned.
+func (c *HostCache) reloadWorker(ctx context.Context) {
+	for {
+		c.schedMu.Lock()
+		if !c.pending {
+			// The exit: confirm there is no work and give up the worker role
+			// in one critical section. This indivisibility is the entire
+			// reason the schedule state lives under a mutex.
+			c.running = false
+			c.schedMu.Unlock()
+			return
 		}
-	}()
+		c.pending = false
+		c.schedMu.Unlock()
+
+		if err := c.Reload(ctx); err != nil {
+			// Re-arm before retiring. The arming this load was serving is a
+			// fact about the world — the verified set changed — and a failed
+			// query has not made it false; consuming the bit here would turn
+			// "applied late" into "applied never". Armed-and-waiting means the
+			// next trigger from any direction (the subscriber's next message,
+			// the operator's next change, the hourly reload's next pass where
+			// one is configured) retries. Retiring rather than looping is
+			// equally deliberate: a persistent error re-attempted in a tight
+			// loop would have every replica hammering a database that is
+			// already in trouble.
+			c.schedMu.Lock()
+			c.pending = true
+			c.running = false
+			c.schedMu.Unlock()
+			c.log.Error("could not reload the verified-hostname cache; this "+
+				"replica may keep serving a domain that has been unverified, "+
+				"or may not yet serve one that has just been verified; the "+
+				"reload stays queued for the next refresh",
+				slog.Any("error", err))
+			return
+		}
+	}
 }
 
 // MarkTLSActive records locally that the on-demand ask has been answered, so a
