@@ -78,8 +78,14 @@ type Querier interface {
 	// links twice would be one nobody could trust to run unattended.
 	//
 	// `IS NOT DISTINCT FROM` rather than `=`, so a rule whose watermark is NULL —
-	// only reachable by a row written outside this product — compares correctly
+	// the timestamp half only reachable by a row written outside this product, the
+	// subject half on every rule that has not fired since 03600 — compares correctly
 	// instead of never matching.
+	//
+	// Both halves are set and both halves are compared. The pair is one position in
+	// the match order — the last subject a firing handled — and a claim that moved
+	// one half against a stale reading of the other would hand two racing replicas
+	// two different positions for the same firing.
 	ClaimAutomationRule(ctx context.Context, arg ClaimAutomationRuleParams) (int64, error)
 	//
 	// One batch of due mail, claimed rather than merely selected.
@@ -285,12 +291,17 @@ type Querier interface {
 	// tenant would evaluate in tenant order, and the fairness this needs is
 	// least-recently-looked-at first across the instance.
 	//
-	// **`last_fired_at` is a watermark, not a diagnostic.** Every match query below
-	// takes a half-open window `(@after, @until]`, and `@after` is that watermark.
-	// That is what makes a rule unable to trigger itself: a subject is matched once,
-	// the watermark moves past it, and no later run can see it again. Removing the
-	// advance turns every rule into a runaway that fires on the same subject on
-	// every tick.
+	// **`last_fired_at` is a watermark, not a diagnostic — and it is half of one.**
+	// Every match query below orders by (event time, id) and takes the window that
+	// opens strictly after the pair `(@after, @after_subject)` and closes at
+	// `@until`. The pair, not the instant alone: a capped fetch can stop part-way
+	// through subjects sharing one timestamp, and a lower bound that carries only
+	// the timestamp cannot re-enter that tie group — it either skips the tied
+	// remainder forever (strict `>`) or re-fires what was already handled (`>=`).
+	// `last_fired_subject_id` (03600) is the id half. What the watermark is *for* is
+	// unchanged: a subject is matched once, the watermark moves past it, and no
+	// later run can see it again. Removing the advance turns every rule into a
+	// runaway that fires on the same subject on every tick.
 	//
 	// **`last_checked_at` is the scheduler's cursor, and it is a different fact.**
 	// When a rule was last *looked at*, whether or not it fired. It orders the due
@@ -309,6 +320,11 @@ type Querier interface {
 	// just wrote is looked at on the next tick instead of waiting for its turn — and
 	// carrying the column in the projection is what keeps these four statements
 	// returning the table's own row type rather than four near-identical structs.
+	//
+	// `last_fired_subject_id` is left NULL for the same projection reason and one of
+	// its own: a rule that has never fired has no boundary subject, and NULL is read
+	// by the evaluator as "the arming instant is fully spent" — the same strict `>`
+	// a timestamp-only watermark meant.
 	CreateAutomationRule(ctx context.Context, arg CreateAutomationRuleParams) (AutomationRule, error)
 	// Campaigns and QR codes (M41).
 	//
@@ -1627,6 +1643,11 @@ type Querier interface {
 	//
 	// Walks link_click_budget_exhausted_idx (02100) — declared DESC, read forward,
 	// which Postgres serves from the same index backwards.
+	//
+	// The lower bound is the composite watermark, in the same range-plus-tiebreak
+	// spelling MatchExpiredLinks explains. Ties on `exhausted_at` are rarer here
+	// than on expiry — each stamp is its own transaction — but two budgets spent in
+	// the same microsecond are not impossible, and the cursor costs nothing.
 	MatchExhaustedBudgets(ctx context.Context, arg MatchExhaustedBudgetsParams) ([]MatchExhaustedBudgetsRow, error)
 	//
 	// Links whose expiry fell inside this rule's window.
@@ -1641,6 +1662,15 @@ type Querier interface {
 	//
 	// Soft-deleted links are excluded, and that exclusion is safe for the opposite
 	// reason: nothing an automation does writes `deleted_at`.
+	//
+	// The lower bound is the composite watermark, and its spelling is deliberate:
+	// `expires_at >= @after` plus a tiebreak is the same predicate as
+	// `(expires_at, id) > (@after, @after_subject)`, written so the planner keeps a
+	// single range condition to walk automation_links_expiry_idx with and applies
+	// the tiebreak as a filter on the handful of boundary rows. Strict `>` on the
+	// timestamp alone is the shape this replaces, and it was lossy: a capped fetch
+	// that stopped inside a group of links sharing one expiry — bulk creation makes
+	// those routine — left the tied remainder outside every later window, forever.
 	MatchExpiredLinks(ctx context.Context, arg MatchExpiredLinksParams) ([]MatchExpiredLinksRow, error)
 	//
 	// Administrative events of one action inside the window.
@@ -1655,6 +1685,11 @@ type Querier interface {
 	// TestTheBlockedVocabularyIsOneWord holds them together.
 	//
 	// Walks audit_logs_workspace_action_idx (02900).
+	//
+	// The lower bound is the composite watermark, in the same range-plus-tiebreak
+	// spelling MatchExpiredLinks explains. `occurred_at` carries whatever instant
+	// the recorder was handed, so a burst of refusals in one transaction shares a
+	// timestamp the way bulk-created links share an expiry.
 	MatchWorkspaceAuditEvents(ctx context.Context, arg MatchWorkspaceAuditEventsParams) ([]MatchWorkspaceAuditEventsRow, error)
 	// The parent is set outright rather than COALESCEd, because NULL is a
 	// destination here: it means the root. A partial-update idiom would make
@@ -2154,6 +2189,12 @@ type Querier interface {
 	// somebody flips the switch. Switching one *off* leaves the watermark where it
 	// is, because a disabled rule is not evaluated at all and the value is what a
 	// reader is shown.
+	//
+	// The re-arm resets **both halves** of the watermark. The pair describes one
+	// position in the match order, and a stale subject id beside a fresh instant
+	// would describe a position that never existed — one that admits subjects tied
+	// on the arming instant whose ids happen to sort above the old boundary. NULL is
+	// the "instant fully spent" spelling, the same one creation uses.
 	UpdateAutomationRule(ctx context.Context, arg UpdateAutomationRuleParams) (AutomationRule, error)
 	// Partial update through COALESCE, like UpdateLink. The two schedule bounds are
 	// three-valued through their own clear flags, because "leave the end date alone"

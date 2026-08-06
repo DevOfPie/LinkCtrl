@@ -3,7 +3,9 @@
 package integration
 
 import (
+	"bytes"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -240,11 +242,18 @@ func (f *automationFixture) expiry(id uuid.UUID) time.Time {
 	return at.UTC()
 }
 
-func (f *automationFixture) watermark(id uuid.UUID) time.Time {
+// watermark reads both halves of a rule's resume position: the instant, and the
+// id of the boundary subject. The subject half is nil until the rule first
+// fires, and nil again after a re-arm — nil means "the instant is fully spent",
+// which is how rows without a recorded boundary keep the strict `>` semantics
+// they were written under.
+func (f *automationFixture) watermark(id uuid.UUID) (time.Time, *uuid.UUID) {
 	f.t.Helper()
 	var at *time.Time
+	var subject *uuid.UUID
 	if err := f.pool.QueryRow(f.t.Context(),
-		`SELECT last_fired_at FROM automation_rules WHERE id = $1`, id).Scan(&at); err != nil {
+		`SELECT last_fired_at, last_fired_subject_id FROM automation_rules WHERE id = $1`,
+		id).Scan(&at, &subject); err != nil {
 		f.t.Fatalf("read watermark: %v", err)
 	}
 	if at == nil {
@@ -252,7 +261,7 @@ func (f *automationFixture) watermark(id uuid.UUID) time.Time {
 			"and a NULL watermark means a rule that will fire for the whole history " +
 			"of the workspace")
 	}
-	return at.UTC()
+	return at.UTC(), subject
 }
 
 // subscribe registers a webhook for every event, directly.
@@ -308,10 +317,17 @@ func TestARuleFiresOnceForOneSubject(t *testing.T) {
 		t.Fatalf("link status is %q, want archived: the archive_link action did not run", got)
 	}
 
-	// The watermark moved to the subject's own expiry, not to the clock. That is
-	// what makes a truncated run pick up its remainder instead of skipping it.
-	if got, want := f.watermark(rule.ID), f.expiry(linkID); !got.Equal(want) {
+	// The watermark moved to the subject's own position — its expiry and its id,
+	// not the clock. That is what makes a truncated run pick up its remainder
+	// instead of skipping it, tied subjects included.
+	got, gotSubject := f.watermark(rule.ID)
+	if want := f.expiry(linkID); !got.Equal(want) {
 		t.Errorf("watermark is %s, want the subject's expiry %s", got, want)
+	}
+	if gotSubject == nil || *gotSubject != linkID {
+		t.Errorf("watermark subject is %v, want the link %s: without the id half, a "+
+			"capped run that stops between two links sharing one expiry cannot say "+
+			"which of them it handled", gotSubject, linkID)
 	}
 
 	// Two more passes, with the clock moving. Nothing new has happened, so
@@ -419,7 +435,7 @@ func TestResumingARuleRearmsIt(t *testing.T) {
 	f := newAutomation(t)
 	rule := f.rule("tell me what expires", domain.TriggerLinkExpired, 1, domain.ActionNotify)
 
-	armed := f.watermark(rule.ID)
+	armed, _ := f.watermark(rule.ID)
 
 	// Paused, then a link expires while it is off. The expiry is placed a
 	// microsecond after the original arming instant rather than "a bit ago",
@@ -439,8 +455,15 @@ func TestResumingARuleRearmsIt(t *testing.T) {
 		link.UpdateAutomationRuleInput{Enabled: &on}); err != nil {
 		t.Fatalf("resume: %v", err)
 	}
-	if resumed := f.watermark(rule.ID); !resumed.After(armed) {
+	resumed, resumedSubject := f.watermark(rule.ID)
+	if !resumed.After(armed) {
 		t.Fatalf("the watermark did not move on resume: %s then %s", armed, resumed)
+	}
+	if resumedSubject != nil {
+		t.Fatalf("the subject half of the watermark survived the re-arm: %s. The pair "+
+			"describes one position, and a stale id beside a fresh instant admits "+
+			"subjects at exactly the arming instant whose ids sort above it.",
+			resumedSubject)
 	}
 	f.advance(time.Minute)
 
@@ -467,7 +490,9 @@ func TestATruncatedRunPicksUpTheRemainder(t *testing.T) {
 	f.rule("archive the backlog", domain.TriggerLinkExpired, 1, domain.ActionArchiveLink)
 	f.advance(time.Minute)
 
-	// Distinct expiries, so "the last one handled" is a well-defined position.
+	// Distinct expiries, so "the last one handled" is a well-defined position
+	// even for a timestamp alone. The tied case — where it is not — is
+	// TestATiedBacklogStraddlingTheCapAllFiresExactlyOnce.
 	for i := range total {
 		f.expiredLink(fmt.Sprintf("bulk-%02d", i), time.Duration(total-i)*time.Second)
 	}
@@ -495,6 +520,95 @@ func (f *automationFixture) archivedCount() int {
 		`SELECT count(*) FROM links WHERE workspace_id = $1 AND status = 'archived'`,
 		f.owner.WorkspaceID).Scan(&n); err != nil {
 		f.t.Fatalf("count archived links: %v", err)
+	}
+	return n
+}
+
+// TestATiedBacklogStraddlingTheCapAllFiresExactlyOnce is
+// TestATruncatedRunPicksUpTheRemainder's sibling, and the sibling exists because
+// that test cannot fail for the defect this one holds down: with distinct
+// expiries, "the last one handled" is a well-defined instant and a
+// timestamp-only watermark resumes correctly. Identical expiries are the broken
+// case — bulk-created links share one expires_at, so the per-run cap lands
+// *inside* a tie group, and a watermark that records only the instant reopens
+// the next window strictly after it. The tied remainder was not deferred; it
+// fell out of every future window, silently. The id half of the watermark
+// (03600) is what re-enters the tie group, and "exactly once" is asserted from
+// both directions: every link ends up archived, and the firings' own records
+// sum to the backlog with nothing counted twice.
+func TestATiedBacklogStraddlingTheCapAllFiresExactlyOnce(t *testing.T) {
+	f := newAutomation(t)
+	const extra = 3
+	total := domain.AutomationMatchesPerRule + extra
+
+	rule := f.rule("archive the tied backlog", domain.TriggerLinkExpired, 1,
+		domain.ActionArchiveLink)
+	f.advance(time.Minute)
+
+	// One shared instant for every expiry. The first fetch is therefore a single
+	// tie group larger than the cap — the degenerate case included: a batch
+	// whose every subject carries the boundary timestamp can only ever advance
+	// if the watermark records which subject it stopped at.
+	at := f.clock().Add(-time.Second)
+	ids := make([]uuid.UUID, 0, total)
+	for i := range total {
+		ids = append(ids, f.expiredLinkAt(fmt.Sprintf("tied-%02d", i), at))
+	}
+
+	f.evaluate()
+	if got := f.archivedCount(); got != domain.AutomationMatchesPerRule {
+		t.Fatalf("first run archived %d, want the cap of %d",
+			got, domain.AutomationMatchesPerRule)
+	}
+
+	// The watermark stopped inside the tie group: the instant is the shared
+	// expiry, and the subject is the last link the capped fetch reached in
+	// (expires_at, id) order — id order alone, here, since the timestamps tie.
+	sorted := append([]uuid.UUID(nil), ids...)
+	slices.SortFunc(sorted, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
+	boundary := sorted[domain.AutomationMatchesPerRule-1]
+	ts, subject := f.watermark(rule.ID)
+	if want := f.expiry(ids[0]); !ts.Equal(want) {
+		t.Errorf("watermark instant is %s, want the shared expiry %s", ts, want)
+	}
+	if subject == nil || *subject != boundary {
+		t.Errorf("watermark subject is %v, want %s, the last link inside the cap. "+
+			"Without it the next window opens after the shared instant and the tied "+
+			"remainder is unreachable.", subject, boundary)
+	}
+
+	f.advance(time.Minute)
+	f.evaluate()
+	if got := f.archivedCount(); got != total {
+		t.Fatalf("after two runs %d of %d links are archived. The remainder of a tie "+
+			"group split by the per-run cap was dropped rather than deferred — the "+
+			"watermark recorded the boundary instant but not the boundary subject, "+
+			"so the next window opened past every link still sharing that expiry.",
+			got, total)
+	}
+
+	// A third run does nothing, and the firing records prove exactly-once from
+	// the matching side: the archive is idempotent, so the archived count alone
+	// cannot see a subject matched twice — the sum of each firing's own matched
+	// figure can.
+	f.advance(time.Minute)
+	f.evaluate()
+	if got := f.matchedTotal(); got != total {
+		t.Errorf("the firings matched %d subjects in total, want exactly %d: more is a "+
+			"tied subject seen twice across the boundary, fewer is one dropped by it",
+			got, total)
+	}
+}
+
+// matchedTotal sums the `matched` figure over every firing record, which is the
+// one place a re-matched subject is visible after idempotent actions.
+func (f *automationFixture) matchedTotal() int {
+	f.t.Helper()
+	var n int
+	if err := f.pool.QueryRow(f.t.Context(), `
+		SELECT coalesce(sum((metadata->>'matched')::int), 0) FROM audit_logs
+		 WHERE action = $1`, audit.ActionAutomationFired).Scan(&n); err != nil {
+		f.t.Fatalf("sum matched subjects: %v", err)
 	}
 	return n
 }
@@ -557,7 +671,7 @@ func TestARuleBeyondTheRunCapIsStillEvaluated(t *testing.T) {
 	// Its id comes from CreateAutomationRule and is a v7, so it sorts after every
 	// filler id and is exactly one place past the cap.
 	rule := f.rule("the hundred and first", domain.TriggerLinkExpired, 1, domain.ActionNotify)
-	armed := f.watermark(rule.ID)
+	armed, _ := f.watermark(rule.ID)
 	f.advance(time.Minute)
 	f.expiredLink("subject-past-the-cap", time.Second)
 
@@ -593,7 +707,7 @@ func TestARuleBeyondTheRunCapIsStillEvaluated(t *testing.T) {
 			"ahead of it hold their places permanently, because a rule that matches "+
 			"nothing never moves the column the queue is ordered by.", got)
 	}
-	if got := f.watermark(rule.ID); !got.After(armed) {
+	if got, _ := f.watermark(rule.ID); !got.After(armed) {
 		t.Errorf("the rule fired and its watermark is still %s", got)
 	}
 }

@@ -216,6 +216,7 @@ file. Append a row when you append an entry.
 | [M45, four answers, and two of them change work already done](#2026-08-05--m45-four-answers-and-two-of-them-change-work-already-done) | D103, D104 and D105 — JavaScript required for the dashboard, README describes the released product, and the outbox purge stays |
 | [M45, one home for the audit vocabulary and a count that checks itself](#2026-08-05--m45-one-home-for-the-audit-vocabulary-and-a-count-that-checks-itself) | F18. `audit.AllActions` and the test that parses the source, because the coverage number had been kept by hand beside a list nothing checked |
 | [M45, one answer to "may an invitation create an account"](#2026-08-05--m45-one-answer-to-may-an-invitation-create-an-account) | F19. The page asked the configured mode and the enforcer asks the effective one — and the redemption page had no test coverage at all |
+| [F147, the watermark that recorded the instant but not the subject](#2026-08-06--f147-the-watermark-that-recorded-the-instant-but-not-the-subject) | D106 — the automation cursor is a (timestamp, id) pair, correcting D84's "not lossy": it was lossy for subjects tied on a capped run's boundary timestamp |
 
 ---
 
@@ -18018,3 +18019,41 @@ alternative was asking for the permission the whole mechanism exists to avoid.
 header addressed to the reviewer, because applying one is `cp` and anything the
 file says about itself lands on the live workflow. The diff is the description,
 and `make workflow-proposals` prints it.
+
+## 2026-08-06 — F147, the watermark that recorded the instant but not the subject
+
+D84 said a capped automation run "is not lossy: the watermark advances only to
+the last subject handled." That sentence was true for distinct timestamps and
+false the moment two subjects shared one — the matchers resume strictly above
+the recorded instant, so everything tied on it that fell past the 25-row cap
+left every future window. Bulk-created links share an `expires_at` as a matter
+of course; the existing truncation test dodged the case on purpose ("Distinct
+expiries, so 'the last one handled' is a well-defined position"), which is how
+the claim survived.
+
+### D106 — the automation cursor is a (timestamp, id) pair
+
+The watermark now records the boundary subject's id beside its instant
+(`automation_rules.last_fired_subject_id`, migration 03600, additive and
+nullable), and all three matchers resume from the pair with the tiebreak
+spelled `ts >= after AND (ts > after OR id > after_id)` so the expiry index
+keeps a single range condition. The claim's compare-and-set covers both
+halves; a re-arm resets both, because a stale id beside a fresh instant is a
+position that never existed.
+
+Two choices worth their ink:
+
+- **A cursor, not tie-truncation.** Truncating the batch below the tie group
+  needs a special case when the entire capped fetch shares one timestamp — a
+  tie group at or past the cap could never advance. The pair has no degenerate
+  case: it walks a tie group one batch at a time. All three subject ids are
+  uuid, so one column serves every trigger.
+- **Legacy NULL reads as uuid.Max, not uuid.Nil.** Every pre-migration
+  watermark was written under strict-greater semantics. Max preserves exactly
+  that — the boundary instant admits nothing — where Nil would re-fire every
+  subject tied on it, and once-per-subject is the invariant two tests pin.
+
+A naive `>=` was rejected for the same reason: it re-fires the boundary
+subject every run. The once-per-subject guarantee is load-bearing
+(`automation.sql`'s claim comment, and the archive/re-arm tests), so the fix
+had to widen the window without ever reopening it.

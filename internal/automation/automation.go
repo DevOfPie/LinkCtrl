@@ -30,10 +30,14 @@
 // 03100 separates.
 //
 // **A rule cannot trigger itself, and the mechanism is the watermark.** Every
-// match query reads the half-open window `(last_fired_at, now]`, and the claim
-// that fires a rule advances `last_fired_at` past the last subject it handled
-// *before* any action runs. A subject is therefore visible to a rule exactly
-// once, whatever the actions did and however many times the scheduler ticks.
+// match query orders by (event time, id) and reads the window that opens
+// strictly after the pair `(last_fired_at, last_fired_subject_id)` and closes at
+// `now`; the claim that fires a rule advances both halves past the last subject
+// it handled *before* any action runs. A pair rather than an instant, because a
+// capped fetch can stop between two subjects sharing one timestamp and only a
+// position in the full match order can say which of them were handled — see
+// resumeCursor. A subject is therefore visible to a rule exactly once, whatever
+// the actions did and however many times the scheduler ticks.
 //
 // **A rule cannot loop through another rule either**, and that is a separate
 // mechanism: no action writes anything any trigger reads.
@@ -229,6 +233,13 @@ func (s *Service) markChecked(ctx context.Context, ids []uuid.UUID, at time.Time
 
 // subject is one thing a trigger matched.
 type subject struct {
+	// ID is the subject's identity in its own source table — the link for the
+	// two link triggers, the audit row for a blocked attempt — and it is the
+	// tiebreak half of the watermark. Every match query orders by (event time,
+	// id), so "the last subject handled" is only a resumable position when both
+	// columns travel with it; the timestamp alone cannot point inside a group of
+	// subjects sharing one instant.
+	ID uuid.UUID
 	// LinkID is set for the two link-subject triggers and nil for a blocked
 	// attempt, which is what makes `archive_link` illegal on that trigger at
 	// write time.
@@ -242,6 +253,42 @@ type subject struct {
 	At time.Time
 }
 
+// resumeCursor is where this rule's next match window opens: strictly after the
+// (event time, subject id) pair of the last subject a firing handled.
+//
+// A keyset cursor over the match queries' ORDER BY, and both halves are
+// load-bearing. The instant alone cannot express "stopped part-way through a
+// group of subjects sharing one timestamp" — routine for link.expired, because
+// bulk-created links share one expires_at — and a capped run that stopped
+// inside such a group used to reopen the next window strictly after the shared
+// instant, dropping the tied remainder from every future window rather than
+// deferring it. Strict `>=` on the instant is not an answer either: it re-fires
+// the boundary subject on every run, which is the runaway the watermark exists
+// to prevent.
+//
+// The timestamp falls back to `created_at` and not `now`, because a rule whose
+// watermark is NULL was written outside this product — every path in
+// internal/link sets it — and firing for the whole history is the wrong
+// direction to guess in.
+//
+// A missing subject id — every row from before 03600, every freshly armed rule,
+// every re-arm — falls back to uuid.Max: no uuid sorts after it, so the tiebreak
+// admits nothing at the boundary instant and the window degenerates to exactly
+// the strict `>` those rows were written under. uuid.Nil would be the opposite
+// guess, and the wrong one — it would re-admit every subject tied on the
+// instant the last firing already handled.
+func resumeCursor(rule dbgen.ListDueAutomationRulesRow) (time.Time, uuid.UUID) {
+	after := rule.CreatedAt
+	if rule.LastFiredAt != nil {
+		after = *rule.LastFiredAt
+	}
+	afterSubject := uuid.Max
+	if rule.LastFiredSubjectID != nil {
+		afterSubject = *rule.LastFiredSubjectID
+	}
+	return after, afterSubject
+}
+
 // evaluateRule matches, claims and acts, in that order.
 func (s *Service) evaluateRule(ctx context.Context, rule dbgen.ListDueAutomationRulesRow, now time.Time) error {
 	actions, config, err := decodeRule(rule)
@@ -251,16 +298,11 @@ func (s *Service) evaluateRule(ctx context.Context, rule dbgen.ListDueAutomation
 		return err
 	}
 
-	// The window's lower bound. `created_at` is the fallback and not `now`,
-	// because a rule whose watermark is NULL was written outside this product —
-	// every path in internal/link sets it — and firing for the whole history is
-	// the wrong direction to guess in.
-	after := rule.CreatedAt
-	if rule.LastFiredAt != nil {
-		after = *rule.LastFiredAt
-	}
+	// The window's lower bound: the composite watermark, with resumeCursor
+	// holding both fallbacks and the reasoning for their directions.
+	after, afterSubject := resumeCursor(rule)
 
-	subjects, err := s.match(ctx, rule, after, now)
+	subjects, err := s.match(ctx, rule, after, afterSubject, now)
 	if err != nil {
 		return err
 	}
@@ -280,12 +322,16 @@ func (s *Service) evaluateRule(ctx context.Context, rule dbgen.ListDueAutomation
 		return nil
 	}
 
-	// **The claim.** Advance the watermark to the last subject handled, and only
-	// if it is still where the match query saw it. Everything after this point
-	// runs exactly once for these subjects.
-	watermark := subjects[len(subjects)-1].At
+	// **The claim.** Advance the watermark to the last subject handled — both
+	// the instant and the subject id, because together they are the position a
+	// capped run resumes from — and only if both halves are still where the
+	// match query saw them. Everything after this point runs exactly once for
+	// these subjects.
+	last := subjects[len(subjects)-1]
 	claimed, err := s.q.ClaimAutomationRule(ctx, dbgen.ClaimAutomationRuleParams{
-		ID: rule.ID, Watermark: &watermark, Expected: rule.LastFiredAt,
+		ID:        rule.ID,
+		Watermark: &last.At, WatermarkSubject: &last.ID,
+		Expected: rule.LastFiredAt, ExpectedSubject: rule.LastFiredSubjectID,
 	})
 	if err != nil {
 		return fmt.Errorf("automation: claim rule %s: %w", rule.ID, err)
@@ -301,13 +347,20 @@ func (s *Service) evaluateRule(ctx context.Context, rule dbgen.ListDueAutomation
 }
 
 // match runs the one query this rule's trigger names.
+//
+// `afterSubject` is the tiebreak half of the window's lower bound and it feeds
+// every arm, because every match query orders by (event time, id) and resumes
+// by the same pair. Each arm also records the row's id on the subject it builds
+// — that id is what the claim will persist as the next boundary.
 func (s *Service) match(
-	ctx context.Context, rule dbgen.ListDueAutomationRulesRow, after, until time.Time,
+	ctx context.Context, rule dbgen.ListDueAutomationRulesRow,
+	after time.Time, afterSubject uuid.UUID, until time.Time,
 ) ([]subject, error) {
 	switch rule.Trigger {
 	case domain.TriggerLinkExpired:
 		rows, err := s.q.MatchExpiredLinks(ctx, dbgen.MatchExpiredLinksParams{
-			WorkspaceID: rule.WorkspaceID, After: &after, Until: &until,
+			WorkspaceID: rule.WorkspaceID, After: &after, AfterSubject: afterSubject,
+			Until:    &until,
 			RowLimit: domain.AutomationMatchesPerRule,
 		})
 		if err != nil {
@@ -316,13 +369,14 @@ func (s *Service) match(
 		out := make([]subject, 0, len(rows))
 		for _, r := range rows {
 			id := r.ID
-			out = append(out, subject{LinkID: &id, Label: r.Alias, At: *r.ExpiresAt})
+			out = append(out, subject{ID: r.ID, LinkID: &id, Label: r.Alias, At: *r.ExpiresAt})
 		}
 		return out, nil
 
 	case domain.TriggerLinkMaxClicks:
 		rows, err := s.q.MatchExhaustedBudgets(ctx, dbgen.MatchExhaustedBudgetsParams{
-			WorkspaceID: rule.WorkspaceID, After: &after, Until: &until,
+			WorkspaceID: rule.WorkspaceID, After: &after, AfterSubject: afterSubject,
+			Until:    &until,
 			RowLimit: domain.AutomationMatchesPerRule,
 		})
 		if err != nil {
@@ -331,7 +385,7 @@ func (s *Service) match(
 		out := make([]subject, 0, len(rows))
 		for _, r := range rows {
 			id := r.LinkID
-			out = append(out, subject{LinkID: &id, Label: r.Alias, At: *r.ExhaustedAt})
+			out = append(out, subject{ID: r.LinkID, LinkID: &id, Label: r.Alias, At: *r.ExhaustedAt})
 		}
 		return out, nil
 
@@ -342,7 +396,7 @@ func (s *Service) match(
 			// action and the webhook event are the same string, which
 			// TestTheBlockedVocabularyIsOneWord holds together.
 			Action: domain.TriggerDestinationBlocked,
-			After:  after, Until: until,
+			After:  after, AfterSubject: afterSubject, Until: until,
 			RowLimit: domain.AutomationMatchesPerRule,
 		})
 		if err != nil {
@@ -350,7 +404,10 @@ func (s *Service) match(
 		}
 		out := make([]subject, 0, len(rows))
 		for _, r := range rows {
-			out = append(out, subject{Label: blockedLabel(r.Metadata), At: r.OccurredAt})
+			// The subject id is the audit row's own id: a blocked attempt has no
+			// link, but it still needs a place in the (occurred_at, id) order for
+			// the watermark to stop at.
+			out = append(out, subject{ID: r.ID, Label: blockedLabel(r.Metadata), At: r.OccurredAt})
 		}
 		return out, nil
 	}

@@ -72,16 +72,20 @@ func (q *Queries) ArchiveLinkByAutomation(ctx context.Context, arg ArchiveLinkBy
 
 const claimAutomationRule = `-- name: ClaimAutomationRule :execrows
 UPDATE automation_rules
-   SET last_fired_at = $1
- WHERE id = $2
+   SET last_fired_at = $1,
+       last_fired_subject_id = $2
+ WHERE id = $3
    AND enabled
-   AND last_fired_at IS NOT DISTINCT FROM $3
+   AND last_fired_at IS NOT DISTINCT FROM $4
+   AND last_fired_subject_id IS NOT DISTINCT FROM $5
 `
 
 type ClaimAutomationRuleParams struct {
-	Watermark *time.Time
-	ID        uuid.UUID
-	Expected  *time.Time
+	Watermark        *time.Time
+	WatermarkSubject *uuid.UUID
+	ID               uuid.UUID
+	Expected         *time.Time
+	ExpectedSubject  *uuid.UUID
 }
 
 // The compare-and-set that fires a rule. **This is the loop guard.**
@@ -106,10 +110,22 @@ type ClaimAutomationRuleParams struct {
 // links twice would be one nobody could trust to run unattended.
 //
 // `IS NOT DISTINCT FROM` rather than `=`, so a rule whose watermark is NULL —
-// only reachable by a row written outside this product — compares correctly
+// the timestamp half only reachable by a row written outside this product, the
+// subject half on every rule that has not fired since 03600 — compares correctly
 // instead of never matching.
+//
+// Both halves are set and both halves are compared. The pair is one position in
+// the match order — the last subject a firing handled — and a claim that moved
+// one half against a stale reading of the other would hand two racing replicas
+// two different positions for the same firing.
 func (q *Queries) ClaimAutomationRule(ctx context.Context, arg ClaimAutomationRuleParams) (int64, error) {
-	result, err := q.db.Exec(ctx, claimAutomationRule, arg.Watermark, arg.ID, arg.Expected)
+	result, err := q.db.Exec(ctx, claimAutomationRule,
+		arg.Watermark,
+		arg.WatermarkSubject,
+		arg.ID,
+		arg.Expected,
+		arg.ExpectedSubject,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -133,7 +149,8 @@ INSERT INTO automation_rules
     (id, workspace_id, name, trigger, trigger_config, actions, enabled, last_fired_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING id, workspace_id, name, trigger, trigger_config, actions, enabled,
-          last_fired_at, created_at, updated_at, last_checked_at
+          last_fired_at, created_at, updated_at, last_checked_at,
+          last_fired_subject_id
 `
 
 type CreateAutomationRuleParams struct {
@@ -156,12 +173,17 @@ type CreateAutomationRuleParams struct {
 // tenant would evaluate in tenant order, and the fairness this needs is
 // least-recently-looked-at first across the instance.
 //
-// **`last_fired_at` is a watermark, not a diagnostic.** Every match query below
-// takes a half-open window `(@after, @until]`, and `@after` is that watermark.
-// That is what makes a rule unable to trigger itself: a subject is matched once,
-// the watermark moves past it, and no later run can see it again. Removing the
-// advance turns every rule into a runaway that fires on the same subject on
-// every tick.
+// **`last_fired_at` is a watermark, not a diagnostic — and it is half of one.**
+// Every match query below orders by (event time, id) and takes the window that
+// opens strictly after the pair `(@after, @after_subject)` and closes at
+// `@until`. The pair, not the instant alone: a capped fetch can stop part-way
+// through subjects sharing one timestamp, and a lower bound that carries only
+// the timestamp cannot re-enter that tie group — it either skips the tied
+// remainder forever (strict `>`) or re-fires what was already handled (`>=`).
+// `last_fired_subject_id` (03600) is the id half. What the watermark is *for* is
+// unchanged: a subject is matched once, the watermark moves past it, and no
+// later run can see it again. Removing the advance turns every rule into a
+// runaway that fires on the same subject on every tick.
 //
 // **`last_checked_at` is the scheduler's cursor, and it is a different fact.**
 // When a rule was last *looked at*, whether or not it fired. It orders the due
@@ -180,6 +202,11 @@ type CreateAutomationRuleParams struct {
 // just wrote is looked at on the next tick instead of waiting for its turn — and
 // carrying the column in the projection is what keeps these four statements
 // returning the table's own row type rather than four near-identical structs.
+//
+// `last_fired_subject_id` is left NULL for the same projection reason and one of
+// its own: a rule that has never fired has no boundary subject, and NULL is read
+// by the evaluator as "the arming instant is fully spent" — the same strict `>`
+// a timestamp-only watermark meant.
 func (q *Queries) CreateAutomationRule(ctx context.Context, arg CreateAutomationRuleParams) (AutomationRule, error) {
 	row := q.db.QueryRow(ctx, createAutomationRule,
 		arg.ID,
@@ -204,6 +231,7 @@ func (q *Queries) CreateAutomationRule(ctx context.Context, arg CreateAutomation
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastCheckedAt,
+		&i.LastFiredSubjectID,
 	)
 	return i, err
 }
@@ -227,7 +255,8 @@ func (q *Queries) DeleteAutomationRule(ctx context.Context, arg DeleteAutomation
 
 const getAutomationRule = `-- name: GetAutomationRule :one
 SELECT id, workspace_id, name, trigger, trigger_config, actions, enabled,
-       last_fired_at, created_at, updated_at, last_checked_at
+       last_fired_at, created_at, updated_at, last_checked_at,
+       last_fired_subject_id
   FROM automation_rules
  WHERE id = $1 AND workspace_id = $2
 `
@@ -252,13 +281,15 @@ func (q *Queries) GetAutomationRule(ctx context.Context, arg GetAutomationRulePa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastCheckedAt,
+		&i.LastFiredSubjectID,
 	)
 	return i, err
 }
 
 const listAutomationRules = `-- name: ListAutomationRules :many
 SELECT id, workspace_id, name, trigger, trigger_config, actions, enabled,
-       last_fired_at, created_at, updated_at, last_checked_at
+       last_fired_at, created_at, updated_at, last_checked_at,
+       last_fired_subject_id
   FROM automation_rules
  WHERE workspace_id = $1
  ORDER BY created_at, id
@@ -285,6 +316,7 @@ func (q *Queries) ListAutomationRules(ctx context.Context, workspaceID uuid.UUID
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.LastCheckedAt,
+			&i.LastFiredSubjectID,
 		); err != nil {
 			return nil, err
 		}
@@ -299,7 +331,8 @@ func (q *Queries) ListAutomationRules(ctx context.Context, workspaceID uuid.UUID
 const listDueAutomationRules = `-- name: ListDueAutomationRules :many
 
 SELECT r.id, r.workspace_id, w.organization_id, r.name, r.trigger,
-       r.trigger_config, r.actions, r.last_fired_at, r.created_at
+       r.trigger_config, r.actions, r.last_fired_at, r.last_fired_subject_id,
+       r.created_at
   FROM automation_rules r
   JOIN workspaces w ON w.id = r.workspace_id
  WHERE r.enabled AND w.deleted_at IS NULL
@@ -308,15 +341,16 @@ SELECT r.id, r.workspace_id, w.organization_id, r.name, r.trigger,
 `
 
 type ListDueAutomationRulesRow struct {
-	ID             uuid.UUID
-	WorkspaceID    uuid.UUID
-	OrganizationID uuid.UUID
-	Name           string
-	Trigger        string
-	TriggerConfig  []byte
-	Actions        []byte
-	LastFiredAt    *time.Time
-	CreatedAt      time.Time
+	ID                 uuid.UUID
+	WorkspaceID        uuid.UUID
+	OrganizationID     uuid.UUID
+	Name               string
+	Trigger            string
+	TriggerConfig      []byte
+	Actions            []byte
+	LastFiredAt        *time.Time
+	LastFiredSubjectID *uuid.UUID
+	CreatedAt          time.Time
 }
 
 // --- evaluation --------------------------------------------------------------
@@ -357,6 +391,7 @@ func (q *Queries) ListDueAutomationRules(ctx context.Context, rowLimit int32) ([
 			&i.TriggerConfig,
 			&i.Actions,
 			&i.LastFiredAt,
+			&i.LastFiredSubjectID,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -409,17 +444,19 @@ SELECT b.link_id, l.alias, b.exhausted_at
  WHERE b.workspace_id = $1
    AND l.deleted_at IS NULL
    AND b.exhausted_at IS NOT NULL
-   AND b.exhausted_at > $2
-   AND b.exhausted_at <= $3
+   AND b.exhausted_at >= $2
+   AND (b.exhausted_at > $2 OR b.link_id > $3)
+   AND b.exhausted_at <= $4
  ORDER BY b.exhausted_at, b.link_id
- LIMIT $4
+ LIMIT $5
 `
 
 type MatchExhaustedBudgetsParams struct {
-	WorkspaceID uuid.UUID
-	After       *time.Time
-	Until       *time.Time
-	RowLimit    int32
+	WorkspaceID  uuid.UUID
+	After        *time.Time
+	AfterSubject uuid.UUID
+	Until        *time.Time
+	RowLimit     int32
 }
 
 type MatchExhaustedBudgetsRow struct {
@@ -437,10 +474,16 @@ type MatchExhaustedBudgetsRow struct {
 //
 // Walks link_click_budget_exhausted_idx (02100) — declared DESC, read forward,
 // which Postgres serves from the same index backwards.
+//
+// The lower bound is the composite watermark, in the same range-plus-tiebreak
+// spelling MatchExpiredLinks explains. Ties on `exhausted_at` are rarer here
+// than on expiry — each stamp is its own transaction — but two budgets spent in
+// the same microsecond are not impossible, and the cursor costs nothing.
 func (q *Queries) MatchExhaustedBudgets(ctx context.Context, arg MatchExhaustedBudgetsParams) ([]MatchExhaustedBudgetsRow, error) {
 	rows, err := q.db.Query(ctx, matchExhaustedBudgets,
 		arg.WorkspaceID,
 		arg.After,
+		arg.AfterSubject,
 		arg.Until,
 		arg.RowLimit,
 	)
@@ -468,17 +511,19 @@ SELECT id, alias, expires_at
  WHERE workspace_id = $1
    AND deleted_at IS NULL
    AND expires_at IS NOT NULL
-   AND expires_at > $2
-   AND expires_at <= $3
+   AND expires_at >= $2
+   AND (expires_at > $2 OR id > $3)
+   AND expires_at <= $4
  ORDER BY expires_at, id
- LIMIT $4
+ LIMIT $5
 `
 
 type MatchExpiredLinksParams struct {
-	WorkspaceID uuid.UUID
-	After       *time.Time
-	Until       *time.Time
-	RowLimit    int32
+	WorkspaceID  uuid.UUID
+	After        *time.Time
+	AfterSubject uuid.UUID
+	Until        *time.Time
+	RowLimit     int32
 }
 
 type MatchExpiredLinksRow struct {
@@ -499,10 +544,20 @@ type MatchExpiredLinksRow struct {
 //
 // Soft-deleted links are excluded, and that exclusion is safe for the opposite
 // reason: nothing an automation does writes `deleted_at`.
+//
+// The lower bound is the composite watermark, and its spelling is deliberate:
+// `expires_at >= @after` plus a tiebreak is the same predicate as
+// `(expires_at, id) > (@after, @after_subject)`, written so the planner keeps a
+// single range condition to walk automation_links_expiry_idx with and applies
+// the tiebreak as a filter on the handful of boundary rows. Strict `>` on the
+// timestamp alone is the shape this replaces, and it was lossy: a capped fetch
+// that stopped inside a group of links sharing one expiry — bulk creation makes
+// those routine — left the tied remainder outside every later window, forever.
 func (q *Queries) MatchExpiredLinks(ctx context.Context, arg MatchExpiredLinksParams) ([]MatchExpiredLinksRow, error) {
 	rows, err := q.db.Query(ctx, matchExpiredLinks,
 		arg.WorkspaceID,
 		arg.After,
+		arg.AfterSubject,
 		arg.Until,
 		arg.RowLimit,
 	)
@@ -529,18 +584,20 @@ SELECT id, occurred_at, metadata
   FROM audit_logs
  WHERE workspace_id = $1
    AND action = $2
-   AND occurred_at > $3
-   AND occurred_at <= $4
+   AND occurred_at >= $3
+   AND (occurred_at > $3 OR id > $4)
+   AND occurred_at <= $5
  ORDER BY occurred_at, id
- LIMIT $5
+ LIMIT $6
 `
 
 type MatchWorkspaceAuditEventsParams struct {
-	WorkspaceID *uuid.UUID
-	Action      string
-	After       time.Time
-	Until       time.Time
-	RowLimit    int32
+	WorkspaceID  *uuid.UUID
+	Action       string
+	After        time.Time
+	AfterSubject uuid.UUID
+	Until        time.Time
+	RowLimit     int32
 }
 
 type MatchWorkspaceAuditEventsRow struct {
@@ -561,11 +618,17 @@ type MatchWorkspaceAuditEventsRow struct {
 // TestTheBlockedVocabularyIsOneWord holds them together.
 //
 // Walks audit_logs_workspace_action_idx (02900).
+//
+// The lower bound is the composite watermark, in the same range-plus-tiebreak
+// spelling MatchExpiredLinks explains. `occurred_at` carries whatever instant
+// the recorder was handed, so a burst of refusals in one transaction shares a
+// timestamp the way bulk-created links share an expiry.
 func (q *Queries) MatchWorkspaceAuditEvents(ctx context.Context, arg MatchWorkspaceAuditEventsParams) ([]MatchWorkspaceAuditEventsRow, error) {
 	rows, err := q.db.Query(ctx, matchWorkspaceAuditEvents,
 		arg.WorkspaceID,
 		arg.Action,
 		arg.After,
+		arg.AfterSubject,
 		arg.Until,
 		arg.RowLimit,
 	)
@@ -599,10 +662,16 @@ UPDATE automation_rules
                           THEN $6
                           ELSE last_fired_at
                         END,
+       last_fired_subject_id = CASE
+                          WHEN coalesce($5, enabled) AND NOT enabled
+                          THEN NULL
+                          ELSE last_fired_subject_id
+                        END,
        updated_at     = now()
  WHERE id = $7 AND workspace_id = $8
 RETURNING id, workspace_id, name, trigger, trigger_config, actions, enabled,
-          last_fired_at, created_at, updated_at, last_checked_at
+          last_fired_at, created_at, updated_at, last_checked_at,
+          last_fired_subject_id
 `
 
 type UpdateAutomationRuleParams struct {
@@ -625,6 +694,12 @@ type UpdateAutomationRuleParams struct {
 // somebody flips the switch. Switching one *off* leaves the watermark where it
 // is, because a disabled rule is not evaluated at all and the value is what a
 // reader is shown.
+//
+// The re-arm resets **both halves** of the watermark. The pair describes one
+// position in the match order, and a stale subject id beside a fresh instant
+// would describe a position that never existed — one that admits subjects tied
+// on the arming instant whose ids happen to sort above the old boundary. NULL is
+// the "instant fully spent" spelling, the same one creation uses.
 func (q *Queries) UpdateAutomationRule(ctx context.Context, arg UpdateAutomationRuleParams) (AutomationRule, error) {
 	row := q.db.QueryRow(ctx, updateAutomationRule,
 		arg.Name,
@@ -649,6 +724,7 @@ func (q *Queries) UpdateAutomationRule(ctx context.Context, arg UpdateAutomation
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastCheckedAt,
+		&i.LastFiredSubjectID,
 	)
 	return i, err
 }

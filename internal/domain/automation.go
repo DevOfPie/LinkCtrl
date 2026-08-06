@@ -228,7 +228,11 @@ const (
 	// AutomationMatchesPerRule bounds how many subjects one rule sees in one
 	// run. A rule that matches more is truncated, logged, and its watermark
 	// advances only to the last subject it actually handled — so the remainder
-	// is picked up next run rather than skipped.
+	// is picked up next run rather than skipped. "Last subject handled" is a
+	// (event time, id) pair, not a timestamp: subjects tied on the boundary
+	// timestamp are routine — bulk-created links share one expires_at — and a
+	// timestamp-only watermark made this sentence false for exactly them, by
+	// reopening the next window strictly after the instant the cap split.
 	AutomationMatchesPerRule = 25
 	// MaxAutomationActions bounds one rule's action list. Three, because there
 	// are three actions and repeating one is never useful — two `notify` entries
@@ -287,13 +291,20 @@ type AutomationRule struct {
 	// LastFiredAt is the **watermark**, and calling it a diagnostic would be a
 	// misreading with consequences.
 	//
-	// A rule sees only subjects whose event time is strictly after this instant,
-	// and the claim that fires a rule advances it in the same statement. That is
-	// what stops a rule triggering itself: a link that expired at 09:00 is
-	// matched once, the watermark moves past 09:00, and no later run can see it
-	// again. Remove the advance and the rule fires on that same link on every
-	// tick, forever — which is the runaway
-	// TestAnAutomationDoesNotFireTwiceForOneSubject exists to catch.
+	// A rule sees only subjects strictly after this watermark, and the claim
+	// that fires a rule advances it in the same statement. That is what stops a
+	// rule triggering itself: a link that expired at 09:00 is matched once, the
+	// watermark moves past 09:00, and no later run can see it again. Remove the
+	// advance and the rule fires on that same link on every tick, forever —
+	// which is the runaway TestAnAutomationDoesNotFireTwiceForOneSubject exists
+	// to catch.
+	//
+	// "Strictly after" is measured against the pair (this instant, the last
+	// subject's id) — `last_fired_subject_id`, added by 03600 and, like
+	// `last_checked_at`, not carried on this struct because nothing outside the
+	// evaluator reads it. The id half is what lets a run capped mid-way through
+	// subjects sharing one timestamp resume inside the tie group instead of
+	// skipping its remainder forever.
 	//
 	// It is therefore set when a rule is created and when a disabled rule is
 	// switched back on, not left NULL until the first firing. A NULL watermark
