@@ -96,12 +96,16 @@ fi
 # otherwise empty diff. Checked here rather than left to CI because the developer
 # who upgrades sqlc locally is the one who introduces it, and their own run of
 # this script is where they should hear about it.
+# The pin moved out of ci.yml and into the Makefile when W27 folded CI's steps
+# into make targets, and this check kept reading the workflow — so it stopped
+# finding a version at all and reported that as a failure rather than silently
+# passing, which is the one direction a broken check should fail in.
 stamped=$(sed -n 's|^//   sqlc \(v[0-9.]*\)$|\1|p' internal/store/dbgen/models.go | head -1)
-pinned=$(sed -n 's|.*sqlc-dev/sqlc/cmd/sqlc@\(v[0-9.]*\).*|\1|p' .github/workflows/ci.yml | head -1)
+pinned=$(sed -n 's|^SQLC_VERSION *:*= *\(v[0-9.]*\).*|\1|p' Makefile | head -1)
 if [ -z "$stamped" ] || [ -z "$pinned" ]; then
-  bad "could not read the sqlc version from the generated code or from ci.yml"
+  bad "could not read the sqlc version from the generated code or from the Makefile's SQLC_VERSION"
 elif [ "$stamped" = "$pinned" ]; then
-  ok "sqlc version agrees with CI ($stamped)"
+  ok "sqlc version agrees with the Makefile pin ($stamped)"
 else
   bad "generated code says sqlc $stamped, ci.yml installs $pinned — CI will fail on the version comment"
 fi

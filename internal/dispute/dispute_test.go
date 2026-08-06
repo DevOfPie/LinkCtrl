@@ -304,7 +304,10 @@ func TestEveryQueueFileIsScanned(t *testing.T) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case ".git", "bin", "node_modules", "dbgen", "test":
+			// `.claude` for the reason instance_test.go gives: it holds agent
+			// worktrees, which are checkouts of this repository inside itself,
+			// and walking into one reports every file of the tree a second time.
+			case ".git", ".claude", "bin", "node_modules", "dbgen", "test":
 				return filepath.SkipDir
 			}
 			return nil

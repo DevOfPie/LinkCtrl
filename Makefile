@@ -549,8 +549,16 @@ dist: assets ## Cross-compile release binaries with checksums into dist/
 	@cd $(DIST) && sha256sum *.tar.gz > SHA256SUMS && cat SHA256SUMS
 
 .PHONY: release-check
-release-check: ## Everything that must hold before tagging a release
-	@scripts/release-check.sh
+release-check: require-db-password ## Everything that must hold before tagging a release
+	@# The DSNs are exported here rather than left to the caller's environment.
+	@# release-check.sh decides to run the integration tests by asking docker
+	@# compose whether Postgres is up, and then ran `go test` with no
+	@# TEST_DATABASE_URL — so on a machine with the stack running, the last gate
+	@# before a tag failed for want of a connection string it could have built
+	@# itself. Same two variables `test-integration` above passes, from the same
+	@# variables, so the two cannot disagree about which instance they mean.
+	@TEST_DATABASE_URL="$(DEV_DATABASE_URL)" LINKCTRL_REDIS_URL="$(DEV_REDIS_URL)" \
+		scripts/release-check.sh
 
 ## ---- load -----------------------------------------------------------------
 

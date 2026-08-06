@@ -193,7 +193,10 @@ func callersOf(t *testing.T, callee string) map[string]string {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case ".git", "bin", "node_modules", "dbgen":
+			// `.claude` holds agent worktrees — checkouts of this repository
+			// inside itself — and walking into one finds every source file of
+			// the tree a second time. Same reason as instance_test.go's.
+			case ".git", ".claude", "bin", "node_modules", "dbgen":
 				return filepath.SkipDir
 			}
 			return nil

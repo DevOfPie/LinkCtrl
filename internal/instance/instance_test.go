@@ -51,7 +51,13 @@ func TestThePrincipalMoveIsReachableFromTheShellAndNowhereElse(t *testing.T) {
 			return err
 		}
 		if d.IsDir() {
-			if name := d.Name(); name == ".git" || name == "node_modules" {
+			// `.claude` holds agent worktrees — checkouts of this repository
+			// inside itself. Walking into one finds a second copy of every file
+			// and reports each of them as an unscanned source, which is what it
+			// did the first time a worktree was left behind. Skipped by name
+			// rather than by detecting a nested `.git`, because the directory is
+			// scratch either way and nothing under it is this tree's source.
+			if name := d.Name(); name == ".git" || name == ".claude" || name == "node_modules" {
 				return fs.SkipDir
 			}
 			return nil

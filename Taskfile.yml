@@ -645,5 +645,14 @@ tasks:
 
   release-check:
     desc: Everything that must hold before tagging a release
+    # The DSNs are supplied here rather than left to the caller's environment.
+    # release-check.sh decides to run the integration tests by asking docker
+    # compose whether Postgres is up, then ran go test with no
+    # TEST_DATABASE_URL — so on a machine with the stack running, the last gate
+    # before a tag failed for want of a connection string it could have built.
+    # Mirrors the Makefile target, from the same two variables.
     cmds:
       - bash scripts/release-check.sh
+    env:
+      TEST_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
+      LINKCTRL_REDIS_URL: "{{.DEV_REDIS_URL}}"
