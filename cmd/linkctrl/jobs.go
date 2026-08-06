@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,12 +27,16 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/webhook"
 )
 
-// jobRunner runs the periodic maintenance work.
+// jobRunner runs the periodic maintenance work, one goroutine per job family.
 //
 // Leader election is a Postgres advisory lock rather than a scheduler service:
 // it needs no extra infrastructure, and the lock is released automatically if
 // the holder dies, so a crashed replica does not block the others. Every job
 // re-checks the lock, so leadership can move between runs without coordination.
+// The lock is per *family*, not global — see the key block below for why the
+// distinction is load-bearing — so leadership over the mail drain and
+// leadership over the dimension rollup are separate facts that can land on
+// separate replicas.
 type jobRunner struct {
 	pool    *pgxpool.Pool
 	salts   *analytics.SaltCache
@@ -71,10 +76,10 @@ type jobRunner struct {
 	domainVerifyBatch    int32
 	// hosts is this replica's verified-hostname set, reloaded on a timer.
 	//
-	// **Not under leadership, unlike every other job on this clock.** The set is
-	// in-process and every replica holds its own, so a reload the leader
-	// performs does nothing for the other three. Nil skips the job, which is
-	// what a runner built without a host cache gets (F73).
+	// **Not under leadership, unlike the verification pass that shares its
+	// family.** The set is in-process and every replica holds its own, so a
+	// reload the leader performs does nothing for the other three. Nil skips
+	// the job, which is what a runner built without a host cache gets (F73).
 	hosts *redirect.HostCache
 	// webhooks drains the outbound delivery queue (M42). Nil skips the job
 	// entirely, which is what a runner built without one gets.
@@ -85,15 +90,56 @@ type jobRunner struct {
 	// of the wiring rather than a promise.
 	automation *automation.Service
 	cancel     context.CancelFunc
-	done       chan struct{}
+	// wg accounts for every family goroutine start launches; stop waits on it,
+	// so shutdown never leaves a pass mid-flight against a pool that is about
+	// to close. The single scheduler goroutine had a done channel doing this
+	// job for one; the WaitGroup is the same discipline at N.
+	wg sync.WaitGroup
 }
 
-// advisoryLockKey is a hand-picked constant — the ASCII bytes "lcjobs" plus a
-// version suffix — NOT a hash of anything. To inspect or hold the leader lock
-// from psql, use the literal value:
+// The advisory lock keys, one per job family.
 //
-//	SELECT pg_try_advisory_lock(7810203205416189953);
-const advisoryLockKey int64 = 0x6c63_6a6f_6273_0001
+// Derivation, kept legible on purpose: the high six bytes are the ASCII string
+// "lcjobs" (0x6c63_6a6f_6273) — the prefix the original single key used — the
+// seventh byte is a generation, and the eighth is the family. Hand-picked
+// constants, NOT hashes of anything, so an operator can inspect or hold any
+// family's lock from psql with the literal beside it.
+//
+// Keys must never collide, and a retired key must never be reused for a new
+// family. A collision does not serialize two families — it makes them *skip*
+// each other: pg_try_advisory_lock never blocks, so with each family on its
+// own goroutine, the same-key loser on the same leader drops its whole tick,
+// and the drop is counted as a follower's skip, which both loses work and
+// poisons the follower-liveness reading ObserveJobSkipped exists for, on a
+// replica whose scheduler is perfectly healthy. Reuse has the same effect
+// across binaries instead of within one: an old binary still holds its keys
+// for as long as a rolling deploy keeps it alive.
+//
+// Deploy overlap, stated as a cost rather than discovered: the generation-0
+// binary holds advisoryLockKeyRetiredV1 for everything, and none of the keys
+// below contend with it, so for the length of a rolling deploy each family can
+// have two leaders — one old, one new. The window costs duplicate effort, not
+// duplicate effects: the drains claim rows with FOR UPDATE SKIP LOCKED, the
+// rollups recompute whole days idempotently, partition creation is
+// IF-NOT-EXISTS-shaped, and the automation watermark is compare-and-set — all
+// of which already had to hold, because an advisory lock is released the
+// moment its holder dies and two leaders was always a window, not an
+// impossibility.
+const (
+	// advisoryLockKeyRetiredV1 is generation 0: one key serializing every job
+	// on one goroutine. Nothing takes it any more. It stays declared so no
+	// future family can be given this value without tripping the key test —
+	// during a rolling deploy the old binary still holds it.
+	advisoryLockKeyRetiredV1 int64 = 0x6c63_6a6f_6273_0001 // 7810203205416189953
+
+	advisoryLockKeyRollup      int64 = 0x6c63_6a6f_6273_0101 // 7810203205416190209
+	advisoryLockKeyDimension   int64 = 0x6c63_6a6f_6273_0102 // 7810203205416190210
+	advisoryLockKeyMail        int64 = 0x6c63_6a6f_6273_0103 // 7810203205416190211
+	advisoryLockKeyWebhooks    int64 = 0x6c63_6a6f_6273_0104 // 7810203205416190212
+	advisoryLockKeyMaintenance int64 = 0x6c63_6a6f_6273_0105 // 7810203205416190213
+	advisoryLockKeyDomains     int64 = 0x6c63_6a6f_6273_0106 // 7810203205416190214
+	advisoryLockKeyAutomation  int64 = 0x6c63_6a6f_6273_0107 // 7810203205416190215
+)
 
 func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analytics.Roller,
 	log *slog.Logger, metrics *observability.Metrics, notifier *notify.Service,
@@ -122,150 +168,210 @@ func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analyt
 		webhooks:             webhooks,
 		automation:           automations,
 		hosts:                hosts,
-		done:                 make(chan struct{}),
 	}
 }
 
+// jobFamily is one scheduler goroutine: a ticker, the pass it runs, and the
+// advisory lock key that pass's leader-elected work takes.
+//
+// The key rides here as well as inside the pass's own withLeadership calls so
+// that families() is a complete, testable statement of the scheduler's shape —
+// which families exist, on what clock, under which lock — and so the
+// key-uniqueness test has one table to hold to account.
+type jobFamily struct {
+	name  string
+	key   int64
+	every time.Duration
+	// onStart runs once, before the first tick, so a freshly started instance
+	// has current numbers rather than waiting out a full interval. It is
+	// allowed to differ from onTick: the domains family verifies at boot but
+	// does not reload the host set, because main has already loaded it before
+	// this runner starts.
+	onStart func(context.Context)
+	// onTick runs on every tick. Within one family everything is strictly
+	// sequential — a slow pass delays its own family's next tick and nothing
+	// else's, and the orderings the passes rely on (partitions before
+	// retention, verification before reload) hold because they share this one
+	// goroutine.
+	onTick func(context.Context)
+}
+
+// families is the scheduler's whole shape, in one place.
+//
+// One goroutine per family, rather than the single select every job used to
+// share, because inline was a latency contract nobody could keep: the
+// dimension rollup is deliberately allowed up to its fifteen-minute timeout,
+// and on a shared goroutine those minutes were charged to every other job —
+// the thirty-second outbox included — while a Go ticker holds only one tick,
+// so the runs queued behind a long pass were dropped, not delayed. Grouping is
+// by data dependency, not by period: jobs that read what another job just
+// wrote share a family and keep their order; jobs that merely share a clock do
+// not, and now cannot stall each other.
+func (j *jobRunner) families() []jobFamily {
+	// Custom-domain re-verification (M40, decision D70) runs on operator
+	// configuration, because the pair of numbers an operator tunes — how often
+	// it checks, and how long a failing hostname keeps serving — is
+	// meaningless if one of them is a constant here. Zero disables both the
+	// pass and the reload (their own guards check it); the ticker still needs
+	// a positive period to exist.
+	domainInterval := j.domainVerifyInterval
+	if domainInterval <= 0 {
+		domainInterval = time.Hour
+	}
+
+	return []jobFamily{
+		{
+			// The totals, with the staleness report riding after them inside
+			// runRollup — coupled by design: the report reads job_state right
+			// after the rollup writes it, and it must keep publishing on this
+			// fast clock while some *other* family is the thing that is stuck.
+			// Cadence chosen so a missed run is never load-bearing: rollups
+			// recompute whole days from raw events.
+			name: "rollup", key: advisoryLockKeyRollup, every: 60 * time.Second,
+			onStart: j.runRollup, onTick: j.runRollup,
+		},
+		{
+			// The dimension breakdowns, on their own clock (M37) and now their
+			// own goroutine. Sixty seconds is the right cadence for numbers
+			// whose upsert count is bounded by the links that were clicked; it
+			// is the wrong one for numbers bounded by the distinct (link, day,
+			// dimension, value) tuples those clicks imply, which at the SLO
+			// dataset is 553k rows and 16-21 seconds of work. Same work, a
+			// clock it fits inside — and a goroutine of its own, because those
+			// seconds (and anything up to the pass's fifteen-minute bound) are
+			// a price only the next *breakdown* may pay, not the outbox.
+			name: "dimension-rollup", key: advisoryLockKeyDimension, every: analytics.DimensionInterval,
+			// The startup run is deliberate here too: waiting fifteen minutes
+			// for a breakdown on a box that has just come up would look
+			// exactly like the breakdown being broken.
+			onStart: j.runDimensionRollup, onTick: j.runDimensionRollup,
+		},
+		{
+			// Mail is on a fast clock because an invitation is something a
+			// person is waiting for with a browser open; an hour of latency
+			// would make the outbox feel like a fault rather than a queue.
+			// Thirty seconds costs one indexed query that usually returns
+			// nothing. The startup run is so mail queued before a restart goes
+			// out at once — surviving the restart is the reason the outbox
+			// exists, and waiting after it would be a strange way to honour
+			// that.
+			name: "mail", key: advisoryLockKeyMail, every: 30 * time.Second,
+			onStart: j.runMail, onTick: j.runMail,
+		},
+		{
+			// The webhook drain used to ride the mail ticker, coupled for
+			// scheduler-latency economics alone: when both ran inline on one
+			// select, a second timer at the same period was a second thing to
+			// reason about for no difference anybody could observe. On its own
+			// goroutine the difference is observable and is the point — a
+			// relay that accepts connections and says nothing costs mail its
+			// SMTP_TIMEOUT without costing anybody's events a millisecond, and
+			// a blackholed receiver cannot hold an invitation (F133's harm
+			// shape, ended rather than bounded). Same clock, same startup
+			// reasoning as the outbox above.
+			name: "webhooks", key: advisoryLockKeyWebhooks, every: 30 * time.Second,
+			onStart: j.runWebhooks, onTick: j.runWebhooks,
+		},
+		{
+			// The hourly pass stays one family because its inside is ordered:
+			// retention runs after partition creation so a run can never drop
+			// the partition the same run just made, and the audit-size
+			// measurement feeds the growth warning that follows it — a data
+			// dependency, not a habit. Cadence chosen so a missed run is never
+			// load-bearing: partitions are maintained two months ahead.
+			name: "maintenance", key: advisoryLockKeyMaintenance, every: time.Hour,
+			onStart: j.runMaintenance, onTick: j.runMaintenance,
+		},
+		{
+			// Verification and the host reload share a family *in that order*
+			// on purpose: verification (leader-only) writes the rows the
+			// reload (every replica, no leadership — F73) reads, so on the
+			// leader a revocation is served out on the same tick that wrote it
+			// rather than racing a sibling timer for it. The startup half is
+			// verification alone — so a hostname whose record was published
+			// while this instance was down starts serving on boot, and one
+			// whose record went away is re-checked promptly — while the host
+			// set was already loaded by main before this runner started.
+			name: "domains", key: advisoryLockKeyDomains, every: domainInterval,
+			onStart: j.runDomainVerification,
+			onTick: func(ctx context.Context) {
+				j.runDomainVerification(ctx)
+				j.runHostReload(ctx)
+			},
+		},
+		{
+			// Automation evaluation, on its own clock (M43): a change to how
+			// often the breakdowns recompute must not silently change how
+			// often somebody's standing instruction runs. Run once at startup
+			// so a rule whose subject appeared while this instance was down
+			// fires on boot rather than a minute later — safe eagerly, because
+			// the watermark means a restart cannot make a rule fire twice for
+			// one subject.
+			name: "automation", key: advisoryLockKeyAutomation, every: domain.AutomationInterval,
+			onStart: j.runAutomation, onTick: j.runAutomation,
+		},
+	}
+}
+
+// start launches one goroutine per job family.
+//
+// What still serializes does so inside a family, on purpose; across families
+// nothing serializes at all, which is what the per-family advisory keys exist
+// to make safe — under the old shared key, two families running concurrently
+// on the same leader would have skipped each other rather than queued.
 func (j *jobRunner) start(parent context.Context) {
 	ctx, cancel := context.WithCancel(context.WithoutCancel(parent))
 	j.cancel = cancel
 
-	go func() {
-		defer close(j.done)
+	for _, f := range j.families() {
+		j.wg.Add(1)
+		go func() {
+			defer j.wg.Done()
+			tick := time.NewTicker(f.every)
+			defer tick.Stop()
 
-		// Cadences chosen so a missed run is never load-bearing: rollups
-		// recompute from raw events, and partitions are maintained two months
-		// ahead.
-		rollup := time.NewTicker(60 * time.Second)
-		// Automation evaluation, on its own clock (M43). One minute, and its own
-		// ticker rather than the rollup's because the two are unrelated jobs
-		// that happen to share a period: a change to how often the breakdowns
-		// recompute must not silently change how often somebody's standing
-		// instruction runs.
-		automations := time.NewTicker(domain.AutomationInterval)
-		// The dimension breakdowns, on their own clock (M37). Sixty seconds is
-		// the right cadence for numbers whose upsert count is bounded by the
-		// links that were clicked; it is the wrong one for numbers whose upsert
-		// count is bounded by the distinct (link, day, dimension, value) tuples
-		// those clicks imply, which at the SLO dataset is 553k rows and 16-21
-		// seconds of every minute. Same work, a clock it fits inside.
-		dimension := time.NewTicker(analytics.DimensionInterval)
-		hourly := time.NewTicker(time.Hour)
-		// Mail is on its own, faster clock. Nothing here is time-critical
-		// except this: an invitation is something a person is waiting for with
-		// a browser open, and an hour of latency would make the outbox feel
-		// like a fault rather than a queue. Thirty seconds costs one indexed
-		// query that usually returns nothing.
-		outbox := time.NewTicker(30 * time.Second)
-		// Custom-domain re-verification (M40, decision D70). Its own clock
-		// rather than the hourly maintenance tick, because the cadence is
-		// operator configuration: the pair of numbers an operator tunes —
-		// how often it checks, and how long a failing hostname keeps serving —
-		// is meaningless if one of them is a constant here.
-		//
-		// A ticker that is never read when the interval is zero, which is the
-		// documented way to switch the pass off and leave verification
-		// on-demand only.
-		domainInterval := j.domainVerifyInterval
-		if domainInterval <= 0 {
-			domainInterval = time.Hour
-		}
-		domains := time.NewTicker(domainInterval)
-		// The verified-hostname set, on the same clock and for the same reason
-		// the pass uses it: the number an operator tunes for "how quickly does a
-		// hostname change take effect" should mean one thing. Its own ticker
-		// rather than a second case on `domains`, because that one is
-		// leader-only and this one must run everywhere (F73).
-		hostReload := time.NewTicker(domainInterval)
-		defer hostReload.Stop()
-		defer rollup.Stop()
-		defer dimension.Stop()
-		defer hourly.Stop()
-		defer outbox.Stop()
-		defer domains.Stop()
-		defer automations.Stop()
-
-		// Run once at startup rather than waiting a full interval, so a
-		// freshly started instance has current numbers. Both halves, because
-		// waiting fifteen minutes for a breakdown on a box that has just come
-		// up would look exactly like the breakdown being broken.
-		j.runRollup(ctx)
-		j.runDimensionRollup(ctx)
-		j.runMaintenance(ctx)
-		// And so mail queued before a restart goes out at once rather than
-		// half a minute later. Surviving the restart is the reason the outbox
-		// exists; waiting after it would be a strange way to honour that.
-		j.runMail(ctx)
-		// And so anything queued before a restart goes out at once rather than
-		// half a minute later, for the reason the outbox does: surviving the
-		// restart is the point of the queue, and waiting after it would be a
-		// strange way to honour that.
-		j.runWebhooks(ctx)
-		// And once at startup, so a hostname whose record was published while
-		// this instance was down starts serving on boot rather than an hour
-		// later — and so one whose record went away is re-checked promptly
-		// rather than inheriting a stale verification from before the restart.
-		j.runDomainVerification(ctx)
-		// And once at startup, so a rule whose subject appeared while this
-		// instance was down fires on boot rather than a minute later. Safe to
-		// run eagerly for the reason every other job here is: the watermark
-		// means a restart cannot make a rule fire twice for one subject.
-		j.runAutomation(ctx)
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-rollup.C:
-				j.runRollup(ctx)
-			case <-dimension.C:
-				j.runDimensionRollup(ctx)
-			case <-outbox.C:
-				j.runMail(ctx)
-				// On the mail clock rather than one of its own. The two are the
-				// same job in every respect that matters — a bounded batch of
-				// network round trips to somebody else's server, drained under
-				// leadership, retried with backoff — and an event nobody
-				// receives for an hour is an event that reads as lost. A second
-				// ticker at the same period would be two timers to reason about
-				// for no difference anybody can observe.
-				//
-				// **Everything in this select is inline, including this.** A job
-				// that runs long here does not delay itself; it delays every
-				// other case, and a Go ticker holds one tick, so the ones after
-				// that are dropped and not queued. Which is why both drains on
-				// this line cost one attempt rather than a batch of them: one
-				// WEBHOOK_TIMEOUT for the deliveries and one SMTP_TIMEOUT for the
-				// mail, whatever either backlog is. The mail half is finding F133
-				// and was fixed second — the webhook drain stopped stalling the
-				// scheduler while the mail drain that runs immediately before it
-				// still could, which left the harm class half-closed.
-				j.runWebhooks(ctx)
-			case <-hourly.C:
-				j.runMaintenance(ctx)
-			case <-domains.C:
-				j.runDomainVerification(ctx)
-			case <-hostReload.C:
-				j.runHostReload(ctx)
-			case <-automations.C:
-				j.runAutomation(ctx)
+			if f.onStart != nil {
+				f.onStart(ctx)
 			}
-		}
-	}()
-}
-
-func (j *jobRunner) stop() {
-	if j.cancel != nil {
-		j.cancel()
-		<-j.done
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-tick.C:
+					f.onTick(ctx)
+				}
+			}
+		}()
 	}
 }
 
-// withLeadership runs fn only if this process holds the advisory lock.
+// stop cancels every family goroutine and waits for all of them to return, so
+// shutdown never abandons a pass mid-flight against a pool that is about to
+// close. The WaitGroup is the accounting: each goroutine start launches is
+// added before it exists and released on its way out, the same discipline the
+// single scheduler goroutine's done channel provided for one.
+func (j *jobRunner) stop() {
+	if j.cancel != nil {
+		j.cancel()
+		j.wg.Wait()
+	}
+}
+
+// withLeadership runs fn only if this process holds the family's advisory lock.
 //
 // pg_try_advisory_lock never blocks, so a follower skips the work instead of
-// queueing behind the leader.
-func (j *jobRunner) withLeadership(ctx context.Context, name string, fn func(context.Context) error) {
+// queueing behind the leader. The key must be the calling family's own — the
+// constants above — and never shared across families: with each family on its
+// own goroutine, two same-key callers on one replica would race each other,
+// and the loser is skipped entirely rather than delayed, dropping work the
+// replica held leadership for.
+//
+// fn runs synchronously on this call, and the lock is held until it returns —
+// which is a contract, not an implementation detail. Advisory locks are
+// session-scoped, so anything fn hands to a goroutine that outlives this call
+// runs without the lock; both Drains wait on their own WaitGroups before
+// returning for exactly this reason (see internal/mail.Service.Drain).
+func (j *jobRunner) withLeadership(ctx context.Context, key int64, name string, fn func(context.Context) error) {
 	conn, err := j.pool.Acquire(ctx)
 	if err != nil {
 		return
@@ -273,19 +379,21 @@ func (j *jobRunner) withLeadership(ctx context.Context, name string, fn func(con
 	defer conn.Release()
 
 	var acquired bool
-	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", advisoryLockKey).Scan(&acquired); err != nil {
+	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", key).Scan(&acquired); err != nil {
 		j.log.Debug("could not attempt job lock", slog.String("job", name), slog.Any("error", err))
 		return
 	}
 	if !acquired {
 		// Counted, not ignored: on a healthy multi-replica deployment most runs
-		// are skips, and a follower reporting no skips at all is a follower
-		// whose scheduler has stopped.
+		// are skips. The reading is per family now that each family holds its
+		// own key — a follower reporting no skips across a family's job names
+		// is a follower whose goroutine for that family has stopped, and the
+		// old whole-scheduler reading is the same check summed over all seven.
 		j.metrics.ObserveJobSkipped(name)
 		return
 	}
 	defer func() {
-		_, _ = conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", advisoryLockKey)
+		_, _ = conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", key)
 	}()
 
 	err = fn(ctx)
@@ -298,7 +406,7 @@ func (j *jobRunner) withLeadership(ctx context.Context, name string, fn func(con
 func (j *jobRunner) runRollup(ctx context.Context) {
 	runCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	j.withLeadership(runCtx, "rollup", func(ctx context.Context) error {
+	j.withLeadership(runCtx, advisoryLockKeyRollup, "rollup", func(ctx context.Context) error {
 		return j.roller.RunRecentTotals(ctx, time.Now())
 	})
 
@@ -307,7 +415,8 @@ func (j *jobRunner) runRollup(ctx context.Context) {
 	// set it would report nothing, and whether the alert fired would depend on
 	// which replica Prometheus reached. It is also the one job metric that has
 	// to keep being published while the *dimension* job is the thing that is
-	// broken, which is exactly when the leader is busy.
+	// broken — which is why it rides this family and not that one: a stuck
+	// dimension pass now cannot delay the report that says it is stuck.
 	j.reportJobStaleness(runCtx)
 }
 
@@ -318,11 +427,15 @@ func (j *jobRunner) runRollup(ctx context.Context) {
 // The pass it runs is measured at 16-21 seconds on the SLO dataset and it is
 // allowed to grow well past that before the cadence has to change again; a
 // two-minute bound would have turned the first slow day into a failed job and a
-// stale breakdown rather than into a slow one.
+// stale breakdown rather than into a slow one. The whole bound is chargeable
+// only to this family: a pass that spends all fifteen minutes delays the next
+// breakdown and nothing else, where on the old shared goroutine it held the
+// thirty-second outbox, the automation clock and the host reload for the
+// duration.
 func (j *jobRunner) runDimensionRollup(ctx context.Context) {
 	runCtx, cancel := context.WithTimeout(ctx, analytics.DimensionInterval)
 	defer cancel()
-	j.withLeadership(runCtx, "dimension-rollup", func(ctx context.Context) error {
+	j.withLeadership(runCtx, advisoryLockKeyDimension, "dimension-rollup", func(ctx context.Context) error {
 		return j.roller.RunRecentDimensions(ctx, time.Now())
 	})
 }
@@ -355,15 +468,14 @@ func (j *jobRunner) reportJobStaleness(ctx context.Context) {
 //
 // The timeout is generous because the batch is a batch of network round trips
 // to somebody else's server, and bounded for the same reason: a relay that
-// accepts connections and then says nothing must not hold the scheduler. Each
-// message carries its own shorter deadline inside this one — SMTP_TIMEOUT, ten
-// seconds by default — and the batch is handed over together rather than in
-// turn, so what this call costs is *one* of those and not twenty. That is the
-// number that matters here: this runs inline on the goroutine below, and a drain
-// that took DrainBatch × SMTP_TIMEOUT held every other job on the instance for
-// the duration, this line's own runWebhooks included. See
-// internal/mail.SendConcurrency, and finding F133, which is that defect one
-// package over from the one M42 was reopened for.
+// accepts connections and then says nothing must not hold this queue forever.
+// Each message carries its own shorter deadline inside this one — SMTP_TIMEOUT,
+// ten seconds by default — and the batch is handed over together rather than in
+// turn, so what this call costs is *one* of those and not twenty (see
+// internal/mail.SendConcurrency, and finding F133). A slow drain now delays
+// only the outbox's own next tick — the family goroutine is mail's alone — but
+// one attempt is still the right cost, because the queue it delays is the one
+// an invitation is waiting in.
 func (j *jobRunner) runMail(ctx context.Context) {
 	if j.mailer == nil {
 		return
@@ -371,7 +483,7 @@ func (j *jobRunner) runMail(ctx context.Context) {
 	runCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	j.withLeadership(runCtx, "mail", func(ctx context.Context) error {
+	j.withLeadership(runCtx, advisoryLockKeyMail, "mail", func(ctx context.Context) error {
 		return j.mailer.Drain(ctx)
 	})
 }
@@ -388,13 +500,14 @@ func (j *jobRunner) runMail(ctx context.Context) {
 //
 // The timeout is generous because the batch is a batch of network round trips to
 // somebody else's server, and bounded for the same reason: a receiver that
-// accepts a connection and then says nothing must not hold the scheduler. Each
-// attempt carries its own shorter deadline inside this one — WEBHOOK_TIMEOUT,
-// ten seconds by default — and the batch is dialled together rather than in
-// turn, so what this call costs is *one* of those and not twenty. That is the
-// number that matters here: this runs inline on the goroutine below, and a drain
-// that took DrainBatch × WEBHOOK_TIMEOUT held every other job on the instance for
-// the duration. See internal/webhook.DeliveryConcurrency.
+// accepts a connection and then says nothing must not hold this queue forever.
+// Each attempt carries its own shorter deadline inside this one —
+// WEBHOOK_TIMEOUT, ten seconds by default — and the batch is dialled together
+// rather than in turn, so what this call costs is *one* of those and not twenty
+// (see internal/webhook.DeliveryConcurrency). A slow drain now delays only the
+// deliveries' own next tick — the family goroutine is this queue's alone — but
+// one attempt is still the right cost, because an event nobody receives for
+// minutes is an event that reads as lost.
 func (j *jobRunner) runWebhooks(ctx context.Context) {
 	if j.webhooks == nil {
 		return
@@ -402,7 +515,7 @@ func (j *jobRunner) runWebhooks(ctx context.Context) {
 	runCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	j.withLeadership(runCtx, "webhooks", func(ctx context.Context) error {
+	j.withLeadership(runCtx, advisoryLockKeyWebhooks, "webhooks", func(ctx context.Context) error {
 		return j.webhooks.Drain(ctx)
 	})
 }
@@ -418,8 +531,10 @@ func (j *jobRunner) runWebhooks(ctx context.Context) {
 //
 // The timeout is generous because the pass is a batch of DNS queries to other
 // people's nameservers, and bounded for the same reason: a nameserver that
-// accepts a query and never answers must not hold the scheduler. Each lookup
-// carries its own shorter deadline inside this one.
+// accepts a query and never answers must not hold this family — the host
+// reload runs behind this call on the same goroutine, and an unbounded pass
+// would stall the one job that takes revoked hostnames out of service. Each
+// lookup carries its own shorter deadline inside this one.
 func (j *jobRunner) runDomainVerification(ctx context.Context) {
 	if j.links == nil || j.domainVerifyInterval <= 0 {
 		return
@@ -427,7 +542,7 @@ func (j *jobRunner) runDomainVerification(ctx context.Context) {
 	runCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 
-	j.withLeadership(runCtx, "domain-verification", func(ctx context.Context) error {
+	j.withLeadership(runCtx, advisoryLockKeyDomains, "domain-verification", func(ctx context.Context) error {
 		sum, err := j.links.ReverifyDomains(ctx, time.Now(), j.domainVerifyBatch)
 		// Logged whenever anything changed, at Info, because both halves are
 		// events an operator has to be able to find afterwards: a hostname
@@ -455,16 +570,18 @@ func (j *jobRunner) runDomainVerification(ctx context.Context) {
 // Redis at all there is no subscriber, so before this the only reload sites
 // were boot and the subscriber itself — a second replica never reloaded (F73).
 //
-// **No leadership**, which is the whole point and the opposite of every other
-// job on this clock. The set lives in each process; a leader reloading its own
-// copy leaves every other replica serving whatever it last knew, which is the
-// staleness this closes.
+// **No leadership**, which is the whole point and the opposite of the
+// verification pass that runs just before it on this family's goroutine. The
+// set lives in each process; a leader reloading its own copy leaves every
+// other replica serving whatever it last knew, which is the staleness this
+// closes.
 //
 // Reload rather than Refresh: this is a timer with nothing behind it, not a
-// burst of invalidations to collapse, and doing it inline means a slow query
-// delays the next tick rather than overlapping with it. A failure is logged and
-// dropped — the replica keeps the set it has, which is the same direction every
-// other failure in this cache takes, and the next tick tries again.
+// burst of invalidations to collapse, and doing it inline on the family means
+// a slow query delays the family's next tick rather than overlapping with it.
+// A failure is logged and dropped — the replica keeps the set it has, which is
+// the same direction every other failure in this cache takes, and the next
+// tick tries again.
 func (j *jobRunner) runHostReload(ctx context.Context) {
 	if j.hosts == nil || j.domainVerifyInterval <= 0 {
 		return
@@ -494,10 +611,11 @@ func (j *jobRunner) runHostReload(ctx context.Context) {
 // and for the same reason: an advisory lock is released the moment its holder
 // dies.
 //
-// The timeout is domain.AutomationTimeout, twice the interval, so a slow run overlaps
-// at most one tick and a stuck one is cut off rather than holding the scheduler.
-// What bounds the run itself is not the timeout: it is the four constants in
-// internal/domain that the package's doc comment multiplies out.
+// The timeout is domain.AutomationTimeout, twice the interval, so a slow run
+// overlaps at most one tick and a stuck one is cut off rather than holding its
+// own family's clock indefinitely. What bounds the run itself is not the
+// timeout: it is the four constants in internal/domain that the package's doc
+// comment multiplies out.
 func (j *jobRunner) runAutomation(ctx context.Context) {
 	if j.automation == nil {
 		return
@@ -505,7 +623,7 @@ func (j *jobRunner) runAutomation(ctx context.Context) {
 	runCtx, cancel := context.WithTimeout(ctx, domain.AutomationTimeout)
 	defer cancel()
 
-	j.withLeadership(runCtx, "automation", func(ctx context.Context) error {
+	j.withLeadership(runCtx, advisoryLockKeyAutomation, "automation", func(ctx context.Context) error {
 		return j.automation.Evaluate(ctx)
 	})
 }
@@ -514,7 +632,7 @@ func (j *jobRunner) runMaintenance(ctx context.Context) {
 	runCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	j.withLeadership(runCtx, "partitions", func(ctx context.Context) error {
+	j.withLeadership(runCtx, advisoryLockKeyMaintenance, "partitions", func(ctx context.Context) error {
 		n, err := store.EnsurePartitions(ctx, j.pool, store.PartitionLookahead)
 		if err == nil && n > 0 {
 			j.log.Info("partitions created", slog.Int("count", n))
@@ -525,7 +643,7 @@ func (j *jobRunner) runMaintenance(ctx context.Context) {
 	// Purging expired salts is the de-identification step, not housekeeping:
 	// once a salt is gone, that day's visitor hashes cannot be linked back to
 	// an address by anyone, including us.
-	j.withLeadership(runCtx, "salt-purge", func(ctx context.Context) error {
+	j.withLeadership(runCtx, advisoryLockKeyMaintenance, "salt-purge", func(ctx context.Context) error {
 		n, err := j.salts.Purge(ctx)
 		if err == nil && n > 0 {
 			j.log.Info("expired analytics salts purged", slog.Int64("count", n))
@@ -542,7 +660,7 @@ func (j *jobRunner) runMaintenance(ctx context.Context) {
 	// The audit window defaults to zero, so on a default instance this drops no
 	// audit partition at all and linkctrl_audit_log_bytes is what tells the
 	// operator what that is costing.
-	j.withLeadership(runCtx, "retention", func(ctx context.Context) error {
+	j.withLeadership(runCtx, advisoryLockKeyMaintenance, "retention", func(ctx context.Context) error {
 		dropped, err := store.DropExpiredPartitions(ctx, j.pool, j.retention, time.Now())
 		for _, name := range dropped {
 			// Info, not Debug: this is irreversible deletion, and the log is the
@@ -580,7 +698,7 @@ func (j *jobRunner) runMaintenance(ctx context.Context) {
 	// run under leadership: three replicas each writing the same notification
 	// would put three copies in one inbox.
 	if err == nil && j.notifier != nil {
-		j.withLeadership(runCtx, "audit-growth-warning", func(ctx context.Context) error {
+		j.withLeadership(runCtx, advisoryLockKeyMaintenance, "audit-growth-warning", func(ctx context.Context) error {
 			return j.notifier.WarnAuditGrowth(ctx, auditBytes, j.auditSizeWarnBytes)
 		})
 	}
@@ -590,7 +708,7 @@ func (j *jobRunner) runMaintenance(ctx context.Context) {
 	// is urgent — a lapsed row does nothing until it is swept, it simply must
 	// not accumulate forever.
 	if j.signup != nil {
-		j.withLeadership(runCtx, "signup-purge", func(ctx context.Context) error {
+		j.withLeadership(runCtx, advisoryLockKeyMaintenance, "signup-purge", func(ctx context.Context) error {
 			n, err := j.signup.PurgeLapsed(ctx)
 			if err == nil && n > 0 {
 				j.log.Info("lapsed sign-up registrations purged", slog.Int64("count", n))
@@ -599,7 +717,7 @@ func (j *jobRunner) runMaintenance(ctx context.Context) {
 		})
 	}
 
-	j.withLeadership(runCtx, "partition-check", func(ctx context.Context) error {
+	j.withLeadership(runCtx, advisoryLockKeyMaintenance, "partition-check", func(ctx context.Context) error {
 		counts, err := store.DefaultPartitionCounts(ctx, j.pool)
 		if err != nil {
 			return err
@@ -622,7 +740,7 @@ func (j *jobRunner) runMaintenance(ctx context.Context) {
 	// recovery window a window rather than forever, and it is where a
 	// trafficked alias enters reserved_aliases — the same statement that
 	// deletes the row, so a crash cannot separate the two.
-	j.withLeadership(runCtx, "housekeeping", func(ctx context.Context) error {
+	j.withLeadership(runCtx, advisoryLockKeyMaintenance, "housekeeping", func(ctx context.Context) error {
 		return j.housekeeping(ctx)
 	})
 }

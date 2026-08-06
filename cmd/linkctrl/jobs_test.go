@@ -93,6 +93,117 @@ func jobsDSNFor(name string) string {
 	return dsn[:i+1] + name + rest
 }
 
+// TestEachJobFamilyHasItsOwnAdvisoryLockKey pins the property the per-family
+// scheduler goroutines depend on: every family locks a key of its own.
+//
+// Two families sharing a key would not serialize against each other — they
+// would *skip* each other. pg_try_advisory_lock never blocks, so with each
+// family on its own goroutine, the same-key loser on the same leader drops its
+// whole tick and counts it as a follower's skip: work is lost, and the
+// follower-liveness reading ObserveJobSkipped exists for is poisoned on a
+// replica whose scheduler is perfectly healthy. And no family may take the
+// retired generation-0 key, because an old binary in a rolling deploy still
+// holds that one for everything.
+//
+// No database: this is a test of the table, not of Postgres.
+func TestEachJobFamilyHasItsOwnAdvisoryLockKey(t *testing.T) {
+	fams := (&jobRunner{}).families()
+
+	const wantFamilies = 7
+	if len(fams) != wantFamilies {
+		t.Fatalf("got %d job families, want %d; a family added or merged has to update this count and the key block in jobs.go together",
+			len(fams), wantFamilies)
+	}
+
+	const (
+		keyPrefix     = int64(0x6c63_6a6f_6273) // "lcjobs", the shared high six bytes
+		keyGeneration = int64(0x01)             // generation 0x00 was the single-key scheduler
+	)
+	seenKey := make(map[int64]string, len(fams))
+	seenName := make(map[string]bool, len(fams))
+	for _, f := range fams {
+		if f.name == "" {
+			t.Fatal("a job family has no name")
+		}
+		if seenName[f.name] {
+			t.Errorf("family name %q is used twice", f.name)
+		}
+		seenName[f.name] = true
+		if f.every <= 0 {
+			t.Errorf("family %q has no interval; its ticker would panic", f.name)
+		}
+		if f.onTick == nil {
+			t.Errorf("family %q has nothing to run", f.name)
+		}
+		if other, dup := seenKey[f.key]; dup {
+			t.Errorf("families %q and %q share advisory key %#x; on one leader they would skip each other's ticks, not queue behind them",
+				other, f.name, f.key)
+		}
+		seenKey[f.key] = f.name
+		if f.key>>16 != keyPrefix || (f.key>>8)&0xff != keyGeneration {
+			t.Errorf("family %q key %#x is outside the documented derivation (%#x + generation %#x + family byte); an operator following the psql recipe in jobs.go would inspect the wrong lock",
+				f.name, f.key, keyPrefix, keyGeneration)
+		}
+		if f.key == advisoryLockKeyRetiredV1 {
+			t.Errorf("family %q reuses the retired single-scheduler key; an old binary in a rolling deploy still holds it, so this family would contend with every job of the old world at once",
+				f.name)
+		}
+	}
+	for _, name := range []string{"mail", "webhooks"} {
+		if !seenName[name] {
+			t.Errorf("no %q family: the mail and webhook drains are separate on purpose, so one stalled remote cannot delay the other's queue",
+				name)
+		}
+	}
+}
+
+// TestOneFamilysLockDoesNotBlockAnothers is the defect's mechanism, run
+// directly: a session holding one family's key must not stop a different
+// family running, and must stop that same family exactly.
+//
+// This is what makes per-family goroutines safe at all. Under a single shared
+// key, concurrent families on the same replica would have turned into skips;
+// with per-family keys the only thing a held key suppresses is its own family.
+func TestOneFamilysLockDoesNotBlockAnothers(t *testing.T) {
+	pool := jobsPool(t)
+	ctx := context.Background()
+
+	// A second session holds the mail family's key, as another replica's
+	// leader would.
+	holder, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Release()
+	var held bool
+	if err := holder.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", advisoryLockKeyMail).Scan(&held); err != nil {
+		t.Fatal(err)
+	}
+	if !held {
+		t.Fatal("could not take the mail key on a fresh database; the rest of this test would prove nothing")
+	}
+
+	j := &jobRunner{pool: pool, log: slog.New(slog.DiscardHandler)}
+
+	ran := false
+	j.withLeadership(ctx, advisoryLockKeyWebhooks, "webhooks", func(context.Context) error {
+		ran = true
+		return nil
+	})
+	if !ran {
+		t.Error("holding the mail family's key stopped the webhook family; the families are still sharing a lock")
+	}
+
+	ran = false
+	j.withLeadership(ctx, advisoryLockKeyMail, "mail", func(context.Context) error {
+		ran = true
+		return nil
+	})
+	if ran {
+		t.Error("the mail family ran while another session held its key; leadership is not being checked per family")
+	}
+}
+
 // TestTheHostReloadRunsWithoutASubscriberAndWithoutLeadership is F73's fix as a
 // claim that can be shown false.
 //
@@ -153,7 +264,7 @@ func TestTheHostReloadRunsWithoutASubscriberAndWithoutLeadership(t *testing.T) {
 
 // The job is skipped rather than crashing when there is nothing to reload and
 // when the operator switched the pass off, which is what the nil and zero cases
-// mean everywhere else on this clock.
+// mean everywhere else in the runner.
 func TestTheHostReloadIsSkippedWhenItIsNotConfigured(t *testing.T) {
 	ctx := context.Background()
 	log := slog.New(slog.DiscardHandler)

@@ -148,11 +148,15 @@ cannot leak the database password or the API-key pepper.
 
 ## Background jobs
 
-An in-process scheduler, leader-elected by a Postgres advisory lock. Every job
-re-checks the lock, so leadership moves between runs without coordination, and a
-crashed holder releases it automatically. On a multi-instance deployment most
-runs are `skipped` — that is healthy, and a follower reporting no skips at all is
-a follower whose scheduler has stopped.
+An in-process scheduler, one goroutine per job family, each family
+leader-elected by its own Postgres advisory lock — so a long dimension pass
+delays nothing but itself (D107). Every job re-checks its lock, so leadership
+moves between runs without coordination, and a crashed holder releases it
+automatically. On a multi-instance deployment most runs are `skipped` — that is
+healthy, and a follower reporting no skips for a family's jobs is a follower
+whose goroutine for that family has stopped. `domain-verification` and
+`host-reload` share one goroutine in that order, so a replica reloads the set
+its own pass just wrote rather than racing it.
 
 | Job | Every | Does |
 | --- | --- | --- |
@@ -170,7 +174,8 @@ a follower whose scheduler has stopped.
 | `housekeeping` | 1h | The reapers. Hard-deletes links whose 30-day trash window has passed — reserving any alias that ever received traffic in the same statement, so it is never reissued — and deletes sessions, revoked API keys and finished outbox rows past their retention. Each purged link is logged by alias; that log line is the only record of the deletion. |
 
 All of them run once at startup rather than waiting a full interval, so a fresh
-instance has current numbers.
+instance has current numbers — except `host-reload`, whose boot pass is process
+start-up itself loading the set.
 
 ## Partitions
 

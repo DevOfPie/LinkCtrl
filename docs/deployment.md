@@ -309,7 +309,7 @@ proxy's and its state lives there.
 ### Re-verification, and what happens when a record is deleted
 
 **Every registered hostname is re-checked hourly.** The check runs on one replica
-at a time — the same Postgres advisory lock the other periodic jobs use — while
+at a time — its own Postgres advisory lock; each job family holds one — while
 *serving* the hostnames is decided by an in-process set on every replica, kept in
 step through Redis pub/sub. That is why an un-verification takes effect
 everywhere within moments rather than on whichever replica happened to run the

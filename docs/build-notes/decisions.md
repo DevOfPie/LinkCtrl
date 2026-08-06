@@ -217,6 +217,7 @@ file. Append a row when you append an entry.
 | [M45, one home for the audit vocabulary and a count that checks itself](#2026-08-05--m45-one-home-for-the-audit-vocabulary-and-a-count-that-checks-itself) | F18. `audit.AllActions` and the test that parses the source, because the coverage number had been kept by hand beside a list nothing checked |
 | [M45, one answer to "may an invitation create an account"](#2026-08-05--m45-one-answer-to-may-an-invitation-create-an-account) | F19. The page asked the configured mode and the enforcer asks the effective one — and the redemption page had no test coverage at all |
 | [F147, the watermark that recorded the instant but not the subject](#2026-08-06--f147-the-watermark-that-recorded-the-instant-but-not-the-subject) | D106 — the automation cursor is a (timestamp, id) pair, correcting D84's "not lossy": it was lossy for subjects tied on a capped run's boundary timestamp |
+| [The scheduler splits into families, because inline was a latency contract nobody could keep](#2026-08-06--the-scheduler-splits-into-families-because-inline-was-a-latency-contract-nobody-could-keep) | D107 — one goroutine per job family, one advisory lock key per family; a single shared key would turn concurrency into skipped work and poison the follower-liveness metric |
 
 ---
 
@@ -18057,3 +18058,79 @@ A naive `>=` was rejected for the same reason: it re-fires the boundary
 subject every run. The once-per-subject guarantee is load-bearing
 (`automation.sql`'s claim comment, and the archive/re-arm tests), so the fix
 had to widen the window without ever reopening it.
+
+## 2026-08-06 — The scheduler splits into families, because inline was a latency contract nobody could keep
+
+### D107 — one goroutine per job family, one advisory lock key per family
+
+Every periodic job ran inline in one goroutine's `select`, and the code knew
+it: the comment on the outbox case said so, and both drains were bounded to one
+network timeout *because* of it. What the arrangement could not survive is the
+dimension rollup, which is deliberately allowed up to its fifteen-minute
+timeout — measured 16–21 seconds a pass at the SLO dataset and permitted to
+grow. While it ran, the 30-second outbox tick, the one-minute automation tick,
+maintenance, domain verification and the host reload all waited behind it, and
+a Go ticker holds one tick, so the runs queued behind it were dropped rather
+than delayed. The worst case chains: a slow dimension pass, then maintenance's
+five minutes, then mail's five, then webhooks' five, then verification's ten —
+against a mail queue whose entire design says thirty seconds, and a host reload
+that is the only thing taking a revoked hostname out of service on a replica
+with no Redis. F82 and F133 bounded two tenants of that goroutine and left the
+landlord: the harm class was never "a drain is slow", it was "everything shares
+one goroutine".
+
+**The decision:** `cmd/linkctrl/jobs.go` runs one goroutine per job *family*,
+each with its own ticker and its own advisory lock key, derived legibly from
+the retired constant — "lcjobs" prefix, a generation byte, a family byte, all
+listed with their psql literals. The families group by data dependency, not by
+period: the totals rollup keeps the staleness report (it reads `job_state`
+right after the rollup writes it, outside leadership, and must keep publishing
+while another family is the thing that is stuck); the dimension rollup stands
+alone; mail and webhooks finally separate, which was F133's recorded intent —
+they were coupled only for scheduler-latency economics that no longer exist;
+maintenance stays one family because its inside is ordered (partitions before
+retention, the audit measurement feeding the growth warning); domain
+verification and the host reload share a family in that order, because the
+leader-only pass writes what the every-replica pass reads; automation keeps its
+own clock. The `Drain`-must-not-outlive-`withLeadership` invariant is untouched
+— `fn` still runs synchronously on the session holding the lock, now stated as
+a contract in `withLeadership`'s comment.
+
+**Why not one shared key over concurrent goroutines:** `pg_try_advisory_lock`
+never blocks, so two families contending on one key on the same replica do not
+queue — the loser is *skipped*, silently dropping work the replica held
+leadership for, and every such skip inflates `ObserveJobSkipped` on a healthy
+scheduler, poisoning the follower-liveness reading that metric exists for. The
+single key was correct precisely as long as the single goroutine made
+contention impossible; concurrency without splitting the key converts latency
+into lost runs, which is worse than the defect.
+
+**What it costs, stated rather than discovered:** a rolling deploy has the old
+binary holding the retired key and the new one holding the family keys, so for
+the length of the overlap each family can have two leaders. That window costs
+duplicate effort, not duplicate effects — the drains claim with
+`FOR UPDATE SKIP LOCKED`, the rollups recompute whole days idempotently,
+partition creation tolerates repetition, the automation watermark is
+compare-and-set — all properties that already had to hold, because an advisory
+lock dies with its holder and two leaders was always a window. The other cost
+is the loss of the implicit global mutex: nothing serializes across families
+any more, so any future cross-job ordering must be made explicit by joining a
+family, the way staleness, retention and the host reload already have.
+
+**Alternatives rejected.** Offloading only the dimension rollup keeps the
+worst single stall and leaves the 5–10-minute chains (maintenance, mail,
+webhooks, verification still serialize against each other) — smaller number,
+same class. Per-*job* goroutines on the shared key is the naive fix and the
+trap above: same-leader contention becomes skipped work and a poisoned skip
+metric. A worker-pool abstraction was not seriously entertained; seven
+goroutines with one launcher is the whole requirement, and this file has
+already recorded why machinery built to make unlike things look alike is one
+more thing to get wrong.
+
+Tested by `TestEachJobFamilyHasItsOwnAdvisoryLockKey` (the family table: seven
+families, distinct names and keys, the documented derivation, no reuse of the
+retired key, mail and webhooks present as separate families — sabotage-verified
+by colliding two keys) and `TestOneFamilysLockDoesNotBlockAnothers` (a session
+holding one family's key stops that family exactly, and no other). The loop
+itself — goroutines reading wall-clock tickers — is asserted by construction
+and by the table those tests hold to account, not by a timing test.
