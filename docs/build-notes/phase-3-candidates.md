@@ -13,11 +13,12 @@ pointer plus which area it belongs to, and the reason stays where it was written
 
 Two owner directives shape it, both 2026-08-06:
 
-1. **A phase aims to be shorter than Phase 2.** Phase 2 ran **33 milestone
-   files** — 25 integers, M21 through M45, plus 8 fractional insertions. Counted
-   from the status table and the directory, not recalled: this said *31 and six*
-   on first writing and both numbers were wrong. How much shorter is not decided;
-   the number is an open question below.
+1. **A phase stays under sixteen milestones**, insertions counted — fifteen at
+   most, owner-set and revisitable, now a rule in
+   [planning.md](planning.md#the-size-target-a-phase-stays-under-sixteen-milestones).
+   Phase 2 ran **33 milestone files**: 25 integers, M21 through M45, plus 8
+   fractional insertions. Counted from the status table and the directory, not
+   recalled — this said *31 and six* on first writing and both were wrong.
 2. **Milestones should sit in separate work areas**, so more than one can be
    worked at a time, or so a blocked milestone has an independent one to fall
    back to. That is what the grouping is *for*, and it is why the areas are cut
@@ -156,20 +157,24 @@ than 3.
 
 ---
 
+## Answered
+
+**How many milestones is "shorter than Phase 2"?** **Under sixteen — fifteen at
+most, insertions counted.** Owner-set 2026-08-06 and explicitly revisitable; the
+rule and the trap it invites are in [planning.md](planning.md#the-size-target-a-phase-stays-under-sixteen-milestones),
+which is where a planner will meet it, and [W32](workflow-changes.md#made) records
+that it was made. Phase 2 ran 33.
+
+**The consequence for this file is a real one.** Seven areas are listed above and
+fifteen milestones will not cover them at Phase 2's depth — that phase spent 33 on
+comparable ground. So Phase 3 takes some of these areas, not all, and the target
+is what forces that to be decided rather than discovered at milestone twenty.
+
+---
+
 ## Open questions
 
-Answering either changes what this file becomes. Both are the owner's.
-
-**1. How many milestones is "shorter than Phase 2"?** Phase 2 ran 33 files.
-Recommendation: **a target of 12–15**, stated in [planning.md](planning.md) so an
-insertion has something to be measured against — enough for two or three of the
-areas above at Phase 2's depth, which is what a coherent release needs, and small
-enough that one adversarial review at `X.9` covers it instead of two. Its own
-con: a target is a number people plan *to*, so the honest failure mode is
-milestones that grow to keep the count down, which is the same scope in fewer
-files and worse reviewability. Proposed as [W32](workflow-changes.md#proposed).
-
-**2. Which areas does Phase 3 take?** No recommendation is offered on the whole
+**Which areas does Phase 3 take?** No recommendation is offered on the whole
 set — that is scope, and it is the owner's alone. Two observations that are the
 actor's to make rather than the owner's to derive: **A carries the two defects**
 (F44, F141), which are the only candidates in this file that make a current claim

@@ -69,6 +69,30 @@ A future-phase feature is parked, not remembered: a row in *Not in Phase N*
 (or the next phase's candidate list) carrying its reason, and a decisions.md
 entry for the why. The queue is the plan, never anybody's head.
 
+### The size target: a phase stays under sixteen milestones
+
+Fifteen at most, counting fractional insertions — they are milestones, they have
+definitions of done, and a rule that counted only integers would be satisfied by
+inserting. **Owner-set 2026-08-06, and explicitly revisitable.**
+
+Phase 2 ran **33**: 25 integers, M21 through M45, and 8 insertions. It was the
+phase that produced this target, and it is the number the target is set against.
+
+An insertion that would take a phase past the target is not forbidden by
+arithmetic — it is a **phase-boundary conversation**, the same as the last bullet
+above. Either something moves to the next phase or the target moves knowingly,
+and both are the owner's. What the target removes is the case where a phase grows
+by one insertion at a time and nobody is ever the person who decided it was large.
+
+**The trap, stated because a target invites it.** A count is a number people plan
+*to*, so the cheapest way to satisfy this rule is fatter milestones — the same
+scope in fewer files, each one less reviewable, which is worse than the size it
+was avoiding. Phase 2's own evidence is that a milestone is the unit of review:
+its two adversarial reviews found defects *"no single milestone's definition of
+done can catch, because each milestone was internally consistent"*. Merging two
+milestones to make a count hides exactly that seam. If the target and a
+milestone's reviewability disagree, the target is the thing that gives.
+
 ## 4. Numbering
 
 - **Integers** are the work the phase planned. Never renumber them: the

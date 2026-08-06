@@ -45,10 +45,10 @@ planning.md's path, per workflow.md's feature trigger.
 
 | File | Bytes | ≈tokens |
 | --- | ---: | ---: |
-| `docs/build-notes/planning.md` | 5804 | 1451 |
+| `docs/build-notes/planning.md` | 7286 | 1821 |
 | `docs/build-notes/phase-details/README.md` | 10051 | 2512 |
 | `docs/build-notes/phase-details/_template.md` | 1585 | 396 |
-| **Total** | **17440** | **4360** |
+| **Total** | **18922** | **4730** |
 
 ### Reference — named by the contract, not read whole by it
 
@@ -57,11 +57,11 @@ what makes the predicted column a ceiling rather than an estimate.
 
 | File | Bytes | ≈tokens |
 | --- | ---: | ---: |
-| `docs/build-notes/decisions.md` | 1126905 | 281726 |
+| `docs/build-notes/decisions.md` | 1129485 | 282371 |
 | `docs/build-notes/deferred-findings.md` | 461200 | 115300 |
 | `docs/build-notes/development.md` | 5884 | 1471 |
 | `docs/build-notes/upcoming-decisions.md` | 4870 | 1217 |
-| **Total** | **1598859** | **399714** |
+| **Total** | **1601439** | **400359** |
 
 ### Floors
 
@@ -77,7 +77,7 @@ keep small — the loop reads the one being built and no others.
 
 ## Realized — what Read actually returned
 
-From 12 session transcript(s) on this machine, 92 Read call(s).
+From 12 session transcript(s) on this machine, 95 Read call(s).
 
 Realized bytes are what the tool returned, including the line-number
 prefix Read adds, so a whole-file read measures slightly above the
@@ -94,18 +94,20 @@ singletons are rolled up in the last row instead.
 | `docs/build-notes/deferred-findings.md` | 7 | 145478 | 36369 | 20782 | 461200 | 0.05 |
 | `docs/build-notes/workflow.md` | 8 | 124224 | 31056 | 15528 | 18605 | 0.83 |
 | `docs/build-notes/phase-loop.md` | 11 | 119693 | 29923 | 10881 | 25238 | 0.43 |
-| `docs/build-notes/decisions.md` | 11 | 37319 | 9329 | 3392 | 1126905 | 0.00 |
+| `docs/build-notes/decisions.md` | 11 | 37319 | 9329 | 3392 | 1129485 | 0.00 |
 | `docs/build-notes/phase-details/README.md` | 4 | 35322 | 8830 | 8830 | 10051 | 0.88 |
 | `docs/build-notes/phase-details/m45.md` | 3 | 17532 | 4383 | 5844 | 6517 | 0.90 |
 | `Taskfile.yml` | 3 | 14652 | 3663 | 4884 | 25989 | 0.19 |
 | `docs/build-notes/phase-details/m28.5.md` | 3 | 11842 | 2960 | 3947 | 11250 | 0.35 |
+| `docs/build-notes/planning.md` | 2 | 7792 | 1948 | 3896 | 7286 | 0.53 |
 | `docs/build-notes/phase-details/m33.5.md` | 2 | 7759 | 1939 | 3879 | 6492 | 0.60 |
 | `internal/httpx/router.go` | 2 | 6545 | 1636 | 3272 | 53079 | 0.06 |
 | `.current-task.md` | 2 | 5652 | 1413 | 2826 | 11026 | 0.26 |
+| `docs/build-notes/workflow-changes.md` | 2 | 2591 | 647 | 1295 | 21332 | 0.06 |
 | `Plan.md` | 2 | 2012 | 503 | 1006 | 169907 | 0.01 |
 | `scripts/slo-breaking-point.sh` | 2 | 1467 | 366 | 733 | 10246 | 0.07 |
-| _32 file(s) read once_ | 32 | 167171 | 41792 | | | |
-| **Total** | **92** | **696668** | **174167** | | | |
+| _31 file(s) read once_ | 31 | 160494 | 40123 | | | |
+| **Total** | **95** | **700374** | **175093** | | | |
 
 A floor, not a total: content also reaches the context through Bash
 (`cat`, `sed`, `grep`), through search results, and through the

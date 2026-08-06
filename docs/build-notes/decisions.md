@@ -223,6 +223,7 @@ file. Append a row when you append an entry.
 | [M45, closing 0.2.0](#2026-08-06--m45-closing-020-f1-verified-f1s-stated-reason-corrected-and-the-read-cost-defended) | F1's extraction verified pre-tag; why F1 **cannot recur** and m45.md's "newest section is last" was false; the always-read floors defended with realized read ratios rather than trimmed |
 | [M45, the fourth obligation](#2026-08-06--m45-the-fourth-obligation-the-versioning-note-named-its-own-contents-as-future-work) | Corrects the count above: the pre-1.0 note justified `0.x` with three features 0.2.0 shipped, and now names what is actually outstanding |
 | [Phase 2 ran 33 milestones, not 31](#2026-08-06--phase-2-ran-33-milestones-not-31-and-the-number-feeds-a-decision) | 25 integers plus 8 fractional insertions, counted from the table; the baseline for the milestone-count target was understated by two |
+| [The size target is fifteen](#2026-08-06--the-size-target-is-fifteen-and-the-rule-says-what-it-costs) | W32 made: under sixteen milestone files, insertions counted, revisitable; why past-it is a conversation; why the target gives before a milestone's reviewability does |
 
 ---
 
@@ -18445,3 +18446,41 @@ in the one place it is written down, which is worth the entry: the rule exists
 because four wording rows in one milestone turned out to have more sites than they
 listed, and the actor that wrote the rule down then trusted a count of milestones
 it had just read a table of.
+
+---
+
+## 2026-08-06 — The size target is fifteen, and the rule says what it costs
+
+Owner-answered, closing the question the queue drain opened and making W32.
+*"I think staying under 16 milestones is good, we can revisit later if needed."*
+So: **a phase stays under sixteen milestone files — fifteen at most — and the
+target is explicitly revisitable.** It is written into planning.md's §3, beside
+the other tests that decide whether work belongs in this phase or the next.
+
+**Insertions count.** A fractional milestone is a milestone: it has a definition
+of done, a status row and a review obligation, and a target counting only integers
+would be satisfied by inserting — which is the one behaviour a size rule must not
+reward. Phase 2's 33 is 25 integers and 8 insertions, and both halves are what
+made it large.
+
+**Past the target is a conversation, not a refusal.** The rule sits with the
+existing bullet about work *"large enough to move the phase's success criteria or
+its release"*, and resolves the same way: something moves to the next phase, or
+the target moves knowingly. Both are the owner's. What the target actually removes
+is the failure mode Phase 2 demonstrated — a phase growing one insertion at a time
+with nobody ever being the person who decided it was large. Eight insertions
+arrived that way and each was individually justified.
+
+**The trap is in the rule, not only here.** A count is a number people plan *to*,
+and the cheapest way to satisfy this one is fatter milestones: the same scope in
+fewer files, each less reviewable. That is worse than the size it avoids, and this
+project has the evidence rather than the intuition — Phase 2's two adversarial
+reviews found defects *"no single milestone's definition of done can catch,
+because each milestone was internally consistent"*, which is a statement that the
+milestone is the unit at which review works. Merging two to make a count hides
+exactly the seam a review looks for. So planning.md says which way the conflict
+resolves: **the target gives, not the milestone's reviewability.**
+
+Recorded with no milestone number, per the convention for a process change.
+W33 — whether the loop may hold more than one milestone, or fall back to an
+independent one when blocked — is untouched by this and remains proposed.
