@@ -26,7 +26,7 @@ import (
 // decision, and what would have to change for a `folders.*` set to be worth
 // minting, is recorded in decisions.md as D67.
 //
-// Three rules are enforced here and nowhere else:
+// Four rules are enforced here and nowhere else:
 //
 //   - **A folder may never become its own descendant.** The move operation is
 //     where that bites, and it is checked against the assembled tree before
@@ -39,7 +39,16 @@ import (
 //   - **The tree may not go deeper than domain.MaxFolderDepth.** Checked on
 //     create for the new folder, and on move for the whole subtree being moved —
 //     a two-level subtree dropped under a folder at the cap would push its
-//     leaves past it, which is the case a per-folder check misses.
+//     leaves past it, which is the case a per-folder check misses. No index can
+//     state "a chain of parents is at most this long", so what makes it true
+//     when requests interleave is `LockWorkspaceFolders`: create and move both
+//     read, decide and write inside the transaction holding every folder row
+//     FOR UPDATE, and neither can decide against a tree the other is reshaping.
+//   - **A workspace may hold at most domain.MaxFoldersPerWorkspace folders.**
+//     Checked on create, the one operation that raises the count, and held
+//     under interleaving by the same lock — no constraint counts rows, and two
+//     creates arriving at one below the cap would otherwise each count the
+//     tree before the other's insert and both pass.
 //
 // Nothing here invalidates a cached snapshot, and that is a fact about the
 // redirect path rather than an oversight: `folder_id` is not in the snapshot,
@@ -96,7 +105,36 @@ func (s *Service) CreateFolder(
 	}
 
 	name, errs := domain.ValidateFolderName(in.Name)
-	tree, err := s.loadFolderTree(ctx, actor.WorkspaceID)
+
+	// The read, the decision and the write in one transaction, over a locked
+	// tree, for the reason MoveFolder gives (F108): the depth and count caps
+	// are questions about the whole tree, and neither can be written as a
+	// column check. Decided from a tree read on its own connection, a create
+	// under a leaf and a move of that leaf deeper each pass a check the other
+	// invalidates — create asks about the parent's depth, move about the
+	// subtree's reach, so their composition can land a folder past the cap
+	// while neither refusal fires. Blocking is not the missing piece: a nested
+	// insert already waits on its parent's row behind a move's FOR UPDATE and
+	// then proceeds on the decision it made before waiting, and a top-level
+	// insert touches no parent row and does not wait at all. What repairs it
+	// is re-reading inside the transaction that writes.
+	//
+	// An empty workspace gives LockWorkspaceFolders nothing to lock, and needs
+	// nothing: the depth cap needs a parent, which is a lockable row, the
+	// count cap needs hundreds of them, and the sibling name falls to the
+	// unique index either way.
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+
+	if _, err := q.LockWorkspaceFolders(ctx, actor.WorkspaceID); err != nil {
+		return nil, fmt.Errorf("lock folders: %w", err)
+	}
+
+	tree, err := s.loadFolderTreeWith(ctx, q, actor.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -132,16 +170,21 @@ func (s *Service) CreateFolder(
 		return nil, errs
 	}
 
-	row, err := s.q.CreateFolder(ctx, dbgen.CreateFolderParams{
+	row, err := q.CreateFolder(ctx, dbgen.CreateFolderParams{
 		ID: uuid.Must(uuid.NewV7()), WorkspaceID: actor.WorkspaceID,
 		ParentID: in.ParentID, Name: name,
 	})
 	if err != nil {
-		// The index is the real guarantee; the check above only makes this rare.
+		// The index is the real guarantee for the name: two creates into an
+		// empty spot of the tree hold no locks against each other, and one of
+		// them lands here. The check above only makes this rare.
 		if isUniqueViolation(err) {
 			return nil, domain.ValidationErrors{folderNameTaken(name)}
 		}
 		return nil, fmt.Errorf("create folder: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
 	}
 	return folderFromRow(row, tree.Depth(in.ParentID)+1, 0), nil
 }

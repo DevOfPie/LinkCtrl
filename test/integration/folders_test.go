@@ -365,6 +365,204 @@ func TestTwoConcurrentMovesCannotBuildACycle(t *testing.T) {
 	}
 }
 
+// TestACreateThatWaitedOutAMoveCannotBreachTheDepthCap reopens the depth cap
+// the way F108 reopened the cycle rule, on the create path this time.
+//
+// Create and move guard the cap with different predicates — create asks how
+// deep the parent sits, move asks how far the subtree reaches — so a create
+// under a top-level leaf and a move of that leaf to the last permitted level
+// each pass while their composition lands the new folder one past the cap. The
+// insert's own blocking repairs nothing: a nested create takes FOR KEY SHARE
+// on its parent's row, waits out the move's FOR UPDATE, and then proceeds on
+// the decision it made before waiting. As with the cycle, the discriminating
+// drive is a request parked on the lock while the tree changes under it:
+// re-reading refuses it, not re-reading writes a folder below the cap.
+func TestACreateThatWaitedOutAMoveCannotBreachTheDepthCap(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	ctx := t.Context()
+
+	// A chain one short of the cap, and a top-level leaf. Moving the leaf
+	// under the chain's end is legal — its depth becomes exactly the cap — and
+	// creating under the leaf while it is top-level is legal too. Both
+	// together are not.
+	var parent *uuid.UUID
+	for i := range domain.MaxFolderDepth - 1 {
+		folder := f.addFolder("chain"+string(rune('a'+i)), parent)
+		parent = &folder.ID
+	}
+	deepest := *parent
+	leaf := f.addFolder("leaf", nil)
+
+	// Hold the workspace's folders exactly as the service's own lock does.
+	holder, err := f.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := holder.Exec(ctx,
+		`SELECT id FROM folders WHERE workspace_id = $1 AND deleted_at IS NULL
+		  ORDER BY id FOR UPDATE`, f.owner.WorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create under the leaf, parked on that lock. At the moment it was issued
+	// this is legal: the leaf is at the top level.
+	parked := make(chan error, 1)
+	go func() {
+		_, err := f.links.CreateFolder(context.Background(), f.owner,
+			link.CreateFolderInput{Name: "one-too-deep", ParentID: &leaf.ID})
+		parked <- err
+	}()
+	select {
+	case err := <-parked:
+		t.Fatalf("the create did not park on the held lock; it returned %v", err)
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	// Now move the leaf to the last permitted level from the holding
+	// transaction, and release. The parked create resumes against a tree in
+	// which its parent sits at the cap.
+	if _, err := holder.Exec(ctx,
+		`UPDATE folders SET parent_id = $2 WHERE id = $1`, leaf.ID, deepest); err != nil {
+		t.Fatal(err)
+	}
+	if err := holder.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	var ve domain.ValidationErrors
+	if err := <-parked; !errors.As(err, &ve) || ve[0].Code != "too_deep" {
+		t.Errorf("a create that waited while its parent moved to the deepest "+
+			"permitted level answered %v; want too_deep, which needs the tree "+
+			"re-read inside the transaction that writes", err)
+	}
+
+	// And nothing sits past the cap, which is the claim the status code alone
+	// does not make.
+	tree, err := f.links.Folders(ctx, f.owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, folder := range tree.Flat() {
+		if folder.Depth > domain.MaxFolderDepth {
+			t.Errorf("folder %q sits at depth %d, past the cap of %d",
+				folder.Name, folder.Depth, domain.MaxFolderDepth)
+		}
+	}
+}
+
+// TestTheFolderCountCapRefusesTheFolderPastIt is the count cap, serially: the
+// folder that reaches domain.MaxFoldersPerWorkspace is allowed, the one past
+// it is refused, and deleting one makes room again — a count, not a ratchet.
+func TestTheFolderCountCapRefusesTheFolderPastIt(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	ctx := t.Context()
+
+	// Everything up to one below the cap goes straight into the table: five
+	// hundred service calls would each read the whole tree, and the check
+	// under test is the one the last two calls make.
+	if _, err := f.pool.Exec(ctx,
+		`INSERT INTO folders (id, workspace_id, name)
+		 SELECT gen_random_uuid(), $1, 'bulk-' || n
+		   FROM generate_series(1, $2) n`,
+		f.owner.WorkspaceID, domain.MaxFoldersPerWorkspace-1); err != nil {
+		t.Fatal(err)
+	}
+
+	last := f.addFolder("the-last-one", nil)
+
+	_, err := f.links.CreateFolder(ctx, f.owner,
+		link.CreateFolderInput{Name: "one-past-the-cap"})
+	var ve domain.ValidationErrors
+	if !errors.As(err, &ve) || ve[0].Code != "too_many" {
+		t.Fatalf("creating folder %d returned %v, want too_many",
+			domain.MaxFoldersPerWorkspace+1, err)
+	}
+
+	if err := f.links.DeleteFolder(ctx, f.owner, last.ID); err != nil {
+		t.Fatal(err)
+	}
+	f.addFolder("room-again", nil)
+}
+
+// TestACreateThatWaitedOutAnotherCreateCannotBreachTheCountCap is the count
+// half of the concurrent reopening. Two creates arriving with the workspace
+// one below the cap each count MaxFoldersPerWorkspace-1 folders and both
+// pass; whichever writes second puts the workspace one past it. A top-level
+// create references no parent row, so nothing on the write path so much as
+// delays it — this is the case where only the service's own lock stands
+// between the stale count and the insert, which is why the park assertion
+// below is itself part of the test.
+func TestACreateThatWaitedOutAnotherCreateCannotBreachTheCountCap(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	ctx := t.Context()
+
+	if _, err := f.pool.Exec(ctx,
+		`INSERT INTO folders (id, workspace_id, name)
+		 SELECT gen_random_uuid(), $1, 'bulk-' || n
+		   FROM generate_series(1, $2) n`,
+		f.owner.WorkspaceID, domain.MaxFoldersPerWorkspace-1); err != nil {
+		t.Fatal(err)
+	}
+
+	holder, err := f.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := holder.Exec(ctx,
+		`SELECT id FROM folders WHERE workspace_id = $1 AND deleted_at IS NULL
+		  ORDER BY id FOR UPDATE`, f.owner.WorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+
+	// The create that loses the race, parked on the lock. At the moment it
+	// was issued it is legal: one slot remains.
+	parked := make(chan error, 1)
+	go func() {
+		_, err := f.links.CreateFolder(context.Background(), f.owner,
+			link.CreateFolderInput{Name: "second-to-arrive"})
+		parked <- err
+	}()
+	select {
+	case err := <-parked:
+		t.Fatalf("the create did not park on the held lock; it returned %v — "+
+			"a top-level create blocks on no row of its own, so only the "+
+			"service taking the workspace lock can make it wait", err)
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	// The create that wins, from the holding transaction, and release. The
+	// parked create resumes against a workspace with no slot left.
+	if _, err := holder.Exec(ctx,
+		`INSERT INTO folders (id, workspace_id, name)
+		 VALUES (gen_random_uuid(), $1, 'first-to-arrive')`, f.owner.WorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if err := holder.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	var ve domain.ValidationErrors
+	if err := <-parked; !errors.As(err, &ve) || ve[0].Code != "too_many" {
+		t.Errorf("a create that waited while another filled the last slot "+
+			"answered %v; want too_many, which needs the count re-taken inside "+
+			"the transaction that writes", err)
+	}
+
+	var n int
+	if err := f.pool.QueryRow(ctx,
+		`SELECT count(*) FROM folders WHERE workspace_id = $1 AND deleted_at IS NULL`,
+		f.owner.WorkspaceID).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != domain.MaxFoldersPerWorkspace {
+		t.Errorf("the workspace holds %d folders, want exactly %d",
+			n, domain.MaxFoldersPerWorkspace)
+	}
+}
+
 func TestALinkCannotBeFiledIntoAnotherWorkspacesFolder(t *testing.T) {
 	f := newRules(t)
 	f.claim()
