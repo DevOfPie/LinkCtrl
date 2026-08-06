@@ -39,6 +39,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -348,46 +350,79 @@ func scrubAddress(err error, recipient string) error {
 	if err == nil || recipient == "" {
 		return err
 	}
-	msg := err.Error()
-	lower := strings.ToLower(msg)
-	target := strings.ToLower(recipient)
-	var b strings.Builder
-	for {
-		i := strings.Index(lower, target)
-		if i < 0 {
-			b.WriteString(msg)
-			break
-		}
-		b.WriteString(msg[:i])
-		b.WriteString("[recipient]")
-		msg, lower = msg[i+len(target):], lower[i+len(target):]
-	}
+	msg := replaceFold(err.Error(), recipient, "[recipient]")
 	// Also the local part on its own, which a relay may quote without the
 	// domain — "user unknown: alice". Only when it is long enough to be a
 	// recipient rather than a word that happens to match.
 	if local, _, ok := strings.Cut(recipient, "@"); ok && len(local) >= 3 {
-		return errors.New(replaceFold(b.String(), local, "[recipient]"))
+		return errors.New(replaceFold(msg, local, "[recipient]"))
 	}
-	return errors.New(b.String())
+	return errors.New(msg)
 }
 
 // replaceFold is strings.ReplaceAll, case-insensitively.
+//
+// Not implemented by lowering a copy of `s` and reusing its indexes, because
+// strings.ToLower does not preserve byte length: U+212A (the Kelvin sign) is
+// three bytes and lowers to a one-byte `k`, U+023A (Ⱥ) is two bytes and lowers
+// to the three-byte U+2C65. An offset found in the lowered copy therefore does
+// not address `s`, and a relay is free to put any of those runes in the line
+// being scrubbed — the drift either slid the redaction off the address it was
+// meant to cover or sliced past the end of the string, and the second is fatal
+// here, because this runs in a goroutine under Drain with no recover anywhere
+// above it. So the match is found rune-by-rune in `s`'s own coordinates
+// instead, and the offsets it returns are the only ones that ever touch `s`.
 func replaceFold(s, old, new string) string {
 	if old == "" {
 		return s
 	}
-	lower, target := strings.ToLower(s), strings.ToLower(old)
+	// Lowered once, rune-wise: strings.ToLower maps every rune to exactly one
+	// rune, so this is the same fold indexFold applies to `s` and the
+	// comparison stays symmetric however the recipient row was cased.
+	target := []rune(strings.ToLower(old))
 	var b strings.Builder
 	for {
-		i := strings.Index(lower, target)
-		if i < 0 {
+		start, end := indexFold(s, target)
+		if start < 0 {
 			b.WriteString(s)
 			return b.String()
 		}
-		b.WriteString(s[:i])
+		b.WriteString(s[:start])
 		b.WriteString(new)
-		s, lower = s[i+len(old):], lower[i+len(old):]
+		s = s[end:]
 	}
+}
+
+// indexFold reports the first substring of s whose runes lower to target, as
+// [start, end) byte offsets into s itself — the property the scrub depends on
+// — or (-1, -1) when there is none. `target` must already be lowercase.
+//
+// Matches begin and end only on rune boundaries. A byte-level search over a
+// lowered copy could match inside a multi-byte rune's encoding; here that is
+// not a corner case to shrug at, because slicing mid-rune is exactly the torn
+// output the caller is being rebuilt to avoid. Quadratic in the worst case,
+// which is acceptable where this runs: once per failed SMTP delivery, over a
+// relay's one-line response.
+func indexFold(s string, target []rune) (start, end int) {
+	for i := 0; i < len(s); {
+		j, matched := i, 0
+		for matched < len(target) {
+			r, size := utf8.DecodeRuneInString(s[j:])
+			if size == 0 || unicode.ToLower(r) != target[matched] {
+				break
+			}
+			j += size
+			matched++
+		}
+		if matched == len(target) {
+			return i, j
+		}
+		// DecodeRuneInString consumes one byte for an invalid sequence, so
+		// this always advances, even over a haystack that is not UTF-8.
+		_, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+	}
+	return -1, -1
 }
 
 // PurgeFinished deletes sent and failed rows past the retention window,
