@@ -518,8 +518,10 @@ identifier kept across days, and this product keeps neither.
 It is computed from the same daily-salted visitor hash the analytics use, so it
 carries no address and becomes unlinkable when the salt is purged. The set lives
 in Redis under `lc:rv:`, is written by the click pipeline rather than on the
-redirect path, is maintained only for links that actually carry such a rule, and
-expires with the day it describes.
+redirect path, is maintained only for links that actually carry such a rule —
+and only by visits that were actually served: a refused request is counted as a
+click but never marks the visitor as seen. It expires with the day it
+describes.
 
 **With `LINKCTRL_REDIS_URL` unset or Redis unreachable, every visitor reads as
 new**: a rule looking for a returning visitor never fires, and one looking for a

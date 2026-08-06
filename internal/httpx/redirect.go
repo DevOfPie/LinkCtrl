@@ -258,7 +258,7 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// traffic is read.
 		// No destination: the request was refused before one was chosen, so the
 		// click is attributed to the link rather than to any of its arms.
-		h.record(r, res.Snapshot, start, uuid.Nil)
+		h.record(r, res.Snapshot, start, uuid.Nil, false)
 		return
 	}
 
@@ -394,7 +394,7 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// `record` is a no-op on HEAD and on a nil recorder, and this branch is
 		// reached only when the alias resolved, so there is always a link to
 		// attribute to.
-		h.record(r, res.Snapshot, start, uuid.Nil)
+		h.record(r, res.Snapshot, start, uuid.Nil, false)
 		return
 	case redirect.OutcomeNotFound:
 		h.chargeProbe(r)
@@ -406,7 +406,7 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// The second is a request that reached a link, so D101 covers it; the
 		// first is not.
 		if !res.Snapshot.NotFound {
-			h.record(r, res.Snapshot, start, uuid.Nil)
+			h.record(r, res.Snapshot, start, uuid.Nil, false)
 		}
 		return
 	case redirect.OutcomeRedirect:
@@ -433,7 +433,7 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// to the old destination long after an edit — with no way to recall it.
 	// no-store for the same reason.
 	h.Location(w, target, h.redirectStatus(r))
-	h.record(r, res.Snapshot, start, destID)
+	h.record(r, res.Snapshot, start, destID, true)
 
 	if h.LogSample > 0 && h.counter.Add(1)%h.LogSample == 0 {
 		h.log().Info("redirect",
@@ -478,8 +478,14 @@ func blockedAsBot(snap *redirect.Snapshot, ua string) bool {
 // disagreeing about what a click event carries. HEAD is excluded in both: it is
 // a client asking about the link rather than following it, and counting it
 // would inflate every figure a link's owner reads.
+//
+// reachedDestination says whether this response actually sent the visitor
+// somewhere. It changes nothing about the click itself — a request that reached
+// a real link is recorded identically whatever the answer, which is D101 —
+// it decides only whether the visitor may enter the returning-visitor set.
 func (h *RedirectHandler) record(
 	r *http.Request, snap *redirect.Snapshot, start time.Time, destID uuid.UUID,
+	reachedDestination bool,
 ) {
 	if h.Recorder == nil || snap == nil || r.Method == http.MethodHead {
 		return
@@ -507,7 +513,16 @@ func (h *RedirectHandler) record(
 		// the links that need it, and this flag is how it finds out which (M34).
 		// Deciding it here rather than in the pipeline is what keeps the pipeline
 		// from having to ask the database which links carry such a rule.
-		TrackReturning: tracksReturning(snap),
+		//
+		// Armed only by a visit that reached a destination. The set is the
+		// record of who this link has actually served, and the refusals that
+		// share this function — a blocked bot, a 410, a deep link the link
+		// cannot forward — count their clicks without writing it. A refusal
+		// that marked the visitor would make a later new-visitor rule miss
+		// that visitor's first real visit, and route somebody the link has
+		// never served as though it had. The gate refusals never reach record
+		// at all, so no refusal anywhere brands anybody.
+		TrackReturning: reachedDestination && tracksReturning(snap),
 	})
 }
 

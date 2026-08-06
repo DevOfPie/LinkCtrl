@@ -1092,6 +1092,71 @@ func TestTheReturningSetIsNotMaintainedForOrdinaryLinks(t *testing.T) {
 	}
 }
 
+// TestARefusedVisitIsNotBrandedReturning is the boundary of what D101's
+// recording may touch.
+//
+// D101 says a request that reached a real link is a click whatever the answer
+// was — and an unforwardable deep link is one of its refusals: a 404 with a
+// real link behind it, recorded like any other. But the returning-visitor set
+// is a different claim about the visitor. Membership means "this link served
+// you today", and a refusal served nothing. A refusal that wrote the set would
+// make a new-visitor rule miss that visitor's first real visit: somebody who
+// mistyped /{alias}/some/path and then followed /{alias} minutes later, same
+// browser, same day, would be routed as returning by a link that had never
+// sent them anywhere.
+//
+// The sequence is exactly that visitor. The final two assertions are what stop
+// this passing against a recorder that simply stopped maintaining the set:
+// the success after the refusal must still mark the visitor, and the visit
+// after that must route as returning.
+func TestARefusedVisitIsNotBrandedReturning(t *testing.T) {
+	rdb := newRedisClient(t)
+	f := newRulesOn(t, newDB(t), rdb, nil, true)
+	f.claim()
+
+	id := f.createLink("branded", "https://example.com/default")
+	f.addRule(id, link.CreateRuleInput{
+		URL: "https://example.com/first-visit", Enabled: true,
+		Conditions: domain.RuleConditions{Returning: boolPtr(false)},
+	})
+
+	// The refusal: a deep link on a link that does not forward paths. A 404,
+	// and — per D101 — a recorded click, because a real link is behind it.
+	resp := f.get("/branded/some/path", nil)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("a deep link on a non-forwarding link answered %d, want 404", resp.StatusCode)
+	}
+	waitForClicks(t, f.pool, id, 1)
+	// A short wait past the flush, as the ordinary-links test above takes, so
+	// a mark written late would still be caught.
+	time.Sleep(200 * time.Millisecond)
+
+	if n, err := rdb.SCard(t.Context(), returningKeyFor(id)).Result(); err != nil {
+		t.Fatal(err)
+	} else if n != 0 {
+		t.Errorf("a refused deep link wrote %d member(s) into the returning-visitor "+
+			"set; the set may only hold visitors the link has actually served", n)
+	}
+
+	// The same visitor's first real visit, same address, same user agent, same
+	// UTC day. The new-visitor rule must catch them.
+	if got := f.location("/branded", nil); got != "https://example.com/first-visit" {
+		t.Errorf("the first successful visit routed to %q, want the new-visitor "+
+			"destination; the earlier refusal branded the visitor as returning", got)
+	}
+
+	// And the success is what marks the set, so the visit after it routes as
+	// returning — the half that keeps this test honest about tracking still
+	// being on for this link.
+	waitForClicks(t, f.pool, id, 2)
+	waitForReturningMember(t, rdb, id)
+	if got := f.location("/branded", nil); got != "https://example.com/default" {
+		t.Errorf("a visit after a recorded success routed to %q, want the link's own "+
+			"destination now that the visitor really is returning", got)
+	}
+}
+
 // With Redis absent the condition evaluates to "not returning", documented and
 // tested — the phase-wide rule is that nothing correctness-critical depends on
 // the cache, and a routing rule is not correctness-critical: the visitor still
