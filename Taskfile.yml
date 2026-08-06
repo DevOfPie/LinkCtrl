@@ -15,6 +15,11 @@ vars:
   WORLDMAP_VERSION: 2.0.2
   WORLDMAP_SHA256: 2516c915867c7baf18ddec727aec46c315541a07cfb3d79a6559b05d5e94eee8
   WORLDMAP_FILE: assets/world-atlas/countries-110m.json
+  # Must match the version stamped into internal/store/dbgen. Keep in sync with
+  # the Makefile, which is the reference.
+  SQLC_VERSION: v1.31.1
+  IMAGE: '{{.IMAGE | default "linkctrl:ci"}}'
+  IMAGE_VERSION: '{{.IMAGE_VERSION | default "ci"}}'
   VERSION:
     sh: git describe --tags --always --dirty 2>/dev/null || echo dev
   COMMIT:
@@ -200,6 +205,34 @@ tasks:
       - go mod tidy
       - go mod verify
 
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  # `tidy` repairs; this one reports. A gate that fixes what it finds passes on a
+  # tree nobody has looked at.
+  check-tidy:
+    desc: Fail if go.mod or go.sum are not tidy
+    cmds:
+      - go mod tidy
+      - git diff --exit-code -- go.mod go.sum
+
+  # `go install` puts sqlc in $(go env GOPATH)/bin, which may not be on PATH on a
+  # workstation — the one way this fails for a reason unrelated to the diff.
+  check-generate:
+    desc: Fail if committed generated code does not match its source
+    cmds:
+      - go install github.com/sqlc-dev/sqlc/cmd/sqlc@{{.SQLC_VERSION}}
+      - sqlc generate
+      - git diff --exit-code -- internal/store/dbgen
+
+  check-version-stamp:
+    desc: Fail if a built binary does not report its version stamp
+    deps: [build]
+    cmds:
+      - bash scripts/check-version-stamp.sh {{.BIN}}/linkctrl {{.BIN}}/lctl
+
   check:
     desc: Everything CI runs, short of integration tests
     cmds:
@@ -207,6 +240,72 @@ tasks:
       - task: lint
       - task: shellcheck
       - task: test
+
+  # ---- ci -------------------------------------------------------------------
+  #
+  # One task per CI job. The workflow that calls these is not writable by the
+  # agent maintaining this repository, so a check added inside one of these
+  # reaches CI on the next push while a check added as a workflow step does not
+  # reach CI until the owner applies a proposal. See ci/proposed/README.md.
+  #
+  # These are not `check`: CI runs uncached, against services the runner
+  # provides, and verifies the vendored assets instead of repairing them.
+
+  ci-test:
+    desc: Unit tests with the race detector, uncached — what CI runs
+    cmds:
+      - go test -race -count=1 ./...
+
+  ci-build:
+    desc: The CI build job, end to end
+    cmds:
+      - task: verify-assets
+      - task: css
+      - task: build
+      - task: check-version-stamp
+      - task: vet
+      - task: ci-test
+      - task: openapi
+      - task: check-tidy
+      - task: check-generate
+      - 'echo "ci-build: every check passed"'
+
+  # golangci-lint is not here. It runs from a commit-pinned action in the
+  # workflow, and reproducing that pin with a `go install` would be a second
+  # version of the same pin, free to drift from the first.
+  ci-lint:
+    desc: The CI lint job's steps, short of golangci-lint
+    cmds:
+      - task: shellcheck
+      - task: htmx
+      - task: swagger-ui
+      - task: css
+      - 'echo "ci-lint: shell clean, assets built; golangci-lint runs from the workflow''s pinned action"'
+
+  # Against whatever Postgres and Redis the caller provides, not the compose
+  # instance. Both variables are required rather than defaulted: without
+  # LINKCTRL_REDIS_URL the Redis tier tests skip and the run is green for tests
+  # that never ran.
+  ci-integration:
+    desc: Integration tests against caller-provided services — what CI runs
+    preconditions:
+      - sh: '[ -n "$TEST_DATABASE_URL" ]'
+        msg: "TEST_DATABASE_URL is not set — refusing to run against an unknown database."
+      - sh: '[ -n "$LINKCTRL_REDIS_URL" ]'
+        msg: "LINKCTRL_REDIS_URL is not set — the Redis tier tests would skip and the run would be green for it."
+    cmds:
+      - bash scripts/ci-db-timezone.sh "$TEST_DATABASE_URL"
+      - go test -tags=integration -race -count=1 ./test/integration/
+
+  ci-image-smoke:
+    desc: Check a built container image runs and reports its version
+    cmds:
+      - bash scripts/ci-image-smoke.sh "{{.IMAGE}}" "{{.IMAGE_VERSION}}"
+
+  workflow-proposals:
+    desc: Which ci/proposed/ workflow proposals the owner has not applied yet
+    cmds:
+      - bash scripts/workflow-proposals.sh
 
   generate:
     desc: Regenerate all generated code

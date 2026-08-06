@@ -302,6 +302,15 @@ default, a predicate, a permission. If a document is wrong because the behaviour
 is wrong, the document is not the decision: say which one is being corrected, and
 if it is the behaviour, that is still a prompt. Owner-set, 2026-08-05.
 
+**`.github/workflows/` cannot be committed to — propose instead.** The build
+token carries no `Workflows` permission, so a push touching those paths is
+rejected before any review happens. What a CI step *does* lives in a `make ci-*`
+target and in `scripts/`, and is edited normally. What CI *is* — triggers, the
+`permissions:` block, service images, action pins, `GO_VERSION` — goes to
+[`ci/proposed/`](../../ci/proposed/README.md) with a *Proposed* row in
+[workflow-changes.md](workflow-changes.md), and the owner applies it.
+`make workflow-proposals` lists what is waiting. Owner-set, 2026-08-06.
+
 **Stop and ask** for: destructive operations, scope changes, anything the owner
 would reasonably want to decide. Proceed without asking for reversible work that
 follows from the current milestone.
