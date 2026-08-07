@@ -6,14 +6,15 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/qr"
 )
 
-// QR codes over the API (M41).
+// QR codes over the API (M41, M49).
 //
-// **Four operations on one subresource, and only one of them answers with an
-// image.** `GET /links/{id}/qr` returns the code as JSON — what it encodes and
-// how it is drawn — and `GET /links/{id}/qr.svg` returns the picture. Two paths
-// rather than content negotiation on `Accept`, because a QR code is something
-// somebody puts in an `<img src>` or downloads, and both of those send an
-// `Accept` header nobody chose.
+// **Five operations on one subresource, and two of them answer with an image.**
+// `GET /links/{id}/qr` returns the code as JSON — what it encodes and how it is
+// drawn — and `GET /links/{id}/qr.svg` and `GET /links/{id}/qr.png` return the
+// picture. Paths rather than content negotiation on `Accept`, because a QR code
+// is something somebody puts in an `<img src>` or downloads, and both of those
+// send an `Accept` header nobody chose. The extension is also the whole of what
+// a person has to know to get the other format, which an `Accept` header is not.
 //
 // **No permission of its own.** A QR code is a picture of the link's own short
 // URL, so seeing one is `links.read` and styling one is `links.update` — see
@@ -80,6 +81,46 @@ func (a *LinkAPI) GetQRSVG(w http.ResponseWriter, r *http.Request) {
 	// output have been parsed as `#rgb`/`#rrggbb`. See the package comment
 	// there, and TestNothingButAColourReachesTheDrawing.
 	_, _ = w.Write(svg) //nolint:gosec // G705: the drawing holds integers and parsed colours only
+}
+
+// PNGDisposition is what the PNG response asks a browser to do with the bytes.
+//
+// **A filename that is not the link's alias, and that is deliberate.** The
+// dashboard's anchor carries `download="qr-<alias>.png"`, which is where a
+// workspace-controlled string belongs: in markup the template engine escapes.
+// Putting it in a response header instead would be the one place in this product
+// where workspace data is written into an HTTP header, for a filename the
+// dashboard already overrides — so the header states the constant and the
+// browser falls back to it only for somebody fetching the URL directly, who
+// asked for `qr.png` and gets `qr.png`.
+const PNGDisposition = `attachment; filename="qr.png"`
+
+// GetQRPNG serves the picture as a raster image (M49).
+//
+// **This is the endpoint D11 said would never exist, and the reversal is in
+// m49.md and in internal/qr's package comment.** D11's premise was that nothing
+// should rasterise on a request; this rasterises only when somebody asks for a
+// file, and internal/qr bounds what that can allocate. A refusal for a code
+// larger than that bound is a 422 — the size is something the reader can change.
+func (a *LinkAPI) GetQRPNG(w http.ResponseWriter, r *http.Request) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	out, err := a.Links.RenderQRPNG(r.Context(), IdentityFrom(r.Context()), id)
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	w.Header().Set("Content-Type", qr.PNGContentType)
+	// The same policy the SVG carries, for the same reason: it is a workspace's
+	// own data behind an authenticated request, so a shared cache must not keep
+	// it, and the two formats of one picture must not expire differently.
+	w.Header().Set("Cache-Control", SVGMaxAge)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Disposition", PNGDisposition)
+	_, _ = w.Write(out) //nolint:gosec // G705: a paletted bitmap of two parsed colours
 }
 
 type setQRRequest struct {

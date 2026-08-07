@@ -102,16 +102,35 @@
       {{if .QRSVG}}{{.QRSVG}}{{end}}
     </div>
     <p class="mt-2 break-all text-xs text-subtle">{{.QRContent}}</p>
-    {{/* The download control keeps its text and gains an icon (M48). The
+    {{/* Two downloads since M49, and the PNG leads because it is the one the
+         milestone exists for: before it, getting a file anything else could
+         open meant saving the SVG and finding a converter. The SVG stays
+         beside it rather than being replaced — it is the right file for
+         anything that will be resized again, and dropping it would only move
+         the conversion to the other direction.
+
+         The download control keeps its text and gains an icon (M48). The
          owner's note named *"the download button being text instead of an
          icon"*, and the fix is an icon beside the label rather than one
          replacing it: an unlabelled icon is a guess for anybody who does not
-         already know what it does, and a download arrow is not a word. */}}
-    <a href="{{.QRDownload}}" download="qr-{{.Link.Alias}}.svg"
-       class="mt-2 inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-sm font-medium text-ink hover:bg-sunken">
-      <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 fill-current" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v8.6l2.3-2.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4l2.3 2.3V4a1 1 0 0 1 1-1ZM5 18a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg>
-      Download the SVG
-    </a>
+         already know what it does, and a download arrow is not a word.
+
+         `download` names the file after the alias. The response's own
+         disposition header says `qr.png`, and this is why the header does not
+         say the alias instead: an attribute the template engine escapes is
+         where workspace-controlled text belongs. */}}
+    <div class="mt-2 flex flex-wrap gap-2">
+      <a href="{{.QRDownloadPNG}}" download="qr-{{.Link.Alias}}.png"
+         class="inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-sm font-medium text-ink hover:bg-sunken">
+        <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 fill-current" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v8.6l2.3-2.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4l2.3 2.3V4a1 1 0 0 1 1-1ZM5 18a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg>
+        Download the PNG
+      </a>
+      <a href="{{.QRDownload}}" download="qr-{{.Link.Alias}}.svg"
+         class="inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-sm font-medium text-ink hover:bg-sunken">
+        <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 fill-current" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v8.6l2.3-2.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4l2.3 2.3V4a1 1 0 0 1 1-1ZM5 18a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg>
+        Download the SVG
+      </a>
+    </div>
   </div>
 
   {{if .Identity.Can "links.update"}}
@@ -135,25 +154,23 @@
       <input id="qr_background" name="background" type="color" value="{{.QRStyle.Background}}"
              class="mt-1 block h-9 w-full rounded-md border border-line-strong bg-raised px-1 py-1">
     </div>
-    <div>
-      <label for="qr_level" class="block text-sm font-medium text-ink">Error correction</label>
-      <select id="qr_level" name="level"
-              class="mt-1 block w-full rounded-md border border-line-strong bg-raised px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none">
-        {{range .QRLevels}}
-        <option value="{{.}}"{{if eq . $.QRStyle.Level}} selected{{end}}>{{.}}</option>
-        {{end}}
-      </select>
-    </div>
-    <div class="grid grid-cols-2 gap-4">
-      <div>
-        <label for="qr_margin" class="block text-sm font-medium text-ink">Quiet zone</label>
-        <input id="qr_margin" name="margin" type="number" min="0" max="16" value="{{.QRStyle.Margin}}"
-               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
-      </div>
-      <div>
-        <label for="qr_scale" class="block text-sm font-medium text-ink">Module size</label>
-        <input id="qr_scale" name="scale" type="number" min="2" max="32" value="{{.QRStyle.Scale}}"
-               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+    {{/* One number, and it replaced two nobody knows (M49). The form asked for
+         a quiet zone in modules and a module size in pixels; somebody printing
+         a poster knows neither and knows how big they want it. Both are still
+         the arithmetic behind this box, derived by qr.FitSize, and the error
+         correction level moved to the API rather than staying here as a
+         tradeoff a dashboard user has no basis to make.
+
+         The bounds are passed in rather than typed, so the numbers the browser
+         enforces and the ones internal/qr enforces cannot drift; the server
+         refuses out-of-range anyway, because a `min` attribute is a
+         convenience and not a check. */}}
+    <div class="sm:col-span-2">
+      <label for="qr_size" class="block text-sm font-medium text-ink">Size</label>
+      <div class="mt-1 flex items-center gap-2">
+        <input id="qr_size" name="size" type="number" min="{{.QRMinSize}}" max="{{.QRMaxSize}}" value="{{.QRSize}}"
+               class="block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        <span class="shrink-0 text-sm text-muted">pixels</span>
       </div>
     </div>
     <div class="flex items-end gap-2 sm:col-span-2">
@@ -163,7 +180,7 @@
       {{end}}
     </div>
     <p class="text-xs text-subtle sm:col-span-2">
-      A higher error-correction level survives more damage and packs the code tighter at the same printed size. The quiet zone is the empty margin scanners need; below four modules a code on a busy background starts failing. Keep the two colours far apart &mdash; a light code on a dark field is refused by many readers, which is why the picture paints its own background rather than following the page.
+      A code is a grid of squares, so the size snaps to the nearest one that keeps them whole &mdash; the picture and both downloads are then the same image at the same size. Keep the two colours far apart &mdash; a light code on a dark field is refused by many readers, which is why the picture paints its own background rather than following the page.
     </p>
   </form>
   {{end}}

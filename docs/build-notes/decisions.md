@@ -247,8 +247,10 @@ file. Append a row when you append an entry.
 | [The demo reset could not clean up after itself](#2026-08-07--the-demo-reset-could-not-clean-up-after-itself) | F168, which stopped a milestone landing: why the reset is scoped to aliases and not to a workspace, why it deletes by *not the default* rather than by a slug, the widening that costs, and the half of the row that did not close |
 | [M48: three facts the last two milestones moved](#2026-08-07--m48-three-facts-the-last-two-milestones-moved) | An amendment, not a decision: two line references and a list of four notification kinds, one of which the demo has never seeded. And the pattern behind three amendments in three milestones |
 | [M48: the owner overrules D124 — the picture goes up, and the guard narrows](#2026-08-07--m48-the-owner-overrules-d124-the-picture-goes-up-and-the-guard-narrows) | Owner-set. Why a narrowing and not an exemption, what M47's claim now has to be re-measured against, and why M47 is not reopened |
+| [M49: what B left behind it](#2026-08-07--m49-what-b-left-behind-it) | An amendment, not a decision: the QR panel is not a line range in `link_detail.html` any more, and the generator is 395 lines rather than 338. Fourth amendment in four milestones, and the first where the moved thing is a *file* rather than a line |
 | [M48: the panel, the thumbnail that could not go where it was asked, and where a notification leads](#2026-08-07--m48-the-panel-the-thumbnail-that-could-not-go-where-it-was-asked-and-where-a-notification-leads) | D123–D125: a panel is a route first and a popup second, and why that is not D24 reversed or D120 reversed; the QR thumbnail stays below the edit form because M47's fold test refuses a picture above it, and what went in the heading row instead; a map rather than a switch so that *has a mapping* is a question code can ask; the two kinds that lead nowhere and say so; three of seven kinds the demo has never seeded and why no coverage row demands them; and the permission a test fixture had been missing since M47, which hid three sections of the link page from every test that renders it |
 | [M48: the picture goes up — the rule that let it, and the page re-measured](#2026-08-07--m48-the-picture-goes-up-the-rule-that-let-it-and-the-page-re-measured) | D126: what M47's fold guard became — a height class and a 160px budget rather than a blanket refusal of `<svg>`, and why the `height` attribute could not be what is read; one constant, three consumers, and the fixture that would otherwise measure a page nobody is served; `internal/qr` gaining a validated class; and the re-measurement in three engines — 327→349px, 443→465px — checked by reproducing M47's own figures with the picture removed |
+| [M49: the size, the second encoder, and D11 spent on purpose](#2026-08-07--m49-the-size-the-second-encoder-and-d11-spent-on-purpose) | D127–D129: what bounds a rasteriser that D11 refused to allow at all, stated as an allocation rather than as a word; why the quiet zone became the second knob and what the search costs in tie-breaks; why `qr.Style` gained no field and what that bought for every row already in the table; why a form that stopped asking about error correction needed a new service operation rather than a default; and the two encoders sharing one arithmetic, with the claim they are held to and the one they are not |
 
 ---
 
@@ -20909,3 +20911,199 @@ not how long they take somebody who has not seen the page: the code is now on
 the first screen at 1280×800, measured above, and it is one click from there.
 Task 1 took ~26 seconds. Whether the picture being visible is worth any of them
 is a blind task's answer, and [M51.9](phase-details/m51.9.md) re-runs it.
+
+
+## 2026-08-07 — M49, what B left behind it
+
+Amendments under [phase-loop.md](phase-loop.md#amending-a-bullet). Three facts,
+no assertions, and none changes what m49.md asks for.
+
+**One, and it is the interesting one.** As it stood: *"The QR panel is a section
+of `link_detail.html` (`:272-355`)"*. As amended: *"The QR panel is
+`internal/ui/templates/partials/link_qr.html` (171 lines) plus the panel body at
+`pages/link_qr.html`"*. The tree fact: `pages/link_detail.html` is **57 lines**
+and holds no QR markup at all. [M47](phase-details/m47.md) decomposed the page
+into eleven partials and [M48](phase-details/m48.md) split the QR area again,
+into a thumbnail, a section and a panel body served at `/links/{id}/qr`.
+
+This is the first amendment in the phase where the reference did not merely
+*move* — the thing it named stopped existing in that shape. A line range into an
+803-line file is a citation with a short half-life by construction, and the
+milestone that made it short is the one m49.md declares a dependency on. The
+sentence around it survives unchanged, which is the test of whether an amendment
+is a fact or an assertion: *landing a settings rewrite into a page being rebuilt
+means writing it twice* is exactly as true of three partials as it was of one
+range, and it is now in the past tense because the rebuild has happened.
+
+**Two.** As it stood: *"338 lines of hand-rolled SVG with a test file nearly as
+long"*. As amended: *"395 lines … with a test file longer still"*. The tree fact:
+`wc -l internal/qr/qr.go internal/qr/qr_test.go` reports 395 and 413. M48 added
+`RenderClass`, `SVGClass` and `validClass` for the thumbnail's height class. The
+risk this sentence is sizing — that the generator is large and hand-rolled — is
+unchanged and slightly larger.
+
+**Three.** `internal/httpx/api_qr.go:32` is the last line of `SVGMaxAge`'s doc
+comment; the constant is at `:33`. Amended.
+
+**Checked and still true**, because a reference that survives is worth saying so:
+`internal/qr/qr.go:3-5`'s package doc still reads *"A PNG download, if it is ever
+wanted, is an additive change here and nowhere else"*; `00600_phase2_dormant.sql:60`
+still declares `style jsonb`; `demo_phase2.go:1108` still seeds
+`Level: qr.LevelQ, Margin: 4, Scale: 10`; `demo_coverage_test.go:522` still holds
+the M41 row *A QR code somebody has styled*; Plan.md:918 still carries the *Not in
+Phase 2* row this milestone discharges; and no `image/png` import exists anywhere
+under `internal/qr`, so nothing here is already built.
+
+**Four milestones, four amendments.** The [M48 entry](#2026-08-07--m48-three-facts-the-last-two-milestones-moved)
+argued this is validation working rather than failing, and the pattern has now
+held long enough to be worth a number rather than an anecdote: every milestone
+file in this phase was written before any of them was built, so every reference
+in the unbuilt ones is a photograph of a tree that the built ones are actively
+changing. Checking all of them at [step 1](phase-loop.md#1-validate) costs a
+handful of greps. Not checking them costs a worker building against a citation
+that points at somebody else's code.
+
+
+## 2026-08-07 — M49, the size, the second encoder, and D11 spent on purpose
+
+Three decisions, D127–D129, and one thing that is not a decision at all: the
+package comment in `internal/qr/qr.go` had said since M41 that *"a PNG download,
+if it is ever wanted, is an additive change here and nowhere else"*, and this
+milestone is the test of that sentence. It held. The generator gained a second
+encoder, a size resolver and a colour parser; nothing outside `internal/qr`
+learned how a QR code is drawn.
+
+### D127 — the bound is a number, because "bounded" is not one
+
+[D11](../../Plan.md#phase-2-decisions) refused an image encoder for two reasons
+and only one of them was about dependencies. The other was that nothing should
+rasterise on a request, and that one is not answered by `image/png` being in the
+standard library — it is answered by saying how much memory a request can cause
+this process to allocate, and refusing anything above it.
+
+**2000 pixels, `image.Paletted`, two colours, one byte a pixel: 4,000,000
+bytes.** A paletted image is not a size optimisation here; it is what makes the
+figure calculable. An `image.NRGBA` of the same picture is 16,000,000 bytes and
+three quarters of it is padding, since a QR code has exactly two colours and any
+third one would be a bug. Go's encoder writes a two-entry palette at one bit per
+pixel, so the file is small as a consequence rather than as an aim.
+
+**Refused, not clamped**, which is the rule margin and scale have had since M41:
+`TestOutOfRangeSizesAreRefusedRatherThanClamped` exists because clamping reports
+success for a setting nobody asked for.
+
+The refusal has a second reachable path and it is the interesting one. A style
+*stored* before this milestone carries whatever margin and scale it was given —
+up to 16 and 32 — and a 64-character alias at those settings describes a picture
+several times the cap. So `qr.ErrTooLarge` is not dead code guarding an
+impossible request; it is the answer for a row that already exists in somebody's
+database. It surfaces as a `422` rather than a `500`, because the reader can make
+the code smaller, and `RenderQRPNG` is where that translation happens.
+
+The SVG path is not capped and does not need one: vector text allocates nothing
+proportional to the pixel size, which is the whole reason D11 preferred it.
+Neither endpoint is on the redirect path, so no `slo.md` re-verification is
+owed — said here rather than left out, so the omission is visible.
+
+### D128 — one number in the interface, two knobs behind it
+
+The form asked for a quiet zone in modules and a module size in pixels. Nobody
+printing a poster knows either. It now asks how big they want it.
+
+**The quiet zone is derived rather than held at the floor**, and that is the
+choice inside the choice. `qr.FitSize` searches margin (4 to 16) against scale (2
+to 32) and takes the nearest whole-module size: on a 29-module code, 300px lands
+on **301** with a 7-module quiet zone, where holding the margin at the floor and
+rounding the scale gives 296. The alternative — one knob, quiet zone fixed at 4 —
+is simpler and coarser, and it was rejected because the extra margin costs a
+scanner nothing. ISO/IEC 18004's floor is a minimum, not a target, and the search
+only ever goes up from it.
+
+Ties break twice, in this order: **the smaller picture, then the smaller quiet
+zone.** Smaller picture first, so a request at the cap cannot snap past it.
+Smaller quiet zone second, so equal-sized candidates resolve to the largest code
+that fits rather than the same code with more white around it.
+
+The alternative the milestone file records and rejects — honour the requested
+size exactly and let modules land on fractional boundaries — is what would make
+the SVG and the PNG round differently, which is precisely the claim below.
+
+**`qr.Style` gained no field.** The size is derived from the margin and scale on
+every read, and that one decision is what makes read-forward free: a
+`qr_codes.style` blob written by M41 has the same five keys it always had, so
+there is no migration, no default to invent for rows that predate the field, and
+no way for a stored size and a stored geometry to disagree. Re-saving a pre-M49
+code at the size the panel shows is a byte-identical no-op, asserted end to end
+by `TestAStyleStoredBeforeM49DrawsExactlyWhatItAlwaysDrew` — which inserts the
+blob by hand, because the claim is about a row that already exists rather than
+about one this code wrote.
+
+The number is on the API's `QRCode` as a read-only `size`. The inherited rule is
+that every UI feature has API support, and a form asking in pixels while the API
+could not report pixels would be two answers to one question. Setting it stays
+`margin` and `scale`: those are strictly more expressive, and a script that wants
+an exact size has the same arithmetic available that the dashboard uses.
+
+### D129 — a form that stopped asking must not answer
+
+Error correction left the dashboard for the API. That much is m49.md's, and the
+reasoning is its: a scannability tradeoff a dashboard user has no basis to make
+and a script might, which is what *"the rest handled in the background"* has to
+mean if background is not to mean unreachable.
+
+What is decided here is the **mechanism**, and it is a new service operation
+rather than a call to the old one with defaults. `Service.SetQRSize` reads the
+stored level and carries it forward; `SetQRStyle` still replaces the style whole,
+which is what makes `{}` mean plain black on white over the API. Had the form
+posted through `SetQRStyle` with the level omitted, every styled code would have
+gone back to `M` the first time anybody adjusted a colour — the level's own
+default doing exactly what it is supposed to do, in a place where the absence of
+a value now means *unchanged* rather than *default*. Two operations, because the
+two surfaces mean different things by an absent field.
+
+The demo seeds through both, in that order: level `Q` the way a script sets it,
+then 400px the way the panel does. A demo seeded only through `SetQRStyle` would
+show a margin and a scale nobody chose, which is the vocabulary this milestone
+removed.
+
+### The claim the two encoders are held to, and the one they are not
+
+**One arithmetic, two encoders.** `Code.geometry` computes the span, the scale,
+the pixel size and the origin offset once; `Code.runs` walks the dark modules as
+horizontal runs once. `SVGClass` writes a `<rect>` per run and `PNG` fills a
+block per run, and neither of them recomputes `margin * scale`. A module one
+encoder drew and the other did not would have to come from `runs`, where there is
+one of it.
+
+`TestTheSVGAndThePNGAreTheSamePicture` parses the SVG's rects back into a grid
+and asks the decoded PNG what colour it put at the **centre** of every module in
+the span — a corner would be shared by four modules and would agree with the
+wrong one under the off-by-one this is meant to catch. Foreground and background
+both, and the counts of each are asserted non-zero, because "both were empty" is
+the shape this class of test fails in.
+
+**Stated as a limit, in m46.md's idiom:** this asserts the module *geometry*
+matches. It does not assert that a browser's rasterisation of the SVG is
+byte-identical to the PNG. That is untrue of any two rasterisers, it is not what
+was asked for, and a test claiming it would fail for reasons nobody can act on.
+
+### The demo, and the coverage row that was left alone
+
+m49.md's demo section left one thing to the milestone: whether the seeded style
+carrying an explicit size needs its own `demoCoverage()` row, or an amendment to
+M41's. **Neither.** The M41 row asserts that exactly one link in the demo carries
+a stored style, bounded `Min: 1, Max: 1`, and that is still exactly what is true
+and exactly what it should assert. What the style *contains* is the seeder's, and
+the seeder is what changed. A coverage row that asserted a particular size would
+be a row that fails when somebody picks a different one, which is not a demo
+being wrong.
+
+### Four milestones, four amendments, and a fifth that did not happen
+
+The amendment entry above this one corrected three facts in m49.md before the
+build started. Nothing in the tree contradicted the file after that — the
+package doc, the migration line, the demo seed and the coverage row all said what
+the file said they said. That is worth recording, because the pattern the M48
+entry named is about *unbuilt* milestone files photographing a moving tree, and
+the prediction it implies is that checking every reference at step 1 exhausts the
+drift rather than sampling it. On this milestone it did.

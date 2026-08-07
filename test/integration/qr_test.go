@@ -3,10 +3,16 @@
 package integration
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"image"
+	_ "image/png" // registers the PNG decoder for the .png endpoint's assertions
+	"io"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +21,7 @@ import (
 
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/httpx"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/qr"
 )
@@ -43,16 +50,16 @@ func (f *ruleFixture) qrSVG(linkID uuid.UUID) string {
 	if ct := resp.Header.Get("Content-Type"); ct != qr.ContentType {
 		f.t.Errorf("Content-Type = %q, want %q", ct, qr.ContentType)
 	}
-	body := make([]byte, 0)
-	buf := make([]byte, 4096)
-	for {
-		n, err := resp.Body.Read(buf)
-		body = append(body, buf[:n]...)
-		if err != nil {
-			break
-		}
+	return string(readAll(f.t, resp))
+}
+
+func readAll(t *testing.T, resp *http.Response) []byte {
+	t.Helper()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
 	}
-	return string(body)
+	return body
 }
 
 // --- the named claim ----------------------------------------------------------
@@ -344,26 +351,171 @@ func TestTheDashboardShowsTheCodeInline(t *testing.T) {
 
 // TestTheStyleFormOnThePageStoresWhatTheAPIWouldStore. Both surfaces call one
 // service, which is the inherited rule; this is what proves the form reaches it.
+//
+// **Rewritten at M49, because the form's vocabulary changed.** It posts two
+// colours and one output size in pixels; the quiet zone, the module size and the
+// error-correction level are no longer fields on it. What the form stores is
+// therefore a *derived* margin and scale, and the assertion is on the size those
+// come to rather than on the numbers themselves — the panel's claim is about
+// pixels, and pinning the pair here would pin qr.FitSize's answer in a place
+// that has no business knowing it.
 func TestTheStyleFormOnThePageStoresWhatTheAPIWouldStore(t *testing.T) {
 	f := newRules(t)
 	f.claim()
 	id := f.createLink("formed", "https://example.com/x")
 
 	f.postQRForm(t, "/links/"+id.String()+"/qr", url.Values{
-		"foreground": {"#123456"}, "background": {"#fedcba"},
-		"level": {"Q"}, "margin": {"5"}, "scale": {"10"},
+		"foreground": {"#123456"}, "background": {"#fedcba"}, "size": {"400"},
 	})
-	if got := f.storedQRStyle(id); got.Foreground != "#123456" || got.Level != qr.LevelQ {
-		t.Fatalf("the form stored %+v", got)
+	code := f.qrCode(id)
+	if code.Style.Foreground != "#123456" || code.Style.Background != "#fedcba" {
+		t.Fatalf("the form stored %+v", code.Style)
+	}
+	if code.Size < 380 || code.Size > 420 {
+		t.Errorf("the form asked for 400px and stored a style that draws %dpx. The snap "+
+			"moves the size by less than one module of the picture, not by tens of "+
+			"pixels", code.Size)
 	}
 	if !strings.Contains(f.qrSVG(id), `fill="#123456"`) {
 		t.Error("the form's colour is not in the served picture")
+	}
+	if got := attrOf(t, f.qrSVG(id), `width="(\d+)"`); got != code.Size {
+		t.Errorf("the served picture is %dpx wide and the panel reports %dpx", got, code.Size)
+	}
+
+	// The level is not on the form and must not be reset by a save that does not
+	// mention it. A dashboard that quietly put every code back to M would be
+	// undoing a choice only the API can now make.
+	resp := f.putJSON("/api/v1/links/"+id.String()+"/qr", `{"style":{"level":"H","scale":10}}`)
+	_ = resp.Body.Close()
+	f.postQRForm(t, "/links/"+id.String()+"/qr", url.Values{
+		"foreground": {"#000000"}, "background": {"#ffffff"}, "size": {"300"},
+	})
+	if got := f.storedQRStyle(id).Level; got != qr.LevelH {
+		t.Errorf("a save from the form left the level at %q, want H. The control left "+
+			"this surface for the API; a form that answers a question it does not ask "+
+			"is worse than one that asks it", got)
+	}
+
+	// A size nothing can be printed at is refused rather than clamped, and the
+	// refusal keeps the reader on a page with the form on it.
+	bad := f.postForm("/links/"+id.String()+"/qr", url.Values{
+		"foreground": {"#000000"}, "background": {"#ffffff"}, "size": {"9"},
+	})
+	status := bad.StatusCode
+	_ = bad.Body.Close()
+	if status != http.StatusUnprocessableEntity {
+		t.Errorf("a 9px code = %d, want 422", status)
 	}
 
 	// The reset button is a value of the same form rather than a second one.
 	f.postQRForm(t, "/links/"+id.String()+"/qr", url.Values{"reset": {"1"}})
 	if n := f.qrRowCount(id); n != 0 {
 		t.Errorf("%d rows after the reset button, want 0", n)
+	}
+}
+
+// --- M49: the size, the PNG, and the styles that were already stored ----------
+
+// TestThePNGAndTheSVGAreTheSameCodeOverTheWire is the milestone's matching claim
+// at the layer a reader meets it.
+//
+// internal/qr holds the module-by-module comparison — this is the assertion that
+// the two endpoints serve *that*: same size, same content, and the raster one
+// carrying the headers a download needs. Reversing D11 is only safe if the file
+// somebody saves is the picture they were looking at.
+func TestThePNGAndTheSVGAreTheSameCodeOverTheWire(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("poster-png", "https://example.com/summer")
+	f.postQRForm(t, "/links/"+id.String()+"/qr", url.Values{
+		"foreground": {"#000000"}, "background": {"#ffffff"}, "size": {"512"},
+	})
+
+	resp := f.get("/api/v1/links/"+id.String()+"/qr.png", nil)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET qr.png = %d", resp.StatusCode)
+	}
+	for header, want := range map[string]string{
+		"Content-Type":           qr.PNGContentType,
+		"Cache-Control":          httpx.SVGMaxAge,
+		"X-Content-Type-Options": "nosniff",
+		"Content-Disposition":    httpx.PNGDisposition,
+	} {
+		if got := resp.Header.Get(header); got != want {
+			t.Errorf("%s = %q, want %q", header, got, want)
+		}
+	}
+
+	img, format, err := image.Decode(bytes.NewReader(readAll(t, resp)))
+	if err != nil {
+		t.Fatalf("the PNG endpoint did not serve a decodable image: %v", err)
+	}
+	if format != "png" {
+		t.Fatalf("the .png path served %q", format)
+	}
+
+	size := f.qrCode(id).Size
+	if b := img.Bounds(); b.Dx() != size || b.Dy() != size {
+		t.Errorf("the PNG is %dx%d and the panel reports %dpx", b.Dx(), b.Dy(), size)
+	}
+	if got := attrOf(t, f.qrSVG(id), `width="(\d+)"`); got != size {
+		t.Errorf("the SVG is %dpx wide and the PNG is %dpx", got, size)
+	}
+}
+
+// TestAStyleStoredBeforeM49DrawsExactlyWhatItAlwaysDrew is the milestone's
+// read-forward bullet, against a row written the way M41 wrote them.
+//
+// **The blob is inserted by hand rather than through the service**, because the
+// claim is about a row that already exists in somebody's database: it holds a
+// quiet zone in modules and a scale in pixels per module and no size at all, and
+// nothing about M49 may change what it draws.
+//
+// The strong half is the last one. Opening the panel on such a code shows the
+// size its margin and scale come to, and saving without touching the number has
+// to be a no-op down to the byte — otherwise every reader who so much as looks
+// at an old code resizes it.
+func TestAStyleStoredBeforeM49DrawsExactlyWhatItAlwaysDrew(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("inherited", "https://example.com/x")
+
+	// Exactly the JSON M41 marshalled: five keys, and `size` is not one of them.
+	const legacy = `{"foreground":"#123a6b","background":"#f5f7fa","level":"Q","margin":4,"scale":10}`
+	if _, err := f.pool.Exec(t.Context(),
+		`INSERT INTO qr_codes (id, link_id, workspace_id, style)
+		 VALUES ($1, $2, $3, $4::jsonb)`,
+		uuid.Must(uuid.NewV7()), id, f.owner.WorkspaceID, legacy); err != nil {
+		t.Fatal(err)
+	}
+
+	before := f.qrSVG(id)
+	code := f.qrCode(id)
+	if code.Style.Margin != 4 || code.Style.Scale != 10 || code.Style.Level != qr.LevelQ {
+		t.Fatalf("the stored row read back as %+v; a pre-M49 blob is read forward "+
+			"unchanged, not normalised into something else", code.Style)
+	}
+	// The size the panel shows is the one those two numbers already produced.
+	if got := attrOf(t, before, `width="(\d+)"`); got != code.Size {
+		t.Fatalf("the panel reports %dpx for a code the endpoint draws %dpx wide",
+			code.Size, got)
+	}
+
+	// And the round trip: the size the panel shows, posted back, changes nothing.
+	f.postQRForm(t, "/links/"+id.String()+"/qr", url.Values{
+		"foreground": {code.Style.Foreground}, "background": {code.Style.Background},
+		"size": {strconv.Itoa(code.Size)},
+	})
+	if after := f.qrSVG(id); after != before {
+		t.Errorf("saving the size a pre-M49 code already drew changed the picture.\n"+
+			"before: %.120s…\nafter:  %.120s…\n\nEvery reader who opens the panel on an "+
+			"old code and presses save would resize it", before, after)
+	}
+	if got := f.storedQRStyle(id); got.Margin != 4 || got.Scale != 10 {
+		t.Errorf("the round trip rewrote the stored geometry as margin %d scale %d, "+
+			"want 4 and 10", got.Margin, got.Scale)
 	}
 }
 
@@ -390,11 +542,31 @@ func (f *ruleFixture) qrContent(linkID uuid.UUID) string {
 
 func (f *ruleFixture) storedQRStyle(linkID uuid.UUID) qr.Style {
 	f.t.Helper()
+	return f.qrCode(linkID).Style
+}
+
+func (f *ruleFixture) qrCode(linkID uuid.UUID) *link.QRCode {
+	f.t.Helper()
 	code, err := f.links.QRCode(f.t.Context(), f.owner, linkID)
 	if err != nil {
 		f.t.Fatalf("read qr: %v", err)
 	}
-	return code.Style
+	return code
+}
+
+// attrOf reads an integer attribute out of a served drawing, for the assertions
+// that compare one surface's number against another's.
+func attrOf(t *testing.T, svg, pattern string) int {
+	t.Helper()
+	m := regexp.MustCompile(pattern).FindStringSubmatch(svg)
+	if m == nil {
+		t.Fatalf("no match for %s in the drawing:\n%.200s", pattern, svg)
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
 }
 
 func (f *ruleFixture) putJSON(path, body string) *http.Response {

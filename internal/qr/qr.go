@@ -1,8 +1,19 @@
-// Package qr encodes a string as a QR code and draws it as SVG (M41).
+// Package qr encodes a string as a QR code and draws it as SVG or PNG (M41,
+// M49).
 //
-// **SVG only, and that is decision D11**: the output is vector text, so no image
-// encoder joins the dependency set and no rasteriser runs on a request. A PNG
-// download, if it is ever wanted, is an additive change here and nowhere else.
+// **It was SVG only, and that was decision D11**: the output is vector text, so
+// no image encoder joined the dependency set and nothing rasterised on a
+// request. The package comment said *"a PNG download, if it is ever wanted, is
+// an additive change here and nowhere else"*, and M49 is that change. D11's
+// premise was that the rasteriser is never called; a person who asked for a file
+// calls it, so the reversal honours the reasoning rather than overriding it. The
+// encoder is `image/png` from the standard library, so the dependency set is
+// still what it was, and the rasteriser is bounded by [MaxSize].
+//
+// **One arithmetic, two encoders.** [Code.SVGClass] and [Code.PNG] both draw
+// from [Code.runs] at the geometry [Code.geometry] computes, so the two outputs
+// cannot round differently — which is the claim
+// TestTheSVGAndThePNGAreTheSamePicture holds them to.
 //
 // **The encoder is github.com/boombuler/barcode, MIT, with no module
 // dependencies of its own** — see decisions.md, D72, for what it was weighed
@@ -25,7 +36,9 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"image"
 	"image/color"
+	"image/png"
 	"strconv"
 	"strings"
 
@@ -80,6 +93,40 @@ const (
 // that; the bound exists so an oversized input is a sentence rather than a
 // library error nobody can act on.
 const MaxContent = 1024
+
+// MinSize and MaxSize bound the output size in pixels a caller may ask for, and
+// MaxSize is also the bound on what this package will rasterise (M49).
+//
+// **The ceiling is what D11 was protecting.** D11 refused an image encoder
+// partly so that nothing would allocate a bitmap on a request; M49 makes that
+// happen, so the allocation gets a number rather than a hope. The PNG is
+// [image.Paletted] over a two-colour palette — one byte per pixel — so 2000×2000
+// is **4,000,000 bytes**, about 3.8 MiB, and that is the largest buffer a
+// request can cause here. The SVG path allocates nothing of the sort and is
+// bounded by the module count instead.
+//
+// 2000px is a QR code 6.7 inches across at 300 DPI, which covers the poster the
+// milestone is written for. The floor is the smallest picture the existing
+// bounds can produce: the shortest code is 21 modules, the quiet zone is at
+// least [DefaultMargin] on each side, and [MinScale] pixels per module makes
+// 58 — so 64 is a request that always has something to snap to.
+//
+// A request outside the range is **refused rather than clamped**, on the rule
+// TestOutOfRangeSizesAreRefusedRatherThanClamped already states for margin and
+// scale: clamping reports success for a setting nobody asked for.
+const (
+	MinSize = 64
+	MaxSize = 2000
+)
+
+// ErrSizeOutOfRange is a requested output size outside [MinSize, MaxSize].
+var ErrSizeOutOfRange = errors.New("output size out of range")
+
+// ErrTooLarge is a drawing whose pixel size exceeds MaxSize. It is reachable
+// only from the PNG path and only for a style stored before M49, whose margin
+// and scale are read forward exactly as written and can therefore describe a
+// picture larger than anything the size control will now produce.
+var ErrTooLarge = errors.New("too large to rasterise")
 
 // Style is how a code is drawn. It is what `qr_codes.style` holds, field for
 // field, and the zero value is the default style rather than a blank one — a
@@ -283,8 +330,8 @@ func (c *Code) SVG(st Style) []byte { return c.SVGClass(st, "") }
 // middle: about a quarter of the size of per-module rects, and a shape whose
 // test can reconstruct the matrix and compare it to the encoder's.
 func (c *Code) SVGClass(st Style, class string) []byte {
-	span := c.Size + 2*st.Margin
-	px := span * st.Scale
+	g := c.geometry(st)
+	span, px := g.span, g.px
 
 	var b bytes.Buffer
 	b.Grow(1024 + c.Size*c.Size/2)
@@ -322,6 +369,59 @@ func (c *Code) SVGClass(st Style, class string) []byte {
 	b.WriteString(`<g fill="`)
 	b.WriteString(st.Foreground)
 	b.WriteString(`">`)
+	c.runs(func(x, y, width int) {
+		b.WriteString(`<rect x="`)
+		b.WriteString(strconv.Itoa(x + st.Margin))
+		b.WriteString(`" y="`)
+		b.WriteString(strconv.Itoa(y + st.Margin))
+		b.WriteString(`" width="`)
+		b.WriteString(strconv.Itoa(width))
+		b.WriteString(`" height="1"/>`)
+	})
+	b.WriteString(`</g></svg>`)
+	return b.Bytes()
+}
+
+// geometry is the arithmetic both encoders draw from (M49).
+//
+// It exists so that "the SVG and the PNG describe the same image" is true by
+// construction rather than by two implementations agreeing. Everything either
+// encoder needs to place a module is here, computed once from the style: a
+// second copy of `margin*scale` in the rasteriser is exactly the drift the claim
+// forbids.
+//
+// The style must already be normalized.
+type geometry struct {
+	// span is the picture's width in modules, quiet zone included.
+	span int
+	// scale is pixels per module.
+	scale int
+	// px is the output size — the picture is square, so one number.
+	px int
+	// origin is the offset in pixels from the picture's edge to the first
+	// module of the code, which is the quiet zone drawn in pixels.
+	origin int
+}
+
+func (c *Code) geometry(st Style) geometry {
+	span := c.Size + 2*st.Margin
+	return geometry{
+		span:   span,
+		scale:  st.Scale,
+		px:     span * st.Scale,
+		origin: st.Margin * st.Scale,
+	}
+}
+
+// runs walks the dark modules as horizontal runs, in module coordinates with the
+// quiet zone excluded — (0,0) is the code's top-left module, not the picture's.
+//
+// **Both encoders walk this and nothing else.** The SVG writes one `<rect>` per
+// run and the PNG fills one block per run, so a module either encoder drew and
+// the other did not would have to come from here, where there is one of it.
+// Runs rather than modules for the reason SVGClass gives: about a quarter of the
+// bytes of a rect per module, and a shape a test can reconstruct.
+func (c *Code) runs(fn func(x, y, width int)) {
 	for y := range c.Size {
 		x := 0
 		for x < c.Size {
@@ -333,22 +433,202 @@ func (c *Code) SVGClass(st Style, class string) []byte {
 			for x+run < c.Size && c.Dark(x+run, y) {
 				run++
 			}
-			b.WriteString(`<rect x="`)
-			b.WriteString(strconv.Itoa(x + st.Margin))
-			b.WriteString(`" y="`)
-			b.WriteString(strconv.Itoa(y + st.Margin))
-			b.WriteString(`" width="`)
-			b.WriteString(strconv.Itoa(run))
-			b.WriteString(`" height="1"/>`)
+			fn(x, y, run)
 			x += run
 		}
 	}
-	b.WriteString(`</g></svg>`)
-	return b.Bytes()
 }
 
-// ContentType is what a QR response is served as.
-const ContentType = "image/svg+xml"
+// ContentType is what a QR response is served as, and PNGContentType is the
+// second one since M49.
+const (
+	ContentType    = "image/svg+xml"
+	PNGContentType = "image/png"
+)
+
+// RenderPNG encodes content and rasterises it, the way Render draws it (M49).
+func RenderPNG(content string, style Style) ([]byte, error) {
+	st, errs := style.Normalize()
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("qr style: %s", errs[0].Message)
+	}
+	code, err := Encode(content, st.Level)
+	if err != nil {
+		return nil, err
+	}
+	return code.PNG(st)
+}
+
+// PNG rasterises the matrix at the same geometry SVGClass draws it.
+//
+// **A paletted image, two colours, and that is not a size optimisation.** It is
+// what makes the allocation MaxSize's comment states — one byte per pixel rather
+// than four — and it is also what makes the output honest: a QR code has exactly
+// two colours, so an RGBA buffer would be three quarters padding and would let
+// an antialiasing bug produce a third colour without anything noticing. Go's PNG
+// encoder writes a two-entry palette at one bit per pixel, so the file is small
+// as a side effect rather than as an aim.
+//
+// The style must already be normalized — RenderPNG is the entry point that
+// guarantees it, on the same terms SVGClass is written for.
+func (c *Code) PNG(st Style) ([]byte, error) {
+	g := c.geometry(st)
+	if g.px > MaxSize {
+		return nil, fmt.Errorf("%w: the style draws %dpx and the bound is %dpx",
+			ErrTooLarge, g.px, MaxSize)
+	}
+
+	// Index 0 is the background, which is why nothing paints the quiet zone
+	// here: NewPaletted zeroes the pixels, so the whole picture starts as the
+	// background colour and D74's painted quiet zone comes out of that for free.
+	img := image.NewPaletted(image.Rect(0, 0, g.px, g.px), color.Palette{
+		parseHex(st.Background), parseHex(st.Foreground),
+	})
+	c.runs(func(x, y, width int) {
+		left := g.origin + x*g.scale
+		top := g.origin + y*g.scale
+		for py := top; py < top+g.scale; py++ {
+			row := img.Pix[py*img.Stride+left : py*img.Stride+left+width*g.scale]
+			for i := range row {
+				row[i] = 1
+			}
+		}
+	})
+
+	var b bytes.Buffer
+	b.Grow(1024 + g.px*g.px/64)
+	if err := (&png.Encoder{CompressionLevel: png.BestCompression}).Encode(&b, img); err != nil {
+		return nil, fmt.Errorf("encode png: %w", err)
+	}
+	return b.Bytes(), nil
+}
+
+// OutputSize is the width in pixels a normalized style draws a code of `modules`
+// modules at. The picture is square, so one number (M49).
+//
+// This is the read direction of the size control: a style stored before M49
+// carries a margin and a scale and no size, and the size it means is whatever
+// those two already produce.
+func OutputSize(modules int, st Style) int {
+	return (modules + 2*st.Margin) * st.Scale
+}
+
+// SizeFit is a requested output size resolved onto a whole number of modules.
+type SizeFit struct {
+	// Requested is the size in pixels that was asked for.
+	Requested int
+	// Size is the size in pixels the geometry below actually produces.
+	Size int
+	// Margin is the quiet zone in modules, and Scale the pixels per module,
+	// that a Style should carry to draw at Size.
+	Margin int
+	Scale  int
+}
+
+// Snapped reports whether the fit had to move off the requested size.
+func (f SizeFit) Snapped() bool { return f.Size != f.Requested }
+
+// FitSize resolves a requested output size in pixels to the quiet zone and the
+// pixels-per-module that come nearest it (M49).
+//
+// **A QR grid is a whole number of modules, so an arbitrary pixel size does not
+// divide evenly**: 300px over a 29-module code with the minimum quiet zone is
+// 10.34 pixels per module. Drawing it anyway would put module boundaries on
+// fractional pixels, where the SVG's rasteriser and the PNG's rounding are free
+// to disagree — which is precisely what the two-outputs-match claim forbids. So
+// the size snaps, and the caller is told what it snapped to.
+//
+// **Two knobs, not one.** The quiet zone is derived here rather than fixed,
+// because a margin one module wider is another `2*scale` pixels of reach and it
+// costs nothing a scanner cares about: the ISO/IEC 18004 floor is four modules
+// and this only ever goes up from there. 300px on that 29-module code lands on
+// 301 with a 7-module quiet zone where the floor alone would have given 296.
+//
+// Ties go to the smaller picture and then to the smaller quiet zone — under
+// rather than over, so a request at the ceiling cannot snap past it, and the
+// largest code that fits rather than the same code with more white around it.
+func FitSize(modules, want int) (SizeFit, error) {
+	if modules <= 0 {
+		return SizeFit{}, fmt.Errorf("qr: a code of %d modules has no size", modules)
+	}
+	if want < MinSize || want > MaxSize {
+		return SizeFit{}, fmt.Errorf("%w: an output size is %d to %d pixels; %d is not",
+			ErrSizeOutOfRange, MinSize, MaxSize, want)
+	}
+
+	best := SizeFit{Requested: want}
+	found := false
+	for margin := DefaultMargin; margin <= MaxMargin; margin++ {
+		span := modules + 2*margin
+		for scale := MinScale; scale <= MaxScale; scale++ {
+			size := span * scale
+			if size > MaxSize {
+				break
+			}
+			c := SizeFit{Requested: want, Size: size, Margin: margin, Scale: scale}
+			if !found || nearer(c, best) {
+				best, found = c, true
+			}
+		}
+	}
+	if !found {
+		// Unreachable for any code this package can encode — 21 modules at the
+		// floor and MinScale is 58px, and version 40 is 370px — but a bound that
+		// is only true by argument is one a future MaxSize change breaks
+		// silently.
+		return SizeFit{}, fmt.Errorf("%w: no whole-module size for a %d-module code",
+			ErrSizeOutOfRange, modules)
+	}
+	return best, nil
+}
+
+// nearer is FitSize's comparison, spelled out so the tie-breaks are readable
+// rather than encoded in the loop order.
+func nearer(a, b SizeFit) bool {
+	da, db := abs(a.Size-a.Requested), abs(b.Size-b.Requested)
+	switch {
+	case da != db:
+		return da < db
+	case a.Size != b.Size:
+		return a.Size < b.Size
+	default:
+		return a.Margin < b.Margin
+	}
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+// parseHex turns a colour that has already been through validHex into a pixel.
+//
+// It repairs nothing and reports nothing, because there is nothing to report: an
+// unparseable colour cannot reach here. Normalize is the only way a Style
+// arrives at either encoder and it refuses anything validHex does not accept, so
+// this reads a string whose shape is already known.
+func parseHex(s string) color.NRGBA {
+	if len(s) == 4 {
+		// #rgb is #rrggbb with each digit doubled, which is what CSS means by it
+		// — #f00 is #ff0000 and not #f00000.
+		s = string([]byte{'#', s[1], s[1], s[2], s[2], s[3], s[3]})
+	}
+	if len(s) != 7 {
+		return color.NRGBA{A: 255}
+	}
+	return color.NRGBA{R: hexByte(s[1], s[2]), G: hexByte(s[3], s[4]), B: hexByte(s[5], s[6]), A: 255}
+}
+
+func hexByte(hi, lo byte) byte { return nibble(hi)<<4 | nibble(lo) }
+
+func nibble(c byte) byte {
+	if c >= 'a' {
+		return c - 'a' + 10
+	}
+	return c - '0'
+}
 
 // validClass accepts a space-separated list of the characters a utility class
 // is made of, and nothing else. It is the second gate — beside validHex — between

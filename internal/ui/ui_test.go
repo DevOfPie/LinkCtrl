@@ -589,9 +589,17 @@ func pageData(t *testing.T) map[string]any {
 				"Foreground": "#000000", "Background": "#ffffff",
 				"Level": "M", "Margin": 4, "Scale": 8,
 			},
-			"QRLevels":      []string{"L", "M", "Q", "H"},
+			// Since M49 the form asks for one number in pixels and no longer
+			// asks for a level, a quiet zone or a module size. 296 is what the
+			// stub style above comes to for a 29-module code, so the fixture is
+			// a state internal/qr could actually produce rather than a number
+			// picked to look plausible.
+			"QRSize":        296,
+			"QRMinSize":     64,
+			"QRMaxSize":     2000,
 			"QRStored":      true,
 			"QRDownload":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.svg",
+			"QRDownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.png",
 			"QRSourceLabel": "qr",
 			"QRReturn":      "/links/0198c9c5-0000-7000-8000-000000000001",
 			"FieldErrors":   map[string]string{},
@@ -618,9 +626,12 @@ func pageData(t *testing.T) map[string]any {
 				"Foreground": "#000000", "Background": "#ffffff",
 				"Level": "M", "Margin": 4, "Scale": 8,
 			},
-			"QRLevels":      []string{"L", "M", "Q", "H"},
+			"QRSize":        296,
+			"QRMinSize":     64,
+			"QRMaxSize":     2000,
 			"QRStored":      true,
 			"QRDownload":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.svg",
+			"QRDownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.png",
 			"QRSourceLabel": "qr",
 			"QRReturn":      "/links/0198c9c5-0000-7000-8000-000000000001/qr",
 			"Notice":        "",

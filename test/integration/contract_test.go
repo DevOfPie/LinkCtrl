@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"image"
 	"io"
 	"net/http"
 	"strings"
@@ -540,6 +541,7 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	}, http.StatusNotFound)
 	c.do("DELETE", p+"/links/"+linkID+"/qr", nil, http.StatusNoContent)
 	c.svgEndpoint(linkID)
+	c.pngEndpoint(linkID)
 
 	// --- registered domains (M39) -------------------------------------------
 	//
@@ -1014,6 +1016,52 @@ func (c *contract) svgEndpoint(linkID string) {
 		c.t.Error("qr.svg holds no modules; the document promises a QR code, not a blank square")
 	}
 	c.hit["getLinkQRSVG"] = true
+}
+
+// pngEndpoint is svgEndpoint's sibling, and the third non-JSON response this
+// API has (M49). Same reason it is checked by hand: `format: binary` is as far as
+// the document can describe an image, and kin-openapi has no decoder for one.
+//
+// What is checked beyond the status and the content type is what the document
+// promises and a schema cannot: that the bytes decode as a PNG at all, that the
+// picture is square, and that it carries the download disposition — a response
+// the document calls a file to save, served without one, is a document that is
+// wrong about the endpoint's whole purpose.
+func (c *contract) pngEndpoint(linkID string) {
+	c.t.Helper()
+	req, err := http.NewRequestWithContext(c.t.Context(), http.MethodGet,
+		c.f.server.URL+"/api/v1/links/"+linkID+"/qr.png", nil)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	resp, err := c.f.client.Do(req)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		c.t.Fatalf("qr.png returned %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "image/png" {
+		c.t.Errorf("qr.png Content-Type = %q", ct)
+	}
+	if cd := resp.Header.Get("Content-Disposition"); !strings.HasPrefix(cd, "attachment") {
+		c.t.Errorf("qr.png Content-Disposition = %q; the document says this is a file "+
+			"to save", cd)
+	}
+	img, format, err := image.Decode(bytes.NewReader(body))
+	if err != nil {
+		c.t.Fatalf("qr.png is not a decodable image: %v", err)
+	}
+	if format != "png" {
+		c.t.Errorf("the .png path served a %s", format)
+	}
+	if b := img.Bounds(); b.Dx() < 1 || b.Dx() != b.Dy() {
+		c.t.Errorf("qr.png is %dx%d; a QR code is square", b.Dx(), b.Dy())
+	}
+	c.hit["getLinkQRPNG"] = true
 }
 
 // yamlSpecEndpoint checks the one non-JSON response by hand: kin-openapi has

@@ -1103,17 +1103,43 @@ func (s *demoSeeder) seedCampaigns(ctx context.Context, cat []demoLink, ids map[
 	// A dark blue on a pale field, which is a real brand choice and still passes
 	// the contrast a scanner needs. Level Q, so a printed code survives being
 	// scuffed — the reason anybody changes the level at all.
+	//
+	// **Two writes, because M49 split the surfaces and the demo shows both.**
+	// The level left the dashboard for the API, so it is set here the way a
+	// script sets it; the size is then set the way the panel sets it, and
+	// SetQRSize carries the level forward rather than answering a question its
+	// form no longer asks. A demo seeded only through SetQRStyle would show a
+	// margin and a scale nobody chose, which is exactly the vocabulary this
+	// milestone removed.
 	if _, err := s.link.SetQRStyle(ctx, s.owner, styled, qr.Style{
-		Foreground: "#123a6b", Background: "#f5f7fa",
-		Level: qr.LevelQ, Margin: 4, Scale: 10,
+		Foreground: demoQRForeground, Background: demoQRBackground, Level: qr.LevelQ,
 	}); err != nil {
 		return fmt.Errorf("style the QR code on /%s: %w", demoQRStyled, err)
 	}
+	// 400px: a size somebody printing a poster would type, and one that does not
+	// divide evenly into this link's module count — so the demo shows the snap
+	// and the reported size doing their job rather than a number chosen to make
+	// them invisible.
+	sized, fit, err := s.link.SetQRSize(ctx, s.owner, styled, link.QRSizeInput{
+		Foreground: demoQRForeground, Background: demoQRBackground, Size: demoQRSize,
+	})
+	if err != nil {
+		return fmt.Errorf("size the QR code on /%s: %w", demoQRStyled, err)
+	}
 
-	fmt.Fprintf(os.Stderr, "campaigns: %d, holding %d links; 1 QR code styled\n",
-		len(demoCampaigns()), labelled)
+	fmt.Fprintf(os.Stderr, "campaigns: %d, holding %d links; 1 QR code styled at %dpx "+
+		"(asked for %dpx)\n", len(demoCampaigns()), labelled, sized.Size, fit.Requested)
 	return nil
 }
+
+// The styled code's colours and size. Named because the two writes above both
+// carry the colours, and a hex string typed twice is a hex string that ends up
+// meaning two different colours.
+const (
+	demoQRForeground = "#123a6b"
+	demoQRBackground = "#f5f7fa"
+	demoQRSize       = 400
+)
 
 // demoWebhooks are the registrations the demo shows.
 //

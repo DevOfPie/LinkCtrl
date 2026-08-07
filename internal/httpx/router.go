@@ -226,15 +226,18 @@ func registerAppRoutes(d Deps, app *appMux) {
 			// seeing the code is links.read and styling it is links.update — see
 			// internal/link/qr.go and decisions.md, D75.
 			//
-			// The `.svg` sibling is the picture and is the one non-JSON response
-			// this API has besides the spec document. A second path rather than
-			// Accept negotiation, because an <img> and a download both send an
-			// Accept header nobody chose.
+			// The `.svg` and `.png` siblings are the picture and are the only
+			// non-JSON responses this API has besides the spec document. Paths
+			// rather than Accept negotiation, because an <img> and a download
+			// both send an Accept header nobody chose. `.png` is M49, and it is
+			// the one endpoint here that rasterises — internal/qr's MaxSize is
+			// the bound that lets it.
 			//
 			// PUT rather than PATCH: an omitted style field means its default,
 			// which is what makes "back to plain black on white" an empty object.
 			"GET " + APIPrefix + "/links/{id}/qr":            api.GetQR,
 			"GET " + APIPrefix + "/links/{id}/qr.svg":        api.GetQRSVG,
+			"GET " + APIPrefix + "/links/{id}/qr.png":        api.GetQRPNG,
 			"PUT " + APIPrefix + "/links/{id}/qr":            api.SetQR,
 			"DELETE " + APIPrefix + "/links/{id}/qr":         api.DeleteQR,
 			"GET " + APIPrefix + "/folders":                  api.ListFolders,

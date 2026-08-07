@@ -2,20 +2,32 @@ package httpx
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/qr"
 )
 
-// The QR panel on a link's page (M41).
+// The QR panel on a link's page (M41, reworded by M49).
 //
 // One form, on the same no-JavaScript shape the folder and campaign pages use:
-// two colour inputs, an error-correction select and two numbers, posting to the
-// link's own URL. The code beside it is server-rendered SVG, so the panel shows
-// what it will produce without a round trip and without a script.
+// two colour inputs and one number, posting to the link's own URL. The code
+// beside it is server-rendered SVG, so the panel shows what it will produce
+// without a round trip and without a script.
+//
+// **The number is the output size in pixels, and it used to be two numbers
+// nobody knows.** The form asked for a quiet zone in modules and a module size
+// in pixels; the person printing a poster knows neither and knows how big they
+// want it. Both survive as the arithmetic behind the one control — see
+// qr.FitSize — and the error-correction level left this surface for the API,
+// because it is a scannability tradeoff a dashboard user has no basis to make.
+// A save therefore carries the level the link already had rather than the
+// default, which is what SetQRSize is for.
 //
 // **Reset is a value of the same form rather than a second one.** The style is
 // replaced whole by every submit, which is what makes "back to plain black on
@@ -65,7 +77,7 @@ func (h *Web) LinkQRPage(w http.ResponseWriter, r *http.Request) {
 		shell:      h.shell(r, "QR code · /"+l.Alias, "links"),
 		Link:       l,
 		linkQRView: h.linkQR(r.Context(), actor, l, self),
-		Notice:     qrNotice(r.URL.Query().Get("qr")),
+		Notice:     qrNotice(r.URL.Query()),
 	})
 }
 
@@ -76,12 +88,21 @@ func (h *Web) LinkQRPage(w http.ResponseWriter, r *http.Request) {
 // the reader is looking at. The value is therefore **matched, never followed**:
 // it is compared against the two paths this function builds itself, so the field
 // is a choice between two and not a redirect target a POST body can name.
-func qrReturn(next string, id interface{ String() string }, marker string) string {
+//
+// `extra` is what the notice on the far side needs and the redirect is the only
+// thing that survives to carry: a POST that snapped the size has to say so, and
+// the page it lands on was rendered by a fresh request that never saw the number
+// anybody typed.
+func qrReturn(next string, id interface{ String() string }, marker string, extra url.Values) string {
+	q := url.Values{"qr": {marker}}
+	for k, v := range extra {
+		q[k] = v
+	}
 	page := "/links/" + id.String()
 	if next == page+"/qr" {
-		return page + "/qr?qr=" + marker
+		return page + "/qr?" + q.Encode()
 	}
-	return page + "?qr=" + marker + "#qr"
+	return page + "?" + q.Encode() + "#qr"
 }
 
 // LinkQRStyle stores how this link's code is drawn.
@@ -104,22 +125,35 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 			h.finishQRAction(w, r, id, rerr)
 			return
 		}
-		seeOther(w, r, qrReturn(next, id, "reset"))
+		seeOther(w, r, qrReturn(next, id, "reset", nil))
 		return
 	}
 
-	style := qr.Style{
+	in := link.QRSizeInput{
 		Foreground: strings.TrimSpace(r.PostFormValue("foreground")),
 		Background: strings.TrimSpace(r.PostFormValue("background")),
-		Level:      qr.Level(strings.TrimSpace(r.PostFormValue("level"))),
-		Margin:     formInt(r.PostFormValue("margin"), qr.DefaultMargin),
-		Scale:      formInt(r.PostFormValue("scale"), qr.DefaultScale),
+		// No fallback that would make sense here: a size box submitted empty is
+		// somebody who cleared it, not somebody asking for the default, and -1
+		// is refused with a sentence naming the range.
+		Size: formInt(r.PostFormValue("size"), -1),
 	}
-	if _, serr := h.Links.SetQRStyle(r.Context(), IdentityFrom(r.Context()), id, style); serr != nil {
+	_, fit, serr := h.Links.SetQRSize(r.Context(), IdentityFrom(r.Context()), id, in)
+	if serr != nil {
 		h.finishQRAction(w, r, id, serr)
 		return
 	}
-	seeOther(w, r, qrReturn(next, id, "styled"))
+
+	// Only when it moved. A redirect carrying "you asked for 300 and got 300"
+	// would put a sentence on the page for every save, which is how a message
+	// that matters stops being read.
+	var extra url.Values
+	if fit.Snapped() {
+		extra = url.Values{
+			"want": {strconv.Itoa(fit.Requested)},
+			"got":  {strconv.Itoa(fit.Size)},
+		}
+	}
+	seeOther(w, r, qrReturn(next, id, "styled", extra))
 }
 
 // finishQRAction puts a refusal back on the page it was made from, with the
@@ -151,22 +185,60 @@ func formInt(raw string, fallback int) int {
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil {
-		// Zero, so Normalize's range check refuses it with a sentence rather
-		// than this function quietly choosing a value.
+		// Out of every range this product has, so the validator downstream
+		// refuses it with a sentence rather than this function quietly choosing
+		// a value. *(The comment here said "Zero" and the code has returned -1
+		// since M41; zero is a value Normalize reads as "unset" and fills in with
+		// a default, which is the opposite of what this line is for. Corrected
+		// 2026-08-07 under M49, which is the milestone that started routing a
+		// size through it.)*
 		return -1
 	}
 	return n
 }
 
 // qrNotice turns the ?qr= marker into a sentence.
-func qrNotice(marker string) string {
-	switch marker {
+//
+// **The snap is reported here or nowhere.** m49.md requires the size actually
+// produced to appear beside the one that was asked for, and after the redirect
+// the form shows the produced size with nothing to say it is not the number the
+// reader typed. So the pair travels in the query and this is where it is spent.
+//
+// Both numbers are re-derived as integers rather than echoed: they arrive in a
+// URL anybody can edit, and a sentence built from a query string is a sentence
+// somebody else can write. A value that is not a number in range says nothing,
+// which leaves the ordinary "restyled" message.
+func qrNotice(q url.Values) string {
+	switch q.Get("qr") {
 	case "styled":
-		return "QR code restyled. The code says the same thing — a style changes how " +
-			"it is drawn, never what it encodes."
+		const unchanged = "The code says the same thing — a style changes how it is " +
+			"drawn, never what it encodes."
+		want, wok := sizeParam(q.Get("want"))
+		got, gok := sizeParam(q.Get("got"))
+		if !wok || !gok || want == got {
+			return "QR code restyled. " + unchanged
+		}
+		return fmt.Sprintf("QR code restyled, and drawn at %dpx rather than the %dpx you "+
+			"asked for: a code is a whole number of squares, and %dpx is the nearest size "+
+			"that keeps them whole. %s", got, want, got, unchanged)
 	case "reset":
 		return "QR code back to black on white."
 	default:
 		return ""
 	}
+}
+
+// sizeParam reads a pixel size out of the query string.
+//
+// Bounded above by what internal/qr will draw and below by one pixel rather than
+// by qr.MinSize: the *requested* size is inside the range, but the size it snaps
+// to can sit below the floor — the shortest code at the smallest scale is 58px,
+// and a request for 64 lands there. Refusing to mention that would suppress the
+// sentence in exactly the case it explains most.
+func sizeParam(raw string) (int, bool) {
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 || n > qr.MaxSize {
+		return 0, false
+	}
+	return n, true
 }

@@ -99,8 +99,9 @@ tags:
       evaluation runs on the leader-elected scheduler and nowhere else.
   - name: qr
     description: >
-      A link's QR code. SVG only, and the one non-JSON response this API has
-      besides the spec document itself.
+      A link's QR code, as JSON and as a picture. `qr.svg` and `qr.png` are the
+      two non-JSON responses this API has besides the spec document itself, and
+      they are the same image at the same size.
   - name: rules
     description: >
       Routing rules: which visitors a link sends where, evaluated in priority
@@ -1359,17 +1360,21 @@ paths:
       operationId: getLinkQRSVG
       summary: The link's QR code, drawn
       description: |
-        SVG, and only SVG (decision D11): the output is vector text, so no image
-        encoder is in this program's dependency set and nothing rasterises on a
-        request. A PNG download, if it is ever wanted, is an additive change.
+        The vector form. `GET /links/{id}/qr.png` beside it is the same picture
+        rasterised, and both are drawn from one matrix at one geometry, so they
+        describe the same image at the same size.
+
+        The SVG carries explicit pixel `width` and `height` as well as a
+        `viewBox`, so *drawn at the set size* is what a browser actually does
+        with it rather than something a stylesheet has to arrange.
 
         The picture paints its own background across the quiet zone rather than
         leaving it transparent. A QR code inverted onto a dark field is refused
         by a large share of scanners, and a transparent one inverts itself the
         moment it is placed on one.
 
-        A second path rather than content negotiation on `Accept`, because an
-        `<img>` and a download both send an `Accept` header nobody chose.
+        A path per format rather than content negotiation on `Accept`, because
+        an `<img>` and a download both send an `Accept` header nobody chose.
       responses:
         "200":
           description: The code as an SVG document
@@ -1383,6 +1388,46 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /links/{id}/qr.png:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+    get:
+      tags: [qr]
+      operationId: getLinkQRPNG
+      summary: The link's QR code, as an image file
+      description: |
+        The raster form, and the one endpoint on this API that rasterises.
+
+        **This is decision D11 reversed, and the reversal keeps its reasoning.**
+        D11 said SVG only *because* no image encoder was in the dependency set
+        and nothing should rasterise on a request. The encoder is now
+        `image/png` from the Go standard library, so the dependency set has not
+        moved; and the rasteriser runs only when somebody asks for a file, under
+        a stated bound. Output stops at **2000 pixels** — a two-colour paletted
+        bitmap, so the largest buffer a request can cause is 4,000,000 bytes —
+        and a code whose stored style draws larger than that is refused with a
+        `422` rather than drawn.
+
+        Same content as `qr.svg`, same geometry, same caching. The response
+        carries `Content-Disposition: attachment`, because a file somebody can
+        save is the point of it.
+      responses:
+        "200":
+          description: The code as a PNG image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
 
   /campaigns:
     get:
@@ -4469,27 +4514,34 @@ components:
             Error correction, as ISO/IEC 18004 names the levels. Default `M`. A
             higher level survives more damage and packs the code tighter at the
             same printed size.
+
+            **This field is API-only.** The dashboard stopped offering it at
+            M49: it is a scannability tradeoff a dashboard user has no basis to
+            make and a script might, so it is chosen here and carried forward
+            unchanged by a save from the panel.
         margin:
           type: integer
           minimum: 0
           maximum: 16
           description: >
             The quiet zone, in modules. Default 4, which is the minimum
-            ISO/IEC 18004 specifies.
+            ISO/IEC 18004 specifies. Together with `scale` this decides `size`;
+            the dashboard asks for `size` and resolves it to these two.
         scale:
           type: integer
           minimum: 2
           maximum: 32
           description: >
-            Pixels per module. Decides the `width` and `height` attributes only
-            — the drawing itself is in module units inside a `viewBox`, so a
-            consumer sizing the element with CSS gets the same code at any size.
-            Default 8.
+            Pixels per module. Default 8. `(module count + 2 × margin) × scale`
+            is the output size in pixels, which the SVG carries as explicit
+            `width` and `height` and the PNG is rasterised at. The SVG's drawing
+            is also in module units inside a `viewBox`, so a consumer sizing the
+            element with CSS still gets the same code at any size.
 
     QRCode:
       type: object
       additionalProperties: false
-      required: [link_id, content, style, stored]
+      required: [link_id, content, style, stored, size]
       properties:
         link_id: { type: string, format: uuid }
         content:
@@ -4503,6 +4555,17 @@ components:
           description: >
             False for a link whose style has never been set, which renders at
             the default rather than not at all.
+        size:
+          type: integer
+          description: >
+            The output size in pixels this style draws this content at — the
+            width and the height, since a code is square. **Read-only and
+            derived**: the stored style holds a quiet zone in modules and a
+            scale in pixels per module, and how many pixels those come to
+            depends on how many modules the content encodes to. Set it by
+            setting `margin` and `scale`; the dashboard asks for this number
+            instead and resolves it to those two against the link's own module
+            count.
 
     QRCodeResponse:
       type: object

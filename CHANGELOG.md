@@ -58,6 +58,23 @@ migrations run at boot.
   below, each also served as an ordinary page. Bookmark one, open it in a second
   tab, or share the URL.
 
+- **A QR code can be downloaded as a PNG.** `GET /api/v1/links/{id}/qr.png`, and
+  a **Download the PNG** button in the QR panel beside the SVG one. Until now the
+  only file you could get was vector text, and turning it into something most
+  programs open meant finding a converter.
+
+  **It is the same picture as the SVG, and that is asserted rather than
+  intended.** Both are drawn from one grid at one size with one offset, and a
+  test walks every square of the code checking that the pixel at its centre in
+  the PNG carries the colour the SVG's shapes put there. What is *not* claimed:
+  that a browser's rendering of the SVG is byte-identical to the PNG. No two
+  rasterisers agree to the byte, and the claim is about the squares.
+
+  **Output stops at 2000 pixels.** The image is two colours at one byte a pixel,
+  so the largest buffer a request can cause is 4,000,000 bytes; a size above the
+  cap is refused rather than quietly shrunk. Nothing joined this program's
+  dependency list for it — the encoder is Go's own `image/png`.
+
 ### Changed
 
 - **A link's QR code stops being a section and becomes a panel.** What is on the
@@ -70,6 +87,28 @@ migrations run at boot.
   **The download control keeps its text and gains an icon.** The note named "the
   download button being text instead of an icon"; an unlabelled icon is a guess
   for anybody who does not already know what it does, so it is both.
+
+- **The QR form asks how big you want the code, in pixels.** It used to ask for a
+  quiet zone in modules and a module size in pixels, which is two numbers nobody
+  printing a poster knows. Both are still the arithmetic behind the one control,
+  and the empty margin scanners need is derived from the size and never goes
+  below the four squares the specification requires.
+
+  **The size snaps to keep the squares whole, and the panel names both numbers.**
+  A code is a grid, so an arbitrary pixel size does not divide into it — 300px
+  over a 29-square code is 10.34 pixels a square. Ask for 300 and you are told
+  what you got and why. Squares landing on fractional boundaries are what would
+  make the SVG and the PNG round differently.
+
+  **Error correction moved to the API.** It is a tradeoff between how much damage
+  a printed code survives and how tightly it packs, and there is no way to judge
+  it from a dashboard; `PUT /api/v1/links/{id}/qr` still sets it, and saving the
+  form afterwards keeps whatever it was set to rather than resetting it.
+
+  **Codes styled before this release are untouched.** Their stored settings are
+  read forward to the size they already produced, so nothing anybody has printed
+  changed shape — and re-saving one at the size the panel shows is a no-op down
+  to the byte.
 
 - **Managing dispute reviewers moves off the review queue.** The queue still says
   who reviews it — that is context for a page whose decisions are instance-wide —

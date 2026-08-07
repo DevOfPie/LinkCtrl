@@ -47,6 +47,19 @@ type QRCode struct {
 	// Stored is false for a link whose code has never been styled, which renders
 	// at the default rather than not at all.
 	Stored bool `json:"stored"`
+	// Size is the output size in pixels this style draws this content at (M49).
+	//
+	// **Derived, never stored.** `qr_codes.style` holds a quiet zone in modules
+	// and a scale in pixels per module, and how many pixels those come to
+	// depends on how many modules the content encodes to — a longer alias is a
+	// bigger matrix at the same style. So the number is computed on every read,
+	// which is also what makes a style written before M49 read forward: the size
+	// it means is the one its margin and scale already produce.
+	//
+	// It is in the API's answer as well as on the dashboard because the size is
+	// now the vocabulary the surface asks in, and a script that could not see the
+	// number the form shows would be a second answer to the same question.
+	Size int `json:"size"`
 }
 
 // QRCode returns a link's code: its content and the style it is drawn with.
@@ -64,12 +77,33 @@ func (s *Service) QRCode(
 	if err != nil {
 		return nil, err
 	}
+	content := QRContent(l.ShortURL)
 	return &QRCode{
 		LinkID:  linkID,
-		Content: QRContent(l.ShortURL),
+		Content: content,
 		Style:   style,
 		Stored:  stored,
+		Size:    QROutputSize(content, style),
 	}, nil
+}
+
+// QROutputSize is the pixel size a style draws a piece of content at, or 0 for
+// content that cannot be encoded at all.
+//
+// Zero rather than an error, because every caller is answering "how big is this
+// picture" about a picture it is already reporting a failure for by other means:
+// the panel shows its own message and the API's JSON view is not the surface
+// that draws anything. A size beside a code that does not exist is the one
+// answer that would be actively wrong.
+//
+// Exported for the same reason QRContent is — two surfaces ask, and a second
+// copy of the arithmetic is a second answer.
+func QROutputSize(content string, style qr.Style) int {
+	code, err := qr.Encode(content, style.Level)
+	if err != nil {
+		return 0
+	}
+	return qr.OutputSize(code.Size, style)
 }
 
 // RenderQR draws a link's code as SVG.
@@ -89,6 +123,101 @@ func (s *Service) RenderQR(
 		return nil, fmt.Errorf("render qr for %s: %w", linkID, err)
 	}
 	return svg, nil
+}
+
+// RenderQRPNG rasterises a link's code (M49).
+//
+// **The one refusal that is the caller's fault is the size.** A style written
+// before M49 carries whatever margin and scale it was given, up to 16 and 32,
+// and a long URL at those settings describes a picture past qr.MaxSize. That is
+// a 422 rather than a 500: the reader can make it smaller, and the alternative —
+// rasterising it anyway — is the unbounded allocation D11 refused to allow in
+// the first place. Everything else reaching the error path here is the product's
+// own mistake, exactly as it is for RenderQR.
+func (s *Service) RenderQRPNG(
+	ctx context.Context, actor *auth.Identity, linkID uuid.UUID,
+) ([]byte, error) {
+	code, err := s.QRCode(ctx, actor, linkID)
+	if err != nil {
+		return nil, err
+	}
+	out, err := qr.RenderPNG(code.Content, code.Style)
+	if err != nil {
+		if errors.Is(err, qr.ErrTooLarge) {
+			return nil, domain.ValidationErrors{{
+				Field: "style.size", Code: "out_of_range",
+				Message: fmt.Sprintf(
+					"this code is drawn at %dpx and a downloadable image stops at %dpx; "+
+						"set a smaller size and download it again", code.Size, qr.MaxSize),
+			}}
+		}
+		return nil, fmt.Errorf("render qr png for %s: %w", linkID, err)
+	}
+	return out, nil
+}
+
+// QRSizeInput is the dashboard's write: the colours somebody chose and the one
+// number they know, which is how big they want the picture (M49).
+//
+// **The error-correction level is deliberately absent**, and its absence is what
+// makes SetQRSize a different operation from SetQRStyle rather than a wrapper
+// with defaults. A save from a form that no longer asks about error correction
+// must not silently answer the question; the level a link already has is carried
+// forward, and a caller that wants to choose one uses the API.
+type QRSizeInput struct {
+	Foreground string
+	Background string
+	// Size is the output size in pixels, before snapping.
+	Size int
+}
+
+// SetQRSize stores a style described by its output size.
+//
+// The size is resolved against *this link's* module count, because that is what
+// decides how many pixels a scale comes to. A link whose alias grows later keeps
+// the margin and scale stored here and therefore draws slightly larger — which
+// is the same behaviour every pre-M49 style has and is why the size is derived
+// on read rather than written into the row.
+func (s *Service) SetQRSize(
+	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, in QRSizeInput,
+) (*QRCode, qr.SizeFit, error) {
+	if !actor.Can(PermUpdate) {
+		return nil, qr.SizeFit{}, fmt.Errorf(
+			"%w: styling a QR code requires %s", domain.ErrForbidden, PermUpdate)
+	}
+	l, err := s.Get(ctx, actor, linkID)
+	if err != nil {
+		return nil, qr.SizeFit{}, err
+	}
+	current, _, err := s.storedQRStyle(ctx, actor.WorkspaceID, linkID)
+	if err != nil {
+		return nil, qr.SizeFit{}, err
+	}
+
+	code, err := qr.Encode(QRContent(l.ShortURL), current.Level)
+	if err != nil {
+		return nil, qr.SizeFit{}, fmt.Errorf("encode qr for %s: %w", linkID, err)
+	}
+	fit, err := qr.FitSize(code.Size, in.Size)
+	if err != nil {
+		if errors.Is(err, qr.ErrSizeOutOfRange) {
+			return nil, qr.SizeFit{}, domain.ValidationErrors{{
+				Field: "style.size", Code: "out_of_range",
+				Message: fmt.Sprintf("a code is %d to %d pixels across; %d is not a size "+
+					"anything can be printed at", qr.MinSize, qr.MaxSize, in.Size),
+			}}
+		}
+		return nil, qr.SizeFit{}, fmt.Errorf("fit qr size for %s: %w", linkID, err)
+	}
+
+	stored, err := s.SetQRStyle(ctx, actor, linkID, qr.Style{
+		Foreground: in.Foreground, Background: in.Background,
+		Level: current.Level, Margin: fit.Margin, Scale: fit.Scale,
+	})
+	if err != nil {
+		return nil, qr.SizeFit{}, err
+	}
+	return stored, fit, nil
 }
 
 // SetQRStyle stores how a link's code is drawn.
@@ -127,8 +256,10 @@ func (s *Service) SetQRStyle(
 	}); err != nil {
 		return nil, fmt.Errorf("upsert qr code: %w", err)
 	}
+	content := QRContent(l.ShortURL)
 	return &QRCode{
-		LinkID: linkID, Content: QRContent(l.ShortURL), Style: normalized, Stored: true,
+		LinkID: linkID, Content: content, Style: normalized, Stored: true,
+		Size: QROutputSize(content, normalized),
 	}, nil
 }
 

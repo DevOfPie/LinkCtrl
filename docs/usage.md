@@ -15,7 +15,7 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 | `/links` | Search the list; filter by status, folder, campaign or hostname; sort; create a link; page through with a cursor. The search box is the first control on the page, filters as you type and updates the address bar, so a reload or a shared URL shows the same view. Everything except search is behind **Filters**, and creating a link is behind **Create a link** — see [The links list](#the-links-list). |
 | `/links/{id}` | Everything about one link: edit destination, alias, title, description, expiry and tags; per-window analytics (7/30/90 days) with device, browser, OS, referrer, language and country breakdowns, each with a share ring, plus a world choropleth over the country figures; recent activity; archive, restore and delete. |
 | `/keys` | Mint, list and revoke API keys, and choose whether a new one reaches one workspace or the organization. Rotation is not here: it replaces the credential that made the request, and a browser session is not one. |
-| `/links/{id}/qr` | The link's QR code, its style form and the download, on their own page. The same thing the **QR code** panel on the link's page opens — see [On-demand panels](#on-demand-panels). |
+| `/links/{id}/qr` | The link's QR code, its style form and the downloads, on their own page. The same thing the **QR code** panel on the link's page opens — see [On-demand panels](#on-demand-panels). |
 | `/notifications` | Things the instance wanted you to know about. Opening one goes to what it is about and marks it read; a read one can be marked unread again. |
 | `/disputes` | The review queue: destinations somebody was refused and has asked you to look at. Needs `destinations.review`, which is held instance-wide rather than by a role. The account that claimed the instance also appoints other reviewers here. |
 | `/disputes/reviewers` | Who reviews disputes, and appointing or withdrawing them. Needs `instance.admin`, and the queue above shows the list in summary. Also the **Change who reviews** panel on `/disputes`. |
@@ -270,7 +270,7 @@ list and filtering by it is `links.read`; creating is `links.create`, editing is
 ### On-demand panels
 
 Two things you reach occasionally are behind a panel rather than in the page
-body: a link's **QR code** settings and download, and **Change who reviews** on
+body: a link's **QR code** settings and downloads, and **Change who reviews** on
 the dispute queue. A panel opens over the page you are on and closes on Escape
 or a click outside.
 
@@ -289,12 +289,13 @@ who reviews it either way.
 Every link has one. There is nothing to create and no row to make: open a link's
 page and a small version of the code is drawn beside the link's name, at the top.
 Clicking it — or **Settings and download** in the **QR code** section further
-down — opens the panel with the full code, the style form and a **Download the
-SVG** button.
+down — opens the panel with the full code, the style form and **Download the
+PNG** and **Download the SVG** buttons.
 
-**SVG only.** The code is vector text, so it prints at any size, and no image
-encoder is anywhere in this program. There is no PNG download, and there is no
-way to have two codes for one link.
+**Two formats, one picture.** The PNG is the file most programs open; the SVG is
+vector text and is the one to use for anything that will be resized again. They
+are generated from the same grid at the same size, so they are the same image.
+There is still no way to have two codes for one link.
 
 **The code encodes your short URL with `?src=qr` on it**, and that is what makes
 a scan countable. A camera sends no `Referer` header, so without the parameter
@@ -305,10 +306,22 @@ Two things follow: somebody who types `?src=qr` by hand is counted as a scan, an
 two printed codes for one link cannot be told apart.
 
 **Restyling changes the drawing and never the content.** The form takes a
-foreground colour, a background colour, an error-correction level (`L`, `M`, `Q`,
-`H` — higher survives more damage and packs the code tighter at the same printed
-size), a quiet zone in modules, and a module size in pixels. **Back to black on
-white** appears once a style is stored.
+foreground colour, a background colour and a **size in pixels** — 64 to 2000.
+**Back to black on white** appears once a style is stored.
+
+**The size snaps, and the panel says so.** A code is a grid of squares, so an
+arbitrary pixel size does not divide evenly into it: 300px over a 29-square code
+is 10.34 pixels a square. Asking for 300 therefore gets you the nearest size that
+keeps the squares whole, the flash message names both numbers, and the box then
+shows the size you actually have. Squares that landed on fractional boundaries
+would make the SVG and the PNG round differently, which is the one thing worth
+snapping to avoid. The empty margin scanners need is derived from the size and
+never goes below the four squares the specification requires.
+
+**The error-correction level is set over the API and not on the form.** It is a
+tradeoff between how much damage a printed code survives and how tightly it is
+packed, and there is no way to judge it from a dashboard; the `PUT` below sets
+it, and saving the form afterwards keeps whatever it was set to.
 
 **The code does not follow your theme.** It paints its own background across its
 quiet zone and defaults to black on white in both light and dark mode, because a
@@ -322,19 +335,28 @@ colour.
 Over the API:
 
 ```sh
-# The picture.
+# The picture, as vector text.
 curl -sS "$BASE/api/v1/links/$LINK_ID/qr.svg" \
   -H "Authorization: Bearer $LINKCTRL_API_KEY" -o code.svg
 
-# What it encodes, and how it is drawn.
+# The same picture, rasterised. Capped at 2000px; a stored style that draws
+# larger than that is refused rather than rasterised.
+curl -sS "$BASE/api/v1/links/$LINK_ID/qr.png" \
+  -H "Authorization: Bearer $LINKCTRL_API_KEY" -o code.png
+
+# What it encodes, and how it is drawn. `size` is the output size in pixels the
+# stored margin and scale come to — read-only, because it depends on how many
+# squares this particular URL encodes to.
 curl -sS "$BASE/api/v1/links/$LINK_ID/qr" \
   -H "Authorization: Bearer $LINKCTRL_API_KEY"
 
 # Restyle it. An omitted field is its default, so {} is plain black on white.
+# The API sets `margin` and `scale` directly; the dashboard's size box is those
+# two resolved against the link's own square count.
 curl -sS -X PUT "$BASE/api/v1/links/$LINK_ID/qr" \
   -H "Authorization: Bearer $LINKCTRL_API_KEY" \
   -H 'Content-Type: application/json' \
-  -d '{"style": {"foreground": "#123a6b", "level": "Q"}}'
+  -d '{"style": {"foreground": "#123a6b", "level": "Q", "margin": 4, "scale": 12}}'
 ```
 
 Seeing a code is `links.read` and styling one is `links.update`: a QR code is a

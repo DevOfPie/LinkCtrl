@@ -529,9 +529,23 @@ type linkQRView struct {
 	// page promises and the word the redirect path writes cannot drift apart.
 	QRSourceLabel string
 	QRStyle       qr.Style
-	QRLevels      []qr.Level
-	QRStored      bool
+	// QRSize is the output size in pixels the code is drawn at, and since M49 it
+	// is the only size the form asks about: the quiet zone and the pixels per
+	// module are the arithmetic behind it and have left the interface. QRMinSize
+	// and QRMaxSize bound the input, passed in rather than written into the
+	// template so the numbers the form offers cannot drift from the ones
+	// internal/qr accepts.
+	QRSize    int
+	QRMinSize int
+	QRMaxSize int
+	QRStored  bool
+	// QRDownload is the SVG and QRDownloadPNG the raster (M49). Both, because
+	// the vector is the right file for anything that will be resized again and
+	// the raster is the one every other program can open — which is the gap the
+	// milestone is closing, and offering only the replacement would leave the
+	// people who wanted the SVG converting in the other direction.
 	QRDownload    string
+	QRDownloadPNG string
 	// QRError is what went wrong drawing the code, if anything. The page keeps
 	// its analytics and says so, rather than failing over a picture.
 	QRError string
@@ -756,9 +770,11 @@ func (h *Web) linkQR(
 	ctx context.Context, actor *auth.Identity, l *domain.Link, back string,
 ) linkQRView {
 	view := linkQRView{
-		QRLevels:      qr.Levels,
 		QRSourceLabel: domain.ClickSourceQR,
 		QRDownload:    fmt.Sprintf("%s/links/%s/qr.svg", APIPrefix, l.ID),
+		QRDownloadPNG: fmt.Sprintf("%s/links/%s/qr.png", APIPrefix, l.ID),
+		QRMinSize:     qr.MinSize,
+		QRMaxSize:     qr.MaxSize,
 		QRReturn:      back,
 	}
 
@@ -769,6 +785,7 @@ func (h *Web) linkQR(
 	}
 	view.QRContent = code.Content
 	view.QRStyle = code.Style
+	view.QRSize = code.Size
 	view.QRStored = code.Stored
 
 	svg, err := qr.Render(code.Content, code.Style)
@@ -872,7 +889,7 @@ func linkDetailNotice(q url.Values, l *domain.Link) string {
 	case q.Get("split") != "":
 		return splitNotice(q.Get("split"))
 	case q.Get("qr") != "":
-		return qrNotice(q.Get("qr"))
+		return qrNotice(q)
 	case q.Get("created") == "1":
 		return "Link created: " + l.ShortURL
 	case q.Get("saved") == "1":
