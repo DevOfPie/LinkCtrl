@@ -15,6 +15,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
+	"github.com/DevOfPie/LinkCtrl/internal/recovery"
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
 	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/team"
@@ -52,6 +53,11 @@ type Deps struct {
 	// public signup pages unregistered and every registration refused, which is
 	// the direction a missing dependency has to fail in.
 	Signup *signup.Service
+	// Recovery repairs a forgotten password (M51). Nil leaves the two endpoints
+	// and the two public pages unregistered, which is what the parity test
+	// against openapi.yaml compares itself to — and which is the state F141
+	// describes: no route back into an account whose password was lost.
+	Recovery *recovery.Service
 	// Disputes serves the blocked-attempt appeal path and the review queue. Nil
 	// leaves both the endpoints and the dashboard page unregistered, which is
 	// what the parity test against openapi.yaml compares itself to — and which
@@ -169,6 +175,18 @@ func registerAppRoutes(d Deps, app *appMux) {
 		// credential too — and the lockout does not cover it.
 		app.Handle("POST "+APIPrefix+"/auth/password",
 			guard(RequireAuth(http.HandlerFunc(authAPI.ChangePassword))))
+
+		// Account recovery (M51). Unauthenticated, necessarily — the caller has
+		// lost the only credential they had — and under the same `guard` as
+		// login and registration, so recovery and credential guessing draw on
+		// one budget. That sharing is why the milestone adds no limiter of its
+		// own: a per-route bucket would let an attacker burn one without
+		// touching the other.
+		if d.Recovery != nil {
+			rec := &RecoveryAPI{Recovery: d.Recovery}
+			app.Handle("POST "+APIPrefix+"/auth/forgot", guard(http.HandlerFunc(rec.Forgot)))
+			app.Handle("POST "+APIPrefix+"/auth/reset", guard(http.HandlerFunc(rec.Reset)))
+		}
 
 		// The switcher. On the auth service because which workspace a request
 		// acts in is identity, not a feature of one.
@@ -569,6 +587,23 @@ func registerAppRoutes(d Deps, app *appMux) {
 			app.Handle("POST /signup", guard(http.HandlerFunc(web.SignupSubmit)))
 			app.HandleFunc("GET /verify/{token}", web.VerifyPage)
 			app.Handle("POST /verify/{token}", guard(http.HandlerFunc(web.VerifySubmit)))
+		}
+
+		// Account recovery (M51). Public for the reason redemption and signup
+		// are — somebody who has lost their password has no session — and under
+		// the same login limiter, so a reset sweep and a credential sweep draw
+		// on one budget rather than two.
+		//
+		// Registered whether or not a relay is configured, so a mail-free
+		// instance answers the refusal these handlers write rather than the
+		// alias catch-all's 404. "This instance cannot send mail" and "there is
+		// no such page" are different answers and only one of them is true —
+		// the same reason the signup pages are registered on a closed instance.
+		if web.Recovery != nil {
+			app.HandleFunc("GET /forgot", web.ForgotPage)
+			app.Handle("POST /forgot", guard(http.HandlerFunc(web.ForgotSubmit)))
+			app.HandleFunc("GET /reset/{token}", web.ResetPage)
+			app.Handle("POST /reset/{token}", guard(http.HandlerFunc(web.ResetSubmit)))
 		}
 
 		// Everything else redirects anonymous visitors to the login form,

@@ -16,6 +16,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
+	"github.com/DevOfPie/LinkCtrl/internal/recovery"
 	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/team"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
@@ -48,6 +49,11 @@ type Web struct {
 	// form. Nil leaves the signup and verification pages unregistered, and every
 	// registration refused.
 	Signup *signup.Service
+	// Recovery repairs a forgotten password (M51). Nil leaves both public pages
+	// unregistered and the "Forgot your password?" link undrawn, which is the
+	// state every instance was in before this existed — a lockout with no route
+	// back but the operator's database client (F141).
+	Recovery *recovery.Service
 	// Disputes serves the review queue and the appeal a refused creator files.
 	// Nil leaves the page unregistered and takes the "ask for a review" button
 	// off the link form, because a refusal must not offer a door that is not
@@ -368,6 +374,10 @@ type loginPageData struct {
 	// refusal is worse than no link, and on an instance with no mailer `open`
 	// is not open — so this is the effective mode and not the configured one.
 	SignupOpen bool
+	// RecoveryAvailable draws the "forgot your password?" link, on the same rule
+	// and for the same reason: recovery is delivered by mail, so an instance with
+	// no relay has no recovery to offer and must not appear to.
+	RecoveryAvailable bool
 }
 
 func (h *Web) LoginPage(w http.ResponseWriter, r *http.Request) {
@@ -382,7 +392,11 @@ func (h *Web) LoginPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := loginPageData{shell: h.shell(r, "Sign in", ""), SignupOpen: h.signupOpen()}
+	data := loginPageData{
+		shell:             h.shell(r, "Sign in", ""),
+		SignupOpen:        h.signupOpen(),
+		RecoveryAvailable: h.recoveryAvailable(),
+	}
 	if r.URL.Query().Get("next") != "" {
 		data.Next = safeNext(r.URL.Query().Get("next"))
 	}
@@ -411,10 +425,11 @@ func (h *Web) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		data := loginPageData{
-			shell:      h.shell(r, "Sign in", ""),
-			Email:      r.PostFormValue("email"),
-			Next:       safeNext(r.PostFormValue("next")),
-			SignupOpen: h.signupOpen(),
+			shell:             h.shell(r, "Sign in", ""),
+			Email:             r.PostFormValue("email"),
+			Next:              safeNext(r.PostFormValue("next")),
+			SignupOpen:        h.signupOpen(),
+			RecoveryAvailable: h.recoveryAvailable(),
 		}
 		switch {
 		case isCredentialFailure(err):

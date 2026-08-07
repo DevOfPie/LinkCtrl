@@ -25,6 +25,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/DevOfPie/LinkCtrl/api"
+	"github.com/DevOfPie/LinkCtrl/internal/recovery"
 )
 
 // contract replays real requests against the running fixture and validates
@@ -1253,6 +1254,48 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.do("POST", p+"/auth/password", map[string]string{
 		"current_password": password, "new_password": "a-brand-new-longer-password",
 	}, http.StatusNoContent)
+
+	// --- account recovery (M51) ---------------------------------------------
+	//
+	// Last of the authenticated flow on purpose: the reset revokes every session
+	// on the account, so anything after it would be running unauthenticated. The
+	// logout below is what the spec says happens either way.
+	//
+	// **The refusals are replayed before the success**, because a spent token is
+	// one of them and the success is what spends it. 202 is the answer to an
+	// address with no account as much as to one with — that equality is asserted
+	// against whole bodies in recovery_test.go, and what is documented here is
+	// only that the status is what the spec says.
+	c.do("POST", p+"/auth/forgot", map[string]string{
+		"email": "nobody-here@example.com",
+	}, http.StatusAccepted)
+	c.doBadRequest("POST", p+"/auth/forgot", map[string]string{
+		"email": "not-an-address",
+	}, http.StatusUnprocessableEntity)
+	c.do("POST", p+"/auth/forgot", map[string]string{
+		"email": "owner@example.com",
+	}, http.StatusAccepted)
+
+	// The token exists only in the mail body, which is the property M51 is
+	// about — nothing hands the plaintext back to a caller, so the only way to
+	// spend one is to read the message. The outbox is where a client cannot look
+	// and a test can.
+	resetToken := c.resetTokenFromOutbox()
+
+	c.doBadRequest("POST", p+"/auth/reset", map[string]string{
+		"token": resetToken, "new_password": "short",
+	}, http.StatusUnprocessableEntity)
+	c.do("POST", p+"/auth/reset", map[string]string{
+		"token": "not-a-token-anybody-issued", "new_password": "a-recovered-longer-password",
+	}, http.StatusNotFound)
+	c.do("POST", p+"/auth/reset", map[string]string{
+		"token": resetToken, "new_password": "a-recovered-longer-password",
+	}, http.StatusNoContent)
+	// Spent, and answered the same way a token that never existed is.
+	c.do("POST", p+"/auth/reset", map[string]string{
+		"token": resetToken, "new_password": "a-second-recovered-password",
+	}, http.StatusNotFound)
+
 	c.do("POST", p+"/auth/logout", nil, http.StatusNoContent)
 	c.do("GET", p+"/me", nil, http.StatusUnauthorized)
 
@@ -1273,6 +1316,31 @@ func TestAPIMatchesItsContract(t *testing.T) {
 		t.Errorf("spec operations never exercised by this test:\n  %s",
 			strings.Join(missed, "\n  "))
 	}
+}
+
+// resetTokenFromOutbox reads the newest password-reset link out of the mail
+// outbox and returns its token.
+//
+// It goes to the database rather than to a response because that is the whole
+// point of the mechanism: the plaintext exists in exactly one place a client
+// can reach, which is the mailbox, and the row stores only its SHA-256. A test
+// helper that received the token from an endpoint would be exercising an API
+// M51 deliberately does not have.
+func (c *contract) resetTokenFromOutbox() string {
+	c.t.Helper()
+	var body string
+	err := c.f.pool.QueryRow(c.t.Context(),
+		`SELECT body FROM mail_outbox WHERE kind = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
+		recovery.MailKind).Scan(&body)
+	if err != nil {
+		c.t.Fatalf("no %s mail in the outbox: %v", recovery.MailKind, err)
+	}
+	const marker = "/reset/"
+	i := strings.Index(body, marker)
+	if i < 0 {
+		c.t.Fatalf("no reset link in the mail body:\n%s", body)
+	}
+	return strings.Fields(body[i+len(marker):])[0]
 }
 
 // svgEndpoint checks the other non-JSON response by hand (M41), following the

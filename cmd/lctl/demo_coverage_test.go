@@ -899,6 +899,35 @@ func demoCoverage() []demoFeature {
 				"different for a different kind. One kind in the inbox shows a " +
 				"click-through that could be a hardcoded link",
 		},
+		{
+			// Not a display claim — a safety claim, and the same shape D81, D86
+			// and M44's grace row have.
+			//
+			// **M51 seeds nothing, and this row is what says so on purpose rather
+			// than by omission.** The inherited rule asks a milestone that ships
+			// something visible to extend the seeder; what M51 ships is two public
+			// pages reachable on the demo with no seeded data at all, because the
+			// demo configures a mailer and the sign-in page therefore draws the
+			// link. There is no page anywhere that lists reset tokens, so a seeded
+			// row would show nobody anything.
+			//
+			// What it would do is put a live password-reset token on a public
+			// instance anybody can drive — the one credential in this schema that
+			// sets a password, where the demo's four API keys are unusable because
+			// only an HMAC is stored. Asserted rather than trusted, because "the
+			// seeder does not do that" is exactly the claim that survives the
+			// change making it false.
+			Milestone: "M51", Feature: "The seeder mints no password-reset token",
+			Query: `SELECT count(*) FROM password_resets pr
+			          JOIN users u ON u.id = pr.user_id
+			         WHERE u.id = $2 OR u.id IN (
+			             SELECT DISTINCT m.user_id FROM memberships m
+			              WHERE m.organization_id = $1)`,
+			MaxIsZero: true,
+			Shows: "that seeding the demo hands nobody a way into an account: the " +
+				"recovery pages are reachable and working on the demo, and every " +
+				"link they issue is one a visitor asked for",
+		},
 	}
 }
 

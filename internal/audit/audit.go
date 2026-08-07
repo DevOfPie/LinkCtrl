@@ -267,6 +267,23 @@ const (
 	// person being the record; here the credential's owner was not present, may
 	// not know, and "who stopped it" is the question afterwards.
 	ActionAPIKeyRevoked = "apikey.revoked"
+
+	// A password recovered from a mailbox (M51).
+	//
+	// The first action in this vocabulary with **no organization**, and that is
+	// the fact worth stating rather than an implementation detail. Every other
+	// entry is written by somebody standing in a tenant; this one is written by
+	// somebody holding no credential at all — that is what recovery is — so
+	// there is no workspace they were in and no honest way to choose among the
+	// organizations their account may belong to. The row lands with a NULL
+	// `organization_id` and is read through `audit.read.instance`, which is the
+	// right audience for "an account on this box was recovered".
+	//
+	// Only the recovery is here. An ordinary password change is not, and its
+	// absence is the same one minting a key has: the person held a session, so
+	// the session is the record. A reset is the case where they did not, and
+	// "who set this password, and from what network" is the question afterwards.
+	ActionPasswordReset = "password.reset"
 )
 
 // Event is one thing that happened.
@@ -795,5 +812,6 @@ func AllActions() []string {
 		ActionAutomationFired,
 		ActionAPIKeyRotated,
 		ActionAPIKeyRevoked,
+		ActionPasswordReset,
 	}
 }

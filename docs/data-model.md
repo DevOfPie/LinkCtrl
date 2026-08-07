@@ -102,6 +102,7 @@ appears in sqlc-visible SQL.
 | `instance_grants` | 4 | Built | The instance principal's permissions (D98, `03400`). |
 | `invitations` | 12 | Built | Single-use, address-bound (D27), expiring (D29). |
 | `pending_registrations` | 9 | Built | Self-serve signup (M29). Swept when its window lapses. |
+| `password_resets` | 6 | Built | Account recovery (M51, `03900`). The third bearer-token table, after invitations and registrations: only a SHA-256 is stored, single-use, one hour. Swept hourly, and every row for an account is spent when one of them is used. |
 
 ### Links and routing
 
@@ -135,7 +136,7 @@ appears in sqlc-visible SQL.
 
 | Table | Cols | Status | Notes |
 | --- | --- | --- | --- |
-| `audit_logs` | 12 | Built, partitioned | 32 actions, enumerated by `audit.AllActions` and checked by a test. |
+| `audit_logs` | 12 | Built, partitioned | 33 actions, enumerated by `audit.AllActions` and checked by a test. |
 | `notifications` | 9 | Built | Scoped to the reader and the workspace they are standing in, with organization-level news visible from every workspace (D102). |
 | `mail_outbox` | 11 | Built | Optional: an instance with no `SMTP_HOST` never queues. Bodies are blanked when a row finishes (F32). |
 | `webhooks` / `webhook_deliveries` | 10 / 11 | Built | Delivery is instance-wide and arrival-ordered, which is a recorded limitation (F90). |

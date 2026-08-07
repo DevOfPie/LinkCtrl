@@ -21,6 +21,13 @@
       </div>
       <button type="submit" class="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Sign in</button>
     </form>
+    {{/* Drawn only when the instance can actually send the mail (M51). The link
+         leads to a page that refuses when no relay is configured, and an offer
+         of recovery that cannot be honoured is what F141 called worse than an
+         absent feature. */}}
+    {{if .RecoveryAvailable}}
+    <p class="mt-4 text-center text-sm"><a href="/forgot" class="text-muted hover:text-ink hover:underline">Forgot your password?</a></p>
+    {{end}}
   </div>
   {{/* Drawn only when the instance is actually accepting sign-ups. A link to a
        page that answers 403 is worse than no link, and an instance configured

@@ -574,6 +574,37 @@ func validatePasswordLength(password, field string) error {
 	return nil
 }
 
+// WritePassword hashes a password and stores it against an account.
+//
+// **The product's one password-writing path**, and it is exported for that
+// reason rather than for reuse. Two of them existed the moment M51 needed to
+// write a password without a session to verify against: this function is what
+// POST /account/password reaches through ChangePassword below, and what a
+// completed recovery reaches through internal/recovery. One statement, one
+// hasher, one place where `failed_login_count` and `locked_until` are cleared —
+// which matters more than it looks, because an account recovered while locked
+// out by the guessing that made its owner reset it would otherwise still refuse
+// the new password.
+//
+// It takes the Queries rather than reading the service's own, so a caller inside
+// a transaction passes the transactional handle and the write joins whatever
+// else that transaction is doing. Recovery needs exactly that: spending the
+// token and setting the password must not be separable.
+func WritePassword(
+	ctx context.Context, q *dbgen.Queries, h *Hasher, userID uuid.UUID, password string,
+) error {
+	hash, err := h.Hash(password)
+	if err != nil {
+		return err
+	}
+	if err := q.UpdateUserPassword(ctx, dbgen.UpdateUserPasswordParams{
+		ID: userID, PasswordHash: &hash,
+	}); err != nil {
+		return fmt.Errorf("update password: %w", err)
+	}
+	return nil
+}
+
 // ChangePassword updates a password and logs out every other session.
 func (s *Service) ChangePassword(ctx context.Context, userID, keepSession uuid.UUID, current, next string) error {
 	if err := validatePasswordLength(next, "new_password"); err != nil {
@@ -590,14 +621,8 @@ func (s *Service) ChangePassword(ctx context.Context, userID, keepSession uuid.U
 		return ErrInvalidCredentials
 	}
 
-	hash, err := s.hasher.Hash(next)
-	if err != nil {
+	if err := WritePassword(ctx, s.q, s.hasher, userID, next); err != nil {
 		return err
-	}
-	if err := s.q.UpdateUserPassword(ctx, dbgen.UpdateUserPasswordParams{
-		ID: userID, PasswordHash: &hash,
-	}); err != nil {
-		return fmt.Errorf("update password: %w", err)
 	}
 
 	// Anyone holding the old password must lose their sessions; that is the

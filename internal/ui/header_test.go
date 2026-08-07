@@ -25,10 +25,13 @@ const (
 // them from the fixture means a page that quietly stops carrying an identity
 // fails this test instead of silently lowering the expected count.
 //
-// The invitation, signup and verification pages join them for a different
-// reason from the other three: each is served to somebody who has no account at
-// all, which is the whole point of them, so there is no identity to draw.
-var chromelessPages = []string{"login", "setup", "error", "invite", "signup", "verify"}
+// The invitation, signup, verification and the two recovery pages join them for
+// a different reason from the other three: each is served to somebody with no
+// session — no account at all, in the first three, and a lost password in the
+// last two — which is the whole point of them, so there is no identity to draw.
+var chromelessPages = []string{
+	"login", "setup", "error", "invite", "signup", "verify", "forgot", "reset",
+}
 
 // hasOrganization reads the shell flag out of a page's test data.
 //

@@ -171,7 +171,7 @@ its own pass just wrote rather than racing it.
 | `signup-purge` | 1h | Deletes pending registrations whose verification window has lapsed, and consumed ones past their short retention. Runs only where self-serve sign-up is possible; it exports `linkctrl_job_runs_total` like every other job and was the one `withLeadership` job with no row in this table until 0.2.0 ([F45](build-notes/deferred-findings.md)), so an operator reading it for the set of jobs to watch was one short. |
 | `domain-verification` | 1h | Re-reads every registered hostname's DNS TXT challenge. A hostname that starts passing begins being served without anybody pressing anything; one that stops passing keeps serving for `DOMAIN_VERIFY_GRACE` — a day by default — with the owning workspace notified at the **first** failure, and then stops being served on every replica. **This is the only job whose failure takes something offline**, which is why the window is long and why the warning comes early; the runbook is in [deployment.md](deployment.md#custom-domains). A pass that changed anything logs `custom domain verification` with the counts. **Serving hostnames are checked before registered-but-unserved ones**, so the stop above can only ever be delayed by other serving hostnames — never by a pile of registrations, which anybody can create and whose place in the queue a rename resets. A domain renamed while its check was in flight logs `a domain changed while its verification was in flight` and verifies nothing; one line is an owner renaming at an unlucky moment, a stream of them is somebody trying to have a check of one name land on another. `DOMAIN_VERIFY_INTERVAL=0` switches it off, which also removes the only thing that would ever stop serving a hostname whose record has gone. |
 | `host-reload` | `DOMAIN_VERIFY_INTERVAL` | Re-reads this replica's verified-hostname set from Postgres. **The only job here that does not take leadership, and that is the point**: the set is in-process and every replica holds its own, so a reload the leader performs does nothing for the other three. It is the backstop Redis pub/sub cannot be — pub/sub is at-most-once, so a published invalidation that is simply lost while the subscription stays healthy is never noticed, and an instance with no Redis has no subscriber at all. Before this, such a replica served whatever it last knew until it restarted. One query against a table of tens of rows; a failure is logged and the replica keeps the set it has. `DOMAIN_VERIFY_INTERVAL=0` switches it off with the pass. |
-| `housekeeping` | 1h | The reapers. Hard-deletes links whose 30-day trash window has passed — reserving any alias that ever received traffic in the same statement, so it is never reissued — and deletes sessions, revoked API keys and finished outbox rows past their retention. Each purged link is logged by alias; that log line is the only record of the deletion. |
+| `housekeeping` | 1h | The reapers. Hard-deletes links whose 30-day trash window has passed — reserving any alias that ever received traffic in the same statement, so it is never reissued — and deletes sessions, revoked API keys, spent and lapsed password-reset tokens, and finished outbox rows past their retention. Each purged link is logged by alias; that log line is the only record of the deletion. |
 
 All of them run once at startup rather than waiting a full interval, so a fresh
 instance has current numbers — except `host-reload`, whose boot pass is process
@@ -330,9 +330,9 @@ defeat the bound that makes delegation safe. Somebody holding it appoints
 reviewers, and reviewers appoint nobody.
 
 That leaves one case — the founding account is gone, or was never the operator's,
-or its password is lost and this product has no password reset. It is the
-operator's to fix, because they have the box and the person who lost the account
-does not:
+or its password is lost on an instance with no mailer, where the product's own
+password reset has nothing to send with. It is the operator's to fix, because
+they have the box and the person who lost the account does not:
 
 ```sh
 $ lctl instance principal show

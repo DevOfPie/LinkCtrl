@@ -252,6 +252,10 @@ file. Append a row when you append an entry.
 | [M50.5: where an uploaded logo lives](#2026-08-07--m505-where-an-uploaded-logo-lives) | D134, owner-set. The answer to the phase's one pre-filed question, and what it obliges M50.5 to measure before M57 is written |
 | [M50.5: the owner overrules D136 — the default code gets a logo too](#2026-08-07--m505-the-owner-overrules-d136-the-default-code-gets-a-logo-too) | Owner-set. Why the bullet counts capabilities rather than operations, why the shorthand and not a reserved slug, and what D130 is protected from |
 | [M50.6: the logo reference that is still not a reference](#2026-08-07--m506-the-logo-reference-that-is-still-not-a-reference) | An amendment, not a decision. Two files said M50.6 fills a Phase 1 promise; D134 is what made that false, one milestone before this one |
+| [M51: the migration number this run used up](#2026-08-07--m51-the-migration-number-this-run-used-up) | An amendment, not a decision. A milestone file reserved a number two later milestones then took, and the third kind of drift this phase has produced |
+| [M51: the mail-free instance, and the one rule this product breaks on purpose](#2026-08-07--m51-the-mail-free-instance-and-the-one-rule-this-product-breaks-on-purpose) | D143: why recovery refuses instead of degrading when `SMTP_HOST` is unset, the two alternatives that were refused, and why this refusal names its reason where the sign-up form's does not |
+| [M51: what the mailbox is told, and how long the link lives](#2026-08-07--m51-what-the-mailbox-is-told-and-how-long-the-link-lives) | D144: one unavailable template rather than two and what that costs a suspended account's owner; the login limiter as the only bound and the mail it sends to strangers; one hour against signup's day; and the response that carries no timestamp so there is no second value to keep identical |
+| [M51: what a completed reset ends, what it starts, and where the record goes](#2026-08-07--m51-what-a-completed-reset-ends-what-it-starts-and-where-the-record-goes) | D145: every session and every sibling token, no new session, and API keys deliberately untouched; `auth.WritePassword` as one function rather than two call sites that agree; and the first audit action in the product written by somebody holding no credential, which is why its row belongs to no organization |
 | [M50.5: the shorthand that carries a logo, and the row it has to write](#2026-08-07--m505-the-shorthand-that-carries-a-logo-and-the-row-it-has-to-write) | D139: what the owner's ruling became — two more members of D133's family, the row a `bytea` column obliges a code with no row to acquire, and the style it is written at; the multipart body the dashboard needs because a file cannot travel in a urlencoded form; and the four sabotages |
 | [M50.5: the first file this product accepts](#2026-08-07--m505-the-first-file-this-product-accepts) | D135–D138: the caps as numbers and the worst-case row D134 was owed, including why the upload cap does not bound the database; why only a named code carries a logo and what gap that leaves; what an orphan even is once the bytes are the row; and why an upload does not inherit the API's rate limit |
 | [M48: the panel, the thumbnail that could not go where it was asked, and where a notification leads](#2026-08-07--m48-the-panel-the-thumbnail-that-could-not-go-where-it-was-asked-and-where-a-notification-leads) | D123–D125: a panel is a route first and a popup second, and why that is not D24 reversed or D120 reversed; the QR thumbnail stays below the edit form because M47's fold test refuses a picture above it, and what went in the heading row instead; a map rather than a switch so that *has a mapping* is a question code can ask; the two kinds that lead nowhere and say so; three of seven kinds the demo has never seeded and why no coverage row demands them; and the permission a test fixture had been missing since M47, which hid three sections of the link page from every test that renders it |
@@ -21935,3 +21939,193 @@ nothing builds — m50.6.md's *Deliberately not done* already says so and points
 [M58](phase-details/m58.md)'s documentation sweep, which is where the comment
 gets trued up rather than here. `docs/data-model.md` was corrected by the worker
 under the standing documentation approval and already reads this way.
+
+
+## 2026-08-07 — M51, the migration number this run used up
+
+Amendments under [phase-loop.md](phase-loop.md#amending-a-bullet). Three facts,
+no assertions.
+
+**One, and it is a kind this phase has not seen before.** m51.md reserved *"the
+next free `037xx` migration"* and argued the number in a note of its own — that
+`00200` is an area marker rather than a free band, so the right move is to take
+the next number. It was right when written. Then [M50](phase-details/m50.md) took
+`03700` and [M50.5](phase-details/m50.5.md) took `03800`, both earlier in the same
+unattended run, and the number m51.md reserved was gone before m51.md was read.
+Amended to `03900`. **The reasoning is untouched**, which is the test of an
+amendment: *take the next number* is exactly as true at 03900 as at 03700, and it
+is what the note was written to assert.
+
+This is the third distinct kind of drift this phase has produced, and naming the
+three together is worth more than the individual corrections:
+
+| Kind | Cause | Defence |
+| --- | --- | --- |
+| A citation into Go | a later milestone moved the code | cite the symbol name beside the number |
+| A claim a decision falsified | an answered question reached a file written while it was open — [D134](#2026-08-07--m506-the-logo-reference-that-is-still-not-a-reference) | when answering a filed question, check every milestone file written while it was open, not only the ones the entry names |
+| **A reserved resource** | an earlier milestone consumed it | **do not reserve; say *the next free one* and resolve it at [step 1](phase-loop.md#1-validate)** |
+
+The third is the cheapest to avoid and the easiest to get wrong, because
+reserving a number reads like precision. It is a claim about what other
+milestones will not do.
+
+**Two.** `internal/httpx/router.go:472-512` for the public route block became
+`:532-572`, and the login limiter it names — the `guard(...)` on `POST /login` —
+moved from `:497` to `:535`. Four milestones added routes to that file this run.
+
+**Three.** *"`mail.Enqueuer` is nil when `SMTP_HOST` is unset
+(`internal/config/config.go:344`)"* pointed at `SMTP_USERNAME`'s field tag. The
+declaration is at `:340`, and the place the nil is actually produced is
+`cmd/linkctrl/main.go:368` — *"no sender, no job, and a nil Enqueuer at every
+consumer"*. The citation now names both, because the bullet's claim is about the
+nil rather than about the variable.
+
+**What held.** `01400_signup.sql:26`, `internal/auth/session.go:113` and `:124`,
+`internal/httpx/web_keys.go:272`, `internal/auth/service.go:374` and `:378-379`,
+`internal/signup/signup.go:99`, `internal/ui/mail.go:49` and `:77`,
+`03200_mail_body_scrub.sql:47`, and `cmd/linkctrl/jobs.go:743` — ten references,
+all exact. Both migration citations held, as every migration citation in this
+phase has.
+
+
+## 2026-08-07 — M51, the mail-free instance, and the one rule this product breaks on purpose
+
+D143. **A reset request on an instance with no `SMTP_HOST` refuses, out loud,
+and writes nothing.** Both surfaces: `503 no-mailer` from the API, and a page
+that replaces the form with the reason from the dashboard. The link on the
+sign-in page is not drawn at all.
+
+This is the one place in the product that does not degrade mail-free, and it is
+worth saying why the pattern D1 established does not reach here. Everywhere else
+the mailer is an *addition*: an invitation still has a copyable link, a
+notification is still in the inbox, an audit-growth warning still reaches the
+owner. Recovery has no other channel — the mail **is** the mechanism — so
+"degrading" would mean answering *check your inbox* to somebody whose instance
+can send nothing. That is worse than the lockout [F141](deferred-findings.md)
+describes, because it replaces a knowable absence with a person waiting for a
+message that was never queued.
+
+**What was considered and refused.** Answering `202` and queueing a row for a
+relay that may arrive later: the row would sit pending until the abandon sweep
+took it, and the person would have gone to the operator a week too late. And
+leaving the routes unregistered on a mail-free instance, so the paths 404: that
+makes *this instance cannot send mail* indistinguishable from *there is no such
+page*, which is exactly the distinction the signup pages are registered on a
+closed instance to preserve.
+
+**The cost is stated rather than hidden, and it is the milestone's real risk.**
+`SMTP_HOST` unset is the shipped default, so a default instance ships a route
+that refuses. m51.md names this and says what to do if it turns out to be the
+common case rather than the edge: a documentation change, not a second
+mechanism. The demo seeder configures a mailer, so the demo shows the working
+path. `cmd/linkctrl/main.go` warns once at boot, beside the signup warning and
+for the same reason — the page that says so is one nobody is watching.
+
+**Two smaller things follow from it.** `Reset` re-checks the mailer as well as
+`Request`, so an instance whose relay was removed after a link went out is not
+still completing resets from mail it can no longer send — the shape
+`signup.Verify` has for the effective mode, and D7's reasoning that a bound is a
+state the instance is in rather than a moment a request passed through. And the
+refusal *names its reason*, unlike `writeSignupClosed`, which deliberately does
+not: there is nothing to protect, since an instance with no relay already says
+so at the sign-up form, and "ask the operator" without the sentence explaining
+why is advice nobody can act on.
+
+
+## 2026-08-07 — M51, what the mailbox is told, and how long the link lives
+
+D144. Two answers, and they are here rather than in the code because both are
+choices somebody could have made differently.
+
+**One template for every address that gets no link, not two.** An address with
+no account and an account this mechanism refuses — suspended, or with no
+password to replace — receive the same `password-reset-unavailable` message,
+which says no link was created, names both possibilities, and says the operator
+is the only person who can tell them which.
+
+The stance it inherits is signup's, settled at F13 and shipped as
+`account-exists.txt`: the channel that proves an address exists is the mailbox,
+and the person holding the mailbox is entitled to know somebody tried. What is
+new is the *merging*, and the argument for it is that splitting would put the
+distinction back into the one channel allowed to carry it while also telling a
+suspended account's owner their status because a stranger filled in a form. The
+cost is real and is accepted: a person whose account is genuinely suspended gets
+a vaguer message than they could have. They also get a working answer — *ask the
+operator* — which is the only action available in either case.
+
+**The same stated cost signup accepted comes with it.** This sends mail to
+addresses that never registered, which is what an attacker gets for free. It is
+bounded by the login limiter and by nothing else, and the limiter is shared with
+`POST /login` on purpose: a per-route bucket would let an attacker burn one
+without touching the other. Named here so a later finding is a known cost rather
+than a surprise.
+
+**One hour, against signup's day.** `recovery.TTL` is deliberately shorter than
+`signup.VerificationTTL`, and the reason is what the two tokens buy. A
+verification link creates an account whose password its holder does not know; a
+reset link **sets a password on an account that already exists**. Nobody is ever
+stuck waiting for it, because asking again supersedes the outstanding link —
+which is also why superseding is a `consumed_at` write rather than a delete:
+a registration nobody completed is a waiting-room row and no record of anything,
+where a second reset request is evidence somebody asked to recover this account
+twice.
+
+**And the response carries no timestamp at all.** `signup.Registered` returns an
+`ExpiresAt` and had to truncate it to microseconds so Go's nanosecond clock did
+not answer, in three fractional digits, the question the status code no longer
+did. `recovery.Requested` holds the normalized address and nothing else, so
+there is no second value to keep identical. The mail says when the link lapses,
+and the mail only reaches somebody who has an account.
+
+
+## 2026-08-07 — M51, what a completed reset ends, what it starts, and where the record goes
+
+D145. The blast radius, and the two things outside it.
+
+**Every session on the account, with none kept.** `ChangePassword` keeps the
+browser the change was made in; there is no session here to keep, and the whole
+premise of a recovery is that somebody else may be holding one. Every
+outstanding reset token goes with them — the one presented and its siblings —
+because a recovery that leaves a second live token behind has recovered nothing.
+
+**It starts no session either**, and that is a choice rather than a limitation.
+The reset has just revoked every session on the account; answering with a new
+one would put back, in the same breath, the kind of credential the recovery
+exists to displace. Typing the password at the sign-in form is also the proof it
+is known. The setup and invitation forms do sign somebody straight in, and both
+of them had the password in hand from a form they had just authenticated.
+
+**API keys are untouched**, and the omission is a decision. A key is a separate
+credential with its own rotation story (D9, D87); revoking them on a password
+reset would turn a recovery into an outage for whatever CI job the account's key
+was minted for. Stated in the mail, on the page and in the API document, so it is
+a property somebody can rely on rather than a gap they discover.
+
+**One password-writing path, and it is now a function rather than an
+agreement.** m51.md asked for the new hash to go through the same argon2 path
+`POST /account/password` uses. Two call sites doing the same two steps would
+satisfy that sentence and not its point, so `auth.WritePassword` was extracted
+and `ChangePassword` calls it too. It takes the `*dbgen.Queries` rather than
+reading the service's own, which is what lets recovery pass its transactional
+handle: spending the token and setting the password must not be separable. It
+also carries a thing neither call site should have to remember — the write
+clears `failed_login_count` and `locked_until`, so an account recovered while
+locked out by the guessing that made its owner reset it does not then refuse the
+new password.
+
+**The audit entry has no organization, and that is the correct row rather than a
+missing field.** `password.reset` is the first action in `audit.AllActions()`
+written by somebody holding no credential, so there is no workspace they were
+standing in and no honest way to choose among the organizations their account may
+belong to — stamping one is the misattribution [F36](deferred-findings.md)
+named. The record lands with
+a NULL `organization_id` and is read through `audit.read.instance`, held by the
+principal, which is the right audience for *an account on this box was
+recovered*. The actor is the account itself, matching `invitation.redeemed`:
+nobody else was present, and `system` would lose the one fact worth recording.
+Metadata is empty and the network fact is the request's IP prefix, which
+`audit.Record` takes from the context and reduces there.
+
+**An ordinary password change is still not audited**, and its absence has
+minting a key's reason: the person held a session, so the session is the record.
+A reset is the case where they did not.

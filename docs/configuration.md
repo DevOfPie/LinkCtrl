@@ -573,6 +573,13 @@ It cannot be granted to an API key — see [SECURITY.md](SECURITY.md).
 it does with this section deleted: notifications are delivered in the dashboard
 and nowhere else, nothing is queued, and no outbound connection is ever made.
 
+**One feature does not degrade — it refuses.** Account recovery is delivered by
+mail and has no second channel, so with no relay there is no *forgot your
+password?* link on the sign-in page, `/forgot` says the instance cannot send
+mail, and `POST /api/v1/auth/forgot` answers `503`. The server says so once at
+boot, beside the sign-up warning. On such an instance a forgotten password is
+still the operator's to fix, with database access.
+
 **Turning it off again is not the same as never turning it on.** Messages queued
 while a relay was configured stay in the outbox, and with no relay there is
 nothing to deliver them: the drain does not run. The scheduler abandons them

@@ -61,6 +61,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/platform/httpserver"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/postgres"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/redis"
+	"github.com/DevOfPie/LinkCtrl/internal/recovery"
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
 	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
@@ -442,6 +443,33 @@ func run(cfg config.Config, _ io.Writer) error {
 			slog.String("effective_signup_mode", string(signupSvc.Effective())))
 	}
 
+	// Account recovery (M51). Built beside signup because it is the same shape —
+	// a token mailed to an address, spent once — and after the mailer for the
+	// reason invitations are.
+	//
+	// **The one consumer whose nil mailer is a refusal rather than a
+	// degradation.** Everything else in this tree drops to a lesser behaviour
+	// when SMTP_HOST is unset; the mail here *is* the mechanism, so recovery
+	// says so out loud instead of succeeding into a void (F141).
+	recoverySvc, err := recovery.NewService(pools.App, recovery.Config{
+		AppURL: cfg.AppOrigin(),
+		Hasher: authSvc.Hasher(),
+		Mail:   recoveryMailer(mailSvc),
+		Audit:  auditSvc,
+		Log:    log,
+	})
+	if err != nil {
+		return err
+	}
+	// Said once, at boot, for the reason the signup warning above is: an
+	// operator who has configured no relay has also switched off the only route
+	// back into a locked-out account, and the page that says so is one nobody
+	// is watching.
+	if !recoverySvc.MailerConfigured() {
+		log.Warn("no mailer is configured, so a forgotten password cannot be reset in the product; " +
+			"the operator's only route back into an account is setting its hash directly")
+	}
+
 	// Invitations. Built after the mailer, because whether one exists is the
 	// whole difference between "we emailed it" and "copy this link" — and a nil
 	// Enqueuer here is the mail-free instance, not an error.
@@ -797,6 +825,7 @@ func run(cfg config.Config, _ io.Writer) error {
 
 	roller := analytics.NewRoller(pools.App, log)
 	jobs := newJobRunner(pools.App, salts, roller, log, metrics, notifySvc, mailSvc, signupSvc,
+		recoverySvc,
 		linkSvc, webhookSvc, automationSvc, hostCache, cfg.Domains,
 		cfg.Analytics.RetentionDays, cfg.Audit.RetentionDays, cfg.Audit.SizeWarnBytes)
 	jobs.start(ctx)
@@ -856,6 +885,7 @@ func run(cfg config.Config, _ io.Writer) error {
 		Invites:  inviteSvc,
 		Team:     teamSvc,
 		Signup:   signupSvc,
+		Recovery: recoverySvc,
 		Disputes: disputeSvc,
 		Instance: instanceSvc,
 		Metrics:  metrics,
@@ -863,8 +893,8 @@ func run(cfg config.Config, _ io.Writer) error {
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
 			Links: linkSvc, Stats: stats, Notify: notifySvc, Invites: inviteSvc,
-			Team: teamSvc, Signup: signupSvc, Disputes: disputeSvc,
-			Instance: instanceSvc,
+			Team: teamSvc, Signup: signupSvc, Recovery: recoverySvc,
+			Disputes: disputeSvc, Instance: instanceSvc,
 		},
 	})
 
@@ -999,6 +1029,17 @@ func inviteMailer(m *mail.Service) invite.Enqueuer {
 // the signup ceiling to `invite` (D1), so getting this conversion wrong would
 // offer open sign-ups on an instance that cannot verify an address.
 func signupMailer(m *mail.Service) signup.Enqueuer {
+	if m == nil {
+		return nil
+	}
+	return m
+}
+
+// recoveryMailer is signupMailer for the recovery service, and exists for the
+// same typed-nil reason. It matters most here: a nil Enqueuer is what makes
+// account recovery refuse rather than degrade (M51), so a typed nil sneaking
+// through as a non-nil interface would offer a reset the instance cannot send.
+func recoveryMailer(m *mail.Service) recovery.Enqueuer {
 	if m == nil {
 		return nil
 	}

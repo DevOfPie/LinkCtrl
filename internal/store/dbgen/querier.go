@@ -179,6 +179,24 @@ type Querier interface {
 	// two when both are set. A limit below one can never match, which is correct: a
 	// link nobody may follow.
 	ConsumeClickBudget(ctx context.Context, arg ConsumeClickBudgetParams) (ConsumeClickBudgetRow, error)
+	// Spends every unconsumed token for one account.
+	//
+	// **One statement, called from both ends of the flow**, because the two needs
+	// are the same statement and writing it twice would be two places for the
+	// predicate to drift.
+	//
+	// Requesting a reset calls it to supersede whatever was outstanding, so a fresh
+	// request takes the slot and the previous link stops working at the same
+	// moment — the shape DeleteOutstandingRegistration has for registrations,
+	// except consumed rather than deleted: a superseded reset is evidence somebody
+	// asked to recover this account twice, and the purge is what removes it later.
+	//
+	// Completing a reset calls it to spend the token just used *and its siblings*,
+	// because a recovery that leaves a second live token behind has recovered
+	// nothing: whoever else requested one — including whoever the person is
+	// recovering from — would still hold a working link to the account whose
+	// password just changed.
+	ConsumePasswordResets(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Spends a registration. Conditional on it still being unspent, so this could
 	// not succeed twice even without the lock above; zero rows rolls the
 	// transaction back.
@@ -435,6 +453,11 @@ type Querier interface {
 	CreateLink(ctx context.Context, arg CreateLinkParams) (Link, error)
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
 	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (Organization, error)
+	// Account recovery: the reset tokens a forgotten password is repaired with
+	// (M51). The account's own row is written through query/auth.sql's
+	// UpdateUserPassword, so there is one password-writing statement in the product
+	// and not two.
+	CreatePasswordReset(ctx context.Context, arg CreatePasswordResetParams) (PasswordReset, error)
 	// Self-serve signup: the registrations waiting on an address to be proven
 	// (M29). The mode itself is `LINKCTRL_SIGNUP_MODE` and is never read from the
 	// database (D38), so nothing here answers what the instance admits.
@@ -876,6 +899,14 @@ type Querier interface {
 	// path that is already writing a row, rather than carrying a name on every
 	// identity for the one surface that needs it.
 	GetOrganizationName(ctx context.Context, id uuid.UUID) (string, error)
+	// The reset lookup, inside the transaction that spends the row.
+	//
+	// FOR UPDATE, so two submissions of the same link serialize and the second sees
+	// the row the first consumed. The join is what makes the account's own state
+	// reachable in one round trip: `status` and `password_hash` are both refusals
+	// this path has to make, and reading them separately would leave a gap between
+	// the check and the write.
+	GetPasswordResetByTokenHash(ctx context.Context, tokenHash []byte) (GetPasswordResetByTokenHashRow, error)
 	// Verification's lookup, inside the transaction that spends the row.
 	//
 	// FOR UPDATE, so two clicks on the same link serialize and the second sees the
@@ -1891,6 +1922,13 @@ type Querier interface {
 	// their bodies when they finished; this is what stops the record of *that* piling
 	// up. Lowering it would not shorten any credential's exposure.
 	PurgeFinishedMail(ctx context.Context, maxAgeDays int32) (int64, error)
+	// The sweep. Removes tokens nobody used past their expiry, and spent rows past
+	// the same short window a spent registration gets.
+	//
+	// Both, because neither is a record of anything a reader needs: the audit log
+	// carries that the reset happened, and the password itself is the durable
+	// evidence. This table is a waiting room, not an archive.
+	PurgeFinishedPasswordResets(ctx context.Context, arg PurgeFinishedPasswordResetsParams) (int64, error)
 	//
 	// Delivered and abandoned rows past the retention window. The delivery log is a
 	// record of what was attempted, not an archive; without this it is a table that

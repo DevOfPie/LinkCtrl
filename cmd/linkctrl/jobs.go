@@ -20,6 +20,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/mail"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
+	"github.com/DevOfPie/LinkCtrl/internal/recovery"
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
 	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
@@ -66,6 +67,10 @@ type jobRunner struct {
 	// the service is always built — but held as a pointer so a test runner
 	// without one skips the sweep rather than panicking.
 	signup *signup.Service
+	// recovery sweeps password-reset tokens (M51), on the same terms as signup
+	// above and for the same reason: a waiting-room table with no sweep is the
+	// one shape that grows forever with nothing watching it.
+	recovery *recovery.Service
 	// links re-verifies custom domains (M40). Nil skips the pass entirely,
 	// which is what a runner built without the link service gets.
 	links *link.Service
@@ -143,7 +148,8 @@ const (
 
 func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analytics.Roller,
 	log *slog.Logger, metrics *observability.Metrics, notifier *notify.Service,
-	mailer *mail.Service, signups *signup.Service, links *link.Service,
+	mailer *mail.Service, signups *signup.Service, resets *recovery.Service,
+	links *link.Service,
 	webhooks *webhook.Service, automations *automation.Service, hosts *redirect.HostCache,
 	domains config.DomainsConfig,
 	analyticsRetentionDays, auditRetentionDays int, auditSizeWarnBytes int64,
@@ -161,6 +167,7 @@ func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analyt
 		auditSizeWarnBytes:     auditSizeWarnBytes,
 		mailer:                 mailer,
 		signup:                 signups,
+		recovery:               resets,
 		links:                  links,
 		//nolint:gosec // G115: range-checked above.
 		domainVerifyInterval: domains.VerifyInterval,
@@ -785,6 +792,27 @@ func (j *jobRunner) housekeeping(ctx context.Context) error {
 		errs = append(errs, fmt.Errorf("delete expired sessions: %w", err))
 	} else if n > 0 {
 		j.log.Debug("expired sessions deleted", slog.Int64("count", n))
+	}
+
+	// Reset tokens nobody used, and spent ones past the same short window a
+	// spent registration gets (M51).
+	//
+	// Here rather than in a job family of its own, deliberately: a new advisory
+	// key and a new goroutine to delete a handful of rows an hour is cost
+	// without a reason, and this pass already holds the lock and already runs
+	// the two sweeps this one is shaped like. Batched at purgeBatch for the
+	// reason the link purge is — a burst drains over a few runs instead of
+	// holding row locks for one long one.
+	//
+	// Debug rather than Info. Unlike the link purge, nothing irreversible about
+	// a person's data goes here: the token is already dead by expiry or by use,
+	// and the audit record of the reset is what survives.
+	if j.recovery != nil {
+		if n, err := j.recovery.PurgeFinished(ctx, purgeBatch); err != nil {
+			errs = append(errs, err)
+		} else if n > 0 {
+			j.log.Debug("finished password resets purged", slog.Int64("count", n))
+		}
 	}
 
 	// Uploaded QR logos belonging to links that are already deleted (M50.5).

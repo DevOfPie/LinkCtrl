@@ -1,0 +1,42 @@
+{{define "content"}}
+<div class="mx-auto mt-16 max-w-sm">
+  <div class="mb-8 text-center">
+    <h1 class="text-2xl font-semibold tracking-tight">Choose a new password</h1>
+    <p class="mt-1 text-sm text-muted">On LinkCtrl</p>
+  </div>
+
+  {{if .Done}}
+  {{/* No session is started here, deliberately. The reset revoked every session
+       on the account, so signing this browser in would put back the one thing
+       the recovery exists to displace. Typing the password at the sign-in form
+       is also the proof it is known. */}}
+  <div class="rounded-lg border border-line bg-raised p-6 shadow-sm">
+    <h2 class="text-sm font-medium text-ink">Your password is set</h2>
+    <p class="mt-2 text-sm text-muted">Every session on the account has been signed out, including any you did not open. API keys are not affected and keep working.</p>
+    <a href="/login" class="mt-4 inline-block text-sm font-medium text-accent-ink hover:underline">Sign in</a>
+  </div>
+  {{else}}
+  <div class="rounded-lg border border-line bg-raised p-6 shadow-sm">
+    {{template "flash_error" .Error}}
+    <form method="post" action="/reset/{{.Token}}" class="space-y-4">
+      <div>
+        <label for="password" class="block text-sm font-medium text-ink">New password</label>
+        <input id="password" name="password" type="password" required minlength="12" autofocus autocomplete="new-password"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        <p class="mt-1 text-xs text-subtle">At least 12 characters. Length is the only rule.</p>
+        {{template "field_error" (index .FieldErrors "password")}}
+      </div>
+      <div>
+        <label for="confirm_password" class="block text-sm font-medium text-ink">Confirm new password</label>
+        <input id="confirm_password" name="confirm_password" type="password" required minlength="12" autocomplete="new-password"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        {{template "field_error" (index .FieldErrors "confirm_password")}}
+      </div>
+      <p class="text-xs text-subtle">Setting it signs out every session on the account. API keys are not affected.</p>
+      <button type="submit" class="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Set password</button>
+    </form>
+  </div>
+  <p class="mt-6 text-center text-sm text-muted"><a href="/login" class="font-medium text-accent-ink hover:underline">Back to sign in</a></p>
+  {{end}}
+</div>
+{{end}}

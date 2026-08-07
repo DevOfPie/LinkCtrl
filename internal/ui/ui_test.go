@@ -913,6 +913,26 @@ func pageData(t *testing.T) map[string]any {
 			"Token": "2ZQ3jd0eGkEaBcDeFgHiJkLmNoPqRsTuVwXyZ012",
 			"Error": "",
 		},
+		// Account recovery (M51). Both pages are drawn in the state that has the
+		// form: the three other states — sent, no mailer, done — are a heading and
+		// two paragraphs each, and rendering the form is what exercises the
+		// partials this test is looking for.
+		"forgot": map[string]any{
+			"Title": "Reset your password", "Nav": "", "Identity": (*identityStub)(nil),
+			"Sent": false, "NoMailer": false,
+			"Form":        map[string]string{"Email": "someone@example.com"},
+			"FieldErrors": map[string]string{"email": "that does not look like an email address"},
+			"Error":       "",
+		},
+		"reset": map[string]any{
+			"Title": "Choose a new password", "Nav": "", "Identity": (*identityStub)(nil),
+			"Token": "2ZQ3jd0eGkEaBcDeFgHiJkLmNoPqRsTuVwXyZ012",
+			"Done":  false,
+			"FieldErrors": map[string]string{
+				"password": "the password must be at least 12 characters",
+			},
+			"Error": "",
+		},
 	}
 
 	// Shell fields every page carries, supplied once rather than in each entry

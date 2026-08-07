@@ -24,6 +24,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
+	"github.com/DevOfPie/LinkCtrl/internal/recovery"
 	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/team"
 )
@@ -102,6 +103,19 @@ func newAPI(t *testing.T) *apiFixture {
 		t.Fatal(err)
 	}
 
+	// Account recovery (M51). Wired because the mailer above exists: with none
+	// its two endpoints refuse everything with 503, and the contract test would
+	// be replaying a refusal instead of the operation.
+	recoverySvc, err := recovery.NewService(pool, recovery.Config{
+		AppURL: cfg.AppOrigin(),
+		Hasher: authSvc.Hasher(),
+		Mail:   mailSvc,
+		Audit:  audit.NewService(pool),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	inviteSvc, err := invite.NewService(pool, invite.Config{
 		AppURL:      cfg.AppOrigin(),
 		TTL:         168 * time.Hour,
@@ -148,6 +162,7 @@ func newAPI(t *testing.T) *apiFixture {
 		Invites:  inviteSvc,
 		Team:     teamSvc,
 		Signup:   signupSvc,
+		Recovery: recoverySvc,
 		Disputes: disputeSvc,
 		Instance: instanceSvc,
 	}))

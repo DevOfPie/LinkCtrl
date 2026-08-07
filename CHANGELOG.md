@@ -10,11 +10,12 @@ whether an upgrade is safe:
 - **The REST API is `/api/v1`** and is a stable contract. A breaking change there
   becomes `/api/v2`, not a major version bump here.
 - **The product** is pre-1.0 while account lifecycle and identity are incomplete.
-  There is no account recovery — a forgotten password locks the account out
-  permanently — and no account deletion or erasure of any kind; MFA and SSO are a
-  later phase, and a dashboard redesign is planned for early Phase 3. Each of
-  those moves the product surface, so the version stays in the `0.x` range until
-  they have settled. `0.x` here means "the product surface may still move", not
+  There is no account deletion or erasure of any kind; MFA and SSO are a later
+  phase, and a dashboard redesign is under way. Account recovery was on this list
+  until 0.3.0 and has been built — a forgotten password is recoverable by the
+  person who forgot it, on an instance with a mailer configured. Each of the rest
+  moves the product surface, so the version stays in the `0.x` range until they
+  have settled. `0.x` here means "the product surface may still move", not
   "unfinished": everything documented as built is tested and exercised end to end.
   *(This read "pre-1.0 while Phase 2 is outstanding. Shared workspaces, folders
   and custom domains will change the dashboard and add tables" until 0.2.0 — all
@@ -26,6 +27,46 @@ migrations run at boot.
 ## [Unreleased]
 
 ### Added
+
+- **A forgotten password stops being permanent.** Until now the only route back
+  into an account whose password was lost was an operator editing an argon2 hash
+  in the database on somebody's behalf — true of every account on every instance,
+  including the one that administers the box. There is now a *forgot your
+  password?* link on the sign-in page, a `GET/POST /forgot` form behind it, and a
+  `GET/POST /reset/{token}` page that the emailed link lands on. The API has the
+  same pair: `POST /api/v1/auth/forgot` and `POST /api/v1/auth/reset`. Both are
+  unauthenticated, necessarily, and both share the sign-in rate limit rather than
+  getting one of their own.
+
+  **It needs a mailer, and with none it refuses out loud instead of pretending.**
+  `SMTP_HOST` unset is the shipped default. On such an instance the sign-in page
+  draws no link at all, `/forgot` says the instance cannot send mail and names
+  the operator's route, and the API answers `503`. Every other optional-mailer
+  feature in this product degrades to a lesser behaviour; this one cannot,
+  because the mail *is* the mechanism — being told to check an inbox nothing was
+  sent to is worse than being told there is no reset here.
+
+  **The form never says whether an address has an account.** Same page, same
+  status, same body and the same argon2 cost whatever you type. The answer goes
+  to the address: an address that cannot be recovered — no account, a suspended
+  one, or one that signs in some other way — receives a message saying no link
+  was created and pointing at the operator, which is what registration already
+  does for an address that is taken. The cost is stated: this sends mail to
+  addresses that never registered.
+
+  **What a completed reset does, in one list.** The link works once and lapses
+  after an hour; asking again replaces it. Every session on the account is
+  signed out, including any you did not open, and every other outstanding reset
+  link stops working. **API keys are not revoked** and keep working — a key is a
+  separate credential with its own rotation, and taking them out would turn a
+  recovery into an outage. No session is started: you sign in with the password
+  you just set. The reset is written to the instance-wide audit log as
+  `password.reset`, with the account as the actor and a network prefix rather
+  than an address.
+
+  A link that has been used, has lapsed, or names an account that cannot be
+  recovered is answered `404` — the same answer for all of them, so the endpoint
+  cannot be asked which.
 
 - **This product now accepts a file.** One kind of file, for one thing: an image
   uploaded against a QR code, over `PUT /api/v1/links/{id}/qr/logo` for the

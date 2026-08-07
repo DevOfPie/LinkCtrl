@@ -313,6 +313,15 @@ type Organization struct {
 	DeletedAt  *time.Time
 }
 
+type PasswordReset struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	TokenHash  []byte
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
+	ConsumedAt *time.Time
+}
+
 type PendingRegistration struct {
 	ID           uuid.UUID
 	Email        string

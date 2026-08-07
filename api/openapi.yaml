@@ -304,6 +304,139 @@ paths:
         "204":
           description: Session revoked, cookie cleared
 
+  /auth/forgot:
+    post:
+      tags: [auth]
+      operationId: requestPasswordReset
+      summary: Ask for a password reset link
+      description: |
+        Mails a single-use link to the address, if the address can be recovered
+        on this instance.
+
+        **The answer is `202` for every address**, with the same body and the
+        same argon2 cost, whether or not the address has an account and whether
+        or not that account can be recovered. Neither the response nor a
+        stopwatch says which. The answer goes to the address by mail — an
+        address that cannot be recovered receives a message saying no link was
+        created, which is the stance `POST /auth/register` already takes: the
+        channel that proves an address exists is the mailbox, and a status code
+        reaches whoever typed the address into the form.
+
+        The stated cost is that this sends mail to addresses that never
+        registered. It is bounded by the login limiter and it is the same bound
+        registration already accepted.
+
+        **This endpoint requires a configured mailer and refuses without one.**
+        It is the one place in this product that does not degrade when
+        `SMTP_HOST` is unset: the mail is the mechanism, so a request that
+        succeeded into a void would be worse than the lockout it was meant to
+        cure. With no relay the answer is `503`, and the operator's route back
+        into a locked-out account is setting the hash directly.
+
+        Two accounts are refused, silently, and each gets the "no link created"
+        mail: one whose status is not `active`, and one with no password to
+        replace. A suspended account is not recoverable by the person who lost
+        the password, and saying so is the operator's job.
+
+        Shares the login limiter with `POST /auth/login`, deliberately, so an
+        attacker cannot double their budget by alternating between the two.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "202":
+          description: >-
+            A message has been queued to the address. The same answer whether or
+            not it has an account, and the body carries nothing that varies.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [reset_requested]
+        "422":
+          $ref: "#/components/responses/Validation"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/NoMailer"
+
+  /auth/reset:
+    post:
+      tags: [auth]
+      operationId: completePasswordReset
+      summary: Spend a reset token and set a new password
+      description: |
+        Writes the new password through the same argon2 path
+        `POST /auth/password` uses, then **revokes every session on the
+        account** — including any the caller did not open, which is the whole
+        point of a recovery. API keys are deliberately not revoked: a key is a
+        separate credential with its own rotation story, and taking them out
+        here would make recovery an outage.
+
+        Every outstanding reset token for the account is spent at the same time,
+        not only the one presented. A recovery that left a second live token
+        behind would have recovered nothing.
+
+        **`404` is the answer to every refusal, and never `410`.** A token that
+        does not exist, one that has expired, one already used, an account whose
+        status is not `active` and an account with no password are
+        indistinguishable to a caller enumerating.
+
+        `204` rather than a session: the caller signs in with the password they
+        just set, which is also the proof they know it.
+
+        The token travels in the body rather than in the path. A URL reaches the
+        access log, the referrer header and the client's own history, and this
+        one sets a password — the browser form has no choice, because a link in
+        a mail is a URL, and a JSON client has no such excuse.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token, new_password]
+              properties:
+                token:
+                  type: string
+                  description: The token from the emailed link.
+                new_password:
+                  type: string
+                  minLength: 12
+      responses:
+        "204":
+          description: Password set; every session on the account revoked
+        "404":
+          description: |
+            The link is not valid. Expired, already spent, never existed, or an
+            account this mechanism refuses — the five are one answer on purpose.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          $ref: "#/components/responses/Validation"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/NoMailer"
+
   /auth/password:
     post:
       tags: [auth]
@@ -4099,6 +4232,18 @@ components:
           schema:
             type: integer
             minimum: 1
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
+    NoMailer:
+      description: |
+        This instance has no SMTP relay configured, so it cannot send the mail
+        the operation depends on. `503` rather than `403` or `404`: the
+        mechanism exists and is unavailable rather than forbidden or absent, and
+        a client that retries after the operator configures a relay will
+        succeed.
       content:
         application/problem+json:
           schema:

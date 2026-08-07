@@ -53,7 +53,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M50](m50.md) | More than one QR code per link, told apart in the analytics | M49 | done |
 | [M50.5](m50.5.md) | The first file this product accepts | M50 | done |
 | [M50.6](m50.6.md) | A logo in the middle of a QR code | M50.5 | done |
-| [M51](m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | not started |
+| [M51](m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | done |
 | [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | not started |
 | [M52](m52.md) | Account deletion and subject erasure | M50.5 · M51 *(ordering)* | not started |
 | [M53](m53.md) | A second factor: TOTP, enrolment, and recovery codes | M51 | not started |

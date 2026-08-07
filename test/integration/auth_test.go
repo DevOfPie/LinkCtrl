@@ -91,13 +91,19 @@ func TestMigrationsProduceExpectedSchema(t *testing.T) {
 	// principal (D98) — a permission held by a person over the whole instance
 	// rather than through a membership, which is the one thing this schema had no
 	// way to express and the reason F15, F31 and F36 all bottomed out at D38.
+	// And password_resets is M51's account recovery — the third table in this
+	// schema holding a bearer-shaped secret as its SHA-256, after invitations and
+	// pending_registrations, and the one that closed F141: until it existed a
+	// forgotten password was permanent on every instance.
+	//
 	// Each is live and typed rather than dormant jsonb, because the feature that
 	// reads it arrived in the same commit. The number moves and the sentence says
 	// why, rather than the count silently growing whenever somebody adds a table.
-	if tables != 38 {
-		t.Errorf("got %d tables, want 38 (all 20 Plan.md entities, plus mail_outbox, "+
+	if tables != 39 {
+		t.Errorf("got %d tables, want 39 (all 20 Plan.md entities, plus mail_outbox, "+
 			"invitations, pending_registrations, blocked_destinations, "+
-			"destination_disputes, link_click_budget and instance_grants)", tables)
+			"destination_disputes, link_click_budget, instance_grants and "+
+			"password_resets)", tables)
 	}
 
 	// The UTC guarantee the partition scheme depends on.

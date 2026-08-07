@@ -327,9 +327,11 @@ func (s *Service) Principals(ctx context.Context) ([]Principal, error) {
 // the product deletes a `users` row — so a conferred principal cannot be *lost*
 // through the product, but the account it sits on can be. A forgotten password
 // with no mailer configured, a departed colleague, an instance whose earliest
-// surviving account was never the operator's: each of those ended at `psql`, and
-// [F141] establishes that this product has no account recovery at all, so the
-// principal's password and the principal are the same thing to lose.
+// surviving account was never the operator's: each of those ended at `psql`. F141
+// is now closed by M51 and narrows the first of the three rather than removing
+// it — the password can be reset by its owner **when a mailer is configured**, and
+// with none the principal's password and the principal are still the same thing
+// to lose, which is the case this command exists for.
 //
 // **It takes no actor, and that is the design rather than an omission.** The
 // authority here is the shell. An operator running `lctl` has filesystem and

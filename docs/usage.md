@@ -16,6 +16,7 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 | `/links/{id}` | Everything about one link: edit destination, alias, title, description, expiry and tags; per-window analytics (7/30/90 days) with device, browser, OS, referrer, language and country breakdowns, each with a share ring, plus a world choropleth over the country figures; recent activity; archive, restore and delete. |
 | `/keys` | Mint, list and revoke API keys, and choose whether a new one reaches one workspace or the organization. Rotation is not here: it replaces the credential that made the request, and a browser session is not one. |
 | `/links/{id}/qr` | The link's QR code, its style form and the downloads, on their own page. The same thing the **QR code** panel on the link's page opens — see [On-demand panels](#on-demand-panels). |
+| `/forgot`, `/reset/{token}` | Recovering a forgotten password. Public, because whoever needs them has no session. `/forgot` mails a single-use link and answers the same way whatever address you type; `/reset/{token}` is where that link lands. **Both need a mailer** — see [Recovering a forgotten password](#recovering-a-forgotten-password). |
 | `/notifications` | Things the instance wanted you to know about. Opening one goes to what it is about and marks it read; a read one can be marked unread again. |
 | `/disputes` | The review queue: destinations somebody was refused and has asked you to look at. Needs `destinations.review`, which is held instance-wide rather than by a role. The account that claimed the instance also appoints other reviewers here. |
 | `/disputes/reviewers` | Who reviews disputes, and appointing or withdrawing them. Needs `instance.admin`, and the queue above shows the list in summary. Also the **Change who reviews** panel on `/disputes`. |
@@ -786,10 +787,11 @@ Every failure is `application/problem+json`. Branch on `type`, never on prose:
 | --- | --- |
 | `401` | No valid credential — or the credential itself is being rejected. Invalid, revoked and expired keys are indistinguishable on purpose, and so is every sign-in failure: a wrong password, an unregistered address, a suspended account and an account locked out by repeated failures are one answer, because telling them apart says whether an address has an account here. |
 | `403` | Authenticated but not permitted. The detail names the missing permission, which is useful rather than a disclosure. |
-| `404` | Does not exist, or belongs to a workspace you cannot see. Someone else's resource is never a `403`, so ids cannot be probed. |
+| `404` | Does not exist, or belongs to a workspace you cannot see. Someone else's resource is never a `403`, so ids cannot be probed. A spent, lapsed or unknown password-reset token is `reset-not-valid` here rather than `410`, and so is a token for an account that cannot be recovered — `410` would concede that the token existed. |
 | `409` | Alias already taken. |
 | `422` | Validation failed; `errors` names each field. |
 | `429` | `rate-limited`: your address is going too fast. `Retry-After` says how long to wait, and waiting works. This used to be two types — the other was `account-locked` — and it is one now, because which of them you got answered whether the address you named is registered. A locked account is a `401` like every other sign-in refusal; the lockout is fifteen minutes and further attempts extend it, so the `401` body says so whether or not one is in force. |
+| `503` | `no-mailer`, from the two account-recovery endpoints only: this instance has no SMTP relay, so it cannot send the message the operation *is*. Not `403` and not `404` — the mechanism exists and is unavailable, so a retry after the operator configures a relay succeeds. |
 | `504` | The request exceeded the server's deadline. Retry; narrow the window if it is an analytics query. |
 
 Unknown JSON fields are rejected rather than ignored: a misspelled field silently
@@ -1320,6 +1322,60 @@ the mode again, so a restart into `closed` strands them.
 Registration shares the sign-in rate limit, per address, so alternating between
 the two surfaces does not double anybody's budget. There is **no CAPTCHA**. On a
 public instance, open sign-ups are the largest abuse surface there is.
+
+## Recovering a forgotten password
+
+**Only if this instance has a mailer**, because the recovery is the mail. With
+`LINKCTRL_SMTP_HOST` unset there is no *forgot your password?* link on the
+sign-in page, `/forgot` says the instance cannot send mail, and
+`POST /api/v1/auth/forgot` answers `503`. That is deliberate rather than a gap
+being papered over: everything else that uses the mailer has a second channel —
+an invitation has a copyable link, a notification is in the dashboard — and this
+has none, so a page that said "check your inbox" would be lying. On such an
+instance the route back is the operator, with database access, and
+[operations.md](operations.md#moving-the-instance-principal) covers the one
+account that has a command instead.
+
+With a mailer, the flow is three steps and no support ticket:
+
+1. **`/forgot`**, or `POST /api/v1/auth/forgot` with `{"email": "..."}`. The
+   answer is the same whatever you type — the page says a message is on its way
+   and the API answers `202` — so neither can be asked whether an address has an
+   account. The answer goes to the address instead: an address that cannot be
+   recovered receives a message saying no link was created, which is what
+   registration already does for an address that is taken.
+2. **Open the link.** It works once and lapses after an hour, and asking again
+   replaces it. Choose a password of at least twelve characters, the same floor
+   every other password in this product has.
+3. **Sign in with it.** No session is started for you, deliberately — see below.
+
+**What setting it does**, all of which the page and the mail say:
+
+- **Every session on the account is signed out**, including any you did not
+  open. That is the point: a recovery that left somebody else's browser signed
+  in would have recovered nothing.
+- **Every other outstanding reset link stops working**, for the same reason.
+- **API keys keep working.** A key is a separate credential with its own
+  rotation, and revoking them here would turn a recovery into an outage for
+  whatever it was minted for. If you are recovering because you believe the
+  account was reached by somebody else, revoke the keys yourself at `/keys`.
+- **No session is started.** You type the new password at the sign-in form,
+  which is also the proof you know it.
+- **The reset is audited** as `password.reset`, with the account as the actor and
+  a network prefix rather than an address. It is an instance-wide record rather
+  than an organization's, because nobody was signed in to any organization when
+  it happened — so it is read at `GET /api/v1/instance/audit` by whoever holds
+  `audit.read.instance`.
+
+A link that has been used, has lapsed, or names an account that cannot be
+recovered — a suspended one, or one that signs in some other way — is answered
+`404` and the page says the same words for all of them. The endpoint cannot be
+asked which, on purpose.
+
+Recovery shares the sign-in rate limit, per address, so alternating between the
+two surfaces does not double anybody's budget. The cost of the identical answer
+is stated rather than hidden: this instance will mail an address that never
+registered, if somebody types one in.
 
 ## Which workspace you are in
 
