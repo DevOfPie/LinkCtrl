@@ -205,7 +205,7 @@ planning itself — see *Open questions*.
 **Which candidates each area takes.** Owner-set 2026-08-06, recorded as D109–D111
 in [Plan.md](../../Plan.md#phase-3-decisions) with the reasoning in
 [decisions.md](decisions.md#2026-08-06--phase-3-planned-what-each-area-takes-and-the-twelve-slots).
-Twelve slots for work, after two reviews and the close come out of fifteen.
+Twelve slots for work, after two reviews and the close come out of fifteen. *(The phase later ran to seventeen — see Plan.md's Phase 3 build plan for how the target moved and why.)*
 
 | Area | Takes | Leaves on this list |
 | --- | --- | --- |

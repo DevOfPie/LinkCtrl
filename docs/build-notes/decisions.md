@@ -239,6 +239,7 @@ file. Append a row when you append an entry.
 | [What eighteen blind tasks specified, and the six defects hiding inside a word](#2026-08-07--what-eighteen-blind-tasks-specified-and-the-six-defects-hiding-inside-a-word) | D114 *(its heading says six; seven were filed — corrected by the entry below)*: *irritating* was mostly *defective*, so B stays at three; F160–F166; why the coverage test measures the seed rather than the instance; the workspace-label contradiction |
 | [An independent review of the plan, and the four numbers it caught](#2026-08-07--an-independent-review-of-the-plan-and-the-four-numbers-it-caught) | Fifteen findings before the plan merged: M49's false demo claim, the k6 count, two enforcement mechanisms that could not fail, D103 asserted backwards, and the scope row nobody had scheduled |
 | [QR logos, the first file this product accepts, and the target moving](#2026-08-07--qr-logos-the-first-file-this-product-accepts-and-the-target-moving) | D115: no upload surface exists anywhere; why a logo is a milestone not a parameter; the storage decision M57's test bounds; the target moves to sixteen for this phase only |
+| [The logo milestone was two, and a review found it the same day it was written](#2026-08-07--the-logo-milestone-was-two-and-a-review-found-it-the-same-day-it-was-written) | D116: the split; the erasure limb that was wrong in the dangerous direction; a cap ordering that specified the bomb; a decode test naming a decoder the tree does not have |
 
 ---
 
@@ -19702,3 +19703,93 @@ the redesign's fourth milestone and again here, and kept both times. Recorded
 because it is evidence about what the owner values, not because the answer needs
 defending: nobody asked for two QR codes on one link in eighteen blind tasks,
 and it is still in the phase.
+
+## 2026-08-07 — The logo milestone was two, and a review found it the same day it was written
+
+**D116.** [M50.5](phase-details/m50.5.md) was written, reviewed by an
+independent agent, and split — all on the day it was added. The split is the
+headline; three of the review's findings are why it is not merely tidier.
+
+### The erasure limb was wrong in the dangerous direction
+
+The original amendment to [M52](phase-details/m52.md) said account deletion
+"removes every logo belonging to the account's workspaces and organizations".
+It cannot, and the reason is a chain nobody had traced: logos hang off
+`qr_codes` → `links` → workspaces and organizations
+(`00600_phase2_dormant.sql:55-57`), never off `users`. M52 also refuses to
+delete an account that is the **sole owner of a surviving organization**. So
+every organization the account belongs to outlives it, and the bullet either
+destroyed a surviving tenant's data or named an empty set.
+
+Its test could not have been written either: a logo needs an organization, a
+deletable account is not that organization's sole owner, so another owner exists
+and the logo has to survive. **Account erasure reaches no logos at all**, and
+M52 now asserts that as the claim — a test that deletes an account and confirms
+a co-owned organization's logo is *still there*. The failure this could have
+had was over-reach, so the test protects against over-reach.
+
+It also dissolved the ordering argument that had been used to place the
+milestone. The real reasons M50.5 precedes M52 are the storage mechanism and the
+orphan sweep, not erasure reach.
+
+### Two mechanisms that specified the vulnerability
+
+The bounding bullet said *a byte cap on the request body, then a dimension cap
+on the decoded image* — under a heading reading **Bounded before it is
+decoded**, and beside a risk section naming *"a cap enforced after the
+allocation it was meant to bound"* as a known failure mode. A decompression bomb
+is a small file declaring an enormous image, so a byte cap does not bound it and
+capping the decoded image is capping afterwards. The mechanism is
+`image.DecodeConfig`, which reads the header and yields dimensions without
+decoding pixels. The file now specifies three ordered steps.
+
+And the decode test — *every logo'd code is read back by a decoder* — named a
+capability this tree does not have. `go.mod` carries `boombuler/barcode`, an
+encoder; nothing in `internal/qr` decodes. A decoder is a new module, and
+[M49](phase-details/m49.md) asserts it adds none, tested against the require
+block. That is a milestone-sized cost hiding in a sub-clause, which is exactly
+what the size target's own trap warns about.
+
+**[M50.6](phase-details/m50.6.md) resolves it rather than importing it.** The
+shipping assertion is geometric — occluded module count against the symbol's
+codeword budget — and the scan check is run **once, by hand, against real
+scanners**, recorded with what was tested. A capability CI cannot assert is
+verified the way this product's SLO numbers are: measured, written down, and
+honest about being a measurement rather than a gate. Adding a decoder as a
+permanent gate stays available and is a decision to take, not a side effect.
+
+### Where the seam is
+
+M50.5 is the upload surface: the endpoint, the caps as numbers, sniffing,
+re-encoding, server-generated names, the storage decision, removal and
+replacement, the orphan sweep, the `docs/SECURITY.md` row, and teaching the
+contract test **multipart, which it has never done** — the phase's only
+genuinely new endpoint had unpriced API-parity work, and the inherited rule is
+not optional.
+
+M50.6 is the compositing: forced level H, the occlusion cap with its derivation,
+SVG-and-PNG parity over the logo's box, a test that pins `img-src` (nothing pins
+it today, so a later widening to `blob:` would pass every assertion this product
+has), and the contract answer for a request that sets `level=L` beside a logo.
+
+**The seam is that M50.5 is finished and useful with no logo ever drawn.** It
+stores an image against a code. That is the test for whether a split is real
+rather than cosmetic, and it passes.
+
+### What the review says about reviewing plans
+
+This is the second independent review of Phase 3's planning in one day, and the
+second to find defects in text written hours earlier by an author who had read
+the rules being broken. The first found fifteen; this one found nine plus six
+judgement calls, in a single milestone file.
+
+Both reviews were given the plan and the repository's standards and nothing
+else — no conclusions, no hint of which parts were thought weak. Both were
+verified rather than trusted, and in each case one item did not survive that
+check. That is the shape worth keeping: an independent reader, the project's own
+rules as the standard, and the findings checked before they are acted on.
+
+The storage question is filed in
+[upcoming-decisions.md](upcoming-decisions.md) with three options and a
+recommendation, because it is the one thing here the loop will stand still on
+and the file exists for exactly that.

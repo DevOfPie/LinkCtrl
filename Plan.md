@@ -471,7 +471,7 @@ per milestone lives in
 [phase-details/README.md](docs/build-notes/phase-details/README.md) and nowhere
 else; the plan below is the scope contract rather than a progress report.
 
-**Phase 3: planned on 2026-08-06, unstarted.** Sixteen milestones, M46–M58,
+**Phase 3: planned on 2026-08-06, unstarted.** Seventeen milestones, M46–M58,
 across four work areas; the plan is [below](#phase-3-build-plan). It was planned
 in full before its first milestone was built, on the owner's direction, so that
 the fifteen-milestone target is enforced by arithmetic rather than discovered at
@@ -939,16 +939,21 @@ a row there is a pointer back to this list plus an area.
 
 ## Phase 3 build plan
 
-**Sixteen milestones, M46–M58, continuing Phase 2's numbering.** Thirteen of work,
-two adversarial reviews (`X.9`, as reserved), one close. That is the size target
-set by the owner on 2026-08-06 and recorded in
-[planning.md](docs/build-notes/planning.md#the-size-target-a-phase-stays-under-sixteen-milestones):
-a phase stays under sixteen, insertions counted. Phase 2 ran 33.
+**Seventeen milestones, M46–M58, continuing Phase 2's numbering.** Fourteen of
+work, two adversarial reviews (`X.9`, as reserved), one close. The size target is
+**fifteen** — *a phase stays under sixteen, insertions counted*, set by the owner
+on 2026-08-06 and recorded in
+[planning.md](docs/build-notes/planning.md#the-size-target-a-phase-stays-under-sixteen-milestones).
+This phase is over it, knowingly and twice; the paragraph below is the record.
+Phase 2 ran 33.
 
-**The target moved once, knowingly.** The phase was planned at fifteen with
-every slot spent, and [M50.5](docs/build-notes/phase-details/m50.5.md) took it
-to sixteen on 2026-08-07 when the owner chose to have both QR logos and M50
-rather than trade one for the other. That is the phase-boundary conversation
+**The target moved twice on 2026-08-07, both times knowingly.** The phase was
+planned at fifteen with every slot spent. It went to sixteen when the owner chose
+to have both QR logos and M50 rather than trade one for the other, and to
+seventeen when a review found the logo milestone was two — an upload surface
+([M50.5](docs/build-notes/phase-details/m50.5.md)) and the compositing
+([M50.6](docs/build-notes/phase-details/m50.6.md)) — and the owner split it
+rather than keep one fat milestone. That is the phase-boundary conversation
 [planning.md](docs/build-notes/planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)
 requires rather than a rule being broken — the target is owner-set and
 explicitly revisitable, and the alternatives were priced before it moved.
@@ -962,7 +967,7 @@ touch so a blocked milestone has an independent one to fall back to under
 | Area | Milestones | |
 | --- | --- | --- |
 | **B** — Dashboard UI and UX | M46–M48 | Asked for first, and the surface every other area rebases onto |
-| **F** — QR codes | M49–M50.5 | Overlaps B on the settings vocabulary, so it is an ordered run behind B rather than an independent area |
+| **F** — QR codes | M49–M50.6 | Overlaps B on the settings vocabulary, so it is an ordered run behind B rather than an independent area |
 | **A** — Identity and account lifecycle | M51–M54 | Carries the two findings that make claims the tree makes today false |
 | **E** — Infrastructure and resilience | M55–M57 | The only area with no edge into any other |
 
@@ -978,10 +983,11 @@ walkthrough that specifies them is planning's first input (D112).
 | [M48](docs/build-notes/phase-details/m48.md) | On-demand panels, and what stops being buried | M47 | The *"buried deep in the page"* complaint |
 | [M49](docs/build-notes/phase-details/m49.md) | QR codes sized in pixels, and a PNG to download | M48 *(ordering)* | *A PNG QR code* · the QR-vocabulary complaint · reverses D11 |
 | [M50](docs/build-notes/phase-details/m50.md) | More than one QR code per link, told apart in the analytics | M49 | *More than one QR code per link, and per-code scan counts* |
-| [M50.5](docs/build-notes/phase-details/m50.5.md) | A logo in the middle of a QR code, and the first upload this product has | M50 | — *(owner-added scope, 2026-08-07)* |
+| [M50.5](docs/build-notes/phase-details/m50.5.md) | The first file this product accepts | M50 | — *(owner-added scope, 2026-08-07)* |
+| [M50.6](docs/build-notes/phase-details/m50.6.md) | A logo in the middle of a QR code | M50.5 | — *(owner-added scope, 2026-08-07)* |
 | [M51](docs/build-notes/phase-details/m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | F141 · *Account recovery, of any kind, for anybody* |
 | [M51.9](docs/build-notes/phase-details/m51.9.md) | **Mid-phase adversarial review** | M46–M51 | — |
-| [M52](docs/build-notes/phase-details/m52.md) | Account deletion and subject erasure | M51 *(ordering)* | F44 · *Account deletion and erasure* · compliance (erasure limb) |
+| [M52](docs/build-notes/phase-details/m52.md) | Account deletion and subject erasure | M50.5 · M51 *(ordering)* | F44 · *Account deletion and erasure* · compliance (erasure limb) |
 | [M53](docs/build-notes/phase-details/m53.md) | A second factor: TOTP, enrolment, and recovery codes | M51 | The MFA limb of *MFA, OAuth, OIDC, SSO, SCIM* |
 | [M54](docs/build-notes/phase-details/m54.md) | An API key belongs to an account, not to one organization | M52 | F75 · *An API key that reaches more than one organization* |
 | [M55](docs/build-notes/phase-details/m55.md) | An update checker, and the fifth thing that leaves this product | — | — *(owner-added scope, 2026-08-06)* |
@@ -1008,8 +1014,9 @@ Taken 2026-08-06, at planning. The *why* for each is in
 | D111 | Area F's scope, and D11 reversed | All three candidates, and a fourth added on 2026-08-07 — see D115. **SVG stays the render; PNG is a download.** The user-facing setting becomes an output size in pixels, and *an SVG at that size matches the PNG* is asserted by test rather than assumed — both are generated from one module matrix and one arithmetic. Sizes snap to keep modules whole, and the produced size is reported beside the requested one. |
 | D112 | How the redesign is specified | A **live owner walkthrough with blind tasks**, run before any milestone is built. The alternative — the actor that will build it also specifying it, judged by nobody who uses it — is the failure the queue row asked to avoid. The cost is that planning stalls on owner time, which is why A, E and F were planned in parallel with it. |
 | D113 | Version at phase end | **0.3.0.** 1.0.0 stays a later phase's promise, on D4's reasoning for 0.2.0. |
-| D114 | What the walkthrough changed, and what it did not | Eighteen blind tasks over two rounds (2026-08-06, 2026-08-07) specified [M46](docs/build-notes/phase-details/m46.md)–[M48](docs/build-notes/phase-details/m48.md) and produced **seven defects**, F160–F166, which are fixed at [M58](docs/build-notes/phase-details/m58.md) and cost no redesign slot. **B stays at three and the phase stays at fifteen** — owner-set 2026-08-07. Notification click-through and mark-unread fold into M48, being the same *buried* complaint and needing no schema change. **Folders path-entry, organization switching and API-key scope grouping are deferred to Phase 4** with their reasons, in [phase-3-candidates.md](docs/build-notes/phase-3-candidates.md). |
-| D115 | QR logos, and the target moving | **Both** QR logos and [M50](docs/build-notes/phase-details/m50.md), rather than trading one for the other — owner-set 2026-08-07, taking the phase to sixteen. Logos are [M50.5](docs/build-notes/phase-details/m50.5.md), placed after M50 because a logo is per-code style and landing it first would mean retrofitting. **It is the first time this product accepts a file**, which is what makes it a milestone rather than a QR parameter: an upload surface, untrusted image decoding, a storage decision bounded by [M57](docs/build-notes/phase-details/m57.md)'s no-new-dependency test, a `docs/SECURITY.md` row, and an erasure limb [M52](docs/build-notes/phase-details/m52.md) does not currently have. |
+| D114 *(count superseded by D115 and D116)* | What the walkthrough changed, and what it did not | Eighteen blind tasks over two rounds (2026-08-06, 2026-08-07) specified [M46](docs/build-notes/phase-details/m46.md)–[M48](docs/build-notes/phase-details/m48.md) and produced **seven defects**, F160–F166, which are fixed at [M58](docs/build-notes/phase-details/m58.md) and cost no redesign slot. **B stays at three and the phase stays at fifteen** — owner-set 2026-08-07. Notification click-through and mark-unread fold into M48, being the same *buried* complaint and needing no schema change. **Folders path-entry, organization switching and API-key scope grouping are deferred to Phase 4** with their reasons, in [phase-3-candidates.md](docs/build-notes/phase-3-candidates.md). |
+| D115 | QR logos, and the target moving | **Both** QR logos and [M50](docs/build-notes/phase-details/m50.md), rather than trading one for the other — owner-set 2026-08-07, taking the phase to sixteen. Logos are placed after M50, because a logo is per-code style and landing it first would mean retrofitting. **Split into two by D116 the same day**, so the row reads [M50.5](docs/build-notes/phase-details/m50.5.md) and [M50.6](docs/build-notes/phase-details/m50.6.md). **It is the first time this product accepts a file**, which is what makes it a milestone rather than a QR parameter: an upload surface, untrusted image decoding, a storage decision bounded by [M57](docs/build-notes/phase-details/m57.md)'s no-new-dependency test, a `docs/SECURITY.md` row, and an erasure limb [M52](docs/build-notes/phase-details/m52.md) does not currently have. |
+| D116 | The logo milestone is two, and the target moves again | **Split**, owner-set 2026-08-07 after an independent review, taking the phase to **seventeen**. [M50.5](docs/build-notes/phase-details/m50.5.md) is the upload surface — endpoint, caps, re-encode, storage, removal and orphan collection, the `docs/SECURITY.md` row, and teaching the contract test multipart, which it has never done. [M50.6](docs/build-notes/phase-details/m50.6.md) is the compositing — level H, the occlusion cap, SVG/PNG parity. The seam is that M50.5 is useful with no logo ever drawn. Rejected: keeping one milestone and dropping its decode test, and paying for the split by dropping M50. The standing target stays **fifteen**; this phase is over it twice, both times recorded. |
 
 ### Not in Phase 3
 

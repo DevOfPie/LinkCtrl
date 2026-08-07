@@ -84,15 +84,28 @@ above. Either something moves to the next phase or the target moves knowingly,
 and both are the owner's. What the target removes is the case where a phase grows
 by one insertion at a time and nobody is ever the person who decided it was large.
 
-**It has been tested once, and it worked as designed.** Phase 3 was planned at
-fifteen with every slot spent. On 2026-08-07 the owner asked for QR logos, was
-shown that they fitted no milestone and that the phase had no room, was offered
-the alternatives with their costs — park them, or trade
-[M50](phase-details/m50.md)'s slot — and chose to have both and move the target.
-Phase 3 therefore runs at **sixteen**, and that is a recorded exception rather
-than a new ceiling: **the rule here stays fifteen**. The conversation happened,
-somebody decided, and it is written down, which is the whole of what the target
-was for.
+**It has been tested twice in one day, and it worked as designed both times.**
+Phase 3 was planned at fifteen with every slot spent.
+
+On 2026-08-07 the owner asked for QR logos, was shown that they fitted no
+milestone and that the phase had no room, was offered the alternatives with their
+costs — park them for Phase 4, or trade [M50](phase-details/m50.md)'s slot — and
+chose to have both. Sixteen.
+
+Hours later an independent review of that milestone found it was two: an upload
+surface and the compositing, with a clean seam and unpriced work hiding in a
+sub-clause. The owner split it rather than keep one fat milestone. Seventeen.
+
+**The second one is the more interesting test**, because it is the trap this
+section warns about arriving from the other direction. A count invites fatter
+milestones, and the way this one was caught was a review reading the milestone
+against *reviewability* rather than against the number. The rule's own sentence
+holds: if the target and a milestone's reviewability disagree, the target gives.
+
+Phase 3 therefore runs at **seventeen**, and that is a recorded exception rather
+than a new ceiling: **the rule here stays fifteen**. Moving the target for one
+phase and moving it for every phase after are different decisions, and only the
+first was taken — twice.
 
 **The trap, stated because a target invites it.** A count is a number people plan
 *to*, so the cheapest way to satisfy this rule is fatter milestones — the same
