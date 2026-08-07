@@ -38,6 +38,24 @@ var files embed.FS
 // StylesheetPath is the asset a build is expected to have generated.
 const StylesheetPath = "css/app.css"
 
+// QRThumbClass is the class the link page's QR thumbnail carries, and it is
+// exported because the drawing is generated outside this package (M48).
+//
+// **The box has to be stated in a class rather than left to the picture.** The
+// thumbnail sits in the link page's heading row, in front of the destination
+// box that M47 measured at 327px from the top of a 1280×800 viewport and that
+// M48 re-measured at 349px with this picture beside it, and `internal/qr` sizes
+// an `<svg>` from the encoded version — a longer URL is a bigger code, so the
+// `width` and `height` attributes are a function of the data. A class is not:
+// 6rem is 6rem for every link in the product, which is what makes the height of
+// the heading row something the markup states rather than something the data
+// decides. TestTheEditControlIsReachableWithoutScrolling is the rule that
+// requires it, and decisions.md carries why it is a rule and not an exemption.
+//
+// Both dimensions, because a QR code is square and a CSS height alone would
+// leave the `width` attribute to fight it.
+const QRThumbClass = "h-24 w-24"
+
 // Renderer holds the parsed template set and the fingerprinted asset table.
 //
 // Templates are parsed once at boot. A syntax error therefore fails startup

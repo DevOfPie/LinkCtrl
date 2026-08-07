@@ -313,10 +313,17 @@
      Bounded on purpose, at notify.PreviewLimit. A preview long enough to scroll
      would be a worse copy of the page it links to.
 
-     The items are text rather than links. Nothing here is the only way to reach
-     a notification — every one of them is on /notifications, which is what View
-     all is for — and inventing a per-notification destination would be scope
-     this milestone does not have.
+     **The items lead somewhere since M48**, and this comment used to say the
+     opposite: *"inventing a per-notification destination would be scope this
+     milestone does not have"*. M22 was right to defer it and M48 is the
+     milestone that has the scope — the mapping from a notification's kind and
+     data to a URL is in internal/httpx, enumerated and tested per kind, and the
+     bell is the surface these are most often read on.
+
+     A form submit rather than an anchor, for the reason the notifications page
+     uses one: opening a notification marks it read, and a state change behind a
+     GET is one any prefetch can fire. An item whose kind leads nowhere stays
+     text, which is what it always was.
 
      The empty state is the common case for a new account, so the panel says so
      rather than opening onto a blank box. Both count and preview arrive from one
@@ -336,7 +343,13 @@
     <ul class="max-h-80 overflow-y-auto">
       {{range .UnreadPreview}}
       <li class="border-b border-line px-3 py-2 last:border-b-0">
+        {{if .Target}}
+        <form method="post" action="/notifications/{{.ID}}/open">
+          <button type="submit" class="w-full cursor-pointer text-left text-sm font-medium text-ink hover:underline">{{.Title}}</button>
+        </form>
+        {{else}}
         <p class="text-sm font-medium text-ink">{{.Title}}</p>
+        {{end}}
         {{if .Body}}<p class="mt-0.5 line-clamp-2 text-xs text-muted">{{.Body}}</p>{{end}}
         <p class="mt-1 text-xs text-subtle">{{.CreatedAt.Format "2 Jan 2006, 15:04"}} UTC</p>
       </li>

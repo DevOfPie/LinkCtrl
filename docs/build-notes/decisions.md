@@ -245,6 +245,10 @@ file. Append a row when you append an entry.
 | [M47: the line count M46 moved](#2026-08-07--m47-the-line-count-m46-moved) | An amendment, not a decision: `link_detail.html` is 805 lines and m47.md said 803, because M46's own table wrapper landed in it the day before |
 | [M47: the three choices it gave itself, and the 1883 pixels](#2026-08-07--m47-the-three-choices-it-gave-itself-and-the-1883-pixels) | D120–D122: the analytics go below and the tiles go with them; the order, with the row at which measurement stops and an argument starts; a 60-line cap fixed by the shortest partial's body rather than by the page's length; one sentence for two facts that were adjacent and did not compose; 1883px to 327px, three engines; what the fold test cannot check and the sabotage that proved both its limbs |
 | [The demo reset could not clean up after itself](#2026-08-07--the-demo-reset-could-not-clean-up-after-itself) | F168, which stopped a milestone landing: why the reset is scoped to aliases and not to a workspace, why it deletes by *not the default* rather than by a slug, the widening that costs, and the half of the row that did not close |
+| [M48: three facts the last two milestones moved](#2026-08-07--m48-three-facts-the-last-two-milestones-moved) | An amendment, not a decision: two line references and a list of four notification kinds, one of which the demo has never seeded. And the pattern behind three amendments in three milestones |
+| [M48: the owner overrules D124 — the picture goes up, and the guard narrows](#2026-08-07--m48-the-owner-overrules-d124-the-picture-goes-up-and-the-guard-narrows) | Owner-set. Why a narrowing and not an exemption, what M47's claim now has to be re-measured against, and why M47 is not reopened |
+| [M48: the panel, the thumbnail that could not go where it was asked, and where a notification leads](#2026-08-07--m48-the-panel-the-thumbnail-that-could-not-go-where-it-was-asked-and-where-a-notification-leads) | D123–D125: a panel is a route first and a popup second, and why that is not D24 reversed or D120 reversed; the QR thumbnail stays below the edit form because M47's fold test refuses a picture above it, and what went in the heading row instead; a map rather than a switch so that *has a mapping* is a question code can ask; the two kinds that lead nowhere and say so; three of seven kinds the demo has never seeded and why no coverage row demands them; and the permission a test fixture had been missing since M47, which hid three sections of the link page from every test that renders it |
+| [M48: the picture goes up — the rule that let it, and the page re-measured](#2026-08-07--m48-the-picture-goes-up-the-rule-that-let-it-and-the-page-re-measured) | D126: what M47's fold guard became — a height class and a 160px budget rather than a blanket refusal of `<svg>`, and why the `height` attribute could not be what is read; one constant, three consumers, and the fixture that would otherwise measure a page nobody is served; `internal/qr` gaining a validated class; and the re-measurement in three engines — 327→349px, 443→465px — checked by reproducing M47's own figures with the picture removed |
 
 ---
 
@@ -20462,3 +20466,446 @@ recovers from a state that should not arise, and saying so is the point: this
 entry fixed the recovery, not the cause. The demo's second workspace has never
 held a link, and the workspace scoping it exists to demonstrate has never been
 demonstrable.
+
+
+## 2026-08-07 — M48, three facts the last two milestones moved
+
+Amendments under [phase-loop.md](phase-loop.md#amending-a-bullet), all three
+**facts** rather than assertions: a line number, a line range, and which four
+strings a seeder writes. Nobody could have decided any of them differently, and
+none changes what m48.md asks for.
+
+**One.** The bullet as it stood: *"`pages/links.html:122` has a `<noscript>`
+submit"*. As amended: *"`pages/links.html:65`"*. The tree fact:
+`grep -n noscript internal/ui/templates/pages/links.html` reports one hit, at 65.
+[M46](phase-details/m46.md) moved it into the hot filter row the day before, and
+said so.
+
+**Two.** As it stood: *"the workspace switcher deliberately does not (D103/F21,
+`partials/nav.html:9-36`)"*. As amended: *"`partials/nav.html:41-95`"*. The tree
+fact: `{{define "workspace_label"}}` now occupies line 30, the switcher's comment
+opens at 41 and `{{define "workspace_switch"}}` is at 83. Lines 9-36 are the
+label M46 added — the very control the citation was contrasting the switcher
+*with*, so the stale range pointed at the wrong half of its own argument.
+
+**Three.** As it stood: *"The demo already seeds four notification kinds —
+`domain.failing`, `automation.fired`, `dispute.filed`, `dispute.decided`"*. As
+amended: *"`automation.fired`, `dispute.filed`, `dispute.decided`,
+`invite.accepted`"*. The tree fact: `SELECT kind, count(*) FROM notifications
+GROUP BY kind` against the demo instance returns exactly those four —
+`automation.fired` 1, `dispute.decided` 2, `dispute.filed` 3, `invite.accepted`
+2. `domain.failing` is a real kind (`internal/notify/domains.go:24`) and the demo
+has never written one. The count of four is right and one of the four names was
+not, which is the wrong half to be right about: the bullet immediately below it
+says a coverage row is owed for *"a kind with no seeded example"*, and this
+correction changes which kinds that sentence is about.
+
+**The pattern, which is the part worth keeping.** This is the third amendment in
+three milestones and every one has the same cause: a milestone moved something
+the *next* milestone's file had already measured. M47's was M46 adding two lines
+to a file M47 quoted a length of; both of M48's line references are M46's edits
+again. The milestone files for a phase are written together, before any of them
+is built, so every reference in them is a photograph of the tree on planning day
+— and the first milestones to land are the ones that invalidate the rest.
+
+That is not an argument against writing the references. They are what makes a
+bullet falsifiable, and finding them stale is [step 1](phase-loop.md#1-validate)
+working rather than failing. It is an argument for expecting them, which
+validation now does: all three were found by checking every reference in the file
+rather than by tripping over one. The cost is a few greps per milestone and the
+alternative is a worker building against a citation that quietly points somewhere
+else.
+
+**What did not drift, checked rather than assumed.**
+`00600_phase2_dormant.sql:116-126` still declares `read_at timestamptz` with no
+`NOT NULL`, so the mark-unread bullet's premise holds. And the risk section's
+genuine unknown — whether notification kinds are *"strings scattered across
+packages rather than an enumerable set"* — resolves in the milestone's favour:
+they are exported constants (`internal/notify/notify.go:40,45`,
+`domains.go:24,29`, `automation.go:26`), so the test that keeps the mapping
+honest can be written as described rather than narrowed.
+
+
+## 2026-08-07 — M48, the panel, the thumbnail that could not go where it was asked, and where a notification leads
+
+Three decisions, one constraint that forced the second of them, and two things
+found while building that are worth more than the decisions.
+
+## D123 — a panel is a route first and a popup second
+
+m48.md states the property as a requirement rather than as a preference: *"Its
+contents stay reachable without JavaScript. The panel is a route that renders as
+an ordinary page when opened directly, and the popup is what the browser does
+with it when it can."* Everything below follows from reading that literally.
+
+**What was built.** `partials/panel.html` holds the chrome — an invoker, a
+`popover="auto"` container, a heading, a `Close` button and an `Open as a page`
+link — and each caller writes its body between `panel_open` and `panel_close`.
+The body is a partial of its own, and a page under `pages/` renders that same
+partial inside the ordinary layout. So `/links/{id}/qr` and `/disputes/reviewers`
+serve exactly what the two popups hold.
+
+**Three mechanisms were available and two were refused.**
+
+*htmx into an overlay* is the shape a reader expects, and it cannot be built
+here. htmx will fetch a fragment and swap it into a container; nothing in HTML
+opens a popover, and `showPopover()` is a script the CSP has no `script-src`
+allowance for. Making it work means either an inline handler — a `'unsafe-inline'`
+waiver, which the inherited *`ui` stays stdlib-only* rule forbids in as many
+words — or a served JavaScript file, which is the modal framework the milestone
+says not to add. It also fetches, which means the panel's contents do not exist
+until the network says so, which is the opposite of the requirement.
+
+*`<details>` in flow* is what M46 used for the links page's filter panel, and
+D120 is the entry that chose it. It is refused here for the reason D120 gave for
+choosing it: a disclosure pushes the page down and these panels cover it. D24
+already made this distinction for the header menus and chose the Popover API for
+one word — Escape — and the same argument reaches a mid-page overlay unchanged.
+**Neither decision is reversed.** The links page's filter panel is still a
+`<details>`, and it should be: it is in flow.
+
+*The Popover API with server-rendered contents* is what shipped. No fetch, no
+script, no CSP change, and the failure mode below the floor D24 already raised —
+Chrome 114, Safari 17, Firefox 125 — is that the attribute is ignored and the
+panel renders as an ordinary block inside the page. Every control in it still
+works. That is a better answer than a `<noscript>` fallback would have been,
+because it is not a fallback: it is the same markup, unaugmented.
+
+**The geometry is written out in the partial** and it needs to be. A top-layer
+element's containing block is the viewport, and Tailwind's preflight zeroes
+`margin` on every element — which silently defeats the UA stylesheet's
+`:where([popover]) { margin: auto }`, since a `:where()` rule has zero
+specificity. Left alone, the panel pins itself to the top-left corner of the
+window. `inset-0 m-auto` re-states the centring the UA sheet meant to provide.
+
+**What stops it becoming two patterns** is a test that reads rendered HTML rather
+than templates: `TestBothPanelsUseTheOnePanelMechanism` finds the panel inside
+each host page's `<main>`, requires exactly one, and requires the two class
+strings to be **byte-identical**. A surface that hand-rolls a popover fails on
+the class comparison; a surface that adds a second popup fails on the count. The
+sabotage run replaced the reviewer panel's `panel_open` call with a hand-written
+`<div popover="auto" class="fixed w-96 …">` and the test named both class strings
+in its failure.
+
+## D124 — the QR thumbnail is not above the edit form, and the reason is M47's test
+
+m48.md asks for *"a small rendered code … in the link page's upper region"*,
+quoting the owner: *"a small render of the QR code near the top that I can click
+on to open the settings/download button in a pop-up"*. The natural reading is
+that the picture goes in the page's heading row, above the edit form.
+
+It cannot, and the thing that stops it is a test M47 shipped four commits ago.
+`TestTheEditControlIsReachableWithoutScrolling` fails on any `<table> <svg> <img>
+<iframe> <video> <canvas> <ul> <ol> <details>` rendered before `id="url"`, for a
+reason it states: *"Its height cannot be read off the markup, so it can push the
+control below the fold without failing anything here."* A QR thumbnail is an
+`<svg>`. The test is stricter than the claim it protects — a 99px picture would
+move the destination box from 327px to about 430px, still half a screen inside a
+1280×800 viewport — but the claim is not what is asserted, and D121's first two
+rows are the *measured* half of the link page's order. Weakening either one
+milestone after they landed is a decision about M47, not about M48.
+
+**So the heading row gets a word and the QR section keeps the picture.**
+`panel_trigger` renders a plain `<button>` labelled *QR code* beside the short
+URL: a button carries no `name`, so `namedControls` does not count it and the
+destination and alias are still the first two controls; and *QR code* is seven
+characters against a 400-character text budget that was spending 93. Both limbs
+of M47's test still pass, unmodified. The thumbnail, the worded trigger beside it
+and the heading-row button all carry `popovertarget` for the same id — an invoker
+may sit anywhere in the document, including before the panel it names — so there
+is one panel and three ways into it, and the code is one click from the top of
+the page without anything tall being drawn there.
+
+**What this does not claim.** It does not claim the retrieval path is faster. The
+milestone says the figure is recorded rather than asserted and that
+[M51.9](phase-details/m51.9.md) re-runs the task, so the honest position is that
+the QR section shrank from a settings panel to a strip, the invoker reached the
+first screen, and the number is M51.9's to produce.
+
+## D125 — where a notification leads
+
+**A map, not a switch**, and that is the whole design. m48.md asks that *"a test
+asserts every declared kind constant has a mapping"*, and a `switch` with a
+`default:` arm answers "does this kind have a destination" with *yes* for every
+string in the language. `notificationTargets` is a `map[string]func(...) string`,
+so presence is a question code can ask; `notificationTarget` is the one function
+from kind plus data that m48.md specifies, and it reads the map.
+
+**The enumeration is discovered, never listed.** `declaredNotificationKinds`
+walks `internal/` with `go/ast` and collects exported constants whose identifier
+begins with `Kind` and whose value contains a dot. The value test is what keeps
+it honest in both directions: without it the scan picks up `MailKind`,
+`MailKindExists` and four `RuleKind*` constants in `internal/domain`; with it,
+exactly the seven notification kinds match. It walks the whole tree rather than
+the two packages that hold kinds today, because the vocabulary is *already* split
+across `internal/notify` and `internal/dispute` — dispute imports notify, so
+notify cannot hold dispute's — and naming two packages would be the list the
+function exists to avoid. Both directions are asserted: a declared kind with no
+entry fails, and an entry no constant declares fails.
+
+**Two kinds lead nowhere, and that is an answer.**
+
+`audit.growth` has no destination because the audit log has no dashboard page. It
+is an API surface and a retention environment variable, the recipient is the
+instance principal, and what they have to do about the warning is set
+`LINKCTRL_AUDIT_RETENTION_DAYS` on the deployment. Linking it to
+`/notifications` would be a link back to the page the reader is on.
+
+`dispute.decided` depends on its data, and it is the only mapping that does more
+than read an id. The recipient is whoever *filed* the dispute, who is an ordinary
+account: `/disputes` needs `destinations.review`, so sending them to the queue
+would be sending them to a refusal. Allowed → `/links`, because what the outcome
+means for them is that they can create the link now, which is what the
+notification's own body says. Upheld → nowhere, because no page in this product
+shows a refusal that stands.
+
+The surfaces render a kind with no destination as plain text with the mark-read
+control it always had. `""` and *absent* are therefore different states, which is
+why the map holds an entry returning `""` rather than simply omitting the kind.
+
+**The click-through is a POST.** Opening a notification marks it read, and a
+state change behind a `GET` is one a prefetch, a link checker or an `<img>` on
+somebody else's page can fire — the notification would be read before anybody saw
+it. The title is a submit button styled as a heading, which is the trade the
+header's sign-out control already makes. The destination is computed from the
+row, never from the request: the id in the path is all the caller supplies.
+
+**Mark-unread ships with it** rather than after it, because this milestone is
+what makes the accident common. It is `read_at = NULL`, which is what unread has
+always meant, so there is no migration — asserted by
+`TestNotificationsNeedNoMigration`, which fails if any migration but `00600`
+shapes the table, and by `TestReadAtIsNullable`, which reads the column's
+declaration. Both were sabotaged: a throwaway `ALTER TABLE notifications` and a
+`NOT NULL` on the column, each reverted by counter-edit.
+
+The `MarkNotificationUnread` statement deliberately carries no guard, unlike
+`MarkNotificationRead`, which refuses to touch an already-read row so that "when
+did you first see this" survives a double click. Unreading discards that
+timestamp. It is the person it belongs to doing it, on purpose, and a guard here
+would mean a notification read a week ago could not be un-read.
+
+## The demo seeds four of seven kinds, and no coverage row demands the other three
+
+m48.md leaves this open: *"`demoCoverage()` gains a row only if a kind ends up
+with no seeded example; whether it does is settled during the work rather than
+guessed here, and the answer is written down either way."*
+
+**Three kinds have no seeded example**: `audit.growth`, `domain.failing` and
+`domain.unverified`. The other four — `automation.fired`, `dispute.filed`,
+`dispute.decided`, `invite.accepted` — are written by the seeder's own service
+calls.
+
+**No row demands the missing three, and that is deliberate.** Each would require
+the demo to assert something untrue about itself. An `audit.growth` row says this
+instance's audit log has outgrown its threshold; a `domain.failing` row says a
+hostname the demo serves has stopped verifying. Seeding either to satisfy a
+coverage list would make the demo lie in order to demonstrate a link.
+
+The row that *was* added asserts what the feature needs instead: **more than one
+kind in the owner's inbox**, so clicking two notifications goes to two different
+places. Counted as `count(DISTINCT kind)` rather than as a list of kinds, for the
+reason `quotedScopes` exists in that file — a query naming the vocabulary would be
+a second enumeration of it, written in SQL where no test would notice it going
+stale.
+
+The no-destination branch is visible in the demo anyway, without seeding
+`audit.growth`: the demo upholds one dispute, and `dispute.decided` with status
+`upheld` is one of the two kinds that lead nowhere.
+
+## The fixture that had been rendering three sections of the link page as nothing
+
+Found while building, and it is the finding worth keeping.
+
+`internal/ui`'s `owner()` fixture held `links.create`, `links.update` and
+`links.delete` and **not `links.read`**. Three sections of the link page are
+guarded on it — `link_qr`, `link_rules` and `link_split` — so since M47
+decomposed the page, every test that renders `link_detail` has been rendering a
+link page with no QR code, no routing rules and no split test. `TestEveryPageRenders`
+included. The templates parsed, so nothing failed; they were simply never
+executed.
+
+It surfaced because M48 could not assert its panel renders on the link page until
+the section carrying it did. Adding the permission immediately produced a real
+template error — `link_rules.html:13:40: executing "link_rules" at <len .Rules>` —
+which is the shape of it: the fixture had no `Rules`, no `Split` and no
+vocabulary for either form, because nothing had ever asked for them.
+
+**In spec, under workflow.md's rule** that a defect making the current
+milestone's claim false is in spec whatever it looks like: the claim is that the
+panel renders on the link page, and it was unassertable. Fixed by adding the
+permission and the three sections' data — one enabled rule and one disabled, a
+weighted split with an arm of each state and a fallback.
+
+**M47's own claim is not made false and the milestone is not reopened.** All
+three sections sit below the edit form, so
+`TestTheEditControlIsReachableWithoutScrolling`'s assertions — the first two
+controls, and nothing tall in front of them — were unaffected by their absence,
+and they pass unchanged with the sections present.
+
+What it says about the guard: `TestEveryPageRenders` proves a page's data shape is
+*sufficient*, never that it is *complete*. A permission missing from a fixture
+silences a section without failing anything, and there is no test in this tree
+that would notice. Recording it rather than fixing it further — a scan asserting
+every `{{if .Identity.Can}}` branch on a page is exercised by some fixture is a
+real mechanism and it is a milestone, not a paragraph.
+
+
+## 2026-08-07 — M48, the owner overrules D124: the picture goes up, and the guard narrows
+
+Owner-set, 2026-08-07, at [M48](phase-details/m48.md)'s acceptance. Written down
+before it is acted on, because it arrived in conversation and the build that
+follows it is the thing that would otherwise be the only record.
+
+**The question.** m48.md asks for *"a small rendered code … in the link page's
+upper region"*. The first worker built the clickable thumbnail exactly as the
+owner's note describes it but left it in the QR section — second of eight, below
+a 208-line edit form — and put a worded button in the heading row instead. Its
+reasoning was **D124**: [M47](phase-details/m47.md)'s
+`TestTheEditControlIsReachableWithoutScrolling` fails on any `<svg>` drawn before
+`id="url"`, and reversing that one milestone after it was measured is a decision
+about M47 rather than about M48. The worker named the conflict instead of burying
+it, which is why it reached the owner at all.
+
+**The answer: the picture goes to the top, and M47's guard narrows to let it.**
+
+The objection D124 rests on is mechanical rather than principled. That test
+refuses `<svg>` because *"an image's height cannot be read off the markup"* —
+true of an image with no stated size, and false of one carrying explicit size
+classes. So the refusal becomes: an `<svg>` **with no explicit height class**.
+That is a rule, and it has to be written as one. An exemption for this one
+element would be the first hole in a guard that is four hours old, and the next
+milestone would widen it by pointing at the precedent rather than at the reason.
+
+**What this does not do.** It does not reopen M47. M47's claim is that the
+destination and the alias are reachable without scrolling at 1280×800, and that
+claim survives a bounded thumbnail — but *survives* is a measurement and not an
+argument, so it is re-measured with the thumbnail in place rather than assumed.
+The test's first limb is untouched: the thumbnail is a `<button>` with no `name`,
+so `namedControls` does not count it and the destination and alias are still the
+first two controls the page draws.
+
+**D124 stands as the reasoning it was**, and is overruled rather than deleted.
+The worker was right that the choice was not its own to make; it was wrong only
+in which way the owner would make it. That distinction is the whole reason a
+worker returns a prompt instead of an answer.
+
+
+## 2026-08-07 — M48, the picture goes up: the rule that let it, and the page re-measured
+
+One decision and one measurement, both owed to the
+[owner's ruling above](#2026-08-07--m48-the-owner-overrules-d124-the-picture-goes-up-and-the-guard-narrows).
+The ruling settled *what*; this is what it turned out to be, and the numbers it
+required rather than allowed to be assumed.
+
+## D126 — a picture in front of the destination box states its own height
+
+**The rule, as it is written.** `TestTheEditControlIsReachableWithoutScrolling`
+refused nine tags outright, `<svg>` among them, and the failure message said why:
+*"its height cannot be read off the markup"*. `<svg>` has left that list and
+acquired a rule of its own — every `<svg>` rendered before `id="url"` must carry
+a Tailwind height utility naming a fixed length, and their declared heights
+together must stay inside a 160px budget. The other eight tags are untouched.
+
+**Why this is a narrowing and not a hole.** The refusal's own sentence is false
+of an element that states its height, so the list was refusing a tag for a
+property that tag does not always have. What replaces it is stricter in the
+direction that matters: the old rule asked *is there a picture up there*, and
+this one asks *how tall is it, and is that within what was measured*. An `<img>`
+with `h-24` on it would still fail, and deliberately — its height class governs a
+box whose contents arrive over the network, and this page has none.
+
+`statedHeight` accepts `h-24`, `h-0.5`, `h-px`. It refuses `h-full`, `h-screen`,
+`h-auto`, `h-min`, `h-max` and `h-fit`, each of which is a height decided by the
+parent, the viewport or the content — which is the situation being refused,
+spelled differently — and it refuses Tailwind's arbitrary values (`h-[6rem]`)
+for the smaller reason that they are a second syntax to parse for a box the
+spacing scale already states.
+
+**Why a class and not the `height` attribute, which is right there.** Because
+the attribute is a function of the data. `internal/qr` sizes the drawing from the
+encoded version: at the thumbnail's scale a short URL with `?src=qr` on it is
+111px square and the demo's longer host is 123px, and a link with a long alias
+would be larger again. So a guard reading the attribute would be reading a number
+the *content* chose, and the fold claim would hold for some links and not others
+without anything failing. `ui.QRThumbClass` is `h-24` for every link in the
+product, which is what makes the heading row's height a property of the page.
+
+**One constant, three consumers, and that is on purpose.** `ui.QRThumbClass` is
+read by `internal/httpx` when it draws the picture, by the `internal/ui` fixture
+the guard measures, and by the guard's own error messages. The fixture is the
+weak link — a stub free to state a height the product does not render would be a
+guard measuring a page nobody is served — so it names the constant instead of
+copying it, and `TestTheQRThumbnailStatesItsOwnHeight` in `internal/httpx` is the
+assertion that the rendering end still puts it on the element.
+
+**`internal/qr` grew `RenderClass`, and it validates.** The class is a Go
+constant and no attacker is anywhere near it, which is exactly the argument that
+stops being true the first time somebody derives one from data. The package
+comment promises that the bytes of an SVG it emits cannot hold a `<` this
+codebase did not write, and that promise is worth more than the argument:
+`validClass` accepts letters, digits, `-`, `_` and spaces, so a quote, an angle
+bracket or a newline is refused rather than escaped. `Render` is unchanged and
+writes no attribute at all, because the same drawing is what `/qr.svg` serves and
+downloads.
+
+### The re-measurement, which the ruling required rather than permitted
+
+M47's claim is that the destination and the alias are reachable without scrolling
+at 1280×800. With the thumbnail in the heading row, in Blink, Gecko and WebKit
+identically:
+
+| | M47, measured | M48, re-measured |
+| --- | --- | --- |
+| `#url` top edge | 327px | **349px** |
+| `#alias` bottom edge | 443px | **465px** |
+| Viewport left below the alias | 357px | **335px** |
+
+**22px for a 96px picture**, because it sits *beside* the heading rather than
+above it: the heading block was already 74px of text — back link, alias row,
+destination — and a 96px square next to it costs the difference. The page's
+heading block became a two-column flex to get that, which is the whole of the
+layout change.
+
+The harness is not committed, for the reason M47's and M46's were not:
+`tools/render-verify` is opt-in and reachable from no gate, so a pixel assertion
+living there would protect nothing between the two times somebody ran it. What
+makes this the *same* measurement rather than a new one is that it reproduces
+M47's figures exactly — remove the thumbnail from the rendered DOM and the same
+harness reports 327px and 443px in all three engines. A harness that agreed with
+the old numbers only after being told them would be worth nothing.
+
+**160px, and where it came from.** A rule that read a height and then ignored it
+would be asking for a number for its own sake, so the declared heights are added
+up and compared to the room the measurement found. 96px is spent and 335px is
+left; 160 spends 64 of it and keeps 271. It refuses a second thumbnail beside the
+first, and it never has to be raised for a longer URL — the class is the same for
+every link, which is the whole reason the class is what is read.
+
+### What did not change
+
+**M47 is not reopened.** Its first limb is untouched and untouchable by this: the
+thumbnail is a `<button>` with no `name`, so `namedControls` does not count it,
+and the destination and the alias are still the first two controls the page
+draws. Its character budget is untouched too — the picture draws no text, and the
+prefix still spends 93 of 400.
+
+**D124 stands, and is marked overruled rather than removed.** Its Plan.md row now
+says so in its first words and keeps its reasoning after them, because a reader
+who finds the row alone has to learn both things: that the QR section is not
+where the picture went, and that the argument for putting it there was a real one
+that reached the owner and was decided the other way. The entry in this file is
+unedited, as every entry in this file is.
+
+**The QR section keeps a worded trigger and loses the picture.** Two renderings
+of the same code on one page would be noise, and the section is still where the
+page order puts the subject — so *Settings and download* stays there and opens
+the same panel the thumbnail does. `popovertarget` names an id, so both invokers
+reach one panel from opposite ends of the document.
+
+**And the retrieval figure is still M51.9's**, which D124 said and this does not
+change. m48.md asks for the new number to be *recorded* rather than for an
+improvement to be asserted, and what can be recorded here is where things are,
+not how long they take somebody who has not seen the page: the code is now on
+the first screen at 1280×800, measured above, and it is one click from there.
+Task 1 took ~26 seconds. Whether the picture being visible is worth any of them
+is a blind task's answer, and [M51.9](phase-details/m51.9.md) re-runs it.

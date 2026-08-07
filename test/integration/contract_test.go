@@ -787,6 +787,11 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	// Marking an id that does not exist is a 204, not a 404 — someone else's
 	// notification must be indistinguishable from one that was never there.
 	c.do("POST", p+"/notifications/"+uuid.NewString()+"/read", nil, http.StatusNoContent)
+	// And back to unread (M48), which is a DELETE of the read state rather than
+	// a second verb: `read_at` is a column with a value or without one. Probed
+	// with an id that does not exist for the same reason the line above is, and
+	// answering the same 204.
+	c.do("DELETE", p+"/notifications/"+uuid.NewString()+"/read", nil, http.StatusNoContent)
 
 	// --- workspaces ---------------------------------------------------------
 	// One membership on this fixture, which is the shape every instance has

@@ -25,7 +25,64 @@ migrations run at boot.
 
 ## [Unreleased]
 
+### Added
+
+- **Clicking a notification goes to what it is about, and marks it read.** In the
+  bell and on `/notifications` alike. Until now an item was a sentence and
+  nothing else — "an automation rule fired", with no way to reach the rule — and
+  the destination is now derived from the notification's own kind and data: a
+  filing opens the review queue at the row that is waiting, a firing opens
+  `/automation`, a domain warning opens `/domains`, an accepted invitation opens
+  `/invites`, and a dispute allowed on appeal opens `/links`, where the refused
+  link can now be created.
+
+  **Two kinds lead nowhere and say so** rather than sending you back to the list
+  you were reading: an audit-growth warning, because the audit log has no
+  dashboard page and what to do about it is a configuration variable; and a
+  dispute whose refusal was upheld, because no page shows a refusal that stands.
+  Those two render without anything to click. Every kind the code declares has an
+  answer of one sort or the other, and a test reads the vocabulary out of the
+  source rather than from a list, so a kind added later fails the build instead
+  of quietly becoming unclickable.
+
+  Opening one is a form submit rather than a link, because it changes state and a
+  state change behind a `GET` is one any prefetch can fire.
+
+- **A read notification can be marked unread**, which is the undo for having
+  opened one by accident — and this release is what makes the accident common.
+  `DELETE /api/v1/notifications/{id}/read` over the API. No schema change: unread
+  has always meant the read timestamp is absent, so putting one back is removing
+  a value.
+
+- **`/links/{id}/qr` and `/disputes/reviewers`** — the two on-demand panels
+  below, each also served as an ordinary page. Bookmark one, open it in a second
+  tab, or share the URL.
+
 ### Changed
+
+- **A link's QR code stops being a section and becomes a panel.** What is on the
+  page is a small rendered code beside the link's name, at the top; clicking it —
+  or **Settings and download** in the QR section further down — opens the full
+  code, the style form and the download over the page you are on. An owner given
+  the task of retrieving a QR code spent about twenty-six seconds finding it, and
+  the note asked for exactly this shape.
+
+  **The download control keeps its text and gains an icon.** The note named "the
+  download button being text instead of an icon"; an unlabelled icon is a guess
+  for anybody who does not already know what it does, so it is both.
+
+- **Managing dispute reviewers moves off the review queue.** The queue still says
+  who reviews it — that is context for a page whose decisions are instance-wide —
+  and appointing or withdrawing somebody is behind **Change who reviews**.
+  Permissions are unchanged: the roster is `instance.admin` in both places, and
+  the queue is `destinations.review` as it was.
+
+  Both panels are the same mechanism, and its defining property is that the
+  contents are a route first: the popup is what the browser does with the same
+  markup when it can, and a browser too old for it renders the panel inline
+  rather than hiding it. No modal library, no CDN and no new script — the
+  dashboard's stylesheet and content-security policy are unchanged.
+
 
 - **The dashboard shell says where you are, at every membership count.** The
   header now names the current organization and workspace on every page. With one

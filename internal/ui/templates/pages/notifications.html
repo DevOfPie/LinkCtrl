@@ -1,8 +1,25 @@
 {{define "content"}}
+{{/* Notifications lead somewhere (M48).
+
+     Until this milestone an item here was a sentence and nothing else: "an
+     automation rule fired" with no way to reach the rule, which is the same
+     complaint as a QR code eight screens down wearing different clothes.
+
+     **The title is a form submit, not a link.** Opening a notification marks it
+     read, and a state change behind a GET is a state change any prefetch, any
+     link checker and any <img> on somebody else's page can fire. The button is
+     styled as text so it reads as the heading it is; the POST goes to
+     /notifications/{id}/open, which marks it read and answers a redirect to
+     wherever the mapping in internal/httpx sends that kind.
+
+     An item whose kind leads nowhere renders as plain text, with the mark-read
+     control it always had. That is a real answer rather than a gap — the audit
+     log has no dashboard page — and it is why .Target is a field rather than a
+     boolean. */}}
 <div class="mb-6 flex items-start justify-between gap-4">
   <div>
     <h1 class="text-xl font-semibold tracking-tight">Notifications</h1>
-    <p class="mt-1 text-sm text-muted">Things this instance wanted you to know about. Nothing is sent by email until a mailer is configured.</p>
+    <p class="mt-1 text-sm text-muted">Things this instance wanted you to know about. Opening one takes you to what it is about and marks it read.</p>
   </div>
   {{if .Unread}}
   <form method="post" action="/notifications/read">
@@ -20,14 +37,32 @@
   <li class="rounded-lg border {{if .ReadAt}}border-line bg-raised{{else}}border-accent-line bg-accent-soft{{end}} p-4">
     <div class="flex items-start justify-between gap-4">
       <div class="min-w-0">
+        {{if .Target}}
+        <form method="post" action="/notifications/{{.ID}}/open">
+          <button type="submit" class="cursor-pointer text-left text-sm font-medium text-ink hover:underline">
+            {{if not .ReadAt}}<span class="mr-1.5 inline-block h-2 w-2 rounded-full bg-accent align-middle" aria-label="Unread"></span>{{end}}
+            {{.Title}}
+          </button>
+        </form>
+        {{else}}
         <h2 class="text-sm font-medium text-ink">
           {{if not .ReadAt}}<span class="mr-1.5 inline-block h-2 w-2 rounded-full bg-accent align-middle" aria-label="Unread"></span>{{end}}
           {{.Title}}
         </h2>
+        {{end}}
         {{if .Body}}<p class="mt-1 text-sm text-muted">{{.Body}}</p>{{end}}
         <p class="mt-2 text-xs text-subtle">{{.CreatedAt.Format "2 Jan 2006, 15:04"}} UTC · {{.Kind}}</p>
       </div>
-      {{if not .ReadAt}}
+      {{/* Read and unread are both undoable, and the second one is M48's: the
+           owner's note was *"No way to mark a read message as unread if it was
+           accidentally marked as read"*, and the accident is caused by the
+           click-through above. So the undo ships with the thing that needs
+           undoing rather than after it. */}}
+      {{if .ReadAt}}
+      <form method="post" action="/notifications/{{.ID}}/unread">
+        <button type="submit" class="shrink-0 rounded-md px-2 py-1 text-sm text-muted hover:bg-sunken hover:text-ink">Mark unread</button>
+      </form>
+      {{else}}
       <form method="post" action="/notifications/{{.ID}}/read">
         <button type="submit" class="shrink-0 rounded-md px-2 py-1 text-sm text-muted hover:bg-sunken hover:text-ink">Mark read</button>
       </form>

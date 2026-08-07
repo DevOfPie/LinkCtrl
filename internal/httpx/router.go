@@ -432,6 +432,10 @@ func registerAppRoutes(d Deps, app *appMux) {
 			"GET " + APIPrefix + "/notifications/unread":     n.Unread,
 			"POST " + APIPrefix + "/notifications/read":      n.ReadAll,
 			"POST " + APIPrefix + "/notifications/{id}/read": n.Read,
+			// Marking one unread is a DELETE of the read state rather than a
+			// second verb on the same noun: `read_at` is a column with a value
+			// or without one, and removing it is what this does (M48).
+			"DELETE " + APIPrefix + "/notifications/{id}/read": n.MarkUnread,
 		} {
 			app.Handle(pattern, RequireAuth(h))
 		}
@@ -534,12 +538,18 @@ func registerAppRoutes(d Deps, app *appMux) {
 			"POST /campaigns":                     web.CampaignCreate,
 			"POST /campaigns/{campaignID}":        web.CampaignUpdate,
 			"POST /campaigns/{campaignID}/delete": web.CampaignDelete,
-			"POST /links/{id}/qr":                 web.LinkQRStyle,
-			"GET /folders":                        web.FoldersPage,
-			"POST /folders":                       web.FolderCreate,
-			"POST /folders/{folderID}":            web.FolderRename,
-			"POST /folders/{folderID}/move":       web.FolderMove,
-			"POST /folders/{folderID}/delete":     web.FolderDelete,
+			// The QR panel's own route (M48), and the POST that has always
+			// written the style. The GET is what makes the panel a panel: its
+			// contents render as an ordinary page when opened directly, and the
+			// popover on the link page is the same block drawn over the surface
+			// it belongs to.
+			"GET /links/{id}/qr":              web.LinkQRPage,
+			"POST /links/{id}/qr":             web.LinkQRStyle,
+			"GET /folders":                    web.FoldersPage,
+			"POST /folders":                   web.FolderCreate,
+			"POST /folders/{folderID}":        web.FolderRename,
+			"POST /folders/{folderID}/move":   web.FolderMove,
+			"POST /folders/{folderID}/delete": web.FolderDelete,
 			// Registered hostnames (M39). Three POSTs and no JavaScript, like
 			// the folder page: registering, renaming and removing are each a
 			// form that submits on its own. The page exists to say what the API
@@ -599,9 +609,14 @@ func registerAppRoutes(d Deps, app *appMux) {
 			"GET /notifications":                     web.NotificationsPage,
 			"POST /notifications/read":               web.NotificationReadAll,
 			"POST /notifications/{id}/read":          web.NotificationRead,
-			"POST /keys":                             web.KeyCreate,
-			"POST /keys/{id}/revoke":                 web.KeyRevoke,
-			"GET /account":                           web.AccountPage,
+			// Where a notification leads, and the undo for the read it performs
+			// on the way (M48). Both POST: opening one changes state, and
+			// unreading one is the correction for having done so by accident.
+			"POST /notifications/{id}/open":   web.NotificationOpen,
+			"POST /notifications/{id}/unread": web.NotificationUnread,
+			"POST /keys":                      web.KeyCreate,
+			"POST /keys/{id}/revoke":          web.KeyRevoke,
+			"GET /account":                    web.AccountPage,
 			// Read-only, and registered GET-only on purpose: a POST to /feeds
 			// must be refused by the mux rather than by a handler somebody
 			// could add one to. D40, and TestTheDisclosurePageAcceptsNoWrite.
@@ -639,6 +654,12 @@ func registerAppRoutes(d Deps, app *appMux) {
 			// posting into a 404.
 			if web.Instance != nil {
 				for pattern, fn := range map[string]http.HandlerFunc{
+					// The roster's own route (M48), the panel pattern's second
+					// caller. Registered beside the writes rather than with the
+					// queue for the reason the writes are: without web.Instance
+					// the section is not drawn, and a page with no service
+					// behind it would render a form posting into a 404.
+					"GET /disputes/reviewers":              web.DisputeReviewersPage,
 					"POST /disputes/reviewers":             web.DisputeReviewerGrant,
 					"POST /disputes/reviewers/{id}/revoke": web.DisputeReviewerRevoke,
 				} {

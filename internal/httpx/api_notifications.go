@@ -67,6 +67,29 @@ func (a *NotificationAPI) Read(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// MarkUnread puts one notification back in the unread list (M48).
+//
+// The API counterpart of the dashboard's undo, so the surfaces stay level: the
+// inherited rule is that every UI feature has API support, and this is the one
+// operation M48 adds that changes state. The click-through itself is navigation
+// and has no API form — a JSON client already receives `kind` and `data` and
+// decides its own destinations.
+//
+// Idempotent and probe-resistant on the same terms as Read: an id that is not
+// the caller's own changes no rows and answers 204.
+func (a *NotificationAPI) MarkUnread(w http.ResponseWriter, r *http.Request) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	if err := a.Notify.MarkUnread(r.Context(), IdentityFrom(r.Context()), id); err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ReadAll empties the badge and reports how many it cleared.
 func (a *NotificationAPI) ReadAll(w http.ResponseWriter, r *http.Request) {
 	n, err := a.Notify.MarkAllRead(r.Context(), IdentityFrom(r.Context()))

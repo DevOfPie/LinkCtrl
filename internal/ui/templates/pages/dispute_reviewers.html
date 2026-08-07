@@ -1,0 +1,27 @@
+{{define "content"}}
+{{/* The reviewer panel, as an ordinary page (M48).
+
+     The same block the popup on /disputes renders, served at its own route so
+     the panel's contents are reachable without the popup — bookmarked, opened
+     in a second tab, or reached by a browser below the Popover API's floor.
+
+     The gate is the route's, not this template's: the handler refuses anybody
+     without instance.admin, exactly as the section on the queue is drawn only
+     for them. A page that rendered the form and left the refusal to the POST
+     would be offering a control that cannot work. */}}
+<div class="mb-6">
+  <a href="/disputes" class="text-sm text-muted hover:text-ink">← Blocked destinations</a>
+  <h1 class="mt-2 text-xl font-semibold tracking-tight">Who reviews disputes</h1>
+  <p class="mt-1 text-sm text-muted">
+    This queue is instance-wide: a decision in it changes what every workspace on this
+    instance may link to.
+  </p>
+</div>
+
+{{template "flash_ok" .Notice}}
+{{template "flash_error" .Error}}
+
+<div class="rounded-lg border border-line bg-raised p-6">
+  {{template "dispute_reviewers_body" .}}
+</div>
+{{end}}

@@ -73,7 +73,13 @@ type shell struct {
 	//
 	// Empty is the ordinary state of a new account, and the bell renders an
 	// empty state rather than an empty box for it.
-	UnreadPreview []notify.Notification
+	//
+	// Carries each row's destination since M48, which is why it is a view rather
+	// than the service's own type: the bell is the surface unread notifications
+	// are actually read on, and an item there that leads nowhere while the same
+	// item on /notifications leads somewhere would be two answers to one
+	// question.
+	UnreadPreview []notificationView
 	// Theme is the explicit override, or "" to follow prefers-color-scheme.
 	// Rendered as an attribute on <html> by the layout, so the first response
 	// is already in the right theme and there is no correcting script — the
@@ -140,7 +146,7 @@ func (h *Web) shell(r *http.Request, title, nav string) shell {
 	// not be computed is the wrong trade.
 	if h.Notify != nil && s.Identity != nil {
 		if n, items, err := h.Notify.UnreadPreview(r.Context(), s.Identity, notify.PreviewLimit); err == nil {
-			s.Unread, s.UnreadPreview = n, items
+			s.Unread, s.UnreadPreview = n, notificationViews(items)
 		}
 	}
 	// Same trade for the switcher: a page whose content the reader asked for

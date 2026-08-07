@@ -37,6 +37,69 @@ type disputesPageData struct {
 	// Reviewers is the roster, loaded only when CanAdminister. Empty otherwise,
 	// and empty is never rendered.
 	Reviewers []instance.Reviewer
+	// ReviewersReturn is where a grant or a revoke lands, carried on the forms
+	// inside the panel (M48). See reviewersReturn.
+	ReviewersReturn string
+}
+
+// reviewerRosterPath is the panel's own route: the reviewer roster served as an
+// ordinary page.
+const reviewerRosterPath = "/disputes/reviewers"
+
+// reviewersReturn is where a reviewer write lands, given what the form asked
+// for.
+//
+// Matched, never followed — the same rule qrReturn applies, and for the same
+// reason. Two surfaces render the roster since M48, and the form is the only
+// thing that knows which one the reader is standing on; the value is compared
+// against the two literals below and anything else falls back to the queue.
+func reviewersReturn(next, outcome string) string {
+	if next == reviewerRosterPath {
+		return reviewerRosterPath + "?reviewers=" + outcome
+	}
+	return "/disputes?reviewers=" + outcome
+}
+
+// reviewersPageData is what pages/dispute_reviewers.html renders.
+type reviewersPageData struct {
+	shell
+	Reviewers       []instance.Reviewer
+	ReviewersReturn string
+	Notice          string
+	Error           string
+}
+
+// DisputeReviewersPage serves the reviewer roster at its own URL (M48).
+//
+// The panel's route, and the second caller of the pattern the QR area
+// introduced: what is on the queue is a summary, and changing the list is here.
+//
+// **The gate is unchanged and it is checked here rather than left to the POST.**
+// `Instance.Reviewers` refuses anybody without instance.admin, which is exactly
+// the guard the section on the queue is drawn under (D98) — a page that rendered
+// the form for somebody who cannot use it would be offering a control that
+// answers 403.
+func (h *Web) DisputeReviewersPage(w http.ResponseWriter, r *http.Request) {
+	reviewers, err := h.Instance.Reviewers(r.Context(), IdentityFrom(r.Context()))
+	if err != nil {
+		h.webError(w, r, err)
+		return
+	}
+
+	data := reviewersPageData{
+		shell:           h.shell(r, "Who reviews disputes", "disputes"),
+		Reviewers:       reviewers,
+		ReviewersReturn: reviewerRosterPath,
+	}
+	switch r.URL.Query().Get("reviewers") {
+	case "granted":
+		data.Notice = "Appointed. They can now read this queue and decide what is in it."
+	case "revoked":
+		data.Notice = "Withdrawn. They keep every permission their own organization gives them."
+	case "unknown":
+		data.Error = "No account on this instance has that address."
+	}
+	h.render(w, r, http.StatusOK, "dispute_reviewers", data)
 }
 
 // DisputesPage is the review queue.
@@ -58,6 +121,9 @@ func (h *Web) DisputesPage(w http.ResponseWriter, r *http.Request) {
 		OpenOnly:      r.URL.Query().Get("all") != "1",
 		CanDecide:     actor.Can(dispute.PermDecide),
 		CanAdminister: actor.Can(instance.PermAdmin),
+		// The panel's forms are rendered on this page, so a write from inside
+		// the popup comes back to the queue rather than to the panel's route.
+		ReviewersReturn: "/disputes",
 	}
 
 	if data.CanAdminister && h.Instance != nil {
@@ -149,15 +215,16 @@ func (h *Web) DisputeReviewerGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	next := r.PostFormValue("next")
 	_, err := h.Instance.GrantReviewer(r.Context(), IdentityFrom(r.Context()),
 		strings.TrimSpace(r.PostFormValue("email")))
 	switch {
 	case errors.Is(err, domain.ErrValidation):
-		seeOther(w, r, "/disputes?reviewers=unknown")
+		seeOther(w, r, reviewersReturn(next, "unknown"))
 	case err != nil:
 		h.webError(w, r, err)
 	default:
-		seeOther(w, r, "/disputes?reviewers=granted")
+		seeOther(w, r, reviewersReturn(next, "granted"))
 	}
 }
 
@@ -173,11 +240,15 @@ func (h *Web) DisputeReviewerRevoke(w http.ResponseWriter, r *http.Request) {
 		h.webError(w, r, err)
 		return
 	}
+	if err := parseForm(w, r); err != nil {
+		h.errorPage(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
+		return
+	}
 	if err := h.Instance.RevokeReviewer(r.Context(), IdentityFrom(r.Context()), id); err != nil {
 		h.webError(w, r, err)
 		return
 	}
-	seeOther(w, r, "/disputes?reviewers=revoked")
+	seeOther(w, r, reviewersReturn(r.PostFormValue("next"), "revoked"))
 }
 
 // DisputeFile is how a person who was refused asks for a review.

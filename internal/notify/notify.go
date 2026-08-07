@@ -492,6 +492,32 @@ func (s *Service) UnreadPreview(ctx context.Context, actor *auth.Identity, limit
 	return rows[0].UnreadTotal, items, nil
 }
 
+// Get returns one of the actor's own notifications.
+//
+// The click-through's first call (M48): where a notification leads is a function
+// of its kind and its data, and both are read off the row here rather than
+// carried on the request that asked to open it.
+//
+// A notification belonging to somebody else answers ErrNotFound, the same
+// answer an id that never existed gets, so the pair cannot be told apart. That
+// is the rule MarkRead below already follows, spelled as an error because this
+// one has a value to return.
+func (s *Service) Get(ctx context.Context, actor *auth.Identity, id uuid.UUID) (Notification, error) {
+	if actor == nil {
+		return Notification{}, domain.ErrUnauthorized
+	}
+	row, err := s.q.GetNotification(ctx, dbgen.GetNotificationParams{
+		ID: id, UserID: actor.UserID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return Notification{}, domain.ErrNotFound
+	case err != nil:
+		return Notification{}, fmt.Errorf("get notification: %w", err)
+	}
+	return toNotification(row), nil
+}
+
 // MarkRead marks one notification read, reporting whether it changed anything.
 //
 // A notification that is not the actor's own is indistinguishable from one that
@@ -507,6 +533,30 @@ func (s *Service) MarkRead(ctx context.Context, actor *auth.Identity, id uuid.UU
 	}
 	// Deliberately not ErrNotFound on zero rows: already-read is the common
 	// case — two tabs, or a double click — and it is a success, not a 404.
+	return nil
+}
+
+// MarkUnread puts one notification back in the unread list.
+//
+// The owner's note is the whole justification: *"No way to mark a read message
+// as unread if it was accidentally marked as read"*. M48 is also what makes the
+// accident common — opening a notification now marks it read on the way past —
+// so the undo ships with the thing that needs undoing rather than after it.
+//
+// No schema change. `read_at` has been nullable since 00600 and NULL has always
+// been what unread means, so this is an UPDATE and not a migration.
+//
+// Same probe-resistance as MarkRead: somebody else's id changes no rows and
+// reports success, because a 404 here would confirm the id exists.
+func (s *Service) MarkUnread(ctx context.Context, actor *auth.Identity, id uuid.UUID) error {
+	if actor == nil {
+		return domain.ErrUnauthorized
+	}
+	if _, err := s.q.MarkNotificationUnread(ctx, dbgen.MarkNotificationUnreadParams{
+		ID: id, UserID: actor.UserID,
+	}); err != nil {
+		return fmt.Errorf("mark notification unread: %w", err)
+	}
 	return nil
 }
 

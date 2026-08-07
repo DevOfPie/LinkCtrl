@@ -1,90 +1,171 @@
 {{define "link_qr"}}
-{{- /* The QR code (M41).
+{{- /* The QR area on a link's page (M41, reshaped by M48).
 
-       **The code carries its own background and does not follow the theme.** A QR
-       scanner expects dark modules on a light field; inverting them is refused by
-       a large share of readers, and a transparent code would invert itself the
-       moment somebody switched to dark mode. So the picture paints its own
-       background and quiet zone, and the theme tokens are on the frame around it.
-       Decision D74.
+       **What is in flow is a thumbnail; the settings and the download are a
+       panel.** The blind task that produced this spent ~26 seconds finding the
+       code, and the owner's own description of the fix is what is built here:
+       *"a small render of the QR code near the top that I can click on to open
+       the settings/download button in a pop-up"*. M47 moved the section up the
+       page and changed nothing about it; this is the second half.
 
-       The drawing is inlined SVG rather than an <img> pointing at the API. It is
-       bytes this process has already generated, so a second authenticated request
-       for the same picture would buy nothing; the download link beside it is the
-       API path, which is also the answer to "how do I get this from a script".
+       The thumbnail is itself the invoker, because that is what the note asks
+       for — the picture is the thing you click — and it is drawn in the page's
+       heading row rather than here, which is `link_qr_thumb` below. This
+       section keeps a worded trigger, so the affordance does not depend on
+       somebody guessing that an image is a button and so the panel is still
+       reachable from the place in the page order the code belongs to. Both
+       point at the same panel: `popovertarget` names an id, so an invoker may
+       live anywhere in the document, including in the header block that
+       renders before this section.
+
+       The code carries its own background and does not follow the theme. A QR
+       scanner expects dark modules on a light field; inverting them is refused
+       by a large share of readers, and a transparent code would invert itself
+       the moment somebody switched to dark mode. So the picture paints its own
+       background and quiet zone, and the theme tokens are on the frame around
+       it. Decision D74.
+
+       Both drawings are inlined SVG rather than an <img> pointing at the API.
+       They are bytes this process has already generated, so a second
+       authenticated request for the same picture would buy nothing; the download
+       control in the panel is the API path, which is also the answer to "how do
+       I get this from a script".
 
        The code encodes the short URL with `?src=qr` on it, which is what makes a
        scan countable: a camera sends no referrer, so without the parameter every
-       scan would arrive indistinguishable from somebody typing the URL.
-
-       Second on the page since M47, on the strength of the blind task that took
-       ~26 seconds to reach it. Reworking the panel into something on-demand is
-       M48's; M47 moved it and changed nothing about it. */ -}}
+       scan would arrive indistinguishable from somebody typing the URL. */ -}}
 <div id="qr" class="rounded-lg border border-line bg-raised p-6">
-  <h2 class="mb-1 text-sm font-medium text-ink">QR code</h2>
-  <p class="mb-4 text-sm text-muted">
-    Scans are counted as ordinary clicks and show up under <strong>{{.QRSourceLabel}}</strong> in the referrers breakdown below, because the code encodes the short URL with a source parameter on it. Restyling the code never changes what it says.
-  </p>
-  {{if .QRError}}
-  {{template "flash_error" .QRError}}
-  {{end}}
-  <div class="flex flex-wrap items-start gap-6">
-    <div>
-      {{/* A fixed frame, so a scale change resizes the drawing inside a box
-           that does not jump. The border is a theme token; everything inside
-           the <svg> is the code's own colours. */}}
-      <div class="inline-block max-w-full overflow-x-auto rounded-md border border-line-strong p-2">
-        {{if .QRSVG}}{{.QRSVG}}{{end}}
-      </div>
-      <p class="mt-2 break-all text-xs text-subtle">{{.QRContent}}</p>
-      <a href="{{.QRDownload}}" download="qr-{{.Link.Alias}}.svg"
-         class="mt-2 inline-block text-sm font-medium text-accent-ink hover:underline">Download the SVG →</a>
-    </div>
-
-    {{if .Identity.Can "links.update"}}
-    <form method="post" action="/links/{{.Link.ID}}/qr" class="grid flex-1 gap-4 sm:grid-cols-2">
-      <div>
-        <label for="qr_foreground" class="block text-sm font-medium text-ink">Code</label>
-        <input id="qr_foreground" name="foreground" type="color" value="{{.QRStyle.Foreground}}"
-               class="mt-1 block h-9 w-full rounded-md border border-line-strong bg-raised px-1 py-1">
-      </div>
-      <div>
-        <label for="qr_background" class="block text-sm font-medium text-ink">Background</label>
-        <input id="qr_background" name="background" type="color" value="{{.QRStyle.Background}}"
-               class="mt-1 block h-9 w-full rounded-md border border-line-strong bg-raised px-1 py-1">
-      </div>
-      <div>
-        <label for="qr_level" class="block text-sm font-medium text-ink">Error correction</label>
-        <select id="qr_level" name="level"
-                class="mt-1 block w-full rounded-md border border-line-strong bg-raised px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none">
-          {{range .QRLevels}}
-          <option value="{{.}}"{{if eq . $.QRStyle.Level}} selected{{end}}>{{.}}</option>
-          {{end}}
-        </select>
-      </div>
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <label for="qr_margin" class="block text-sm font-medium text-ink">Quiet zone</label>
-          <input id="qr_margin" name="margin" type="number" min="0" max="16" value="{{.QRStyle.Margin}}"
-                 class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
-        </div>
-        <div>
-          <label for="qr_scale" class="block text-sm font-medium text-ink">Module size</label>
-          <input id="qr_scale" name="scale" type="number" min="2" max="32" value="{{.QRStyle.Scale}}"
-                 class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
-        </div>
-      </div>
-      <div class="flex items-end gap-2 sm:col-span-2">
-        <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Save the style</button>
-        {{if .QRStored}}
-        <button type="submit" name="reset" value="1" class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-sunken">Back to black on white</button>
-        {{end}}
-      </div>
-      <p class="text-xs text-subtle sm:col-span-2">
-        A higher error-correction level survives more damage and packs the code tighter at the same printed size. The quiet zone is the empty margin scanners need; below four modules a code on a busy background starts failing. Keep the two colours far apart &mdash; a light code on a dark field is refused by many readers, which is why the picture paints its own background rather than following the page.
+  <div class="flex flex-wrap items-center gap-4">
+    <div class="min-w-0 grow">
+      <h2 class="text-sm font-medium text-ink">QR code</h2>
+      <p class="mt-1 text-sm text-muted">
+        Scans are counted as ordinary clicks and show up under <strong>{{.QRSourceLabel}}</strong> in the referrers breakdown below. Restyling the code never changes what it says.
       </p>
-    </form>
-    {{end}}
+    </div>
+    {{template "panel_trigger" (dict "ID" "link-qr-panel" "Label" "Settings and download")}}
   </div>
+  {{if .QRError}}
+  <div class="mt-4">{{template "flash_error" .QRError}}</div>
+  {{end}}
+
+  {{template "panel_open" (dict "ID" "link-qr-panel" "Title" "QR code" "Href" (printf "/links/%s/qr" .Link.ID))}}
+  {{template "link_qr_body" .}}
+  {{template "panel_close" .}}
+</div>
+{{end}}
+
+{{define "link_qr_thumb"}}
+{{- /* The small rendered code, drawn in the link page's heading row (M48).
+
+       **This is the one <svg> the page draws in front of the destination box,
+       and what lets it is a rule rather than an exemption.** M47 measured that
+       box at 327px from the top of a 1280×800 viewport and
+       TestTheEditControlIsReachableWithoutScrolling refuses anything above it
+       whose height the markup does not state — a picture that could be any
+       height can push the control below the fold without failing anything.
+       `ui.QRThumbClass` states it: the drawing is 6rem whatever version the
+       link's URL encodes to, so the height is a property of the page and not
+       of the data. Re-measured with it here, the box sits at 349px and the
+       alias's bottom edge at 465px, in all three engines. The owner's ruling of
+       2026-08-07 is why the guard narrowed rather than making room for this one
+       element; D124 is the reasoning it overruled, and decisions.md has both.
+
+       A <button> with no `name`, so `namedControls` does not count it and the
+       destination and the alias are still the first two controls the page
+       draws. The label is on the button because the picture carries none —
+       internal/qr writes no <title> and no aria-label, deliberately, so that a
+       workspace-controlled string never reaches markup the template engine has
+       stopped escaping. */ -}}
+{{if .QRThumbSVG}}
+<button type="button" popovertarget="link-qr-panel"
+        aria-label="QR code: open the settings and the download"
+        class="shrink-0 cursor-pointer rounded-md border border-line-strong p-1 hover:border-accent">
+  {{.QRThumbSVG}}
+</button>
+{{end}}
+{{end}}
+
+{{define "link_qr_body"}}
+{{- /* The panel's contents, and the page at /links/{id}/qr renders exactly this
+       block inside the ordinary layout. One definition, two surfaces: a
+       divergence between the popup and the page it is a popup *of* would be the
+       first thing this pattern got wrong. */ -}}
+{{if .QRError}}
+{{template "flash_error" .QRError}}
+{{end}}
+<div class="flex flex-wrap items-start gap-6">
+  <div>
+    {{/* A fixed frame, so a scale change resizes the drawing inside a box
+         that does not jump. The border is a theme token; everything inside
+         the <svg> is the code's own colours. */}}
+    <div class="inline-block max-w-full overflow-x-auto rounded-md border border-line-strong p-2">
+      {{if .QRSVG}}{{.QRSVG}}{{end}}
+    </div>
+    <p class="mt-2 break-all text-xs text-subtle">{{.QRContent}}</p>
+    {{/* The download control keeps its text and gains an icon (M48). The
+         owner's note named *"the download button being text instead of an
+         icon"*, and the fix is an icon beside the label rather than one
+         replacing it: an unlabelled icon is a guess for anybody who does not
+         already know what it does, and a download arrow is not a word. */}}
+    <a href="{{.QRDownload}}" download="qr-{{.Link.Alias}}.svg"
+       class="mt-2 inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-sm font-medium text-ink hover:bg-sunken">
+      <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 fill-current" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v8.6l2.3-2.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4l2.3 2.3V4a1 1 0 0 1 1-1ZM5 18a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg>
+      Download the SVG
+    </a>
+  </div>
+
+  {{if .Identity.Can "links.update"}}
+  <form method="post" action="/links/{{.Link.ID}}/qr" class="grid flex-1 gap-4 sm:grid-cols-2">
+    {{/* Where the save lands, carried on the form the way the workspace
+         switcher and the appearance control already carry theirs. The panel is
+         a route, so a write from inside it has two honest destinations — the
+         link page it was opened over, or the panel's own page when that is
+         where the reader is standing — and the form is the only thing that
+         knows which. The handler accepts neither value as given: it compares
+         against the two paths it builds itself, so this field cannot name a
+         third. */}}
+    <input type="hidden" name="next" value="{{.QRReturn}}">
+    <div>
+      <label for="qr_foreground" class="block text-sm font-medium text-ink">Code</label>
+      <input id="qr_foreground" name="foreground" type="color" value="{{.QRStyle.Foreground}}"
+             class="mt-1 block h-9 w-full rounded-md border border-line-strong bg-raised px-1 py-1">
+    </div>
+    <div>
+      <label for="qr_background" class="block text-sm font-medium text-ink">Background</label>
+      <input id="qr_background" name="background" type="color" value="{{.QRStyle.Background}}"
+             class="mt-1 block h-9 w-full rounded-md border border-line-strong bg-raised px-1 py-1">
+    </div>
+    <div>
+      <label for="qr_level" class="block text-sm font-medium text-ink">Error correction</label>
+      <select id="qr_level" name="level"
+              class="mt-1 block w-full rounded-md border border-line-strong bg-raised px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none">
+        {{range .QRLevels}}
+        <option value="{{.}}"{{if eq . $.QRStyle.Level}} selected{{end}}>{{.}}</option>
+        {{end}}
+      </select>
+    </div>
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label for="qr_margin" class="block text-sm font-medium text-ink">Quiet zone</label>
+        <input id="qr_margin" name="margin" type="number" min="0" max="16" value="{{.QRStyle.Margin}}"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      </div>
+      <div>
+        <label for="qr_scale" class="block text-sm font-medium text-ink">Module size</label>
+        <input id="qr_scale" name="scale" type="number" min="2" max="32" value="{{.QRStyle.Scale}}"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      </div>
+    </div>
+    <div class="flex items-end gap-2 sm:col-span-2">
+      <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Save the style</button>
+      {{if .QRStored}}
+      <button type="submit" name="reset" value="1" class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-sunken">Back to black on white</button>
+      {{end}}
+    </div>
+    <p class="text-xs text-subtle sm:col-span-2">
+      A higher error-correction level survives more damage and packs the code tighter at the same printed size. The quiet zone is the empty margin scanners need; below four modules a code on a busy background starts failing. Keep the two colours far apart &mdash; a light code on a dark field is refused by many readers, which is why the picture paints its own background rather than following the page.
+    </p>
+  </form>
+  {{end}}
 </div>
 {{end}}

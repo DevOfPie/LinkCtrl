@@ -353,3 +353,61 @@ func TestAHigherLevelCostsModules(t *testing.T) {
 			"reaching the encoder", high.Size, low.Size)
 	}
 }
+
+// TestAClassGoesOnTheRootElementAndNowhereElse is M48's addition, and the whole
+// point of it is that the class is on the `<svg>` rather than on something
+// wrapping it: the link page's guard reads the height off the drawing itself,
+// because the drawing is what has a height nobody stated.
+func TestAClassGoesOnTheRootElementAndNowhereElse(t *testing.T) {
+	svg, err := RenderClass(sample, Style{}, "h-24 w-24")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(svg)
+
+	if !strings.HasPrefix(got, `<svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24" width="`) {
+		t.Errorf("the class is not on the root element:\n  %.120s…", got)
+	}
+	if n := strings.Count(got, "class="); n != 1 {
+		t.Errorf("the drawing carries %d class attributes, want 1; the modules are "+
+			"not styled individually and never should be", n)
+	}
+
+	// And Render is still the same bytes it was, so every caller that wants no
+	// class gets no attribute rather than an empty one.
+	plain, err := Render(sample, Style{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(plain), "class=") {
+		t.Error("Render writes a class attribute; an empty class must write nothing, " +
+			"because this is also the document served at /qr.svg and downloaded")
+	}
+}
+
+// TestNothingButAClassNameReachesTheClassAttribute is
+// TestNothingButAColourReachesTheDrawing for the second caller-controlled input
+// this package acquired.
+//
+// The class is a Go constant today and an attacker reaches none of it. That is
+// exactly the argument that stops being true the first time somebody derives one
+// from data, and the package's promise — that the bytes cannot hold a `<` this
+// file did not write — is worth more than the argument.
+func TestNothingButAClassNameReachesTheClassAttribute(t *testing.T) {
+	hostile := []string{
+		`h-24" onload="x`,
+		`"><script>alert(1)</script>`,
+		`h-[6rem]`,
+		"h-24\nw-24",
+		"h-24\x00",
+		`h-24;`,
+		`h-24'`,
+	}
+	for _, class := range hostile {
+		t.Run(class, func(t *testing.T) {
+			if _, err := RenderClass(sample, Style{}, class); err == nil {
+				t.Fatalf("%q was accepted as a class list", class)
+			}
+		})
+	}
+}

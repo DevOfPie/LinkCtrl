@@ -30,7 +30,18 @@ func owner() *identityStub {
 		Email: "o@example.com", Name: "Owner", Role: "owner",
 		UserID: "0198c9c5-0000-7000-8000-000000000001",
 		perms: map[string]bool{
-			"links.create": true, "links.update": true, "links.delete": true,
+			// **links.read was missing until M48**, and three sections of the
+			// link page were therefore rendered by nothing: `link_qr`,
+			// `link_rules` and `link_split` are each guarded on it, so
+			// TestEveryPageRenders had been exercising a link page with its QR
+			// code, its routing rules and its split test all absent since M47
+			// decomposed the page. Every owner holds links.read — an owner who
+			// could create a link and not read one is not a state this product
+			// has — so the fixture was wrong rather than narrow.
+			//
+			// Found by M48, which could not assert that its panel renders on the
+			// link page until the section carrying it did.
+			"links.read": true, "links.create": true, "links.update": true, "links.delete": true,
 			// The identity menu's three administrative entries are drawn from
 			// the shell on every page, so an owner holds all three permissions
 			// here and every page exercises those branches.
@@ -451,18 +462,20 @@ func pageData(t *testing.T) map[string]any {
 			// that is *not* the reader: one carries a Withdraw control and the
 			// other says "you". A single-row fixture would leave half the
 			// section unrendered, which is the same trap twoWorkspaces avoids.
-			"Reviewers": []map[string]any{
-				{
-					"UserID": "0198c9c5-0000-7000-8000-000000000001",
-					"Email":  "o@example.com", "Name": "Owner",
-					"GrantedAt": now, "GrantedBy": (*string)(nil), "CanDecide": true,
-				},
-				{
-					"UserID": "0198c9c5-0000-7000-8000-000000000002",
-					"Email":  "admin@example.com", "Name": "Admin",
-					"GrantedAt": now, "GrantedBy": &ownerUserID, "CanDecide": true,
-				},
-			},
+			"Reviewers": reviewerRoster(now, &ownerUserID),
+			// Where the panel's forms return to when they are submitted from
+			// this page rather than from the roster's own route (M48).
+			"ReviewersReturn": "/disputes",
+		},
+		// The reviewer panel as a page (M48): the same block the popup on
+		// /disputes renders, served at /disputes/reviewers. Both entries carry
+		// the same roster, so a divergence between the two surfaces shows up as
+		// one of them rendering something the other does not.
+		"dispute_reviewers": map[string]any{
+			"Title": "Who reviews disputes", "Nav": "disputes", "Identity": owner(),
+			"Reviewers":       reviewerRoster(now, &ownerUserID),
+			"ReviewersReturn": "/disputes/reviewers",
+			"Notice":          "", "Error": "",
 		},
 		"link_detail": map[string]any{
 			"Title": "/demo", "Nav": "links", "Identity": owner(),
@@ -494,9 +507,59 @@ func pageData(t *testing.T) map[string]any {
 				{"Value": "ZA", "Clicks": int64(4), "UniqueVisitors": int64(1)},
 				{"Value": "HK", "Clicks": int64(2), "UniqueVisitors": int64(1)},
 			},
-			"GeoBase":        "/links/0198c9c5-0000-7000-8000-000000000001?days=30",
-			"GeoList":        "/links/0198c9c5-0000-7000-8000-000000000001?days=30#countries",
-			"GeoUnavailable": GeoUnavailable,
+			// Routing rules and the split test, which the fixture has never
+			// carried because the permission that draws them was missing from
+			// `owner` — see the note there. Both sections render an empty state
+			// and a populated one, and the populated one is the interesting
+			// branch: a table, a toggle whose label flips on `Enabled`, and a
+			// fallback row. One rule of each state, and one arm of each, for the
+			// reason twoWorkspaces gives.
+			"Rules": []map[string]any{
+				{
+					"Rule": map[string]any{
+						"ID": "0198c9c5-0000-7000-8000-000000000060", "Priority": 10,
+						"URL": "https://example.com/uk", "Enabled": true,
+					},
+					"Summary": "Country is GB",
+				},
+				{
+					"Rule": map[string]any{
+						"ID": "0198c9c5-0000-7000-8000-000000000061", "Priority": 20,
+						"URL": "https://example.com/mobile", "Enabled": false,
+					},
+					"Summary": "Device is mobile",
+				},
+			},
+			"RuleWeekdays":       []string{"mon", "tue", "wed", "thu", "fri", "sat", "sun"},
+			"RuleHelp":           "One condition per line.",
+			"ReturningAvailable": true,
+			"Split": map[string]any{
+				"Kind": "weighted",
+				"Variants": []map[string]any{
+					{
+						"ID":  "0198c9c5-0000-7000-8000-000000000070",
+						"URL": "https://example.com/a", "Weight": 60,
+						"Enabled": true, "Share": 60.0,
+					},
+					{
+						"ID":  "0198c9c5-0000-7000-8000-000000000071",
+						"URL": "https://example.com/b", "Weight": 40,
+						"Enabled": false, "Share": 0.0,
+					},
+				},
+				"Fallback": map[string]any{
+					"ID":  "0198c9c5-0000-7000-8000-000000000072",
+					"URL": "https://example.com/fallback", "Enabled": true,
+				},
+			},
+			"SplitKinds":        []string{"weighted", "sequential"},
+			"SplitHelp":         "A weight is a share, not a percentage.",
+			"MaxWeight":         100,
+			"MinPasswordLength": 12,
+			"GeoAvailable":      true,
+			"GeoBase":           "/links/0198c9c5-0000-7000-8000-000000000001?days=30",
+			"GeoList":           "/links/0198c9c5-0000-7000-8000-000000000001?days=30#countries",
+			"GeoUnavailable":    GeoUnavailable,
 			"Form": map[string]string{
 				"URL": "https://example.com/x", "Alias": "demo", "Title": "A demo",
 				"Description": "", "ExpiresAt": "", "Tags": "launch",
@@ -513,7 +576,14 @@ func pageData(t *testing.T) map[string]any {
 			"CampaignOptions": []map[string]any{
 				{"ID": "0198c9c5-0000-7000-8000-000000000050", "Label": "Summer 2026", "Selected": true},
 			},
-			"QRSVG":     template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" role="img"></svg>`),
+			"QRSVG": template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" role="img"></svg>`),
+			// The class is QRThumbClass rather than a copy of it: this stub is what
+			// TestTheEditControlIsReachableWithoutScrolling measures the heading
+			// row's height from, and a fixture free to state a different height
+			// from the one internal/httpx renders would measure a page nobody is
+			// served.
+			"QRThumbSVG": template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" class="` +
+				QRThumbClass + `" width="111" height="111" role="img"></svg>`),
 			"QRContent": "http://links.test/demo?src=qr",
 			"QRStyle": map[string]any{
 				"Foreground": "#000000", "Background": "#ffffff",
@@ -523,8 +593,37 @@ func pageData(t *testing.T) map[string]any {
 			"QRStored":      true,
 			"QRDownload":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.svg",
 			"QRSourceLabel": "qr",
+			"QRReturn":      "/links/0198c9c5-0000-7000-8000-000000000001",
 			"FieldErrors":   map[string]string{},
 			"Notice":        "", "Error": "",
+		},
+		// The QR panel as a page (M48). Same fields as the link page's QR area,
+		// because it is the same block: linkQRView is one struct embedded in two
+		// page structs, and this fixture is the assertion that the second one is
+		// not short of anything the block reads. QRReturn differs, and only
+		// QRReturn, which is the panel's own route rather than the link page.
+		"link_qr": map[string]any{
+			"Title": "QR code · /demo", "Nav": "links", "Identity": owner(),
+			"Link":  lnk,
+			"QRSVG": template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" role="img"></svg>`),
+			// The class is QRThumbClass rather than a copy of it: this stub is what
+			// TestTheEditControlIsReachableWithoutScrolling measures the heading
+			// row's height from, and a fixture free to state a different height
+			// from the one internal/httpx renders would measure a page nobody is
+			// served.
+			"QRThumbSVG": template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" class="` +
+				QRThumbClass + `" width="111" height="111" role="img"></svg>`),
+			"QRContent": "http://links.test/demo?src=qr",
+			"QRStyle": map[string]any{
+				"Foreground": "#000000", "Background": "#ffffff",
+				"Level": "M", "Margin": 4, "Scale": 8,
+			},
+			"QRLevels":      []string{"L", "M", "Q", "H"},
+			"QRStored":      true,
+			"QRDownload":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.svg",
+			"QRSourceLabel": "qr",
+			"QRReturn":      "/links/0198c9c5-0000-7000-8000-000000000001/qr",
+			"Notice":        "",
 		},
 		"keys": map[string]any{
 			"Title": "API keys", "Nav": "keys", "Identity": owner(),
@@ -551,11 +650,13 @@ func pageData(t *testing.T) map[string]any {
 			// as *Last-Used*.
 			"WorkspacePinned": false,
 		},
-		// Both states in one render: a read notification and an unread one, so
-		// the branch that draws the dot and the "mark read" button is exercised
-		// alongside the branch that does not. Unread is non-zero so the nav
-		// badge renders too — it is drawn from the shell on every page, and a
-		// template error there would break every page rather than this one.
+		// Every state in one render. A read notification and an unread one, so
+		// the dot, "Mark read" and "Mark unread" are each exercised; and since
+		// M48 one item that leads somewhere beside one that does not, because
+		// those are two different headings — a submit button and an <h2>. Unread
+		// is non-zero so the nav badge renders too: it is drawn from the shell on
+		// every page, and a template error there would break every page rather
+		// than this one.
 		"notifications": map[string]any{
 			"Title": "Notifications", "Nav": "notifications", "Identity": owner(),
 			"Unread": int64(1),
@@ -565,11 +666,13 @@ func pageData(t *testing.T) map[string]any {
 					"Title":  "The audit log has passed its size threshold",
 					"Body":   "audit_logs now uses 5.2 GiB on disk.",
 					"Data":   map[string]any{"bytes": int64(5583457484)},
+					"Target": "",
 					"ReadAt": (*time.Time)(nil), "CreatedAt": now,
 				},
 				{
-					"ID": "0198c9c5-0000-7000-8000-000000000004", "Kind": "audit.growth",
-					"Title": "An older notice", "Body": "",
+					"ID": "0198c9c5-0000-7000-8000-000000000004", "Kind": "automation.fired",
+					"Title": "Automation rule fired: Expiring soon", "Body": "",
+					"Target": "/automation",
 					"ReadAt": &now, "CreatedAt": now,
 				},
 			},
@@ -799,18 +902,52 @@ func pageData(t *testing.T) map[string]any {
 	return data
 }
 
+// reviewerRoster is the instance's dispute reviewers, as both surfaces that
+// render them see them (M45; two surfaces since M48).
+//
+// Two rows, because the roster's interesting branch is the one that is *not* the
+// reader: it carries a Withdraw control and the other says "you". A single-row
+// fixture would leave half the section unrendered, which is the same trap
+// twoWorkspaces avoids.
+//
+// A function rather than a literal in each entry, so the queue's summary and the
+// panel's page are rendered from the same rows. Two copies would let one drift
+// and still render.
+func reviewerRoster(now time.Time, grantedBy *string) []map[string]any {
+	return []map[string]any{
+		{
+			"UserID": "0198c9c5-0000-7000-8000-000000000001",
+			"Email":  "o@example.com", "Name": "Owner",
+			"GrantedAt": now, "GrantedBy": (*string)(nil), "CanDecide": true,
+		},
+		{
+			"UserID": "0198c9c5-0000-7000-8000-000000000002",
+			"Email":  "admin@example.com", "Name": "Admin",
+			"GrantedAt": now, "GrantedBy": grantedBy, "CanDecide": true,
+		},
+	}
+}
+
 // unreadPreview is the bell's data: two unread notifications, one with a body
 // and one without, so both branches of the item template render.
+//
+// **Their Targets differ, and that is the point of the pair since M48.** One
+// leads somewhere and renders as a submit button; the other leads nowhere and
+// stays text, which is the branch a kind like audit.growth actually takes. A
+// fixture where both had a destination would render half the template.
 func unreadPreview(now time.Time) []map[string]any {
 	return []map[string]any{
 		{
 			"ID": "0198c9c5-0000-7000-8000-000000000005", "Kind": "audit.growth",
-			"Title": "The audit log has passed its size threshold",
-			"Body":  "audit_logs now uses 5.2 GiB on disk.", "CreatedAt": now,
+			"Title":  "The audit log has passed its size threshold",
+			"Body":   "audit_logs now uses 5.2 GiB on disk.",
+			"Target": "", "CreatedAt": now,
 		},
 		{
-			"ID": "0198c9c5-0000-7000-8000-000000000006", "Kind": "audit.growth",
-			"Title": "A notice with no body", "Body": "", "CreatedAt": now,
+			"ID": "0198c9c5-0000-7000-8000-000000000006", "Kind": "dispute.filed",
+			"Title": "A notice with no body", "Body": "",
+			"Target":    "/disputes?all=1#dispute-0198c9c5-0000-7000-8000-000000000030",
+			"CreatedAt": now,
 		},
 	}
 }

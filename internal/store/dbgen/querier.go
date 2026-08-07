@@ -783,6 +783,15 @@ type Querier interface {
 	// two administrators acting at once could each read a state the other is
 	// changing — the check-then-act that the last-owner refusal exists to prevent.
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
+	//
+	// One row of the actor's own inbox, scoped by user_id like every statement
+	// around it: somebody else's notification is "no rows" rather than a 403 that
+	// confirms the id exists.
+	//
+	// Read by the click-through (M48). Where a notification leads is computed from
+	// its `kind` and its `data`, and both have to come off the row — a destination
+	// carried on the request would be a redirect target the caller chose.
+	GetNotification(ctx context.Context, arg GetNotificationParams) (Notification, error)
 	// The organization being deleted, read after LockOrganizations has locked it.
 	//
 	// Its name and slug are read here because the audit record has to carry them:
@@ -1597,6 +1606,20 @@ type Querier interface {
 	// rather than a fresh timestamp, so "when did you first see this" survives a
 	// double click.
 	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (int64, error)
+	//
+	// `read_at` back to NULL, which is the whole of "unread": 00600 declared the
+	// column nullable and the inbox has always used NULL for it, so putting one
+	// back is an UPDATE and never a migration (M48).
+	//
+	// **Deliberately not the mirror image of MarkNotificationRead.** That statement
+	// refuses to touch an already-read row so that "when did you first see this"
+	// survives a double click. This one carries no such guard: it exists because the
+	// click-through M48 adds marks a notification read as a side effect of opening
+	// it, and somebody undoing that is saying they have not dealt with it — which is
+	// as true of a row read last week as of one read by accident a second ago. The
+	// first-seen timestamp is what is being discarded, on purpose, by the person it
+	// belongs to.
+	MarkNotificationUnread(ctx context.Context, arg MarkNotificationUnreadParams) (int64, error)
 	//
 	// Retry exhausted. Terminal, and deliberately not deleted: a row saying what was
 	// attempted, how many times, and what the receiver said is the whole reason this

@@ -3247,6 +3247,35 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "422":
           $ref: "#/components/responses/Validation"
+    delete:
+      tags: [notifications]
+      operationId: markNotificationUnread
+      summary: Put one notification back in the unread list
+      description: |
+        The undo for the line above, and for the click-through the dashboard
+        performs: opening a notification marks it read on the way past, so
+        having read one by accident is a common state rather than a rare one.
+
+        `read_at` is set back to `NULL`, which is what unread has always meant —
+        no schema change, and no separate "unread" flag to disagree with the
+        timestamp. The first-seen timestamp is discarded, deliberately, by the
+        person it belongs to; `POST` deliberately never overwrites one, and this
+        is the only way to lose it.
+
+        Idempotent, and someone else's id is indistinguishable from one that
+        does not exist — both answer `204`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Marked unread (idempotent)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Validation"
 
   /workspaces:
     get:

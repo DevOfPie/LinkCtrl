@@ -24,14 +24,21 @@
      Every section below is a partial. That is enforced, not encouraged:
      TestTheLinkPageStaysDecomposed caps this file's line count, so a section
      added here goes in internal/ui/templates/partials/ or breaks the build. */}}
-<div class="mb-6">
-  <a href="/links" class="text-sm text-muted hover:text-ink">← Links</a>
-  <div class="mt-2 flex flex-wrap items-center gap-3">
-    <h1 class="text-xl font-semibold tracking-tight">/{{.Link.Alias}}</h1>
-    <span class="{{statusBadge .Link.Status}}">{{.Link.Status}}</span>
-    <a href="{{.Link.ShortURL}}" target="_blank" rel="noopener" class="text-sm text-accent-ink hover:underline">{{.Link.ShortURL}}</a>
+<div class="mb-6 flex items-start gap-4">
+  <div class="min-w-0 grow">
+    <a href="/links" class="text-sm text-muted hover:text-ink">← Links</a>
+    <div class="mt-2 flex flex-wrap items-center gap-3">
+      <h1 class="text-xl font-semibold tracking-tight">/{{.Link.Alias}}</h1>
+      <span class="{{statusBadge .Link.Status}}">{{.Link.Status}}</span>
+      <a href="{{.Link.ShortURL}}" target="_blank" rel="noopener" class="text-sm text-accent-ink hover:underline">{{.Link.ShortURL}}</a>
+    </div>
+    <p class="mt-1 break-all text-sm text-muted">→ {{.Link.URL}}</p>
   </div>
-  <p class="mt-1 break-all text-sm text-muted">→ {{.Link.URL}}</p>
+  {{/* M48: the small rendered code, beside the heading rather than eight
+       screens down. Why it may be drawn in front of the destination box, and
+       what keeps it from pushing it below the fold, is in the partial.
+       Guarded like the section, so the invoker never outlives the panel. */}}
+  {{if and .Identity (.Identity.Can "links.read")}}{{template "link_qr_thumb" .}}{{end}}
 </div>
 
 {{template "flash_ok" .Notice}}

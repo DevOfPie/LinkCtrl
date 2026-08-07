@@ -22,6 +22,68 @@ import (
 // white" a button that posts the defaults instead of a delete somebody has to
 // find.
 
+// linkQRPageData is what pages/link_qr.html renders: the panel's contents,
+// served as an ordinary page (M48).
+//
+// Its own struct rather than linkDetailPageData, because the link page's data is
+// three page-replacing reads and five soft ones for eight sections, and this
+// page has one section. Opening the panel's route must not cost a statistics
+// rollup.
+type linkQRPageData struct {
+	shell
+	Link *domain.Link
+	linkQRView
+	Notice string
+}
+
+// LinkQRPage serves the QR panel's contents at their own URL.
+//
+// **This route is the panel**, and the popover on the link page is what a
+// browser does with the same block when it can. m48.md states the property as a
+// requirement — *"the panel is a route that renders as an ordinary page when
+// opened directly"* — and this handler is one half of it;
+// TestEveryPanelIsAlsoACompletePage is the other.
+//
+// Gated by loading the link, which is `links.read`: the same permission the
+// section on the link page is drawn under. Nothing here widens who may see a
+// code, and the style form inside it is still drawn only for `links.update`.
+func (h *Web) LinkQRPage(w http.ResponseWriter, r *http.Request) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		h.webError(w, r, err)
+		return
+	}
+	actor := IdentityFrom(r.Context())
+	l, err := h.Links.Get(r.Context(), actor, id)
+	if err != nil {
+		h.webError(w, r, err)
+		return
+	}
+
+	self := "/links/" + id.String() + "/qr"
+	h.render(w, r, http.StatusOK, "link_qr", linkQRPageData{
+		shell:      h.shell(r, "QR code · /"+l.Alias, "links"),
+		Link:       l,
+		linkQRView: h.linkQR(r.Context(), actor, l, self),
+		Notice:     qrNotice(r.URL.Query().Get("qr")),
+	})
+}
+
+// qrReturn is where a style write lands, given what the form asked for.
+//
+// The panel is a route, so a save has two honest destinations — the link page it
+// was opened over, and the panel's own page — and only the form knows which one
+// the reader is looking at. The value is therefore **matched, never followed**:
+// it is compared against the two paths this function builds itself, so the field
+// is a choice between two and not a redirect target a POST body can name.
+func qrReturn(next string, id interface{ String() string }, marker string) string {
+	page := "/links/" + id.String()
+	if next == page+"/qr" {
+		return page + "/qr?qr=" + marker
+	}
+	return page + "?qr=" + marker + "#qr"
+}
+
 // LinkQRStyle stores how this link's code is drawn.
 func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 	id, err := pathUUID(r, "id")
@@ -33,6 +95,7 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 		h.errorPage(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
 		return
 	}
+	next := r.PostFormValue("next")
 
 	// The reset button posts the same form under a different name, so the
 	// service sees an ordinary style rather than a second operation.
@@ -41,7 +104,7 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 			h.finishQRAction(w, r, id, rerr)
 			return
 		}
-		seeOther(w, r, "/links/"+id.String()+"?qr=reset#qr")
+		seeOther(w, r, qrReturn(next, id, "reset"))
 		return
 	}
 
@@ -56,7 +119,7 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 		h.finishQRAction(w, r, id, serr)
 		return
 	}
-	seeOther(w, r, "/links/"+id.String()+"?qr=styled#qr")
+	seeOther(w, r, qrReturn(next, id, "styled"))
 }
 
 // finishQRAction puts a refusal back on the page it was made from, with the

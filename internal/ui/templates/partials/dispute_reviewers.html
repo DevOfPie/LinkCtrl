@@ -1,0 +1,107 @@
+{{/* The reviewer roster (M45, D98; moved behind a panel by M48).
+
+     Drawn only for the instance-level principal — instance.admin — and never for
+     a reviewer they appointed. That is D98's delegation bound: the principal may
+     confer instance-level review, and a holder of it may not confer it onwards,
+     or the first delegatee appoints the next and the bound is gone in two hops.
+     The section is absent rather than disabled, because who else administers the
+     instance is not a reviewer's business either.
+
+     **M48 moves the changing and leaves the reading.** The blind-task note was
+     specific: *"I don't think the reviewer list or changes to it should be
+     directly on the page. Placing on its own tab or pop-up screen would be
+     better for items that need uncommon access."* So the summary below stays on
+     the queue — a line saying who reviews it, which is context for a page whose
+     decisions are instance-wide — and appointing and withdrawing move into the
+     panel at /disputes/reviewers.
+
+     **Permissions are unchanged.** Both halves render under exactly the
+     `.CanAdminister` guard the one section rendered under before, and the
+     service refuses either POST regardless. A panel that quietly widened who may
+     edit a reviewer set would be a permission change wearing a layout
+     milestone's clothes, so the guard is on the section rather than on the
+     controls inside it — moving markup must not move a gate.
+
+     There is no scope picker. What a grant confers is enumerated in Go
+     (auth.InstanceGrantable) and a form that could name a scope could name
+     instance.admin, which is the one thing this must not be able to hand
+     over. */}}
+
+{{define "dispute_reviewers_summary"}}
+<section class="mt-10 border-t border-line pt-6">
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div class="min-w-0">
+      <h2 class="text-base font-semibold tracking-tight">Who reviews disputes</h2>
+      <p class="mt-1 text-sm text-muted">
+        This queue is instance-wide: a decision here changes what every workspace on this
+        instance may link to. Only the accounts below can see it, and only you can change
+        that list.
+      </p>
+      <ul class="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+        {{range .Reviewers}}
+        <li class="text-sm text-ink">
+          {{.Email}}{{if not .CanDecide}} <span class="text-xs text-subtle">· reads only</span>{{end}}
+        </li>
+        {{end}}
+      </ul>
+    </div>
+    {{template "panel_trigger" (dict "ID" "dispute-reviewers-panel" "Label" "Change who reviews")}}
+  </div>
+
+  {{template "panel_open" (dict "ID" "dispute-reviewers-panel" "Title" "Who reviews disputes" "Href" "/disputes/reviewers")}}
+  {{template "dispute_reviewers_body" .}}
+  {{template "panel_close" .}}
+</section>
+{{end}}
+
+{{define "dispute_reviewers_body"}}
+{{- /* The panel's contents, and /disputes/reviewers renders exactly this block
+       inside the ordinary layout. */ -}}
+<p class="text-sm text-muted">
+  Somebody you appoint reviews disputes and cannot appoint anybody else. Appointing
+  grants nothing inside your organization, and nothing inside theirs.
+</p>
+
+<ul class="mt-4 space-y-2">
+  {{range .Reviewers}}
+  <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-raised px-4 py-3">
+    <div class="min-w-0">
+      <p class="truncate text-sm font-medium text-ink">{{.Email}}</p>
+      <p class="mt-0.5 text-xs text-subtle">
+        {{.Name}} · appointed {{.GrantedAt.Format "2 Jan 2006"}}
+        {{if not .GrantedBy}}· when this instance was claimed{{end}}
+        {{if not .CanDecide}}· can read the queue but not decide{{end}}
+      </p>
+    </div>
+    {{if ne .UserID $.Identity.UserID}}
+    <form method="post" action="/disputes/reviewers/{{.UserID}}/revoke"
+          hx-post="/disputes/reviewers/{{.UserID}}/revoke"
+          hx-confirm="Withdraw instance-level review from this account? They keep every permission their own organization gives them.">
+      {{/* Where the withdrawal lands, carried the way the QR form carries its
+           own and the workspace switcher has carried one since M46. The
+           handler compares it against the two paths it builds itself rather
+           than following it, so this field cannot name a third. */}}
+      <input type="hidden" name="next" value="{{$.ReviewersReturn}}">
+      <button type="submit" class="rounded-md border border-line-strong px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface">Withdraw</button>
+    </form>
+    {{else}}
+    <span class="text-xs text-subtle">you</span>
+    {{end}}
+  </li>
+  {{end}}
+</ul>
+
+<form method="post" action="/disputes/reviewers" class="mt-4 flex flex-wrap items-end gap-3">
+  <input type="hidden" name="next" value="{{.ReviewersReturn}}">
+  <div class="min-w-0 grow">
+    <label for="reviewer-email" class="block text-sm font-medium text-ink">Appoint a reviewer</label>
+    <input id="reviewer-email" name="email" type="email" required autocomplete="off"
+           placeholder="somebody@example.com"
+           class="mt-1 block w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-subtle">
+    <p class="mt-1 text-xs text-subtle">
+      They need an account on this instance already.
+    </p>
+  </div>
+  <button type="submit" class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Appoint</button>
+</form>
+{{end}}

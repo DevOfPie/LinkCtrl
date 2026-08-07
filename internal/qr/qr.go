@@ -234,6 +234,29 @@ func Encode(content string, level Level) (*Code, error) {
 
 // Render encodes content and draws it, in one call, for the common case.
 func Render(content string, style Style) ([]byte, error) {
+	return RenderClass(content, style, "")
+}
+
+// RenderClass is Render with a CSS class on the root `<svg>` (M48).
+//
+// **Why a class is worth an entry point of its own.** `Scale` sizes the drawing
+// in pixels, and the pixel count is a function of the *encoded version* — a
+// longer URL is a bigger matrix, so the same style produces a taller picture for
+// a longer link. That is fine for a code somebody scans and wrong for one drawn
+// into a fixed row of a page, where the height has to be a property of the page
+// rather than of the data. A class is how a caller states it.
+//
+// The class is **validated, not trusted**, which is what keeps the package
+// comment's promise true — the bytes of an SVG this package emits cannot contain
+// a `<` that did not come from this file. `validClass` accepts the characters a
+// class list is made of and nothing that could close an attribute or a tag, so a
+// caller cannot smuggle markup through it whatever it passes.
+//
+// An empty class writes no attribute at all, which is what Render relies on.
+func RenderClass(content string, style Style, class string) ([]byte, error) {
+	if !validClass(class) {
+		return nil, fmt.Errorf("qr class: %q is not a class list", class)
+	}
 	st, errs := style.Normalize()
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("qr style: %s", errs[0].Message)
@@ -242,12 +265,16 @@ func Render(content string, style Style) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return code.SVG(st), nil
+	return code.SVGClass(st, class), nil
 }
 
-// SVG draws the matrix. The style must already be normalized — Render is the
-// entry point that guarantees it, and passing an unchecked one is a programming
-// error rather than a runtime one.
+// SVG draws the matrix, with no class on the root element.
+func (c *Code) SVG(st Style) []byte { return c.SVGClass(st, "") }
+
+// SVGClass draws the matrix. The style must already be normalized and the class
+// must already have been checked — Render and RenderClass are the entry points
+// that guarantee both, and passing an unchecked one is a programming error
+// rather than a runtime one.
 //
 // **Dark modules are drawn as horizontal runs, one rect per run.** A rect per
 // module is the obvious shape and produces roughly ten times the bytes for a
@@ -255,13 +282,19 @@ func Render(content string, style Style) ([]byte, error) {
 // and cannot be read back by anything simpler than a path parser. Runs are the
 // middle: about a quarter of the size of per-module rects, and a shape whose
 // test can reconstruct the matrix and compare it to the encoder's.
-func (c *Code) SVG(st Style) []byte {
+func (c *Code) SVGClass(st Style, class string) []byte {
 	span := c.Size + 2*st.Margin
 	px := span * st.Scale
 
 	var b bytes.Buffer
 	b.Grow(1024 + c.Size*c.Size/2)
-	b.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" width="`)
+	b.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" `)
+	if class != "" {
+		b.WriteString(`class="`)
+		b.WriteString(class)
+		b.WriteString(`" `)
+	}
+	b.WriteString(`width="`)
 	b.WriteString(strconv.Itoa(px))
 	b.WriteString(`" height="`)
 	b.WriteString(strconv.Itoa(px))
@@ -316,6 +349,30 @@ func (c *Code) SVG(st Style) []byte {
 
 // ContentType is what a QR response is served as.
 const ContentType = "image/svg+xml"
+
+// validClass accepts a space-separated list of the characters a utility class
+// is made of, and nothing else. It is the second gate — beside validHex — between
+// a caller and the bytes of an SVG, and it is what lets the package comment go
+// on saying that nothing an attacker controls reaches the output.
+//
+// Deliberately narrower than HTML allows. A quote, an angle bracket or a
+// backslash would each be a way out of the attribute, and none of them appears
+// in a class name anybody writes; a name that needs one is a change to make here
+// with a reason, not a hole to leave open in advance. The same goes for
+// Tailwind's arbitrary values — `h-[6rem]` is refused, and `h-24` is the way to
+// say it.
+func validClass(s string) bool {
+	for i := range len(s) {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case c == '-', c == '_', c == ' ':
+		default:
+			return false
+		}
+	}
+	return true
+}
 
 // validHex accepts #rgb and #rrggbb, lowercase, and nothing else. It is the one
 // gate between a stored style and the bytes of an SVG, so it rejects rather than

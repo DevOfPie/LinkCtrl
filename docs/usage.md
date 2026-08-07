@@ -15,8 +15,10 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 | `/links` | Search the list; filter by status, folder, campaign or hostname; sort; create a link; page through with a cursor. The search box is the first control on the page, filters as you type and updates the address bar, so a reload or a shared URL shows the same view. Everything except search is behind **Filters**, and creating a link is behind **Create a link** — see [The links list](#the-links-list). |
 | `/links/{id}` | Everything about one link: edit destination, alias, title, description, expiry and tags; per-window analytics (7/30/90 days) with device, browser, OS, referrer, language and country breakdowns, each with a share ring, plus a world choropleth over the country figures; recent activity; archive, restore and delete. |
 | `/keys` | Mint, list and revoke API keys, and choose whether a new one reaches one workspace or the organization. Rotation is not here: it replaces the credential that made the request, and a browser session is not one. |
-| `/notifications` | Things the instance wanted you to know about, and mark-read. |
+| `/links/{id}/qr` | The link's QR code, its style form and the download, on their own page. The same thing the **QR code** panel on the link's page opens — see [On-demand panels](#on-demand-panels). |
+| `/notifications` | Things the instance wanted you to know about. Opening one goes to what it is about and marks it read; a read one can be marked unread again. |
 | `/disputes` | The review queue: destinations somebody was refused and has asked you to look at. Needs `destinations.review`, which is held instance-wide rather than by a role. The account that claimed the instance also appoints other reviewers here. |
+| `/disputes/reviewers` | Who reviews disputes, and appointing or withdrawing them. Needs `instance.admin`, and the queue above shows the list in summary. Also the **Change who reviews** panel on `/disputes`. |
 | `/feeds` | Whether this instance sends the destinations you type to a third party, and to whom. Read-only, and readable by everybody — what it describes is what happens to your own data. |
 | `/members` | Who is in this organization, at what role, with role changes and removal. Behind `members.read` and `members.write` from an organization-wide membership. |
 | `/workspaces` | The organization's workspaces: create, rename, delete. |
@@ -47,6 +49,21 @@ about; the top level is for where work happens.
 The **bell** carries the unread count and, opened, shows the newest few unread
 notifications with a **View all** link to `/notifications`, which is still the
 full surface: everything, paged, with mark-read.
+
+**Clicking a notification goes to what it is about and marks it read**, in the
+bell and on the page alike. A dispute filing opens the queue at the row that is
+waiting; an automation firing opens `/automation`; a domain warning opens
+`/domains`; an accepted invitation opens `/invites`; a dispute decided in your
+favour opens `/links`, which is where you can now create the link that was
+refused. Two kinds lead nowhere and say so by offering nothing to click — an
+audit-growth warning, because the audit log has no page and what to do about it
+is `LINKCTRL_AUDIT_RETENTION_DAYS`; and a dispute whose refusal was upheld,
+because no page shows a refusal that stands.
+
+**A read notification can be marked unread**, which is the undo for having
+opened one by accident. It sets the read timestamp back to nothing, so "when did
+you first see this" is discarded — deliberately, by you. Over the API that is
+`DELETE /api/v1/notifications/{id}/read`.
 
 **Since 0.2.0 the inbox is scoped to the workspace you are acting in.** A
 notification a workspace produced — an automation rule firing, a custom domain
@@ -250,11 +267,30 @@ Campaigns need no permission of their own, exactly as folders do not. Reading th
 list and filtering by it is `links.read`; creating is `links.create`, editing is
 `links.update`, deleting is `links.delete`.
 
+### On-demand panels
+
+Two things you reach occasionally are behind a panel rather than in the page
+body: a link's **QR code** settings and download, and **Change who reviews** on
+the dispute queue. A panel opens over the page you are on and closes on Escape
+or a click outside.
+
+**Each one is a page as well as a panel.** `/links/{id}/qr` and
+`/disputes/reviewers` serve exactly what the panel holds, with the header and a
+way back, so you can bookmark one, open it in a second tab, or share the URL —
+and a browser too old for the popup renders the panel inline instead of hiding
+it. The panel's own **Open as a page** link is where that URL comes from.
+
+Neither panel changes who may do anything. The QR settings are still
+`links.update` and the reviewer roster is still `instance.admin`; the queue shows
+who reviews it either way.
+
 ### QR codes
 
 Every link has one. There is nothing to create and no row to make: open a link's
-page and the code is drawn under **QR code**, with a **Download the SVG** link
-beside it.
+page and a small version of the code is drawn beside the link's name, at the top.
+Clicking it — or **Settings and download** in the **QR code** section further
+down — opens the panel with the full code, the style form and a **Download the
+SVG** button.
 
 **SVG only.** The code is vector text, so it prints at any size, and no image
 encoder is anywhere in this program. There is no PNG download, and there is no

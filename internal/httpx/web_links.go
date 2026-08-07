@@ -488,16 +488,42 @@ type linkDetailPageData struct {
 	// terms FolderOptions is loaded on. Empty when the workspace has made none.
 	CampaignOptions []campaignOption
 
-	// The link's QR code (M41). QRSVG is the drawing, inlined rather than
-	// fetched: it is bytes this process just generated, so an <img> pointing at
-	// the API endpoint would be a second authenticated request for something
-	// already in hand.
+	// The link's QR code (M41), as its own embedded view since M48 — the panel
+	// and the page at /links/{id}/qr render the same block from the same fields,
+	// and a second copy of the field list is a second thing that can disagree.
+	linkQRView
+}
+
+// linkQRView is everything the `link_qr_body` block reads.
+//
+// Embedded in two page structs, which is the whole reason it is a type: the QR
+// panel on a link's page and the page at /links/{id}/qr are the same markup, and
+// m48.md's requirement is that they stay the same markup. Field names are
+// promoted, so the template's `.QRSVG` reads identically from either.
+//
+// It declares no name the shell declares — see TestNoPageDataStructShadowsTheShell,
+// which reads embedded mixins as well as named fields for exactly this shape.
+type linkQRView struct {
+	// QRSVG is the drawing, inlined rather than fetched: it is bytes this
+	// process just generated, so an <img> pointing at the API endpoint would be
+	// a second authenticated request for something already in hand.
 	//
 	// Safe as template.HTML because internal/qr builds the document out of
 	// integers and colours it has parsed itself; nothing a workspace controls
 	// reaches the markup. See the package comment there.
-	QRSVG     template.HTML
-	QRContent string
+	QRSVG template.HTML
+	// QRThumbSVG is the same code drawn small, and it is what the link page puts
+	// in its heading row (M48): the owner asked for *"a small render of the QR
+	// code near the top that I can click on to open the settings/download button
+	// in a pop-up"*, and the picture is what is clicked.
+	//
+	// A second render rather than the same bytes twice, so the drawing has an
+	// intrinsic size of its own for the case where the stylesheet has not
+	// applied. It carries `ui.QRThumbClass`, which is what bounds it when the
+	// stylesheet has — see the comment where it is built for why the page needs
+	// both numbers rather than either one.
+	QRThumbSVG template.HTML
+	QRContent  string
 	// QRSourceLabel is the value a scan appears under in the referrers
 	// breakdown, passed in rather than written into the template so the word the
 	// page promises and the word the redirect path writes cannot drift apart.
@@ -509,6 +535,12 @@ type linkDetailPageData struct {
 	// QRError is what went wrong drawing the code, if anything. The page keeps
 	// its analytics and says so, rather than failing over a picture.
 	QRError string
+	// QRReturn is where the style form lands after a save: the link page when
+	// the panel was opened over it, the panel's own page when that is where the
+	// reader is standing. It travels on the form because the form is the only
+	// thing that knows which, and the handler compares it against the two paths
+	// it builds itself rather than following it.
+	QRReturn string
 }
 
 // loadLinkDetail assembles the link page.
@@ -579,7 +611,7 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 	}
 
 	h.fillLinkEdit(r.Context(), actor, &data)
-	h.fillLinkQR(r.Context(), actor, &data)
+	data.linkQRView = h.linkQR(r.Context(), actor, l, "/links/"+l.ID.String())
 	h.fillLinkRouting(r.Context(), actor, &data)
 	fillLinkAnalytics(r, &data, from, to)
 	data.Notice = linkDetailNotice(r.URL.Query(), l)
@@ -661,33 +693,94 @@ func (h *Web) fillLinkEdit(ctx context.Context, actor *auth.Identity, data *link
 	}
 }
 
-// fillLinkQR is the `link_qr` partial's data.
+// qrThumbScale is the module size the heading row's thumbnail is drawn at (M48).
+//
+// **It is the fallback size and not the rendered one.** What a reader sees is
+// `ui.QRThumbClass`, because a stylesheet rule beats a presentation attribute.
+// This is what a page whose stylesheet never arrived draws, and it exists so
+// that page does not put the full 296–328px code above the destination box.
+//
+// Three, which puts a short URL with `?src=qr` on it at 111px square including
+// its quiet zone, and the demo's longer host at 123px — fifteen to
+// twenty-seven pixels above the 96px the class states, which is the closest a
+// scale can come to a class it cannot see. It cannot come closer, and that
+// asymmetry is the reason the class exists: the pixel count is a function of
+// the encoded version and the box the heading row can afford is not. Two would
+// undershoot by as much in the other direction, and internal/qr's MinScale
+// refuses anything below it, so no clamping happens behind the number.
+const qrThumbScale = 3
+
+// qrThumb draws the heading row's thumbnail: the reader's own colours and
+// error-correction level, small, and boxed by a class.
+//
+// The quiet zone travels with it rather than being trimmed — a code without one
+// is a code scanners refuse, and a thumbnail that could not be scanned would be
+// a picture of a QR code rather than one.
+//
+// **Both the scale and the class, and they are not the same statement.**
+// `ui.QRThumbClass` is what the heading row's height is *read off*, because it
+// is the same for every link; the scale is what the picture measures when no
+// stylesheet applies, and without it that fallback is the full 296–328px code
+// where the class says 96.
+//
+// A failure draws nothing and says nothing: the full code has already rendered
+// by the time this is called, so the section has its subject, and reporting
+// that a decoration could not be drawn would be reporting a problem the reader
+// cannot act on. The QR section draws its worded trigger regardless, so the
+// panel is never unreachable.
+//
+// A function rather than four lines in linkQR because the class is the half of
+// this that a test can hold on to without a database — see
+// TestTheQRThumbnailStatesItsOwnHeight.
+func qrThumb(content string, style qr.Style) template.HTML {
+	style.Scale = qrThumbScale
+	svg, err := qr.RenderClass(content, style, ui.QRThumbClass)
+	if err != nil {
+		return ""
+	}
+	//nolint:gosec // G203: internal/qr emits integers, parsed colours and a checked class
+	return template.HTML(svg)
+}
+
+// linkQR is the `link_qr` and `link_qr_body` blocks' data.
 //
 // The two failure messages are different on purpose: a code that cannot be read
 // and a code that cannot be drawn are different problems, and the second one
 // still has content to show beneath it.
-func (h *Web) fillLinkQR(ctx context.Context, actor *auth.Identity, data *linkDetailPageData) {
-	l := data.Link
-	data.QRLevels = qr.Levels
-	data.QRSourceLabel = domain.ClickSourceQR
-	data.QRDownload = fmt.Sprintf("%s/links/%s/qr.svg", APIPrefix, l.ID)
+//
+// `back` is where the style form returns to, which differs by the surface that
+// is rendering: the link page passes its own path, the panel's page passes that.
+// It is a parameter rather than something read off the request, so the value the
+// form carries is always one this function chose.
+func (h *Web) linkQR(
+	ctx context.Context, actor *auth.Identity, l *domain.Link, back string,
+) linkQRView {
+	view := linkQRView{
+		QRLevels:      qr.Levels,
+		QRSourceLabel: domain.ClickSourceQR,
+		QRDownload:    fmt.Sprintf("%s/links/%s/qr.svg", APIPrefix, l.ID),
+		QRReturn:      back,
+	}
 
 	code, err := h.Links.QRCode(ctx, actor, l.ID)
 	if err != nil {
-		data.QRError = "The QR code could not be read."
-		return
+		view.QRError = "The QR code could not be read."
+		return view
 	}
-	data.QRContent = code.Content
-	data.QRStyle = code.Style
-	data.QRStored = code.Stored
+	view.QRContent = code.Content
+	view.QRStyle = code.Style
+	view.QRStored = code.Stored
 
 	svg, err := qr.Render(code.Content, code.Style)
 	if err != nil {
-		data.QRError = "The QR code could not be drawn."
-		return
+		view.QRError = "The QR code could not be drawn."
+		return view
 	}
 	//nolint:gosec // G203: internal/qr emits integers and parsed colours only
-	data.QRSVG = template.HTML(svg)
+	view.QRSVG = template.HTML(svg)
+
+	view.QRThumbSVG = qrThumb(code.Content, code.Style)
+	return view
 }
 
 // fillLinkRouting is the data behind `link_rules` and `link_split`, which are

@@ -3,6 +3,7 @@ package ui
 import (
 	"io/fs"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -65,14 +66,92 @@ func TestTheLinkPageStaysDecomposed(t *testing.T) {
 }
 
 // unboundedHeight are the tags whose rendered height cannot be reasoned about
-// from markup at all: a table is as tall as its rows, an SVG as tall as its
-// viewBox, a list as tall as its items.
+// from markup at all: a table is as tall as its rows, a list as tall as its
+// items, an image as tall as whatever the server sends back.
 //
 // Text is deliberately absent. A paragraph's height is bounded by how much text
 // is in it, and the character budget below is what bounds that.
+//
+// **`<svg` was on this list and has been taken off it, and that is a narrowing
+// and not a hole.** The reason the list refuses a tag is written into the
+// failure message — *"its height cannot be read off the markup"* — and that
+// sentence is false of an `<svg>` carrying a height class, which states the
+// rendered box in the markup exactly the way a character count states a
+// paragraph's. So the refusal becomes a rule about what the tag says rather
+// than about the tag: statedHeight below is that rule, and it is stricter than
+// membership of this list in the one direction that matters, because it also
+// adds up what it finds. The owner set this on 2026-08-07 against a milestone
+// that wanted an exemption for one element; decisions.md carries why the
+// difference is worth the paragraph.
 var unboundedHeight = []string{
-	"<table", "<svg", "<img", "<iframe", "<video", "<canvas", "<ul", "<ol", "<details",
+	"<table", "<img", "<iframe", "<video", "<canvas", "<ul", "<ol", "<details",
 }
+
+// svgTag captures the attributes of an `<svg>` opening tag.
+var svgTag = regexp.MustCompile(`<svg\b([^>]*)>`)
+
+// classList pulls the class attribute out of a stretch of attributes.
+var classList = regexp.MustCompile(`\bclass="([^"]*)"`)
+
+// statedHeight reads the rendered height an `<svg>`'s classes declare, in CSS
+// pixels, and reports whether they declare one at all.
+//
+// **Only the utilities that name a fixed length count.** `h-24` is six rem and
+// is six rem on every page that draws it; `h-full`, `h-screen`, `h-auto`,
+// `h-min`, `h-max` and `h-fit` are each a height decided by something outside
+// the element — the parent, the viewport, the content — which is the situation
+// the guard exists to refuse, spelled differently. Tailwind arbitrary values
+// (`h-[6rem]`) are refused too, and for a smaller reason: they are a second
+// syntax to parse here for a box the spacing scale can already state.
+//
+// The scale is Tailwind's: one unit is 0.25rem, and rem is 16px because nothing
+// in this product changes the root font size. `h-px` is the one exception the
+// scale itself makes, and it is a pixel.
+func statedHeight(attrs string) (int, bool) {
+	m := classList.FindStringSubmatch(attrs)
+	if m == nil {
+		return 0, false
+	}
+	for _, class := range strings.Fields(m[1]) {
+		n, ok := strings.CutPrefix(class, "h-")
+		if !ok {
+			continue
+		}
+		if n == "px" {
+			return 1, true
+		}
+		units, err := strconv.ParseFloat(n, 64)
+		if err != nil {
+			continue
+		}
+		return int(units * 4), true
+	}
+	return 0, false
+}
+
+// linkDetailPrefixPixelBudget bounds the declared height of the pictures the
+// page may draw in front of the destination box, and it is the second half of
+// the rule that replaced `<svg`'s place on the list above.
+//
+// **A rule that read a height and then ignored it would be a rule that asks for
+// a number for its own sake.** So the heights are added up and compared to what
+// the measurement says there is room for. The QR thumbnail declares 96px
+// (`ui.QRThumbClass`, h-24) and is the only picture up there.
+//
+// **Re-measured with it in place, which M48 did rather than assume.** At
+// 1280×800, in Blink, Gecko and WebKit identically: the destination box's top
+// edge sits at **349px** where M47 measured 327, and the alias field's bottom
+// edge at **465px** where M47 measured 443 — 22px of movement for a 96px
+// picture, because it sits *beside* the heading rather than above it and the
+// heading block was already 74px of text. Both controls are inside the viewport
+// with **335px** to spare.
+//
+// 160 spends 64px of that slack and keeps 271px, which is the same shape of
+// margin the character budget keeps. It refuses a second thumbnail beside the
+// first (192px), it refuses one picture more than two-thirds again as tall as
+// this one, and it does not have to be raised for a taller code — the class is
+// the same for every link, which is the whole reason the class is what is read.
+const linkDetailPrefixPixelBudget = 160
 
 // linkDetailPrefixBudget bounds the visible text the page may draw in front of
 // the destination box.
@@ -94,23 +173,32 @@ var htmlTag = regexp.MustCompile(`(?s)<[^>]*>`)
 
 // TestTheEditControlIsReachableWithoutScrolling is M47's first bullet.
 //
-// **The pixel claim was measured, once, and this test is not the measurement.**
+// **The pixel claim was measured, and this test is not the measurement.**
 // At 1280×800, in Blink, Gecko and WebKit identically: the destination box's top
-// edge moved from **1883px to 327px** and the alias field's bottom edge sits at
-// **443px**, so both are inside the viewport with 357px to spare where before
-// they were a screen and a half below it. The harness that took those figures is
-// not committed, for the reason M46's was not — `tools/render-verify` is opt-in
-// and reachable from no gate, so a pixel assertion living there would protect
-// nothing between the two times somebody ran it. decisions.md carries the
-// numbers.
+// edge moved from **1883px to 327px** and the alias field's bottom edge sat at
+// **443px**, so both are inside the viewport where before they were a screen and
+// a half below it.
+//
+// **Measured a second time at M48**, when the QR thumbnail went into the heading
+// row, because a claim that survives a change survives it by measurement and not
+// by argument: 327 became **349px** and 443 became **465px**, in all three
+// engines, leaving 335px of viewport below the alias. M47 is not reopened — its
+// claim is what was re-checked, and it holds.
+//
+// The harness that took both sets of figures is not committed, for the reason
+// M46's was not — `tools/render-verify` is opt-in and reachable from no gate, so
+// a pixel assertion living there would protect nothing between the two times
+// somebody ran it. decisions.md carries the numbers.
 //
 // What this test asserts is the structural property that measurement rests on,
-// in the two directions that can regress:
+// in the three directions that can regress:
 //
 //   - the destination and the alias are the **first two** controls the page
 //     draws, so nothing interactive can be put in front of them;
-//   - what is in front of them is text and only text, under a character budget,
-//     so nothing tall can be put there either.
+//   - what is in front of them is text, under a character budget, so no
+//     paragraph can be put there either;
+//   - and a picture in front of them states its own height in a class and stays
+//     inside a pixel budget, so it cannot grow with the data it draws.
 //
 // Stated rather than implied, in m46.md's idiom: this does not check pixels and
 // cannot. A section whose own height grew would pass it. The cap on this file's
@@ -141,6 +229,31 @@ func TestTheEditControlIsReachableWithoutScrolling(t *testing.T) {
 				"configuration on this page and that is the milestone; put it there.",
 				tag)
 		}
+	}
+
+	// The narrowed rule: a drawing may go up there, and it has to say how tall
+	// it is and stay inside the budget.
+	pixels := 0
+	for _, m := range svgTag.FindAllStringSubmatch(prefix, -1) {
+		px, ok := statedHeight(m[1])
+		if !ok {
+			t.Errorf("an <svg> is rendered in front of the destination box with no "+
+				"height class:\n  <svg%s>\n\nIts height is then whatever the drawing "+
+				"turns out to be — for a QR code, whatever version the URL encodes "+
+				"to — so it can push the control below the fold without failing "+
+				"anything here. Give it a fixed height utility (h-24, and w-24 "+
+				"beside it if it is square), or put the picture below the "+
+				"configuration where the analytics are.", m[1])
+			continue
+		}
+		pixels += px
+	}
+	if pixels > linkDetailPrefixPixelBudget {
+		t.Errorf("the link page draws %dpx of pictures in front of the destination "+
+			"box and the budget is %dpx.\n\nThe box was measured at 349px from the "+
+			"top of a 1280×800 viewport with one 96px thumbnail up there. Every "+
+			"pixel added here moves it down by one, and the budget is what stops "+
+			"the heading row becoming a section.", pixels, linkDetailPrefixPixelBudget)
 	}
 
 	text := strings.TrimSpace(htmlTag.ReplaceAllString(prefix, " "))

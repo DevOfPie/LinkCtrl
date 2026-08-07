@@ -798,6 +798,39 @@ func demoCoverage() []demoFeature {
 			Shows: "that an instance-wide act is recorded where it happened rather " +
 				"than filed under whichever organization the person was standing in",
 		},
+
+		{
+			// M48's click-through, and the one thing it needs the demo to have:
+			// an inbox holding notifications of **more than one kind**, so
+			// clicking two of them goes to two different places.
+			//
+			// m48.md asks whether a coverage row is owed at all —
+			// *"demoCoverage() gains a row only if a kind ends up with no seeded
+			// example; whether it does is settled during the work rather than
+			// guessed here"* — and the answer is yes, but not the row that
+			// question implies. Three of the seven declared kinds have no seeded
+			// example: `audit.growth`, `domain.failing` and `domain.unverified`.
+			// None of them is seedable without the demo asserting something
+			// untrue about itself — that its audit log has outgrown its disk, or
+			// that a hostname it serves has stopped verifying — so the honest row
+			// is about what the feature needs rather than about the vocabulary
+			// being complete. decisions.md carries the full reasoning.
+			//
+			// Counted as distinct kinds rather than as a list of them. A query
+			// naming the kinds would be a second enumeration of the vocabulary,
+			// which internal/httpx's notificationTargets is deliberately the only
+			// one of — and one written in SQL, where no test would notice it
+			// going stale.
+			Milestone: "M48", Feature: "Notifications of more than one kind in the owner's inbox",
+			Query: `SELECT count(DISTINCT kind) FROM notifications
+			         WHERE user_id = $2
+			           AND (workspace_id IS NULL
+			                OR workspace_id IN (` + demoWorkspaces + `))`,
+			Min: 2,
+			Shows: "that opening a notification goes somewhere, and somewhere " +
+				"different for a different kind. One kind in the inbox shows a " +
+				"click-through that could be a hardcoded link",
+		},
 	}
 }
 
