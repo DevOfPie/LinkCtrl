@@ -90,6 +90,45 @@ type QRCode struct {
 	// now the vocabulary the surface asks in, and a script that could not see the
 	// number the form shows would be a second answer to the same question.
 	Size int `json:"size"`
+	// HasLogo says whether an image has been uploaded against this code (M50.5).
+	//
+	// **A boolean rather than the image, and there is no endpoint that returns
+	// the bytes.** The two operations this milestone adds are set and clear; what
+	// a stored logo is *for* is M50.6, which composites it into the picture the
+	// existing `.svg` and `.png` paths already serve. Until then the only thing a
+	// client needs to know is whether its upload landed and whether a clear took
+	// effect, and that is one bit — which is also all the reads fetch, because
+	// the bytes are a megabyte a row and a list of twenty codes must not pull
+	// them to print twenty names.
+	HasLogo bool `json:"has_logo"`
+}
+
+// qrRow is one stored code as the service reads it: every column of `qr_codes`
+// except the logo, plus whether there is one.
+//
+// **A type of this package's own rather than sqlc's**, because M50.5 gave the
+// three read queries explicit column lists — a star projection would have
+// fetched the logo bytes on every read — and sqlc answers a projection with a
+// generated row struct per query. Three structurally identical types would
+// otherwise mean three copies of qrCodeFrom.
+type qrRow struct {
+	ID      uuid.UUID
+	Slug    string
+	Label   string
+	Style   []byte
+	HasLogo bool
+}
+
+func qrRowFromGet(r dbgen.GetQRCodeRow) qrRow {
+	return qrRow{ID: r.ID, Slug: r.Slug, Label: r.Label, Style: r.Style, HasLogo: r.HasLogo}
+}
+
+func qrRowFromList(r dbgen.ListQRCodesRow) qrRow {
+	return qrRow{ID: r.ID, Slug: r.Slug, Label: r.Label, Style: r.Style, HasLogo: r.HasLogo}
+}
+
+func qrRowFromUpsert(r dbgen.UpsertQRCodeRow) qrRow {
+	return qrRow{ID: r.ID, Slug: r.Slug, Label: r.Label, Style: r.Style, HasLogo: r.HasLogo}
 }
 
 // QRCode returns a link's default code: its content and the style it is drawn
@@ -158,10 +197,10 @@ func (s *Service) ListQRCodes(
 	}
 	out := make([]QRCode, 0, len(rows)+1)
 	if len(rows) == 0 || rows[0].Slug != "" {
-		out = append(out, qrCodeFrom(linkID, l.ShortURL, "", dbgen.QrCode{}, false))
+		out = append(out, qrCodeFrom(linkID, l.ShortURL, "", qrRow{}, false))
 	}
 	for _, row := range rows {
-		out = append(out, qrCodeFrom(linkID, l.ShortURL, row.Slug, row, true))
+		out = append(out, qrCodeFrom(linkID, l.ShortURL, row.Slug, qrRowFromList(row), true))
 	}
 	return out, nil
 }
@@ -232,7 +271,7 @@ func (s *Service) CreateQRCode(
 	// cache falls in — but the window is a printed code that is not counted as
 	// itself, so it is closed here rather than left to REDIRECT_TTL.
 	s.invalidateQRLink(ctx, actor, linkID)
-	code := qrCodeFrom(linkID, l.ShortURL, row.Slug, row, true)
+	code := qrCodeFrom(linkID, l.ShortURL, row.Slug, qrRowFromUpsert(row), true)
 	return &code, nil
 }
 
@@ -275,14 +314,14 @@ func (s *Service) SetQRCodeLabel(
 		if merr != nil {
 			return nil, fmt.Errorf("encode qr style: %w", merr)
 		}
-		row, err = s.q.UpsertQRCode(ctx, dbgen.UpsertQRCodeParams{
+		upserted, uerr := s.q.UpsertQRCode(ctx, dbgen.UpsertQRCodeParams{
 			ID: uuid.Must(uuid.NewV7()), LinkID: linkID, WorkspaceID: actor.WorkspaceID,
 			Slug: "", Label: label, Style: blob,
 		})
-		if err != nil {
-			return nil, fmt.Errorf("insert qr code: %w", err)
+		if uerr != nil {
+			return nil, fmt.Errorf("insert qr code: %w", uerr)
 		}
-		code := qrCodeFrom(linkID, l.ShortURL, "", row, true)
+		code := qrCodeFrom(linkID, l.ShortURL, "", qrRowFromUpsert(upserted), true)
 		return &code, nil
 	}
 
@@ -384,7 +423,7 @@ func qrCapError() error {
 // with no row is a real code drawn at the default style, and the zero row is how
 // it arrives here.
 func qrCodeFrom(
-	linkID uuid.UUID, shortURL, slug string, row dbgen.QrCode, found bool,
+	linkID uuid.UUID, shortURL, slug string, row qrRow, found bool,
 ) QRCode {
 	style := decodeQRStyle(row.Style)
 	content := QRContent(shortURL, slug)
@@ -395,6 +434,7 @@ func qrCodeFrom(
 	if found {
 		out.ID = row.ID
 		out.Label = row.Label
+		out.HasLogo = row.HasLogo
 	}
 	return out
 }
@@ -622,7 +662,7 @@ func (s *Service) SetQRStyleBySlug(
 	if err != nil {
 		return nil, fmt.Errorf("upsert qr code: %w", err)
 	}
-	out := qrCodeFrom(linkID, l.ShortURL, slug, row, true)
+	out := qrCodeFrom(linkID, l.ShortURL, slug, qrRowFromUpsert(row), true)
 	out.Style = normalized
 	return &out, nil
 }
@@ -652,22 +692,227 @@ func (s *Service) ResetQRStyle(ctx context.Context, actor *auth.Identity, linkID
 	return nil
 }
 
+// A logo on a code (M50.5).
+//
+// **The first file this product accepts, and the service layer's whole part in
+// it is two writes and a translation.** The bytes arrive already bounded: the
+// handler caps the request body with `http.MaxBytesReader`, and internal/qr's
+// NormalizeLogo caps the declared image before decoding it and re-encodes what
+// it decodes. What is left here is the authorization, the code lookup, and
+// turning internal/qr's sentinels into the field errors a caller reads — the
+// same division RenderQRPNG makes with qr.ErrTooLarge.
+//
+// **`links.update`, and no permission of its own.** D75's reasoning is
+// unchanged by a logo: a QR code is a picture of the link's own short URL, so
+// styling one is styling the link's own presentation, and a logo is style. There
+// is therefore no new slug to classify and no D18 delegability question to
+// answer.
+//
+// **Not requireSessionActor-gated, deliberately.** D87's limb refuses operations
+// whose subject is *the person* — their password, their sessions, where their
+// browser lands. The subject here is the link, so an API key that may restyle a
+// code may put a logo on it, exactly as it may change its colours today.
+//
+// **Every code, and the default one is reached by the empty slug.** The owner
+// overruled D136 on 2026-08-07: *one upload operation and one to clear* counts
+// capabilities rather than routes, so the same two operations answer at the
+// `/qr` shorthand D133 kept and at `/qr/codes/{slug}`, exactly as `GET
+// …/qr.png` and `GET …/qr/codes/{slug}/image.png` are one capability. The
+// default code keeps its identity — the *absence* of a slug, which is D130 and
+// the whole reason a printed picture goes on counting as what it always was —
+// so nothing here gives it a reserved one.
+//
+// **What that costs is a row that did not have to exist before.** A default
+// code with no `qr_codes` row is a real code drawn at the default style, and a
+// column cannot hold bytes for a row that is not there. So an upload against it
+// writes the row first, at the style it was already being drawn at.
+
+// SetQRCodeLogo stores an uploaded image against one of a link's codes. The
+// empty slug is the link's default code.
+//
+// Replacing is the same call: the write is a single UPDATE, so the image being
+// replaced is overwritten rather than deleted by a second statement, and there
+// is no state in which a code has two logos or none.
+func (s *Service) SetQRCodeLogo(
+	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, slug string, upload []byte,
+) (*QRCode, error) {
+	if !actor.Can(PermUpdate) {
+		return nil, fmt.Errorf(
+			"%w: uploading a QR code logo requires %s", domain.ErrForbidden, PermUpdate)
+	}
+	l, err := s.Get(ctx, actor, linkID)
+	if err != nil {
+		return nil, err
+	}
+	row, found, err := s.storedQRCode(ctx, actor.WorkspaceID, linkID, slug)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		// A named code must already exist — CreateQRCode is what brings one into
+		// being, and a slug the link never issued must not be creatable by
+		// uploading to it. The default code is the exception it has always been.
+		if slug != "" {
+			return nil, domain.ErrNotFound
+		}
+		if row, err = s.materializeDefaultQRCode(ctx, actor.WorkspaceID, linkID); err != nil {
+			return nil, err
+		}
+	}
+
+	logo, err := qr.NormalizeLogo(upload)
+	if err != nil {
+		return nil, qrLogoError(err)
+	}
+	if _, err := s.q.SetQRCodeLogo(ctx, dbgen.SetQRCodeLogoParams{
+		ID: row.ID, WorkspaceID: actor.WorkspaceID, Logo: logo.PNG,
+	}); err != nil {
+		return nil, fmt.Errorf("store qr code logo %s: %w", row.ID, err)
+	}
+	row.HasLogo = true
+	// No cache invalidation. A logo is a dashboard fact like a style and a label:
+	// the redirect snapshot carries a link's slugs and nothing else about its
+	// codes, so nothing cached can disagree with this write.
+	code := qrCodeFrom(linkID, l.ShortURL, slug, row, true)
+	return &code, nil
+}
+
+// ClearQRCodeLogo removes the image from one of a link's codes. The empty slug
+// is the link's default code.
+//
+// **The artefact goes, not just the reference**, which under D134 is one and the
+// same write: the bytes are the column. Idempotent, and it does not care whether
+// there was a logo — "this code has no logo" is already true for a code that
+// never had one, and reporting 404 for it would make the operation care whether
+// a preference had ever been expressed, which is the trade ResetQRStyle already
+// makes.
+//
+// **No row is that same case and not a 404**, for the default code only. A
+// default code nobody has styled or uploaded to has no row, so it has no logo,
+// so the clear has already happened. A named code with no row does not exist,
+// and that is still a 404 — which is what stops this operation being a way to
+// ask whether a slug was ever issued.
+func (s *Service) ClearQRCodeLogo(
+	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, slug string,
+) error {
+	if !actor.Can(PermUpdate) {
+		return fmt.Errorf(
+			"%w: removing a QR code logo requires %s", domain.ErrForbidden, PermUpdate)
+	}
+	if _, err := s.Get(ctx, actor, linkID); err != nil {
+		return err
+	}
+	row, found, err := s.storedQRCode(ctx, actor.WorkspaceID, linkID, slug)
+	if err != nil {
+		return err
+	}
+	if !found {
+		if slug != "" {
+			return domain.ErrNotFound
+		}
+		return nil
+	}
+	if _, err := s.q.ClearQRCodeLogo(ctx, dbgen.ClearQRCodeLogoParams{
+		ID: row.ID, WorkspaceID: actor.WorkspaceID,
+	}); err != nil {
+		return fmt.Errorf("clear qr code logo %s: %w", row.ID, err)
+	}
+	return nil
+}
+
+// materializeDefaultQRCode writes the row a link's default code has been
+// standing in for, and returns it.
+//
+// **A default code exists whether or not `qr_codes` holds it** — that is what
+// makes "a QR endpoint returns a code for any link" true, and why twenty
+// untouched links carry no rows at all. The row appears the first time somebody
+// expresses a preference about the code, which until M50.5 meant styling it. A
+// logo is the second such preference, and unlike a style it *needs* the row:
+// under D134 the bytes are a column on it.
+//
+// **The style written is the one the code was already being drawn at**, which
+// for a code with no row is the product default — `decodeQRStyle(nil)` is
+// exactly what every read of that code has been answering with. So nothing
+// about the picture changes, and the only visible consequence is `stored`
+// turning true, which is already what it means: this code now has a row.
+//
+// The upsert rather than a plain insert, for the reason SetQRStyleBySlug uses
+// one: two concurrent uploads to the same untouched default code would
+// otherwise be two inserts racing for one (link, slug), and 03700's unique
+// index would fail the loser rather than letting it proceed.
+func (s *Service) materializeDefaultQRCode(
+	ctx context.Context, workspaceID, linkID uuid.UUID,
+) (qrRow, error) {
+	blob, err := json.Marshal(decodeQRStyle(nil))
+	if err != nil {
+		return qrRow{}, fmt.Errorf("encode qr style: %w", err)
+	}
+	row, err := s.q.UpsertQRCode(ctx, dbgen.UpsertQRCodeParams{
+		ID: uuid.Must(uuid.NewV7()), LinkID: linkID, WorkspaceID: workspaceID,
+		Slug: "", Label: "", Style: blob,
+	})
+	if err != nil {
+		return qrRow{}, fmt.Errorf("upsert qr code: %w", err)
+	}
+	return qrRowFromUpsert(row), nil
+}
+
+// qrLogoError turns internal/qr's refusals into the 422 a caller can act on.
+//
+// Every one of them is the caller's mistake — a format this product does not
+// take, or an image larger than it will decode — so none of them is a 500. The
+// field is `logo` in each case, because that is the multipart part the caller
+// named, and the messages say what to do rather than what went wrong: an
+// upload refused with "invalid image" is an upload somebody retries unchanged.
+func qrLogoError(err error) error {
+	field := func(code, message string) error {
+		return domain.ValidationErrors{{Field: "logo", Code: code, Message: message}}
+	}
+	switch {
+	case errors.Is(err, qr.ErrLogoEmpty):
+		return field("empty", "no image was uploaded")
+	case errors.Is(err, qr.ErrLogoSVG):
+		return field("unsupported_format",
+			"an SVG is a document rather than an image — it can carry script and fetch "+
+				"other files — so this product does not accept one; export the logo as a "+
+				"PNG or a JPEG")
+	case errors.Is(err, qr.ErrLogoFormat):
+		return field("unsupported_format",
+			"a logo is a PNG or a JPEG, decided by what is in the file rather than by "+
+				"what it is called")
+	case errors.Is(err, qr.ErrLogoTooLarge):
+		return field("too_large", fmt.Sprintf(
+			"a logo is at most %d pixels on a side and %d pixels in total; this one is "+
+				"larger, and a QR code draws it at a fraction of its own size anyway",
+			qr.MaxLogoDimension, qr.MaxLogoPixels))
+	case errors.Is(err, qr.ErrLogoStoreTooLarge):
+		return field("too_large", fmt.Sprintf(
+			"this image re-encodes to more than the %d bytes a stored logo may occupy",
+			qr.MaxLogoStoredBytes))
+	case errors.Is(err, qr.ErrLogoUndecodable):
+		return field("invalid",
+			"the file begins like a PNG or a JPEG and then does not decode as one")
+	default:
+		return fmt.Errorf("normalize qr code logo: %w", err)
+	}
+}
+
 // storedQRCode reads one code's row. Absent is not an error: for the default
 // code it means the default style, and every caller that cares whether a named
 // code exists reads the second return.
 func (s *Service) storedQRCode(
 	ctx context.Context, workspaceID, linkID uuid.UUID, slug string,
-) (dbgen.QrCode, bool, error) {
+) (qrRow, bool, error) {
 	row, err := s.q.GetQRCode(ctx, dbgen.GetQRCodeParams{
 		LinkID: linkID, WorkspaceID: workspaceID, Slug: slug,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return dbgen.QrCode{}, false, nil
+			return qrRow{}, false, nil
 		}
-		return dbgen.QrCode{}, false, fmt.Errorf("get qr code: %w", err)
+		return qrRow{}, false, fmt.Errorf("get qr code: %w", err)
 	}
-	return row, true, nil
+	return qrRowFromGet(row), true, nil
 }
 
 // storedQRStyle reads one code's style, falling back to the default.

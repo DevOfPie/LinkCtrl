@@ -27,6 +27,48 @@ migrations run at boot.
 
 ### Added
 
+- **This product now accepts a file.** One kind of file, for one thing: an image
+  uploaded against a QR code, over `PUT /api/v1/links/{id}/qr/logo` for the
+  link's original code and `PUT /api/v1/links/{id}/qr/codes/{slug}/logo` for a
+  named one, with a `multipart/form-data` body, and removed with a `DELETE` at
+  the same path. It needs `links.update` — the permission that already changes
+  how a code is drawn — and an API key that holds it may use it. **The QR panel
+  on a link's page does it too**, so a logo is not an API-only feature.
+
+  **Nothing draws it yet.** Storing the image and putting it in the middle of a
+  QR code are two pieces of work, and this is the first: the endpoint, the
+  bounds, and where the bytes live. A code carrying a logo reports `has_logo` and
+  is otherwise unchanged, so upgrading changes no picture anybody has printed.
+
+  **PNG and JPEG, decided by what is in the file** rather than by what it is
+  called or what your client says it is — so a `.png` holding a JPEG works and a
+  file that is neither is refused whatever its extension. **An SVG is refused,
+  and the refusal says why**: an SVG is a document that can carry script and
+  fetch other files, and this product will not serve markup it did not write.
+
+  **What is stored is a PNG this server encoded from your image, never the file
+  you sent.** That is deliberate and has a consequence worth knowing: metadata
+  does not survive, so this is not somewhere to keep an original.
+
+  Three limits, each a number, each answering `422` and naming which: the request
+  body stops at 1,048,576 bytes, the image at 1024 pixels a side and 262,144
+  pixels in total, and the stored result at 1,060,000 bytes. **Uploads have a
+  rate limit of their own**, `LINKCTRL_UPLOAD_RATE_PER_MIN`, thirty a minute by
+  default and applied on top of the API limit rather than instead of it.
+
+  **For operators: the image lives in the database, in `qr_codes.logo`.** No
+  volume to mount, no object store to run, nothing new in a backup procedure —
+  and, in exchange, binary in the row and in every `pg_dump`, bounded at about a
+  megabyte a code and 20 MiB for a link carrying the maximum twenty. Removing a
+  code, a workspace or an organization removes its images with it. Deleting a
+  *link* is a soft delete, so its images are cleared by the hourly maintenance
+  pass rather than immediately.
+
+  **The link's original code carries one too**, and it is reached the way
+  `qr.svg` and `qr.png` reach it — without a slug, at `…/qr/logo`. The original
+  code's identity is that it has no printed slug, so it keeps none: nothing
+  already printed changes what it counts as.
+
 - **More than one QR code per link, told apart in the analytics.** A print run
   and a shop-window card against the same short link used to be the same picture,
   and their scans were the same number. Each code now carries a name you choose

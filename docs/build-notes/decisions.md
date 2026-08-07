@@ -249,6 +249,10 @@ file. Append a row when you append an entry.
 | [M48: the owner overrules D124 — the picture goes up, and the guard narrows](#2026-08-07--m48-the-owner-overrules-d124-the-picture-goes-up-and-the-guard-narrows) | Owner-set. Why a narrowing and not an exemption, what M47's claim now has to be re-measured against, and why M47 is not reopened |
 | [M49: what B left behind it](#2026-08-07--m49-what-b-left-behind-it) | An amendment, not a decision: the QR panel is not a line range in `link_detail.html` any more, and the generator is 395 lines rather than 338. Fourth amendment in four milestones, and the first where the moved thing is a *file* rather than a line |
 | [M50: two line numbers, and the references that held](#2026-08-07--m50-two-line-numbers-and-the-references-that-held) | An amendment, not a decision. Also the first milestone in the phase whose *migration* number was still right, and why that is not luck |
+| [M50.5: where an uploaded logo lives](#2026-08-07--m505-where-an-uploaded-logo-lives) | D134, owner-set. The answer to the phase's one pre-filed question, and what it obliges M50.5 to measure before M57 is written |
+| [M50.5: the owner overrules D136 — the default code gets a logo too](#2026-08-07--m505-the-owner-overrules-d136-the-default-code-gets-a-logo-too) | Owner-set. Why the bullet counts capabilities rather than operations, why the shorthand and not a reserved slug, and what D130 is protected from |
+| [M50.5: the shorthand that carries a logo, and the row it has to write](#2026-08-07--m505-the-shorthand-that-carries-a-logo-and-the-row-it-has-to-write) | D139: what the owner's ruling became — two more members of D133's family, the row a `bytea` column obliges a code with no row to acquire, and the style it is written at; the multipart body the dashboard needs because a file cannot travel in a urlencoded form; and the four sabotages |
+| [M50.5: the first file this product accepts](#2026-08-07--m505-the-first-file-this-product-accepts) | D135–D138: the caps as numbers and the worst-case row D134 was owed, including why the upload cap does not bound the database; why only a named code carries a logo and what gap that leaves; what an orphan even is once the bytes are the row; and why an upload does not inherit the API's rate limit |
 | [M48: the panel, the thumbnail that could not go where it was asked, and where a notification leads](#2026-08-07--m48-the-panel-the-thumbnail-that-could-not-go-where-it-was-asked-and-where-a-notification-leads) | D123–D125: a panel is a route first and a popup second, and why that is not D24 reversed or D120 reversed; the QR thumbnail stays below the edit form because M47's fold test refuses a picture above it, and what went in the heading row instead; a map rather than a switch so that *has a mapping* is a question code can ask; the two kinds that lead nowhere and say so; three of seven kinds the demo has never seeded and why no coverage row demands them; and the permission a test fixture had been missing since M47, which hid three sections of the link page from every test that renders it |
 | [M48: the picture goes up — the rule that let it, and the page re-measured](#2026-08-07--m48-the-picture-goes-up-the-rule-that-let-it-and-the-page-re-measured) | D126: what M47's fold guard became — a height class and a 160px budget rather than a blanket refusal of `<svg>`, and why the `height` attribute could not be what is read; one constant, three consumers, and the fixture that would otherwise measure a page nobody is served; `internal/qr` gaining a validated class; and the re-measurement in three engines — 327→349px, 443→465px — checked by reproducing M47's own figures with the picture removed |
 | [M50: the empty slug, the parameter that stayed closed, and the rollup that was not written](#2026-08-07--m50-the-empty-slug-the-parameter-that-stayed-closed-and-the-rollup-that-was-not-written) | D130–D133: why the default code's identity is its *absence* of an identifier and what that bought for every code already printed; why a code identity could not ride inside `src` and how the second parameter is bounded instead; why per-code counts are a filter over the referrer dimension rather than the new rollup campaign analytics was deferred for, and what the Referrers panel therefore still shows; and why the five shipped QR endpoints stayed the default-code shorthand |
@@ -21326,3 +21330,354 @@ hand. `image.svg` and `image.png` sit one segment deeper than the older
 `qr.svg`/`qr.png` for a mechanical reason worth stating so it does not read as
 inconsistency: a `ServeMux` wildcard matches a whole path segment, so
 `{slug}.svg` is not a pattern that exists.
+
+
+## 2026-08-07 — M50.5, where an uploaded logo lives
+
+**D134. A `bytea` column on `qr_codes`.** Owner-set 2026-08-07, against a
+question filed in [upcoming-decisions.md](upcoming-decisions.md) on 2026-08-06 —
+so the decision predates the work, which is the whole reason that file exists.
+The entry has left it, which is the only way an entry ever leaves it.
+
+The three options and their costs are not restated here; they were written when
+the question was filed and the owner answered against them. What is recorded is
+what the answer obliges.
+
+**It is not deferrable and that is why it was asked first.** The other two
+options each add something [M57](phase-details/m57.md)'s conformance test is
+written to forbid: a filesystem path needs a volume `docker-compose.yml` does not
+mount, and an object store is a new required dependency. M57 asserts one
+container with no Redis exercises the full surface, and it is written a
+phase-half after M50.5 builds against this. Answering it inside the build would
+have meant discovering the conflict from a failing test in [M57](phase-details/m57.md)
+rather than from a question in M50.5.
+
+**The assumption the answer rests on is still unverified, deliberately.** The
+filed entry says so: *"that the caps M50.5 sets keep a stored image small enough
+for a column to be uncontroversial — which is true only once those numbers
+exist"*. They do not exist yet; M50.5 is what sets them. So the obligation
+transfers rather than discharging — **M50.5 states the cap as a number and states
+the resulting worst-case bytes per row**, the same way [M49](phase-details/m49.md)
+was required to state the rasteriser's bound rather than promise one. A cap
+chosen without that arithmetic written down would make this decision true by
+assertion.
+
+**Two amendments to m50.5.md came with it**, both facts. Its *Where it is
+stored* section instructed the milestone to pick one and is now the record that
+the owner already did — a milestone that re-derives an answered question is how a
+decision gets taken twice and differently. And `internal/httpx/api_qr.go:18-20`,
+its citation for D75's permission, became `:20-22` when [M49](phase-details/m49.md)
+and [M50](phase-details/m50.md) edited that file; the sixth reference in six
+milestones to be moved by an earlier one, and the sixth into Go rather than into
+a migration.
+
+**The accepted cost, said plainly so nobody rediscovers it as a surprise.**
+Binary lives in the row and therefore in every `pg_dump`. Postgres is the one
+dependency this product cannot degrade without, and this makes it carry bytes it
+did not carry before. That is the price of deletion coming free with the cascades
+already there and of the container count not moving, and it was paid knowingly.
+
+
+## 2026-08-07 — M50.5, the first file this product accepts
+
+**D135–D138.** The upload surface itself. [D134](../../Plan.md#phase-3-decisions)
+had already settled *where* a logo lives; these are the four choices building
+against it forced, and the first of them is the one D134 explicitly transferred.
+
+### D135 — the caps, and the row they imply
+
+**1,048,576 bytes of request body; 1024 pixels a side and 262,144 pixels in
+total; 1,060,000 bytes stored.** Every one of them is in
+`internal/qr/logo.go`'s constant block with the allocation it bounds, which is
+the standard [M49](phase-details/m49.md) set for its rasteriser — 2000px at one
+byte a pixel is 4,000,000 bytes — and which D134 turned from a habit into an
+obligation. The owner chose a column against an assumption nobody could check at
+the time: *that the caps this milestone sets keep a stored image small enough for
+a column to be uncontroversial.* Without the arithmetic written down that
+assumption stays unchecked and the decision is true by assertion.
+
+**So the arithmetic, in full, because that is the point of it.** The decoded
+image is normalized to `image.NRGBA` — four bytes a pixel, one buffer shape
+whatever the input was — so the largest decode a request can cause is 262,144 ×
+4 = 1,048,576 bytes. The stored artefact is a PNG encoded from that buffer, and
+its worst case is an image whose pixels do not compress at all *and* whose shape
+is the tallest the area cap admits, because PNG spends a filter byte per
+scanline: 1024 × (1 + 256×4) = 1,049,600 filtered bytes, plus 85 for deflate's
+stored-block framing, 6 for the zlib header and checksum, 396 for IDAT chunking
+and 45 for the signature, IHDR and IEND — **1,050,132**. `MaxLogoStoredBytes` is
+1,060,000, that figure with room over it because two of its terms are properties
+of Go's encoder rather than of the PNG format.
+
+**Enforced, not merely derived.** `NormalizeLogo` refuses an encoding above the
+constant. That branch is unreachable through the caps above it, which is exactly
+why it is there: a Go release that frames its output differently should produce a
+failed upload rather than a row past the bound, and an arithmetic claim nothing
+checks is the shape D134 asked this milestone not to leave behind.
+`TestTheWorstCaseLogoFitsTheStatedBound` builds the worst case and pins both
+halves — that the real figure is close to the derivation, and that it is under
+the constant.
+
+**The fixture that test uses is a finding rather than a detail.** It is a
+*paletted* PNG, because the stored bound is not implied by the upload cap:
+incompressible pixels are incompressible on the way in too, so a truecolour
+upload near the worst case would not fit through the body cap at all. One byte of
+palette index per pixel does fit — about 263 KB on the wire — and expands to four
+bytes a pixel when it is normalized. The worst stored row is therefore reachable,
+and reachable through a file a quarter of its size. A cap on the request body is
+not a cap on the database.
+
+**So the number D134 is owed: 1,060,000 bytes a row**, and at
+`domain.MaxQRCodesPerLink` — twenty — **21,200,000 bytes a link**, about 20 MiB.
+That is in the row, in every backup and in every `pg_dump`.
+
+**Two caps rather than one, and each refuses something the other admits.** A
+2048×1 strip is 2048 pixels of nothing: it fails the side cap and passes the area
+cap. A 1024×1024 image is a megapixel buffer: it passes the side cap and fails
+the area one. The area is what the allocation is proportional to; the side is
+what [M50.6](phase-details/m50.6.md)'s geometry has to place inside a code that
+stops at `qr.MaxSize`. `TestBothCapsRefuseSomethingTheOtherAdmits` is what keeps
+the pair from decaying into one cap and a redundant constant.
+
+**And the reads stopped using `q.*`.** `GetQRCode`, `ListQRCodes` and
+`UpsertQRCode` all projected every column; with a megabyte-a-row `bytea` in the
+table, drawing a list of twenty code names would have fetched twenty megabytes.
+They carry explicit column lists now and report `(logo IS NOT NULL)::boolean`,
+which Postgres answers from the row's TOAST pointer without detoasting anything.
+The cost is three sqlc row structs where there was one model type, absorbed by a
+`qrRow` of the service's own; the alternative was a performance defect shipped
+inside a security milestone.
+
+### D136 — only a named code carries a logo
+
+**The default code cannot have one, and this is a consequence of the milestone's
+own count rather than a preference.** m50.5.md asks for *one upload operation
+against a QR code, and one to clear it*. The collection where a code is addressed
+by name is `/links/{id}/qr/codes/{slug}`; the default code has no slug — its
+identity is the *absence* of one, which is what [D130](../../Plan.md#phase-3-decisions)
+made load-bearing — and it is reached through the `/qr` shorthand
+[D133](../../Plan.md#phase-3-decisions) kept. Giving the shorthand a logo path of
+its own would have been two more operations than the milestone asked for.
+
+It also reads consistently with D133: `/qr/codes/{slug}` is the canonical form
+and `/qr` is the shorthand kept for callers written before codes existed. A
+surface added now has no compatibility burden and lands on the canonical path
+only.
+
+**The gap is real and is recorded rather than hidden**, in
+`internal/httpx/api_qr.go`, in the API document's `has_logo` description, in
+`docs/usage.md` and in the CHANGELOG: a workspace that has never added a second
+code cannot put a logo on the one it has. Whether that is the right product
+answer is the owner's, and it is a question this entry exists to make visible
+rather than one the worker answered.
+
+### D137 — what the orphan sweep collects, under a column
+
+m50.5.md requires an orphan sweep in the hourly `housekeeping` pass, and gives
+its reason as *every one of the paths above can fail between the row and the
+bytes*. **Under D134 that reason does not apply**: the bytes *are* the row, so
+setting, replacing and clearing are each one statement and there is no gap for a
+failure to land in. Removing a code, a workspace or an organization is a cascade
+on foreign keys 00600 already declared.
+
+**One path is left, and it is the one m50.5.md names first: deleting the link.**
+A link is soft-deleted with a purge deadline so its alias stays reserved and it
+can be brought back by hand. Its `qr_codes` rows survive that whole window
+holding up to a megabyte each, unreachable through every read in
+`query/campaigns.sql` — they all filter `l.deleted_at IS NULL` — and therefore
+unclearable through the endpoint that would clear them, which answers 404 for a
+deleted link. The purge that finally removes them is bounded at `purgeBatch` an
+hour, so a large deletion leaves them for days.
+
+So `ClearOrphanedQRCodeLogos` nulls the column where the owning link is
+soft-deleted, bounded and `SKIP LOCKED` like every other statement in that pass,
+and idempotent because its predicate is `logo IS NOT NULL`. **The row is left
+alone**: the trash window exists so the *link* can come back, and the artefact is
+the thing deletion was asked to remove. That is what makes m50.5.md's *deleting
+the link removes its artefacts* true rather than merely intended, and
+`TestTheOrphanSweepClearsLogosFromDeletedLinks` asserts both halves — that the
+deleted link's bytes go and that a live link's do not.
+
+### D138 — uploads get a bucket of their own
+
+**`UPLOAD_RATE_PER_MIN`, default thirty, shared through Redis, on top of
+`API_RATE_PER_MIN` rather than instead of it.** m50.5.md required the milestone
+to name a bucket, and the reason it is not the API's is that the two limits bound
+different things. Every other request under `/api/v1` is a JSON body this product
+caps at 256 KiB and hands to `encoding/json`; an upload is up to a megabyte
+handed to an image decoder, so what a request costs is set by its content rather
+than by its shape. `API_RATE_PER_MIN`'s 600 was chosen about the first kind, and
+600 megabyte uploads a minute is a bandwidth and decoder budget nobody set by
+tuning a number about JSON.
+
+Shared rather than per-instance, on the reasoning `login` and `link_password`
+already carry: the resource is bandwidth into the deployment, and a per-replica
+budget on four replicas is four times the number an operator configured. The
+**clear** carries no second limit — it accepts no body and decodes nothing, and
+throttling it would only make it harder to remove a logo somebody regrets.
+
+Thirty a minute is what somebody restyling a poster does, with room to spare. It
+charges the address rather than the workspace, like every other limit in
+`internal/httpx/limits.go`.
+
+
+## 2026-08-07 — M50.5, the owner overrules D136: the default code gets a logo too
+
+Owner-set, 2026-08-07, at [M50.5](phase-details/m50.5.md)'s acceptance. Written
+down before it is acted on.
+
+**The question.** The milestone built the logo only on named codes —
+`PUT`/`DELETE /links/{id}/qr/codes/{slug}/logo` — and **D136** reasoned that the
+default code has no slug because *not having one is its identity* ([D130](../../Plan.md#phase-3-decisions)),
+so there is nothing to address it by. The bullet asks for *"one upload operation
+against a QR code, and one to clear it"*, and two operations is what was built.
+The worker raised it as the item worth the owner's attention rather than leaving
+it to be found.
+
+It is a real gap and the common case is the broken one: a link where nobody added
+a second code — which is nearly every link — could not carry a logo at all, and
+[M50.6](phase-details/m50.6.md) would have shipped into that.
+
+**The answer: add the shorthand pair, `PUT`/`DELETE /links/{id}/qr/logo`.**
+
+That is the shape [D133](../../Plan.md#phase-3-decisions) already ships five
+times. `/links/{id}/qr.svg` and `/qr.png` *are* the default code addressed
+without a slug, and they were kept that way one milestone ago precisely so the
+default code stays reachable while named codes get a collection of their own. A
+sixth and seventh member of that family invents nothing.
+
+**Why not the third option — give the default code a reserved slug.** It would
+make one shape where there are two, and it reopens D130 to do it. D130 exists so
+that nothing already printed changes what it counts as: the default code's
+payload carries no code parameter because that is what every picture this product
+drew before M50 carries. A reserved slug means either those payloads change,
+which is the one thing M50 spent a milestone avoiding, or the payload and the
+address disagree, which is a seam somebody will fall into later. The two-shape
+cost is smaller and it is already paid.
+
+**What the bullet was read to mean, stated because it is the arguable part.**
+*One upload operation and one to clear* is read as **two capabilities, not two
+routes** — the same operation reachable at the shorthand and at the collection,
+exactly as `GET …/qr.png` and `GET …/qr/codes/{slug}/image.png` are one
+capability today. D136 read it as a count and was not wrong to; the owner chose
+the other reading. Recording both is what makes it a decision rather than a
+correction.
+
+**A second amendment to the same citation, at [step 3.4](phase-loop.md#3-land).**
+m50.5.md's reference for D75 went `:18-20` → `:20-22` at step 1 and `:20-22` →
+`:24-26` here, both times because a worker added imports above it. And
+`link.QRContent`, amended twice inside M50, has moved again — it is at
+`internal/link/qr.go:963` now. **m50.md is not amended for it and that is
+deliberate**: M50 is shipped, its claim is about behaviour rather than about where
+a function lives, and chasing a line number through every later milestone is the
+churn [the M50 entry](#2026-08-07--m50-two-line-numbers-and-the-references-that-held)
+argued against. What that entry recommended is what saves it — m50.md names
+`link.QRContent` beside the number, so a reader finds it after the number is
+wrong. **Amend the milestone being built; leave the ones that shipped.**
+
+**D136 stands as the reasoning it was**, marked overruled rather than deleted,
+for the same reason [D124](#2026-08-07--m48-the-owner-overrules-d124-the-picture-goes-up-and-the-guard-narrows)
+is. Two overruled worker decisions in one phase, both escalated rather than
+buried, is the two-actor split doing the job it costs a rejection to have.
+
+
+## 2026-08-07 — M50.5, the shorthand that carries a logo, and the row it has to write
+
+What the owner's ruling above became, built after it and against it. One
+decision, and two things that are consequences rather than choices — recorded
+because each is a place a later reader would otherwise assume the opposite.
+
+### D139 — the default code's logo is the shorthand, and it writes a row
+
+**`PUT`/`DELETE /links/{id}/qr/logo`, beside the slug form, and no reserved
+slug.** The owner's ruling names the shape; what this entry adds is what
+building it cost, because one part of it was not visible from the decision.
+
+**The invisible part: a `bytea` column needs a row, and the default code may not
+have one.** A link's default code exists whether or not `qr_codes` holds it —
+that is what makes *a QR endpoint returns a code for any link* true, and why
+twenty untouched links carry no rows at all. A named code is the opposite: it
+exists *because* somebody created it, so by the time anything can be uploaded to
+it the row is already there. The logo is the first per-code fact that cannot be
+synthesised on read, so an upload against an unstyled default code has to
+materialise the row before it can write the column.
+
+`materializeDefaultQRCode` is that write, and two things about it are
+deliberate. It writes **the style the code was already being drawn at** —
+`decodeQRStyle(nil)`, which is precisely what every read of an unstored code has
+been answering with — so creating the row changes no picture and no download. And
+it goes through `UpsertQRCode` rather than a plain insert, for the reason
+`SetQRStyleBySlug` does: two concurrent uploads to one untouched code are two
+inserts racing for one `(link, slug)`, and 03700's unique index would fail the
+loser rather than let it proceed.
+
+The one visible consequence is `stored` turning true, and it is honest rather
+than a side effect worth hiding: there *is* a row now.
+`TestTheDefaultCodeCarriesALogoToo` compares the style of the row an upload
+created against a genuinely untouched link's code rather than against a literal,
+so the claim is *the picture did not change* and not *the picture is this*.
+
+**The clear is idempotent one step further than the named-code clear.** A named
+code with no row does not exist and is a 404 — which is what stops removal being
+a way to ask whether a slug was ever issued. A *default* code with no row has no
+logo, which is what the caller asked for, so it answers 204 and writes nothing.
+The trade is `ResetQRStyle`'s, made once more: an operation that reported 404
+would be one that cares whether a preference had ever been expressed.
+
+**Two response shapes, because there are two families and not two operations.**
+The shorthand answers `{"qr": …}` like every other `/links/{id}/qr` operation and
+the collection answers `{"code": …}` like every other `/qr/codes/{slug}` one. A
+single shape would have made one of the two families inconsistent with itself,
+which is a worse trade than the one paid here. The multipart request body is a
+`components/requestBodies` entry both paths `$ref`, so the shape a client is
+validated against is one definition rather than two that can drift.
+
+### The dashboard needed a second route, and the reason is the body
+
+**A file cannot travel in the form the panel already had.** Every other write in
+the QR panel posts `application/x-www-form-urlencoded` to
+`POST /links/{id}/qr`, which `LinkQRStyle` reads with `parseForm`; a file needs
+`multipart/form-data`, and a handler that branched on the content type would be
+two handlers wearing one name. So the upload posts to `POST /links/{id}/qr/logo`
+and **the removal stays on the existing form** under its own button name, the way
+`reset`, `remove` and `rename` already do — which also keeps removal available
+when no file is selected.
+
+That forced the one change to a shipped helper. `readUploadedFile` now returns
+the short text parts it walked past as well as the file, because `next` and
+`code` are ordinary hidden inputs and the multipart body is the only body this
+form has. **Every part is walked rather than stopping at the file**: a browser
+sends parts in markup order, and a reader that returned early would make the two
+values depend on where a template happens to put the file input.
+`TestTheFieldsBesideAnUploadAreReadWhereverTheySit` sends them before it, after
+it, and on both sides. Text parts are read one byte past `maxUploadFieldBytes`
+and refused rather than truncated — a return path cut in half is a redirect
+somewhere nobody asked for, reported as success.
+
+The dashboard route shares the **same limiter object** as the API's, not a second
+one configured to the same number. That is the reasoning `guard` has carried
+since the login form: a budget an attacker doubles by alternating between two
+surfaces is not the budget an operator configured. What differs is the refusal —
+a page rather than a problem document, because a browser is what posts here.
+
+### What the panel says, and why it says it
+
+The notice after an upload states in as many words that **nothing draws the logo
+yet**. The picture beside it is unchanged, and a reader who was not told would
+reasonably conclude the upload failed. M50.6 is what removes the sentence. The
+list of codes gains *has a logo* on the rows that carry one, so which of a link's
+codes have images is answerable without opening each in turn.
+
+### Sabotage
+
+Four new claims, four counter-edits, each confirmed red and restored:
+
+- `SetQRCodeLogo` refusing the empty slug the way it did before the ruling →
+  `TestTheDefaultCodeCarriesALogoToo` fails on the 404.
+- The panel's form action moved by one path segment →
+  `TestTheDashboardReachesTheLogoOnTheDefaultCode` fails on the missing form.
+- `readUploadedFile` returning at the file part →
+  `TestTheFieldsBesideAnUploadAreReadWhereverTheySit` fails for *after the file*
+  and *either side*, and passes for *before* — which is the ordering dependence
+  it exists to refuse.
+- The shorthand answering under the `code` key → `TestAPIMatchesItsContract`
+  fails on both the response validation and the field it reads.

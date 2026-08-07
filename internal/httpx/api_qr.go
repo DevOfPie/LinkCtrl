@@ -1,7 +1,11 @@
 package httpx
 
 import (
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/qr"
@@ -333,6 +337,219 @@ func (a *LinkAPI) GetQRCodePNG(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeQRImage(w, qr.PNGContentType, PNGDisposition, out)
+}
+
+// A logo on a code (M50.5).
+//
+// **This is the first surface in this product that accepts a file**, and every
+// choice in it is *do less*. Two operations — replace the image, remove it. No
+// download endpoint: nothing in this milestone serves a stored logo back, and
+// what one is *for* is M50.6, which composites it into the pictures the `.svg`
+// and `.png` paths already serve.
+//
+// **`links.update`, no new permission, and no session gate.** D75 already
+// decided that styling a code is styling the link, and a logo is style; D87's
+// limb refuses operations whose subject is the person, and the subject here is
+// the link, so a key that may recolour a code may put an image on it.
+//
+// **Two capabilities, four routes, and that is the shape D133 already ships
+// five times.** The owner overruled D136 on 2026-08-07: a link where nobody
+// added a second code — nearly every link — could not carry a logo at all,
+// because the default code's identity is the *absence* of a slug (D130) and the
+// collection addresses codes by one. So the pair answers at `/links/{id}/qr/logo`
+// as well as at `/links/{id}/qr/codes/{slug}/logo`, the same way `qr.png` and
+// `codes/{slug}/image.png` are one capability at two addresses. The default code
+// gains no reserved slug — that would reopen D130 and change what an
+// already-printed picture counts as.
+//
+// The shorthand answers with `qr`, as every other `/links/{id}/qr` operation
+// does, and the collection answers with `code`. Two shapes because there are two
+// families, not because the operation differs.
+
+// SetQRLogo replaces the image stored against a link's default code.
+//
+// PUT rather than POST, for the reason SetQR is a PUT: the request replaces the
+// resource whole, and sending it twice leaves the same state as sending it once.
+func (a *LinkAPI) SetQRLogo(w http.ResponseWriter, r *http.Request) {
+	a.setQRLogo(w, r, "", "qr")
+}
+
+// SetQRCodeLogo replaces the image stored against one of a link's named codes.
+func (a *LinkAPI) SetQRCodeLogo(w http.ResponseWriter, r *http.Request) {
+	a.setQRLogo(w, r, r.PathValue("slug"), "code")
+}
+
+// setQRLogo is the upload both routes perform. One function, because the only
+// difference between them is which code is addressed and which key the answer
+// is written under — and a second copy of the read-cap-store sequence is a
+// second place for the ordering the milestone is about to come apart.
+func (a *LinkAPI) setQRLogo(w http.ResponseWriter, r *http.Request, slug, key string) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	upload, err := readUploadedFile(w, r, "logo")
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	code, err := a.Links.SetQRCodeLogo(r.Context(), IdentityFrom(r.Context()), id, slug, upload.File)
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{key: code, "levels": qr.Levels})
+}
+
+// DeleteQRLogo removes the image from a link's default code, leaving the code.
+func (a *LinkAPI) DeleteQRLogo(w http.ResponseWriter, r *http.Request) {
+	a.clearQRLogo(w, r, "")
+}
+
+// DeleteQRCodeLogo removes the image from one named code, leaving the code.
+func (a *LinkAPI) DeleteQRCodeLogo(w http.ResponseWriter, r *http.Request) {
+	a.clearQRLogo(w, r, r.PathValue("slug"))
+}
+
+func (a *LinkAPI) clearQRLogo(w http.ResponseWriter, r *http.Request, slug string) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	if err := a.Links.ClearQRCodeLogo(
+		r.Context(), IdentityFrom(r.Context()), id, slug,
+	); err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// uploadedForm is a multipart body read into memory: the one part this product
+// treats as a file, and the short text parts beside it.
+//
+// **Fields exists for the dashboard and is empty for the API.** A browser form
+// that uploads a file also carries the two hidden inputs every other form in the
+// panel carries — where the save returns to, and which code it is for — and a
+// multipart body is the only body it can send them in. The API's own callers
+// send the file alone, and nothing reads Fields for them.
+type uploadedForm struct {
+	File   []byte
+	Fields url.Values
+}
+
+// maxUploadFieldBytes bounds one text part of a multipart upload.
+//
+// The whole body is already capped by MaxBytesReader, so this is not what stops
+// a large request; it is what stops a *file* arriving under a text field's name
+// and being held twice. Two kilobytes is far above the longest value any form
+// here sends — a return path and an eight-character slug.
+const maxUploadFieldBytes = 2048
+
+// readUploadedFile reads one named part out of a multipart body.
+//
+// **`MultipartReader`, never `ParseMultipartForm`.** The convenient one spills
+// anything past its memory budget into `os.TempDir()`, which would have this
+// product writing a stranger's bytes to the filesystem — the exact thing the
+// storage decision (D134) chose a column to avoid, arriving through the back
+// door of a helper function. The streaming reader holds the part in memory,
+// under the same cap as the request.
+//
+// **The cap is on the request body and it is the first thing that happens**, so
+// it applies to the whole envelope — part headers, boundaries and all — and not
+// only to whatever the sender labels as the file. That ordering is why a body
+// that never ends is refused rather than read: `MaxBytesReader` fails the read
+// itself, so the multipart parser cannot be starved into holding a connection
+// open while it waits for a boundary.
+//
+// **Neither the filename nor the part's declared `Content-Type` is read**, and
+// that is asserted rather than promised — see
+// TestNothingAboutAnUploadsNameOrDeclaredTypeIsRead. Both are strings the sender
+// chose: one would be a path component if anything ever treated it as one, and
+// the other would be a way to pick this product's decoder from outside it. What
+// decides the decoder is the content, in internal/qr.
+//
+// **Every part is walked, rather than stopping at the file.** A browser puts its
+// hidden inputs wherever the markup does, so a reader that returned at the file
+// part would make the two fields the dashboard needs depend on where a template
+// happens to place them. Walking to the end costs nothing that is not already
+// bounded: the envelope is capped, and each text part is capped again at
+// maxUploadFieldBytes.
+func readUploadedFile(w http.ResponseWriter, r *http.Request, field string) (uploadedForm, error) {
+	out := uploadedForm{Fields: url.Values{}}
+	tooLarge := domain.ValidationErrors{{
+		Field: field, Code: "too_large",
+		Message: fmt.Sprintf("an upload is at most %d bytes", qr.MaxLogoUploadBytes),
+	}}
+	notMultipart := domain.ValidationErrors{{
+		Field: field, Code: "invalid",
+		Message: "this endpoint takes a multipart/form-data body carrying a " +
+			field + " part",
+	}}
+
+	r.Body = http.MaxBytesReader(w, r.Body, qr.MaxLogoUploadBytes)
+	parts, err := r.MultipartReader()
+	if err != nil {
+		return out, notMultipart
+	}
+	for {
+		part, err := parts.NextPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			var maxErr *http.MaxBytesError
+			if AsError(err, &maxErr) {
+				return out, tooLarge
+			}
+			return out, notMultipart
+		}
+		// FormName is the *field* name, which this handler chose and the sender
+		// merely repeats. It is not the filename, and nothing here asks for one.
+		name := part.FormName()
+		// A text part is read one byte past its bound, so passing it is
+		// detectable rather than silently truncated — a return path cut in half
+		// would send the reader somewhere nobody asked for and report success.
+		limit := int64(maxUploadFieldBytes) + 1
+		if name == field {
+			limit = qr.MaxLogoUploadBytes
+		}
+		body, err := io.ReadAll(io.LimitReader(part, limit))
+		_ = part.Close()
+		if err != nil {
+			var maxErr *http.MaxBytesError
+			if AsError(err, &maxErr) {
+				return out, tooLarge
+			}
+			return out, notMultipart
+		}
+		if name != field {
+			if len(body) > maxUploadFieldBytes {
+				return out, domain.ValidationErrors{{
+					Field: name, Code: "too_large",
+					Message: fmt.Sprintf("a form field beside an upload is at most %d bytes",
+						maxUploadFieldBytes),
+				}}
+			}
+			out.Fields.Set(name, string(body))
+			continue
+		}
+		if len(body) == 0 {
+			return out, domain.ValidationErrors{{
+				Field: field, Code: "empty", Message: "the " + field + " part carries no bytes",
+			}}
+		}
+		out.File = body
+	}
+	if out.File == nil {
+		return out, domain.ValidationErrors{{
+			Field: field, Code: "required",
+			Message: "the body carries no " + field + " part",
+		}}
+	}
+	return out, nil
 }
 
 // writeQRImage is the headers every picture response here shares.

@@ -575,6 +575,20 @@ type linkQRView struct {
 	QRMaxLabel int
 	// QRLabel is the selected code's name, which the rename control edits.
 	QRLabel string
+	// QRHasLogo says whether the selected code carries an uploaded image
+	// (M50.5), and it is what decides whether the panel draws a remove control.
+	//
+	// A boolean and not the picture: nothing in this milestone serves a stored
+	// logo back, so there is nothing to show. What the panel can honestly say is
+	// that there is one, and offer to take it away.
+	QRHasLogo bool
+	// QRMaxLogoBytes and QRMaxLogoDimension are the upload's bounds, passed in
+	// like QRMinSize and QRMaxSize so the numbers the panel states and the ones
+	// internal/qr enforces cannot drift. Stated in bytes rather than rounded to
+	// a megabyte, because a rounded figure is one that stops being true the
+	// first time the constant moves and nothing fails.
+	QRMaxLogoBytes     int
+	QRMaxLogoDimension int
 }
 
 // qrCodeView is one row of the panel's list of codes (M50).
@@ -592,7 +606,11 @@ type qrCodeView struct {
 	// removed, and the row says so by not offering the control.
 	Default bool
 	// Selected marks the code the style form below the list is editing.
-	Selected    bool
+	Selected bool
+	// HasLogo says whether this code carries an uploaded image (M50.5), so a
+	// reader can see at a glance which of a link's codes have one without
+	// opening each in turn.
+	HasLogo     bool
 	Panel       string
 	Download    string
 	DownloadPNG string
@@ -825,15 +843,17 @@ func (h *Web) linkQR(
 	ctx context.Context, actor *auth.Identity, l *domain.Link, back, slug string,
 ) linkQRView {
 	view := linkQRView{
-		QRSourceLabel: domain.ClickSourceQR,
-		QRMinSize:     qr.MinSize,
-		QRMaxSize:     qr.MaxSize,
-		QRMaxCodes:    domain.MaxQRCodesPerLink,
-		QRMaxLabel:    domain.MaxQRCodeLabelLength,
-		QRReturn:      back,
-		QRSlug:        slug,
-		QRDownload:    qrDownloadPath(l.ID, slug, "svg"),
-		QRDownloadPNG: qrDownloadPath(l.ID, slug, "png"),
+		QRSourceLabel:      domain.ClickSourceQR,
+		QRMinSize:          qr.MinSize,
+		QRMaxSize:          qr.MaxSize,
+		QRMaxCodes:         domain.MaxQRCodesPerLink,
+		QRMaxLabel:         domain.MaxQRCodeLabelLength,
+		QRMaxLogoBytes:     qr.MaxLogoUploadBytes,
+		QRMaxLogoDimension: qr.MaxLogoDimension,
+		QRReturn:           back,
+		QRSlug:             slug,
+		QRDownload:         qrDownloadPath(l.ID, slug, "svg"),
+		QRDownloadPNG:      qrDownloadPath(l.ID, slug, "png"),
 	}
 
 	// The list first, so a panel opened on a code that has since been removed
@@ -861,6 +881,7 @@ func (h *Web) linkQR(
 	view.QRSize = code.Size
 	view.QRStored = code.Stored
 	view.QRLabel = code.Label
+	view.QRHasLogo = code.HasLogo
 
 	svg, err := qr.Render(code.Content, code.Style)
 	if err != nil {
@@ -921,7 +942,7 @@ func qrCodeViews(linkID uuid.UUID, codes []link.QRCode, selected string) []qrCod
 			panel += "?code=" + url.QueryEscape(c.Slug)
 		}
 		out = append(out, qrCodeView{
-			Slug: c.Slug, Label: c.Label, Size: c.Size, Name: name,
+			Slug: c.Slug, Label: c.Label, Size: c.Size, Name: name, HasLogo: c.HasLogo,
 			Default: c.Slug == "", Selected: c.Slug == selected, Panel: panel,
 			Download:    qrDownloadPath(linkID, c.Slug, "svg"),
 			DownloadPNG: qrDownloadPath(linkID, c.Slug, "png"),

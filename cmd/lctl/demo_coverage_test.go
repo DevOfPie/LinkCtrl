@@ -571,6 +571,30 @@ func demoCoverage() []demoFeature {
 				"column of zeroes beside a column of clicks",
 		},
 		{
+			// M50.5. The first uploaded file this product holds.
+			//
+			// **What this row proves is that the upload path ran**, not that
+			// anything is drawn: nothing composites a logo until M50.6, so
+			// there is no page on the demo where a reader would notice its
+			// absence. The row is here anyway, and deliberately, because
+			// M50.6's demo bullet is *the seeded code from M50.5 renders with
+			// its logo* — a milestone that arrives to find nothing uploaded
+			// would have to seed the upload as well as the compositing, and
+			// the seam between the two would stop being where the split put it.
+			//
+			// Bounded above at one for the reason the style row is: a demo
+			// where every code carries a logo cannot show that carrying one is
+			// a choice.
+			Milestone: "M50.5", Feature: "A QR code carrying an uploaded logo",
+			Query: `SELECT count(*) FROM qr_codes
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND logo IS NOT NULL`,
+			Min: 1, Max: 1,
+			Shows: "that this instance has accepted, re-encoded and stored a file — " +
+				"the one thing the product could not do before, and the input " +
+				"M50.6 composites",
+		},
+		{
 			Milestone: "M41", Feature: "Campaigns, more than one, and one of them over",
 			Query: `SELECT count(*) FROM campaigns
 			         WHERE workspace_id IN (` + demoWorkspaces + `)

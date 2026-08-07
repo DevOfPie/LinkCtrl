@@ -127,6 +127,34 @@ type Querier interface {
 	// the drainer needs both for every claimed delivery, and N+1 round trips to
 	// assemble a batch of network calls is the wrong shape.
 	ClaimDueWebhookDeliveries(ctx context.Context, arg ClaimDueWebhookDeliveriesParams) ([]ClaimDueWebhookDeliveriesRow, error)
+	// The orphan sweep, run hourly by the maintenance pass.
+	//
+	// **What is orphaned under a column, and what is not.** Removing a code, a
+	// workspace or an organization takes its logos by cascade, and replacing one is
+	// the single UPDATE above, so none of those can leave bytes behind. Deleting a
+	// *link* can, and does: a link is soft-deleted with a purge deadline, so its
+	// `qr_codes` rows survive the whole trash window while every read in this file
+	// filters them out with `l.deleted_at IS NULL`. Those bytes are unreachable
+	// through the product — the endpoint that would clear them answers 404 for a
+	// deleted link — and they sit in the row and in every `pg_dump` until the purge
+	// fires, which for a large backlog is several hourly runs away and for a row
+	// the purge skips is longer still.
+	//
+	// This is what makes m50.5.md's claim *deleting the link removes its artefacts*
+	// true rather than merely intended. The row itself is left alone: the trash
+	// window exists so a link can be brought back by hand, and the artefact is the
+	// thing deletion was asked to remove.
+	//
+	// Idempotent by construction — a second run matches nothing, because `logo IS
+	// NOT NULL` is the predicate. Bounded like every other pass in that job, and
+	// SKIP LOCKED so it can never block, or be blocked by, a concurrent write to
+	// the same code.
+	ClearOrphanedQRCodeLogos(ctx context.Context, batchSize int32) (int64, error)
+	// Removes the image, and the row stays: a code without a logo is a code.
+	//
+	// NULL rather than an empty bytea, because the schema has one spelling for "no
+	// logo" and two would disagree the first time somebody wrote a zero-length one.
+	ClearQRCodeLogo(ctx context.Context, arg ClearQRCodeLogoParams) (int64, error)
 	// Spend one click of a one-time or max-click link's durable budget.
 	//
 	// **One statement, and that is the whole of the concurrency argument.** Two
@@ -553,6 +581,9 @@ type Querier interface {
 	// Removes one named code. Scoped by workspace rather than by link, because the
 	// id is already unique and the service has resolved the link before it gets
 	// here; the workspace column is the tenancy check.
+	//
+	// The logo goes with the row, which is the whole of what D134 bought: no second
+	// statement, and no way for the two to come apart.
 	DeleteQRCodeByID(ctx context.Context, arg DeleteQRCodeByIDParams) (int64, error)
 	// Reaper. Kept long enough to be visible in the key list after revocation, and
 	// long enough for the audit question above to be answerable.
@@ -850,11 +881,23 @@ type Querier interface {
 	// FOR UPDATE, so two clicks on the same link serialize and the second sees the
 	// row the first consumed.
 	GetPendingRegistrationByTokenHash(ctx context.Context, tokenHash []byte) (PendingRegistration, error)
+	// **`q.*` is gone from the three reads below, and that is M50.5 rather than
+	// style.** `qr_codes` now carries a `logo bytea` (03800, D134) bounded at
+	// qr.MaxLogoStoredBytes — a little over a megabyte a row — and a link may hold
+	// domain.MaxQRCodesPerLink of them. A star projection would fetch every one of
+	// those bytes to draw a list of names, so the reads carry an explicit column
+	// list and report the logo as the one fact a reader of the list needs:
+	// **whether there is one**. `logo IS NOT NULL` is answered from the row's TOAST
+	// pointer without detoasting the value, so asking costs nothing.
+	//
+	// The bytes themselves are read by nothing here. Nothing in M50.5 serves a
+	// stored logo back — the two operations are set and clear — and M50.6, which
+	// composites one into a picture, is where a query that reads them belongs.
 	// One code of a link's, by slug. No rows is not an error for the default code
 	// (slug ''): it means the default style, which is what every link's code is
 	// drawn with until somebody changes it. For any other slug no rows means the
 	// code does not exist, and the service reports that.
-	GetQRCode(ctx context.Context, arg GetQRCodeParams) (QrCode, error)
+	GetQRCode(ctx context.Context, arg GetQRCodeParams) (GetQRCodeRow, error)
 	// The live-activity feed. Bounded and index-backed on (link_id, occurred_at).
 	GetRecentClicks(ctx context.Context, arg GetRecentClicksParams) ([]GetRecentClicksRow, error)
 	GetRoleBySlug(ctx context.Context, slug string) (Role, error)
@@ -1258,7 +1301,7 @@ type Querier interface {
 	// order the rest were created in — it is the one every already-printed code
 	// attributes to, and a list that buried it would bury the answer to "which of
 	// these is the one on my existing posters".
-	ListQRCodes(ctx context.Context, arg ListQRCodesParams) ([]QrCode, error)
+	ListQRCodes(ctx context.Context, arg ListQRCodesParams) ([]ListQRCodesRow, error)
 	// The management list: every rule on a link, enabled or not, in the order the
 	// redirect path would evaluate them.
 	//
@@ -2220,6 +2263,20 @@ type Querier interface {
 	// for existence.
 	SetLastWorkspaceForUser(ctx context.Context, arg SetLastWorkspaceForUserParams) (int64, error)
 	SetPrimaryDestination(ctx context.Context, arg SetPrimaryDestinationParams) error
+	// --- QR logos (M50.5) --------------------------------------------------------
+	// Stores the re-encoded image against one code.
+	//
+	// **One statement, so setting and replacing are the same operation and neither
+	// has a gap in it.** A logo that replaced another leaves nothing behind to
+	// collect: the previous value is overwritten by this write rather than deleted
+	// by a second one, which is the property the storage decision was chosen for
+	// (D134) and the reason "replacing removes the artefact it replaced" needs no
+	// code of its own.
+	//
+	// The bytes are already bounded — the request body by http.MaxBytesReader, the
+	// decode by qr.MaxLogoPixels, and this value by qr.MaxLogoStoredBytes, which
+	// internal/qr enforces rather than assumes.
+	SetQRCodeLogo(ctx context.Context, arg SetQRCodeLogoParams) (int64, error)
 	// Moves one session, and only the session that asked.
 	//
 	// Scoped by user_id as well as id so a session id from elsewhere cannot be
@@ -2348,8 +2405,11 @@ type Querier interface {
 	//
 	// The label is not in the DO UPDATE list. This statement is how a *style* is
 	// written, and a style write must not silently rename the code it is drawn for;
-	// UpdateQRCodeLabel is the operation that renames one.
-	UpsertQRCode(ctx context.Context, arg UpsertQRCodeParams) (QrCode, error)
+	// UpdateQRCodeLabel is the operation that renames one. **Nor is the logo**, for
+	// the same reason and with more at stake: restyling a code must not throw away
+	// the image somebody uploaded to it, and the insert branch leaves the column at
+	// its NULL default because a code that has just come into being has no logo.
+	UpsertQRCode(ctx context.Context, arg UpsertQRCodeParams) (UpsertQRCodeRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

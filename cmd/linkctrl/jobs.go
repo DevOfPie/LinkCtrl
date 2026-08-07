@@ -787,6 +787,34 @@ func (j *jobRunner) housekeeping(ctx context.Context) error {
 		j.log.Debug("expired sessions deleted", slog.Int64("count", n))
 	}
 
+	// Uploaded QR logos belonging to links that are already deleted (M50.5).
+	//
+	// **The only orphan a column can leave, and it exists because one of the
+	// four deletions is soft.** Removing a code, a workspace or an organization
+	// takes its logos by cascade, and replacing one is a single UPDATE, so none
+	// of those can separate the row from the bytes — that is what D134 bought.
+	// Deleting a *link* does not: the row is kept with a purge deadline so the
+	// alias stays reserved and the link can be brought back by hand, and its
+	// `qr_codes` rows go on holding up to a megabyte each, unreachable through
+	// every read (they filter on `l.deleted_at IS NULL`) and therefore
+	// unclearable through the endpoint that would clear them.
+	//
+	// Directly above the link purge's own statement in this function and after
+	// it in the pass, which is the ordering that matters: a link the purge has
+	// already removed took its logos with it, so what is left here is only the
+	// window between deletion and purge — bounded by the trash window for a
+	// small backlog and by purgeBatch for a large one.
+	//
+	// Idempotent, and it does nothing on almost every run: the predicate is
+	// `logo IS NOT NULL`, and the partial index 03800 adds is what makes asking
+	// cheap. Info rather than Debug, because it is irreversible deletion of
+	// something a workspace uploaded, and this line is its only record.
+	if n, err := q.ClearOrphanedQRCodeLogos(ctx, purgeBatch); err != nil {
+		errs = append(errs, fmt.Errorf("clear orphaned qr code logos: %w", err))
+	} else if n > 0 {
+		j.log.Info("qr code logos removed from deleted links", slog.Int64("count", n))
+	}
+
 	// Rotated predecessors whose grace window has closed (M44).
 	//
 	// This is bookkeeping, not enforcement, and the distinction is worth holding

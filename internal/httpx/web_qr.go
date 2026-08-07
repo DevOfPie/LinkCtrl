@@ -165,6 +165,20 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Removing the logo is a fourth named button rather than a form of its own
+	// (M50.5). The upload has to be its own form — a file needs
+	// `multipart/form-data`, which this handler does not read — but the removal
+	// carries no body at all, so putting it here keeps the refusal coming back
+	// to the panel the way every other refusal in this handler does.
+	if r.PostFormValue("remove_logo") != "" {
+		if lerr := h.Links.ClearQRCodeLogo(r.Context(), actor, id, slug); lerr != nil {
+			h.finishQRAction(w, r, id, lerr)
+			return
+		}
+		seeOther(w, r, qrReturn(next, id, "logo_removed", slug, nil))
+		return
+	}
+
 	// The reset button posts the same form under a different name, so the
 	// service sees an ordinary style rather than a second operation.
 	if r.PostFormValue("reset") != "" {
@@ -201,6 +215,45 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	seeOther(w, r, qrReturn(next, id, "styled", slug, extra))
+}
+
+// LinkQRLogo stores an image against the code the panel is open on (M50.5).
+//
+// **Its own route because a file needs its own body.** Every other write in this
+// panel posts `application/x-www-form-urlencoded` to `POST /links/{id}/qr`,
+// which LinkQRStyle reads with `parseForm`; a file cannot travel in that, and a
+// handler that branched on the content type would be two handlers wearing one
+// name. So the upload posts here and the removal stays there, which is also
+// what keeps the removal available with no file selected.
+//
+// **`next` and `code` arrive as parts of the multipart body**, because that is
+// the only body this form has. They are the same two hidden inputs every other
+// form in the panel carries and they mean the same things — where the save
+// returns to, matched against the two paths qrReturn builds itself, and which
+// code is being edited, which the service refuses if the link does not have it.
+//
+// The default code is reachable here exactly as a named one is: its `code` value
+// is the empty string, which is its identity (D130) and what the owner's ruling
+// of 2026-08-07 made addressable for a logo.
+func (h *Web) LinkQRLogo(w http.ResponseWriter, r *http.Request) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		h.webError(w, r, err)
+		return
+	}
+	upload, err := readUploadedFile(w, r, "logo")
+	if err != nil {
+		h.finishQRAction(w, r, id, err)
+		return
+	}
+	slug := upload.Fields.Get("code")
+	if _, serr := h.Links.SetQRCodeLogo(
+		r.Context(), IdentityFrom(r.Context()), id, slug, upload.File,
+	); serr != nil {
+		h.finishQRAction(w, r, id, serr)
+		return
+	}
+	seeOther(w, r, qrReturn(upload.Fields.Get("next"), id, "logo", slug, nil))
 }
 
 // finishQRAction puts a refusal back on the page it was made from, with the
@@ -280,6 +333,16 @@ func qrNotice(q url.Values) string {
 	case "renamed":
 		return "Code renamed. The name is what the dashboard calls it — what the code " +
 			"says is unchanged, so nothing already printed is affected."
+	case "logo":
+		// Says plainly that nothing is drawn yet, because the picture beside this
+		// message is unchanged and a reader who was not told would reasonably
+		// conclude the upload failed. M50.6 is what removes this sentence.
+		return "Logo stored, re-encoded as a PNG by this server. Nothing draws it into " +
+			"the code yet — that is the next piece of work — so the picture beside " +
+			"this is unchanged."
+	case "logo_removed":
+		return "Logo removed. The image is gone from the row rather than merely " +
+			"unreferenced, so nothing is left behind."
 	default:
 		return ""
 	}

@@ -123,7 +123,7 @@
       <div class="min-w-0 grow">
         <a href="{{.Panel}}" class="text-sm font-medium text-ink hover:text-accent">{{.Name}}</a>
         <p class="text-xs text-subtle">
-          {{.Size}}px{{if .Default}} &middot; the code every already-printed picture of this link resolves to{{else}} &middot; <code>{{.Slug}}</code>{{end}}{{if .Counted}} &middot; {{.Clicks}} scan{{if ne .Clicks 1}}s{{end}} in this window{{end}}
+          {{.Size}}px{{if .Default}} &middot; the code every already-printed picture of this link resolves to{{else}} &middot; <code>{{.Slug}}</code>{{end}}{{if .HasLogo}} &middot; has a logo{{end}}{{if .Counted}} &middot; {{.Clicks}} scan{{if ne .Clicks 1}}s{{end}} in this window{{end}}
         </p>
       </div>
       <div class="flex shrink-0 items-center gap-2">
@@ -285,4 +285,59 @@
   </form>
   {{end}}
 </div>
+
+{{if .Identity.Can "links.update"}}
+{{- /* A logo on the code being edited (M50.5).
+
+       **Its own form, and it has to be.** A file needs
+       `enctype="multipart/form-data"`, which the style form above cannot carry
+       without every one of its other buttons arriving in a body the handler
+       does not read. So the upload posts to its own route and the removal
+       stays on the style form's, under its own button name the way reset and
+       remove already do.
+
+       **This reaches the default code as well as a named one.** `code` is
+       whichever row the panel is open on, and for the default that is the
+       empty string &mdash; its identity is the absence of a slug, and the
+       owner's ruling of 2026-08-07 is what made a logo addressable that way
+       rather than giving it a reserved one. A link nobody has added a second
+       code to is nearly every link, and it was the case that could not carry a
+       logo at all.
+
+       Nothing draws it yet, and the paragraph says so rather than leaving a
+       reader to conclude from an unchanged picture that the upload failed.
+       Compositing is the next milestone.
+
+       `accept` and `required` are conveniences for the browser and not checks:
+       the decoder is chosen by the file's own bytes, and the server refuses an
+       empty or unreadable upload whatever the markup allowed. */ -}}
+<div class="mt-6 border-t border-line pt-4">
+  <h3 class="text-sm font-medium text-ink">Logo</h3>
+  <p class="mt-1 text-xs text-subtle">
+    PNG or JPEG, at most {{.QRMaxLogoBytes}} bytes and {{.QRMaxLogoDimension}} pixels a side. What is stored is a PNG this server encodes from your image, so metadata does not survive &mdash; this is not somewhere to keep an original. <strong>Nothing draws it into the code yet</strong>; storing it is this step, and putting it in the middle of the picture is the next one.
+  </p>
+  <div class="mt-2 flex flex-wrap items-end gap-2">
+    <form method="post" action="/links/{{.Link.ID}}/qr/logo" enctype="multipart/form-data"
+          class="flex flex-wrap items-end gap-2">
+      <input type="hidden" name="next" value="{{.QRReturn}}">
+      <input type="hidden" name="code" value="{{.QRSlug}}">
+      <div>
+        <label for="qr_logo" class="block text-sm font-medium text-ink">Image</label>
+        <input id="qr_logo" name="logo" type="file" accept="image/png,image/jpeg" required
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-sunken file:px-2 file:py-1 file:text-sm file:text-ink focus:border-accent focus:outline-none">
+      </div>
+      <button type="submit"
+              class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-sunken">{{if .QRHasLogo}}Replace the logo{{else}}Upload a logo{{end}}</button>
+    </form>
+    {{if .QRHasLogo}}
+    <form method="post" action="/links/{{.Link.ID}}/qr">
+      <input type="hidden" name="next" value="{{.QRReturn}}">
+      <input type="hidden" name="code" value="{{.QRSlug}}">
+      <button type="submit" name="remove_logo" value="1"
+              class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-danger hover:bg-sunken">Remove the logo</button>
+    </form>
+    {{end}}
+  </div>
+</div>
+{{end}}
 {{end}}

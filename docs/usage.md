@@ -399,6 +399,66 @@ Seeing a code is `links.read` and styling one is `links.update`: a QR code is a
 picture of the link's own short URL, so anybody who can see the link can see its
 code.
 
+#### A logo on a code
+
+**The one thing in this product that accepts a file**, and it is `PUT` with a
+`multipart/form-data` body. It takes `links.update`, like every other change to
+how a code is drawn, and an API key that holds it may use it. The QR panel on a
+link's page does the same thing from a browser.
+
+Two addresses, one operation — the same relationship `qr.png` and
+`codes/{slug}/image.png` have. The link's **default** code has no slug, because
+having none is what makes it the code every already-printed picture resolves to,
+so it is reached through the shorthand:
+
+```sh
+# The link's default code. Upload; the part must be named `logo`, and the
+# filename is ignored.
+curl -sS -X PUT "$BASE/api/v1/links/$LINK_ID/qr/logo" \
+  -H "Authorization: Bearer $LINKCTRL_API_KEY" \
+  -F 'logo=@brand.png'
+
+# A named code, by the slug printed in its payload.
+curl -sS -X PUT "$BASE/api/v1/links/$LINK_ID/qr/codes/$SLUG/logo" \
+  -H "Authorization: Bearer $LINKCTRL_API_KEY" \
+  -F 'logo=@brand.png'
+
+# Remove it. The code stays; the image goes. Idempotent, at either address.
+curl -sS -X DELETE "$BASE/api/v1/links/$LINK_ID/qr/logo" \
+  -H "Authorization: Bearer $LINKCTRL_API_KEY"
+```
+
+The shorthand answers under `qr` and the collection under `code`, like every
+other operation in their respective families.
+
+Four things are worth knowing before you script it.
+
+**PNG and JPEG only, decided by the bytes.** Neither the filename nor the
+`Content-Type` you send is read, so a `.png` holding a JPEG works and a `.jpg`
+holding something else does not. **An SVG is refused** and says so: it is a
+document that can carry script and fetch other files, and this product will not
+serve one it did not write.
+
+**What is stored is a PNG this server encoded**, never your file. That strips
+metadata as a side effect, so do not use this to keep an original.
+
+**Three bounds, and exceeding any of them is a `422` naming which**: the request
+body stops at 1,048,576 bytes, the image at 1024 pixels a side and 262,144
+pixels in total, and the re-encoded result at 1,060,000 bytes. The middle pair
+is checked from the file's header before anything is decoded.
+
+**Uploads have their own rate limit** (`UPLOAD_RATE_PER_MIN`, thirty a minute by
+default) on top of the API's, so a `429` here can arrive while everything else
+is still answering.
+
+There is no operation that reads a logo back: `has_logo` on the code says
+whether one is there, and nothing draws it yet.
+
+**Uploading to a default code that has never been styled creates its stored
+row**, so `stored` turns true alongside `has_logo`. The bytes live on the row, so
+there has to be one; the style written is the one the code was already being
+drawn at, so no picture and no download changes.
+
 ### Reading the analytics
 
 Numbers come from daily rollups, not from raw events, which is what keeps them

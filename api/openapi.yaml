@@ -1429,6 +1429,66 @@ paths:
         "422":
           $ref: "#/components/responses/Validation"
 
+  /links/{id}/qr/logo:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+    put:
+      tags: [qr]
+      operationId: setLinkQRLogo
+      summary: Upload the default code's logo
+      description: |
+        **The link's default code, addressed the way `qr.svg` and `qr.png`
+        address it: without a slug.** The default code's identity is that it has
+        none — its payload carries no code parameter, which is what every
+        picture printed before per-code identity existed carries — so this is
+        the shorthand for it rather than a second kind of logo.
+
+        Everything `PUT /links/{id}/qr/codes/{slug}/logo` says applies here
+        unchanged: one `multipart/form-data` part named `logo`, `links.update`,
+        PNG and JPEG decided by the bytes, an SVG refused by name, the stored
+        image re-encoded by this server, the same three bounds, and the same
+        separate upload rate limit.
+
+        The response is keyed `qr` rather than `code`, as every other
+        `/links/{id}/qr` operation's is.
+      requestBody:
+        $ref: "#/components/requestBodies/QRLogoUpload"
+      responses:
+        "200":
+          description: The default code, now carrying a logo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QRCodeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    delete:
+      tags: [qr]
+      operationId: deleteLinkQRLogo
+      summary: Remove the default code's logo
+      description: |
+        **The image goes, and the code stays.** Idempotent, and it stays a `204`
+        for a link whose default code has never been styled or uploaded to —
+        that code has no stored row at all, so "it carries no logo" is already
+        true. A link this workspace cannot see is still a `404`.
+      responses:
+        "204":
+          description: The default code carries no logo
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /links/{id}/qr/codes:
     parameters:
       - $ref: "#/components/parameters/LinkID"
@@ -1580,6 +1640,86 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/Validation"
+
+  /links/{id}/qr/codes/{slug}/logo:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+      - $ref: "#/components/parameters/QRCodeSlug"
+    put:
+      tags: [qr]
+      operationId: setLinkQRCodeLogo
+      summary: Upload a named code's logo
+      description: |
+        **One of the two operations in this API that accept a file**, the other
+        being the same operation against the link's default code at
+        `PUT /links/{id}/qr/logo`. It takes a `multipart/form-data` body
+        carrying one part named `logo`, and it is governed by `links.update` —
+        the permission that already styles a code, because a logo is style and a
+        code is a picture of the link's own URL.
+
+        **PNG and JPEG, decided by the bytes.** Neither the part's filename nor
+        its declared `Content-Type` is read: the decoder is chosen by the
+        content, so a `.png` holding a JPEG is decoded as a JPEG and a file that
+        is neither is refused whatever it is called. **An SVG is refused by
+        name** — it is a document that can carry script and fetch other files,
+        and accepting one would mean sanitising markup this product then serves.
+
+        **What is stored is a PNG this server encoded**, never the bytes you
+        sent. That strips metadata, and it means a polyglot file stops being
+        one. Do not expect the response's `has_logo` to imply your exact bytes
+        are retrievable — no operation here returns them.
+
+        Three bounds, in this order, and each is a number rather than a promise:
+        the request body stops at **1,048,576 bytes**; the image's declared
+        dimensions must be at most **1024 pixels a side** and **262,144 pixels
+        in total**, checked from the header before anything is decoded; and the
+        re-encoded result must fit **1,060,000 bytes**. Exceeding any of them is
+        a `422` naming which.
+
+        Uploading again replaces what is there. Uploads are rate-limited
+        separately from the rest of this API — see `UPLOAD_RATE_PER_MIN` — so a
+        `429` here can arrive while other calls are still being served.
+      requestBody:
+        $ref: "#/components/requestBodies/QRLogoUpload"
+      responses:
+        "200":
+          description: The code, now carrying a logo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleQRCodeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    delete:
+      tags: [qr]
+      operationId: deleteLinkQRCodeLogo
+      summary: Remove a named code's logo
+      description: |
+        **The image goes, and the code stays.** The stored bytes are removed
+        rather than merely dereferenced, so nothing is left behind for a sweep
+        to find.
+
+        Idempotent: a code that carries no logo answers `204` too, because
+        "this code has no logo" is already true and reporting `404` would make
+        the operation care whether one had ever been uploaded. A slug this link
+        never issued is still a `404`.
+      responses:
+        "204":
+          description: The code carries no logo
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /links/{id}/qr/codes/{slug}/image.svg:
     parameters:
@@ -3870,6 +4010,24 @@ components:
       description: Inclusive, UTC. Defaults to today.
 
   requestBodies:
+    QRLogoUpload:
+      required: true
+      description: >
+        The image, as one `multipart/form-data` part named `logo`. Shared by the
+        default code's shorthand and the named-code collection, because they are
+        one operation at two addresses — a second copy of this shape is a second
+        thing that can disagree with the handler.
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [logo]
+            properties:
+              logo:
+                type: string
+                format: binary
+                description: The image, as PNG or JPEG.
     Credentials:
       required: true
       content:
@@ -4762,7 +4920,7 @@ components:
     QRCode:
       type: object
       additionalProperties: false
-      required: [link_id, slug, label, content, style, stored, size]
+      required: [link_id, slug, label, content, style, stored, size, has_logo]
       properties:
         id:
           type: string
@@ -4809,6 +4967,16 @@ components:
             setting `margin` and `scale`; the dashboard asks for this number
             instead and resolves it to those two against the link's own module
             count.
+        has_logo:
+          type: boolean
+          description: >
+            Whether an image has been uploaded against this code. **A boolean
+            rather than the image, and there is no operation anywhere in this
+            document that returns the bytes** — the two that exist replace one
+            and remove one. Every code can carry one, the default included: it
+            is addressed at `/links/{id}/qr/logo`, the same shorthand `qr.svg`
+            and `qr.png` use, because the default code's identity is having no
+            slug rather than having a reserved one.
 
     QRCodeResponse:
       type: object

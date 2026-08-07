@@ -408,8 +408,9 @@ saves. See *Per instance, unless the limit is shared* below.
 | `LINKCTRL_API_RATE_PER_MIN` | `600` | Everything under `/api/v1`. Dashboard pages, static assets and the health endpoints are not counted. |
 | `LINKCTRL_REDIRECT_404_RATE_LIMIT` | `60` | Misses on the redirect path, and misses only. |
 | `LINKCTRL_LINK_PASSWORD_RATE_LIMIT` | `20` | Submissions to a password-protected link, charged per address **and** per alias. |
+| `LINKCTRL_UPLOAD_RATE_PER_MIN` | `30` | Uploading a QR code's logo — the only thing this product accepts a file for, at three addresses: the API's two logo `PUT`s and the dashboard panel's form. **On top of the API limit, not instead of it** — an API upload spends a token from both buckets — and **one bucket across all three**, so alternating between the dashboard and the API does not double the budget. |
 
-Four properties are worth knowing before you tune them.
+Five properties are worth knowing before you tune them.
 
 **Per address means per address as the server sees it.** Behind a reverse proxy
 with `TRUSTED_PROXIES` empty, every request appears to come from the proxy, so all
@@ -438,6 +439,15 @@ visitors, and a per-address bucket would never see them. It is charged only on a
 **submitted** password — visiting a password link and being shown the challenge
 costs nothing — and there is no lockout to go with it, because there is no
 account to lock.
+
+**The upload limit exists because an upload is not an API call.** Everything
+else under `/api/v1` is a JSON body capped at 256 KiB and parsed by the standard
+library; an upload is up to a megabyte handed to an image decoder, so what a
+request costs is decided by its content rather than by its shape.
+`API_RATE_PER_MIN`'s 600 was chosen about the first kind, and 600 megabyte
+uploads a minute is a bandwidth and decoder budget nobody set by tuning a number
+about JSON. It is shared through Redis like the credential limit, so it means one
+thing across replicas rather than N.
 
 **The 404 limit charges misses only, and never a request that costs nothing.**
 A working link never spends anything, so a popular link cannot throttle its own

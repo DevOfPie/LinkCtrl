@@ -348,6 +348,37 @@ func registerAppRoutes(d Deps, app *appMux) {
 		for pattern, h := range protected {
 			app.Handle(pattern, RequireAuth(h))
 		}
+
+		// The upload surface (M50.5), registered apart from the map above
+		// because it carries a second limit.
+		//
+		// **A bucket of its own, and it is on the write rather than on both.**
+		// Everything else under `/api/v1` is a JSON body capped at 256 KiB;
+		// this one accepts up to qr.MaxLogoUploadBytes and hands them to an
+		// image decoder, so what a request costs is set by its content rather
+		// than by its shape and `API_RATE_PER_MIN` is a number nobody chose for
+		// it. Both limits apply — the API limiter still wraps the whole tree at
+		// the mount — and `UPLOAD_RATE_PER_MIN` is the narrower of the two.
+		//
+		// The clear is not limited beyond the API's own bound: it accepts no
+		// body, decodes nothing, and throttling it would only make it harder to
+		// remove a logo somebody regrets.
+		//
+		// **Four routes, two capabilities.** The `/qr/logo` pair is the default
+		// code's, on exactly the shape D133 gave `/qr.svg` and `/qr.png`: the
+		// shorthand is how a code with no slug is addressed, and the default
+		// code's identity *is* the absence of one (D130). The owner overruled
+		// D136 on 2026-08-07 to add it — without it a link nobody had added a
+		// second code to, which is nearly every link, could carry no logo at all.
+		upload := RateLimit(d.Limits.Upload, "upload", d.Metrics, nil)
+		app.Handle("PUT "+APIPrefix+"/links/{id}/qr/logo",
+			upload(RequireAuth(http.HandlerFunc(api.SetQRLogo))))
+		app.Handle("DELETE "+APIPrefix+"/links/{id}/qr/logo",
+			RequireAuth(http.HandlerFunc(api.DeleteQRLogo)))
+		app.Handle("PUT "+APIPrefix+"/links/{id}/qr/codes/{slug}/logo",
+			upload(RequireAuth(http.HandlerFunc(api.SetQRCodeLogo))))
+		app.Handle("DELETE "+APIPrefix+"/links/{id}/qr/codes/{slug}/logo",
+			RequireAuth(http.HandlerFunc(api.DeleteQRCodeLogo)))
 	}
 
 	if d.Keys != nil {
@@ -651,6 +682,23 @@ func registerAppRoutes(d Deps, app *appMux) {
 		} {
 			app.Handle(pattern, signedIn(fn))
 		}
+
+		// The dashboard's own upload (M50.5), registered apart from the map
+		// because it carries the same second limit the API's does.
+		//
+		// **The same limiter object, not a second one with the same number.** The
+		// reasoning is the login guard's, one bucket above: a budget an attacker
+		// can double by alternating between the API and the dashboard is not the
+		// budget an operator configured. What differs is the refusal — a page
+		// rather than a problem document, because a browser is what posts here.
+		//
+		// Removing a logo posts to `POST /links/{id}/qr` under its own button
+		// name, the way reset and remove already do: it carries no body worth
+		// limiting, and one action attribute per surface is what keeps a refusal
+		// coming back to the form it was made from.
+		app.Handle("POST /links/{id}/qr/logo",
+			RateLimit(d.Limits.Upload, "upload", d.Metrics, web.tooManyRequests)(
+				signedIn(web.LinkQRLogo)))
 
 		if web.Invites != nil {
 			for pattern, fn := range map[string]http.HandlerFunc{

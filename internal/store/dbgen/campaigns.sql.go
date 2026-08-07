@@ -12,6 +12,73 @@ import (
 	"github.com/google/uuid"
 )
 
+const clearOrphanedQRCodeLogos = `-- name: ClearOrphanedQRCodeLogos :execrows
+WITH doomed AS (
+    SELECT q.id
+      FROM qr_codes q
+      JOIN links l ON l.id = q.link_id
+     WHERE q.logo IS NOT NULL
+       AND l.deleted_at IS NOT NULL
+     ORDER BY q.id
+     LIMIT $1::int
+       FOR UPDATE OF q SKIP LOCKED
+)
+UPDATE qr_codes SET logo = NULL, updated_at = now()
+ WHERE id IN (SELECT id FROM doomed)
+`
+
+// The orphan sweep, run hourly by the maintenance pass.
+//
+// **What is orphaned under a column, and what is not.** Removing a code, a
+// workspace or an organization takes its logos by cascade, and replacing one is
+// the single UPDATE above, so none of those can leave bytes behind. Deleting a
+// *link* can, and does: a link is soft-deleted with a purge deadline, so its
+// `qr_codes` rows survive the whole trash window while every read in this file
+// filters them out with `l.deleted_at IS NULL`. Those bytes are unreachable
+// through the product — the endpoint that would clear them answers 404 for a
+// deleted link — and they sit in the row and in every `pg_dump` until the purge
+// fires, which for a large backlog is several hourly runs away and for a row
+// the purge skips is longer still.
+//
+// This is what makes m50.5.md's claim *deleting the link removes its artefacts*
+// true rather than merely intended. The row itself is left alone: the trash
+// window exists so a link can be brought back by hand, and the artefact is the
+// thing deletion was asked to remove.
+//
+// Idempotent by construction — a second run matches nothing, because `logo IS
+// NOT NULL` is the predicate. Bounded like every other pass in that job, and
+// SKIP LOCKED so it can never block, or be blocked by, a concurrent write to
+// the same code.
+func (q *Queries) ClearOrphanedQRCodeLogos(ctx context.Context, batchSize int32) (int64, error) {
+	result, err := q.db.Exec(ctx, clearOrphanedQRCodeLogos, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const clearQRCodeLogo = `-- name: ClearQRCodeLogo :execrows
+UPDATE qr_codes SET logo = NULL, updated_at = now()
+ WHERE id = $1 AND workspace_id = $2
+`
+
+type ClearQRCodeLogoParams struct {
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+}
+
+// Removes the image, and the row stays: a code without a logo is a code.
+//
+// NULL rather than an empty bytea, because the schema has one spelling for "no
+// logo" and two would disagree the first time somebody wrote a zero-length one.
+func (q *Queries) ClearQRCodeLogo(ctx context.Context, arg ClearQRCodeLogoParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearQRCodeLogo, arg.ID, arg.WorkspaceID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countCampaigns = `-- name: CountCampaigns :one
 SELECT count(*) FROM campaigns
 WHERE workspace_id = $1 AND deleted_at IS NULL
@@ -152,6 +219,9 @@ type DeleteQRCodeByIDParams struct {
 // Removes one named code. Scoped by workspace rather than by link, because the
 // id is already unique and the service has resolved the link before it gets
 // here; the workspace column is the tenancy check.
+//
+// The logo goes with the row, which is the whole of what D134 bought: no second
+// statement, and no way for the two to come apart.
 func (q *Queries) DeleteQRCodeByID(ctx context.Context, arg DeleteQRCodeByIDParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteQRCodeByID, arg.ID, arg.WorkspaceID)
 	if err != nil {
@@ -193,7 +263,10 @@ func (q *Queries) GetCampaign(ctx context.Context, arg GetCampaignParams) (Campa
 }
 
 const getQRCode = `-- name: GetQRCode :one
-SELECT q.id, q.link_id, q.workspace_id, q.style, q.created_at, q.updated_at, q.label, q.slug FROM qr_codes q
+
+SELECT q.id, q.link_id, q.workspace_id, q.style, q.created_at, q.updated_at,
+       q.label, q.slug, (q.logo IS NOT NULL)::boolean AS has_logo
+  FROM qr_codes q
 JOIN links l ON l.id = q.link_id
 WHERE q.link_id = $1 AND q.workspace_id = $2 AND q.slug = $3 AND l.deleted_at IS NULL
 `
@@ -204,13 +277,37 @@ type GetQRCodeParams struct {
 	Slug        string
 }
 
+type GetQRCodeRow struct {
+	ID          uuid.UUID
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+	Style       []byte
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	Label       string
+	Slug        string
+	HasLogo     bool
+}
+
+// **`q.*` is gone from the three reads below, and that is M50.5 rather than
+// style.** `qr_codes` now carries a `logo bytea` (03800, D134) bounded at
+// qr.MaxLogoStoredBytes — a little over a megabyte a row — and a link may hold
+// domain.MaxQRCodesPerLink of them. A star projection would fetch every one of
+// those bytes to draw a list of names, so the reads carry an explicit column
+// list and report the logo as the one fact a reader of the list needs:
+// **whether there is one**. `logo IS NOT NULL` is answered from the row's TOAST
+// pointer without detoasting the value, so asking costs nothing.
+//
+// The bytes themselves are read by nothing here. Nothing in M50.5 serves a
+// stored logo back — the two operations are set and clear — and M50.6, which
+// composites one into a picture, is where a query that reads them belongs.
 // One code of a link's, by slug. No rows is not an error for the default code
 // (slug ”): it means the default style, which is what every link's code is
 // drawn with until somebody changes it. For any other slug no rows means the
 // code does not exist, and the service reports that.
-func (q *Queries) GetQRCode(ctx context.Context, arg GetQRCodeParams) (QrCode, error) {
+func (q *Queries) GetQRCode(ctx context.Context, arg GetQRCodeParams) (GetQRCodeRow, error) {
 	row := q.db.QueryRow(ctx, getQRCode, arg.LinkID, arg.WorkspaceID, arg.Slug)
-	var i QrCode
+	var i GetQRCodeRow
 	err := row.Scan(
 		&i.ID,
 		&i.LinkID,
@@ -220,6 +317,7 @@ func (q *Queries) GetQRCode(ctx context.Context, arg GetQRCodeParams) (QrCode, e
 		&i.UpdatedAt,
 		&i.Label,
 		&i.Slug,
+		&i.HasLogo,
 	)
 	return i, err
 }
@@ -297,7 +395,9 @@ func (q *Queries) ListCampaigns(ctx context.Context, workspaceID uuid.UUID) ([]L
 }
 
 const listQRCodes = `-- name: ListQRCodes :many
-SELECT q.id, q.link_id, q.workspace_id, q.style, q.created_at, q.updated_at, q.label, q.slug FROM qr_codes q
+SELECT q.id, q.link_id, q.workspace_id, q.style, q.created_at, q.updated_at,
+       q.label, q.slug, (q.logo IS NOT NULL)::boolean AS has_logo
+  FROM qr_codes q
 JOIN links l ON l.id = q.link_id
 WHERE q.link_id = $1 AND q.workspace_id = $2 AND l.deleted_at IS NULL
 ORDER BY (q.slug <> ''), q.created_at, q.id
@@ -306,6 +406,18 @@ ORDER BY (q.slug <> ''), q.created_at, q.id
 type ListQRCodesParams struct {
 	LinkID      uuid.UUID
 	WorkspaceID uuid.UUID
+}
+
+type ListQRCodesRow struct {
+	ID          uuid.UUID
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+	Style       []byte
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	Label       string
+	Slug        string
+	HasLogo     bool
 }
 
 // Every code a link carries (M50), default first.
@@ -319,15 +431,15 @@ type ListQRCodesParams struct {
 // order the rest were created in — it is the one every already-printed code
 // attributes to, and a list that buried it would bury the answer to "which of
 // these is the one on my existing posters".
-func (q *Queries) ListQRCodes(ctx context.Context, arg ListQRCodesParams) ([]QrCode, error) {
+func (q *Queries) ListQRCodes(ctx context.Context, arg ListQRCodesParams) ([]ListQRCodesRow, error) {
 	rows, err := q.db.Query(ctx, listQRCodes, arg.LinkID, arg.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []QrCode{}
+	items := []ListQRCodesRow{}
 	for rows.Next() {
-		var i QrCode
+		var i ListQRCodesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.LinkID,
@@ -337,6 +449,7 @@ func (q *Queries) ListQRCodes(ctx context.Context, arg ListQRCodesParams) ([]QrC
 			&i.UpdatedAt,
 			&i.Label,
 			&i.Slug,
+			&i.HasLogo,
 		); err != nil {
 			return nil, err
 		}
@@ -346,6 +459,39 @@ func (q *Queries) ListQRCodes(ctx context.Context, arg ListQRCodesParams) ([]QrC
 		return nil, err
 	}
 	return items, nil
+}
+
+const setQRCodeLogo = `-- name: SetQRCodeLogo :execrows
+
+UPDATE qr_codes SET logo = $3, updated_at = now()
+ WHERE id = $1 AND workspace_id = $2
+`
+
+type SetQRCodeLogoParams struct {
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+	Logo        []byte
+}
+
+// --- QR logos (M50.5) --------------------------------------------------------
+// Stores the re-encoded image against one code.
+//
+// **One statement, so setting and replacing are the same operation and neither
+// has a gap in it.** A logo that replaced another leaves nothing behind to
+// collect: the previous value is overwritten by this write rather than deleted
+// by a second one, which is the property the storage decision was chosen for
+// (D134) and the reason "replacing removes the artefact it replaced" needs no
+// code of its own.
+//
+// The bytes are already bounded — the request body by http.MaxBytesReader, the
+// decode by qr.MaxLogoPixels, and this value by qr.MaxLogoStoredBytes, which
+// internal/qr enforces rather than assumes.
+func (q *Queries) SetQRCodeLogo(ctx context.Context, arg SetQRCodeLogoParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setQRCodeLogo, arg.ID, arg.WorkspaceID, arg.Logo)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const unassignCampaignLinks = `-- name: UnassignCampaignLinks :execrows
@@ -457,7 +603,8 @@ INSERT INTO qr_codes (id, link_id, workspace_id, slug, label, style)
 VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (link_id, slug) DO UPDATE
    SET style = EXCLUDED.style, updated_at = now()
-RETURNING id, link_id, workspace_id, style, created_at, updated_at, label, slug
+RETURNING id, link_id, workspace_id, style, created_at, updated_at,
+          label, slug, (logo IS NOT NULL)::boolean AS has_logo
 `
 
 type UpsertQRCodeParams struct {
@@ -469,14 +616,29 @@ type UpsertQRCodeParams struct {
 	Style       []byte
 }
 
+type UpsertQRCodeRow struct {
+	ID          uuid.UUID
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+	Style       []byte
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	Label       string
+	Slug        string
+	HasLogo     bool
+}
+
 // One row per (link, slug), which qr_codes_link_slug_key (03700) is what makes
 // true. Without the unique index this is two concurrent inserts and a link with
 // two codes answering to one name.
 //
 // The label is not in the DO UPDATE list. This statement is how a *style* is
 // written, and a style write must not silently rename the code it is drawn for;
-// UpdateQRCodeLabel is the operation that renames one.
-func (q *Queries) UpsertQRCode(ctx context.Context, arg UpsertQRCodeParams) (QrCode, error) {
+// UpdateQRCodeLabel is the operation that renames one. **Nor is the logo**, for
+// the same reason and with more at stake: restyling a code must not throw away
+// the image somebody uploaded to it, and the insert branch leaves the column at
+// its NULL default because a code that has just come into being has no logo.
+func (q *Queries) UpsertQRCode(ctx context.Context, arg UpsertQRCodeParams) (UpsertQRCodeRow, error) {
 	row := q.db.QueryRow(ctx, upsertQRCode,
 		arg.ID,
 		arg.LinkID,
@@ -485,7 +647,7 @@ func (q *Queries) UpsertQRCode(ctx context.Context, arg UpsertQRCodeParams) (QrC
 		arg.Label,
 		arg.Style,
 	)
-	var i QrCode
+	var i UpsertQRCodeRow
 	err := row.Scan(
 		&i.ID,
 		&i.LinkID,
@@ -495,6 +657,7 @@ func (q *Queries) UpsertQRCode(ctx context.Context, arg UpsertQRCodeParams) (QrC
 		&i.UpdatedAt,
 		&i.Label,
 		&i.Slug,
+		&i.HasLogo,
 	)
 	return i, err
 }

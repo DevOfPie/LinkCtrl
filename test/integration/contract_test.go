@@ -9,8 +9,12 @@ import (
 	"encoding/xml"
 	"fmt"
 	"image"
+	"image/color"
+	"image/png"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"strings"
 	"testing"
 
@@ -159,6 +163,147 @@ func (c *contract) doAsKey(token, method, path string, body any, wantStatus int)
 func (c *contract) doBadRequest(method, path string, body any, wantStatus int) []byte {
 	c.t.Helper()
 	return c.call(method, path, body, wantStatus, false)
+}
+
+// upload replays a multipart operation (M50.5).
+//
+// **The contract test had no multipart shape before this milestone**, and
+// teaching it one was named as part of M50.5 rather than discovered inside it.
+// Everything above sends `application/json`: `call` marshals whatever it is
+// given and sets one header. A file is a different body entirely — a boundary,
+// per-part headers, and a schema whose property is `format: binary` — so it
+// needs its own builder rather than a flag on that one.
+//
+// What it keeps is everything that makes `call` worth having: the request is
+// validated against the document before it is trusted, the response is validated
+// against what the document promises for that status, and the operation is
+// recorded as exercised. The body is rebuilt for the validation pass because the
+// first send consumed it.
+//
+// `filename` and `declared` are deliberately parameters. The server reads
+// neither — that is the milestone's claim, asserted in internal/httpx by source
+// scan and in qr_test.go by behaviour — so this replay sends values that
+// disagree with the content, and the operation is expected to succeed anyway.
+func (c *contract) upload(
+	method, path, field, filename, declared string, body []byte,
+	wantStatus int, checkRequest bool,
+) []byte {
+	c.t.Helper()
+
+	build := func() (string, []byte) {
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		part, err := w.CreatePart(textproto.MIMEHeader{
+			"Content-Disposition": {
+				`form-data; name="` + field + `"; filename="` + filename + `"`,
+			},
+			"Content-Type": {declared},
+		})
+		if err != nil {
+			c.t.Fatal(err)
+		}
+		if _, err := part.Write(body); err != nil {
+			c.t.Fatal(err)
+		}
+		if err := w.Close(); err != nil {
+			c.t.Fatal(err)
+		}
+		return w.FormDataContentType(), buf.Bytes()
+	}
+
+	newReq := func() *http.Request {
+		contentType, payload := build()
+		req, err := http.NewRequestWithContext(c.t.Context(), method,
+			c.f.server.URL+path, bytes.NewReader(payload))
+		if err != nil {
+			c.t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", contentType)
+		if c.bearer != "" {
+			req.Header.Set("Authorization", "Bearer "+c.bearer)
+		}
+		return req
+	}
+
+	// The same substitution `call` makes: a bearer replaces the session on a
+	// client with no cookie jar, so a call made as an API key is provably made
+	// as one.
+	client := c.f.client
+	if c.bearer != "" {
+		client = &http.Client{}
+	}
+
+	resp, err := client.Do(newReq())
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	respBody, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	if resp.StatusCode != wantStatus {
+		c.t.Fatalf("%s %s = %d, want %d\n%s", method, path, resp.StatusCode, wantStatus, respBody)
+	}
+
+	vreq := newReq()
+	route, pathParams, err := c.router.FindRoute(vreq)
+	if err != nil {
+		c.t.Fatalf("%s %s is not in openapi.yaml: %v", method, path, err)
+	}
+	opts := &openapi3filter.Options{
+		IncludeResponseStatus: true,
+		AuthenticationFunc:    openapi3filter.NoopAuthenticationFunc,
+	}
+	rvi := &openapi3filter.RequestValidationInput{
+		Request: vreq, PathParams: pathParams, Route: route, Options: opts,
+	}
+	if checkRequest {
+		if err := openapi3filter.ValidateRequest(c.t.Context(), rvi); err != nil {
+			c.t.Errorf("request %s %s violates the spec: %v", method, path, err)
+		}
+	}
+	if err := openapi3filter.ValidateResponse(c.t.Context(), &openapi3filter.ResponseValidationInput{
+		RequestValidationInput: rvi,
+		Status:                 resp.StatusCode,
+		Header:                 resp.Header,
+		Body:                   io.NopCloser(bytes.NewReader(respBody)),
+		Options:                opts,
+	}); err != nil {
+		c.t.Errorf("response %d from %s %s violates the spec: %v\n%s",
+			resp.StatusCode, method, path, err, respBody)
+	}
+
+	c.hit[route.Operation.OperationID] = true
+	return respBody
+}
+
+// uploadAsKey replays an upload as an API key rather than as the session.
+func (c *contract) uploadAsKey(
+	token, method, path, field, filename, declared string, body []byte, wantStatus int,
+) []byte {
+	c.t.Helper()
+	c.bearer = token
+	defer func() { c.bearer = "" }()
+	return c.upload(method, path, field, filename, declared, body, wantStatus, true)
+}
+
+// contractLogo is a real PNG built here rather than committed as a fixture: a
+// binary file in the tree is one nobody reviews, and this one has to be small
+// enough to be obviously inert.
+func contractLogo(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewNRGBA(image.Rect(0, 0, 32, 32))
+	for y := range 32 {
+		for x := range 32 {
+			img.SetNRGBA(x, y, color.NRGBA{R: uint8(x * 8), G: 0x30, B: uint8(y * 8), A: 0xff})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
 }
 
 func field(t *testing.T, raw []byte, name string) string {
@@ -578,6 +723,123 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.do("DELETE", p+"/links/"+linkID+"/qr/codes/zzzzzzzz", nil, http.StatusNotFound)
 	c.svgCodeEndpoint(linkID, slug)
 	c.pngCodeEndpoint(linkID, slug)
+
+	// --- the first file this API accepts (M50.5) ----------------------------
+	//
+	// The upload, and then the three claims about it that the *document* makes
+	// and that a client would otherwise have to discover: that `has_logo` turns
+	// over, that an SVG is refused, and that clearing is idempotent.
+	logoPath := p + "/links/" + linkID + "/qr/codes/" + slug + "/logo"
+	var uploaded struct {
+		Code struct {
+			HasLogo bool `json:"has_logo"`
+		} `json:"code"`
+	}
+	// The filename is a path escape and the declared type is the one format
+	// this product refuses, and neither is read — so the PNG in the body is
+	// what decides, and the call succeeds. That is the milestone's sniffing
+	// claim replayed at the surface a client meets it.
+	if err := json.Unmarshal(c.upload("PUT", logoPath, "logo",
+		"../../../etc/passwd", "image/svg+xml", contractLogo(t),
+		http.StatusOK, true), &uploaded); err != nil {
+		t.Fatalf("decode logo upload: %v", err)
+	}
+	if !uploaded.Code.HasLogo {
+		t.Error("a code came back with has_logo false after an upload; the document " +
+			"says that field is how a client knows the upload landed")
+	}
+
+	// An SVG. Refused by the server rather than by the schema — the document's
+	// request body is `format: binary` and cannot express which bytes are
+	// acceptable — so this is a real 422 from the decoder's own refusal, and the
+	// request half is checked because the request *is* valid against the spec.
+	c.upload("PUT", logoPath, "logo", "logo.png", "image/png",
+		[]byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>x()</script></svg>`),
+		http.StatusUnprocessableEntity, true)
+
+	// **And once as an API key**, which is m50.5.md's D87 bullet stated
+	// positively: this operation is not session-gated, because its subject is
+	// the link rather than the person. A key holding `links.update` may
+	// restyle a code today, and putting an image on one is the same authority.
+	// Replayed here rather than asserted by reading the handler, because what
+	// would be wrong is the middleware around it.
+	uploader := c.do("POST", p+"/api-keys", map[string]any{
+		"name": "logo uploader", "scopes": []string{"links.read", "links.update"},
+	}, http.StatusCreated)
+	c.uploadAsKey(field(t, uploader, "key"), "PUT", logoPath, "logo",
+		"logo.png", "image/png", contractLogo(t), http.StatusOK)
+
+	c.do("DELETE", logoPath, nil, http.StatusNoContent)
+	// Idempotent: a code with no logo answers the same 204, because "this code
+	// has no logo" is already true.
+	c.do("DELETE", logoPath, nil, http.StatusNoContent)
+	var cleared struct {
+		Code struct {
+			HasLogo bool `json:"has_logo"`
+		} `json:"code"`
+	}
+	if err := json.Unmarshal(
+		c.do("GET", p+"/links/"+linkID+"/qr/codes/"+slug, nil, http.StatusOK), &cleared,
+	); err != nil {
+		t.Fatalf("decode qr code after clearing its logo: %v", err)
+	}
+	if cleared.Code.HasLogo {
+		t.Error("has_logo is still true after the logo was cleared")
+	}
+	// A slug this link never issued, on both operations, so neither can be used
+	// to ask whether a code exists.
+	c.upload("PUT", p+"/links/"+linkID+"/qr/codes/zzzzzzzz/logo", "logo",
+		"logo.png", "image/png", contractLogo(t), http.StatusNotFound, true)
+	c.do("DELETE", p+"/links/"+linkID+"/qr/codes/zzzzzzzz/logo", nil, http.StatusNotFound)
+
+	// --- and the same capability at the shorthand (M50.5, D136 overruled) ---
+	//
+	// The owner ruled on 2026-08-07 that the link's *default* code carries a
+	// logo too, addressed the way `qr.svg` and `qr.png` address it: without a
+	// slug, because having none is what makes it the default code. Two routes,
+	// one capability — which is the same relationship `GET …/qr.png` and
+	// `GET …/qr/codes/{slug}/image.png` already have.
+	//
+	// Replayed here rather than beside the named code because the state matters:
+	// `DELETE …/qr` ran above and removed this link's default-code row, so this
+	// is the upload against a code that has no row at all — the case that was
+	// nearly every link and could not carry a logo before the ruling.
+	shorthandLogo := p + "/links/" + linkID + "/qr/logo"
+	var defaultCode struct {
+		QR struct {
+			Slug    string `json:"slug"`
+			Stored  bool   `json:"stored"`
+			HasLogo bool   `json:"has_logo"`
+		} `json:"qr"`
+	}
+	if err := json.Unmarshal(c.upload("PUT", shorthandLogo, "logo",
+		"../../brand.svg", "image/svg+xml", contractLogo(t),
+		http.StatusOK, true), &defaultCode); err != nil {
+		t.Fatalf("decode default-code logo upload: %v", err)
+	}
+	// Keyed `qr` and not `code`, like every other `/links/{id}/qr` operation,
+	// and answering for the code whose slug is empty. Both are what the document
+	// promises, and a client reading either from the wrong key gets nothing.
+	if defaultCode.QR.Slug != "" {
+		t.Errorf("the shorthand answered for the code %q; it addresses the default "+
+			"code, whose slug is the empty string", defaultCode.QR.Slug)
+	}
+	if !defaultCode.QR.HasLogo || !defaultCode.QR.Stored {
+		t.Errorf("the default code came back has_logo=%v stored=%v after an upload; "+
+			"both are how a client knows the row now exists and carries an image",
+			defaultCode.QR.HasLogo, defaultCode.QR.Stored)
+	}
+	c.do("DELETE", shorthandLogo, nil, http.StatusNoContent)
+	// Idempotent here for the same reason it is on a named code, and for one
+	// more: a default code with no stored row has no logo either.
+	c.do("DELETE", shorthandLogo, nil, http.StatusNoContent)
+	// A link this workspace cannot see, on both, so neither is a way to learn
+	// that one exists.
+	missing := p + "/links/" + uuid.NewString() + "/qr/logo"
+	c.upload("PUT", missing, "logo", "logo.png", "image/png",
+		contractLogo(t), http.StatusNotFound, true)
+	c.do("DELETE", missing, nil, http.StatusNotFound)
+
 	c.do("DELETE", p+"/links/"+linkID+"/qr/codes/"+slug, nil, http.StatusNoContent)
 	c.do("GET", p+"/links/"+linkID+"/qr/codes/"+slug, nil, http.StatusNotFound)
 

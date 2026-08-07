@@ -340,6 +340,7 @@ type QrCode struct {
 	UpdatedAt   time.Time
 	Label       string
 	Slug        string
+	Logo        []byte
 }
 
 type ReservedAlias struct {

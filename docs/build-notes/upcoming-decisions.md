@@ -42,31 +42,6 @@ conclusions are what this file exists to stop.
 
 ## Open — a milestone needs this
 
-### M50.5 — where does an uploaded logo live?
-
-**Needed by:** [M50.5](phase-details/m50.5.md), and it cannot be deferred into
-the build: the answer decides whether [M57](phase-details/m57.md)'s conformance
-test still passes, and that test is written a phase-half later.
-
-This product has never stored a file. Three options, and each costs something it
-has so far avoided.
-
-| Option | Buys | Costs |
-| --- | --- | --- |
-| **A `bytea` column on `qr_codes`** *(recommended)* | Deletion comes free with the foreign-key cascades that already exist, backup and restore need no new procedure, and a single container stays a single container — which is the constraint M57 turns into a test | Binary in the row and in every `pg_dump`. A capped image is small, but the cap becomes a database sizing question rather than a disk one, and Postgres is the one dependency this product cannot degrade without |
-| A filesystem path | Bytes stay out of the database, and serving is a file read | `docker-compose.yml` mounts only `pgdata`, so this needs a volume that does not exist and that `make demo-update` must not lose. It also makes deletion explicit everywhere a cascade would have handled it, and gives a multi-replica deployment a shared-storage problem it does not have today |
-| An object store | The answer that scales, and the one an operator running many replicas would expect | A **new required dependency**, which [M57](phase-details/m57.md)'s single-container conformance test is written to forbid. Choosing this means amending that test's claim before it is written |
-
-**Default if unanswered:** **A**. It is the only option that adds no
-infrastructure and no new deletion path, and the caps are what keep its cost
-bounded. Moving to B or C later is a migration of bytes, not of behaviour.
-
-**Assumes:** that the caps M50.5 sets keep a stored image small enough for a
-column to be uncontroversial — which is true only once those numbers exist, so
-this answer is re-checked when they do; and that no milestone before M50.5
-introduces file storage for its own reasons. None does.
-
-
 ### M55 — Does the update checker default on or off?
 
 **Needed by:** [M55](phase-details/m55.md). The milestone builds either way and

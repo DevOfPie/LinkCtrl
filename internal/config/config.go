@@ -242,6 +242,23 @@ type AuthConfig struct {
 	LoginRatePerMin  int `env:"LOGIN_RATE_PER_MIN" envDefault:"10"`
 	LockoutThreshold int `env:"LOGIN_LOCKOUT_THRESHOLD" envDefault:"5"`
 	APIRatePerMin    int `env:"API_RATE_PER_MIN" envDefault:"600"`
+
+	// UploadRatePerMin bounds how often one address may upload a file (M50.5).
+	//
+	// **A bucket of its own because an upload is not an API call.** Every other
+	// request under `/api/v1` carries a body this product caps at 256 KiB and
+	// parses as JSON; an upload carries up to `qr.MaxLogoUploadBytes` and is
+	// decoded, which is the one place a request's cost is set by its content
+	// rather than by its shape. `API_RATE_PER_MIN` defaults to 600, and 600
+	// megabyte uploads a minute is a bandwidth and decoder budget nobody chose
+	// by setting a number about JSON.
+	//
+	// Thirty is what somebody restyling a poster does — upload, look, upload
+	// again — with room to spare. It charges the *address* like every other
+	// limit here rather than the workspace: the resource being protected is this
+	// instance's, and an attacker with one account has as many addresses as they
+	// have hosts either way.
+	UploadRatePerMin int `env:"UPLOAD_RATE_PER_MIN" envDefault:"30"`
 }
 
 // IngestConfig tunes the click pipeline.
@@ -869,6 +886,7 @@ func (c Config) Validate() error {
 	for name, v := range map[string]int{
 		"LOGIN_RATE_PER_MIN":       c.Auth.LoginRatePerMin,
 		"API_RATE_PER_MIN":         c.Auth.APIRatePerMin,
+		"UPLOAD_RATE_PER_MIN":      c.Auth.UploadRatePerMin,
 		"REDIRECT_404_RATE_LIMIT":  c.Redirect.NotFoundLimit,
 		"LINK_PASSWORD_RATE_LIMIT": c.Redirect.PasswordLimit,
 		"LOGIN_LOCKOUT_THRESHOLD":  c.Auth.LockoutThreshold,

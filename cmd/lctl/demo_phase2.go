@@ -1,9 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
+	"math"
 	"net"
 	"os"
 	"strings"
@@ -1142,15 +1147,77 @@ func (s *demoSeeder) seedCampaigns(ctx context.Context, cat []demoLink, ids map[
 	); err != nil {
 		return fmt.Errorf("name the default QR code on /%s: %w", demoQRStyled, err)
 	}
+	// And a logo on that second code (M50.5), which is this product's first
+	// uploaded file and would otherwise be a feature with no example anywhere on
+	// the demo.
+	//
+	// **The bytes are generated here rather than committed to the repository.**
+	// A binary fixture in the tree is a file nobody reviews, and it would make
+	// the demo depend on a path — which is exactly the shape D134 declined for
+	// storage. demoLogoPNG draws one deterministically, so two runs of
+	// `make demo-update` upload the same image.
+	//
+	// Through the service like everything else here, so the demo's logo went
+	// through the caps, the sniffing and the re-encode a real upload does. What
+	// the demo *shows* is M50.6's — nothing draws it yet — and what it proves
+	// here is that the upload path ran.
+	if _, err := s.link.SetQRCodeLogo(
+		ctx, s.owner, styled, second.Slug, demoLogoPNG(),
+	); err != nil {
+		return fmt.Errorf("upload a logo to the second QR code on /%s: %w", demoQRStyled, err)
+	}
+
 	scans, err := s.attributeQRScans(ctx, styled, second.Slug)
 	if err != nil {
 		return err
 	}
 
 	fmt.Fprintf(os.Stderr, "campaigns: %d, holding %d links; 1 QR code styled at %dpx "+
-		"(asked for %dpx); 2 codes on /%s, %d scans between them\n",
+		"(asked for %dpx); 2 codes on /%s, 1 carrying a logo, %d scans between them\n",
 		len(demoCampaigns()), labelled, sized.Size, fit.Requested, demoQRStyled, scans)
 	return nil
+}
+
+// demoLogoSide is how big the seeded logo is, in pixels.
+//
+// Small on purpose. It stands for a brand mark rather than for a photograph,
+// and M50.6 will draw it at a fraction of a code's own size, so a large one
+// would only make the demo's database bigger for a picture nobody sees at that
+// resolution.
+const demoLogoSide = 96
+
+// demoLogoPNG draws the seeded logo: a filled disc with a lighter ring in it,
+// on a transparent field.
+//
+// **Transparent, and that is the part worth having.** A logo with an opaque
+// rectangle behind it would sit on a QR code as a white box; the alpha channel
+// is what a real one carries and what M50.6's compositing has to handle, so the
+// demo's example carries it too.
+//
+// Deterministic — no randomness, no clock — because `make demo-update` runs the
+// seeder twice and the second run must produce the same instance as the first.
+func demoLogoPNG() []byte {
+	img := image.NewNRGBA(image.Rect(0, 0, demoLogoSide, demoLogoSide))
+	const c = demoLogoSide / 2
+	for y := range demoLogoSide {
+		for x := range demoLogoSide {
+			dx, dy := float64(x-c)+0.5, float64(y-c)+0.5
+			d := math.Sqrt(dx*dx + dy*dy)
+			switch {
+			case d > float64(c)-1:
+				// Outside the disc: left transparent.
+			case d > float64(c)*0.62 && d < float64(c)*0.80:
+				img.SetNRGBA(x, y, color.NRGBA{R: 0xf5, G: 0xf7, B: 0xfb, A: 0xff})
+			default:
+				img.SetNRGBA(x, y, color.NRGBA{R: 0x1d, G: 0x35, B: 0x7a, A: 0xff})
+			}
+		}
+	}
+	var buf bytes.Buffer
+	// The encoder cannot fail writing to a bytes.Buffer, and a seeder that
+	// returned an error here would be reporting one nothing can cause.
+	_ = png.Encode(&buf, img)
+	return buf.Bytes()
 }
 
 // attributeQRScans turns a share of the styled link's existing clicks into scans
