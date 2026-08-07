@@ -235,6 +235,7 @@ file. Append a row when you append an entry.
 | [Phase 3 takes four areas, and one of them cannot be planned yet](#2026-08-06--phase-3-takes-four-areas-and-one-of-them-cannot-be-planned-yet) | A, B, E, F in; C, D, G stay candidates; planned in full before anything is built, and why the walkthrough is planning's first input rather than its alternative |
 | [What the resume path reads is the live phase](#2026-08-06--what-the-resume-path-reads-is-the-live-phase) | W35 made: a finished phase's status rows move to their own file; plus Phase 3 starts at M46 and budgets two adversarial reviews, and the walkthrough gates all planning |
 | [The command catches up with the file it writes](#2026-08-06--the-command-catches-up-with-the-file-it-writes) | W8 made: `/preview-decisions` asks after filing; why the order is the substance; where an early answer lives before the milestone that uses it lands |
+| [Reviewing the specification, not only the thing built from it](#2026-08-07--reviewing-the-specification-not-only-the-thing-built-from-it) | W36 made: a plan is reviewed before it is built against; why a different model from the writer's; what the reviewer is deliberately not given; findings are evidence, not a verdict |
 
 ---
 
@@ -19246,3 +19247,83 @@ still on them, and only the questions *this run wrote* are asked, so a second ru
 over the same milestones is quiet.
 
 Recorded with no milestone number, per the convention for a process change.
+
+## 2026-08-07 — Reviewing the specification, not only the thing built from it
+
+**W36.** A plan is now reviewed by somebody who did not write it, before the
+first milestone is built against it. Owner-asked, and the rule is
+[planning.md §7](planning.md#7-review-it-before-anything-is-built-against-it).
+
+### The gap, stated as arithmetic
+
+A phase budgets **two adversarial reviews for the code** — one mid-phase, one
+pre-release — on the reasoning that a milestone is the unit of review and that
+each milestone can be internally consistent while the seams between them are
+not. It budgets **none for the plan**, and the plan is what all of those
+milestones are validated against. A definition of done that is wrong is wrong in
+the tree before anybody looks at the tree, and the two code reviews are reading
+against it rather than at it.
+
+### The evidence, which is why this is a rule and not a suggestion
+
+Two independent reviews ran against Phase 3's planning on 2026-08-07, hours
+after the text was written.
+
+The first, over the whole plan, sampled about fifty `file:line` citations and
+returned **fifteen findings**: one outright false claim about the demo's state,
+three numbers that were load-bearing and wrong, two milestones naming
+enforcement mechanisms that could not catch what they were cited for, a recorded
+decision asserted backwards, and a scope row promising work nothing delivered.
+
+The second, over a single milestone file, returned **nine defects and six
+judgement calls** — including an erasure rule that was wrong in the destructive
+direction, a bounding sequence that specified the vulnerability its own risk
+section named, and a test requiring a decoder the repository does not have. It
+also concluded the milestone was two, which it was.
+
+Neither was carelessness. Both were an author reading past rules cited on the
+same page — the counting rule, the enforcement-is-a-mechanism rule, the
+cap-before-allocation warning. That is precisely the failure a second reader
+catches and a re-read does not.
+
+### Why the model matters, and why the rule says *different*
+
+**A reviewer sharing the writer's model shares its blind spots.** Both reviews
+were run on a different model from the writer's, and both found defects the
+writer had read past twice. The rule therefore prefers a different model, and a
+more capable one where the choice exists, rather than merely a second pass.
+
+Where only one model is available it degrades to a fresh context that has never
+seen the writer's reasoning. The independence is what is being bought; the model
+is how it is bought when there is a choice.
+
+### What the reviewer is not given
+
+Conclusions, a summary of intent, and any hint of which parts the author thinks
+are weak. Withholding that is the load-bearing part of the instruction — a
+reviewer told where to look will find what it was pointed at and stop, and the
+most valuable finding in both runs was in a place nobody had flagged. It is
+pointed at **dimensions** instead, of which the sharpest turned out to be
+checking the plan's own citations against the tree.
+
+### Findings are verified before they are acted on
+
+**A review is evidence, not a verdict.** Each of the two runs contained exactly
+one item that did not survive being checked — a line number off by one, and a
+mis-stated conclusion. Acting on either would have made the plan worse, and the
+rule says so rather than trusting a reviewer because it was right about the
+other twenty-three things.
+
+Documentation corrections are made under the standing approval that already
+exists. Anything touching a definition of done, a scope row or a milestone count
+is a prompt. A finding the owner declines is recorded, because *we decided this
+did not matter* is the decision this project keeps losing.
+
+### What it costs, stated because it is not free
+
+A review of a phase plan is a large agent run. The trigger is therefore
+narrow — a phase plan, or a scope addition that adds a milestone — and
+explicitly excludes annotations, re-homing rows and count fixes, where the
+review would cost more than it could find. If the cost stops being worth paying,
+the trigger narrows deliberately and in writing rather than the step being
+skipped quietly.

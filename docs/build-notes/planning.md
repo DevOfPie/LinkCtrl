@@ -126,3 +126,80 @@ Five artifacts. None optional — each keeps a different document true.
   it; if it does not, the numbering is wrong, not the review.
 - Any count, status line or table the addition made false is part of the
   addition, not cleanup for later.
+
+## 7. Review it before anything is built against it
+
+**A plan is reviewed by somebody who did not write it, before the first
+milestone is built against it.** Owner-set 2026-08-07.
+
+The phase already budgets two adversarial reviews for the *code*. Nothing
+budgeted one for the plan, and the plan is what every one of those milestones is
+validated against — a definition of done that is wrong is wrong in the tree
+before anybody looks.
+
+### When
+
+- **A phase plan** — always, before its first milestone starts.
+- **A scope addition that adds a milestone** — always, before it is built.
+- **Not** an annotation, a re-homing row, a deferral, or a count correction.
+  Reviewing a one-line row costs more than it can find.
+
+### Who
+
+An independent reviewer, and the two words carry weight:
+
+- **A different model from the writer's, and a more capable one where the choice
+  exists.** A reviewer sharing the writer's model shares its blind spots, and
+  the failures this rule was written from were not carelessness — they were an
+  author reading past rules they had themselves cited on the same page. Where
+  only one model is available, use a fresh context that has never seen the
+  writer's reasoning; the independence is the point and the model is how it is
+  bought.
+- **Given the plan, this repository's standards, and nothing else.** No
+  conclusions, no summary of the author's intent, and above all no hint of which
+  parts the author thinks are weak — that is the fastest way to get a review
+  that confirms rather than checks. Name the standards as files:
+  [_template.md](phase-details/_template.md), the inherited-rules table in
+  [phase-details/README.md](phase-details/README.md), this file,
+  [workflow.md](workflow.md), and [phase-loop.md](phase-loop.md).
+
+### What it is pointed at
+
+Dimensions, never conclusions. At least:
+
+1. **Internal consistency** — counts, numbering, the ordering table against the
+   status table against the files on disk, dependency edges.
+2. **Falsifiability** — which *done means* bullets would pass review while being
+   untestable, and where enforcement is named as a mechanism that cannot catch
+   what it is cited for.
+3. **Evidence accuracy** — plans here cite `file:line` heavily. **The reviewer
+   checks them against the tree**, and proves absence claims with its own
+   searches rather than trusting the wording.
+4. **Conformance** — the five artifacts, the inherited rules one at a time, and
+   whether anything contradicts a recorded decision without saying it reverses
+   it.
+5. **Ordering and hidden edges** — two milestones that would edit the same
+   files, or one needing what a later one builds.
+6. **Is any milestone two?** The size target's trap is fatter milestones, and a
+   reviewer reading for reviewability is what catches it.
+7. **What is missing**, given what the phase is for.
+
+### What happens to what it finds
+
+- **Verified before it is acted on.** A review is evidence, not a verdict. Both
+  reviews that produced this rule contained one item that did not survive being
+  checked, and acting on either would have made the plan worse.
+- Documentation-level corrections are **made** — the standing approval in
+  [workflow.md](workflow.md#standing-rules) already covers them.
+- Anything that changes a definition of done, a scope row or a milestone count
+  is a **prompt**, not a correction.
+- Findings the owner declines are recorded, because *we decided this did not
+  matter* is the decision this project keeps losing.
+
+### What it costs
+
+A review of a phase plan is a large agent run and it is not free. It is worth it
+at a phase boundary and at a milestone insertion, and it is not worth it for
+every edit to a planning file — which is what the *When* list above is for. If
+the cost stops being worth paying, narrow the trigger deliberately and in
+writing rather than skipping it quietly.

@@ -58,7 +58,13 @@ the owner's.
 Not a defect — defects follow the trigger above. Features follow
 [planning.md](planning.md): establish absence, decide the phase, place by
 number (`X.9` is reserved for scheduled reviews), write the five artifacts,
-verify. The owner decides scope; planning.md decides everything else.
+verify, then **review**. The owner decides scope; planning.md decides
+everything else.
+
+A plan that adds a milestone is reviewed by an independent actor before it is
+built against — a different model from the writer's where the choice exists,
+given the standards and none of the author's conclusions. The contract is
+[planning.md §7](planning.md#7-review-it-before-anything-is-built-against-it).
 
 ### Something is noticed, and now is not the time
 
