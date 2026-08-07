@@ -244,6 +244,7 @@ file. Append a row when you append an entry.
 | [M46: the three choices the milestone gave itself, and the header that could not fit](#2026-08-07--m46-the-three-choices-the-milestone-gave-itself-and-the-header-that-could-not-fit) | D117–D119: the switcher drops the workspace you are in and the header gains a label; API keys leaves the top-level nav on D35's own reasoning; one hot filter because one is all any task reached for; why `<details>` here is not D24 reversed; what the overflow scan does and does not enforce, measured in a browser at three widths |
 | [M47: the line count M46 moved](#2026-08-07--m47-the-line-count-m46-moved) | An amendment, not a decision: `link_detail.html` is 805 lines and m47.md said 803, because M46's own table wrapper landed in it the day before |
 | [M47: the three choices it gave itself, and the 1883 pixels](#2026-08-07--m47-the-three-choices-it-gave-itself-and-the-1883-pixels) | D120–D122: the analytics go below and the tiles go with them; the order, with the row at which measurement stops and an argument starts; a 60-line cap fixed by the shortest partial's body rather than by the page's length; one sentence for two facts that were adjacent and did not compose; 1883px to 327px, three engines; what the fold test cannot check and the sabotage that proved both its limbs |
+| [The demo reset could not clean up after itself](#2026-08-07--the-demo-reset-could-not-clean-up-after-itself) | F168, which stopped a milestone landing: why the reset is scoped to aliases and not to a workspace, why it deletes by *not the default* rather than by a slug, the widening that costs, and the half of the row that did not close |
 
 ---
 
@@ -20396,3 +20397,68 @@ peak — reaches `series_chart.html`, which this page renders. It was checked
 against [step 1](phase-loop.md#1-validate)'s deferred-overlap rule and makes no
 M47 claim false: this milestone claims where the chart *is*, never what its
 numbers say. It stays for [M58](phase-details/m58.md).
+
+
+## 2026-08-07 — The demo reset could not clean up after itself
+
+No milestone was being built. [M47](phase-details/m47.md) was accepted, committed
+and unpushed when its step 3.7 — `make demo-update` — failed twice on the same
+cause, which is what prompted this and what the owner approved fixing as work of
+its own.
+
+**What was broken.** `make demo-update` is the loop's last gate before work is
+published, and it had jammed permanently: `create "spring-webinar": conflict:
+alias "spring-webinar" is already in use on default`, identically on every run.
+Four of `demoWorkspace2Catalogue()`'s five aliases were sitting in the demo's
+**Default** workspace while the second workspace held none, and aliases are
+unique per *domain* rather than per workspace — so the strays refused the next
+run's creation of the same names, and the reset could not remove them because it
+reached links only by deleting the workspace they were supposed to be inside.
+Recorded as [F168](deferred-findings.md#closed) with the reproduction.
+
+**Why the fix is two edits and not one.** The jam needed both.
+
+*The alias list.* `demoReset` collected only `demoCatalogue()`'s aliases; it now
+collects `demoWorkspace2Catalogue()`'s as well. The delete those aliases feed is
+already scoped to the organization rather than to a workspace, so widening the
+list is enough to reach a stray wherever it landed. This costs nothing in the
+ordinary case — the workspace delete gets there first and the alias match finds
+nothing — and it is the entire recovery when the ordinary case did not happen.
+The principle it restores is the one the function's own comment claims: *run
+twice, the same demo.* An idempotency that depends on the previous run having
+filed every row correctly is not idempotency, it is luck with a comment.
+
+*The workspace delete.* It read `slug = $2` against `demoWorkspace2Slug`, which
+deletes exactly what today's constant creates and nothing else. Renaming the
+second workspace therefore orphans whatever the previous name made, silently and
+forever — and the demo instance had been carrying the proof since 2026-08-02: a
+`Marketing` workspace, slug `marketing`, still in the organization with zero
+links, because the constant had become `campaigns` and the delete stopped
+matching. It is now `slug <> 'default'`, `default` being the slug
+`auth.Register` gives the workspace it provisions with the account
+(`internal/auth/service.go:796-797`) and therefore the one thing in that
+organization the seeder did not make.
+
+**The widening, stated rather than buried.** That delete now removes a workspace
+a demo *visitor* created, where before it left one standing. That is a real
+change and it is the same trade every other statement in the reset already
+makes: the demo is rebuilt from nothing at every milestone, and the command
+refuses to run against production without `--force`. The alternative — enumerate
+the slugs the seeder is allowed to delete — is the construction that just failed,
+one rename later.
+
+**How it was verified, which is the part worth copying.** Against the broken
+instance rather than a fresh one. A fix for a jam is only proved by the jam: the
+demo database that could not be seeded was seeded, with no manual SQL, and then
+seeded again to show the result was stable. `Marketing` is gone. Rebuilding the
+instance first would have tested the fix against the one state in which the bug
+does not exist.
+
+**What did not close with it.** [F169](deferred-findings.md#open). The strays are
+still created in the wrong workspace — `actAs` writes the user's *last* workspace
+while the demo owner has a *pinned default*, and `ResolveWorkspaceForUser` ranks
+the pin higher, so the seeder cannot move the owner at all. The reset now
+recovers from a state that should not arise, and saying so is the point: this
+entry fixed the recovery, not the cause. The demo's second workspace has never
+held a link, and the workspace scoping it exists to demonstrate has never been
+demonstrable.

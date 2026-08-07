@@ -39,8 +39,29 @@ type pgxExecutor interface {
 // Every row the Phase 2 seeding writes is removed here too, in demoResetPhase2.
 // That is what makes `make demo-update` idempotent: run twice, the same demo.
 func demoReset(ctx context.Context, pool *pgxpool.Pool, actor *auth.Identity, cat []demoLink) error {
+	// The second workspace's aliases are reset here too, and not only by the
+	// workspace delete at the end of demoResetPhase2 that cascades them (F168).
+	//
+	// That delete reaches a link only if the link is *inside* the workspace, and
+	// on 2026-08-07 four of these five were found in the demo's **Default**
+	// workspace instead — `spring-webinar`, `roadshow`, `partner-portal` and
+	// `cw-survey` — while the second workspace held none. Aliases are unique per
+	// **domain** and both workspaces are on the instance default, so the stranded
+	// copies refused the next run's creation of the same names and no re-run could
+	// clear them: `make demo-update` failed identically forever. The reset is what
+	// makes this command idempotent, and an idempotency that depends on the last
+	// run having put every row in the right place is not one.
+	//
+	// Matching by alias across the organization costs nothing when the rows are
+	// where they belong — the workspace delete gets there first — and is the whole
+	// recovery when they are not.
 	aliases := make([]string, 0, len(cat))
 	for _, d := range cat {
+		if d.alias != "" {
+			aliases = append(aliases, d.alias)
+		}
+	}
+	for _, d := range demoWorkspace2Catalogue() {
 		if d.alias != "" {
 			aliases = append(aliases, d.alias)
 		}

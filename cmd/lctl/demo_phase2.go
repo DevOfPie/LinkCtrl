@@ -1793,9 +1793,31 @@ func demoResetPhase2(ctx context.Context, tx pgxExecutor, orgID, userID uuid.UUI
 		{"notifications", `DELETE FROM notifications WHERE user_id = $1`, []any{userID}},
 		{"audit records", `DELETE FROM audit_logs WHERE organization_id = $1`, []any{orgID}},
 		// Cascades the workspace's links, tags and destinations.
-		{"second workspace",
-			`DELETE FROM workspaces WHERE organization_id = $1 AND slug = $2`,
-			[]any{orgID, demoWorkspace2Slug}},
+		//
+		// **Every workspace but the default one, rather than the one slug this
+		// seeder happens to use today** (F168). It read `slug = $2` against
+		// demoWorkspace2Slug, which resets exactly what the current constant
+		// creates and nothing else — so renaming the second workspace orphans
+		// whatever the previous name made, permanently and silently. The demo
+		// instance proved it: a `Marketing` workspace, slug `marketing`, created
+		// 2026-08-02, was still in the organization on 2026-08-07 holding nothing,
+		// because the constant had since become `campaigns` and the delete no
+		// longer matched it.
+		//
+		// `default` is the slug auth.Register gives the workspace it provisions
+		// with the account (`internal/auth/service.go:796-797`), so it is the one
+		// thing in this organization the seeder did not make and must not remove.
+		// Everything else here was made by a previous run or by somebody clicking
+		// around the demo, and a reset that keeps either is not a reset.
+		//
+		// The widening is deliberate and it is stated: this now deletes a
+		// workspace a demo visitor created, where before it left one behind. That
+		// is the same trade every other statement in this function already makes
+		// — the demo is rebuilt from nothing on every milestone, and the command
+		// refuses to run against production without --force.
+		{"workspaces other than the default",
+			`DELETE FROM workspaces WHERE organization_id = $1 AND slug <> 'default'`,
+			[]any{orgID}},
 		// The personal organizations registration gave the seeded accounts. No
 		// foreign key removes them with the user, and leaving them behind would
 		// make the next run's organization list grow every time.
