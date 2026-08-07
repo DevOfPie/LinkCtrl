@@ -11,11 +11,20 @@ import (
 // Every assertion about "the first thing on this page" needs it. The header is
 // interactive by definition — it is a navigation bar — so a claim about the page
 // that counted the header would be a claim no page could satisfy.
+// The opening tag's own attributes are cut away with it (M47). Every caller
+// until then read this with Contains and Index, for which the extra 36
+// characters were invisible; TestTheEditControlIsReachableWithoutScrolling
+// counts the visible text in front of a control, and `class="mx-auto max-w-6xl
+// px-4 py-8">` is not text the page drew.
 func mainOf(t *testing.T, body string) string {
 	t.Helper()
 	_, rest, ok := strings.Cut(body, "<main ")
 	if !ok {
 		t.Fatal("the page has no <main>; the shell did not render")
+	}
+	_, rest, ok = strings.Cut(rest, ">")
+	if !ok {
+		t.Fatal("the page's <main> tag is never closed")
 	}
 	inner, _, ok := strings.Cut(rest, "</main>")
 	if !ok {

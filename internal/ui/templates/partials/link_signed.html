@@ -1,0 +1,28 @@
+{{define "link_signed"}}
+{{- /* Signed links (M35). Its own form, and its own POST, because minting one is
+       not editing the link: it produces a capability rather than changing a
+       setting, and it is deliberately not carried back through a redirect &mdash;
+       a signed URL in the address bar is a signed URL in the history, the proxy
+       log and the next page's Referer. */ -}}
+<div class="rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-1 text-sm font-medium text-ink">Signed links</h2>
+  <p class="mb-4 text-sm text-muted">
+    A signed link carries an expiry and a signature over this alias. Anyone holding one can follow the link until it expires, and nothing identifies them &mdash; treat it as a secret rather than as a permission.
+  </p>
+  {{if .SignedURL}}
+  <div class="mb-4 rounded-md border border-line-strong bg-sunken p-3">
+    <p class="text-xs text-subtle">Valid until {{.SignedExpires}}. Shown once, here; it is not stored and reloading this page will not bring it back.</p>
+    <code class="mt-2 block break-all text-sm text-ink">{{.SignedURL}}</code>
+  </div>
+  {{end}}
+  <form method="post" action="/links/{{.Link.ID}}/sign" class="flex flex-wrap items-end gap-3">
+    <div>
+      <label for="ttl_hours" class="block text-sm font-medium text-ink">Valid for <span class="text-subtle">(hours)</span></label>
+      <input id="ttl_hours" name="ttl_hours" type="number" min="1" max="720" value="24"
+             class="mt-1 block w-32 rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      {{template "field_error" (index .FieldErrors "ttl_seconds")}}
+    </div>
+    <button type="submit" class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-sunken">Create a signed link</button>
+  </form>
+</div>
+{{end}}

@@ -61,6 +61,29 @@ migrations run at boot.
   set. Search stays on the page. **No route, form field or query parameter
   changed**, and the no-JavaScript submit still applies every filter at once.
 
+- **A link's page opens on the link, not on its analytics.** The destination and
+  the alias are the first two things you can type into, in view without
+  scrolling: at 1280×800 the destination box's top edge is 327px from the top of
+  the window, where it used to be 1883px — a screen and a half down, behind three
+  statistic tiles, a chart, a world map and six breakdowns. Changing where a link
+  points took about thirty-five seconds in a blind task, and the note was
+  *"scrolling, which is worse when not looking for the massive QR code"*.
+
+  The eight sections are re-ordered by how often somebody needs them: edit, QR
+  code, routing rules, split test, signed links, analytics, recent activity,
+  danger zone. Nothing was removed and no section changed what it does — the
+  analytics are the same analytics, further down the same page, at the same URL.
+  **No route, form field or query parameter changed.**
+
+- **The click limit says what it is a limit on.** It read *Click limit (empty =
+  none)* with *"416 used so far"* in a separate line beneath it, and an owner
+  setting a limit could not tell whether the box wanted the extra clicks or the
+  total. It wanted the total. It now says so in one sentence, naming both
+  numbers: *"A total and not an allowance on top of what has gone before: 416 of
+  the 466 are already spent, and past the limit the link answers 410."* The gate
+  is unchanged — a limit has always been absolute, and making it anything else
+  would silently redefine every limit already set.
+
 ### Fixed
 
 - **No dashboard page scrolls sideways on a phone.** At 360px, sixteen of the

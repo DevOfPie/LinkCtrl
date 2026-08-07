@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -510,6 +511,22 @@ type linkDetailPageData struct {
 	QRError string
 }
 
+// loadLinkDetail assembles the link page.
+//
+// One function per section, and the sections are the partials the page renders
+// (M47). It was 207 lines filling eight of them in a single pass, which is the
+// state m47.md names: "a partial whose data is assembled by a quarter of a
+// 250-line function is not decomposed, it is relocated."
+//
+// **The split is along the failure rule as much as along the sections**, and
+// that is what makes it a seam rather than a tidy-up. Three reads replace the
+// page when they fail — the link, its statistics and its recent clicks —
+// because without them there is nothing to render. Every read below them fails
+// soft and leaves its own section empty: this page is analytics somebody asked
+// for, and losing it over a select, a picture or a list of rules would be the
+// wrong trade. So the helpers return nothing at all. They fill what they can
+// and say nothing about what they could not, which is exactly the contract the
+// partials are written against.
 func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetailPageData, bool) {
 	actor := IdentityFrom(r.Context())
 
@@ -547,6 +564,35 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 		return data, false
 	}
 
+	data = linkDetailPageData{
+		shell:        h.shell(r, "/"+l.Alias, "links"),
+		Link:         l,
+		Stats:        stats,
+		RecentClicks: recent,
+		Days:         days,
+		Windows:      statsWindows,
+		FieldErrors:  map[string]string{},
+		// Read once, here, because two sections branch on it: the rule form
+		// warns that a country condition will never match, and the ranked
+		// country list has its own empty state for the same fact.
+		GeoAvailable: h.Config.Analytics.GeoIPPath != "",
+	}
+
+	h.fillLinkEdit(r.Context(), actor, &data)
+	h.fillLinkQR(r.Context(), actor, &data)
+	h.fillLinkRouting(r.Context(), actor, &data)
+	fillLinkAnalytics(r, &data, from, to)
+	data.Notice = linkDetailNotice(r.URL.Query(), l)
+
+	return data, true
+}
+
+// fillLinkEdit is the `link_edit` partial's data: the link's own values as the
+// form renders them, the two selects that file it, and what the domain above it
+// says about automated clients.
+func (h *Web) fillLinkEdit(ctx context.Context, actor *auth.Identity, data *linkDetailPageData) {
+	l := data.Link
+
 	form := linkFormData{
 		URL:              l.URL,
 		Alias:            l.Alias,
@@ -576,18 +622,8 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 		names = append(names, t.Name)
 	}
 	form.Tags = strings.Join(names, ", ")
-
-	data = linkDetailPageData{
-		shell:        h.shell(r, "/"+l.Alias, "links"),
-		Link:         l,
-		Stats:        stats,
-		Series:       fillSeries(stats.Series, from, to),
-		RecentClicks: recent,
-		Days:         days,
-		Windows:      statsWindows,
-		Form:         form,
-		FieldErrors:  map[string]string{},
-	}
+	data.Form = form
+	data.MinPasswordLength = auth.MinPasswordLength
 
 	// What the domain above this link says. A read failure leaves the control
 	// rendering as an ordinary select: this is one page's explanatory text, not
@@ -601,59 +637,77 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 	// not served on. `LinkDomainBots` reads the same row the API's own refusal
 	// reads, which is what makes the two surfaces agree by construction rather
 	// than by both happening to look at the default.
-	if bots, serr := h.Links.LinkDomainBots(r.Context(), actor, id); serr == nil {
+	if bots, serr := h.Links.LinkDomainBots(ctx, actor, l.ID); serr == nil {
 		policy := domain.DomainBots(bots.BlockBots, bots.BlockBotsEnforced)
 		data.BotsEnforced = domain.BotPolicyLocked(policy)
 		data.BotDomainOn = bots.BlockBots
 		data.BotHost = bots.Hostname
 	}
 
-	// The link's routing rules. A read failure leaves the section empty rather
-	// than replacing the page: the rest of this page is analytics somebody asked
-	// for, and losing it over a rule list would be the wrong trade.
-	if rules, rerr := h.Links.ListRules(r.Context(), actor, id); rerr == nil {
-		data.Rules = ruleViews(rules)
-	}
-	// The link's split test. Read and failed the same way the rules are, for the
-	// same reason: this page is analytics somebody asked for, and losing it over
-	// a list of arms would be the wrong trade.
-	if split, serr := h.Links.GetSplit(r.Context(), actor, id); serr == nil {
-		data.Split = split
-	}
-	// The folders this link could be filed in. Read and failed the same way the
-	// rules and the split are: this page is analytics somebody asked for, and
-	// losing it over a select would be the wrong trade.
-	if tree, ferr := h.Links.Folders(r.Context(), actor); ferr == nil {
+	// The folders this link could be filed in, and the campaigns it could carry.
+	// Both are read and failed the way everything below the three page-replacing
+	// reads is: losing the page over a select would be the wrong trade.
+	if tree, ferr := h.Links.Folders(ctx, actor); ferr == nil {
 		data.FolderOptions = folderOptions(tree, 0)
 		for i := range data.FolderOptions {
 			data.FolderOptions[i].Selected = data.FolderOptions[i].ID == form.FolderID
 		}
 	}
-	// The campaigns this link could carry, and the link's own QR code. Both are
-	// read and failed exactly as the rules, the split and the folder tree above
-	// are: this page is analytics somebody asked for, and losing it over a
-	// select or a picture would be the wrong trade.
-	if campaigns, cerr := h.Links.Campaigns(r.Context(), actor); cerr == nil {
+	if campaigns, cerr := h.Links.Campaigns(ctx, actor); cerr == nil {
 		data.CampaignOptions = campaignOptions(campaigns, nil)
 		for i := range data.CampaignOptions {
 			data.CampaignOptions[i].Selected = data.CampaignOptions[i].ID == form.CampaignID
 		}
 	}
+}
+
+// fillLinkQR is the `link_qr` partial's data.
+//
+// The two failure messages are different on purpose: a code that cannot be read
+// and a code that cannot be drawn are different problems, and the second one
+// still has content to show beneath it.
+func (h *Web) fillLinkQR(ctx context.Context, actor *auth.Identity, data *linkDetailPageData) {
+	l := data.Link
 	data.QRLevels = qr.Levels
 	data.QRSourceLabel = domain.ClickSourceQR
 	data.QRDownload = fmt.Sprintf("%s/links/%s/qr.svg", APIPrefix, l.ID)
-	if code, qerr := h.Links.QRCode(r.Context(), actor, id); qerr != nil {
+
+	code, err := h.Links.QRCode(ctx, actor, l.ID)
+	if err != nil {
 		data.QRError = "The QR code could not be read."
-	} else {
-		data.QRContent = code.Content
-		data.QRStyle = code.Style
-		data.QRStored = code.Stored
-		if svg, rerr := qr.Render(code.Content, code.Style); rerr != nil {
-			data.QRError = "The QR code could not be drawn."
-		} else {
-			//nolint:gosec // G203: internal/qr emits integers and parsed colours only
-			data.QRSVG = template.HTML(svg)
-		}
+		return
+	}
+	data.QRContent = code.Content
+	data.QRStyle = code.Style
+	data.QRStored = code.Stored
+
+	svg, err := qr.Render(code.Content, code.Style)
+	if err != nil {
+		data.QRError = "The QR code could not be drawn."
+		return
+	}
+	//nolint:gosec // G203: internal/qr emits integers and parsed colours only
+	data.QRSVG = template.HTML(svg)
+}
+
+// fillLinkRouting is the data behind `link_rules` and `link_split`, which are
+// one section in two halves: a rule says who goes where and a split says how
+// many, and the redirect path evaluates them in that order.
+//
+// The vocabularies are passed in rather than written into the templates so the
+// days, kinds and bounds the forms offer cannot drift from the ones the
+// validator accepts.
+func (h *Web) fillLinkRouting(ctx context.Context, actor *auth.Identity, data *linkDetailPageData) {
+	id := data.Link.ID
+
+	// Read and failed the way the folder tree is: this page is analytics
+	// somebody asked for, and losing it over a list of rules or a list of arms
+	// would be the wrong trade.
+	if rules, rerr := h.Links.ListRules(ctx, actor, id); rerr == nil {
+		data.Rules = ruleViews(rules)
+	}
+	if split, serr := h.Links.GetSplit(ctx, actor, id); serr == nil {
+		data.Split = split
 	}
 
 	data.RuleWeekdays = domain.RuleWeekdays
@@ -661,7 +715,23 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 	data.SplitKinds = domain.SplitKinds
 	data.SplitHelp = splitHelp
 	data.MaxWeight = domain.MaxDestinationWeight
-	data.GeoAvailable = h.Config.Analytics.GeoIPPath != ""
+	// The returning-visitor condition needs Redis, and the form says so beside
+	// the control rather than letting somebody discover it from traffic that did
+	// not move.
+	data.ReturningAvailable = h.Config.Redis.URL != ""
+}
+
+// fillLinkAnalytics is the `link_analytics` partial's data: the series, the
+// choropleth, the rings and the ranked country list.
+//
+// No receiver and no context, and that is the point of the seam rather than an
+// accident of it — every figure here is already in `data.Stats`, so this half of
+// the page performs no I/O and cannot fail. It is laid out in Go so the
+// templates stay dumb loops and the CSP stays as it is.
+func fillLinkAnalytics(r *http.Request, data *linkDetailPageData, from, to time.Time) {
+	stats := data.Stats
+	data.Series = fillSeries(stats.Series, from, to)
+
 	if !data.GeoAvailable {
 		// Only when it is actually true. The ranked list's empty state used to be
 		// this sentence unconditionally, which meant a link with a GeoIP database
@@ -670,7 +740,7 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 		// "No data yet".
 		data.GeoUnavailable = ui.GeoUnavailable
 	}
-	data.GeoBase = fmt.Sprintf("/links/%s?days=%d", l.ID, days)
+	data.GeoBase = fmt.Sprintf("/links/%s?days=%d", data.Link.ID, data.Days)
 	data.GeoList = data.GeoBase + "#countries"
 
 	// The choropleth. Shaded by clicks unless asked for visitors, and the
@@ -695,27 +765,31 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 	for dim, values := range stats.Dimensions {
 		data.Donuts[dim] = ui.DonutChart(dimensionSlices(values), stats.Totals.Clicks, 100)
 	}
+}
 
-	data.ReturningAvailable = h.Config.Redis.URL != ""
-	data.MinPasswordLength = auth.MinPasswordLength
-
+// linkDetailNotice is the flash the page opens with, chosen from what the last
+// redirect put in the query string.
+//
+// First match wins and the order is the order it was written in, which matters
+// only for a hand-made URL carrying two of them.
+func linkDetailNotice(q url.Values, l *domain.Link) string {
 	switch {
-	case r.URL.Query().Get("rule") != "":
-		data.Notice = ruleNotice(r.URL.Query().Get("rule"))
-	case r.URL.Query().Get("split") != "":
-		data.Notice = splitNotice(r.URL.Query().Get("split"))
-	case r.URL.Query().Get("qr") != "":
-		data.Notice = qrNotice(r.URL.Query().Get("qr"))
-	case r.URL.Query().Get("created") == "1":
-		data.Notice = "Link created: " + l.ShortURL
-	case r.URL.Query().Get("saved") == "1":
-		data.Notice = "Changes saved."
-	case r.URL.Query().Get("archived") == "1":
-		data.Notice = "Link archived. It no longer redirects; the alias stays reserved."
-	case r.URL.Query().Get("restored") == "1":
-		data.Notice = "Link restored."
+	case q.Get("rule") != "":
+		return ruleNotice(q.Get("rule"))
+	case q.Get("split") != "":
+		return splitNotice(q.Get("split"))
+	case q.Get("qr") != "":
+		return qrNotice(q.Get("qr"))
+	case q.Get("created") == "1":
+		return "Link created: " + l.ShortURL
+	case q.Get("saved") == "1":
+		return "Changes saved."
+	case q.Get("archived") == "1":
+		return "Link archived. It no longer redirects; the alias stays reserved."
+	case q.Get("restored") == "1":
+		return "Link restored."
 	}
-	return data, true
+	return ""
 }
 
 // countryValues turns the country breakdown into the per-code figures the

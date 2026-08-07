@@ -1,0 +1,208 @@
+{{define "link_edit"}}
+{{- /* The link's own settings, and the reason this page exists (M47). Takes the
+       whole link_detail page data, as every partial on this page does.
+
+       Drawn first, and its caller holds the `links.update` guard rather than
+       this file, so the page reads as an ordered list of guarded sections. */ -}}
+<div class="rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-4 text-sm font-medium text-ink">Edit link</h2>
+  <form method="post" action="/links/{{.Link.ID}}" class="grid gap-4 sm:grid-cols-2">
+    <div class="sm:col-span-2">
+      <label for="url" class="block text-sm font-medium text-ink">Destination URL</label>
+      <input id="url" name="url" type="url" required value="{{.Form.URL}}"
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      {{template "field_error" (index .FieldErrors "url")}}
+    </div>
+    <div>
+      <label for="alias" class="block text-sm font-medium text-ink">Alias</label>
+      <input id="alias" name="alias" type="text" required value="{{.Form.Alias}}"
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      {{template "field_error" (index .FieldErrors "alias")}}
+      <p class="mt-1 text-xs text-subtle">Changing the alias breaks anything already pointing at the old one.</p>
+    </div>
+    <div>
+      <label for="title" class="block text-sm font-medium text-ink">Title</label>
+      <input id="title" name="title" type="text" value="{{.Form.Title}}"
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+    </div>
+    <div class="sm:col-span-2">
+      <label for="description" class="block text-sm font-medium text-ink">Description</label>
+      <textarea id="description" name="description" rows="2"
+                class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">{{.Form.Description}}</textarea>
+    </div>
+    <div>
+      <label for="expires_at" class="block text-sm font-medium text-ink">Expires <span class="text-subtle">(UTC, empty = never)</span></label>
+      <input id="expires_at" name="expires_at" type="datetime-local" value="{{.Form.ExpiresAt}}"
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      {{template "field_error" (index .FieldErrors "expires_at")}}
+    </div>
+    <div>
+      <label for="tags" class="block text-sm font-medium text-ink">Tags <span class="text-subtle">(comma-separated)</span></label>
+      <input id="tags" name="tags" type="text" value="{{.Form.Tags}}" placeholder="marketing, launch"
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+    </div>
+    {{/* Where the link is filed (M38). Drawn only when the workspace has
+         folders, so a workspace that has never made one carries no control with
+         a single meaningless option. "No folder" is the first entry rather than
+         a checkbox beside the select: this form posts every field, so an empty
+         value is how a link is taken out of a folder. */}}
+    {{if .FolderOptions}}
+    <div>
+      <label for="folder_id" class="block text-sm font-medium text-ink">Folder</label>
+      <select id="folder_id" name="folder_id"
+              class="mt-1 block w-full rounded-md border border-line-strong bg-raised px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none">
+        <option value=""{{if eq .Form.FolderID ""}} selected{{end}}>No folder</option>
+        {{range .FolderOptions}}
+        <option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
+        {{end}}
+      </select>
+      {{template "field_error" (index .FieldErrors "folder_id")}}
+      <p class="mt-1 text-xs text-subtle">Filing changes nothing about where the link sends anybody. <a href="/folders" class="text-accent-ink hover:underline">Manage folders</a>.</p>
+    </div>
+    {{end}}
+    {{/* The campaign select (M41). Drawn on exactly the terms the folder select
+         above is, and "No campaign" is the first entry for the same reason:
+         this form posts every field, so an empty value is how a link is taken
+         out of a campaign. A folder and a campaign are different questions —
+         where the link lives, and what it is for — so a link may carry both. */}}
+    {{if .CampaignOptions}}
+    <div>
+      <label for="campaign_id" class="block text-sm font-medium text-ink">Campaign</label>
+      <select id="campaign_id" name="campaign_id"
+              class="mt-1 block w-full rounded-md border border-line-strong bg-raised px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none">
+        <option value=""{{if eq .Form.CampaignID ""}} selected{{end}}>No campaign</option>
+        {{range .CampaignOptions}}
+        <option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
+        {{end}}
+      </select>
+      {{template "field_error" (index .FieldErrors "campaign_id")}}
+      <p class="mt-1 text-xs text-subtle">A label, not a schedule: a campaign ending changes nothing about the link. <a href="/campaigns" class="text-accent-ink hover:underline">Manage campaigns</a>.</p>
+    </div>
+    {{end}}
+    <div>
+      <label for="bot_blocking" class="block text-sm font-medium text-ink">Automated clients</label>
+      {{/* Disabled, not hidden, when the domain enforces. A control that
+           vanished would look like the feature does not exist; one that is
+           visible and refuses to move says who decided instead. A disabled
+           select posts nothing, so the handler reads it as "leave alone" and
+           the value is never overwritten by a form the browser would not let
+           anybody change. */}}
+      <select id="bot_blocking" name="bot_blocking" {{if .BotsEnforced}}disabled{{end}}
+              class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none {{if .BotsEnforced}}bg-sunken text-muted{{else}}bg-raised text-ink{{end}}">
+        <option value="inherit"{{if not (or (eq .Form.BotBlocking "on") (eq .Form.BotBlocking "off"))}} selected{{end}}>Follow the domain</option>
+        <option value="on"{{if eq .Form.BotBlocking "on"}} selected{{end}}>Block</option>
+        <option value="off"{{if eq .Form.BotBlocking "off"}} selected{{end}}>Allow</option>
+      </select>
+      {{template "field_error" (index .FieldErrors "bot_blocking")}}
+      <p class="mt-1 text-xs text-subtle">
+        {{if .BotsEnforced}}Blocking is enforced for every link on {{.BotHost}} and cannot be turned off here.
+        {{else if .BotDomainOn}}Blocked bots get a 403. Following the domain means blocking, because {{.BotHost}} blocks by default.
+        {{else}}Blocked bots get a 403 that names nothing. Following the domain means allowing them, which is what {{.BotHost}} does today.{{end}}
+        Detection is a user-agent heuristic and a person it misjudges has no way past the refusal.
+      </p>
+    </div>
+    <div class="sm:col-span-2">
+      <label class="flex items-start gap-2 text-sm text-ink">
+        <input type="checkbox" name="forward_query" value="1" class="mt-0.5 rounded border-line-strong"
+               {{if .Form.ForwardQuery}}checked{{end}}>
+        <span>Forward query parameters
+          <span class="block text-xs text-subtle">Visitors' <code>?utm_source=…</code> and friends are merged into the destination. The destination's own parameters win on conflict.</span>
+        </span>
+      </label>
+    </div>
+    <div class="sm:col-span-2">
+      {{/* The second half of the same idea, and deliberately the same shape as
+           the checkbox above: one control, off by default, no modes. What it
+           costs is stated rather than implied — with it on the alias stops
+           being one URL. */}}
+      <label class="flex items-start gap-2 text-sm text-ink">
+        <input type="checkbox" name="forward_path" value="1" class="mt-0.5 rounded border-line-strong"
+               {{if .Form.ForwardPath}}checked{{end}}>
+        <span>Forward extra path segments
+          <span class="block text-xs text-subtle">
+            <code>/{{.Link.Alias}}/pricing</code> reaches the destination's own <code>/pricing</code>. With this off, anything after the alias is a 404 &mdash; so switching it on makes this link answer every path beneath itself, not just its own.
+          </span>
+        </span>
+      </label>
+    </div>
+    {{/* The gates (M35). Grouped rather than scattered among the fields above,
+         because they share one property nothing else on this form has: each of
+         them can stop a visitor reaching the destination, and somebody
+         auditing a link wants to read them together. */}}
+    <div class="sm:col-span-2 border-t border-line pt-4">
+      <h3 class="text-sm font-medium text-ink">Gates</h3>
+      <p class="mt-1 text-xs text-subtle">
+        Each of these is off unless you switch it on, and each is paid for on every visit to this link and no other. Nothing here is a substitute for a destination that authenticates its own visitors.
+      </p>
+    </div>
+    <div>
+      <label for="password" class="block text-sm font-medium text-ink">Password</label>
+      {{/* The box is always empty, and that is not a bug to fix later. The
+           password is stored as an argon2id hash, so there is nothing to
+           render — and because this form posts every field, an empty box has
+           to mean "leave it alone" or every save would clear the gate.
+           Removing one is therefore its own checkbox. */}}
+      <input id="password" name="password" type="password" autocomplete="new-password"
+             placeholder="{{if .Form.HasPassword}}Set — type to replace{{else}}No password{{end}}"
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      {{template "field_error" (index .FieldErrors "password")}}
+      <p class="mt-1 text-xs text-subtle">
+        At least {{.MinPasswordLength}} characters. Visitors get a challenge page and type it in; nothing is remembered in their browser, so they type it again next time.
+      </p>
+      {{if .Form.HasPassword}}
+      <label class="mt-2 flex items-start gap-2 text-sm text-ink">
+        <input type="checkbox" name="clear_password" value="1" class="mt-0.5 rounded border-line-strong"
+               {{if .Form.ClearPassword}}checked{{end}}>
+        <span>Remove the password</span>
+      </label>
+      {{end}}
+    </div>
+    <div>
+      {{/* The one label M47 changed, and the blind task is the whole reason
+           (m47.md, "The one label that changes"). The label read *Click limit
+           (empty = none)* and the consumed count sat in its own <strong> six
+           lines below it; the owner set a limit and wrote *"Unsure if done
+           properly as nothing notes whether the field is setting for additional
+           clicks or total clicks. Current clicks was 416, was setting the field
+           to 50 or 466 correct?"*
+
+           Both facts were already on the page, adjacent, and still did not
+           compose — so the fix is not a third element. It is one sentence
+           naming the total and the spend together, which is the only form in
+           which a reader does not have to relate them.
+
+           The gate is unchanged. `MaxClicks` stays absolute, because changing
+           it would silently redefine every limit already set. */}}
+      <label for="max_clicks" class="block text-sm font-medium text-ink">Click limit <span class="text-subtle">(empty = none)</span></label>
+      <input id="max_clicks" name="max_clicks" type="number" min="1" value="{{.Form.MaxClicks}}"
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      {{template "field_error" (index .FieldErrors "max_clicks")}}
+      <p class="mt-1 text-xs text-subtle">
+        {{if .Link.ClicksConsumed}}{{if .Form.MaxClicks}}A <strong class="text-ink">total</strong> and not an allowance on top of what has gone before: {{.Link.ClicksConsumed}} of the {{.Form.MaxClicks}} are already spent, and past the limit the link answers 410.{{else}}A <strong class="text-ink">total</strong> and not an allowance on top of what has gone before: {{.Link.ClicksConsumed}} are already spent, so a limit at or below {{.Link.ClicksConsumed}} makes this link answer 410 at once.{{end}}{{else}}A <strong class="text-ink">total</strong> and not an allowance on top of what has gone before: nothing has been spent against this link yet, and past the limit it answers 410.{{end}}
+        Counted exactly, in the database &mdash; not by the click total below, which is approximate.
+      </p>
+    </div>
+    <div class="sm:col-span-2">
+      <label class="flex items-start gap-2 text-sm text-ink">
+        <input type="checkbox" name="one_time" value="1" class="mt-0.5 rounded border-line-strong"
+               {{if .Form.OneTime}}checked{{end}}>
+        <span>Follow once, then stop
+          <span class="block text-xs text-subtle">The same gate as a click limit of 1. With both set, the smaller wins. A HEAD request never spends a click, so a link checker cannot burn this link by looking at it.</span>
+        </span>
+      </label>
+    </div>
+    <div class="sm:col-span-2">
+      <label class="flex items-start gap-2 text-sm text-ink">
+        <input type="checkbox" name="require_signature" value="1" class="mt-0.5 rounded border-line-strong"
+               {{if .Form.RequireSignature}}checked{{end}}>
+        <span>Require a signed link
+          <span class="block text-xs text-subtle">The plain short URL stops working: only a signed one, made below and not yet expired, is accepted. Switching this on without minting a signed link makes the link unreachable.</span>
+        </span>
+      </label>
+    </div>
+    <div class="sm:col-span-2">
+      <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Save changes</button>
+    </div>
+  </form>
+</div>
+{{end}}

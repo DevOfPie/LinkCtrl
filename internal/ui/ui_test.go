@@ -78,6 +78,7 @@ func pageData(t *testing.T) map[string]any {
 	t.Helper()
 	now := time.Now()
 	ownerUserID := "0198c9c5-0000-7000-8000-000000000001"
+	consumed := int64(416)
 	lnk := map[string]any{
 		"ID": "0198c9c5-0000-7000-8000-000000000001", "Alias": "demo",
 		"ShortURL": "http://links.test/demo", "URL": "https://example.com/x",
@@ -85,6 +86,13 @@ func pageData(t *testing.T) map[string]any {
 		"Tags":       []map[string]any{{"Name": "launch"}},
 		"ClickCount": int64(1234), "LastClickAt": &now,
 		"CreatedAt": now, "UpdatedAt": now,
+		// A gated link, so the click-limit control renders the branch M47
+		// rewrote rather than its no-budget fallback. The figure is the one from
+		// the blind task that produced the rewrite: the owner had 416 clicks and
+		// could not tell whether a limit of 50 or of 466 was the right answer.
+		// `withBudget` leaves this nil for a link with no gate, which is why the
+		// template has a branch for that at all.
+		"ClicksConsumed": &consumed,
 	}
 	stats := map[string]any{
 		"Totals": map[string]int64{"Clicks": 40, "UniqueVisitors": 12, "BotClicks": 3},
@@ -493,6 +501,11 @@ func pageData(t *testing.T) map[string]any {
 				"URL": "https://example.com/x", "Alias": "demo", "Title": "A demo",
 				"Description": "", "ExpiresAt": "", "Tags": "launch",
 				"CampaignID": "0198c9c5-0000-7000-8000-000000000050",
+				// The limit the blind task's owner was trying to set, beside the
+				// 416 already spent on Link.ClicksConsumed. Both numbers, because
+				// the sentence M47 replaced two elements with names both and
+				// TestTheClickLimitNamesTheTotalAndWhatIsSpent reads it.
+				"MaxClicks": "466",
 			},
 			// The campaign select and the QR panel (M41). The SVG is a stub
 			// rather than a real code: this test exercises the template, and

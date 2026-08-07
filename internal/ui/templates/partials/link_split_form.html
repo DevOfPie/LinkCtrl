@@ -1,0 +1,40 @@
+{{define "link_split_form"}}
+{{- /* Adding an arm (M36). Its own partial since M47, for the reason
+       link_rule_form is: the thing you read and the thing you write are two
+       jobs, and the write half is what pushes the read half off the screen. */ -}}
+<form method="post" action="/links/{{.Link.ID}}/split" class="mt-6 border-t border-line pt-6">
+  <h3 class="mb-1 text-sm font-medium text-ink">Add an arm</h3>
+  <p class="mb-4 text-xs text-subtle">{{.SplitHelp}}</p>
+
+  <div class="grid gap-4 sm:grid-cols-4">
+    <div class="sm:col-span-2">
+      <label for="variant_url" class="block text-sm font-medium text-ink">Send visitors to</label>
+      <input id="variant_url" name="variant_url" type="url" required placeholder="https://example.com/variant-b"
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+    </div>
+    <div>
+      <label for="variant_kind" class="block text-sm font-medium text-ink">Kind</label>
+      <select id="variant_kind" name="variant_kind"
+              class="mt-1 block w-full rounded-md border border-line-strong bg-raised px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none">
+        {{range .SplitKinds}}<option value="{{.}}"{{if and $.Split (eq $.Split.Kind .)}} selected{{end}}>{{.}}</option>{{end}}
+        <option value="fallback">fallback</option>
+      </select>
+      <p class="mt-1 text-xs text-subtle">A link's arms are all one kind. A fallback is separate, and there is one.</p>
+    </div>
+    <div>
+      <label for="variant_weight" class="block text-sm font-medium text-ink">Weight</label>
+      <input id="variant_weight" name="variant_weight" type="number" min="0" max="{{.MaxWeight}}" value="100"
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      <p class="mt-1 text-xs text-subtle">Weighted arms only. Shares are relative, so 60/40 and 600/400 are the same test.</p>
+    </div>
+  </div>
+
+  <div class="mt-4 flex items-center gap-4">
+    <label class="flex items-center gap-2 text-sm text-ink">
+      <input type="checkbox" name="variant_enabled" value="1" checked class="rounded border-line-strong">
+      <span>Enabled</span>
+    </label>
+    <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Add arm</button>
+  </div>
+</form>
+{{end}}

@@ -242,6 +242,8 @@ file. Append a row when you append an entry.
 | [The logo milestone was two, and a review found it the same day it was written](#2026-08-07--the-logo-milestone-was-two-and-a-review-found-it-the-same-day-it-was-written) | D116: the split; the erasure limb that was wrong in the dangerous direction; a cap ordering that specified the bomb; a decode test naming a decoder the tree does not have |
 | [Reviewing the specification, not only the thing built from it](#2026-08-07--reviewing-the-specification-not-only-the-thing-built-from-it) | W36 made: a plan is reviewed before it is built against; why a different model from the writer's; what the reviewer is deliberately not given; findings are evidence, not a verdict |
 | [M46: the three choices the milestone gave itself, and the header that could not fit](#2026-08-07--m46-the-three-choices-the-milestone-gave-itself-and-the-header-that-could-not-fit) | D117–D119: the switcher drops the workspace you are in and the header gains a label; API keys leaves the top-level nav on D35's own reasoning; one hot filter because one is all any task reached for; why `<details>` here is not D24 reversed; what the overflow scan does and does not enforce, measured in a browser at three widths |
+| [M47: the line count M46 moved](#2026-08-07--m47-the-line-count-m46-moved) | An amendment, not a decision: `link_detail.html` is 805 lines and m47.md said 803, because M46's own table wrapper landed in it the day before |
+| [M47: the three choices it gave itself, and the 1883 pixels](#2026-08-07--m47-the-three-choices-it-gave-itself-and-the-1883-pixels) | D120–D122: the analytics go below and the tiles go with them; the order, with the row at which measurement stops and an argument starts; a 60-line cap fixed by the shortest partial's body rather than by the page's length; one sentence for two facts that were adjacent and did not compose; 1883px to 327px, three engines; what the fold test cannot check and the sabotage that proved both its limbs |
 
 ---
 
@@ -20132,3 +20134,265 @@ pages, keeping them would put a second Links link a few centimetres from the
 first. `link_detail.html`'s *← Links* stays: it is *up one level from this
 object* rather than a peer destination, and that page belongs to
 [M47](phase-details/m47.md).
+
+## 2026-08-07 — M47, the line count M46 moved
+
+An amendment under [phase-loop.md](phase-loop.md#amending-a-bullet), logged
+because the rule says every amendment is logged and not because two lines are
+interesting. It is a **fact**, not an assertion: nobody could have decided the
+file was a different length.
+
+The bullet as it stood:
+
+> `pages/link_detail.html` is **803 lines**, more than a fifth of every template
+> in this product put together
+
+As amended:
+
+> `pages/link_detail.html` is **805 lines**, more than a fifth of every template
+> in this product put together
+
+The tree fact: `wc -l internal/ui/templates/pages/link_detail.html` reports 805
+at `099b561`. [M46](phase-details/m46.md) is what moved it — its overflow bullet
+wrapped the recent-activity table in an `overflow-x-auto` div, which is 24
+insertions against 22 deletions in that file and a net of two. The milestone file
+was written on 2026-08-06, before M46 was built, and 803 was true then.
+
+Nothing else in m47.md drifted, and that was checked rather than assumed:
+`loadLinkDetail` is still at `internal/httpx/web_links.go:513` and runs to `:719`,
+which is 207 lines and inside the bullet's *roughly 220*; the `max_clicks` label
+is still at `pages/link_detail.html:211` with `ClicksConsumed` at `:217`;
+`withBudget` is still at `internal/link/gates.go:167`; and the page still carries
+exactly the eight top-level sections the bullet names, in the order it names
+them — clicks per day, edit, signed links, QR, routing rules, split test, danger
+zone, recent activity.
+
+Worth noticing rather than filing: the drift is a milestone changing a file the
+*next* milestone measures, one day apart. The cap M47 has to choose is a line
+count in the same file, and a cap chosen from a number that moved is the failure
+this entry is the cheap version of.
+
+## 2026-08-07 — M47, the three choices it gave itself, and the 1883 pixels
+
+[m47.md](phase-details/m47.md) does what [m46.md](phase-details/m46.md) did the
+day before: it names the choices it will not pre-answer and states the criterion
+each has to be decided against. Nothing here was put to the owner, because
+nothing here was left open — the milestone file says in as many words that where
+the analytics go and what the line cap is are *"the milestone's to decide and to
+record"*.
+
+### D120 — the analytics go below, and it is the only one of the three options that costs nothing
+
+m47.md offers three: below, behind a tab, or on their own route. The bullet is
+emphatic about which half is negotiable — *"that they no longer sit between the
+reader and the edit form is not"* — so the criterion is what the other two cost
+against a milestone whose other claim is that **behaviour does not change**.
+
+A **tab** needs state, and there are two ways to hold it. A query parameter
+changes what `/links/{id}` answers, which is the thing this milestone promised
+not to touch; a script contradicts nothing but adds the first piece of
+client-side view state in the product to the page with the largest diff of the
+phase. A **route** is worse on the same axis: `/links/{id}/analytics` is a new
+page, a new handler, a new nav state, and it splits one object across two URLs
+one milestone before [M48](phase-details/m48.md) starts putting things *back*
+onto this page as panels.
+
+**Below** changes no route, no query parameter, no handler signature and no
+test, and it fully satisfies the half of the bullet that is not negotiable. It
+also leaves M48 free: a panel is a better home for the analytics than a tab
+would have been, and M48 owns that mechanism.
+
+**The three statistic tiles went down with the rest**, and that is the part
+worth stating rather than assuming. Keeping a summary strip at the top is the
+obvious compromise and it fails the bullet's own words — *"analytics stop being
+the first thing on a configuration page"*. A tile is analytics. Leaving three of
+them in front of the edit form would have put the reader back behind exactly
+what they were behind, in a shorter costume.
+
+One consequence, and it is the kind of thing a reorder leaves behind: two
+sentences on the page said *above* about something that is now below. The QR
+panel's *"show up under **qr** in the referrers breakdown above"* and the click
+limit's *"not by the click total above, which is approximate"* both now read
+*below*. Every other directional word on the page was checked rather than
+assumed — the rules and the split both say the destination is *above* them, and
+it is; the edit form says a signed link is made *below*, and it is.
+
+### D121 — the order, and the point at which the evidence runs out
+
+The order is **edit, QR code, routing rules, split test, signed links,
+analytics, recent activity, danger zone**. m47.md asks for it to be *"written
+down with what it was derived from, so a later reader can disagree with the
+evidence rather than with a preference"*, so here is the derivation with the
+join between the two clearly marked.
+
+**Measured, from the round-one blind tasks:**
+
+| # | Section | The evidence |
+| --- | --- | --- |
+| 1 | Edit | Changing where a link points is *"the most ordinary thing anybody does to a link"* and took **~35 seconds**, with the note *"scrolling, which is worse when not looking for the massive QR code"*. It is the only section with a task about the thing the section does |
+| 2 | QR code | Task 1 took **~26 seconds** to reach it, and [M48](phase-details/m48.md) exists because it is buried. A whole milestone naming a section is the second-strongest evidence in the set |
+
+**Not measured, and ranked by a stated secondary criterion instead.** No blind
+task reached for routing rules, the split test, signed links or the danger zone
+by name. Ranking them by preference and calling it frequency would be the thing
+m47.md's phrasing is written to prevent, so the criterion is named instead:
+**how close the section is to the question the edit form answers — where does
+this link send somebody.**
+
+| # | Section | Why there |
+| --- | --- | --- |
+| 3 | Routing rules | The same question, per visitor. A rule overrides the destination directly above it, and reading the two apart is how a link ends up pointing somewhere nobody expected |
+| 4 | Split test | The same question again, per share of the traffic — and strictly downstream, since a split is applied only to visitors no rule claimed. The page says so itself, so the order on the page is now the order the redirect path evaluates in |
+| 5 | Signed links | Not where it goes but who may follow it. It is also the `require_signature` checkbox's companion, and that checkbox says the signed link is *"made below"*, which stays true |
+| 6 | Analytics | Reading, not configuring, on a page whose complaint was that it is a configuration page you cannot configure from. Task 6 shows the breakdowns are used, which is why they are above the log rather than at the bottom |
+| 7 | Recent activity | The same data as 6, one row at a time, and nothing reached for it |
+| 8 | Danger zone | Last, and the one position that needed no derivation: a link is deleted once, and it is the only section whose accidental use cannot be undone from the dashboard |
+
+**What a later reader should disagree with.** Rows 3 to 8 are an argument, not a
+measurement, and one person's seven tasks are the whole of rows 1 and 2.
+[M51.9](phase-details/m51.9.md) re-runs those tasks against the built tree,
+which is the check on all of it.
+
+### D122 — the cap is 60 lines, and the number that fixes it is 21
+
+`pages/link_detail.html` was **805 lines** and is **50**. The cap m47.md asks
+for is **60**, and its risk section is right that this is the milestone's
+genuine unknown: *"set too high it enforces nothing; set too low it forces
+partials that exist only to satisfy a number."*
+
+The number that resolves it is not the page's length. It is **the length of the
+shortest thing that could be put back into it.** What a regression costs this
+file is a section's *body* — the markup between `{{define}}` and `{{end}}`,
+which is what a paste carries — and the eleven bodies this page renders run from
+`link_signed`'s **21 lines** to `link_edit`'s **201**. So any cap below 71
+refuses even the smallest of them, and 60 refuses it by eleven lines while
+leaving ten for three more sections and their lines in the order comment.
+
+This was measured rather than reasoned to. The cap was first written at 70 on
+the arithmetic of whole *files* — `link_signed.html` is 28 lines — and the
+sabotage run that is supposed to prove a test works put the file at **72
+against a cap of 70**. A two-line margin is luck, not enforcement, and the error
+was counting the `{{define}}`, the comment and the `{{end}}` as though a paste
+would bring them along. The cap is stated in bodies now, and the margin is
+eleven.
+
+It bounds **this page and no other**. A cap across `pages/` would be a number
+nobody derived applied to templates nobody complained about; this one has 805
+lines and a stopwatch behind it.
+
+### The one label, and why a third element was not available
+
+`max_clicks` read *Click limit (empty = none)* with `416 used so far` in its own
+`<strong>` six lines below. The owner set a limit and wrote: *"Unsure if done
+properly as nothing notes whether the field is setting for additional clicks or
+total clicks. Current clicks was 416, was setting the field to 50 or 466
+correct?"* The answer is 466.
+
+**Both facts were already on the page, adjacent, and still did not compose.**
+That is what rules out the cheap fix — a third element saying *total* would be a
+third thing to relate. So the two became one sentence: *"A total and not an
+allowance on top of what has gone before: 416 of the 466 are already spent, and
+past the limit the link answers 410."*
+
+`TestTheClickLimitNamesTheTotalAndWhatIsSpent` asserts both numbers appear in
+**one sentence** rather than merely on the page, which is the only form of the
+assertion that would have failed before. It reads the markup *past* the input's
+closing bracket, because the box carries `value="466"` and a region starting
+inside the tag would let the limit be named by an attribute nobody reads — the
+assertion passing for precisely the reason the defect existed.
+
+The gate is untouched. `MaxClicks` stays absolute, because changing it would
+silently redefine every limit already set on every instance.
+
+### Measured, not asserted
+
+The bullet is a pixel claim, so it was taken in a browser. Playwright is already
+here for [`tools/render-verify`](../../tools/render-verify/README.md), which D25
+permits on the condition that Node stays out of the product.
+
+The page was rendered at **1280×800** from `internal/ui`'s own fixture, before
+and after, the `before` from a worktree at `099b561` so the comparison is the
+same page through the same stylesheet pipeline:
+
+| | Destination box, top edge | Alias field, bottom edge | Horizontal scroll |
+| --- | --- | --- | --- |
+| Before (`099b561`) | **1883px** | 1999px | none |
+| After | **327px** | **443px** | none |
+
+Identical to the pixel in Blink, Gecko and WebKit. Both fields are inside the
+viewport with 357px to spare, where before they were a screen and a half below
+it.
+
+The harness is **not committed**, for the reason M46's was not: the milestone's
+enforcement is the template scan, this was evidence for a one-time claim, and
+`tools/render-verify` is opt-in and reachable from no gate — a pixel assertion
+living there would protect nothing between the two occasions somebody ran it.
+
+### What the fold test enforces, and what it does not
+
+`TestTheEditControlIsReachableWithoutScrolling` cannot re-take that measurement.
+`internal/ui` renders HTML and does no layout, and that is not a gap to close —
+it is why the package depends on nothing but the standard library. What it
+asserts instead is the structural property the measurement rests on, in the two
+directions that can regress:
+
+- the destination and the alias are the **first two** controls the page draws,
+  so nothing interactive can be put in front of them;
+- what *is* in front of them is text and only text — no `<table>`, `<svg>`,
+  `<img>`, `<ul>`, `<details>` or the rest, whose heights cannot be read off
+  markup — under a 400-character budget against the 93 characters it draws
+  today.
+
+Both limbs earn their place, and the sabotage run is what shows it. Putting the
+analytics back on top failed the second limb twice and the third once, and did
+**not** fail the first: the analytics block contains no named form control, so
+an ordinal assertion alone would have watched 1556 pixels of chart and map move
+in front of the edit form and reported success.
+
+Stated rather than implied, in m46.md's idiom for the overflow scan: this does
+not check pixels. A section whose own content grew taller would pass it. The cap
+on the page's length and the recorded order are what make that unlikely; the
+measurement above is what makes it false today; [M51.9](phase-details/m51.9.md)
+is what re-checks it against a person.
+
+### The unmodified-tests claim, and what it is worth
+
+m47.md's falsifiable claim is that **every existing integration test touching
+the link page passes unmodified**. It held, and nothing under `test/integration`
+was touched: `web_test.go`, `qr_test.go`, `routing_test.go`, `split_test.go`,
+`gates_test.go`, `bots_test.go`, `folders_test.go`, `expiry_test.go` and
+`contract_test.go` all pass against the restructured page. Routes, form field
+names, redirect targets and flash behaviour are unchanged; `api/openapi.yaml`
+was not opened.
+
+Two unit-test files did change, and neither is that claim:
+`internal/ui/ui_test.go`'s fixture gained `Link.ClicksConsumed` and
+`Form.MaxClicks`, because the sentence M47 wrote has a branch for a gated link
+and a fixture with no budget would leave it unrendered on every run; and
+`mainOf` in `internal/ui/links_test.go` now cuts the `<main>` tag's own
+attributes away with it. That helper returned `class="mx-auto max-w-6xl px-4
+py-8">` as part of what the page drew, which was invisible to every caller until
+one of them started **counting** the text in front of a control.
+
+### The handler was split along the same seam, and the seam is the failure rule
+
+`loadLinkDetail` was 207 lines filling eight sections in one pass. It is now six
+functions, and the largest — `fillLinkEdit` at 75 lines including its comments —
+assembles one section rather than a quarter of the page.
+
+The seam is not only *which section*. It is **what a failure costs**: three
+reads replace the page when they fail, because without the link, its statistics
+or its recent clicks there is nothing to render, and every read below them fails
+soft and leaves its own section empty. That was already the behaviour, scattered
+through five comments each re-arguing it. The helpers therefore **return
+nothing** — a signature that says the thing the comments were saying — and
+`fillLinkAnalytics` has no receiver and no context at all, because every figure
+it lays out is already in hand and it cannot fail.
+
+### One deferred row read and left open
+
+[F164](deferred-findings.md) — every bar chart labels its axis ceiling as the
+peak — reaches `series_chart.html`, which this page renders. It was checked
+against [step 1](phase-loop.md#1-validate)'s deferred-overlap rule and makes no
+M47 claim false: this milestone claims where the chart *is*, never what its
+numbers say. It stays for [M58](phase-details/m58.md).

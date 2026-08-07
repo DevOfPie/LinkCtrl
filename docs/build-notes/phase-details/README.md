@@ -47,7 +47,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | # | Milestone | Depends on | Status |
 | --- | --- | --- | --- |
 | [M46](m46.md) | The shell, the navigation, and the links list | — | done |
-| [M47](m47.md) | The link page, taken apart | M46 | not started |
+| [M47](m47.md) | The link page, taken apart | M46 | done |
 | [M48](m48.md) | On-demand panels, and what stops being buried | M47 | not started |
 | [M49](m49.md) | QR codes sized in pixels, and a PNG to download | M48 *(ordering)* | not started |
 | [M50](m50.md) | More than one QR code per link, told apart in the analytics | M49 | not started |
