@@ -27,21 +27,41 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## Phase 3
 
-**Not planned yet.** Four work areas are chosen — identity and account
+**Planned, unstarted.** Four work areas, chosen 2026-08-06: identity and account
 lifecycle, dashboard UI and UX, infrastructure and resilience, QR codes and
-campaigns — and the phase is planned in full before its first milestone is
-built. Numbering continues from Phase 2, so the first row is **M46**. Two
-adversarial reviews are budgeted inside the fifteen-milestone target, as Phase 2
-had: one mid-phase, one pre-release. What gates the planning, and the three
-questions still open, are in
-[phase-3-candidates.md](../phase-3-candidates.md).
+campaigns. Fifteen milestones — twelve of work, two adversarial reviews, one
+close — against the size target in
+[planning.md](../planning.md#the-size-target-a-phase-stays-under-sixteen-milestones).
+**Twelve of twelve are spent, so the phase has no slack**: a milestone that turns
+out to be two is a phase-boundary conversation, not an insertion.
 
-Until a row exists here, [step 1](../phase-loop.md#1-validate) has no next
-milestone and `/work phase` enters nothing. That is the accurate state, not a
-missing file.
+**M46–M48 are the redesign, written from the owner's walkthrough** — eighteen
+blind tasks over two rounds, 2026-08-06 and 2026-08-07. Round two also produced
+seven defects, which are rows in [deferred-findings.md](../deferred-findings.md)
+and are fixed at [M58](m58.md) rather than costing a redesign slot.
 
 | # | Milestone | Depends on | Status |
 | --- | --- | --- | --- |
+| [M46](m46.md) | The shell, the navigation, and the links list | — | not started |
+| [M47](m47.md) | The link page, taken apart | M46 | not started |
+| [M48](m48.md) | On-demand panels, and what stops being buried | M47 | not started |
+| [M49](m49.md) | QR codes sized in pixels, and a PNG to download | M48 *(ordering)* | not started |
+| [M50](m50.md) | More than one QR code per link, told apart in the analytics | M49 | not started |
+| [M51](m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | not started |
+| [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | not started |
+| [M52](m52.md) | Account deletion and subject erasure | M51 *(ordering)* | not started |
+| [M53](m53.md) | A second factor: TOTP, enrolment, and recovery codes | M51 | not started |
+| [M54](m54.md) | An API key belongs to an account, not to one organization | M52 | not started |
+| [M55](m55.md) | An update checker, and the fifth thing that leaves this product | — | not started |
+| [M56](m56.md) | High availability: the failover contract | — | not started |
+| [M57](m57.md) | High availability: measured, and still one container | M56 | not started |
+| [M57.9](m57.9.md) | **Pre-release adversarial review** | M46–M57 | not started |
+| [M58](m58.md) | Deferred findings, documentation pass, 0.3.0 | all | not started |
+
+Work areas, so a blocked milestone has an independent row to fall back to per
+[W33](../workflow-changes.md#made): **B** is M46–M48, **F** is M49–M50, **A** is
+M51–M54, **E** is M55–M57. An area boundary buys a fallback destination, not
+concurrency — the worker is still forbidden from starting a second milestone.
 
 New milestone files start from [_template.md](_template.md).
 

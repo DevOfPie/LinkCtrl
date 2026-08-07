@@ -42,6 +42,34 @@ conclusions are what this file exists to stop.
 
 ## Open — a milestone needs this
 
+### M55 — Does the update checker default on or off?
+
+**Needed by:** [M55](phase-details/m55.md). The milestone builds either way and
+deliberately does not pre-empt this; what changes is a sentence in
+`docs/SECURITY.md` that is part of why somebody self-hosts this product.
+
+`docs/SECURITY.md:73` currently reads *"No telemetry, no phone-home, no
+third-party calls in the default configuration"*, and enumerates the four
+connections that leave this product rather than counting them — because that row
+said *two* until M45 and both of the missing ones were shipped features. An
+update checker is the fifth, and it is the first that would be **on** without an
+operator asking for it.
+
+| Option | Buys | Costs |
+| --- | --- | --- |
+| **Off by default** *(recommended)* | The sentence above stays true, unedited. An operator who wants the check turns it on, which is the same shape `SMTP_HOST` and `FEED_URL` already have — the operator's connections are off until configured, and this joins that group without changing its rule | The people most likely to be running an outdated version are the least likely to find the setting. The feature exists and does nothing on almost every instance, which is close to not having built it. The recommendation states this against itself: the cheapest option to defend is not obviously the useful one |
+| On by default, with an opt-out | The feature works for the operators it was requested for, without them knowing it exists | `SECURITY.md:73` has to be rewritten rather than extended, and *no phone-home in the default configuration* becomes *no phone-home except this*. That is a real change to a claim this product has made since Phase 1, and it is made on behalf of every operator who read it |
+| On by default, prompted at first run | The operator decides knowingly, and the default is whatever they chose | There is no first-run prompt surface for instance-level settings; the setup form claims the instance and does not configure it. This invents one, inside a milestone that is otherwise a daily HTTP GET |
+
+**Default if unanswered:** **off**. It is the only option that does not require
+editing a security claim, and turning a default-off feature on later is a
+configuration change where turning a default-on feature off later is an apology.
+
+**Assumes:** that `docs/SECURITY.md:73` still enumerates rather than counts —
+true and verified 2026-08-06 by reading it — and that no milestone between here
+and M55 adds a sixth outbound connection. [M53](phase-details/m53.md) explicitly
+adds none.
+
 ## Open — nothing forces this
 
 No deadline, no milestone waiting. Read when convenient; an answer here is worth

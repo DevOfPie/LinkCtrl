@@ -235,6 +235,8 @@ file. Append a row when you append an entry.
 | [Phase 3 takes four areas, and one of them cannot be planned yet](#2026-08-06--phase-3-takes-four-areas-and-one-of-them-cannot-be-planned-yet) | A, B, E, F in; C, D, G stay candidates; planned in full before anything is built, and why the walkthrough is planning's first input rather than its alternative |
 | [What the resume path reads is the live phase](#2026-08-06--what-the-resume-path-reads-is-the-live-phase) | W35 made: a finished phase's status rows move to their own file; plus Phase 3 starts at M46 and budgets two adversarial reviews, and the walkthrough gates all planning |
 | [The command catches up with the file it writes](#2026-08-06--the-command-catches-up-with-the-file-it-writes) | W8 made: `/preview-decisions` asks after filing; why the order is the substance; where an early answer lives before the milestone that uses it lands |
+| [Phase 3 planned: what each area takes, and the twelve slots](#2026-08-06--phase-3-planned-what-each-area-takes-and-the-twelve-slots) | D109–D113: A takes two defects plus MFA and the key model; E takes the checker and HA under a single-instance constraint; F reverses D11 on its own premise; the redesign is specified by owner walkthrough |
+| [What eighteen blind tasks specified, and the six defects hiding inside a word](#2026-08-07--what-eighteen-blind-tasks-specified-and-the-six-defects-hiding-inside-a-word) | D114: *irritating* was mostly *defective*, so B stays at three; F160–F166; why the coverage test measures the seed rather than the instance; the workspace-label contradiction |
 
 ---
 
@@ -19246,3 +19248,267 @@ still on them, and only the questions *this run wrote* are asked, so a second ru
 over the same milestones is quiet.
 
 Recorded with no milestone number, per the convention for a process change.
+
+## 2026-08-06 — Phase 3 planned: what each area takes, and the twelve slots
+
+The entry above — *Phase 3 takes four areas, and one of them cannot be planned
+yet* — chose the areas (**D108**). This one is the plan itself: fifteen
+milestones, M46–M58, with what each area takes and why. The owner answered four
+scoping questions the same day, and the answers are **D109**–**D113** in
+[Plan.md](../../Plan.md#phase-3-decisions).
+
+### The arithmetic came first, and it is why the questions were asked
+
+Fifteen is the target. Two of them are adversarial reviews and one is the phase
+close, so **twelve are available for work**, and Phase 2 spent 33 on comparable
+ground. That is the whole reason the areas had to be scoped by the owner rather
+than discovered: four areas and twelve slots does not divide by itself.
+
+The plan spends all twelve. There is no fractional insertion left, which is
+stated in Plan.md rather than left implicit — an insertion is now a
+phase-boundary conversation, and the point of saying so at planning time is that
+nobody has to be the person who works it out at milestone fourteen.
+
+### D109 — area A takes two defects, MFA, and the key model
+
+F44 (deletion and erasure) and F141 (recovery) were never optional: both falsify
+claims the tree makes today, which makes them defects wearing feature clothes.
+The owner added MFA and the multi-organization API key.
+
+**MFA depends on recovery, hard.** A second factor makes lockout strictly more
+likely, and shipping one into a product where a lost password is permanent takes
+a known defect and multiplies it. That edge is what fixes A's internal order —
+M51 before M53 — and it is the only hard edge in the area that is not about
+schema.
+
+**OAuth, OIDC, SSO and SCIM stay out**, and their scope row is amended rather
+than emptied so the deferral keeps its reason. Any one of them is a credential
+model with its own enrolment, its own recovery and its own account-linking
+question; one would consume the phase.
+
+**What planning found that the candidates file had wrong.** Area A was described
+as `internal/auth`, `internal/identity`, the `002xx` migrations and
+`web_account.go`. Two of those four do not exist: there is no
+`internal/identity` — identity lives in `internal/auth` plus `internal/signup`,
+`internal/invite`, `internal/team` and `internal/instance` — and there is no
+`web_account.go`; the account surface is in `internal/httpx/web_keys.go`.
+`002xx` is a single file, `00200_identity.sql`, and is an **area marker rather
+than a free numbering band** — the next free migration number is `03700`. The
+candidates file's grouping is corrected; the areas it drew are unaffected,
+because they were cut by which files a milestone would touch and the files are
+the same ones under different names.
+
+### D110 — area E takes the checker and high availability, under a constraint
+
+The owner's words were *make sure HA doesn't come at the cost of single instance
+installs*, and that is the more interesting half of the answer.
+
+It is treated as a **testable constraint, not an intention**: M57 carries a
+conformance test that stands the product up as one container with no Redis and
+no load balancer, exercises the full surface, and asserts no new required
+dependency was introduced. Postgres stays the only one. A later milestone that
+makes Redis load-bearing fails that test, which is the reason to write it now
+rather than after something does.
+
+Most of high availability turned out to be already built and undocumented as a
+promise: leadership is per job family via `pg_try_advisory_lock`, `/healthz`
+deliberately touches no dependency, `/readyz` already distinguishes *degraded*
+from *unavailable*, and webhook and mail claims already survive a killed replica
+by lease. What is missing is the **contract** — what an operator may rely on —
+and a **measurement** of a rolling deploy. That split is what makes E two
+milestones instead of three or one.
+
+The update checker is small and its cost is a sentence rather than code:
+`docs/SECURITY.md` says *no phone-home in the default configuration*, and a
+default-on checker makes that false. The default is deliberately **not** decided
+here — it is in
+[upcoming-decisions.md](upcoming-decisions.md#m55--does-the-update-checker-default-on-or-off)
+with options, costs and a recommendation, because M55 is what forces it and the
+question deserves a reader who is not mid-planning.
+
+### D111 — area F takes all three, and D11 reverses on its own terms
+
+The owner's answer was *render as svg, allow png download as an option; I would
+expect an svg rendered to the set pixel size to be a close match to the png
+output*. The second clause is the design.
+
+**D11 (SVG only) and D72 both rest on one premise: that a PNG path would never
+be called.** D72 rejected a QR library specifically for pulling `image/png` and
+`compress/zlib` into the binary *"for a PNG path this product will never
+call"*. The owner has now asked for that path, so the reversal honours the
+reasoning rather than overriding it — and it costs no module dependency, because
+`image/png` is standard library. What D11 was actually protecting is *nothing
+rasterises on a request*, and that is preserved as a **bound**: a stated output
+cap, refused rather than clamped above it.
+
+**The match claim becomes a mechanism.** Both outputs come from one module
+matrix, one snapped pixels-per-module and one origin offset — two encoders over
+one arithmetic. A test walks the grid and checks the PNG pixel at each module's
+centre against the SVG's rect coverage. That makes the expectation falsifiable,
+which an expectation stated in prose is not.
+
+**Sizes snap.** A QR grid is a whole number of modules and 300 pixels over 29
+modules is not a whole number of pixels each. The produced size is the nearest
+one that keeps modules whole, reported beside the requested one. The rejected
+alternative — honour the request exactly, let modules land on fractional
+boundaries — is what would make the SVG and the PNG round differently, which is
+the one thing the answer above asked not to happen.
+
+**Per-code counts do not reverse D73.** More than one QR code per link needs a
+per-code identity in the payload; it does not need the `scan_count` column
+02700 removed. Counts are read from `click_events` through the existing
+analytics path, and the identity travels in its own query parameter beside
+`src=qr` rather than inside the closed vocabulary at
+`internal/domain/attribution.go:44` — which stays closed, because being closed is
+the property it was given.
+
+### D112 — the redesign is specified by the owner, in person
+
+Three options were put: a written inventory answered at leisure, a live
+walkthrough with blind tasks, or the actor that will build it specifying it from
+the three recorded complaints. The owner chose the walkthrough.
+
+**Blind tasks are the substance, not the ceremony.** Seven tasks, given with no
+instructions, against the demo instance: retrieve and save a QR code, size one
+for print, change a destination without changing anything else, gate a link on a
+click count, put links into a campaign, read one country figure, list a
+campaign's links. Each targets a structure the recon found — an 803-line link
+page whose edit form spans 214 lines and whose QR panel sits below it, a
+campaigns surface with no entry in a navigation fixed at three destinations by
+F6 and F7, a workspace selector that renders nothing at one membership.
+
+What the choice costs is that planning stalls on owner time, and that is why A,
+E and F were planned in full alongside it rather than after it: the areas that
+rebase onto B could be numbered against B's *band* without B's contents.
+
+### D113 — 0.3.0
+
+On D4's reasoning for 0.2.0. 1.0.0 stays a later phase's promise.
+
+### What this plan does not decide
+
+The update checker's default, above. And the **three areas not taken** — C
+(analytics), D (redirect path), G (commercial) — which stay candidates rather
+than being dropped or re-homed. D's exclusion has a cost that is worth naming
+because this phase pays a version of it anyway: every row in D owes the
+[slo.md](../slo.md) k6 measurement, and six rows meant six runs. Phase 3 pays for
+**two** — M50's second query parameter on the redirect path, and M57's
+rolling-deploy measurement — which is the reasoning holding rather than failing.
+
+## 2026-08-07 — What eighteen blind tasks specified, and the six defects hiding inside a word
+
+D112 chose a live walkthrough over a written question set. This is what it
+produced, and **D114** is the scoping answer it forced.
+
+### The method, and the one thing that made it work
+
+Two rounds. Round one, 2026-08-06, was seven tasks aimed **deliberately narrowly**
+at the link page, because all three recorded complaints were there and it was
+worth confirming they were real before spending owner time on surfaces nobody had
+complained about. They were real: scrolling was named in four of the seven.
+
+Round two, 2026-08-07, was eleven tasks over the shell, members, domains,
+automation, blocked destinations, API keys, folders, notifications and phone
+width. The owner's question between the rounds — *"these tasks seemed to be
+highly targeted at small sections of the link page, will there be more tasks
+that encompass more areas of the UI?"* — is the reason the second round exists
+in this shape, and is worth recording because a walkthrough that had stopped at
+round one would have specified a third of a redesign and called it a redesign.
+
+**Round two added a per-task verdict — *worth fixing? yes / no / later* — and a
+per-area judgement of fine / irritating / broken.** That single column is what
+made the phase scopeable. Without it the output is eleven observations of
+unknown weight; with it, six areas came back *irritating*, four came back *fine*,
+and **nothing came back broken**.
+
+### The finding that changed the budget: *irritating* was mostly *defective*
+
+Six areas were called irritating, and the natural reading is six areas needing
+redesign work — which the phase could not afford, since B had three slots and
+nothing was spare.
+
+Reading each note against the code instead produced the opposite conclusion.
+**Dashboard, domains, members and phone width were substantially defects**, and a
+defect does not need a milestone: it is a row in
+[deferred-findings.md](deferred-findings.md) and it is fixed at
+[M58](phase-details/m58.md) alongside the rest. Seven were filed, F160–F166.
+
+The two worth naming here, because both were found by an observation that was
+itself wrong:
+
+- **F164.** The owner wrote *"clicks per day should be scaled so the highest
+  reading fills the chart"*. The scaling is correct — `niceCeil` rounds an axis
+  to 1, 2 or 5 × 10ᵏ so the label is readable, and fill is therefore between 40%
+  and 100% by construction. But `funcs.go:93` assigns the **rounded ceiling** to
+  `MaxY`, and `series_chart.html:18` renders it as *"peak N/day"*. The demo's
+  front page says *peak 5,000/day* over a true maximum of 2,351. A complaint
+  about whitespace found a wrong number, on the product's first page, with
+  nothing beside it to contradict it.
+- **F162.** The owner noticed a domain reading *Verified* beside a warning that
+  links would stop being served. That pair is D70 working exactly as designed —
+  during the grace window the hostname genuinely is served. Chasing it found two
+  things that are not: a manual *Check DNS* renders *"is not verified"* directly
+  above a badge reading *Verified* (F161), and the demo's one verified custom
+  hostname is guaranteed to unverify 24 hours after every reseed, because
+  `lctl demo` verifies it through a stub resolver that dies with the seeder while
+  the server uses a real one against an RFC 2606 name that can never resolve.
+
+**F162 also produced the sharpest process lesson of the walkthrough**, and it was
+recorded only after a first attempt got it wrong. The initial row said the
+`demoCoverage()` assertion would *fail* when the domain unverified. It will not:
+`newDemoDB` creates a throwaway database, seeds into it and asserts in the same
+instant, so no hourly job ever runs against what it measured. **The coverage test
+measures the seed, not the instance.** That is a whole class of demo defect the
+guard is structurally unable to see, and F160 is the same shape — the demo holds
+8,123 country rollup rows and cannot draw the map, while two coverage rows exist
+to guarantee it can.
+
+### D114 — B stays at three, and what that costs
+
+Four asks had no defect behind them: folders path-entry with search-as-you-type,
+notification click-through and mark-unread, organization switching, and API-key
+scope grouping. The owner was offered three ways to pay — trade
+[M50](phase-details/m50.md)'s slot for a fourth redesign milestone, stay at
+fifteen, or raise the target to sixteen — and **chose to stay at fifteen**.
+
+- **Notifications fold into [M48](phase-details/m48.md)**, because they are the
+  same complaint that milestone exists for: a notification you cannot act on is
+  buried exactly as a QR code eight screens down is. They are also cheap —
+  `notifications.data` already carries the subject identifier and `read_at` is
+  already nullable, so there is no schema change.
+- **Folders, organization switching and API-key scope grouping go to Phase 4**,
+  with reasons, in [phase-3-candidates.md](phase-3-candidates.md). The stated
+  cost, because it is a real one: folders is the only *irritating* area with no
+  defect behind it and no fix scheduled, and it is met every time somebody files
+  a link.
+
+The recommendation put to the owner was the opposite — trade M50, on the
+reasoning that folders came out of using the product while nobody asked for two
+QR codes on one link in eighteen tasks. The owner chose the target. Recorded
+because a recommendation that was not taken is still evidence about what the
+alternatives were.
+
+### The contradiction the tasks contained, and why it resolved backwards
+
+Task 9 could not be completed: the owner could not confirm which workspace they
+were in without using the switcher. The same task's note then asked for the
+current workspace to be **removed** from the switcher as redundant.
+
+It is not redundant. The selected option is the only place the current workspace
+appears anywhere in the shell, so removing it makes task 9 impossible rather than
+merely hard — and below two memberships `partials/nav.html:38` renders nothing at
+all, which is the candidate row recorded on 2026-08-02. M46 resolves it in the
+direction neither note asked for: **a current-workspace label in the header**,
+with the switcher offering the others. That satisfies both notes and closes the
+one-membership case, and it honours M25's *"a control that cannot do anything"*
+rather than reversing it — the decision was always about the control, and the gap
+was always the label.
+
+### One more thing the walkthrough settled without being asked
+
+Task 4's *"unsure if the field is setting additional clicks or total clicks"* has
+an answer — `MaxClicks` is absolute, so 466 rather than 50 — and the page was
+already showing it: `link_detail.html:211` labels the field and `:217` renders
+*"416 used so far"* directly beneath it. **Both facts were adjacent and still did
+not compose.** That is a better argument for M47 than a missing number would have
+been, because it rules out the cheap fix.
