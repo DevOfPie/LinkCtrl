@@ -236,7 +236,8 @@ file. Append a row when you append an entry.
 | [What the resume path reads is the live phase](#2026-08-06--what-the-resume-path-reads-is-the-live-phase) | W35 made: a finished phase's status rows move to their own file; plus Phase 3 starts at M46 and budgets two adversarial reviews, and the walkthrough gates all planning |
 | [The command catches up with the file it writes](#2026-08-06--the-command-catches-up-with-the-file-it-writes) | W8 made: `/preview-decisions` asks after filing; why the order is the substance; where an early answer lives before the milestone that uses it lands |
 | [Phase 3 planned: what each area takes, and the twelve slots](#2026-08-06--phase-3-planned-what-each-area-takes-and-the-twelve-slots) | D109–D113: A takes two defects plus MFA and the key model; E takes the checker and HA under a single-instance constraint; F reverses D11 on its own premise; the redesign is specified by owner walkthrough |
-| [What eighteen blind tasks specified, and the six defects hiding inside a word](#2026-08-07--what-eighteen-blind-tasks-specified-and-the-six-defects-hiding-inside-a-word) | D114: *irritating* was mostly *defective*, so B stays at three; F160–F166; why the coverage test measures the seed rather than the instance; the workspace-label contradiction |
+| [What eighteen blind tasks specified, and the six defects hiding inside a word](#2026-08-07--what-eighteen-blind-tasks-specified-and-the-six-defects-hiding-inside-a-word) | D114 *(its heading says six; seven were filed — corrected by the entry below)*: *irritating* was mostly *defective*, so B stays at three; F160–F166; why the coverage test measures the seed rather than the instance; the workspace-label contradiction |
+| [An independent review of the plan, and the four numbers it caught](#2026-08-07--an-independent-review-of-the-plan-and-the-four-numbers-it-caught) | Fifteen findings before the plan merged: M49's false demo claim, the k6 count, two enforcement mechanisms that could not fail, D103 asserted backwards, and the scope row nobody had scheduled |
 
 ---
 
@@ -19512,3 +19513,115 @@ already showing it: `link_detail.html:211` labels the field and `:217` renders
 *"416 used so far"* directly beneath it. **Both facts were adjacent and still did
 not compose.** That is a better argument for M47 than a missing number would have
 been, because it rules out the cheap fix.
+
+## 2026-08-07 — An independent review of the plan, and the four numbers it caught
+
+The Phase 3 plan was reviewed before it merged by an agent that was given the
+plan, the repository's own standards and nothing else — no conclusions, no
+hint of which parts the author thought were weak. It sampled about fifty of the
+plan's `file:line` citations against the tree. **Roughly forty checked out
+exactly**, which is the result worth recording first: the evidence discipline
+held. The exceptions are why this entry exists, and every one of them was
+verified independently before being acted on. One of the review's own items did
+not survive that check — it placed a `docs/deployment.md` sentence one line
+above where it is — so the review was not taken on trust either.
+
+### The one outright false claim, and how it was made
+
+[M49](phase-details/m49.md) said *"The demo has no stored QR styles today —
+every panel renders at defaults."* The demo holds **two** `qr_codes` rows, and
+`cmd/lctl/demo_coverage_test.go:522` carries an M41 row requiring one, bounded
+`Min: 1, Max: 1`.
+
+The mechanism of the error is the point. A query was run over the twelve
+**oldest** links, none of them had a QR row, and the absence was generalised to
+the table. `summer-sale`, which carries the seeded style, was not in the sample.
+This is the failure the standing rule about counting rather than trusting exists
+to catch, committed while writing a plan that cites that rule twice — and it
+landed on the milestone's read-forward compatibility surface, which is the one
+place the claim mattered. Corrected, and the correction *improves* the
+milestone: the behaviour is demonstrated by the demo rather than only asserted
+by a test. M49's proposed new coverage row is withdrawn, because it would have
+collided with the M41 row it did not know existed.
+
+### Three numbers that were load-bearing
+
+- **The k6 count was two and is three.** [M50](phase-details/m50.md) and
+  [M57](phase-details/m57.md) both said two while
+  [M57.9](phase-details/m57.9.md) has always required a re-measurement on the
+  final build. That number was part of the argument for declining work area D —
+  *six rows each owing a run* against *this phase pays for two* — so it was not
+  decoration.
+- **The defect count in the entry above this one.** Its heading says *six
+  defects*; its body says *seven were filed*, and F160–F166 is seven. The
+  heading is wrong. This file is append-only, so that entry is not edited: this
+  sentence is the correction.
+- **[M51.9](phase-details/m51.9.md) planned to re-run seven blind tasks.**
+  Eighteen specified the redesign; seven is round one, which targeted the link
+  page alone. A review to that spec would have re-checked a third of what it was
+  reviewing.
+
+### Two mechanisms that could not fail
+
+The template requires enforcement named as a mechanism — *a test that fails, not
+review vigilance* — and two milestones named tests that cannot catch what they
+were cited for.
+
+[M53](phase-details/m53.md) claimed the existing source scan as its no-egress
+enforcement. That scan is `TestThisPackageOpensNoSocketOfItsOwn`, which does
+`os.ReadDir(".")` and therefore only ever reads `internal/link`; M53's code
+lands in `internal/auth` and `internal/httpx`. It would have passed while the
+thing it guarded went unchecked. The milestone now builds a scan over the
+packages it touches, which is work it had not previously accounted for.
+
+[M49](phase-details/m49.md) claimed it could land ahead of a stalled B under
+[W33](workflow-changes.md#made)'s fallback. It cannot: the fallback requires
+every row in a milestone's `Depends on` column to be `done`, and M49 depends on
+M48. The phase's real fallbacks from a stalled B are M51 and M55, and nobody had
+written that down.
+
+### A recorded decision asserted backwards
+
+[M46](phase-details/m46.md) justified keeping a `<noscript>` submit with *"this
+product's dashboard degrades rather than requires"* JavaScript. **D103 answered
+that the other way on 2026-08-05** — it requires JavaScript, and that is written
+down. The justification is replaced with one that survives D103: the fallback
+exists on that page today, and a decluttering milestone has no business removing
+a capability while moving controls around. Taking it away is a separate
+decision.
+
+The plan format exists to make this visible — [M49](phase-details/m49.md) says
+*"reverses D11"* in as many words — and M46 contradicted a decision without
+noticing it was contradicting one.
+
+### What the scope table was still promising
+
+`Plan.md`'s *Link management* table — the one whose header says it wins where it
+disagrees with prose — put **moving links between workspaces** at Phase 3. It
+appeared in no milestone, no candidate row and no deferral. It was the single
+row in this plan that had been dropped in silence, which is the outcome
+*"nothing leaves a tracker silently"* exists to prevent. Deferred to Phase 4 by
+the owner on 2026-08-07 with its reason, in *Not in Phase 3*. The adjacent row
+for MFA and the SSO family is annotated the same day: MFA is scheduled, the
+other four are not, and the row said Phase 3 for all five.
+
+### The confirmation the planning promised itself and skipped
+
+`phase-details/README.md` says which of Phase 2's inherited rules Phase 3 takes
+*"is confirmed when Phase 3 is planned, one at a time, rather than assumed by
+the table having been left in place"*. It was not done. Validation reads that
+table for every milestone, so an unconfirmed rule is binding without anybody
+having checked it applies.
+
+Done on 2026-08-07 rather than backdated. **All fourteen carry**, none was
+weakened, and the result is recorded as which milestone engages each — so the
+next reader learns where a rule does work rather than where it merely sits. The
+lede is corrected to say when it happened and that a review is what prompted it.
+
+### What this says about reviewing a plan at all
+
+Two adversarial reviews are budgeted inside this phase for the code. Nothing was
+budgeted for the plan, and the plan is what every one of those milestones is
+validated against. Fifteen findings against a document written the same day, by
+an author who had read the standards it was breaking, is the argument for
+reviewing the specification and not only the thing built from it.

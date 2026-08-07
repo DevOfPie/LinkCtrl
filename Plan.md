@@ -9,10 +9,10 @@ Scope contract and specification. States **what** is true, not why.
 | Dev environment | `docs/build-notes/development.md` |
 | How the work is done | `docs/build-notes/workflow.md` |
 | Security model and reporting | `docs/SECURITY.md` |
-| Phase 2 definitions of done | `docs/build-notes/phase-details/` — one file per milestone |
+| Definitions of done, per milestone | `docs/build-notes/phase-details/` — one file per milestone, live phase and finished ones |
 | Out-of-spec findings | `docs/build-notes/deferred-findings.md` |
 | Current progress | [Build Status](#build-status) |
-| Last updated | 2026-07-31 |
+| Last updated | 2026-08-07 |
 
 **Core rule:** links are programmable, observable, secure resources.
 
@@ -74,7 +74,7 @@ Authoritative. Where this table and prose elsewhere disagree, this table wins.
 | Folders — schema only, no API or UI | 1 |
 | Folders — API and tree UI | 2 |
 | Bulk operations, templates, import/export | 2+ |
-| Moving links between workspaces | 3 |
+| Moving links between workspaces | 3+ — **not scheduled in Phase 3**; see [Not in Phase 3](#not-in-phase-3) |
 | Version history, scheduled changes, approval workflows | 3+ |
 | Malicious destination blocking, tiered by confidence | 2 |
 | Blocked-attempt disputes, with owner review | 2 |
@@ -148,7 +148,7 @@ rather than rendering a world uniformly colored "unknown".
 | Password links, one-time links, max-click links, signed URLs | 2 |
 | Malicious destination blocking: tiers, logging, notification, disputes | 2 |
 | Third-party reputation and malware feeds — opt-in, off by default | 2 |
-| MFA, OAuth, OIDC, SSO, SCIM | 3 |
+| MFA, OAuth, OIDC, SSO, SCIM | 3 for **MFA only** ([M53](docs/build-notes/phase-details/m53.md)); OAuth, OIDC, SSO and SCIM stay 3+ and unscheduled (D109) |
 
 Destination blocking is two threat models wearing one name, and the *Abuse
 prevention* row above is the other half. What Phase 1 already refuses — non-`http(s)`
@@ -1031,6 +1031,21 @@ deferred, and that reason lives here and nowhere else.
   between organizations stays where it is. The switcher is the only affordance,
   and giving organizations one of their own is a navigation question that
   belongs with whatever Phase 4 decides about the destination set.
+- **Moving links between workspaces.** The *Link management* scope table put it
+  at Phase 3, and that table is the authoritative one — *"where this table and
+  prose elsewhere disagree, this table wins"*. Phase 3 does not build it: it
+  appeared in no milestone, no candidate row and no deferral until a review
+  found it on 2026-08-07, which made it the one row in this plan that was
+  effectively dropped in silence. Deferred to Phase 4 by the owner the same day.
+
+  Two reasons it is not a cheap insertion. It is a **cross-workspace** capability
+  in a service layer where `actor.WorkspaceID` is a single value threaded
+  through every scoped query, which is the same hard part the *All Workspaces*
+  entry in [upcoming-decisions.md](docs/build-notes/upcoming-decisions.md)
+  names — and that entry's recommended option is to build the two together, so
+  deferring this strands that question for another phase. And a link carries
+  analytics, folders, campaigns and a QR row that are all workspace-scoped, so
+  *moving* one is a question about what follows it, not an `UPDATE`.
 - **Grouping API-key scopes by the object they act on.** Round two: the scope
   list is *"hard to find things in and should be better organized/grouped by use
   > name > action"*, with the worked example that organizations, workspaces and
