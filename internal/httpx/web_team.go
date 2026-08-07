@@ -17,8 +17,9 @@ import (
 // your own.
 //
 // Neither takes a top-level nav slot. M26.5 cut that nav to three destinations
-// and TestTopLevelNavHoldsThreeDestinations asserts the count exactly, so that
-// the next milestone wanting a slot argues for one instead of drifting into it —
+// and TestTopLevelNavHoldsTwoDestinations asserts the count exactly — two since
+// M46 moved API keys down beside them — so that the next milestone wanting a
+// slot argues for one instead of drifting into it —
 // and the argument this milestone makes is that it does not need one. Both pages
 // are administrative surfaces visited when something changes, not places work
 // happens, which is the same reason Invitations sits in the identity menu.

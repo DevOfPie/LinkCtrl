@@ -3,6 +3,7 @@ package ui
 import (
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -45,7 +46,6 @@ func TestWorkspaceSwitcherAppearsOnlyWhenThereIsSomewhereToGo(t *testing.T) {
 		t.Error("with two workspaces the header draws no switcher")
 	}
 	for _, want := range []string{
-		`value="0198c9c5-0000-7000-8000-000000000010" selected`, // the current one
 		`value="0198c9c5-0000-7000-8000-000000000011"`,
 		"Acme · Marketing",
 		`name="next" value="/dashboard"`, // switching returns to the page you were on
@@ -53,6 +53,22 @@ func TestWorkspaceSwitcherAppearsOnlyWhenThereIsSomewhereToGo(t *testing.T) {
 		if !strings.Contains(two, want) {
 			t.Errorf("the switcher is missing %q", want)
 		}
+	}
+	// M46: the current workspace is not one of the places you can go. The owner
+	// asked for it to leave on blind task 9, and workspace_label is what made
+	// that possible — see TestTheHeaderNamesWhereYouAreAtEveryMembershipCount.
+	if strings.Contains(two, `value="0198c9c5-0000-7000-8000-000000000010"`) {
+		t.Error("the switcher still offers the workspace you are already in; the " +
+			"header label is where the current workspace is named now, and a " +
+			"switcher lists the places you can move to")
+	}
+	// Something has to be displayed in the closed control, and it must not be
+	// another workspace's name: a select reading "Acme · Marketing" while you are
+	// in Owner · Default is the orientation defect this milestone is fixing.
+	if !strings.Contains(two, `<option value="" selected disabled>`) {
+		t.Error("the switcher has no selected placeholder, so its closed state " +
+			"displays whichever workspace happens to be first and reads as an answer " +
+			"to which one you are in")
 	}
 
 	one := renderPage(t, "dashboard", map[string]any{
@@ -72,6 +88,139 @@ func TestWorkspaceSwitcherAppearsOnlyWhenThereIsSomewhereToGo(t *testing.T) {
 	// to leak about which workspaces exist.
 	if out := renderPage(t, "login", nil); strings.Contains(out, form) {
 		t.Error("the sign-in page renders a workspace switcher")
+	}
+}
+
+// TestTheHeaderNamesWhereYouAreAtEveryMembershipCount is M46's first bullet, and
+// the case it is written for is the one that renders nothing today.
+//
+// Blind task 9 could not be completed: the owner could not confirm which
+// workspace they were acting in. With two memberships the switcher's selected
+// option was the only place the answer appeared anywhere in the shell, and with
+// one — which is every instance that exists — `{{if gt (len .Workspaces) 1}}`
+// drew no switcher, so the answer appeared nowhere at all.
+//
+// Both counts are asserted in one test because only the pair is meaningful. A
+// label that renders whenever the switcher does would pass a two-membership
+// check and still leave the single-membership case exactly as it was, which is
+// the case the candidate row was filed about.
+func TestTheHeaderNamesWhereYouAreAtEveryMembershipCount(t *testing.T) {
+	const switcher = `action="/workspace/switch"`
+
+	for _, tc := range []struct {
+		name       string
+		workspaces []map[string]any
+		wantSwitch bool
+	}{
+		{"one membership", twoWorkspaces()[:1], false},
+		{"two memberships", twoWorkspaces(), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := renderPage(t, "dashboard", map[string]any{"Workspaces": tc.workspaces})
+
+			header, _, ok := strings.Cut(body, "</header>")
+			if !ok {
+				t.Fatal("the page draws no header, so it names nothing")
+			}
+			// The organization and the workspace, both, and inside the header
+			// rather than anywhere on the page: the point is that the answer is
+			// on every page without going to look for it.
+			for _, want := range []string{"Owner", "Default"} {
+				if !strings.Contains(header, ">"+want+"</span>") {
+					t.Errorf("the header does not name %q; with %s the shell has to "+
+						"say which organization and which workspace this is",
+						want, tc.name)
+				}
+			}
+			if !strings.Contains(header, `<span class="sr-only">Current workspace:</span>`) {
+				t.Error("the two names are in the header with nothing saying what " +
+					"they are, so a screen reader gets an organization and a workspace " +
+					"and no reason to think they describe the current one")
+			}
+
+			// M25 is honoured, not reversed: what fills the one-membership gap is
+			// a label, never a dropdown with a single entry.
+			if got := strings.Contains(body, switcher); got != tc.wantSwitch {
+				t.Errorf("with %s the header draws switcher=%v, want %v; a control "+
+					"that cannot do anything stays absent (M25)", tc.name, got, tc.wantSwitch)
+			}
+		})
+	}
+
+	// An account that belongs to nothing has no workspace, and the label must not
+	// invent one — D36 made that a state somebody can legitimately be in.
+	none := renderPage(t, "organization_new", nil)
+	if strings.Contains(none, `<span class="sr-only">Current workspace:</span>`) {
+		t.Error("the header names a current workspace for an account that belongs " +
+			"to no organization")
+	}
+}
+
+// TestTheHeaderCannotPushThePageSideways is the shell half of M46's
+// no-horizontal-scroll bullet.
+//
+// Round two: the "page needs to be scrolled to the side to see anything past
+// half of the workspace switcher". The cause is not one wide element — it is
+// that a flex item refuses by default to shrink below its own content, so one
+// long organization name widens the bar, the bar widens the document, and every
+// page on the instance scrolls sideways at once.
+//
+// Asserted as classes rather than as pixels, in the idiom of M24.5's template
+// scan, because the alternative is a browser in the unit-test path. The pixel
+// claim is checked separately and by hand; what this holds is the property that
+// makes it true, so a later edit that drops `min-w-0` from the group fails here
+// instead of failing on somebody's phone.
+func TestTheHeaderCannotPushThePageSideways(t *testing.T) {
+	body := renderPage(t, "dashboard", nil)
+
+	bar := regexp.MustCompile(`(?s)<nav\b[^>]*>`).FindString(body)
+	if bar == "" {
+		t.Fatal("the page draws no header bar")
+	}
+	// Two lines below `sm`, one above it. Nothing narrower than 640px fits the
+	// logo, the destinations, the label, the switcher, the bell and the identity
+	// control on one line, and a row that cannot fit either wraps or overflows.
+	if !hasClass(bar, "flex-wrap") {
+		t.Errorf("the header bar does not wrap: %s", bar)
+	}
+	if !hasClass(bar, "sm:flex-nowrap") {
+		t.Errorf("the header bar wraps at every width, so the panel geometry "+
+			"written against h-14 is wrong above `sm`: %s", bar)
+	}
+
+	group := regexp.MustCompile(`(?s)<div class="ml-auto[^"]*"`).FindString(body)
+	if group == "" {
+		t.Fatal("the header has no right-hand group")
+	}
+	if !strings.Contains(group, " min-w-0") {
+		t.Errorf("the header's right-hand group cannot shrink, so the longest "+
+			"name in it sets the width of every page: %s", group)
+	}
+
+	// The two unbounded strings in the bar. Everything else in it is a fixed
+	// glyph or a word this repository chose. The label is matched whole rather
+	// than as its opening tag, because the shrink is on the wrapper and the
+	// ellipsis is on the two names inside it.
+	label := regexp.MustCompile(`(?s)<p class="flex min-w-0[^"]*" title="[^"]*">.*?</p>`).FindString(body)
+	if label == "" {
+		t.Fatal("the workspace label is not in the header, or it no longer carries " +
+			"min-w-0 on its wrapper")
+	}
+	sel := regexp.MustCompile(`(?s)<select name="workspace_id"[^>]*>`).FindString(body)
+	if sel == "" {
+		t.Fatal("the workspace switcher is not in the header")
+	}
+	for _, el := range []struct{ what, tag string }{
+		{"workspace label", label},
+		{"workspace switcher", sel},
+	} {
+		if !strings.Contains(el.tag, "min-w-0") {
+			t.Errorf("the %s will not shrink below its text: %s", el.what, el.tag)
+		}
+		if !strings.Contains(el.tag, "truncate") {
+			t.Errorf("the %s does not truncate, so shrinking it clips rather than "+
+				"ellipsises and the name reads as cut off: %s", el.what, el.tag)
+		}
 	}
 }
 

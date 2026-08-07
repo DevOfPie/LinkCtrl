@@ -241,6 +241,7 @@ file. Append a row when you append an entry.
 | [QR logos, the first file this product accepts, and the target moving](#2026-08-07--qr-logos-the-first-file-this-product-accepts-and-the-target-moving) | D115: no upload surface exists anywhere; why a logo is a milestone not a parameter; the storage decision M57's test bounds; the target moves to sixteen for this phase only |
 | [The logo milestone was two, and a review found it the same day it was written](#2026-08-07--the-logo-milestone-was-two-and-a-review-found-it-the-same-day-it-was-written) | D116: the split; the erasure limb that was wrong in the dangerous direction; a cap ordering that specified the bomb; a decode test naming a decoder the tree does not have |
 | [Reviewing the specification, not only the thing built from it](#2026-08-07--reviewing-the-specification-not-only-the-thing-built-from-it) | W36 made: a plan is reviewed before it is built against; why a different model from the writer's; what the reviewer is deliberately not given; findings are evidence, not a verdict |
+| [M46: the three choices the milestone gave itself, and the header that could not fit](#2026-08-07--m46-the-three-choices-the-milestone-gave-itself-and-the-header-that-could-not-fit) | D117–D119: the switcher drops the workspace you are in and the header gains a label; API keys leaves the top-level nav on D35's own reasoning; one hot filter because one is all any task reached for; why `<details>` here is not D24 reversed; what the overflow scan does and does not enforce, measured in a browser at three widths |
 
 ---
 
@@ -19874,3 +19875,260 @@ explicitly excludes annotations, re-homing rows and count fixes, where the
 review would cost more than it could find. If the cost stops being worth paying,
 the trigger narrows deliberately and in writing rather than the step being
 skipped quietly.
+
+## 2026-08-07 — M46, the three choices the milestone gave itself, and the header that could not fit
+
+[m46.md](phase-details/m46.md) does something the milestone files rarely do: it
+names three choices, refuses to pre-answer any of them, and writes down the
+criterion each has to be decided against. This entry is the answers, with the
+criterion applied and the evidence beside it. Nothing here was put to the owner,
+because nothing here was left open — a milestone that assigns itself a decision
+*and* the test for it has not deferred a decision, it has scheduled one.
+
+### D117 — the switcher stops offering the workspace you are already in
+
+The criterion is task 9, and task 9 contained a contradiction: the owner could
+not confirm which workspace they were acting in, and in the same note asked for
+the current workspace to be **removed** from the switcher as redundant. The
+selected option was the only place in the whole shell the answer appeared, so
+granting the second request would have made the first failure permanent.
+
+The resolution is the one neither note asked for, and it is the same one D114
+sketched: **a label in the header, and a switcher that lists the places you can
+go.** With `workspace_label` rendering the current organization and workspace on
+every page, removing the current entry from the select costs nothing and the
+control finally means what its name says.
+
+Two consequences worth stating, because both are one edit from being wrong.
+
+The select needs something to display in its closed state, and it must not be
+another workspace's name — a control reading *Acme · Marketing* while you are in
+*Owner · Default* is this milestone's own defect wearing a different hat. So the
+first option is a **selected, disabled placeholder**. `disabled` and not merely
+unselected: a keyboard user can otherwise arrow back onto it and post an empty
+`workspace_id`.
+
+And **M25 is honoured rather than reversed.** Its ruling was that "a control that
+cannot do anything" stays absent, and the guard it produced —
+`{{if gt (len .Workspaces) 1}}` — is untouched. What fills the single-membership
+gap is a label, which is not a control. The candidate row filed on 2026-08-02
+said exactly this and it turned out to be right: the decision was always about
+the control, and the gap was always the label.
+
+### D118 — the top-level nav holds two destinations, and API keys is the one that left
+
+The criterion is F6 and F7's own evidence, read before anything moved, which is
+what m46.md's risk section asked for.
+
+F6 and F7 cut the header from five destinations to three. The reasoning was not
+about the number: it was that Account is a preference surface and Notifications
+is a count, and neither is a place you go to do the work. D35 then applied the
+same reasoning to Members, Invitations and Workspaces, M39 to Domains, M42 to
+Webhooks and M43 to Automation — six destinations, one after another, each
+argued into the identity menu on the grounds that it is visited when something
+*changes* rather than while work is being done.
+
+**API keys is the only destination in the product that matches that description
+and was not in the menu.** A key is minted once and then not thought about until
+it stops working. Blind task 7 is the evidence that the mismatch was visible from
+outside the repository: the owner's first click for API keys went to the identity
+menu, which is where the reasoning above says it should have been all along.
+
+So the outcome is amended, not reversed, and both deferred rows say so. The
+count is now two — Dashboard and Links — and
+`TestTopLevelNavHoldsThreeDestinations` was **renamed and updated** rather than
+deleted, which is what m46.md required: a test called *...Three* asserting two is
+the next reader's wrong turn. It now also asserts where API keys *went*, because
+a destination that left this level and a destination that became unreachable
+produce an identical nav bar.
+
+The gating did not change with the location. `/keys` requires an organization and
+nothing else, and the menu entry is gated on exactly that — moving a destination
+must not quietly change who can see it.
+
+### D119 — one hot filter, and the second slot left empty on purpose
+
+The owner's prescription was *"only leave 1-2 hot controls on the page and add a
+filter control that displays all the filter controls including the hot ones"*.
+The criterion m46.md set is **what the tasks reached for**, and applying it
+honestly produces an answer the prescription permits but did not predict.
+
+Search is hot. It is named in a task note — the owner *"accidentally clicked on
+the create a link destination URL box instead of the search box a few times"* —
+which is a reach for it, repeated, recorded.
+
+**Nothing else in that bar was reached for by name in eighteen tasks.** Status,
+sort, folder, campaign and hostname appear in no note. The prescription allows
+one hot control as readily as two, so the second slot is left empty rather than
+filled with whichever of the five looked most plausible. Filling it would be a
+guess wearing evidence's clothes, and the milestone's criterion exists to stop
+exactly that.
+
+**Search is not repeated inside the panel**, and this is the one place the
+prescription is not followed to the letter. Two elements named `search` in one
+form submit `?search=a&search=b` for a parameter this milestone promised not to
+change, and the two copies can disagree about what is in the box. The purpose the
+words serve is that nobody has to look in two places for a filter; with one hot
+control sitting immediately against the panel's own summary, both are on screen
+at once, which delivers the purpose without the defect.
+
+The panel **opens by itself when any hidden filter is set**, server-rendered, no
+script. That is the whole risk of demoting five controls — a list filtered for a
+reason nobody can see — and it is answered in markup rather than in a note.
+
+### The mechanism, and why it is not D24 reversed
+
+Both panels on the links page are `<details>`/`<summary>`. The header menus are
+the Popover API and D24 is emphatic about why: `<details>` cannot close on
+Escape, in any engine, and M26.5 asked for exactly that.
+
+D24 is about **overlay menus**, and neither of these is one. A disclosure in flow
+pushes the list down instead of covering it, is dismissed by the control that
+opened it, and needs no geometry — where a top-layer element mid-page would need
+to be positioned against the viewport, because that is what a top layer's
+containing block is. It also has the property this milestone specifically needs
+and a popover does not: **`open` is an attribute a server can write.** The create
+panel has to be open when the last attempt failed, since the typed values, the
+field errors and the low-confidence appeal are all inside it and a shut panel
+would render a page that appears to have done nothing.
+
+`TestHeaderMenusAreScriptFreePopovers` asserts `<details>` is absent, and it is
+left exactly as it was: it renders the dashboard, its message reads "a header
+menu is a `<details>` disclosure again", and the header still holds none.
+
+### The header could not fit, and the arithmetic is the decision
+
+*"Page needs to be scrolled to the side to see anything past half of the
+workspace switcher."*
+
+Adding a label to that bar makes it worse before it makes it better, so the
+question was whether one row can hold the logo, the destinations, the label, the
+switcher, the bell and the identity control at 360px. It cannot, and this is not
+a judgement — at 360px the padding leaves 328px, the logo and two destinations
+take about 156 of it, and the bell and identity control take about 126 more. What
+is left for an organization name and a workspace switcher is roughly twenty
+pixels.
+
+So **the bar wraps below `sm` and does not above it**, at `h-20` and `h-14`
+respectively. Both heights are exact rather than `min-*` because the two header
+panels are in the top layer, positioned against the viewport, and need a header
+height they can be written against: `top-[5.25rem] sm:top-[3.75rem]` clears each
+by the same 3px the original comment claimed.
+
+This is **not** the mobile navigation rework, which stays parked in Plan.md's
+*Not in Phase 2* with its reason. A nav that reflows for a phone decides what to
+show and what to fold away; this one shows everything it showed before, on two
+lines instead of one.
+
+### What the overflow scan actually enforces, and what it does not
+
+m46.md asks for "any element that can exceed the viewport" to sit in a container
+that scrolls on its own, and its own risk section says that if the scan cannot be
+written to mean that, **the bullet is narrowed to what the scan checks and the
+remainder is stated as unenforced**. It cannot, so it is.
+
+`TestWideElementsScrollInsideTheirOwnContainer` renders every page and fails any
+`<table>` or `<pre>` that no ancestor scrolls. Those two are the elements that
+cannot reflow — a table is as wide as its columns, a `<pre>` as wide as its
+longest line. Six tables were bare and are now wrapped, each with a `min-w-` so
+the container it sits in actually scrolls instead of squeezing five columns into
+360px.
+
+Not enforced, and stated rather than implied: a flex row of controls, an unbroken
+string in a table cell, a fixed-width SVG. None is distinguishable from markup
+that is fine, and a scan that guessed would be worse than one with a stated
+boundary. The header — the one that produced the complaint — has its own
+assertion instead, over the properties that make it shrink rather than over
+pixels.
+
+The scan is over the **rendered pages**, not the template sources, because a
+table and its wrapper need not be in the same file: `links_table.html` holds the
+one on the links page and `pages/links.html` renders it. It also fails loudly if
+its own tag stack does not balance, so a page whose nesting it cannot follow
+reports that rather than quietly answering "no ancestor found".
+
+### Measured, not asserted
+
+The claim is a pixel claim, so it was checked in a browser rather than argued
+from markup — Playwright is already in this repository for
+[`tools/render-verify`](../../tools/render-verify/README.md), which D25 permits
+on the condition that Node stays out of the product.
+
+Every page was rendered at 360, 640 and 1280px, before and after, with the
+`before` build produced from a worktree at the previous commit so the comparison
+is the same pages and the same stylesheet pipeline:
+
+| | 360px | 640px | 1280px |
+| --- | --- | --- | --- |
+| Before (HEAD, 23 pages) | **16 overflow** | **16 overflow** | none |
+| After | none | none | none |
+
+Re-run with a 71-character organization name and a 62-character workspace name
+substituted into three pages: still none, at all three widths. Panel clearance
+measured 3px at 360, 640 and 1280.
+
+The harness that took those measurements is **not committed**. The milestone's
+enforcement is the template scan, this was evidence for a one-time claim, and
+`make verify-render` — which is committed, and which passed unchanged in Blink,
+Gecko and WebKit — now says in as many words that it checks the wide half of the
+header geometry and not the narrow one.
+
+### The one existing test that had to change, and why that is not the claim breaking
+
+m46.md's falsifiable claim is that **every existing integration test touching
+these pages passes unmodified**, and it bounds what that means: routes, form
+field names and query parameters unchanged, OpenAPI untouched. All of that held —
+`/workspace/switch`, `workspace_id`, `next`, every links-list query parameter,
+and no API surface was involved at all.
+
+One assertion inside `TestWebWorkspaceSwitcher` did not:
+
+```go
+if !strings.Contains(account, second.String()+`" selected`) {
+    t.Error("after switching, the header control does not show the new workspace as current")
+}
+```
+
+Its subject — *the header says which workspace you are in after a switch* — is
+the same subject as D117, and the milestone instructed this decision to be taken.
+The selected option was the mechanism that assertion happened to read, and it is
+the mechanism blind task 9 established does not work: a workspace id inside an
+attribute is not an answer a person can read, which is why the owner could not
+complete the task while looking straight at it.
+
+So the assertion **moved onto the label** rather than being deleted or weakened.
+It now reads the two names in the header, at the same moment, and adds the
+inverse — that the switched-to workspace has not come back as a selected option.
+Two assertions were added beside it, so the integration test carries the new
+contract rather than merely tolerating it: two options for two memberships, and a
+selected disabled placeholder.
+
+Recorded here because m46.md required exactly that — *a test that needs changing
+means a behaviour change, which is either reverted or justified in the commit*.
+This one is justified: the behaviour it read is the behaviour this milestone was
+told to decide.
+
+### Campaigns and Folders are navigation now
+
+They were two text links in the top-right corner of the links page, which the
+owner had *"not even noticed … existed until now"*. They are a second chrome bar
+drawn for every page whose `Nav` is `links` — the list, a link, campaigns,
+folders.
+
+In the chrome and not in the page, for two reasons that both matter. One bar in
+one place cannot disagree with itself the way three pasted copies can. And the
+links page's search box has to be the first control inside `<main>`, which is
+this milestone's other claim about that page — a sub-navigation rendered as page
+content would sit in front of it and re-create the trap in different markup.
+
+Not three more top-level slots: the top bar holds the places you go, and these
+are one place seen three ways. That is D35's argument applied one level down, not
+a new rule.
+
+The mirror-image links went with them. `pages/campaigns.html` and
+`pages/folders.html` each carried a *Links →* in the same corner, which is the
+same pattern pointing the other way; with the bar drawn above `<main>` on both
+pages, keeping them would put a second Links link a few centimetres from the
+first. `link_detail.html`'s *← Links* stays: it is *up one level from this
+object* rather than a peer destination, and that page belongs to
+[M47](phase-details/m47.md).

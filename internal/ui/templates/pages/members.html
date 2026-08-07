@@ -60,60 +60,62 @@
 
 <div class="rounded-lg border border-line bg-raised p-6">
   <h2 class="mb-4 text-sm font-medium text-ink">Memberships</h2>
-  <table class="w-full text-sm">
-    <thead>
-      <tr class="border-b border-line text-left text-xs uppercase tracking-wide text-subtle">
-        <th class="py-2 pr-4 font-medium">Person</th>
-        <th class="py-2 pr-4 font-medium">Role</th>
-        <th class="py-2 pr-4 font-medium">Reaches</th>
-        <th class="py-2 pr-4 font-medium">Since</th>
-        <th class="py-2 font-medium"></th>
-      </tr>
-    </thead>
-    <tbody>
-      {{range .Members}}
-      <tr class="border-b border-line">
-        <td class="py-3 pr-4">
-          <span class="font-medium">{{.Email}}</span>
-          {{if .IsSelf}}<span class="ml-1 text-xs text-subtle">(you)</span>{{end}}
-          {{if .Name}}<span class="block text-xs text-subtle">{{.Name}}</span>{{end}}
-        </td>
-        <td class="py-3 pr-4">
-          {{if $.CanWrite}}{{if .Manageable}}
-          {{/* The select and its button are one form per row. A change handler
-               would need script, and the CSP forbids inline script for reasons
-               a convenience does not outweigh — the same trade the workspace
-               switcher makes. */}}
-          <form method="post" action="/members/{{.ID}}/role" class="flex items-center gap-1">
-            <select name="role" aria-label="Role for {{.Email}}"
-                    class="rounded-md border border-line-strong bg-raised px-2 py-1 text-sm text-ink">
-              {{$current := .Role}}
-              {{range $.RoleOptions}}
-              <option value="{{.Slug}}"{{if eq $current .Slug}} selected{{end}}>{{.Name}}</option>
-              {{end}}
-            </select>
-            <button type="submit" class="rounded-md px-2 py-1 text-sm text-muted hover:bg-sunken hover:text-ink">Change</button>
-          </form>
-          {{else}}<span class="text-muted">{{.Role}}</span>{{end}}
-          {{else}}<span class="text-muted">{{.Role}}</span>{{end}}
-        </td>
-        <td class="py-3 pr-4 text-muted">
-          {{if .WorkspaceID}}{{if .WorkspaceName}}{{.WorkspaceName}}{{else}}one workspace{{end}}{{else}}every workspace{{end}}
-        </td>
-        <td class="py-3 pr-4 text-muted">{{.CreatedAt.Format "2 Jan 2006"}}</td>
-        <td class="py-3 text-right">
-          {{if and $.CanWrite .Manageable}}
-          {{/* hx-post so hx-confirm is honoured; see the note in link_detail.html. */}}
-          <form method="post" action="/members/{{.ID}}/remove"
-                hx-post="/members/{{.ID}}/remove"
-                hx-confirm="Remove {{.Email}}? Their account and links stay; only this membership goes.">
-            <button type="submit" class="text-sm font-medium text-danger-ink hover:underline">Remove</button>
-          </form>
-          {{end}}
-        </td>
-      </tr>
-      {{end}}
-    </tbody>
-  </table>
+  <div class="overflow-x-auto">
+    <table class="w-full min-w-[40rem] text-sm">
+      <thead>
+        <tr class="border-b border-line text-left text-xs uppercase tracking-wide text-subtle">
+          <th class="py-2 pr-4 font-medium">Person</th>
+          <th class="py-2 pr-4 font-medium">Role</th>
+          <th class="py-2 pr-4 font-medium">Reaches</th>
+          <th class="py-2 pr-4 font-medium">Since</th>
+          <th class="py-2 font-medium"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Members}}
+        <tr class="border-b border-line">
+          <td class="py-3 pr-4">
+            <span class="font-medium">{{.Email}}</span>
+            {{if .IsSelf}}<span class="ml-1 text-xs text-subtle">(you)</span>{{end}}
+            {{if .Name}}<span class="block text-xs text-subtle">{{.Name}}</span>{{end}}
+          </td>
+          <td class="py-3 pr-4">
+            {{if $.CanWrite}}{{if .Manageable}}
+            {{/* The select and its button are one form per row. A change handler
+                 would need script, and the CSP forbids inline script for reasons
+                 a convenience does not outweigh — the same trade the workspace
+                 switcher makes. */}}
+            <form method="post" action="/members/{{.ID}}/role" class="flex items-center gap-1">
+              <select name="role" aria-label="Role for {{.Email}}"
+                      class="rounded-md border border-line-strong bg-raised px-2 py-1 text-sm text-ink">
+                {{$current := .Role}}
+                {{range $.RoleOptions}}
+                <option value="{{.Slug}}"{{if eq $current .Slug}} selected{{end}}>{{.Name}}</option>
+                {{end}}
+              </select>
+              <button type="submit" class="rounded-md px-2 py-1 text-sm text-muted hover:bg-sunken hover:text-ink">Change</button>
+            </form>
+            {{else}}<span class="text-muted">{{.Role}}</span>{{end}}
+            {{else}}<span class="text-muted">{{.Role}}</span>{{end}}
+          </td>
+          <td class="py-3 pr-4 text-muted">
+            {{if .WorkspaceID}}{{if .WorkspaceName}}{{.WorkspaceName}}{{else}}one workspace{{end}}{{else}}every workspace{{end}}
+          </td>
+          <td class="py-3 pr-4 text-muted">{{.CreatedAt.Format "2 Jan 2006"}}</td>
+          <td class="py-3 text-right">
+            {{if and $.CanWrite .Manageable}}
+            {{/* hx-post so hx-confirm is honoured; see the note in link_detail.html. */}}
+            <form method="post" action="/members/{{.ID}}/remove"
+                  hx-post="/members/{{.ID}}/remove"
+                  hx-confirm="Remove {{.Email}}? Their account and links stay; only this membership goes.">
+              <button type="submit" class="text-sm font-medium text-danger-ink hover:underline">Remove</button>
+            </form>
+            {{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
 </div>
 {{end}}

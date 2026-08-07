@@ -753,16 +753,48 @@ func TestWebWorkspaceSwitcher(t *testing.T) {
 	if !strings.Contains(switcher, `name="next"`) {
 		t.Error("the switcher no longer carries the path it was submitted from")
 	}
+	// **It offers the places you can go, and not the one you are in** (M46, D117).
+	// Two memberships, so two options: the selected placeholder the closed control
+	// displays, and the other workspace. A third would be the current one back in
+	// the list, and the count says so without needing its id.
+	if got := strings.Count(switcher, "<option "); got != 2 {
+		t.Errorf("the switcher renders %d options for two memberships, want 2 — a "+
+			"disabled placeholder and the workspace you are not in; the current one "+
+			"is named by the header label instead", got)
+	}
+	if !strings.Contains(switcher, `<option value="" selected disabled>`) {
+		t.Error("the switcher has no selected placeholder, so its closed state " +
+			"displays another workspace's name while you are not in it")
+	}
 
 	// Switching returns to the page it was posted from.
 	f.wantRedirect(f.postForm("/workspace/switch", url.Values{
 		"workspace_id": {second.String()}, "next": {"/links"},
 	}, nil), "/links")
 
-	// And the account page now shows the switched-to workspace as current.
+	// **And the header now says where you are** — the assertion this milestone
+	// moved rather than dropped (M46, D117).
+	//
+	// It read `second.String()+'" selected'`: the switcher's selected option was
+	// the only place the current workspace appeared anywhere in the shell, which
+	// is exactly why blind task 9 could not be completed — an id in an attribute
+	// is not an answer a person reads. The current workspace is now a label, so
+	// the assertion is on the names a person actually sees, at the one moment it
+	// has to be right.
 	account := f.body(f.get("/account", nil))
-	if !strings.Contains(account, second.String()+`" selected`) {
-		t.Error("after switching, the header control does not show the new workspace as current")
+	header, _, ok := strings.Cut(account, "</header>")
+	if !ok {
+		t.Fatal("the page draws no header")
+	}
+	for _, want := range []string{">Acme</span>", ">Marketing</span>"} {
+		if !strings.Contains(header, want) {
+			t.Errorf("after switching, the header does not name %q; it is the only "+
+				"place a person can read which workspace they are acting in", want)
+		}
+	}
+	if strings.Contains(header, second.String()+`" selected`) {
+		t.Error("the switcher offers the switched-to workspace as its selected " +
+			"option again, which is the state D117 removed")
 	}
 
 	// The default-workspace control pins it.

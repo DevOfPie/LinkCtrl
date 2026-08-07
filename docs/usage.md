@@ -12,7 +12,7 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 | Page | What it does |
 | --- | --- |
 | `/dashboard` | 30-day totals, clicks-per-day chart, your five newest links. |
-| `/links` | Create a link; search, filter by status, sort; page through with a cursor. The search box filters as you type and updates the address bar, so a reload or a shared URL shows the same view. |
+| `/links` | Search the list; filter by status, folder, campaign or hostname; sort; create a link; page through with a cursor. The search box is the first control on the page, filters as you type and updates the address bar, so a reload or a shared URL shows the same view. Everything except search is behind **Filters**, and creating a link is behind **Create a link** — see [The links list](#the-links-list). |
 | `/links/{id}` | Everything about one link: edit destination, alias, title, description, expiry and tags; per-window analytics (7/30/90 days) with device, browser, OS, referrer, language and country breakdowns, each with a share ring, plus a world choropleth over the country figures; recent activity; archive, restore and delete. |
 | `/keys` | Mint, list and revoke API keys, and choose whether a new one reaches one workspace or the organization. Rotation is not here: it replaces the credential that made the request, and a browser session is not one. |
 | `/notifications` | Things the instance wanted you to know about, and mark-read. |
@@ -35,9 +35,14 @@ instead of reloading, and that is the only thing it is used for.
 
 ### The header
 
-Three destinations at the top level — Dashboard, Links, API keys — and on the
-right, in order: the workspace switcher, a notification bell and your email
-address.
+Two destinations at the top level — **Dashboard** and **Links** — and on the
+right, in order: the workspace you are in, the switcher, a notification bell and
+your email address. Below `sm` the bar is two lines rather than one, so nothing
+is dropped on a phone and no page scrolls sideways.
+
+**API keys was a third destination up here** and is now in the identity menu,
+with the administrative surfaces. A key is minted once and then not thought
+about; the top level is for where work happens.
 
 The **bell** carries the unread count and, opened, shows the newest few unread
 notifications with a **View all** link to `/notifications`, which is still the
@@ -55,11 +60,12 @@ The preview is deliberately
 short, and nothing is only reachable through it.
 
 Your **email address** opens a menu holding the administrative surfaces —
-**Members**, **Invitations**, **Workspaces** and **Blocked destinations**, each
-shown only if you hold the permission its page needs — plus **Reputation
-feeds**, **Account** and **Sign out**. They live here
-rather than at the top level because each is visited when something *changes*,
-where the three top-level destinations are where work happens.
+**Members**, **Invitations**, **Workspaces**, **Domains**, **Blocked
+destinations**, **Webhooks** and **Automation**, each shown only if you hold the
+permission its page needs — plus **API keys**, **Reputation feeds**, **Account**
+and **Sign out**. They live here rather than at the top level because each is
+visited when something *changes*, where the two top-level destinations are where
+work happens.
 
 **Reputation feeds** is the one entry gated on no permission at all, and
 deliberately so: it says whether the destinations *you* type leave this instance
@@ -94,6 +100,32 @@ sitting at each of them chose. It is also why it works before you sign in.
 There is no flash of the wrong theme while a page loads. The server reads the
 cookie and renders the theme into the page it sends, so the first paint is
 already correct — there is no script to run and nothing to correct.
+
+### The links list
+
+The page opens on the list, and the **search box is the first control on it** —
+it filters as you type and pushes the result into the address bar, so a reload or
+a shared URL shows the same view.
+
+Everything else that narrows the list lives behind **Filters**: status, folder,
+campaign, hostname and sort order. Folder, campaign and hostname appear only when
+the workspace has any of those, because a select whose only option is *All* is a
+control that can do nothing. **The panel opens by itself whenever one of those
+filters is set**, so a list is never narrowed for a reason you cannot see, and
+none of the query parameters changed when the controls moved — `?status=`,
+`?folder=`, `?campaign=`, `?domain=`, `?sort=` and `?search=` are what they
+always were.
+
+**Create a link** is a panel too, directly under the filters and one click from
+anywhere on the page. It opens on its own when a creation was refused, carrying
+what you typed, the reason and — where the refusal was a rule that can be
+wrong — the button that asks for a review.
+
+*Campaigns* and *Folders* are a second bar under the header, on every page of the
+links area rather than only on this one.
+
+With JavaScript off, the **Filter** button beside the search box applies every
+control at once, including the ones inside the panel.
 
 ### Creating a link
 
@@ -1114,12 +1146,17 @@ public instance, open sign-ups are the largest abuse surface there is.
 
 Every request acts in exactly one workspace. With one membership — which is
 every account that has not accepted an invitation — there is nothing to choose
-and the dashboard shows no switcher at all.
+and the dashboard shows no switcher at all. It still says where you are: the
+header names the current organization and workspace whether or not there is
+anywhere to switch to.
 
-Once there is more than one, a control appears in the header. Switching moves
-*that browser*, immediately and for the rest of the session, so two windows can
-sit in two workspaces. It is also remembered: the next time you sign in, you
-start where you last were.
+Once there is more than one, a control appears in the header. It lists the
+workspaces you can move to and **not** the one you are already in — that one is
+named beside it, as *organization · workspace*, which is the label that appears
+at every membership count including one. Switching moves *that browser*,
+immediately and for the rest of the session, so two windows can sit in two
+workspaces. It is also remembered: the next time you sign in, you start where
+you last were.
 
 *Account* → **Default workspace** overrides that. **Last-Used** is the first
 option and the one every account is on; picking a workspace instead pins it, and

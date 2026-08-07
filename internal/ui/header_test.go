@@ -104,19 +104,29 @@ func TestExactlyOneIdentityMenuAndBellPerPage(t *testing.T) {
 // the top-level nav, plus the logo, which links to the dashboard too.
 var headerHrefs = regexp.MustCompile(`href="(/[^"]*)"`)
 
-// TestTopLevelNavHoldsThreeDestinations is F6 and F7's visible outcome.
+// TestTopLevelNavHoldsTwoDestinations is F6 and F7's visible outcome, as M46
+// amended it.
 //
 // Account is a preference surface and Notifications is a count; neither is a
-// place you go to do the work, and both spent a slot competing with the three
+// place you go to do the work, and both spent a slot competing with the ones
 // that are. The count is asserted rather than the absences, because "Account is
 // gone" would still pass if it had been replaced by something else that does not
-// belong at this level — and four milestones are queued behind this one, each
+// belong at this level — and milestones keep queueing up behind this one, each
 // wanting a slot.
-func TestTopLevelNavHoldsThreeDestinations(t *testing.T) {
+//
+// **It held three until M46, and API keys is the one that left.** Blind task 7's
+// first click went to the identity menu looking for it, which is the evidence
+// D35 asked a milestone to bring before moving anything at this level: a
+// top-level slot is for where work is done, and a key is minted once and then
+// not thought about. The assertion is renamed with the count rather than deleted
+// — the count is the point of it, and a test called ...Three asserting two would
+// be the next reader's wrong turn.
+func TestTopLevelNavHoldsTwoDestinations(t *testing.T) {
 	body := renderPage(t, "dashboard", nil)
 
-	// The right-hand group is where the switcher, the bell and the identity menu
-	// live. What sits between the opening <nav> and it is the top-level nav.
+	// The right-hand group is where the label, the switcher, the bell and the
+	// identity menu live. What sits between the opening <nav> and it is the
+	// top-level nav.
 	_, nav, opened := strings.Cut(body, "<nav ")
 	nav, _, found := strings.Cut(nav, `<div class="ml-auto`)
 	if !opened || !found {
@@ -128,7 +138,7 @@ func TestTopLevelNavHoldsThreeDestinations(t *testing.T) {
 	for _, m := range headerHrefs.FindAllStringSubmatch(nav, -1) {
 		got = append(got, m[1])
 	}
-	want := []string{"/dashboard", "/dashboard", "/links", "/keys"}
+	want := []string{"/dashboard", "/dashboard", "/links"}
 
 	if len(got) != len(want) {
 		t.Fatalf("the top-level nav links to %v, want %v (the first is the logo)", got, want)
@@ -137,6 +147,19 @@ func TestTopLevelNavHoldsThreeDestinations(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("the top-level nav links to %v, want %v", got, want)
 		}
+	}
+
+	// Where API keys went. A destination that left this level and a destination
+	// that became unreachable produce the same nav, so the move is asserted at
+	// its other end too.
+	at := strings.Index(body, `<a href="/keys"`)
+	if at < 0 {
+		t.Fatal("API keys is reachable from nowhere in the shell; it left the " +
+			"top-level nav and nothing caught it")
+	}
+	if menu := strings.Index(body, `id="linkctrl-identity-menu"`); menu < 0 || at < menu {
+		t.Error("API keys is not inside the identity menu, which is where blind " +
+			"task 7's first click went looking for it")
 	}
 }
 

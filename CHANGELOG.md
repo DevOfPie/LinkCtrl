@@ -25,7 +25,51 @@ migrations run at boot.
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- **The dashboard shell says where you are, at every membership count.** The
+  header now names the current organization and workspace on every page. With one
+  membership — which is every account that has not accepted an invitation — the
+  shell previously named neither: the workspace switcher is drawn only when there
+  is somewhere to switch to, and the workspace's name appeared nowhere else. An
+  owner given the task *"confirm which workspace you are in"* could not complete
+  it.
+
+  The switcher itself now offers **the workspaces you can move to and not the one
+  you are already in**, with the current workspace named beside it instead. It
+  still does not appear at all with a single membership: a dropdown with one
+  entry is a control that cannot do anything, and what fills that gap is a label.
+
+- **API keys moved from the top-level navigation into the identity menu.** Two
+  destinations remain up there, Dashboard and Links. Nothing changed about who
+  can reach `/keys` or what it does; a key is minted once and then not thought
+  about, which is the same reason Members, Domains, Webhooks and Automation are
+  in that menu, and the first place an owner looked for it.
+
+- **Campaigns and Folders are navigation.** They were two text links in the
+  corner of the links page and are now a bar under the header, on every page of
+  the links area.
+
+- **The links list stops trapping the first click.** The search box is the first
+  control on the page. The *Create a link* form sat above it, so the first text
+  box on a page whose subject is a list was the one that made a new link — it is
+  now a panel one click away, directly under the filters, that opens on its own
+  when a creation was refused so the reason and what you typed are still there.
+
+  Five of the six filter controls — status, folder, campaign, hostname and sort —
+  are behind one **Filters** panel, which opens by itself whenever any of them is
+  set. Search stays on the page. **No route, form field or query parameter
+  changed**, and the no-JavaScript submit still applies every filter at once.
+
+### Fixed
+
+- **No dashboard page scrolls sideways on a phone.** At 360px, sixteen of the
+  twenty-three pages did: the header could not fit the workspace switcher on one
+  line and dragged every page with it, and six tables were as wide as their
+  columns with nothing to scroll them. The header is two lines below the `sm`
+  breakpoint and every table now scrolls inside its own box. Measured in Chromium
+  at 360, 640 and 1280px, before and after, and held by a test that renders every
+  page and fails any `<table>` or `<pre>` that nothing scrolls.
 
 ## [0.2.0] - 2026-08-06
 

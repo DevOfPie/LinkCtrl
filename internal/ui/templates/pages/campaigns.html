@@ -1,7 +1,10 @@
 {{define "content"}}
-<div class="mb-6 flex items-baseline justify-between">
+{{/* The way back to the list was a text link here, mirroring the two this
+     page and the campaign page were reachable by. M46 made all three the
+     links-area bar the layout draws above <main>, so this one would now be a
+     second Links link three centimetres from the first. */}}
+<div class="mb-6">
   <h1 class="text-xl font-semibold tracking-tight">Campaigns</h1>
-  <a href="/links" class="text-sm font-medium text-accent-ink hover:underline">Links →</a>
 </div>
 
 {{template "campaign_panel" .}}

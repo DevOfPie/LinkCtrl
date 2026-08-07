@@ -151,8 +151,14 @@ async function topLayerIgnoresAncestor(page, ctx) {
   return { detail: detail.join("; "), fails };
 }
 
-// "top-[3.75rem]  the bar is h-14 (3.5rem) plus a 1px border, so this clears it
+// "the bar is h-14 (3.5rem) plus a 1px border from `sm` up, so 3.75rem clears it
 // by 3px and the panel reads as hanging off the header."
+//
+// At 1440px, which is the `sm`-and-up half of that sentence. M46 made the bar
+// wrap to two lines below `sm` and gave the panels `top-[5.25rem]` to match; the
+// narrow half is **not** checked here, and saying so is the point of this
+// paragraph. It was measured by hand at 360px on the day — bar 81px, panel top
+// 84px, the same 3px — and nothing in this file re-measures it.
 async function verticalPosition(page, ctx) {
   const fails = [];
   const detail = [];

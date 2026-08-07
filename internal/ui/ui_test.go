@@ -140,6 +140,20 @@ func pageData(t *testing.T) map[string]any {
 			"NextURL": "/links?cursor=abc",
 			"Total":   func() *int64 { n := int64(1); return &n }(),
 			"Search":  "demo", "Status": "", "Sort": "newest", "Filtered": true,
+			// The three conditional filters, each drawn only when the workspace
+			// has any of that thing. Populated here so every control in M46's
+			// filter panel renders on every run: without them the panel held two
+			// selects, and the milestone's claim is about what happens to six.
+			"Folder": "", "Campaign": "", "Domain": "",
+			"FolderOptions": []map[string]any{
+				{"ID": "0198c9c5-0000-7000-8000-000000000041", "Label": "‒ Summer", "Selected": false},
+			},
+			"CampaignOptions": []map[string]any{
+				{"ID": "0198c9c5-0000-7000-8000-000000000050", "Label": "Summer 2026", "Selected": false},
+			},
+			"DomainOptions": []map[string]any{
+				{"ID": "0198c9c5-0000-7000-8000-000000000051", "Hostname": "go.example.com", "Selected": false},
+			},
 			"Form":        map[string]string{"URL": "", "Alias": ""},
 			"FieldErrors": map[string]string{"url": "bad"},
 			// The appeal affordance, drawn only after a low-confidence refusal.
@@ -753,6 +767,22 @@ func pageData(t *testing.T) map[string]any {
 	organizationNew, _ := data["organization_new"].(map[string]any)
 	organizationNew["HasOrganization"] = false
 	organizationNew["Workspaces"] = []map[string]any{}
+
+	// The links area's own bar reads .Path for its active entry (M46), and the
+	// loop above gives every page /dashboard. Left at that, all four links pages
+	// would render the bar with nothing current — which renders fine and asserts
+	// nothing, so the fixture carries the path each page is actually served at.
+	// /links/{id} collapses to /links on the shell (switchTarget), which is also
+	// the right answer for this bar: a link's page is inside Links.
+	for page, path := range map[string]string{
+		"links":       "/links",
+		"link_detail": "/links",
+		"campaigns":   "/campaigns",
+		"folders":     "/folders",
+	} {
+		m, _ := data[page].(map[string]any)
+		m["Path"] = path
+	}
 	return data
 }
 
