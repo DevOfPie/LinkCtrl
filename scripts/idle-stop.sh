@@ -5,7 +5,7 @@
 # The test instance is disposable and spends most of its life doing nothing,
 # which on a laptop is three containers' worth of memory and a Postgres holding
 # its shared buffers. This is run by a systemd timer every few minutes; see
-# docs/dev-notes/instances.md and the unit in docs/dev-notes/wsl2-environment.md.
+# docs/dev-notes/instances.md and the unit in docs/dev-notes/environment.md.
 #
 # Usage: scripts/idle-stop.sh [instance] [idle-minutes]
 #

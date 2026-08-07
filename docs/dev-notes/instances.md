@@ -8,6 +8,7 @@ and nothing done to one can reach the other.
 | --- | --- | --- |
 | For | Using the product between milestones | Building and breaking things |
 | Dashboard | <http://localhost:8080> | <http://localhost:8081> |
+| From anywhere else | <https://linkctrl-demo.devofpie.com> — see [the tunnel](#the-demo-is-also-reachable-from-off-the-host) | Not published |
 | Postgres / Redis | `55432` / `56379` | `55433` / `56380` |
 | Metrics (loopback) | `9090` | `9091` |
 | Restart policy | `unless-stopped` | `no` — see [when it stops](#when-the-test-instance-stops) |
@@ -203,6 +204,53 @@ A fresh demo has no user, and `lctl demo` needs one to own the data. Claim the
 instance at <http://localhost:8080> first — the setup form appears once and then
 disappears permanently — and run `make demo-update` again.
 
+## The demo is also reachable from off the host
+
+<https://linkctrl-demo.devofpie.com> serves the **demo** instance through a
+Cloudflare tunnel. It is the URL to use when the browser is not on the machine
+the containers run on, which is the normal case — the host is a development VM
+and the person looking at the demo usually is not sitting on it.
+
+**`localhost:8080` and that hostname are the same instance**, not two
+deployments. The chain, verified 2026-08-07 rather than assumed:
+
+| Link | How it is established |
+| --- | --- |
+| Hostname → port | `cloudflared` logs its ingress at startup: `linkctrl-demo.devofpie.com` → `http://localhost:8080`, everything else `http_status:404` |
+| Port → container | `linkctrl-demo-app-1` publishes `0.0.0.0:8080->8080` |
+| Container → what `make demo-update` rebuilds | that target runs `docker compose -p linkctrl-demo … --force-recreate`, and `linkctrl-demo` is the project those containers belong to |
+| Same database, not merely the same image | a demo link alias returns the identical `302` destination on both, and the test instance answers `404` for it |
+| Not the test instance | `/readyz` reports `"version": "demo"` through the tunnel and `"version": "test"` on `8081` |
+
+The tunnel is `linkctrl-tunnel.service`, a systemd unit on the host. Its
+contents are in
+[environment.md](environment.md#the-demo-tunnel) so a rebuild
+reproduces it, as with every other unit that carries a path or a credential.
+
+**Ingress is not in a file on this host.** The tunnel is token-managed, so which
+hostname maps to which local port is configured in the Cloudflare Zero Trust
+dashboard. `journalctl -u linkctrl-tunnel` is where the running configuration
+can actually be read, and it is the only local source of truth for it:
+
+```sh
+journalctl -u linkctrl-tunnel | grep 'Updated to new configuration'
+```
+
+Two consequences worth knowing before debugging:
+
+- **The test instance is not published and must not be.** The ingress has a
+  single hostname and a catch-all `404`; adding `8081` would put a stack that
+  gets `make rebuild` and load generators pointed at it on the public internet.
+- **Absolute URLs the application generates still say `localhost`.** `.env.demo`
+  sets `LINKCTRL_BASE_URL=http://localhost:8080` and no `LINKCTRL_APP_BASE_URL`,
+  and `Config.AppOrigin` falls back to `BaseURL` when the second is unset — so
+  an invitation link (`internal/invite/invite.go:904-906`) or a freshly minted
+  signed link arrives pointing at a host the recipient cannot reach. Ordinary
+  navigation is unaffected, because the application's own redirects are
+  relative. This is a property of how the demo is configured rather than a
+  defect to hunt when somebody notices it; setting `LINKCTRL_APP_BASE_URL` to
+  the tunnel hostname is what would change it.
+
 ## When the test instance stops
 
 It is disposable and spends most of its life doing nothing, which on a laptop is
@@ -245,7 +293,7 @@ sudo systemctl disable --now linkctrl-idle-stop.timer   # stop managing it
 
 The unit and timer live in `/etc/systemd/system/` rather than in this repository,
 because they carry absolute paths and a username; their contents are in
-[wsl2-environment.md](wsl2-environment.md#10-the-idle-stop-timer) so a rebuild
+[environment.md](environment.md#the-idle-stop-timer) so a rebuild
 reproduces them.
 
 ## What is guarded
@@ -289,7 +337,7 @@ it at <http://localhost:8080>, then `make demo-update`.
 
 ## Related
 
-- [wsl2-environment.md](wsl2-environment.md) — the WSL2 layer these run on
+- [environment.md](environment.md) — the machine these run on
 - [development.md](../build-notes/development.md) — project setup, host-agnostic
 - [workflow.md](../build-notes/workflow.md) — where the refresh sits in a milestone
 - [cli.md](../cli.md) — `lctl demo` and `lctl seed` in full
