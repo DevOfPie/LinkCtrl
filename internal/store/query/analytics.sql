@@ -162,6 +162,38 @@ GROUP BY value
 ORDER BY clicks DESC, value
 LIMIT sqlc.arg(row_limit);
 
+-- name: GetLinkQRDimensions :many
+-- The per-QR-code breakdown (M50).
+--
+-- **A filter over GetLinkDimensions' rows, not a rollup of its own.** Every
+-- value here was written by RollupDimensionDaily's ordinary `referrer` pass,
+-- because a scan's code is stored *as* its referrer value — `qr` for the default
+-- code and `qr:<slug>` for a named one. So this milestone added no pass over
+-- click_events, no column and no dimension name: the thing that made a
+-- per-campaign rollup too expensive to include in this phase is the thing this
+-- does not do.
+--
+-- It is a separate statement rather than a reuse of GetLinkDimensions because
+-- that one is bounded at twenty rows ordered by clicks, and a link whose busiest
+-- referrers are twenty real hostnames would lose its own codes off the end of
+-- its own breakdown. Same table, same index, same shape — only the predicate and
+-- the bound differ, and the bound is domain.MaxQRCodesPerLink + 1 because the
+-- default code is one more than the cap counts.
+--
+-- `value = 'qr' OR value LIKE 'qr:%'` cannot collide with a real referrer. The
+-- column otherwise holds hostnames and the `direct` sentinel, and a colon is not
+-- a character a hostname may contain.
+SELECT value, sum(clicks)::bigint AS clicks, sum(unique_visitors)::bigint AS unique_visitors
+FROM link_dimension_daily
+WHERE link_id = $1
+  AND dimension = 'referrer'
+  AND (value = 'qr' OR value LIKE 'qr:%')
+  AND day >= sqlc.arg(from_day)::date
+  AND day <= sqlc.arg(to_day)::date
+GROUP BY value
+ORDER BY clicks DESC, value
+LIMIT sqlc.arg(row_limit);
+
 -- name: GetWorkspaceStats :many
 SELECT day, clicks, unique_visitors, bot_clicks, active_links
 FROM workspace_click_daily

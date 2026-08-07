@@ -115,7 +115,7 @@ appears in sqlc-visible SQL.
 | `folders` | 7 | Built | Self-referencing tree; the cycle rule is enforced in Go over a locked tree ([M38](build-notes/phase-details/m38.md)'s reopening). |
 | `tags` / `link_tags` | 5 / 3 | Built | |
 | `campaigns` | 11 | Built | `ON DELETE SET NULL` — deleting a campaign unfiles its links rather than taking them. |
-| `qr_codes` | 6 | Built | |
+| `qr_codes` | 8 | Built | One row per (link, code). The empty `slug` is the link's **default** code — the one whose payload carries no code parameter, and therefore the one every picture printed before [M50](build-notes/phase-details/m50.md) resolves to. A named code's slug travels in its payload and is resolved against the link's own codes on the redirect path. |
 | `link_click_budget` | 7 | Built | The durable counter behind max-click gates and sequential splits (M35, M36). |
 | `blocked_destinations` | 5 | Built | The runtime blocklist. `source` separates the environment list, the review queue and the seeded shorteners. |
 | `destination_disputes` | 14 | Built | No foreign keys, by design (`01600`). |

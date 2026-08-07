@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -36,9 +37,38 @@ import (
 // the row is created only when somebody styles the code — twenty links would
 // otherwise carry twenty rows saying nothing.
 
-// QRCode is a link's code: the style it is drawn with and the URL it encodes.
+// More than one code per link (M50).
+//
+// **A link has codes, and one of them is the default.** The default is the code
+// whose payload carries no code parameter — which is the payload of every code
+// this product drew before M50 — so it is what every already-printed picture
+// resolves to, and it exists for every link whether or not a row has ever been
+// written for it. The rest are named: each carries a generated slug that travels
+// in its payload and a label that never leaves the dashboard.
+//
+// **The single-code operations stayed as they were and now mean the default
+// code.** m50.md required this choice be made and recorded, and the alternative —
+// growing `GET /links/{id}/qr` an identifier — would have changed what a shipped
+// endpoint answers for every client already calling it, which is exactly what
+// the contract test exists to catch. Recorded in decisions.md under M50.
+
+// QRCode is one of a link's codes: the style it is drawn with and the URL it
+// encodes.
 type QRCode struct {
+	// ID is the stored row, and the zero uuid means there is no row — a default
+	// code nobody has styled or named yet. It is what the per-code API paths
+	// address, and it is absent from the JSON for an unstored code rather than
+	// answering with a uuid nothing can be done with.
+	ID     uuid.UUID `json:"id,omitempty"`
 	LinkID uuid.UUID `json:"link_id"`
+	// Slug is the identity that travels in the payload, and the empty string is
+	// the default code (M50). It is generated, never chosen: it is printed, so a
+	// workspace-supplied one would be a name somebody has to keep unique across
+	// a link's codes and correct across every copy already in the world.
+	Slug string `json:"slug"`
+	// Label is what a person reads in the list. Free text, never in a URL, never
+	// in the picture, and never seen by the redirect path.
+	Label string `json:"label"`
 	// Content is exactly what the picture encodes, including the source
 	// parameter. Returned so a client can see what a scanner will read rather
 	// than having to reconstruct it.
@@ -62,9 +92,28 @@ type QRCode struct {
 	Size int `json:"size"`
 }
 
-// QRCode returns a link's code: its content and the style it is drawn with.
+// QRCode returns a link's default code: its content and the style it is drawn
+// with.
+//
+// The shorthand, unchanged in meaning since M41: it answers for the code whose
+// payload carries no code parameter, which is the one on every picture this
+// product has ever produced. QRCodeBySlug is how a named code is reached.
 func (s *Service) QRCode(
 	ctx context.Context, actor *auth.Identity, linkID uuid.UUID,
+) (*QRCode, error) {
+	return s.QRCodeBySlug(ctx, actor, linkID, "")
+}
+
+// QRCodeBySlug returns one of a link's codes.
+//
+// The empty slug is the default code and never 404s: a link that has never been
+// styled or named still has one, drawn at the default style, which is what "a QR
+// endpoint returns a code for any link" has meant since M41. Any other slug is a
+// row that must exist, and its absence is a 404 rather than a default — a code
+// somebody deleted must stop answering, or a printed identity would go on
+// resolving after the workspace retired it.
+func (s *Service) QRCodeBySlug(
+	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, slug string,
 ) (*QRCode, error) {
 	if !actor.Can(PermRead) {
 		return nil, domain.ErrForbidden
@@ -73,18 +122,281 @@ func (s *Service) QRCode(
 	if err != nil {
 		return nil, err
 	}
-	style, stored, err := s.storedQRStyle(ctx, actor.WorkspaceID, linkID)
+	row, found, err := s.storedQRCode(ctx, actor.WorkspaceID, linkID, slug)
 	if err != nil {
 		return nil, err
 	}
-	content := QRContent(l.ShortURL)
-	return &QRCode{
-		LinkID:  linkID,
-		Content: content,
-		Style:   style,
-		Stored:  stored,
-		Size:    QROutputSize(content, style),
-	}, nil
+	if !found && slug != "" {
+		return nil, domain.ErrNotFound
+	}
+	code := qrCodeFrom(linkID, l.ShortURL, slug, row, found)
+	return &code, nil
+}
+
+// ListQRCodes returns every code a link carries, default first.
+//
+// **The default is synthesised when no row holds it**, for the same reason
+// QRCodeBySlug answers for it: the link has that code whether or not anybody has
+// styled it, and a list that omitted it would show a link's second code as its
+// only one. A link nobody has touched therefore lists exactly one code, which is
+// the state every link is in until this milestone's create operation is used.
+func (s *Service) ListQRCodes(
+	ctx context.Context, actor *auth.Identity, linkID uuid.UUID,
+) ([]QRCode, error) {
+	if !actor.Can(PermRead) {
+		return nil, domain.ErrForbidden
+	}
+	l, err := s.Get(ctx, actor, linkID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.q.ListQRCodes(ctx, dbgen.ListQRCodesParams{
+		LinkID: linkID, WorkspaceID: actor.WorkspaceID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list qr codes for %s: %w", linkID, err)
+	}
+	out := make([]QRCode, 0, len(rows)+1)
+	if len(rows) == 0 || rows[0].Slug != "" {
+		out = append(out, qrCodeFrom(linkID, l.ShortURL, "", dbgen.QrCode{}, false))
+	}
+	for _, row := range rows {
+		out = append(out, qrCodeFrom(linkID, l.ShortURL, row.Slug, row, true))
+	}
+	return out, nil
+}
+
+// CreateQRCode adds a named code to a link.
+//
+// A new code starts at the link's *default* style rather than at the product
+// default, because somebody adding a second poster wants the poster they already
+// have. Nothing is copied that identifies the code it was copied from: the slug
+// is new, the label is what the caller asked for, and the two codes are
+// thereafter independent.
+func (s *Service) CreateQRCode(
+	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, label string,
+) (*QRCode, error) {
+	if !actor.Can(PermUpdate) {
+		return nil, fmt.Errorf(
+			"%w: adding a QR code requires %s", domain.ErrForbidden, PermUpdate)
+	}
+	l, err := s.Get(ctx, actor, linkID)
+	if err != nil {
+		return nil, err
+	}
+	label = strings.TrimSpace(label)
+	if errs := domain.QRCodeLabelErrors(label); len(errs) > 0 {
+		return nil, errs
+	}
+
+	count, err := s.q.CountQRCodes(ctx, dbgen.CountQRCodesParams{
+		LinkID: linkID, WorkspaceID: actor.WorkspaceID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("count qr codes for %s: %w", linkID, err)
+	}
+	// The default code counts against the cap whether or not it has a row, so
+	// the check is against the number of codes the link *has* rather than the
+	// number of rows it holds. Otherwise a link would be allowed one code more
+	// than the cap for as long as its default went unstyled.
+	held := count
+	if _, defaulted, derr := s.storedQRCode(ctx, actor.WorkspaceID, linkID, ""); derr != nil {
+		return nil, derr
+	} else if !defaulted {
+		held++
+	}
+	if held >= domain.MaxQRCodesPerLink {
+		return nil, qrCapError()
+	}
+
+	// The style the link is already drawing at, so a second code looks like the
+	// first one until somebody changes it.
+	current, _, err := s.storedQRStyle(ctx, actor.WorkspaceID, linkID, "")
+	if err != nil {
+		return nil, err
+	}
+	blob, err := json.Marshal(current)
+	if err != nil {
+		return nil, fmt.Errorf("encode qr style: %w", err)
+	}
+	row, err := s.q.UpsertQRCode(ctx, dbgen.UpsertQRCodeParams{
+		ID: uuid.Must(uuid.NewV7()), LinkID: linkID, WorkspaceID: actor.WorkspaceID,
+		Slug: domain.NewQRCodeSlug(), Label: label, Style: blob,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("insert qr code: %w", err)
+	}
+	// The redirect snapshot carries this link's slugs, so a new one has to reach
+	// every replica before a scan of it can be attributed. Until it does, a scan
+	// resolves as the default code — the safe direction, and the same one a cold
+	// cache falls in — but the window is a printed code that is not counted as
+	// itself, so it is closed here rather than left to REDIRECT_TTL.
+	s.invalidateQRLink(ctx, actor, linkID)
+	code := qrCodeFrom(linkID, l.ShortURL, row.Slug, row, true)
+	return &code, nil
+}
+
+// SetQRCodeLabel renames one of a link's codes.
+//
+// The slug is not touched and cannot be: it is printed. A rename is a change to
+// what the dashboard calls a code, never to what the code says.
+func (s *Service) SetQRCodeLabel(
+	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, slug, label string,
+) (*QRCode, error) {
+	if !actor.Can(PermUpdate) {
+		return nil, fmt.Errorf(
+			"%w: renaming a QR code requires %s", domain.ErrForbidden, PermUpdate)
+	}
+	l, err := s.Get(ctx, actor, linkID)
+	if err != nil {
+		return nil, err
+	}
+	label = strings.TrimSpace(label)
+	if errs := domain.QRCodeLabelErrors(label); len(errs) > 0 {
+		return nil, errs
+	}
+
+	row, found, err := s.storedQRCode(ctx, actor.WorkspaceID, linkID, slug)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		if slug != "" {
+			return nil, domain.ErrNotFound
+		}
+		// Naming the default code is the first thing that makes a row for it,
+		// which is the same trade styling one makes: a row appears when somebody
+		// expresses a preference and not before.
+		style, _, serr := s.storedQRStyle(ctx, actor.WorkspaceID, linkID, "")
+		if serr != nil {
+			return nil, serr
+		}
+		blob, merr := json.Marshal(style)
+		if merr != nil {
+			return nil, fmt.Errorf("encode qr style: %w", merr)
+		}
+		row, err = s.q.UpsertQRCode(ctx, dbgen.UpsertQRCodeParams{
+			ID: uuid.Must(uuid.NewV7()), LinkID: linkID, WorkspaceID: actor.WorkspaceID,
+			Slug: "", Label: label, Style: blob,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("insert qr code: %w", err)
+		}
+		code := qrCodeFrom(linkID, l.ShortURL, "", row, true)
+		return &code, nil
+	}
+
+	if _, err := s.q.UpdateQRCodeLabel(ctx, dbgen.UpdateQRCodeLabelParams{
+		ID: row.ID, WorkspaceID: actor.WorkspaceID, Label: label,
+	}); err != nil {
+		return nil, fmt.Errorf("rename qr code %s: %w", row.ID, err)
+	}
+	row.Label = label
+	code := qrCodeFrom(linkID, l.ShortURL, slug, row, true)
+	return &code, nil
+}
+
+// DeleteQRCode removes a named code from a link.
+//
+// **The default code cannot be deleted**, and the refusal is a validation error
+// rather than a 404: it is there, and what the caller almost certainly means —
+// put it back to plain black on white — is ResetQRStyle. Deleting the code every
+// already-printed picture resolves to would leave those pictures resolving to
+// nothing, which is not something an interface should offer as a button.
+//
+// A deleted code's scans stop accumulating; they are not reassigned. A payload
+// naming a slug that no longer exists is recorded as no code at all, which the
+// analytics show as the default code's own bare `qr`, and the rows the deleted
+// code already earned stay exactly where they are under its slug.
+func (s *Service) DeleteQRCode(
+	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, slug string,
+) error {
+	if !actor.Can(PermUpdate) {
+		return fmt.Errorf(
+			"%w: removing a QR code requires %s", domain.ErrForbidden, PermUpdate)
+	}
+	if _, err := s.Get(ctx, actor, linkID); err != nil {
+		return err
+	}
+	if slug == "" {
+		return domain.ValidationErrors{{
+			Field: "slug", Code: "invalid",
+			Message: "the default code is what every already-printed picture of this link " +
+				"resolves to, so it cannot be removed; reset its style instead",
+		}}
+	}
+	row, found, err := s.storedQRCode(ctx, actor.WorkspaceID, linkID, slug)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return domain.ErrNotFound
+	}
+	if _, err := s.q.DeleteQRCodeByID(ctx, dbgen.DeleteQRCodeByIDParams{
+		ID: row.ID, WorkspaceID: actor.WorkspaceID,
+	}); err != nil {
+		return fmt.Errorf("delete qr code %s: %w", row.ID, err)
+	}
+	// The other half of the create's reasoning, and the half that is visible in
+	// the data: a replica still holding the deleted slug goes on attributing
+	// that printed code to itself, so the row it stopped earning keeps growing
+	// for up to REDIRECT_TTL after somebody removed it.
+	s.invalidateQRLink(ctx, actor, linkID)
+	return nil
+}
+
+// invalidateQRLink drops the link's cached snapshot after its code set changes.
+//
+// Only the code *set* needs this. A style, a label and a size are dashboard
+// facts that never enter the snapshot, so writing one invalidates nothing; the
+// slugs are the one part of a QR code the redirect path reads, and adding or
+// removing one is the only thing that can make a cached entry disagree with the
+// database about which scans belong to which code.
+//
+// The alias is read here rather than carried down from Get, because
+// domain.Link does not expose the domain id and the invalidation key is the
+// pair. A failure is swallowed for the reason invalidateLink swallows one: the
+// write already happened, and the worst outcome is attribution being briefly
+// wrong rather than a visitor going anywhere unexpected.
+func (s *Service) invalidateQRLink(ctx context.Context, actor *auth.Identity, linkID uuid.UUID) {
+	if s.cache == nil {
+		return
+	}
+	row, err := s.q.GetLink(ctx, dbgen.GetLinkParams{ID: linkID, WorkspaceID: actor.WorkspaceID})
+	if err != nil {
+		return
+	}
+	s.invalidateLink(ctx, row.DomainID, row.Alias)
+}
+
+// qrCapError is the refusal both create paths share.
+func qrCapError() error {
+	return domain.ValidationErrors{{
+		Field: "codes", Code: "limit_reached",
+		Message: fmt.Sprintf("a link carries at most %d QR codes, and this one already has "+
+			"them; remove one before adding another", domain.MaxQRCodesPerLink),
+	}}
+}
+
+// qrCodeFrom assembles the view of one code from its row, or from nothing.
+//
+// The `found` argument is what makes the second case expressible: a default code
+// with no row is a real code drawn at the default style, and the zero row is how
+// it arrives here.
+func qrCodeFrom(
+	linkID uuid.UUID, shortURL, slug string, row dbgen.QrCode, found bool,
+) QRCode {
+	style := decodeQRStyle(row.Style)
+	content := QRContent(shortURL, slug)
+	out := QRCode{
+		LinkID: linkID, Slug: slug, Content: content,
+		Style: style, Stored: found, Size: QROutputSize(content, style),
+	}
+	if found {
+		out.ID = row.ID
+		out.Label = row.Label
+	}
+	return out
 }
 
 // QROutputSize is the pixel size a style draws a piece of content at, or 0 for
@@ -106,11 +418,18 @@ func QROutputSize(content string, style qr.Style) int {
 	return qr.OutputSize(code.Size, style)
 }
 
-// RenderQR draws a link's code as SVG.
+// RenderQR draws a link's default code as SVG.
 func (s *Service) RenderQR(
 	ctx context.Context, actor *auth.Identity, linkID uuid.UUID,
 ) ([]byte, error) {
-	code, err := s.QRCode(ctx, actor, linkID)
+	return s.RenderQRBySlug(ctx, actor, linkID, "")
+}
+
+// RenderQRBySlug draws one of a link's codes as SVG.
+func (s *Service) RenderQRBySlug(
+	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, slug string,
+) ([]byte, error) {
+	code, err := s.QRCodeBySlug(ctx, actor, linkID, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +456,14 @@ func (s *Service) RenderQR(
 func (s *Service) RenderQRPNG(
 	ctx context.Context, actor *auth.Identity, linkID uuid.UUID,
 ) ([]byte, error) {
-	code, err := s.QRCode(ctx, actor, linkID)
+	return s.RenderQRPNGBySlug(ctx, actor, linkID, "")
+}
+
+// RenderQRPNGBySlug rasterises one of a link's codes.
+func (s *Service) RenderQRPNGBySlug(
+	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, slug string,
+) ([]byte, error) {
+	code, err := s.QRCodeBySlug(ctx, actor, linkID, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -181,6 +507,19 @@ type QRSizeInput struct {
 func (s *Service) SetQRSize(
 	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, in QRSizeInput,
 ) (*QRCode, qr.SizeFit, error) {
+	return s.SetQRSizeBySlug(ctx, actor, linkID, "", in)
+}
+
+// SetQRSizeBySlug stores one code's style, described by its output size.
+//
+// The size is resolved against *this code's* module count rather than the
+// link's. Two codes for one link encode different payloads — one carries a slug
+// and the other does not — so they are different matrices, and a size fitted
+// against the wrong one snaps to a scale that draws the picture at some other
+// number of pixels than the one asked for.
+func (s *Service) SetQRSizeBySlug(
+	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, slug string, in QRSizeInput,
+) (*QRCode, qr.SizeFit, error) {
 	if !actor.Can(PermUpdate) {
 		return nil, qr.SizeFit{}, fmt.Errorf(
 			"%w: styling a QR code requires %s", domain.ErrForbidden, PermUpdate)
@@ -189,12 +528,15 @@ func (s *Service) SetQRSize(
 	if err != nil {
 		return nil, qr.SizeFit{}, err
 	}
-	current, _, err := s.storedQRStyle(ctx, actor.WorkspaceID, linkID)
+	current, found, err := s.storedQRStyle(ctx, actor.WorkspaceID, linkID, slug)
 	if err != nil {
 		return nil, qr.SizeFit{}, err
 	}
+	if !found && slug != "" {
+		return nil, qr.SizeFit{}, domain.ErrNotFound
+	}
 
-	code, err := qr.Encode(QRContent(l.ShortURL), current.Level)
+	code, err := qr.Encode(QRContent(l.ShortURL, slug), current.Level)
 	if err != nil {
 		return nil, qr.SizeFit{}, fmt.Errorf("encode qr for %s: %w", linkID, err)
 	}
@@ -210,7 +552,7 @@ func (s *Service) SetQRSize(
 		return nil, qr.SizeFit{}, fmt.Errorf("fit qr size for %s: %w", linkID, err)
 	}
 
-	stored, err := s.SetQRStyle(ctx, actor, linkID, qr.Style{
+	stored, err := s.SetQRStyleBySlug(ctx, actor, linkID, slug, qr.Style{
 		Foreground: in.Foreground, Background: in.Background,
 		Level: current.Level, Margin: fit.Margin, Scale: fit.Scale,
 	})
@@ -220,9 +562,21 @@ func (s *Service) SetQRSize(
 	return stored, fit, nil
 }
 
-// SetQRStyle stores how a link's code is drawn.
+// SetQRStyle stores how a link's default code is drawn.
 func (s *Service) SetQRStyle(
 	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, style qr.Style,
+) (*QRCode, error) {
+	return s.SetQRStyleBySlug(ctx, actor, linkID, "", style)
+}
+
+// SetQRStyleBySlug stores how one of a link's codes is drawn.
+//
+// A named code must already exist: styling is a change to a code, and the
+// operation that brings one into being is CreateQRCode. The default code is the
+// exception it has always been — its row appears the first time somebody
+// expresses a preference about it.
+func (s *Service) SetQRStyleBySlug(
+	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, slug string, style qr.Style,
 ) (*QRCode, error) {
 	if !actor.Can(PermUpdate) {
 		return nil, fmt.Errorf("%w: styling a QR code requires %s", domain.ErrForbidden, PermUpdate)
@@ -250,20 +604,34 @@ func (s *Service) SetQRStyle(
 	if err != nil {
 		return nil, fmt.Errorf("encode qr style: %w", err)
 	}
-	if _, err := s.q.UpsertQRCode(ctx, dbgen.UpsertQRCodeParams{
-		ID: uuid.Must(uuid.NewV7()), LinkID: linkID,
-		WorkspaceID: actor.WorkspaceID, Style: blob,
-	}); err != nil {
+	// The label the code already carries, so a style write does not rename it.
+	// The upsert leaves `label` alone on conflict, and this is what supplies it
+	// for the insert branch — a named code that reached here exists, so this is
+	// its own label, and the default code's is empty until somebody sets one.
+	existing, found, err := s.storedQRCode(ctx, actor.WorkspaceID, linkID, slug)
+	if err != nil {
+		return nil, err
+	}
+	if !found && slug != "" {
+		return nil, domain.ErrNotFound
+	}
+	row, err := s.q.UpsertQRCode(ctx, dbgen.UpsertQRCodeParams{
+		ID: uuid.Must(uuid.NewV7()), LinkID: linkID, WorkspaceID: actor.WorkspaceID,
+		Slug: slug, Label: existing.Label, Style: blob,
+	})
+	if err != nil {
 		return nil, fmt.Errorf("upsert qr code: %w", err)
 	}
-	content := QRContent(l.ShortURL)
-	return &QRCode{
-		LinkID: linkID, Content: content, Style: normalized, Stored: true,
-		Size: QROutputSize(content, normalized),
-	}, nil
+	out := qrCodeFrom(linkID, l.ShortURL, slug, row, true)
+	out.Style = normalized
+	return &out, nil
 }
 
-// ResetQRStyle returns a link's code to the default style.
+// ResetQRStyle returns a link's default code to the default style.
+//
+// Only the default code. A named code is removed rather than reset — it exists
+// because somebody made it, so "put it back to how it was" is deleting it — and
+// DeleteQRCode is that operation.
 func (s *Service) ResetQRStyle(ctx context.Context, actor *auth.Identity, linkID uuid.UUID) error {
 	if !actor.Can(PermUpdate) {
 		return fmt.Errorf("%w: styling a QR code requires %s", domain.ErrForbidden, PermUpdate)
@@ -284,21 +652,45 @@ func (s *Service) ResetQRStyle(ctx context.Context, actor *auth.Identity, linkID
 	return nil
 }
 
-// storedQRStyle reads a link's style, falling back to the default.
-func (s *Service) storedQRStyle(
-	ctx context.Context, workspaceID, linkID uuid.UUID,
-) (qr.Style, bool, error) {
-	row, err := s.q.GetQRCode(ctx, dbgen.GetQRCodeParams{LinkID: linkID, WorkspaceID: workspaceID})
+// storedQRCode reads one code's row. Absent is not an error: for the default
+// code it means the default style, and every caller that cares whether a named
+// code exists reads the second return.
+func (s *Service) storedQRCode(
+	ctx context.Context, workspaceID, linkID uuid.UUID, slug string,
+) (dbgen.QrCode, bool, error) {
+	row, err := s.q.GetQRCode(ctx, dbgen.GetQRCodeParams{
+		LinkID: linkID, WorkspaceID: workspaceID, Slug: slug,
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			style, _ := qr.Style{}.Normalize()
-			return style, false, nil
+			return dbgen.QrCode{}, false, nil
 		}
-		return qr.Style{}, false, fmt.Errorf("get qr code: %w", err)
+		return dbgen.QrCode{}, false, fmt.Errorf("get qr code: %w", err)
 	}
+	return row, true, nil
+}
+
+// storedQRStyle reads one code's style, falling back to the default.
+func (s *Service) storedQRStyle(
+	ctx context.Context, workspaceID, linkID uuid.UUID, slug string,
+) (qr.Style, bool, error) {
+	row, found, err := s.storedQRCode(ctx, workspaceID, linkID, slug)
+	if err != nil {
+		return qr.Style{}, false, err
+	}
+	return decodeQRStyle(row.Style), found, nil
+}
+
+// decodeQRStyle reads a stored blob back into a style.
+//
+// Normalized on the way out as well as on the way in, so a row written before a
+// field existed renders with that field's default rather than its zero value —
+// and so the zero blob, which is how an unstored default code arrives, reads as
+// the product default rather than as black on black.
+func decodeQRStyle(blob []byte) qr.Style {
 	var style qr.Style
-	if len(row.Style) > 0 {
-		if err := json.Unmarshal(row.Style, &style); err != nil {
+	if len(blob) > 0 {
+		if err := json.Unmarshal(blob, &style); err != nil {
 			// A jsonb blob that is not a style is a row somebody wrote by hand.
 			// Falling back to the default draws a working code instead of
 			// failing a page, and the row is left alone rather than repaired
@@ -306,20 +698,24 @@ func (s *Service) storedQRStyle(
 			style = qr.Style{}
 		}
 	}
-	// Normalized on the way out as well as on the way in, so a row written
-	// before a field existed renders with that field's default rather than its
-	// zero value.
 	normalized, _ := style.Normalize()
-	return normalized, true, nil
+	return normalized
 }
 
-// QRContent is what a link's QR code encodes: its short URL, carrying the
-// source parameter that makes a scan tell the analytics what it is.
+// QRContent is what one of a link's QR codes encodes: its short URL, carrying
+// the source parameter that makes a scan tell the analytics what it is, and — for
+// a named code — the slug that says which code it was (M50).
 //
 // Exported because two surfaces render a code — the API and the dashboard — and
 // a second copy of this concatenation is a second answer to "what does the
-// picture say".
-func QRContent(shortURL string) string {
+// picture say". M50 gave that property a second job: the redirect path resolves
+// the slug this function writes, so the encoded payload and the redirect's
+// expectation cannot drift apart.
+//
+// **The empty slug adds nothing.** The default code's payload is byte for byte
+// what every code this product drew before M50 carried, which is what makes an
+// already-printed picture go on being counted as the same code it always was.
+func QRContent(shortURL, slug string) string {
 	if shortURL == "" {
 		return ""
 	}
@@ -327,5 +723,9 @@ func QRContent(shortURL string) string {
 	if u, err := url.Parse(shortURL); err == nil && u.RawQuery != "" {
 		sep = "&"
 	}
-	return shortURL + sep + domain.ClickSourceParam + "=" + domain.ClickSourceQR
+	out := shortURL + sep + domain.ClickSourceParam + "=" + domain.ClickSourceQR
+	if slug != "" {
+		out += "&" + domain.ClickCodeParam + "=" + slug
+	}
+	return out
 }

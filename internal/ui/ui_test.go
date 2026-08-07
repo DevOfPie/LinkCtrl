@@ -602,8 +602,32 @@ func pageData(t *testing.T) map[string]any {
 			"QRDownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.png",
 			"QRSourceLabel": "qr",
 			"QRReturn":      "/links/0198c9c5-0000-7000-8000-000000000001",
-			"FieldErrors":   map[string]string{},
-			"Notice":        "", "Error": "",
+			// Two codes (M50), because the fixture has to render the state the
+			// milestone exists for: a link with one code and a link with two are
+			// different markup, and the theme scan, the overflow check and the
+			// fold measurement all read whichever this fixture is. The first row
+			// is the default code — no slug, and no remove control, because it is
+			// the one every already-printed picture resolves to.
+			"QRCodes": []map[string]any{
+				{"Slug": "", "Label": "", "Name": "The original code", "Size": 296,
+					"Default": true, "Selected": true,
+					"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr",
+					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.svg",
+					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.png",
+					"Clicks":      412, "Counted": true},
+				{"Slug": "k7m2qh4b", "Label": "Autumn poster", "Name": "Autumn poster", "Size": 296,
+					"Default": false, "Selected": false,
+					"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=k7m2qh4b",
+					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/k7m2qh4b/image.svg",
+					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/k7m2qh4b/image.png",
+					"Clicks":      37, "Counted": true},
+			},
+			"QRSlug":      "",
+			"QRLabel":     "",
+			"QRMaxCodes":  20,
+			"QRMaxLabel":  60,
+			"FieldErrors": map[string]string{},
+			"Notice":      "", "Error": "",
 		},
 		// The QR panel as a page (M48). Same fields as the link page's QR area,
 		// because it is the same block: linkQRView is one struct embedded in two
@@ -634,7 +658,31 @@ func pageData(t *testing.T) map[string]any {
 			"QRDownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.png",
 			"QRSourceLabel": "qr",
 			"QRReturn":      "/links/0198c9c5-0000-7000-8000-000000000001/qr",
-			"Notice":        "",
+			// Two codes (M50), because the fixture has to render the state the
+			// milestone exists for: a link with one code and a link with two are
+			// different markup, and the theme scan, the overflow check and the
+			// fold measurement all read whichever this fixture is. The first row
+			// is the default code — no slug, and no remove control, because it is
+			// the one every already-printed picture resolves to.
+			"QRCodes": []map[string]any{
+				{"Slug": "", "Label": "", "Name": "The original code", "Size": 296,
+					"Default": true, "Selected": true,
+					"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr",
+					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.svg",
+					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.png",
+					"Clicks":      412, "Counted": false},
+				{"Slug": "k7m2qh4b", "Label": "Autumn poster", "Name": "Autumn poster", "Size": 296,
+					"Default": false, "Selected": false,
+					"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=k7m2qh4b",
+					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/k7m2qh4b/image.svg",
+					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/k7m2qh4b/image.png",
+					"Clicks":      37, "Counted": false},
+			},
+			"QRSlug":     "",
+			"QRLabel":    "",
+			"QRMaxCodes": 20,
+			"QRMaxLabel": 60,
+			"Notice":     "",
 		},
 		"keys": map[string]any{
 			"Title": "API keys", "Nav": "keys", "Identity": owner(),

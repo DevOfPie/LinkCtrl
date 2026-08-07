@@ -218,6 +218,9 @@ type Querier interface {
 	CountOrganizationWorkspaces(ctx context.Context, organizationID uuid.UUID) (int64, error)
 	CountPendingMail(ctx context.Context) (int64, error)
 	CountPendingWebhookDeliveries(ctx context.Context) (int64, error)
+	// What domain.MaxQRCodesPerLink is checked against, the way campaign creation
+	// checks CountCampaigns.
+	CountQRCodes(ctx context.Context, arg CountQRCodesParams) (int64, error)
 	//
 	// The re-notify guard. A threshold that is still crossed is still crossed on
 	// the next run an hour later, and a notification per hour forever is how an
@@ -544,9 +547,13 @@ type Querier interface {
 	// working at the same moment, which is what makes this safe: there is never
 	// more than one live link per address.
 	DeleteOutstandingRegistration(ctx context.Context, email string) (int64, error)
-	// Returns the link's code to the default style. A hard delete, because a style
-	// row holds nothing but the preference being withdrawn.
+	// Returns the link's default code to the default style. A hard delete, because
+	// the row holds nothing but the preference being withdrawn.
 	DeleteQRCode(ctx context.Context, arg DeleteQRCodeParams) (int64, error)
+	// Removes one named code. Scoped by workspace rather than by link, because the
+	// id is already unique and the service has resolved the link before it gets
+	// here; the workspace column is the tenancy check.
+	DeleteQRCodeByID(ctx context.Context, arg DeleteQRCodeByIDParams) (int64, error)
 	// Reaper. Kept long enough to be visible in the key list after revocation, and
 	// long enough for the audit question above to be answerable.
 	DeleteRevokedAPIKeys(ctx context.Context) (int64, error)
@@ -771,6 +778,27 @@ type Querier interface {
 	// snapshot the resolver already produced and re-deriving it from the alias would
 	// be a second lookup of a row we have already identified.
 	GetLinkPasswordHash(ctx context.Context, id uuid.UUID) (*string, error)
+	// The per-QR-code breakdown (M50).
+	//
+	// **A filter over GetLinkDimensions' rows, not a rollup of its own.** Every
+	// value here was written by RollupDimensionDaily's ordinary `referrer` pass,
+	// because a scan's code is stored *as* its referrer value — `qr` for the default
+	// code and `qr:<slug>` for a named one. So this milestone added no pass over
+	// click_events, no column and no dimension name: the thing that made a
+	// per-campaign rollup too expensive to include in this phase is the thing this
+	// does not do.
+	//
+	// It is a separate statement rather than a reuse of GetLinkDimensions because
+	// that one is bounded at twenty rows ordered by clicks, and a link whose busiest
+	// referrers are twenty real hostnames would lose its own codes off the end of
+	// its own breakdown. Same table, same index, same shape — only the predicate and
+	// the bound differ, and the bound is domain.MaxQRCodesPerLink + 1 because the
+	// default code is one more than the cap counts.
+	//
+	// `value = 'qr' OR value LIKE 'qr:%'` cannot collide with a real referrer. The
+	// column otherwise holds hostnames and the `direct` sentinel, and a colon is not
+	// a character a hostname may contain.
+	GetLinkQRDimensions(ctx context.Context, arg GetLinkQRDimensionsParams) ([]GetLinkQRDimensionsRow, error)
 	// Reads the rollup, never the raw events. This is what keeps analytics under
 	// the 2s target as click_events grows into the tens of millions.
 	GetLinkStats(ctx context.Context, arg GetLinkStatsParams) ([]GetLinkStatsRow, error)
@@ -822,9 +850,10 @@ type Querier interface {
 	// FOR UPDATE, so two clicks on the same link serialize and the second sees the
 	// row the first consumed.
 	GetPendingRegistrationByTokenHash(ctx context.Context, tokenHash []byte) (PendingRegistration, error)
-	// The stored style for a link's code, or no rows for a link that has never been
-	// styled. No rows is not an error: it means the default style, which is what
-	// every link's code is drawn with until somebody changes it.
+	// One code of a link's, by slug. No rows is not an error for the default code
+	// (slug ''): it means the default style, which is what every link's code is
+	// drawn with until somebody changes it. For any other slug no rows means the
+	// code does not exist, and the service reports that.
 	GetQRCode(ctx context.Context, arg GetQRCodeParams) (QrCode, error)
 	// The live-activity feed. Bounded and index-backed on (link_id, occurred_at).
 	GetRecentClicks(ctx context.Context, arg GetRecentClicksParams) ([]GetRecentClicksRow, error)
@@ -1218,6 +1247,18 @@ type Querier interface {
 	// The scope vocabulary. Scopes are validated against the permissions table
 	// rather than a list in Go, so RBAC and API keys cannot drift apart.
 	ListPermissionSlugs(ctx context.Context) ([]string, error)
+	// Every code a link carries (M50), default first.
+	//
+	// Unpaginated, and bounded instead by domain.MaxQRCodesPerLink, which is the
+	// same trade ListCampaigns makes: the cap is small enough that a page of them is
+	// the whole set, and a pager over a list that cannot exceed it would be a
+	// control nobody ever operates.
+	//
+	// `q.slug <> ''` sorts false before true, so the default code leads whatever
+	// order the rest were created in — it is the one every already-printed code
+	// attributes to, and a list that buried it would bury the answer to "which of
+	// these is the one on my existing posters".
+	ListQRCodes(ctx context.Context, arg ListQRCodesParams) ([]QrCode, error)
 	// The management list: every rule on a link, enabled or not, in the order the
 	// redirect path would evaluate them.
 	//
@@ -1950,6 +1991,26 @@ type Querier interface {
 	// click_events.destination_id — and the weight is the arm's share; both have to
 	// be in the snapshot because reading either at request time would be the query
 	// this design exists to avoid.
+	//
+	// The second lateral is M50's, and it is the same bargain a third time. A link
+	// may carry several QR codes, each printing a slug in its payload, and a scan
+	// may only be attributed to a slug this link actually has — otherwise the
+	// parameter is an open write surface into `link_dimension_daily`, reachable by
+	// anybody who can read a URL. Checking that at request time would be a query on
+	// the hot path; checking it against the snapshot is a scan of a slice bounded by
+	// domain.MaxQRCodesPerLink. So the slugs ride home in the round trip that was
+	// happening anyway, on `qr_codes_link_idx` — the index 03700 restored — and find
+	// nothing at all for the overwhelming majority of links, because a link with no
+	// named codes is the default and always will be.
+	//
+	// Slugs only, never labels or styles. The redirect path has no use for either: a
+	// label is what a person reads in the dashboard and a style is how the picture
+	// is drawn, and putting them in the snapshot would serialize workspace free text
+	// into every cached entry for nothing.
+	//
+	// `q.slug <> ''` leaves the default code out. Its payload carries no parameter
+	// at all, so there is nothing for a request to match it by, and a request
+	// carrying no recognised slug is attributed to it by falling through.
 	ResolveAliasForRedirect(ctx context.Context, arg ResolveAliasForRedirectParams) (ResolveAliasForRedirectRow, error)
 	// Read once at boot and cached. The default domain is matched on the flag
 	// rather than on a hostname string, so it never has to agree with
@@ -2246,6 +2307,9 @@ type Querier interface {
 	// Scoped by organization as well as id, so the authorization decision the
 	// service made cannot be applied to a row in another tenant.
 	UpdateMembershipRole(ctx context.Context, arg UpdateMembershipRoleParams) (int64, error)
+	// Renames one code. The slug is untouched on purpose: it is printed, and a
+	// rename that moved it would break every copy already in the world.
+	UpdateQRCodeLabel(ctx context.Context, arg UpdateQRCodeLabelParams) (int64, error)
 	// Partial update, same COALESCE-with-narg shape as UpdateLink. The destination
 	// is not here: changing where a rule points is a write to its `destinations`
 	// row, so that the URL, its host and the tier check that accepted it stay in
@@ -2278,8 +2342,13 @@ type Querier interface {
 	// that never happened. created_at is left alone, because the entry is the same
 	// entry it was before the restart.
 	UpsertEnvBlockedDestination(ctx context.Context, arg UpsertEnvBlockedDestinationParams) error
-	// One row per link, which qr_codes_link_key (02700) is what makes true. Without
-	// the unique index this is two concurrent inserts and a link with two styles.
+	// One row per (link, slug), which qr_codes_link_slug_key (03700) is what makes
+	// true. Without the unique index this is two concurrent inserts and a link with
+	// two codes answering to one name.
+	//
+	// The label is not in the DO UPDATE list. This statement is how a *style* is
+	// written, and a style write must not silently rename the code it is drawn for;
+	// UpdateQRCodeLabel is the operation that renames one.
 	UpsertQRCode(ctx context.Context, arg UpsertQRCodeParams) (QrCode, error)
 }
 

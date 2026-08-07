@@ -27,6 +27,45 @@ migrations run at boot.
 
 ### Added
 
+- **More than one QR code per link, told apart in the analytics.** A print run
+  and a shop-window card against the same short link used to be the same picture,
+  and their scans were the same number. Each code now carries a name you choose
+  and an identity it prints, so the breakdown on the link page shows you which
+  one people actually scanned.
+
+  **Every code already printed keeps counting exactly as it did.** A link's
+  original code is unchanged — same picture, same payload, same row in the
+  Referrers breakdown — because the identity a new code prints is something it
+  *adds*, and the original's identity is that it adds nothing. There is nothing
+  to reprint and nothing to reconcile.
+
+  A link carries up to twenty codes. Twenty is the number that keeps the panel a
+  list and the analytics a chart rather than a wall.
+
+  What a code is not: it has no destination of its own, no expiry of its own and
+  no gate of its own. Those belong to the link, which is what makes changing the
+  link's destination change every printed code at once — the point of the product.
+  A code that pointed somewhere else would be a second link.
+
+  **Removing a code keeps what it already recorded, and stops it growing.** Scans
+  from a picture printed with a code you have since removed are counted as the
+  link's original code from then on, rather than being credited back to the code
+  that is gone. That will look like an interrupted line to somebody reading a
+  chart across the removal, so it is worth knowing before you remove one.
+
+  Over the API: `GET`/`POST /api/v1/links/{id}/qr/codes`, and
+  `GET`/`PUT`/`DELETE /api/v1/links/{id}/qr/codes/{slug}` with
+  `.../{slug}/image.svg` and `.../{slug}/image.png` for the pictures. **The
+  existing five `/qr` endpoints are unchanged and answer for the link's original
+  code**, so nothing written against 0.2.0 has to move.
+
+  The new identity is a second reserved query parameter, `qrc`, beside `src`.
+  Like `src` it is **forwarded** to your destination when a link has query
+  forwarding on, and like `src` it is not evidence of anything: anybody can type
+  one. A value that is not one of that link's codes is counted as the link's
+  original code and is never stored, which is what stops the parameter being a
+  way for a stranger to write rows into your analytics.
+
 - **Clicking a notification goes to what it is about, and marks it read.** In the
   bell and on `/notifications` alike. Until now an item was a sentence and
   nothing else — "an automation rule fired", with no way to reach the rule — and

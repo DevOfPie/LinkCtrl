@@ -338,6 +338,8 @@ type QrCode struct {
 	Style       []byte
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+	Label       string
+	Slug        string
 }
 
 type ReservedAlias struct {

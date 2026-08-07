@@ -923,17 +923,22 @@ a row there is a pointer back to this list plus an area.
   this row predicted is the one that was taken — `GET /links/{id}/qr.png`, one
   endpoint and one standard-library encoder, so no module dependency joined the
   set, and the rasteriser is bounded by [D127](#phase-3-decisions)'s stated cap.
-- **More than one QR code per link, and per-code scan counts.** `qr_codes` holds
-  one style row per link (02700's unique index), and `?src=qr` carries no code
-  identity, so two printed codes for one link are indistinguishable in the
-  analytics. Both follow from [D73](#phase-2-decisions-taken-after-the-plan-was-finalised)
-  and [D76](#phase-2-decisions-taken-after-the-plan-was-finalised); telling them
-  apart needs a per-code token in the payload, which is a design decision rather
-  than a column. **Scheduled 2026-08-06 as
-  [M50](docs/build-notes/phase-details/m50.md)**, which takes that decision: the
-  identity travels in its own query parameter beside `src=qr` rather than inside
-  the closed vocabulary, and per-code counts are read from `click_events` — D73's
-  refusal of a counter column on the 20ms path is **not** reversed.
+- **More than one QR code per link, and per-code scan counts.** **Built by
+  [M50](docs/build-notes/phase-details/m50.md), 2026-08-07.** Kept rather than
+  deleted because it is what the milestone discharges. `qr_codes` held one style
+  row per link (02700's unique index) and `?src=qr` carried no code identity, so
+  two printed codes for one link were indistinguishable. A link now carries up to
+  `domain.MaxQRCodesPerLink` codes, each with a label and a generated slug that
+  travels in its payload as `&qrc=<slug>` beside `?src=qr`; the redirect resolves
+  the slug against the codes the link actually has, from the snapshot it already
+  holds, and records `qr:<slug>` — so per-code counts are a filter over the
+  referrer dimension every other breakdown is read from, with no new rollup pass
+  and no column on `click_events`. Neither
+  [D73](#phase-2-decisions-taken-after-the-plan-was-finalised) nor
+  [D76](#phase-2-decisions-taken-after-the-plan-was-finalised) is reversed: no
+  counter column returned, `src`'s vocabulary is still closed, and the Referrers
+  breakdown still shows scans as the single value `qr`. See
+  [D130](#phase-3-decisions)–[D133](#phase-3-decisions).
 
 ---
 
@@ -1030,6 +1035,10 @@ Taken 2026-08-06, at planning. The *why* for each is in
 | D127 | What bounds the rasteriser D11 refused to allow | **2000 pixels, and the allocation is stated rather than described.** The PNG is `image.Paletted` over a two-colour palette, one byte per pixel, so the largest buffer a request can cause is **4,000,000 bytes** — the number is what makes the bound a bound. Refused rather than clamped, on the rule margin and scale have had since M41: clamping reports success for a setting nobody asked for. The refusal is reachable from a *stored* style as well as a requested size — `MaxMargin` at `MaxScale` on a 64-character alias draws past the cap — and that is a `422`, because it is something the reader can change. The SVG path is not capped and needs no cap: vector text allocates nothing proportional to the pixel size. Neither endpoint is on the redirect path, so no SLO re-verification is owed. |
 | D128 | One number in the interface, two knobs behind it, and no new stored field | **The quiet zone is derived, not fixed at the floor.** `qr.FitSize` searches margin (4 to 16) and scale (2 to 32) together and takes the nearest whole-module size — 300px on a 29-module code lands on 301 with a 7-module quiet zone where the floor alone gives 296. Ties go to the smaller picture and then to the smaller quiet zone, so a request at the cap cannot snap past it and the largest code that fits wins over the same code with more white around it. **`qr.Style` gains no field**, which is what makes every pre-M49 `qr_codes.style` row read forward with no migration and no appearance change: the size is derived from the margin and scale already stored, and re-saving it is a byte-identical no-op. The number is on the API's `QRCode` as a read-only `size`, so a script sees what the form shows. |
 | D129 | Error correction leaves the dashboard and stays on the API | **The panel no longer asks, and a save from it carries the stored level forward.** It is a tradeoff between damage tolerance and density that a dashboard user has no basis to make and a script might, which is the milestone's answer to *"the rest handled in the background"* — background means chosen well, not made unreachable. The mechanism is a separate service operation (`SetQRSize`) rather than `SetQRStyle` with a default: a form that no longer asks a question must not silently answer it, and defaulting would have put every styled code back to `M` the first time anybody adjusted a colour. |
+| D130 | The identity of the code every already-printed picture is | **The empty slug, and a payload with no code parameter in it.** A link's default code keeps the payload M41 shipped, so a poster printed last month and a reprint of it are the same code in the analytics; giving it a generated slug would have split one code's history in two on the day M50 landed, for a code nobody touched. Migration 03700 therefore backfills nothing. It cannot be deleted — every printed picture resolves to it — and `DELETE /links/{id}/qr` resets its style instead; an unrecognised slug resolves to it too, which is what makes a retired code's rows stop growing rather than be reassigned. |
+| D131 | Where a code's identity travels, and what bounds it | **Its own parameter, `qrc`, resolved against the link's own slugs — never inside `src`.** `src`'s vocabulary is closed because `link_dimension_daily`'s primary key includes the value, and a code identity is workspace data that cannot be enumerated, so the bound is membership rather than allowlisting: anything not among this link's slugs is recorded as the default code. The slugs ride home in `ResolveAliasForRedirect`'s existing round trip on the index 03700 restores, so the check is a slice scan and not a query — which is the question [m50.md](docs/build-notes/phase-details/m50.md) said would otherwise be a prompt. No `CacheKeyVersion` bump: an absent field decodes as pre-M50 behaviour. Measured at 93.08µs mean, 100% of 240,002 requests under 20ms, against 93.67µs for a request that attributes nothing. |
+| D132 | Per-code counts, without the rollup campaign analytics was deferred for | **The code *is* the stored referrer value** — `qr` for the default, `qr:<slug>` for a named one — so `RollupDimensionDaily` writes the per-code rows at the cost it already paid and `GetLinkDimensions`' shape reads them. No column on `click_events`, no new pass, no new dimension name. A colon cannot appear in a hostname, which is what makes the namespace collision-free. **The Referrers panel is unchanged**: the reader sums the QR values back into the single `qr` row D76 promised and reports the split as its own section, so a link growing a second code does not reshape a surface the reader is not looking at. |
+| D133 | What the five shipped QR endpoints mean now that a link has several codes | **The default-code shorthand, unchanged.** [m50.md](docs/build-notes/phase-details/m50.md) required the choice be made and recorded. Growing them an identifier would either break every existing caller or be the shorthand with extra syntax; the collection at `/links/{id}/qr/codes` is where several are addressed, keyed by the slug a person holding a printed code has in hand. `image.svg`/`image.png` sit a segment deeper than `qr.svg`/`qr.png` because a `ServeMux` wildcard matches a whole segment, so `{slug}.svg` is not a pattern that exists. |
 
 ### Not in Phase 3
 

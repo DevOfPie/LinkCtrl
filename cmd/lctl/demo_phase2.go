@@ -1127,9 +1127,71 @@ func (s *demoSeeder) seedCampaigns(ctx context.Context, cat []demoLink, ids map[
 		return fmt.Errorf("size the QR code on /%s: %w", demoQRStyled, err)
 	}
 
+	// A second code on the same link (M50). One link, two codes, two names —
+	// because a feature whose whole value is telling two things apart shows
+	// nothing when only one of them exists.
+	second, err := s.link.CreateQRCode(ctx, s.owner, styled, demoQRSecondLabel)
+	if err != nil {
+		return fmt.Errorf("add a second QR code to /%s: %w", demoQRStyled, err)
+	}
+	// The default code gets a name too. Without one the panel heads its row "The
+	// original code", which is honest and is not what a workspace running two
+	// campaigns would see: they would have named both.
+	if _, err := s.link.SetQRCodeLabel(
+		ctx, s.owner, styled, "", demoQRDefaultLabel,
+	); err != nil {
+		return fmt.Errorf("name the default QR code on /%s: %w", demoQRStyled, err)
+	}
+	scans, err := s.attributeQRScans(ctx, styled, second.Slug)
+	if err != nil {
+		return err
+	}
+
 	fmt.Fprintf(os.Stderr, "campaigns: %d, holding %d links; 1 QR code styled at %dpx "+
-		"(asked for %dpx)\n", len(demoCampaigns()), labelled, sized.Size, fit.Requested)
+		"(asked for %dpx); 2 codes on /%s, %d scans between them\n",
+		len(demoCampaigns()), labelled, sized.Size, fit.Requested, demoQRStyled, scans)
 	return nil
+}
+
+// attributeQRScans turns a share of the styled link's existing clicks into scans
+// of its two codes (M50).
+//
+// **The same deliberate trip around the service layer attributeSplitClicks
+// makes, for the same reason and with the same bucketing.** These clicks were
+// written by COPY rather than produced by a redirect, so there is no scan for the
+// redirect path to have attributed; the alternative is a demo with two codes and
+// no way to see that they are counted apart, which is the empty page the
+// milestone exists to prevent.
+//
+// Bucketed on the visitor hash, which is derived from the seeded PRNG, so two
+// runs of `make demo-update` produce the same split. Roughly a fifth of the
+// link's human traffic becomes scans, weighted towards the original code:
+// somebody who printed a poster last month and a shop-window card last week has
+// more history on the first, and a demo where two codes had identical numbers
+// would be a demo where the reader cannot tell the columns are real.
+//
+// Bots are left alone. They are excluded from every rollup anyway, and a crawler
+// did not scan anything.
+func (s *demoSeeder) attributeQRScans(
+	ctx context.Context, linkID uuid.UUID, slug string,
+) (int64, error) {
+	const q = `
+		UPDATE click_events ce
+		   SET referrer_host = CASE
+		           WHEN ('x' || substr(encode(ce.visitor_hash, 'hex'), 1, 8))::bit(32)::int % 100
+		                BETWEEN 0 AND 12 THEN $2
+		           ELSE $3
+		       END
+		 WHERE ce.link_id = $1
+		   AND NOT ce.is_bot
+		   AND ('x' || substr(encode(ce.visitor_hash, 'hex'), 1, 8))::bit(32)::int % 100
+		       BETWEEN 0 AND 20`
+	tag, err := s.pool.Exec(ctx, q, linkID,
+		domain.ClickSourceCode(slug), domain.ClickSourceQR)
+	if err != nil {
+		return 0, fmt.Errorf("attribute qr scans on /%s: %w", demoQRStyled, err)
+	}
+	return tag.RowsAffected(), nil
 }
 
 // The styled code's colours and size. Named because the two writes above both
@@ -1139,6 +1201,11 @@ const (
 	demoQRForeground = "#123a6b"
 	demoQRBackground = "#f5f7fa"
 	demoQRSize       = 400
+	// The two labels the demo's codes carry. Different words, because the point
+	// of the pair is that a reader can tell which number belongs to which
+	// printed thing.
+	demoQRDefaultLabel = "Storefront window card"
+	demoQRSecondLabel  = "Summer print run"
 )
 
 // demoWebhooks are the registrations the demo shows.

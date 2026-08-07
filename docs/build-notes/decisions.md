@@ -248,8 +248,10 @@ file. Append a row when you append an entry.
 | [M48: three facts the last two milestones moved](#2026-08-07--m48-three-facts-the-last-two-milestones-moved) | An amendment, not a decision: two line references and a list of four notification kinds, one of which the demo has never seeded. And the pattern behind three amendments in three milestones |
 | [M48: the owner overrules D124 — the picture goes up, and the guard narrows](#2026-08-07--m48-the-owner-overrules-d124-the-picture-goes-up-and-the-guard-narrows) | Owner-set. Why a narrowing and not an exemption, what M47's claim now has to be re-measured against, and why M47 is not reopened |
 | [M49: what B left behind it](#2026-08-07--m49-what-b-left-behind-it) | An amendment, not a decision: the QR panel is not a line range in `link_detail.html` any more, and the generator is 395 lines rather than 338. Fourth amendment in four milestones, and the first where the moved thing is a *file* rather than a line |
+| [M50: two line numbers, and the references that held](#2026-08-07--m50-two-line-numbers-and-the-references-that-held) | An amendment, not a decision. Also the first milestone in the phase whose *migration* number was still right, and why that is not luck |
 | [M48: the panel, the thumbnail that could not go where it was asked, and where a notification leads](#2026-08-07--m48-the-panel-the-thumbnail-that-could-not-go-where-it-was-asked-and-where-a-notification-leads) | D123–D125: a panel is a route first and a popup second, and why that is not D24 reversed or D120 reversed; the QR thumbnail stays below the edit form because M47's fold test refuses a picture above it, and what went in the heading row instead; a map rather than a switch so that *has a mapping* is a question code can ask; the two kinds that lead nowhere and say so; three of seven kinds the demo has never seeded and why no coverage row demands them; and the permission a test fixture had been missing since M47, which hid three sections of the link page from every test that renders it |
 | [M48: the picture goes up — the rule that let it, and the page re-measured](#2026-08-07--m48-the-picture-goes-up-the-rule-that-let-it-and-the-page-re-measured) | D126: what M47's fold guard became — a height class and a 160px budget rather than a blanket refusal of `<svg>`, and why the `height` attribute could not be what is read; one constant, three consumers, and the fixture that would otherwise measure a page nobody is served; `internal/qr` gaining a validated class; and the re-measurement in three engines — 327→349px, 443→465px — checked by reproducing M47's own figures with the picture removed |
+| [M50: the empty slug, the parameter that stayed closed, and the rollup that was not written](#2026-08-07--m50-the-empty-slug-the-parameter-that-stayed-closed-and-the-rollup-that-was-not-written) | D130–D133: why the default code's identity is its *absence* of an identifier and what that bought for every code already printed; why a code identity could not ride inside `src` and how the second parameter is bounded instead; why per-code counts are a filter over the referrer dimension rather than the new rollup campaign analytics was deferred for, and what the Referrers panel therefore still shows; and why the five shipped QR endpoints stayed the default-code shorthand |
 | [M49: the size, the second encoder, and D11 spent on purpose](#2026-08-07--m49-the-size-the-second-encoder-and-d11-spent-on-purpose) | D127–D129: what bounds a rasteriser that D11 refused to allow at all, stated as an allocation rather than as a word; why the quiet zone became the second knob and what the search costs in tie-breaks; why `qr.Style` gained no field and what that bought for every row already in the table; why a form that stopped asking about error correction needed a new service operation rather than a default; and the two encoders sharing one arithmetic, with the claim they are held to and the one they are not |
 
 ---
@@ -21107,3 +21109,220 @@ the file said they said. That is worth recording, because the pattern the M48
 entry named is about *unbuilt* milestone files photographing a moving tree, and
 the prediction it implies is that checking every reference at step 1 exhausts the
 drift rather than sampling it. On this milestone it did.
+
+
+## 2026-08-07 — M50, two line numbers, and the references that held
+
+Amendments under [phase-loop.md](phase-loop.md#amending-a-bullet). Two facts, no
+assertions.
+
+**One.** As it stood: *"Deleting a link cascades its codes, which the existing
+foreign key already does (`00600:56`)"*. As amended: *"(`00600:57`)"*. The tree
+fact: `00600_phase2_dormant.sql:56` is `id uuid PRIMARY KEY`; the cascading
+reference is the line below it. Off by one, and nothing moved it — the reference
+was written a line short.
+
+**Two, and it is the one that mattered.** As it stood: *"`link.QRContent`
+(`internal/link/qr.go:186-198`)"*. As amended: *"(`internal/link/qr.go:322-334`)"*. **Amended a second time at
+[step 3.4](phase-loop.md#3-land), to `:718-730`** — M50's own work moved it
+again, and `QRContent` now takes a slug as well as a URL. Two amendments to one
+reference inside one milestone is not a mistake repeated; it is the same fact
+being true at two different times, and the second one is what a reader of the
+shipped milestone needs.
+The tree fact: `QRContent` is declared at `internal/link/qr.go:322`.
+[M49](phase-details/m49.md) rewrote that file the previous commit, and lines
+186-198 are now somewhere else entirely. The bullet's point — that one function
+builds the payload so *"the encoded payload and the redirect's expectation cannot
+drift apart"* — is unchanged and is precisely the property M50 is about to lean
+on.
+
+**What held, and why it is worth a paragraph.** Every other reference in m50.md
+is still exact: `02700_qr_and_campaigns.sql:34` still drops `scan_count`, `:38-48`
+still carries the comment this milestone quotes back, `:48` still creates
+`qr_codes_link_key`, `internal/domain/attribution.go:36` and `:39` still declare
+`ClickSourceParam` and `ClickSourceQR` with the closed vocabulary below them,
+`domain.MaxCampaignsPerWorkspace` still exists, and Plan.md:926 still carries the
+*Not in Phase 2* row this discharges.
+
+The pattern across five milestones is sharper than *references rot*. **What rots
+is a reference into Go or template source; what holds is a reference into a
+migration.** Every amendment this phase has been the first kind, and every
+migration citation has survived untouched — because a migration is append-only by
+this project's own DDL rule, so a line in `02700` is a line in `02700` forever.
+That is not luck and it is worth knowing when writing the next phase's milestone
+files: cite the thing that cannot move, and where the code has to be cited, cite
+a symbol name beside the number so a reader can find it after the number is
+wrong.
+
+m50.md's own `037xx` is the same shape pointing forward, and it is still right:
+the highest migration in the tree is `03600_automation_watermark_subject.sql`, so
+the next one is `03700`.
+
+
+## 2026-08-07 — M50, the empty slug, the parameter that stayed closed, and the rollup that was not written
+
+Four decisions, and they are one design read four ways. m50.md set the problem
+with unusual precision — a code needs an identity, `src`'s vocabulary must stay
+closed, no counter column may return, per-code counts must be *a filter on an
+existing dimension and not a new rollup*, and the redirect's validation must come
+from data the resolver already holds. Each of the four below is what those
+constraints leave once they are taken together rather than one at a time.
+
+### D130 — The default code's identity is the absence of one
+
+**The empty slug is a link's default code, and its payload carries no code
+parameter at all.**
+
+The obvious design gives every code a generated slug, backfills one onto each of
+`qr_codes`' existing rows, and prints it. It is wrong, and the reason is outside
+the database: **the pictures are already in the world.** Every QR code this
+product has ever drawn encodes `<short url>?src=qr` and nothing else. Give the
+code those pictures are of a slug, and from the moment M50 ships, a poster
+printed last month records as *no code* while a reprint of the same poster
+records as `qr:<slug>` — one code's history split in two, for a code nobody
+touched, with no event anywhere to explain the discontinuity.
+
+So the default code keeps the payload it has. Its identity is that it has no
+`qrc`, which makes it the thing an absent parameter resolves to, which is what
+every already-printed code carries. Migration `03700` therefore backfills
+nothing: `label` and `slug` land as `NOT NULL DEFAULT ''`, and every existing row
+is already the default code of its link.
+
+Three consequences worth writing down, because each is a property somebody will
+later be tempted to change:
+
+- **`qr_codes_link_slug_key` is unique on `(link_id, slug)`**, so `('', link_id)`
+  appears once. A link cannot acquire two unnamed codes and leave the redirect
+  path with two answers to *which code has no parameter*.
+- **The default code cannot be deleted.** Removing it would leave every printed
+  picture resolving to a code that is not there. The API does not expose it —
+  `/qr/codes/{slug}` has no slug for it — and the service refuses `slug == ""`
+  with a sentence naming `DELETE /links/{id}/qr`, which resets its style and is
+  what somebody reaching for the button almost always means.
+- **An unrecognised slug resolves to it.** m50.md's risk section requires that a
+  deleted code's history *stop accumulating rather than be reassigned*, and this
+  satisfies the letter of it: the rows the deleted code earned stay under its own
+  slug forever, and scans arriving afterwards join the default code's bucket
+  rather than some other named code's. It is not nothing — a workspace that
+  retires a poster will see its numbers stop and the default's resume — and
+  `docs/usage.md` says so in the words a reader needs rather than leaving it to
+  be discovered.
+
+Rejected: giving the default code a slug and accepting the split, which is a
+silent data discontinuity; and creating a `qr_codes` row for every link at
+creation time so the slug could be printed from the start, which is the twenty
+rows saying nothing that M41's own comment refused.
+
+### D131 — The identity rides beside `src`, never inside it, and is bounded by resolution
+
+**A new reserved parameter, `qrc`, whose value is resolved against the link's own
+codes before anything is stored.**
+
+`domain.ClickSource`'s vocabulary is closed because `link_dimension_daily`'s
+primary key includes the value: an open one lets anybody append `?src=` and a
+fresh random string to a popular link and grow this project's largest table a row
+at a time. A code identity cannot go in there — it is workspace data, so
+enumerating it is exactly what cannot be done — and widening `src` to admit
+unknown values would reopen the hole the allowlist exists to shut.
+
+The second parameter has the same primary key underneath it, so it needs a bound
+of its own, and it is a different kind: **the value must already be one of this
+link's slugs.** That turns an unbounded set into a set the workspace controls and
+`domain.MaxQRCodesPerLink` caps. Anything else is recorded as no code, which is
+the default code, which is what the request would have recorded before the
+parameter existed.
+
+**Whether that check could be a lookup rather than a query was the milestone's
+stated unknown, and it is a lookup.** m50.md named the alternatives — attribute
+optimistically and validate off the path, or do not ship it in this form — and
+said choosing between them would be a prompt. Neither was needed: the link's
+slugs come home inside `ResolveAliasForRedirect`'s existing round trip, in a
+second lateral on the `qr_codes_link_idx` that `03700` restores, and
+`Snapshot.Codes` carries them. This is the third time that bargain has been made
+on this query — the domain join is M32.5's, the rules lateral is M34's — and it
+is made for the reason both of those were: the alternative is a second query at
+request time or a second cache with its own invalidation, and this is neither.
+
+The snapshot gained the field **without a `CacheKeyVersion` bump**, under the
+rule the bot-blocking comment in `snapshot.go` states: an absent `qc` decodes as
+no named codes, every `qrc` then resolves as unrecognised, and an unrecognised
+value is the default code — which is how the alias behaved before M50. The zero
+value means the same thing to a visitor as the true value would; the residue is
+one number attributed to the default code for at most `REDIRECT_TTL`, not a
+control the owner configured being silently absent. What the field *does* need is
+invalidation, and adding or removing a code publishes one — without it, a replica
+holding a deleted slug goes on crediting a retired poster, which is the one case
+where a stale snapshot writes something wrong rather than merely stale.
+
+Measured: three k6 runs on one image, 240,002 / 240,001 / 240,002 requests, 100%
+under 20ms in all three, means of 93.67µs (no query), 93.86µs (`?src=qr`) and
+93.08µs (`?src=qr&qrc=…`). The resolving column is the fastest of the three,
+which is not a claim that resolution is free — it is that a slice scan over one
+eight-character string is below this measurement's resolution. `docs/slo.md` has
+the run, including the check that it measured the branch it claims: 240,003 click
+events stored as `qr:sloqrcod`.
+
+### D132 — Per-code counts are a filter over the referrer dimension, and the Referrers panel does not change
+
+**A scan's code *is* its stored referrer value: `qr` for the default code and
+`qr:<slug>` for a named one.**
+
+m50.md drew a line and put the milestone on one side of it. Campaign analytics
+was deferred out of this phase because it is *a new pass over `click_events`
+grouped by a mostly-null column, stacked on the job M37 was rewritten to fit*;
+per-code counts had to be *a filter on an existing dimension, not a new rollup*,
+and needing a rollup was to be a finding and a prompt rather than a quiet
+addition.
+
+The tempting shape is M36's: a `click_events.qr_code_id` column, a partial index,
+and a `RollupQRCodeDaily` pass beside `RollupDestinationDaily`. It is precisely
+the thing named as too expensive — a new pass over `click_events` grouped by a
+column that is null on every link that has one code — so it is not what was
+built.
+
+What was built instead adds **nothing at all** to the rollup. M41 already stores a
+scan's source *in* `referrer_host`, and `RollupDimensionDaily` already expands
+that column into the `referrer` dimension. Storing `qr:<slug>` there instead of
+the bare `qr` means the per-code rows are written by the pass that was already
+running, at the same cost, and read by `GetLinkDimensions`' own shape. The colon
+is what makes it safe to namespace: the column otherwise holds hostnames and the
+`direct` sentinel, and a hostname cannot contain one. The number of distinct
+values a link can produce is `MaxQRCodesPerLink + 1`, which is the workspace's
+cap and not the visitor's choice.
+
+**The Referrers panel still shows one `qr` row, and that is deliberate.** D76 put
+scans in that breakdown as a single value beside `direct`, and a link that grew a
+second code would otherwise turn one row into a row per code — a shipped surface
+changing shape because of a feature the reader is not looking at. `Reader` sums
+the QR values back into one row for that dimension and reports the split
+separately, as `LinkStats.QRCodes`. So M41's claim is untouched, and the
+per-code numbers are a section of their own rather than a mutation of somebody
+else's.
+
+`GetLinkQRDimensions` is a separate statement rather than a reuse of
+`GetLinkDimensions` for one reason: that query is bounded at twenty rows ordered
+by clicks, and a link whose busiest referrers are twenty real hostnames would
+lose its own codes off the end of its own breakdown. Same table, same index, same
+shape; only the predicate and the bound differ.
+
+### D133 — The five shipped QR endpoints stay the default-code shorthand
+
+m50.md required this be decided in the milestone and recorded, because silently
+changing what a shipped endpoint answers for is what the contract test exists to
+catch. `GET/PUT/DELETE /links/{id}/qr` and the two picture paths were the whole
+QR surface as of 0.2.0, and a link now has several codes, so they either grow an
+identifier or keep meaning one particular code.
+
+**They keep meaning one code: the default.** A client written against the
+previous release goes on receiving the same picture with the same payload, and
+the endpoint's own sentence — *every link has a code* — stays true without
+qualification. Growing them an identifier would have meant either a required
+parameter, which breaks every existing caller, or an optional one defaulting to
+the same code, which is the shorthand with extra syntax.
+
+The collection lives beside them at `/links/{id}/qr/codes`, keyed by slug rather
+than by row id, because the slug is what a person holding a printed code has in
+hand. `image.svg` and `image.png` sit one segment deeper than the older
+`qr.svg`/`qr.png` for a mechanical reason worth stating so it does not read as
+inconsistency: a `ServeMux` wildcard matches a whole path segment, so
+`{slug}.svg` is not a pattern that exists.

@@ -519,13 +519,56 @@ func demoCoverage() []demoFeature {
 			// one state, and a reader cannot see that a style is a preference —
 			// nor that "back to black on white" is a button that appears only on
 			// a link that has one.
+			// **The ceiling moved to two under M50**, which added a named code
+			// to the same link. It is still a ceiling and still says the same
+			// thing: exactly one link carries stored codes, and every other
+			// link's code is drawn at the default with no row at all.
 			Milestone: "M41", Feature: "A QR code somebody has styled",
 			Query: `SELECT count(*) FROM qr_codes
 			         WHERE workspace_id IN (` + demoWorkspaces + `)`,
-			Min: 1, Max: 1,
+			Min: 2, Max: 2,
 			Shows: "the QR panel with a code that is not black on white, and the " +
 				"reset button beside it — with no styled code the panel shows one " +
 				"state and the style form looks like it does nothing",
+		},
+		{
+			// M50. Two codes on one link, each named, and scan history against
+			// both.
+			//
+			// **Three assertions rather than one, because the feature is the
+			// difference between them.** A link with two rows shows a list; a
+			// link whose two rows are both unnamed shows a list nobody can read;
+			// and a link whose two codes have no scans between them shows a
+			// breakdown of zeroes. The whole value of per-code identity is
+			// telling two numbers apart, so a demo that seeds the codes and not
+			// the traffic demonstrates nothing.
+			Milestone: "M50", Feature: "Two QR codes on one link, told apart",
+			Query: `SELECT count(*) FROM qr_codes
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND label <> ''`,
+			Min: 2, Max: 2,
+			Shows: "the QR panel listing a link's codes by name, with a scan count " +
+				"beside each — one code is a list of one, and unnamed codes are a " +
+				"list nobody can read",
+		},
+		{
+			Milestone: "M50", Feature: "A named code with an identity in its payload",
+			Query: `SELECT count(*) FROM qr_codes
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND slug <> ''`,
+			Min: 1, Max: 1,
+			Shows: "a code whose picture encodes ?src=qr&qrc=<slug> beside one whose " +
+				"picture does not, which is what makes the two scannable apart",
+		},
+		{
+			Milestone: "M50", Feature: "Scan history against more than one code",
+			Query: `SELECT count(DISTINCT referrer_host) FROM click_events
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND (referrer_host = 'qr' OR referrer_host LIKE 'qr:%')`,
+			Min: 2,
+			Shows: "two rows in the per-code breakdown with different numbers in " +
+				"them — with traffic against only one code the panel shows a " +
+				"column of zeroes beside a column of clicks",
 		},
 		{
 			Milestone: "M41", Feature: "Campaigns, more than one, and one of them over",

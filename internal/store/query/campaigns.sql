@@ -87,23 +87,63 @@ UPDATE links SET campaign_id = NULL, updated_at = now()
  WHERE workspace_id = $2 AND campaign_id = $1;
 
 -- name: GetQRCode :one
--- The stored style for a link's code, or no rows for a link that has never been
--- styled. No rows is not an error: it means the default style, which is what
--- every link's code is drawn with until somebody changes it.
+-- One code of a link's, by slug. No rows is not an error for the default code
+-- (slug ''): it means the default style, which is what every link's code is
+-- drawn with until somebody changes it. For any other slug no rows means the
+-- code does not exist, and the service reports that.
 SELECT q.* FROM qr_codes q
 JOIN links l ON l.id = q.link_id
-WHERE q.link_id = $1 AND q.workspace_id = $2 AND l.deleted_at IS NULL;
+WHERE q.link_id = $1 AND q.workspace_id = $2 AND q.slug = $3 AND l.deleted_at IS NULL;
+
+-- name: ListQRCodes :many
+-- Every code a link carries (M50), default first.
+--
+-- Unpaginated, and bounded instead by domain.MaxQRCodesPerLink, which is the
+-- same trade ListCampaigns makes: the cap is small enough that a page of them is
+-- the whole set, and a pager over a list that cannot exceed it would be a
+-- control nobody ever operates.
+--
+-- `q.slug <> ''` sorts false before true, so the default code leads whatever
+-- order the rest were created in — it is the one every already-printed code
+-- attributes to, and a list that buried it would bury the answer to "which of
+-- these is the one on my existing posters".
+SELECT q.* FROM qr_codes q
+JOIN links l ON l.id = q.link_id
+WHERE q.link_id = $1 AND q.workspace_id = $2 AND l.deleted_at IS NULL
+ORDER BY (q.slug <> ''), q.created_at, q.id;
+
+-- name: CountQRCodes :one
+-- What domain.MaxQRCodesPerLink is checked against, the way campaign creation
+-- checks CountCampaigns.
+SELECT count(*) FROM qr_codes WHERE link_id = $1 AND workspace_id = $2;
 
 -- name: UpsertQRCode :one
--- One row per link, which qr_codes_link_key (02700) is what makes true. Without
--- the unique index this is two concurrent inserts and a link with two styles.
-INSERT INTO qr_codes (id, link_id, workspace_id, style)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (link_id) DO UPDATE
+-- One row per (link, slug), which qr_codes_link_slug_key (03700) is what makes
+-- true. Without the unique index this is two concurrent inserts and a link with
+-- two codes answering to one name.
+--
+-- The label is not in the DO UPDATE list. This statement is how a *style* is
+-- written, and a style write must not silently rename the code it is drawn for;
+-- UpdateQRCodeLabel is the operation that renames one.
+INSERT INTO qr_codes (id, link_id, workspace_id, slug, label, style)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (link_id, slug) DO UPDATE
    SET style = EXCLUDED.style, updated_at = now()
 RETURNING *;
 
+-- name: UpdateQRCodeLabel :execrows
+-- Renames one code. The slug is untouched on purpose: it is printed, and a
+-- rename that moved it would break every copy already in the world.
+UPDATE qr_codes SET label = $3, updated_at = now()
+ WHERE id = $1 AND workspace_id = $2;
+
 -- name: DeleteQRCode :execrows
--- Returns the link's code to the default style. A hard delete, because a style
--- row holds nothing but the preference being withdrawn.
-DELETE FROM qr_codes WHERE link_id = $1 AND workspace_id = $2;
+-- Returns the link's default code to the default style. A hard delete, because
+-- the row holds nothing but the preference being withdrawn.
+DELETE FROM qr_codes WHERE link_id = $1 AND workspace_id = $2 AND slug = '';
+
+-- name: DeleteQRCodeByID :execrows
+-- Removes one named code. Scoped by workspace rather than by link, because the
+-- id is already unique and the service has resolved the link before it gets
+-- here; the workspace column is the tenancy check.
+DELETE FROM qr_codes WHERE id = $1 AND workspace_id = $2 AND slug <> '';

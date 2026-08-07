@@ -3,6 +3,7 @@ package httpx
 import (
 	"net/http"
 
+	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/qr"
 )
 
@@ -153,8 +154,9 @@ func (a *LinkAPI) SetQR(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// DeleteQR returns the link's code to the default style. Not "delete the QR
-// code" — there is no such thing to delete, because every link has one.
+// DeleteQR returns the link's default code to the default style. Not "delete the
+// QR code" — there is no such thing to delete, because every link has one.
+// Removing one of the *named* codes M50 added is DeleteQRCode below.
 func (a *LinkAPI) DeleteQR(w http.ResponseWriter, r *http.Request) {
 	id, err := pathUUID(r, "id")
 	if err != nil {
@@ -166,4 +168,188 @@ func (a *LinkAPI) DeleteQR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// More than one code per link (M50).
+//
+// **A collection under the link, whose members are keyed by their printed
+// slug.** A code's slug is what a person has in hand — it is in the payload of
+// the picture in front of them — so it is what the path is written in, and the
+// row's uuid is reported for completeness rather than used to address anything.
+//
+// The five operations above are untouched and now name the link's *default*
+// code: the one whose payload carries no code parameter, which is every picture
+// this product drew before this milestone. That choice is recorded in
+// decisions.md under M50, because silently changing what a shipped endpoint
+// answers for is the thing the contract test exists to catch.
+//
+// **The empty slug is not addressable here.** `/qr/codes/` is not a route, and
+// the default code is reached through `/qr` — one identity, one path. What
+// `/qr/codes` does list is every code including the default, because a client
+// asking what codes a link has wants the answer to include the one it started
+// with.
+
+// ListQRCodes answers with every code a link carries, default first.
+func (a *LinkAPI) ListQRCodes(w http.ResponseWriter, r *http.Request) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	codes, err := a.Links.ListQRCodes(r.Context(), IdentityFrom(r.Context()), id)
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{
+		"codes": codes,
+		"max":   domain.MaxQRCodesPerLink,
+	})
+}
+
+type qrCodeRequest struct {
+	Label string   `json:"label"`
+	Style qr.Style `json:"style"`
+}
+
+// CreateQRCode adds a named code to a link.
+//
+// The slug is not in the request and cannot be. It is generated, because it is
+// printed: a caller-chosen one would be a name the caller has to keep unique
+// across the link's codes and correct across every copy already in the world,
+// and the failure mode of getting it wrong is a poster attributing to somebody
+// else's campaign.
+func (a *LinkAPI) CreateQRCode(w http.ResponseWriter, r *http.Request) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	var req qrCodeRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	code, err := a.Links.CreateQRCode(r.Context(), IdentityFrom(r.Context()), id, req.Label)
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusCreated, map[string]any{"code": code, "levels": qr.Levels})
+}
+
+// GetQRCode answers with one named code.
+func (a *LinkAPI) GetQRCode(w http.ResponseWriter, r *http.Request) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	code, err := a.Links.QRCodeBySlug(r.Context(), IdentityFrom(r.Context()), id, r.PathValue("slug"))
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{"code": code, "levels": qr.Levels})
+}
+
+// SetQRCode replaces a named code's label and style.
+//
+// PUT rather than PATCH, for the reason SetQR is a PUT: an omitted style field
+// means its default, which is what makes "back to plain black on white" an empty
+// object rather than five explicit fields. The label follows the same rule —
+// omitting it clears the name — because a request that replaces a resource
+// whole and quietly preserves one field is the shape nobody can predict.
+func (a *LinkAPI) SetQRCode(w http.ResponseWriter, r *http.Request) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	slug := r.PathValue("slug")
+	var req qrCodeRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	actor := IdentityFrom(r.Context())
+	if _, err := a.Links.SetQRCodeLabel(r.Context(), actor, id, slug, req.Label); err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	code, err := a.Links.SetQRStyleBySlug(r.Context(), actor, id, slug, req.Style)
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{"code": code, "levels": qr.Levels})
+}
+
+// DeleteQRCode removes a named code.
+//
+// The default code is not reachable here — it has no slug to name it with — and
+// that is the whole of why it cannot be deleted by accident: the operation that
+// looks like deleting it is `DELETE /links/{id}/qr`, which resets its style.
+func (a *LinkAPI) DeleteQRCode(w http.ResponseWriter, r *http.Request) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	if err := a.Links.DeleteQRCode(
+		r.Context(), IdentityFrom(r.Context()), id, r.PathValue("slug"),
+	); err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// GetQRCodeSVG serves a named code's picture.
+func (a *LinkAPI) GetQRCodeSVG(w http.ResponseWriter, r *http.Request) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	svg, err := a.Links.RenderQRBySlug(r.Context(), IdentityFrom(r.Context()), id, r.PathValue("slug"))
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	writeQRImage(w, qr.ContentType, "", svg)
+}
+
+// GetQRCodePNG serves a named code's picture as a raster image.
+func (a *LinkAPI) GetQRCodePNG(w http.ResponseWriter, r *http.Request) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	out, err := a.Links.RenderQRPNGBySlug(r.Context(), IdentityFrom(r.Context()), id, r.PathValue("slug"))
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	writeQRImage(w, qr.PNGContentType, PNGDisposition, out)
+}
+
+// writeQRImage is the headers every picture response here shares.
+//
+// One function rather than four copies, because the properties are the same
+// four every time and a copy that drifts is a response served without one of
+// them: the cache policy that keeps a workspace's own picture out of a shared
+// cache, the refusal to sniff, and — for the raster — the disposition that names
+// a constant rather than workspace text.
+func writeQRImage(w http.ResponseWriter, contentType, disposition string, body []byte) {
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", SVGMaxAge)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if disposition != "" {
+		w.Header().Set("Content-Disposition", disposition)
+	}
+	// The bytes are generated from integers and validated colours — see
+	// internal/qr's package comment and TestNothingButAColourReachesTheDrawing.
+	_, _ = w.Write(body) //nolint:gosec // G705: the drawing holds integers and parsed colours only
 }

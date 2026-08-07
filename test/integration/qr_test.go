@@ -601,3 +601,343 @@ func deref(s *string) string {
 	}
 	return `"` + *s + `"`
 }
+
+// More than one code per link, told apart in the analytics (M50).
+//
+// **The chain this exercises is the milestone.** A named code prints a slug, the
+// redirect resolves that slug against the codes the link actually has, the click
+// is stored under a value derived from it, the rollup carries it, and the reader
+// turns it back into the code's label. Every one of those has to hold or the
+// feature is two identical pictures with two names.
+//
+// The tests below are ordered by what they cost if they break: attribution
+// first, then the boundary a hostile parameter is bounded by, then the shape of
+// the surfaces.
+
+// TestTwoCodesOnOneLinkAreCountedApart is the milestone's whole claim.
+func TestTwoCodesOnOneLinkAreCountedApart(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("twocodes", "https://example.com/summer")
+
+	named := f.createQRCode(t, id, "Autumn poster")
+	if named.Slug == "" {
+		t.Fatal("a created code carries no slug; nothing in its payload could say which code it is")
+	}
+
+	// Scan the default code twice and the named code once, following exactly
+	// what each picture encodes rather than a URL rebuilt here.
+	f.scan(t, f.codeContent(t, id, ""))
+	f.scan(t, f.codeContent(t, id, ""))
+	f.scan(t, f.codeContent(t, id, named.Slug))
+	waitForClicks(t, f.pool, id, 3)
+
+	// The stored column, read directly so the assertion does not go through the
+	// reader that might be wrong about it.
+	counts := map[string]int{}
+	rows, err := f.pool.Query(t.Context(),
+		`SELECT referrer_host, count(*) FROM click_events WHERE link_id = $1 GROUP BY 1`, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var host *string
+		var n int
+		if err := rows.Scan(&host, &n); err != nil {
+			t.Fatal(err)
+		}
+		counts[deref(host)] = n
+	}
+	rows.Close()
+	if got := counts[`"`+domain.ClickSourceQR+`"`]; got != 2 {
+		t.Errorf("the default code recorded %d scans, want 2 (all of them: %v)", got, counts)
+	}
+	if got := counts[`"`+domain.ClickSourceCode(named.Slug)+`"`]; got != 1 {
+		t.Errorf("the named code recorded %d scans, want 1 (all of them: %v)", got, counts)
+	}
+
+	if err := analytics.NewRoller(f.pool, nil).
+		RunRecentDimensions(context.Background(), time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	// And through the reader, which is what the dashboard and the API show. The
+	// label comes back with the numbers, because a breakdown keyed on an
+	// eight-character slug is a breakdown nobody can read.
+	stats := f.linkStats(t, id)
+	byLabel := map[string]int64{}
+	for _, c := range stats.QRCodes {
+		byLabel[c.Slug] = c.Clicks
+		if c.Slug == named.Slug && c.Label != "Autumn poster" {
+			t.Errorf("the named code came back labelled %q, want %q", c.Label, "Autumn poster")
+		}
+	}
+	if byLabel[""] != 2 || byLabel[named.Slug] != 1 {
+		t.Errorf("the per-code breakdown reads %v; want 2 for the default code and 1 for %q",
+			byLabel, named.Slug)
+	}
+
+	// **The referrers breakdown is unchanged**, which is M41's shipped claim and
+	// D76's: every scan is one value beside `direct`, however many codes the
+	// link carries. A panel that grew a row per code would be a surface changing
+	// shape because a feature the reader is not looking at was used.
+	var qrRows, qrClicks int64
+	for _, v := range stats.Dimensions["referrer"] {
+		if v.Value == domain.ClickSourceQR {
+			qrRows++
+			qrClicks = v.Clicks
+		}
+		if strings.HasPrefix(v.Value, domain.ClickSourceQR+":") {
+			t.Errorf("the referrers breakdown holds %q; a code's slug is not a referrer, "+
+				"and M41 promised one value for every scan", v.Value)
+		}
+	}
+	if qrRows != 1 || qrClicks != 3 {
+		t.Errorf("the referrers breakdown holds %d %q rows totalling %d clicks; want one "+
+			"row of 3", qrRows, domain.ClickSourceQR, qrClicks)
+	}
+}
+
+// TestAnUnknownCodeIsAttributedToTheDefaultRatherThanStored is the write-surface
+// bound, end to end.
+//
+// `link_dimension_daily`'s primary key includes the value, so a code parameter a
+// visitor could choose would let anybody grow that table a row at a time. The
+// closed vocabulary that bounds `src` cannot bound this one — the whole point is
+// that the value is workspace data — so the bound is resolution against the
+// link's own codes, and this is the assertion that it happens.
+func TestAnUnknownCodeIsAttributedToTheDefaultRatherThanStored(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("hostilecode", "https://example.com/x")
+	base := f.codeContent(t, id, "")
+
+	for _, raw := range []string{"zzzzzzzz", "evil", strings.Repeat("a", 40), "%2e%2e"} {
+		f.scan(t, base+"&"+domain.ClickCodeParam+"="+raw)
+	}
+	waitForClicks(t, f.pool, id, 4)
+
+	var distinct int
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT count(DISTINCT referrer_host) FROM click_events WHERE link_id = $1`,
+		id).Scan(&distinct); err != nil {
+		t.Fatal(err)
+	}
+	if distinct != 1 {
+		t.Fatalf("four invented code parameters produced %d distinct stored values; every "+
+			"one of them is a permanent row in the dimension rollup", distinct)
+	}
+	var host *string
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT DISTINCT referrer_host FROM click_events WHERE link_id = $1`, id).Scan(&host); err != nil {
+		t.Fatal(err)
+	}
+	if host == nil || *host != domain.ClickSourceQR {
+		t.Fatalf("an unrecognised code was stored as %s, want the default code %q",
+			deref(host), domain.ClickSourceQR)
+	}
+}
+
+// TestADeletedCodeStopsAccumulatingRatherThanBeingReassigned is the risk m50.md
+// names and says belongs in the documentation.
+//
+// A printed code outlives the row that describes it. What must not happen is the
+// old picture's scans landing on some *other* code, which would rewrite one
+// campaign's numbers with another's traffic.
+func TestADeletedCodeStopsAccumulatingRatherThanBeingReassigned(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("retired", "https://example.com/x")
+	named := f.createQRCode(t, id, "Spring flyer")
+	printed := f.codeContent(t, id, named.Slug)
+
+	f.scan(t, printed)
+	waitForClicks(t, f.pool, id, 1)
+
+	resp := f.deleteAPI("/api/v1/links/" + id.String() + "/qr/codes/" + named.Slug)
+	if resp != http.StatusNoContent {
+		t.Fatalf("deleting the code answered %d, want 204", resp)
+	}
+
+	// The same printed picture, scanned after the code is gone.
+	f.scan(t, printed)
+	waitForClicks(t, f.pool, id, 2)
+
+	counts := map[string]int{}
+	rows, err := f.pool.Query(t.Context(),
+		`SELECT referrer_host, count(*) FROM click_events WHERE link_id = $1 GROUP BY 1`, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var host *string
+		var n int
+		if err := rows.Scan(&host, &n); err != nil {
+			t.Fatal(err)
+		}
+		counts[deref(host)] = n
+	}
+	rows.Close()
+	if counts[`"`+domain.ClickSourceCode(named.Slug)+`"`] != 1 {
+		t.Errorf("the deleted code's history reads %v; the scan it earned while it existed "+
+			"must still be there", counts)
+	}
+	if counts[`"`+domain.ClickSourceQR+`"`] != 1 {
+		t.Errorf("the scan after the deletion reads %v; it should be recorded as no code, "+
+			"which is the link's default", counts)
+	}
+}
+
+// TestTheDefaultCodesPayloadIsUnchanged is the compatibility claim the whole
+// design rests on.
+//
+// Every picture this product printed before M50 carries `?src=qr` and nothing
+// else. If the default code's payload gained an identifier, every one of those
+// pictures would start recording as *no code* while new prints recorded as the
+// default — one code's history split in two, for a code nobody touched.
+func TestTheDefaultCodesPayloadIsUnchanged(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("unchanged", "https://example.com/x")
+	f.createQRCode(t, id, "A second code, which must not disturb the first")
+
+	content := f.codeContent(t, id, "")
+	if strings.Contains(content, domain.ClickCodeParam+"=") {
+		t.Fatalf("the default code now encodes %q; every already-printed picture of this "+
+			"link carries the payload without it", content)
+	}
+	if !strings.HasSuffix(content, domain.ClickSourceParam+"="+domain.ClickSourceQR) {
+		t.Fatalf("the default code encodes %q, which is not what M41 shipped", content)
+	}
+}
+
+// TestALinkWillNotCarryMoreCodesThanItsAnalyticsCanDraw is the cap.
+func TestALinkWillNotCarryMoreCodesThanItsAnalyticsCanDraw(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("capped", "https://example.com/x")
+
+	// The default code counts, so the cap is reached one create short of it.
+	for i := range domain.MaxQRCodesPerLink - 1 {
+		f.createQRCode(t, id, "code "+strconv.Itoa(i))
+	}
+	resp := f.postJSON("/api/v1/links/"+id.String()+"/qr/codes", `{"label":"one too many"}`)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("the %dth code answered %d, want 422: a link with a thousand codes is a "+
+			"link whose analytics page cannot be drawn",
+			domain.MaxQRCodesPerLink+1, resp.StatusCode)
+	}
+}
+
+// TestThePanelListsEveryCodeWithItsOwnDownload is the surface m50.md asks for.
+func TestThePanelListsEveryCodeWithItsOwnDownload(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("listed", "https://example.com/x")
+	named := f.createQRCode(t, id, "Shop window card")
+
+	page := f.getHTML("/links/" + id.String() + "/qr")
+	for _, want := range []string{
+		"Shop window card",
+		named.Slug,
+		"/links/" + id.String() + "/qr/codes/" + named.Slug + "/image.png",
+		"/links/" + id.String() + "/qr/codes/" + named.Slug + "/image.svg",
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the QR panel does not mention %q; m50.md asks for each code with its "+
+				"label, its size and its download", want)
+		}
+	}
+}
+
+// createQRCode adds a named code through the API and returns it.
+func (f *ruleFixture) createQRCode(t *testing.T, linkID uuid.UUID, label string) link.QRCode {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{"label": label})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp := f.postJSON("/api/v1/links/"+linkID.String()+"/qr/codes", string(body))
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		raw, _ := io.ReadAll(resp.Body)
+		t.Fatalf("creating a QR code answered %d: %s", resp.StatusCode, raw)
+	}
+	var out struct {
+		Code link.QRCode `json:"code"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	return out.Code
+}
+
+// codeContent is what one of a link's codes encodes, read over the API rather
+// than rebuilt here — so a change to the payload breaks these tests instead of
+// being copied into them. qrContent above is its service-layer sibling for the
+// default code, which predates named codes.
+func (f *ruleFixture) codeContent(t *testing.T, linkID uuid.UUID, slug string) string {
+	t.Helper()
+	path := "/api/v1/links/" + linkID.String() + "/qr"
+	if slug != "" {
+		path += "/codes/" + slug
+	}
+	var body struct {
+		QR struct {
+			Content string `json:"content"`
+		} `json:"qr"`
+		Code struct {
+			Content string `json:"content"`
+		} `json:"code"`
+	}
+	if err := json.Unmarshal([]byte(f.getJSON(path)), &body); err != nil {
+		t.Fatal(err)
+	}
+	content := body.QR.Content
+	if slug != "" {
+		content = body.Code.Content
+	}
+	if content == "" {
+		t.Fatalf("GET %s reported no content for the code", path)
+	}
+	return content
+}
+
+// scan follows a code's payload the way a camera would: the whole URL out of the
+// picture, nothing added.
+func (f *ruleFixture) scan(t *testing.T, content string) {
+	t.Helper()
+	u, err := url.Parse(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.location(u.RequestURI(), nil)
+}
+
+// linkStats reads the analytics the dashboard and the API read.
+func (f *ruleFixture) linkStats(t *testing.T, linkID uuid.UUID) analytics.LinkStats {
+	t.Helper()
+	var out analytics.LinkStats
+	if err := json.Unmarshal(
+		[]byte(f.getJSON("/api/v1/links/"+linkID.String()+"/stats")), &out,
+	); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// deleteAPI issues a DELETE and returns the status.
+func (f *ruleFixture) deleteAPI(path string) int {
+	f.t.Helper()
+	req, err := http.NewRequestWithContext(f.t.Context(), http.MethodDelete, f.server.URL+path, nil)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	resp, err := f.client.Do(req)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	return resp.StatusCode
+}

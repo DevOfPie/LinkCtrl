@@ -501,12 +501,13 @@ func (h *RedirectHandler) record(
 		IP:            clientIPString(r),
 		UserAgent:     r.UserAgent(),
 		Referrer:      r.Referer(),
-		// Where the visitor came from when the browser cannot say (M41). Read
-		// from the raw query without parsing it: the substring test is false for
-		// every request to every link that is not a QR scan, which is nearly all
-		// of them, and `r.URL.Query()` allocates a map the 20ms budget should
-		// not pay for on a path that would throw it away.
-		Source:    clickSource(r.URL.RawQuery),
+		// Where the visitor came from when the browser cannot say (M41), and
+		// since M50 which of the link's codes it was. Read from the raw query
+		// without parsing it: the substring test is false for every request to
+		// every link that is not a QR scan, which is nearly all of them, and
+		// `r.URL.Query()` allocates a map the 20ms budget should not pay for on
+		// a path that would throw it away.
+		Source:    clickSource(r.URL.RawQuery, snap),
 		Language:  r.Header.Get("Accept-Language"),
 		LatencyUS: latencyUS(time.Since(start)),
 		// The within-day returning-visitor set is maintained by the ingester, for
@@ -526,7 +527,8 @@ func (h *RedirectHandler) record(
 	})
 }
 
-// clickSource pulls a recognised `?src=` value out of a raw query string (M41).
+// clickSource pulls a recognised `?src=` value out of a raw query string (M41),
+// naming the QR code it came from where the payload says which (M50).
 //
 // **It parses nothing unless the parameter is there.** `strings.Contains` on the
 // raw string is one scan with no allocation and is false for every request that
@@ -537,7 +539,19 @@ func (h *RedirectHandler) record(
 // An unparseable query is not an error here. A malformed query string is the
 // visitor's problem and it does not stop a redirect, so it simply attributes
 // nothing.
-func clickSource(rawQuery string) string {
+//
+// **The code parameter is read inside the branch the source already paid for.**
+// It is only meaningful beside a recognised source — a `qrc` on a link nobody
+// scanned is somebody editing a URL — so the whole of M50's addition to this
+// path is one map lookup and a scan of a slice that is empty for every link with
+// no named codes, both of them after the test that is already false for nearly
+// every request on the instance.
+//
+// The slug is resolved against the snapshot rather than trusted, and an
+// unrecognised one falls through to the bare source, which is the default code.
+// That is what keeps the parameter from being a write surface: nothing a visitor
+// types reaches `link_dimension_daily`, only a value that was already there.
+func clickSource(rawQuery string, snap *redirect.Snapshot) string {
 	if rawQuery == "" || !strings.Contains(rawQuery, domain.ClickSourceParam+"=") {
 		return ""
 	}
@@ -549,7 +563,10 @@ func clickSource(rawQuery string) string {
 	if !ok {
 		return ""
 	}
-	return src
+	if src != domain.ClickSourceQR || snap == nil {
+		return src
+	}
+	return domain.ClickSourceCode(snap.CodeSlug(values.Get(domain.ClickCodeParam)))
 }
 
 // blocked refuses an automated client.

@@ -235,16 +235,38 @@ func registerAppRoutes(d Deps, app *appMux) {
 			//
 			// PUT rather than PATCH: an omitted style field means its default,
 			// which is what makes "back to plain black on white" an empty object.
-			"GET " + APIPrefix + "/links/{id}/qr":            api.GetQR,
-			"GET " + APIPrefix + "/links/{id}/qr.svg":        api.GetQRSVG,
-			"GET " + APIPrefix + "/links/{id}/qr.png":        api.GetQRPNG,
-			"PUT " + APIPrefix + "/links/{id}/qr":            api.SetQR,
-			"DELETE " + APIPrefix + "/links/{id}/qr":         api.DeleteQR,
-			"GET " + APIPrefix + "/folders":                  api.ListFolders,
-			"POST " + APIPrefix + "/folders":                 api.CreateFolder,
-			"PATCH " + APIPrefix + "/folders/{folderID}":     api.UpdateFolder,
-			"DELETE " + APIPrefix + "/folders/{folderID}":    api.DeleteFolder,
-			"POST " + APIPrefix + "/folders/{folderID}/move": api.MoveFolder,
+			//
+			// **The five above stayed the link's *default* code (M50).** A link
+			// may now carry several, and the choice m50.md required be made and
+			// recorded was between growing these an identifier and leaving them
+			// as the shorthand. They are the shorthand: the default code is what
+			// every already-printed picture resolves to, so a client calling
+			// `GET /links/{id}/qr` today goes on getting the same code tomorrow,
+			// which is exactly what the contract test exists to hold.
+			//
+			// The `/qr/codes` collection below is where several are addressed. Its
+			// members are keyed by slug rather than by id because the slug is what
+			// is printed on the code and therefore the identity somebody has in
+			// hand, and its `.svg`/`.png` siblings are one path segment deeper for
+			// a mechanical reason: ServeMux wildcards match a whole segment, so
+			// `{slug}.svg` is not a pattern that exists.
+			"GET " + APIPrefix + "/links/{id}/qr":                        api.GetQR,
+			"GET " + APIPrefix + "/links/{id}/qr.svg":                    api.GetQRSVG,
+			"GET " + APIPrefix + "/links/{id}/qr.png":                    api.GetQRPNG,
+			"PUT " + APIPrefix + "/links/{id}/qr":                        api.SetQR,
+			"DELETE " + APIPrefix + "/links/{id}/qr":                     api.DeleteQR,
+			"GET " + APIPrefix + "/links/{id}/qr/codes":                  api.ListQRCodes,
+			"POST " + APIPrefix + "/links/{id}/qr/codes":                 api.CreateQRCode,
+			"GET " + APIPrefix + "/links/{id}/qr/codes/{slug}":           api.GetQRCode,
+			"PUT " + APIPrefix + "/links/{id}/qr/codes/{slug}":           api.SetQRCode,
+			"DELETE " + APIPrefix + "/links/{id}/qr/codes/{slug}":        api.DeleteQRCode,
+			"GET " + APIPrefix + "/links/{id}/qr/codes/{slug}/image.svg": api.GetQRCodeSVG,
+			"GET " + APIPrefix + "/links/{id}/qr/codes/{slug}/image.png": api.GetQRCodePNG,
+			"GET " + APIPrefix + "/folders":                              api.ListFolders,
+			"POST " + APIPrefix + "/folders":                             api.CreateFolder,
+			"PATCH " + APIPrefix + "/folders/{folderID}":                 api.UpdateFolder,
+			"DELETE " + APIPrefix + "/folders/{folderID}":                api.DeleteFolder,
+			"POST " + APIPrefix + "/folders/{folderID}/move":             api.MoveFolder,
 			// Campaigns (M41). A sibling collection rather than a subresource of
 			// a link, exactly as folders are: a campaign exists whether or not
 			// anything carries it, and which links do is a question the links

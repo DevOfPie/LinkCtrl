@@ -24,6 +24,24 @@ func (q *Queries) CountCampaigns(ctx context.Context, workspaceID uuid.UUID) (in
 	return count, err
 }
 
+const countQRCodes = `-- name: CountQRCodes :one
+SELECT count(*) FROM qr_codes WHERE link_id = $1 AND workspace_id = $2
+`
+
+type CountQRCodesParams struct {
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+}
+
+// What domain.MaxQRCodesPerLink is checked against, the way campaign creation
+// checks CountCampaigns.
+func (q *Queries) CountQRCodes(ctx context.Context, arg CountQRCodesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countQRCodes, arg.LinkID, arg.WorkspaceID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createCampaign = `-- name: CreateCampaign :one
 
 INSERT INTO campaigns (id, workspace_id, name, slug, description, starts_at, ends_at)
@@ -104,7 +122,7 @@ func (q *Queries) DeleteCampaign(ctx context.Context, arg DeleteCampaignParams) 
 }
 
 const deleteQRCode = `-- name: DeleteQRCode :execrows
-DELETE FROM qr_codes WHERE link_id = $1 AND workspace_id = $2
+DELETE FROM qr_codes WHERE link_id = $1 AND workspace_id = $2 AND slug = ''
 `
 
 type DeleteQRCodeParams struct {
@@ -112,10 +130,30 @@ type DeleteQRCodeParams struct {
 	WorkspaceID uuid.UUID
 }
 
-// Returns the link's code to the default style. A hard delete, because a style
-// row holds nothing but the preference being withdrawn.
+// Returns the link's default code to the default style. A hard delete, because
+// the row holds nothing but the preference being withdrawn.
 func (q *Queries) DeleteQRCode(ctx context.Context, arg DeleteQRCodeParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteQRCode, arg.LinkID, arg.WorkspaceID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteQRCodeByID = `-- name: DeleteQRCodeByID :execrows
+DELETE FROM qr_codes WHERE id = $1 AND workspace_id = $2 AND slug <> ''
+`
+
+type DeleteQRCodeByIDParams struct {
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+}
+
+// Removes one named code. Scoped by workspace rather than by link, because the
+// id is already unique and the service has resolved the link before it gets
+// here; the workspace column is the tenancy check.
+func (q *Queries) DeleteQRCodeByID(ctx context.Context, arg DeleteQRCodeByIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteQRCodeByID, arg.ID, arg.WorkspaceID)
 	if err != nil {
 		return 0, err
 	}
@@ -155,21 +193,23 @@ func (q *Queries) GetCampaign(ctx context.Context, arg GetCampaignParams) (Campa
 }
 
 const getQRCode = `-- name: GetQRCode :one
-SELECT q.id, q.link_id, q.workspace_id, q.style, q.created_at, q.updated_at FROM qr_codes q
+SELECT q.id, q.link_id, q.workspace_id, q.style, q.created_at, q.updated_at, q.label, q.slug FROM qr_codes q
 JOIN links l ON l.id = q.link_id
-WHERE q.link_id = $1 AND q.workspace_id = $2 AND l.deleted_at IS NULL
+WHERE q.link_id = $1 AND q.workspace_id = $2 AND q.slug = $3 AND l.deleted_at IS NULL
 `
 
 type GetQRCodeParams struct {
 	LinkID      uuid.UUID
 	WorkspaceID uuid.UUID
+	Slug        string
 }
 
-// The stored style for a link's code, or no rows for a link that has never been
-// styled. No rows is not an error: it means the default style, which is what
-// every link's code is drawn with until somebody changes it.
+// One code of a link's, by slug. No rows is not an error for the default code
+// (slug ”): it means the default style, which is what every link's code is
+// drawn with until somebody changes it. For any other slug no rows means the
+// code does not exist, and the service reports that.
 func (q *Queries) GetQRCode(ctx context.Context, arg GetQRCodeParams) (QrCode, error) {
-	row := q.db.QueryRow(ctx, getQRCode, arg.LinkID, arg.WorkspaceID)
+	row := q.db.QueryRow(ctx, getQRCode, arg.LinkID, arg.WorkspaceID, arg.Slug)
 	var i QrCode
 	err := row.Scan(
 		&i.ID,
@@ -178,6 +218,8 @@ func (q *Queries) GetQRCode(ctx context.Context, arg GetQRCodeParams) (QrCode, e
 		&i.Style,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Label,
+		&i.Slug,
 	)
 	return i, err
 }
@@ -243,6 +285,58 @@ func (q *Queries) ListCampaigns(ctx context.Context, workspaceID uuid.UUID) ([]L
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.LinkCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listQRCodes = `-- name: ListQRCodes :many
+SELECT q.id, q.link_id, q.workspace_id, q.style, q.created_at, q.updated_at, q.label, q.slug FROM qr_codes q
+JOIN links l ON l.id = q.link_id
+WHERE q.link_id = $1 AND q.workspace_id = $2 AND l.deleted_at IS NULL
+ORDER BY (q.slug <> ''), q.created_at, q.id
+`
+
+type ListQRCodesParams struct {
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+}
+
+// Every code a link carries (M50), default first.
+//
+// Unpaginated, and bounded instead by domain.MaxQRCodesPerLink, which is the
+// same trade ListCampaigns makes: the cap is small enough that a page of them is
+// the whole set, and a pager over a list that cannot exceed it would be a
+// control nobody ever operates.
+//
+// `q.slug <> ”` sorts false before true, so the default code leads whatever
+// order the rest were created in — it is the one every already-printed code
+// attributes to, and a list that buried it would bury the answer to "which of
+// these is the one on my existing posters".
+func (q *Queries) ListQRCodes(ctx context.Context, arg ListQRCodesParams) ([]QrCode, error) {
+	rows, err := q.db.Query(ctx, listQRCodes, arg.LinkID, arg.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []QrCode{}
+	for rows.Next() {
+		var i QrCode
+		if err := rows.Scan(
+			&i.ID,
+			&i.LinkID,
+			&i.WorkspaceID,
+			&i.Style,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Label,
+			&i.Slug,
 		); err != nil {
 			return nil, err
 		}
@@ -337,28 +431,58 @@ func (q *Queries) UpdateCampaign(ctx context.Context, arg UpdateCampaignParams) 
 	return i, err
 }
 
+const updateQRCodeLabel = `-- name: UpdateQRCodeLabel :execrows
+UPDATE qr_codes SET label = $3, updated_at = now()
+ WHERE id = $1 AND workspace_id = $2
+`
+
+type UpdateQRCodeLabelParams struct {
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+	Label       string
+}
+
+// Renames one code. The slug is untouched on purpose: it is printed, and a
+// rename that moved it would break every copy already in the world.
+func (q *Queries) UpdateQRCodeLabel(ctx context.Context, arg UpdateQRCodeLabelParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateQRCodeLabel, arg.ID, arg.WorkspaceID, arg.Label)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const upsertQRCode = `-- name: UpsertQRCode :one
-INSERT INTO qr_codes (id, link_id, workspace_id, style)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (link_id) DO UPDATE
+INSERT INTO qr_codes (id, link_id, workspace_id, slug, label, style)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (link_id, slug) DO UPDATE
    SET style = EXCLUDED.style, updated_at = now()
-RETURNING id, link_id, workspace_id, style, created_at, updated_at
+RETURNING id, link_id, workspace_id, style, created_at, updated_at, label, slug
 `
 
 type UpsertQRCodeParams struct {
 	ID          uuid.UUID
 	LinkID      uuid.UUID
 	WorkspaceID uuid.UUID
+	Slug        string
+	Label       string
 	Style       []byte
 }
 
-// One row per link, which qr_codes_link_key (02700) is what makes true. Without
-// the unique index this is two concurrent inserts and a link with two styles.
+// One row per (link, slug), which qr_codes_link_slug_key (03700) is what makes
+// true. Without the unique index this is two concurrent inserts and a link with
+// two codes answering to one name.
+//
+// The label is not in the DO UPDATE list. This statement is how a *style* is
+// written, and a style write must not silently rename the code it is drawn for;
+// UpdateQRCodeLabel is the operation that renames one.
 func (q *Queries) UpsertQRCode(ctx context.Context, arg UpsertQRCodeParams) (QrCode, error) {
 	row := q.db.QueryRow(ctx, upsertQRCode,
 		arg.ID,
 		arg.LinkID,
 		arg.WorkspaceID,
+		arg.Slug,
+		arg.Label,
 		arg.Style,
 	)
 	var i QrCode
@@ -369,6 +493,8 @@ func (q *Queries) UpsertQRCode(ctx context.Context, arg UpsertQRCodeParams) (QrC
 		&i.Style,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Label,
+		&i.Slug,
 	)
 	return i, err
 }

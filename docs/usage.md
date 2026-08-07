@@ -295,15 +295,51 @@ PNG** and **Download the SVG** buttons.
 **Two formats, one picture.** The PNG is the file most programs open; the SVG is
 vector text and is the one to use for anything that will be resized again. They
 are generated from the same grid at the same size, so they are the same image.
-There is still no way to have two codes for one link.
 
 **The code encodes your short URL with `?src=qr` on it**, and that is what makes
 a scan countable. A camera sends no `Referer` header, so without the parameter
 every scan would arrive indistinguishable from somebody typing the URL by hand.
 Scans show up in the link's **Referrers** breakdown as `qr`, beside `direct` —
 counted, deduplicated by visitor and filtered for bots like every other click.
-Two things follow: somebody who types `?src=qr` by hand is counted as a scan, and
-two printed codes for one link cannot be told apart.
+One thing follows: somebody who types `?src=qr` by hand is counted as a scan.
+
+### More than one code for a link
+
+A print run and a shop-window card pointing at the same link used to be the same
+picture, so their scans were the same number. **Add another code** in the panel,
+give it a name, and it becomes a code of its own — the same destination, its own
+row in the breakdown.
+
+Each code you add prints an identity in its picture, as `&qrc=<something>` beside
+`?src=qr`. That is what the redirect reads to say which code was scanned. The
+name you type is for you: it never appears in the picture, in a URL, or anywhere
+a visitor can see it.
+
+**Your link's original code is untouched.** It keeps the picture it always had —
+nothing added to the payload — which is exactly why every copy of it already
+printed, mounted or published goes on being counted as the same code it always
+was. There is nothing to reprint.
+
+A link carries at most **twenty** codes. That is the number that keeps the panel
+a list and the breakdown a chart.
+
+A code has no destination, no expiry and no gate of its own. Those belong to the
+link, which is what makes changing the link's destination change every printed
+code at once. A code that pointed somewhere else would be a second link, and you
+can make one of those.
+
+**Removing a code keeps what it recorded and stops it growing.** The rows it
+earned stay in the breakdown, marked as removed. A scan arriving afterwards from
+a picture printed with it is counted as the link's *original* code, because the
+identity it prints is no longer one this link recognises — it is not credited
+back to the code that is gone, and it is not stored as an unknown value either.
+So a chart read across the removal shows one line stopping and another taking up
+the traffic, which is worth knowing before you remove a code that is still in the
+world.
+
+**A name can be changed at any time and changes nothing else.** The identity in
+the picture is fixed when the code is made and is never rewritten, because it is
+printed.
 
 **Restyling changes the drawing and never the content.** The form takes a
 foreground colour, a background colour and a **size in pixels** — 64 to 2000.
@@ -386,6 +422,11 @@ carries `?src=qr` in the picture because a camera sends no referrer either. Both
 sit beside the real hostnames because they answer the same question. `?src=`
 accepts no other value: anything else is ignored and the click is attributed as
 it would have been without the parameter.
+
+**`qr` stays one row however many codes a link carries.** It answers *how many of
+these visits came from a QR code at all*, which is a different question from
+*which code*; the per-code split is its own section on the link page and its own
+`qr_codes` field in the API's answer.
 
 Whether a QR code is scanned or its URL is typed cannot be distinguished — the
 label travels in the URL, and anybody can type it.
@@ -844,6 +885,14 @@ entirely. Unlike the signature parameters below, **it is not stripped**: with
 query forwarding on it reaches your destination like any other parameter, because
 a source label is not a credential and a destination whose own analytics also see
 it is better informed rather than compromised.
+
+**`qrc` is the second reserved parameter**, and it says which of a link's QR
+codes was scanned. It is only read beside a recognised `src`, and its value must
+be one this link actually issued: anything else is counted as the link's original
+code and is never stored, which is what stops a stranger writing rows into your
+analytics by editing a URL. It is not stripped either, for the reason `src` is
+not — it is a label rather than a credential, and it is no more evidence than
+`src` is.
 
 **Deep-link path forwarding** is the other half, and the same shape:
 `forward_path`, per link, off by default. With it on, path segments after the

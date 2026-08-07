@@ -987,6 +987,88 @@ Twenty-five cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%,
 100%, 100%, 100%, 100%, 100%, 99.743%, 100%, 100%, 99.505%, 100%, 100%, 100%,
 100%, 100%, 99.405%, 100%, 99.826% and **100%** under 20ms.
 
+### Re-measured for M50 (2026-08-07)
+
+[M50](build-notes/phase-details/m50.md) touches the redirect path, so the
+inherited rule applies and this is a k6 run rather than a note. It is the first
+of the phase's three.
+
+**What it adds, stated as work rather than as a feature.** A link may now carry
+several QR codes, each printing an identity in its payload as `&qrc=<slug>`
+beside `?src=qr`. The redirect has to say which code a scan came from, and it has
+to do so without trusting the value: `link_dimension_daily`'s primary key
+includes what gets stored, so a code parameter a visitor could choose would be an
+unbounded write anybody could trigger — the same hole `?src=`'s closed vocabulary
+was built to shut, one parameter to the left. The bound is resolution against the
+codes the link actually has, and the whole design question was whether that
+resolution could be answered from data the resolver already holds.
+
+It can. The link's slugs ride home in `ResolveAliasForRedirect`'s round trip, in
+a second lateral on `qr_codes_link_idx`, and the snapshot carries them. So what
+runs per request is: the `strings.Contains` test M41 added, which is false for
+nearly every request on the instance; then, only for a request that carries a
+recognised source, one more `Values.Get` and a scan of a slice bounded by
+`domain.MaxQRCodesPerLink`. No query, no allocation beyond the map M41's parse
+already builds, and nothing at all on a request without `src=`.
+
+**Three request shapes, because there are three branches and the third is the one
+this milestone introduced.** The first is the default path, unchanged since M41.
+The second is M41's scan — `?src=qr`, no code — which is what every picture this
+product printed before today carries. The third is M50's: a slug that has to be
+found in the snapshot before anything is recorded.
+
+| | No query (the default path) | `?src=qr` (M41's scan) | `?src=qr&qrc=sloqrcod` (M50's scan) |
+| --- | --- | --- | --- |
+| Requests | **240,002** at 2,000 rps for 2m | **240,001** at 2,000 rps for 2m | **240,002** at 2,000 rps for 2m |
+| Under 20ms | **100.000%** | **100.000%** | **100.000%** |
+| Under 0.5ms | 100.000% | 100.000% | 100.000% |
+| Mean | **93.67µs** | **93.86µs** | **93.08µs** |
+| Median | 88.84µs | 89.44µs | 88.84µs |
+| p(90) / p(95) | 111.65µs / 120.81µs | 111.64µs / 120.80µs | 110.82µs / 119.39µs |
+| Max | 6.53ms | 5.00ms | 3.84ms |
+| Checks | 100.00%, 480,004 of 480,004 | 100.00%, 480,002 of 480,002 | 100.00%, 480,004 of 480,004 |
+| Cache mix | memory 240,002 · redis 0 · database 0 | memory 240,001 · redis 0 · database 0 | memory 240,002 · redis 0 · database 0 |
+| Redirect pool waits | 0 | 0 | 0 |
+
+**Nothing moved, and the third column is the claim.** 93.08µs for the per-code
+scan against 93.67µs for a request that does no attribution at all — the
+resolving branch measured *faster* than the branch that skips it, which is not a
+finding about resolution being free. It is the honest reading that a slice scan
+over one short string is far below the resolution of a measurement whose
+run-to-run spread this document already records at several microseconds, and that
+the three figures are one number measured three times.
+
+**The measurement was verified to be of the branch it claims**, which matters
+more here than the microseconds. A `qrc` the snapshot does not recognise falls
+through to the default code and costs almost exactly what column two costs, so a
+run where the resolution silently failed would have produced this same table. It
+did not: the 100,000 seeded links were each given a code with the slug
+`sloqrcod` before the third run, and the click events written during it read
+**240,003 rows stored as `qr:sloqrcod`** against 240,001 as the bare `qr` from
+the second run. Every request in the third column resolved a slug and stored the
+code's identity.
+
+The 93.67µs baseline against M45's 87.42µs is host drift rather than this
+milestone: all three columns here were taken minutes apart on one image, and it
+is the *comparison between them* this section is for. Absolute figures across
+sections of this document have moved by more than this between builds that
+changed nothing on the path.
+
+Taken on image `sha256:8f653b58cdd31075eefe7d83798f7be05fb6f18d75cde431bff0a6556be97ead`
+(`linkctrl:test`, built 2026-08-07 from the M50 working tree at
+`v0.2.0-27-gfc8702f-dirty`), rebuilt and recreated from the tree immediately
+before the runs, against a freshly seeded `make seed-slo` dataset of 100,000
+links and 5,000,000 click events. Both cache tiers were emptied and the container
+restarted between the second and third columns, because the third needs snapshots
+written after the `qr_codes` rows existed — without that the run would have
+measured cached entries carrying no slugs, which is the silent failure described
+above. Same host as [M35](#re-measured-for-m35-2026-08-03) onward.
+
+Twenty-eight cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%,
+100%, 100%, 100%, 100%, 100%, 99.743%, 100%, 100%, 99.505%, 100%, 100%, 100%,
+100%, 100%, 99.405%, 100%, 99.826%, 100%, **100%**, **100%** and **100%** under
+20ms.
+
 ## Reproducing it
 
 ```sh
@@ -1025,6 +1107,32 @@ docker compose exec postgres psql -U linkctrl -d linkctrl \
 docker compose exec redis redis-cli FLUSHALL
 docker compose restart app
 make load
+```
+
+The per-code scan (M50) needs codes to resolve against, and `make seed-slo`
+writes none — so they are inserted the same way, and the flush and the restart
+are load-bearing for the same reason the `forward_path` recipe's are: the slugs
+travel inside the cached snapshot, so entries written before the rows existed
+carry none and the run measures the unrecognised-value branch while reporting the
+recognised one.
+
+```sh
+docker compose exec postgres psql -U linkctrl -d linkctrl -c \
+  "INSERT INTO qr_codes (id, link_id, workspace_id, slug, label, style)
+   SELECT gen_random_uuid(), l.id, l.workspace_id, 'sloqrcod', 'SLO print run', '{}'::jsonb
+     FROM links l WHERE l.alias LIKE 'ld%'"
+docker compose exec redis redis-cli FLUSHALL
+docker compose restart app
+SUFFIX='?src=qr&qrc=sloqrcod' make load
+```
+
+Check afterwards that the run measured what it claims, because the failure is
+silent — an unresolved slug is attributed to the default code and costs the same:
+
+```sh
+docker compose exec postgres psql -U linkctrl -d linkctrl -c \
+  "SELECT referrer_host, count(*) FROM click_events
+    WHERE occurred_at > now() - interval '10 minutes' GROUP BY 1 ORDER BY 2 DESC"
 ```
 
 A smaller ceiling would measure the 410 path, which costs a failed predicate and

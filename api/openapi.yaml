@@ -1429,6 +1429,217 @@ paths:
         "422":
           $ref: "#/components/responses/Validation"
 
+  /links/{id}/qr/codes:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+    get:
+      tags: [qr]
+      operationId: listLinkQRCodes
+      summary: Every QR code this link carries
+      description: |
+        A link may carry several codes — a print run and a shop window against
+        the same destination — and this is all of them, the default code first.
+
+        **The default code is the one with an empty `slug`.** Its payload
+        carries no code parameter at all, which is the payload of every code
+        this product drew before per-code identity existed, so it is what every
+        already-printed picture of this link resolves to. It cannot be deleted
+        and it is addressed through `/links/{id}/qr` rather than here.
+
+        Every link has one whether or not a row holds it, so this list is never
+        empty for a link that exists.
+      responses:
+        "200":
+          description: The link's codes, and how many one link may hold
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QRCodeList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [qr]
+      operationId: createLinkQRCode
+      summary: Add a named QR code to this link
+      description: |
+        The new code points at the same link — a code with a destination of its
+        own would be a link, and this product already has links. What it buys is
+        that a scan of it is told apart from a scan of the others.
+
+        **The slug is generated and cannot be supplied.** It is printed inside
+        the picture, so a caller-chosen one would be a name the caller has to
+        keep unique across the link's codes and correct across every copy
+        already in the world. `style` in the request is accepted for symmetry
+        with the PUT below; omitting it starts the code at the style the link is
+        already drawing at, so a second poster looks like the first one.
+
+        `422` when the link already holds the maximum number of codes.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QRCodeRequest"
+      responses:
+        "201":
+          description: The code, with the slug its payload will carry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleQRCodeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /links/{id}/qr/codes/{slug}:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+      - $ref: "#/components/parameters/QRCodeSlug"
+    get:
+      tags: [qr]
+      operationId: getLinkQRCode
+      summary: One of the link's named codes
+      responses:
+        "200":
+          description: The code, its style, and the levels a style may name
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleQRCodeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [qr]
+      operationId: setLinkQRCode
+      summary: Replace a named code's label and style
+      description: |
+        A PUT rather than a PATCH, for the reason `PUT /links/{id}/qr` is one:
+        the resource is replaced whole and an omitted field means its default.
+        That applies to the label as well as to the style — omitting it clears
+        the name — because a request that replaces a resource whole and quietly
+        preserves one field is a shape nobody can predict.
+
+        The slug is not writable. It is printed, and moving it would break every
+        copy of the code already in the world.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QRCodeRequest"
+      responses:
+        "200":
+          description: The code, as it will now be drawn
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleQRCodeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+    delete:
+      tags: [qr]
+      operationId: deleteLinkQRCode
+      summary: Remove a named code
+      description: |
+        **What the code already recorded stays in the breakdown.** A scan
+        arriving afterwards from a picture printed with this slug is recorded as
+        the link's default code, because an unrecognised identity is recorded as
+        no code rather than stored — so the removed code's history stops
+        accumulating rather than being reassigned, and the rows it already
+        earned are still reported, marked `removed`.
+
+        The default code is not reachable here: it has no slug. Putting it back
+        to plain black on white is `DELETE /links/{id}/qr`.
+      responses:
+        "204":
+          description: The code is gone
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /links/{id}/qr/codes/{slug}/image.svg:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+      - $ref: "#/components/parameters/QRCodeSlug"
+    get:
+      tags: [qr]
+      operationId: getLinkQRCodeSVG
+      summary: A named code, drawn
+      description: |
+        Everything `GET /links/{id}/qr.svg` says, for one named code. The
+        picture differs from the default code's by the slug in its payload,
+        which is what a scanner sends back and what makes this code's scans
+        distinguishable from the rest.
+
+        The path carries `image.svg` rather than ending in `{slug}.svg` for a
+        mechanical reason: a route wildcard matches a whole path segment, so
+        `{slug}.svg` is not a pattern that exists.
+      responses:
+        "200":
+          description: The code as an SVG document
+          content:
+            image/svg+xml:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /links/{id}/qr/codes/{slug}/image.png:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+      - $ref: "#/components/parameters/QRCodeSlug"
+    get:
+      tags: [qr]
+      operationId: getLinkQRCodePNG
+      summary: A named code, as an image file
+      description: |
+        Everything `GET /links/{id}/qr.png` says, for one named code — including
+        the 2000-pixel bound and the `422` for a stored style that draws larger.
+      responses:
+        "200":
+          description: The code as a PNG image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+
   /campaigns:
     get:
       tags: [campaigns]
@@ -3591,6 +3802,16 @@ components:
       description: Set by `POST /auth/login`. Unsafe cross-origin requests are refused.
 
   parameters:
+    QRCodeSlug:
+      name: slug
+      in: path
+      required: true
+      description: >
+        The identity printed in the code's payload. The default code has none
+        and is not addressable here.
+      schema:
+        type: string
+        pattern: "^[a-z0-9]{1,16}$"
     LinkID:
       name: id
       in: path
@@ -4541,14 +4762,36 @@ components:
     QRCode:
       type: object
       additionalProperties: false
-      required: [link_id, content, style, stored, size]
+      required: [link_id, slug, label, content, style, stored, size]
       properties:
+        id:
+          type: string
+          format: uuid
+          description: >
+            The stored row. Absent for a default code nobody has styled or
+            named, which has no row yet. Reported for completeness; the slug is
+            what addresses a code.
         link_id: { type: string, format: uuid }
+        slug:
+          type: string
+          description: >
+            The identity this code prints in its payload, as `&qrc=<slug>`
+            beside `?src=qr`. **Empty for the link's default code**, whose
+            payload carries no code parameter at all — which is what every
+            picture drawn before per-code identity existed carries, and why an
+            already-printed code goes on being counted as the same code it
+            always was. Generated, never chosen, and never rewritten.
+        label:
+          type: string
+          description: >
+            What the workspace calls this code. Free text, never in a URL and
+            never in the picture; the redirect path never sees it. Empty for a
+            code nobody has named.
         content:
           type: string
           description: >
             Exactly what the picture encodes: the link's short URL carrying
-            `?src=qr`.
+            `?src=qr`, and `&qrc=<slug>` for a named code.
         style: { $ref: "#/components/schemas/QRStyle" }
         stored:
           type: boolean
@@ -4577,6 +4820,47 @@ components:
           type: array
           description: The error-correction levels a style may name.
           items: { type: string, enum: [L, M, Q, H] }
+
+    QRCodeList:
+      type: object
+      additionalProperties: false
+      required: [codes, max]
+      properties:
+        codes:
+          type: array
+          items:
+            $ref: "#/components/schemas/QRCode"
+          description: The link's codes, default first, then in creation order.
+        max:
+          type: integer
+          description: >
+            How many codes one link may carry. The bound exists because each
+            code is a value in the link's own analytics breakdown, and a link
+            with a thousand of them is a link whose analytics page cannot be
+            drawn.
+
+    SingleQRCodeResponse:
+      type: object
+      additionalProperties: false
+      required: [code, levels]
+      properties:
+        code: { $ref: "#/components/schemas/QRCode" }
+        levels:
+          type: array
+          description: The error-correction levels a style may name.
+          items: { type: string, enum: [L, M, Q, H] }
+
+    QRCodeRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        label:
+          type: string
+          maxLength: 60
+          description: >
+            What to call this code. Omitted means unnamed; on a PUT, omitting it
+            clears an existing name.
+        style: { $ref: "#/components/schemas/QRStyle" }
 
     SetQRRequest:
       type: object
@@ -5415,7 +5699,7 @@ components:
     LinkStats:
       type: object
       additionalProperties: false
-      required: [link_id, from, to, totals, series, dimensions, destinations, caveat]
+      required: [link_id, from, to, totals, series, dimensions, destinations, qr_codes, caveat]
       properties:
         link_id: { type: string, format: uuid }
         from: { type: string, format: date }
@@ -5443,9 +5727,47 @@ components:
             destination, which is every link on a default instance.
           items:
             $ref: "#/components/schemas/DestinationSplit"
+        qr_codes:
+          type: array
+          nullable: true
+          description: >
+            The per-code breakdown (M50). Null for a link nobody has scanned and
+            whose codes nobody has added to, which is every link on a default
+            instance. **A filter over the `referrer` dimension rather than a
+            rollup of its own** — a scan's code *is* its referrer value, `qr` for
+            the default code and `qr:<slug>` for a named one — so the `referrer`
+            breakdown above still reports every scan under the single value `qr`,
+            unchanged by how many codes a link carries.
+          items:
+            $ref: "#/components/schemas/QRCodeSplit"
         caveat:
           type: string
           description: The honest limitation of cookie-free counting, attached to the numbers it qualifies.
+
+    QRCodeSplit:
+      type: object
+      additionalProperties: false
+      required: [slug, label, clicks, unique_visitors]
+      properties:
+        slug:
+          type: string
+          description: >
+            Empty for the link's default code — the one whose payload carries no
+            code parameter, and the one every picture printed before per-code
+            identity existed resolves to.
+        label:
+          type: string
+          description: What the workspace calls this code. Empty for one nobody named.
+        removed:
+          type: boolean
+          description: >
+            Scans attributed to a code that no longer exists. Reported rather
+            than dropped: a link's history must not change because somebody
+            retired a poster. The row stops growing when the code is deleted,
+            because a payload naming a slug the link no longer has is recorded as
+            the default code.
+        clicks: { type: integer }
+        unique_visitors: { type: integer }
 
     Overview:
       type: object

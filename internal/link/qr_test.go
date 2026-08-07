@@ -44,7 +44,7 @@ func TestTheCodeCarriesTheSourceParameter(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := QRContent(tc.shortURL); got != tc.want {
+			if got := QRContent(tc.shortURL, ""); got != tc.want {
 				t.Errorf("QRContent(%q) = %q, want %q", tc.shortURL, got, tc.want)
 			}
 		})

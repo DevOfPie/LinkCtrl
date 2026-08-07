@@ -543,6 +543,44 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.svgEndpoint(linkID)
 	c.pngEndpoint(linkID)
 
+	// --- more than one code per link (M50) ----------------------------------
+	//
+	// **The five above are unchanged and still answer for the link's default
+	// code**, which is the choice m50.md required be made and recorded: they are
+	// the shorthand rather than growing an identifier, so a client written
+	// against the previous release keeps getting the same code. That claim is
+	// exactly what this replay holds — the calls above ran before this block and
+	// asked for nothing new.
+	c.do("GET", p+"/links/"+linkID+"/qr/codes", nil, http.StatusOK)
+	var madeCode struct {
+		Code struct {
+			Slug string `json:"slug"`
+		} `json:"code"`
+	}
+	if err := json.Unmarshal(c.do("POST", p+"/links/"+linkID+"/qr/codes", map[string]any{
+		"label": "Autumn poster",
+	}, http.StatusCreated), &madeCode); err != nil {
+		c.t.Fatalf("decode created qr code: %v", err)
+	}
+	slug := madeCode.Code.Slug
+	if slug == "" {
+		c.t.Fatal("a created QR code came back with no slug; the slug is what its " +
+			"payload prints and what the redirect resolves")
+	}
+	c.do("GET", p+"/links/"+linkID+"/qr/codes/"+slug, nil, http.StatusOK)
+	c.do("PUT", p+"/links/"+linkID+"/qr/codes/"+slug, map[string]any{
+		"label": "Autumn poster, second run",
+		"style": map[string]any{"foreground": "#102030"},
+	}, http.StatusOK)
+	// A slug this link never issued. 404 rather than a default, because a code
+	// somebody removed must stop answering.
+	c.do("GET", p+"/links/"+linkID+"/qr/codes/zzzzzzzz", nil, http.StatusNotFound)
+	c.do("DELETE", p+"/links/"+linkID+"/qr/codes/zzzzzzzz", nil, http.StatusNotFound)
+	c.svgCodeEndpoint(linkID, slug)
+	c.pngCodeEndpoint(linkID, slug)
+	c.do("DELETE", p+"/links/"+linkID+"/qr/codes/"+slug, nil, http.StatusNoContent)
+	c.do("GET", p+"/links/"+linkID+"/qr/codes/"+slug, nil, http.StatusNotFound)
+
 	// --- registered domains (M39) -------------------------------------------
 	//
 	// The lifecycle, plus the two refusals the document names by code. Both are
@@ -1062,6 +1100,72 @@ func (c *contract) pngEndpoint(linkID string) {
 		c.t.Errorf("qr.png is %dx%d; a QR code is square", b.Dx(), b.Dy())
 	}
 	c.hit["getLinkQRPNG"] = true
+}
+
+// svgCodeEndpoint and pngCodeEndpoint are the same two checks for a named code
+// (M50), which are the fourth and fifth non-JSON responses this API has.
+//
+// **The picture has to differ from the default code's, and that is the assertion
+// worth having here.** A named code exists to be told apart, and a `.svg` path
+// that ignored its slug would serve two identical pictures under two identities
+// — the whole feature silently absent, with every status code correct. So the
+// body is checked against the default code's bytes rather than only against the
+// schema.
+func (c *contract) svgCodeEndpoint(linkID, slug string) {
+	c.t.Helper()
+	named := c.image("/api/v1/links/"+linkID+"/qr/codes/"+slug+"/image.svg", "image/svg+xml")
+	if err := xml.Unmarshal(named, new(struct {
+		XMLName xml.Name `xml:"svg"`
+	})); err != nil {
+		c.t.Errorf("a named code's svg is not a well-formed SVG document: %v", err)
+	}
+	if !bytes.Contains(named, []byte("<rect")) {
+		c.t.Error("a named code's svg holds no modules")
+	}
+	if bytes.Equal(named, c.image("/api/v1/links/"+linkID+"/qr.svg", "image/svg+xml")) {
+		c.t.Error("a named code draws the same picture as the link's default code; the " +
+			"slug is supposed to be in the payload, which is what tells the two apart")
+	}
+	c.hit["getLinkQRCodeSVG"] = true
+}
+
+func (c *contract) pngCodeEndpoint(linkID, slug string) {
+	c.t.Helper()
+	body := c.image("/api/v1/links/"+linkID+"/qr/codes/"+slug+"/image.png", "image/png")
+	img, format, err := image.Decode(bytes.NewReader(body))
+	if err != nil {
+		c.t.Fatalf("a named code's png is not a decodable image: %v", err)
+	}
+	if format != "png" {
+		c.t.Errorf("the named code's .png path served a %s", format)
+	}
+	if b := img.Bounds(); b.Dx() < 1 || b.Dx() != b.Dy() {
+		c.t.Errorf("a named code's png is %dx%d; a QR code is square", b.Dx(), b.Dy())
+	}
+	c.hit["getLinkQRCodePNG"] = true
+}
+
+// image fetches a picture endpoint and checks the two things a schema cannot
+// express about one: that it answered 200 and that it said what it is.
+func (c *contract) image(path, contentType string) []byte {
+	c.t.Helper()
+	req, err := http.NewRequestWithContext(c.t.Context(), http.MethodGet, c.f.server.URL+path, nil)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	resp, err := c.f.client.Do(req)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		c.t.Fatalf("GET %s returned %d", path, resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != contentType {
+		c.t.Errorf("GET %s Content-Type = %q, want %q", path, ct, contentType)
+	}
+	return body
 }
 
 // yamlSpecEndpoint checks the one non-JSON response by hand: kin-openapi has

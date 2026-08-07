@@ -555,6 +555,57 @@ type linkQRView struct {
 	// thing that knows which, and the handler compares it against the two paths
 	// it builds itself rather than following it.
 	QRReturn string
+
+	// The link's codes (M50), default first, and which of them the form below
+	// them is editing.
+	//
+	// **The list is the section and the form is one row of it.** m50.md asks for
+	// the codes with their labels, sizes and downloads, inside whatever M48
+	// decided a panel is — so this is the same `link_qr_body` block, and picking
+	// a code is a link back to the panel's own route rather than a second
+	// pattern for opening things.
+	QRCodes []qrCodeView
+	// QRSlug is the code the style form writes to. Empty is the default code,
+	// which is what the link page and an unqualified panel show.
+	QRSlug string
+	// QRMaxCodes is the cap and QRMaxLabel the label bound, both passed in so
+	// the numbers the panel shows and the ones the service enforces cannot
+	// drift.
+	QRMaxCodes int
+	QRMaxLabel int
+	// QRLabel is the selected code's name, which the rename control edits.
+	QRLabel string
+}
+
+// qrCodeView is one row of the panel's list of codes (M50).
+type qrCodeView struct {
+	Slug  string
+	Label string
+	Size  int
+	// Name is what the row is titled: the label if it has one, and otherwise a
+	// standing description. A row headed with an empty string would be a row
+	// nobody can point at, and the default code starts unnamed for every link
+	// that existed before this milestone.
+	Name string
+	// Default marks the code whose payload carries no code parameter — the one
+	// every already-printed picture of this link resolves to. It cannot be
+	// removed, and the row says so by not offering the control.
+	Default bool
+	// Selected marks the code the style form below the list is editing.
+	Selected    bool
+	Panel       string
+	Download    string
+	DownloadPNG string
+	// Clicks is what this code has been scanned, over the window the page is
+	// showing. It is the whole point of the milestone — telling two codes apart
+	// is telling their numbers apart — and it is read from the same rollup every
+	// other breakdown on the page comes from.
+	Clicks int64
+	// Counted is false when the page had no statistics to read, which is the
+	// panel opened at its own route: that page is one section and deliberately
+	// does not pay for an analytics read. The template shows nothing rather than
+	// a zero, because zero is a claim.
+	Counted bool
 }
 
 // loadLinkDetail assembles the link page.
@@ -625,9 +676,13 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 	}
 
 	h.fillLinkEdit(r.Context(), actor, &data)
-	data.linkQRView = h.linkQR(r.Context(), actor, l, "/links/"+l.ID.String())
+	// The link page always shows the default code. Which code the *panel* is
+	// open on is the panel route's business, and a query parameter on the link
+	// page would put the same state in two places.
+	data.linkQRView = h.linkQR(r.Context(), actor, l, "/links/"+l.ID.String(), "")
 	h.fillLinkRouting(r.Context(), actor, &data)
 	fillLinkAnalytics(r, &data, from, to)
+	attachQRCounts(&data.linkQRView, data.Stats)
 	data.Notice = linkDetailNotice(r.URL.Query(), l)
 
 	return data, true
@@ -767,18 +822,36 @@ func qrThumb(content string, style qr.Style) template.HTML {
 // It is a parameter rather than something read off the request, so the value the
 // form carries is always one this function chose.
 func (h *Web) linkQR(
-	ctx context.Context, actor *auth.Identity, l *domain.Link, back string,
+	ctx context.Context, actor *auth.Identity, l *domain.Link, back, slug string,
 ) linkQRView {
 	view := linkQRView{
 		QRSourceLabel: domain.ClickSourceQR,
-		QRDownload:    fmt.Sprintf("%s/links/%s/qr.svg", APIPrefix, l.ID),
-		QRDownloadPNG: fmt.Sprintf("%s/links/%s/qr.png", APIPrefix, l.ID),
 		QRMinSize:     qr.MinSize,
 		QRMaxSize:     qr.MaxSize,
+		QRMaxCodes:    domain.MaxQRCodesPerLink,
+		QRMaxLabel:    domain.MaxQRCodeLabelLength,
 		QRReturn:      back,
+		QRSlug:        slug,
+		QRDownload:    qrDownloadPath(l.ID, slug, "svg"),
+		QRDownloadPNG: qrDownloadPath(l.ID, slug, "png"),
 	}
 
-	code, err := h.Links.QRCode(ctx, actor, l.ID)
+	// The list first, so a panel opened on a code that has since been removed
+	// falls back to the default rather than showing an error where a picture
+	// goes. Failed soft like every other read on this page: a list that cannot
+	// be read leaves the section showing one code, which is what the link had
+	// before this milestone.
+	if codes, cerr := h.Links.ListQRCodes(ctx, actor, l.ID); cerr == nil {
+		view.QRCodes = qrCodeViews(l.ID, codes, slug)
+		if !qrCodeExists(codes, slug) {
+			view.QRSlug, slug = "", ""
+			view.QRCodes = qrCodeViews(l.ID, codes, "")
+			view.QRDownload = qrDownloadPath(l.ID, "", "svg")
+			view.QRDownloadPNG = qrDownloadPath(l.ID, "", "png")
+		}
+	}
+
+	code, err := h.Links.QRCodeBySlug(ctx, actor, l.ID, slug)
 	if err != nil {
 		view.QRError = "The QR code could not be read."
 		return view
@@ -787,6 +860,7 @@ func (h *Web) linkQR(
 	view.QRStyle = code.Style
 	view.QRSize = code.Size
 	view.QRStored = code.Stored
+	view.QRLabel = code.Label
 
 	svg, err := qr.Render(code.Content, code.Style)
 	if err != nil {
@@ -796,8 +870,86 @@ func (h *Web) linkQR(
 	//nolint:gosec // G203: internal/qr emits integers and parsed colours only
 	view.QRSVG = template.HTML(svg)
 
-	view.QRThumbSVG = qrThumb(code.Content, code.Style)
+	// The thumbnail is always the default code. It is the link page's heading
+	// row and it stands for "this link has a QR code", not for whichever one the
+	// panel was last left open on.
+	if slug == "" {
+		view.QRThumbSVG = qrThumb(code.Content, code.Style)
+	} else if def, derr := h.Links.QRCode(ctx, actor, l.ID); derr == nil {
+		view.QRThumbSVG = qrThumb(def.Content, def.Style)
+	}
 	return view
+}
+
+// qrCodeExists says whether the list holds the slug the panel was opened on.
+func qrCodeExists(codes []link.QRCode, slug string) bool {
+	for _, c := range codes {
+		if c.Slug == slug {
+			return true
+		}
+	}
+	return false
+}
+
+// qrDownloadPath is where one code's picture is fetched from.
+//
+// The default code keeps the paths M41 and M49 shipped; a named code uses the
+// collection M50 added. One function, because the panel builds two of these per
+// row and a second copy of the branch is a second answer to "where is this
+// picture".
+func qrDownloadPath(linkID uuid.UUID, slug, ext string) string {
+	if slug == "" {
+		return fmt.Sprintf("%s/links/%s/qr.%s", APIPrefix, linkID, ext)
+	}
+	return fmt.Sprintf("%s/links/%s/qr/codes/%s/image.%s", APIPrefix, linkID, slug, ext)
+}
+
+// qrCodeViews turns the service's codes into the panel's rows.
+func qrCodeViews(linkID uuid.UUID, codes []link.QRCode, selected string) []qrCodeView {
+	out := make([]qrCodeView, 0, len(codes))
+	for _, c := range codes {
+		name := c.Label
+		if name == "" {
+			if c.Slug == "" {
+				name = "The original code"
+			} else {
+				name = "Unnamed code"
+			}
+		}
+		panel := fmt.Sprintf("/links/%s/qr", linkID)
+		if c.Slug != "" {
+			panel += "?code=" + url.QueryEscape(c.Slug)
+		}
+		out = append(out, qrCodeView{
+			Slug: c.Slug, Label: c.Label, Size: c.Size, Name: name,
+			Default: c.Slug == "", Selected: c.Slug == selected, Panel: panel,
+			Download:    qrDownloadPath(linkID, c.Slug, "svg"),
+			DownloadPNG: qrDownloadPath(linkID, c.Slug, "png"),
+		})
+	}
+	return out
+}
+
+// attachQRCounts puts each code's scans on its row (M50).
+//
+// Read off the statistics the page already loaded rather than by asking again:
+// the per-code breakdown is a filter over the referrer dimension that was rolled
+// up with everything else, so the number is already in hand by the time this
+// runs. A code the breakdown does not mention has not been scanned in the
+// window, which is a zero rather than a blank — Counted is what distinguishes
+// that from the panel's own page, which loads no statistics at all.
+func attachQRCounts(view *linkQRView, stats *analytics.LinkStats) {
+	if stats == nil {
+		return
+	}
+	byCode := make(map[string]int64, len(stats.QRCodes))
+	for _, c := range stats.QRCodes {
+		byCode[c.Slug] = c.Clicks
+	}
+	for i := range view.QRCodes {
+		view.QRCodes[i].Clicks = byCode[view.QRCodes[i].Slug]
+		view.QRCodes[i].Counted = true
+	}
 }
 
 // fillLinkRouting is the data behind `link_rules` and `link_split`, which are

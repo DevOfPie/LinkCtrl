@@ -72,11 +72,16 @@ func (h *Web) LinkQRPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Which code the panel is open on. A slug that names nothing falls back to
+	// the default inside linkQR rather than 404ing: the panel is a section of a
+	// page that exists, and a code somebody removed in another tab should show
+	// the link's codes rather than an error page.
+	slug := r.URL.Query().Get("code")
 	self := "/links/" + id.String() + "/qr"
 	h.render(w, r, http.StatusOK, "link_qr", linkQRPageData{
 		shell:      h.shell(r, "QR code · /"+l.Alias, "links"),
 		Link:       l,
-		linkQRView: h.linkQR(r.Context(), actor, l, self),
+		linkQRView: h.linkQR(r.Context(), actor, l, self, slug),
 		Notice:     qrNotice(r.URL.Query()),
 	})
 }
@@ -93,13 +98,18 @@ func (h *Web) LinkQRPage(w http.ResponseWriter, r *http.Request) {
 // thing that survives to carry: a POST that snapped the size has to say so, and
 // the page it lands on was rendered by a fresh request that never saw the number
 // anybody typed.
-func qrReturn(next string, id interface{ String() string }, marker string, extra url.Values) string {
+func qrReturn(next string, id interface{ String() string }, marker, slug string, extra url.Values) string {
 	q := url.Values{"qr": {marker}}
 	for k, v := range extra {
 		q[k] = v
 	}
 	page := "/links/" + id.String()
 	if next == page+"/qr" {
+		// The code being worked on survives the redirect, or every save on a
+		// named code would drop the reader back onto the default one.
+		if slug != "" {
+			q.Set("code", slug)
+		}
 		return page + "/qr?" + q.Encode()
 	}
 	return page + "?" + q.Encode() + "#qr"
@@ -117,15 +127,52 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	next := r.PostFormValue("next")
+	slug := r.PostFormValue("code")
+	actor := IdentityFrom(r.Context())
+
+	// Adding and removing a code post the same form under their own names, the
+	// way reset already does: one action attribute, one place a refusal comes
+	// back to, and no second surface for managing a list that lives inside this
+	// one.
+	if r.PostFormValue("add") != "" {
+		code, aerr := h.Links.CreateQRCode(r.Context(), actor, id, r.PostFormValue("label"))
+		if aerr != nil {
+			h.finishQRAction(w, r, id, aerr)
+			return
+		}
+		// Landing on the code just made, because somebody who added one is about
+		// to style it or download it.
+		seeOther(w, r, qrReturn(next, id, "added", code.Slug, nil))
+		return
+	}
+	if r.PostFormValue("remove") != "" {
+		if derr := h.Links.DeleteQRCode(r.Context(), actor, id, slug); derr != nil {
+			h.finishQRAction(w, r, id, derr)
+			return
+		}
+		// Back to the default code: the one just removed has no page left.
+		seeOther(w, r, qrReturn(next, id, "removed", "", nil))
+		return
+	}
+	if r.PostFormValue("rename") != "" {
+		if _, rerr := h.Links.SetQRCodeLabel(
+			r.Context(), actor, id, slug, r.PostFormValue("label"),
+		); rerr != nil {
+			h.finishQRAction(w, r, id, rerr)
+			return
+		}
+		seeOther(w, r, qrReturn(next, id, "renamed", slug, nil))
+		return
+	}
 
 	// The reset button posts the same form under a different name, so the
 	// service sees an ordinary style rather than a second operation.
 	if r.PostFormValue("reset") != "" {
-		if rerr := h.Links.ResetQRStyle(r.Context(), IdentityFrom(r.Context()), id); rerr != nil {
+		if rerr := h.Links.ResetQRStyle(r.Context(), actor, id); rerr != nil {
 			h.finishQRAction(w, r, id, rerr)
 			return
 		}
-		seeOther(w, r, qrReturn(next, id, "reset", nil))
+		seeOther(w, r, qrReturn(next, id, "reset", "", nil))
 		return
 	}
 
@@ -137,7 +184,7 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 		// is refused with a sentence naming the range.
 		Size: formInt(r.PostFormValue("size"), -1),
 	}
-	_, fit, serr := h.Links.SetQRSize(r.Context(), IdentityFrom(r.Context()), id, in)
+	_, fit, serr := h.Links.SetQRSizeBySlug(r.Context(), actor, id, slug, in)
 	if serr != nil {
 		h.finishQRAction(w, r, id, serr)
 		return
@@ -153,7 +200,7 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 			"got":  {strconv.Itoa(fit.Size)},
 		}
 	}
-	seeOther(w, r, qrReturn(next, id, "styled", extra))
+	seeOther(w, r, qrReturn(next, id, "styled", slug, extra))
 }
 
 // finishQRAction puts a refusal back on the page it was made from, with the
@@ -223,6 +270,16 @@ func qrNotice(q url.Values) string {
 			"that keeps them whole. %s", got, want, got, unchanged)
 	case "reset":
 		return "QR code back to black on white."
+	case "added":
+		return "A second code, with a name and an identity of its own. It points at the " +
+			"same destination — what it changes is that a scan of this one is told apart " +
+			"from a scan of the others."
+	case "removed":
+		return "Code removed. What it already recorded stays in the breakdown; anything " +
+			"printed with it is counted as the link's original code from now on."
+	case "renamed":
+		return "Code renamed. The name is what the dashboard calls it — what the code " +
+			"says is unchanged, so nothing already printed is affected."
 	default:
 		return ""
 	}
