@@ -9,10 +9,10 @@ Scope contract and specification. States **what** is true, not why.
 | Dev environment | `docs/build-notes/development.md` |
 | How the work is done | `docs/build-notes/workflow.md` |
 | Security model and reporting | `docs/SECURITY.md` |
-| Phase 2 definitions of done | `docs/build-notes/phase-details/` — one file per milestone |
+| Definitions of done, per milestone | `docs/build-notes/phase-details/` — one file per milestone, live phase and finished ones |
 | Out-of-spec findings | `docs/build-notes/deferred-findings.md` |
 | Current progress | [Build Status](#build-status) |
-| Last updated | 2026-07-31 |
+| Last updated | 2026-08-07 |
 
 **Core rule:** links are programmable, observable, secure resources.
 
@@ -74,7 +74,7 @@ Authoritative. Where this table and prose elsewhere disagree, this table wins.
 | Folders — schema only, no API or UI | 1 |
 | Folders — API and tree UI | 2 |
 | Bulk operations, templates, import/export | 2+ |
-| Moving links between workspaces | 3 |
+| Moving links between workspaces | 3+ — **not scheduled in Phase 3**; see [Not in Phase 3](#not-in-phase-3) |
 | Version history, scheduled changes, approval workflows | 3+ |
 | Malicious destination blocking, tiered by confidence | 2 |
 | Blocked-attempt disputes, with owner review | 2 |
@@ -148,7 +148,7 @@ rather than rendering a world uniformly colored "unknown".
 | Password links, one-time links, max-click links, signed URLs | 2 |
 | Malicious destination blocking: tiers, logging, notification, disputes | 2 |
 | Third-party reputation and malware feeds — opt-in, off by default | 2 |
-| MFA, OAuth, OIDC, SSO, SCIM | 3 |
+| MFA, OAuth, OIDC, SSO, SCIM | 3 for **MFA only** ([M53](docs/build-notes/phase-details/m53.md)); OAuth, OIDC, SSO and SCIM stay 3+ and unscheduled (D109) |
 
 Destination blocking is two threat models wearing one name, and the *Abuse
 prevention* row above is the other half. What Phase 1 already refuses — non-`http(s)`
@@ -309,6 +309,7 @@ somebody does it stays in the environment.
 | Custom domains, per workspace and per link | 2 |
 | QR codes, campaigns, webhooks, automation | 2 |
 | Advanced analytics, compliance features, high availability | 3 |
+| ↳ of that row, Phase 3 takes **high availability** ([M56](docs/build-notes/phase-details/m56.md), [M57](docs/build-notes/phase-details/m57.md)) and the erasure limb of compliance ([M52](docs/build-notes/phase-details/m52.md)). Advanced analytics and the rest of compliance stay candidates — see [phase-3-candidates.md](docs/build-notes/phase-3-candidates.md) | 3+ |
 | Entitlements or billing for organization creation | 3+ |
 | AI optimization, smart routing, predictive analytics, plugin system | 4 |
 | GraphQL, SDKs, Terraform provider | future |
@@ -469,6 +470,12 @@ of them in 0.2.0, tagged `v0.2.0` on `main` and released on 2026-08-06.** Status
 per milestone lives in
 [phase-details/README.md](docs/build-notes/phase-details/README.md) and nowhere
 else; the plan below is the scope contract rather than a progress report.
+
+**Phase 3: planned on 2026-08-06, unstarted.** Seventeen milestones, M46–M58,
+across four work areas; the plan is [below](#phase-3-build-plan). It was planned
+in full before its first milestone was built, on the owner's direction, so that
+the fifteen-milestone target is enforced by arithmetic rather than discovered at
+milestone twenty.
 
 *(This paragraph read "Phase 2 is planned and unstarted, as of 2026-07-31" for
 the whole of Phase 2 — a dated snapshot that nine milestones overtook on the day
@@ -754,7 +761,11 @@ so more than one can be worked at a time or a blocked one has somewhere to fall
 back to (owner directive, 2026-08-06). It schedules nothing and restates nothing —
 a row there is a pointer back to this list plus an area.
 
-- MFA, OAuth, OIDC, SSO, SCIM — Phase 3 by the scope table.
+- MFA, OAuth, OIDC, SSO, SCIM — Phase 3 by the scope table. **Partially
+  scheduled 2026-08-06: MFA is [M53](docs/build-notes/phase-details/m53.md),
+  TOTP only.** OAuth, OIDC, SSO and SCIM stay on this row and stay unscheduled —
+  each is a separate credential model, and the row is amended rather than
+  removed so their deferral keeps its reason.
 - **An API key that reaches more than one organization.** Owner-directed on
   2026-08-05, after [F75](docs/build-notes/deferred-findings.md): a key should be
   minted by an *account* and reach the organizations that account belongs to,
@@ -791,6 +802,10 @@ a row there is a pointer back to this list plus an area.
   `204`-versus-`404` existence oracle against key ids a caller would have to
   guess. **F75 stays open** and points here, because scheduled elsewhere is not
   resolved.
+
+  **Scheduled 2026-08-06 as [M54](docs/build-notes/phase-details/m54.md)**, which
+  is where the five pieces of work this paragraph enumerates are answered one at
+  a time.
 - **Account deletion and erasure, of any kind, for anybody.** There is no way to
   delete an account, and no subject-erasure routine. `users` appears in none of
   the schema's fourteen `DELETE` statements, nothing writes `users.deleted_at`,
@@ -806,7 +821,10 @@ a row there is a pointer back to this list plus an area.
   audit actor snapshot, and `docs/SECURITY.md` — so a compliance reader met a
   feature that was never built. Those sentences are corrected; the feature is
   recorded here rather than scheduled, and F44 stays open, because documented is
-  not resolved.
+  not resolved. **Scheduled 2026-08-06 as
+  [M52](docs/build-notes/phase-details/m52.md)**, which also gives `deleted_at`
+  and `anonymized_at` their first writers and states in writing why `suspended`
+  still has none.
 - **Account recovery, of any kind, for anybody.** A forgotten password cannot be
   recovered by the person who forgot it. There is no *forgot password* route on
   any surface, no reset table, column, token or query, and no mail template for
@@ -823,7 +841,10 @@ a row there is a pointer back to this list plus an area.
   for it: every part needed to build it already exists — a token-hash pattern
   used twice, an outbox, a mailer, argon2 rehashing — so the absence reads as a
   gap nobody wrote down rather than a decision anybody took, and writing it down
-  is what this entry is.
+  is what this entry is. **Scheduled 2026-08-06 as
+  [M51](docs/build-notes/phase-details/m51.md)**, first of the phase's identity
+  work, and a hard prerequisite of [M53](docs/build-notes/phase-details/m53.md)
+  because a second factor multiplies the lockout this row describes.
 - Version history, scheduled changes, approval workflows — 3+.
 - Re-checking already-accepted links against new blocklist tiers — a separate job
   and a separate decision.
@@ -897,14 +918,160 @@ a row there is a pointer back to this list plus an area.
 - **A PNG QR code.** [D11](#phase-2-decisions) is SVG only, and M41 built it that
   way: no image encoder is in the dependency set and nothing rasterises on a
   request. Adding a PNG download later is additive — one endpoint and one
-  encoder — rather than a rework.
+  encoder — rather than a rework. **Scheduled 2026-08-06 as
+  [M49](docs/build-notes/phase-details/m49.md), which reverses D11** and takes
+  the additive path this row describes: `image/png` is standard library, so no
+  module dependency joins the set, and the rasteriser that now runs on a request
+  is bounded by a stated output cap.
 - **More than one QR code per link, and per-code scan counts.** `qr_codes` holds
   one style row per link (02700's unique index), and `?src=qr` carries no code
   identity, so two printed codes for one link are indistinguishable in the
   analytics. Both follow from [D73](#phase-2-decisions-taken-after-the-plan-was-finalised)
   and [D76](#phase-2-decisions-taken-after-the-plan-was-finalised); telling them
   apart needs a per-code token in the payload, which is a design decision rather
-  than a column.
+  than a column. **Scheduled 2026-08-06 as
+  [M50](docs/build-notes/phase-details/m50.md)**, which takes that decision: the
+  identity travels in its own query parameter beside `src=qr` rather than inside
+  the closed vocabulary, and per-code counts are read from `click_events` — D73's
+  refusal of a counter column on the 20ms path is **not** reversed.
+
+---
+
+## Phase 3 build plan
+
+**Seventeen milestones, M46–M58, continuing Phase 2's numbering.** Fourteen of
+work, two adversarial reviews (`X.9`, as reserved), one close. The size target is
+**fifteen** — *a phase stays under sixteen, insertions counted*, set by the owner
+on 2026-08-06 and recorded in
+[planning.md](docs/build-notes/planning.md#the-size-target-a-phase-stays-under-sixteen-milestones).
+This phase is over it, knowingly and twice; the paragraph below is the record.
+Phase 2 ran 33.
+
+**The target moved twice on 2026-08-07, both times knowingly.** The phase was
+planned at fifteen with every slot spent. It went to sixteen when the owner chose
+to have both QR logos and M50 rather than trade one for the other, and to
+seventeen when a review found the logo milestone was two — an upload surface
+([M50.5](docs/build-notes/phase-details/m50.5.md)) and the compositing
+([M50.6](docs/build-notes/phase-details/m50.6.md)) — and the owner split it
+rather than keep one fat milestone. That is the phase-boundary conversation
+[planning.md](docs/build-notes/planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)
+requires rather than a rule being broken — the target is owner-set and
+explicitly revisitable, and the alternatives were priced before it moved.
+**The standing rule is unchanged at fifteen**; Phase 3 is a recorded exception
+to it, not a new ceiling for every phase after.
+
+Four work areas, chosen 2026-08-06 (D108), cut by which files a milestone would
+touch so a blocked milestone has an independent one to fall back to under
+[W33](docs/build-notes/workflow-changes.md#made):
+
+| Area | Milestones | |
+| --- | --- | --- |
+| **B** — Dashboard UI and UX | M46–M48 | Asked for first, and the surface every other area rebases onto |
+| **F** — QR codes | M49–M50.6 | Overlaps B on the settings vocabulary, so it is an ordered run behind B rather than an independent area |
+| **A** — Identity and account lifecycle | M51–M54 | Carries the two findings that make claims the tree makes today false |
+| **E** — Infrastructure and resilience | M55–M57 | The only area with no edge into any other |
+
+Ordering is B first, deliberately: a redesign landed after the milestones that
+build inside it is a retrofit of everything they produced. The cost is that the
+phase's first three milestones are the least specified, which is why the
+walkthrough that specifies them is planning's first input (D112).
+
+| # | Milestone | Depends on | Discharges |
+| --- | --- | --- | --- |
+| [M46](docs/build-notes/phase-details/m46.md) | The shell, the navigation, and the links list | — | The *workspace selector* candidate row · owner-requested scope, 2026-08-06 |
+| [M47](docs/build-notes/phase-details/m47.md) | The link page, taken apart | M46 | The *"massive mess"* complaint |
+| [M48](docs/build-notes/phase-details/m48.md) | On-demand panels, and what stops being buried | M47 | The *"buried deep in the page"* complaint |
+| [M49](docs/build-notes/phase-details/m49.md) | QR codes sized in pixels, and a PNG to download | M48 *(ordering)* | *A PNG QR code* · the QR-vocabulary complaint · reverses D11 |
+| [M50](docs/build-notes/phase-details/m50.md) | More than one QR code per link, told apart in the analytics | M49 | *More than one QR code per link, and per-code scan counts* |
+| [M50.5](docs/build-notes/phase-details/m50.5.md) | The first file this product accepts | M50 | — *(owner-added scope, 2026-08-07)* |
+| [M50.6](docs/build-notes/phase-details/m50.6.md) | A logo in the middle of a QR code | M50.5 | — *(owner-added scope, 2026-08-07)* |
+| [M51](docs/build-notes/phase-details/m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | F141 · *Account recovery, of any kind, for anybody* |
+| [M51.9](docs/build-notes/phase-details/m51.9.md) | **Mid-phase adversarial review** | M46–M51 | — |
+| [M52](docs/build-notes/phase-details/m52.md) | Account deletion and subject erasure | M50.5 · M51 *(ordering)* | F44 · *Account deletion and erasure* · compliance (erasure limb) |
+| [M53](docs/build-notes/phase-details/m53.md) | A second factor: TOTP, enrolment, and recovery codes | M51 | The MFA limb of *MFA, OAuth, OIDC, SSO, SCIM* |
+| [M54](docs/build-notes/phase-details/m54.md) | An API key belongs to an account, not to one organization | M52 | F75 · *An API key that reaches more than one organization* |
+| [M55](docs/build-notes/phase-details/m55.md) | An update checker, and the fifth thing that leaves this product | — | — *(owner-added scope, 2026-08-06)* |
+| [M56](docs/build-notes/phase-details/m56.md) | High availability: the failover contract | — | *Other surfaces* (high availability) |
+| [M57](docs/build-notes/phase-details/m57.md) | High availability: measured, and still one container | M56 | *Other surfaces* (complete) · the single-instance constraint |
+| [M57.9](docs/build-notes/phase-details/m57.9.md) | **Pre-release adversarial review** | M46–M57 | — |
+| [M58](docs/build-notes/phase-details/m58.md) | Deferred findings, documentation pass, 0.3.0 | all | Phase close |
+
+**Status per milestone lives in
+[phase-details/README.md](docs/build-notes/phase-details/README.md) and nowhere
+else**, which is the lesson F37 taught: a dated snapshot in this file was
+overtaken on the day it was stamped.
+
+### Phase 3 decisions
+
+Taken 2026-08-06, at planning. The *why* for each is in
+[decisions.md](docs/build-notes/decisions.md); this table is what was decided.
+
+| # | Decision | Outcome |
+| --- | --- | --- |
+| D108 | Which work areas Phase 3 takes | **A, B, E and F.** C (analytics), D (redirect path) and G (commercial) stay candidates — not dropped, not re-homed. D was declined partly on cost: every row there owes the `slo.md` k6 measurement, and six rows would mean six runs. |
+| D109 | Area A's scope | The two findings that falsify current claims — F44 erasure, F141 recovery — plus **MFA (TOTP only)** and the **multi-organization API key** (F75). OAuth, OIDC, SSO and SCIM stay unscheduled; each is a separate credential model, and one of them would consume the phase. |
+| D110 | Area E's scope, and its constraint | The **update checker** and **high availability**. High availability must not come at the cost of single-instance installs — owner-set, and enforced by a conformance test in [M57](docs/build-notes/phase-details/m57.md) rather than by intention. No new required dependency; Postgres stays the only one. |
+| D111 | Area F's scope, and D11 reversed | All three candidates, and a fourth added on 2026-08-07 — see D115. **SVG stays the render; PNG is a download.** The user-facing setting becomes an output size in pixels, and *an SVG at that size matches the PNG* is asserted by test rather than assumed — both are generated from one module matrix and one arithmetic. Sizes snap to keep modules whole, and the produced size is reported beside the requested one. |
+| D112 | How the redesign is specified | A **live owner walkthrough with blind tasks**, run before any milestone is built. The alternative — the actor that will build it also specifying it, judged by nobody who uses it — is the failure the queue row asked to avoid. The cost is that planning stalls on owner time, which is why A, E and F were planned in parallel with it. |
+| D113 | Version at phase end | **0.3.0.** 1.0.0 stays a later phase's promise, on D4's reasoning for 0.2.0. |
+| D114 *(count superseded by D115 and D116)* | What the walkthrough changed, and what it did not | Eighteen blind tasks over two rounds (2026-08-06, 2026-08-07) specified [M46](docs/build-notes/phase-details/m46.md)–[M48](docs/build-notes/phase-details/m48.md) and produced **seven defects**, F160–F166, which are fixed at [M58](docs/build-notes/phase-details/m58.md) and cost no redesign slot. **B stays at three and the phase stays at fifteen** — owner-set 2026-08-07. Notification click-through and mark-unread fold into M48, being the same *buried* complaint and needing no schema change. **Folders path-entry, organization switching and API-key scope grouping are deferred to Phase 4** with their reasons, in [phase-3-candidates.md](docs/build-notes/phase-3-candidates.md). |
+| D115 | QR logos, and the target moving | **Both** QR logos and [M50](docs/build-notes/phase-details/m50.md), rather than trading one for the other — owner-set 2026-08-07, taking the phase to sixteen. Logos are placed after M50, because a logo is per-code style and landing it first would mean retrofitting. **Split into two by D116 the same day**, so the row reads [M50.5](docs/build-notes/phase-details/m50.5.md) and [M50.6](docs/build-notes/phase-details/m50.6.md). **It is the first time this product accepts a file**, which is what makes it a milestone rather than a QR parameter: an upload surface, untrusted image decoding, a storage decision bounded by [M57](docs/build-notes/phase-details/m57.md)'s no-new-dependency test, a `docs/SECURITY.md` row, and an erasure limb [M52](docs/build-notes/phase-details/m52.md) does not currently have. |
+| D116 | The logo milestone is two, and the target moves again | **Split**, owner-set 2026-08-07 after an independent review, taking the phase to **seventeen**. [M50.5](docs/build-notes/phase-details/m50.5.md) is the upload surface — endpoint, caps, re-encode, storage, removal and orphan collection, the `docs/SECURITY.md` row, and teaching the contract test multipart, which it has never done. [M50.6](docs/build-notes/phase-details/m50.6.md) is the compositing — level H, the occlusion cap, SVG/PNG parity. The seam is that M50.5 is useful with no logo ever drawn. Rejected: keeping one milestone and dropping its decode test, and paying for the split by dropping M50. The standing target stays **fifteen**; this phase is over it twice, both times recorded. |
+
+### Not in Phase 3
+
+Deferred **out of** Phase 3 rather than never considered. Everything the phase
+declined at planning time is in
+[phase-3-candidates.md](docs/build-notes/phase-3-candidates.md) with its area;
+this list is the shorter one — what the owner's walkthrough asked for and the
+fifteen-milestone target could not pay for. Each row carries the reason it was
+deferred, and that reason lives here and nowhere else.
+
+- **Filing a link into a folder by typing its path.** Creating a folder and
+  assigning links to it are separate actions in separate places, which the owner
+  called *"a hassle"* on 2026-08-07 and asked to become one control: type
+  `Products/Docs`, see matches along the path as you type, and create only when
+  the search returns nothing. It is a real workflow complaint from using the
+  product, and it is **the only area round two called irritating with no defect
+  behind it** — so it is deferred knowingly rather than because it turned out to
+  be a bug somebody else was already fixing. It needs a search surface over the
+  folder tree that does not exist, which is why it is a milestone rather than a
+  control.
+- **Switching organizations anywhere except the workspace dropdown.** Round two:
+  *"the workspace dropdown includes Org but I see no way of switching orgs
+  outside of it."* [M46](docs/build-notes/phase-details/m46.md) names the
+  current organization in the header, which closes the *where am I* half; moving
+  between organizations stays where it is. The switcher is the only affordance,
+  and giving organizations one of their own is a navigation question that
+  belongs with whatever Phase 4 decides about the destination set.
+- **Moving links between workspaces.** The *Link management* scope table put it
+  at Phase 3, and that table is the authoritative one — *"where this table and
+  prose elsewhere disagree, this table wins"*. Phase 3 does not build it: it
+  appeared in no milestone, no candidate row and no deferral until a review
+  found it on 2026-08-07, which made it the one row in this plan that was
+  effectively dropped in silence. Deferred to Phase 4 by the owner the same day.
+
+  Two reasons it is not a cheap insertion. It is a **cross-workspace** capability
+  in a service layer where `actor.WorkspaceID` is a single value threaded
+  through every scoped query, which is the same hard part the *All Workspaces*
+  entry in [upcoming-decisions.md](docs/build-notes/upcoming-decisions.md)
+  names — and that entry's recommended option is to build the two together, so
+  deferring this strands that question for another phase. And a link carries
+  analytics, folders, campaigns and a QR row that are all workspace-scoped, so
+  *moving* one is a question about what follows it, not an `UPDATE`.
+- **Grouping API-key scopes by the object they act on.** Round two: the scope
+  list is *"hard to find things in and should be better organized/grouped by use
+  > name > action"*, with the worked example that organizations, workspaces and
+  domains belong together and links and members do not. The keys page came back
+  **fine** overall and this is the one control on it that did not; it is a
+  presentation change over a permission set that is stable, so deferring it
+  costs nothing that compounds.
+
+**Deferring these was the owner's choice on 2026-08-07 and the recommendation
+was the other way** — trading [M50](docs/build-notes/phase-details/m50.md)'s
+slot for a fourth redesign milestone. Recorded so the alternative is visible:
+these three are cheap to schedule if a slot ever frees, and folders is the one
+that will be missed.
 
 ---
 

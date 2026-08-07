@@ -47,7 +47,16 @@ would turn parallel work into a merge conflict.
 
 ### A — Identity and account lifecycle
 
-`internal/auth`, `internal/identity`, the `002xx` migrations, `web_account.go`.
+`internal/auth`, `internal/signup`, `internal/invite`, `internal/team`,
+`internal/instance`, and `internal/httpx/web_keys.go` for the account surface.
+
+*(Corrected 2026-08-06, at planning. This read "`internal/auth`,
+`internal/identity`, the `002xx` migrations, `web_account.go`" and two of those
+four do not exist: there is no `internal/identity` package and no
+`web_account.go` file. `002xx` is one file, `00200_identity.sql` — an area
+marker, **not** a free numbering band; the next free migration number is
+`03700`. The area's boundary is unchanged, because it was cut by which files a
+milestone would touch and they are the same files under their real names.)*
 
 | Candidate | Where it is recorded |
 | --- | --- |
@@ -193,6 +202,22 @@ rather than discovered at milestone twenty. What that costs is a planning stretc
 with nothing shipping, and it is bounded by B's walkthrough rather than by the
 planning itself — see *Open questions*.
 
+**Which candidates each area takes.** Owner-set 2026-08-06, recorded as D109–D111
+in [Plan.md](../../Plan.md#phase-3-decisions) with the reasoning in
+[decisions.md](decisions.md#2026-08-06--phase-3-planned-what-each-area-takes-and-the-twelve-slots).
+Twelve slots for work, after two reviews and the close come out of fifteen. *(The phase later ran to seventeen — see Plan.md's Phase 3 build plan for how the target moved and why.)*
+
+| Area | Takes | Leaves on this list |
+| --- | --- | --- |
+| **A** | F141 recovery ([M51](phase-details/m51.md)), F44 erasure ([M52](phase-details/m52.md)), MFA/TOTP ([M53](phase-details/m53.md)), the multi-organization key F75 ([M54](phase-details/m54.md)) | OAuth, OIDC, SSO, SCIM; the runtime signup toggle |
+| **B** | Three milestones, M46–M48, specified by the walkthrough | The rows folded into the redesign are decided by it, including the workspace-selector label |
+| **E** | The update checker ([M55](phase-details/m55.md)), high availability ([M56](phase-details/m56.md), [M57](phase-details/m57.md)) | Redis Streams as a work queue; the circuit breaker |
+| **F** | All of it — PNG and pixel sizing ([M49](phase-details/m49.md)), several codes per link ([M50](phase-details/m50.md)) | Nothing |
+
+Four rows above are now **scheduled** and their reasons live where they always
+did; this file points at the milestone instead of at the deferral. The rows left
+behind keep their reason and stay candidates.
+
 ---
 
 ## Open questions
@@ -200,23 +225,30 @@ planning itself — see *Open questions*.
 **Which areas does Phase 3 take?** **Answered 2026-08-06 — A, B, E and F.** See
 *Answered* above. What remains open is everything below.
 
-**What does the redesign actually specify?** B's row says it cannot be specified
-without the owner, and the owner has chosen to plan the whole phase before
-building any of it. Those two do not conflict but they do order: **the
-walkthrough is planning's first input, not its alternative.** Until it happens, B
-has no milestones to write, and the areas that rebase onto B cannot be numbered
-against it either. Nothing else in the phase is blocked by it — A, E and F can be
-planned in full while it waits, and under [W33](workflow-changes.md#made)'s
-fallback a blocked B is exactly the case an independent area now answers.
+**What does the redesign actually specify?** **Answered 2026-08-07.** Eighteen
+blind tasks over two rounds produced [M46](phase-details/m46.md),
+[M47](phase-details/m47.md) and [M48](phase-details/m48.md), plus seven defects
+(F160–F166) that are fixed at [M58](phase-details/m58.md) rather than costing a
+redesign slot. The reasoning, including why *irritating* turned out to mean
+*defective* in four of six areas, is
+[D114](decisions.md#2026-08-07--what-eighteen-blind-tasks-specified-and-the-six-defects-hiding-inside-a-word).
 
-**Does the update checker default on or off?** E's row already says this owes a
-decision before it owes code — it introduces a new outbound-connection class, and
-`docs/SECURITY.md` treats the only existing one as an operator-visible property.
-It belongs in [upcoming-decisions.md](upcoming-decisions.md) when the phase is
-planned, not here.
+Three asks the walkthrough produced are **deferred to Phase 4** rather than
+dropped — folders path-entry, organization switching, and API-key scope grouping.
+Their reasons are in Plan.md's *Not in Phase 3*, which is where a deferral's
+reason lives; this file does not restate them.
 
-**How do B and F share the QR work?** F's boundary note says the settings
-vocabulary is B's templates over F's generator, so with both areas taken they are
-one milestone or an ordered pair — never two independent ones. Which of the two
-is a planning decision, and it is the one place the chosen set puts two areas on
-the same files.
+**Does the update checker default on or off?** **Re-homed 2026-08-06** to
+[upcoming-decisions.md](upcoming-decisions.md#m55--does-the-update-checker-default-on-or-off),
+which is where it said it belonged once the phase was planned. It carries three
+options, their costs and a recommendation, and [M55](phase-details/m55.md) reads
+the answer from there rather than pre-empting it.
+
+**How do B and F share the QR work?** **Answered 2026-08-06 — an ordered pair.**
+The settings vocabulary is B's templates over F's generator, so
+[M49](phase-details/m49.md) sits behind M48 as an ordering preference
+rather than inside it: the generator work — PNG, the pixel-size arithmetic, the
+snap — has no edge on B at all and can land first if B stalls, which is exactly
+the fallback [W33](workflow-changes.md#made) exists for. What must not happen is
+a settings rewrite landing into a page still being rebuilt, because that writes
+it twice.

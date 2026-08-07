@@ -42,6 +42,59 @@ conclusions are what this file exists to stop.
 
 ## Open — a milestone needs this
 
+### M50.5 — where does an uploaded logo live?
+
+**Needed by:** [M50.5](phase-details/m50.5.md), and it cannot be deferred into
+the build: the answer decides whether [M57](phase-details/m57.md)'s conformance
+test still passes, and that test is written a phase-half later.
+
+This product has never stored a file. Three options, and each costs something it
+has so far avoided.
+
+| Option | Buys | Costs |
+| --- | --- | --- |
+| **A `bytea` column on `qr_codes`** *(recommended)* | Deletion comes free with the foreign-key cascades that already exist, backup and restore need no new procedure, and a single container stays a single container — which is the constraint M57 turns into a test | Binary in the row and in every `pg_dump`. A capped image is small, but the cap becomes a database sizing question rather than a disk one, and Postgres is the one dependency this product cannot degrade without |
+| A filesystem path | Bytes stay out of the database, and serving is a file read | `docker-compose.yml` mounts only `pgdata`, so this needs a volume that does not exist and that `make demo-update` must not lose. It also makes deletion explicit everywhere a cascade would have handled it, and gives a multi-replica deployment a shared-storage problem it does not have today |
+| An object store | The answer that scales, and the one an operator running many replicas would expect | A **new required dependency**, which [M57](phase-details/m57.md)'s single-container conformance test is written to forbid. Choosing this means amending that test's claim before it is written |
+
+**Default if unanswered:** **A**. It is the only option that adds no
+infrastructure and no new deletion path, and the caps are what keep its cost
+bounded. Moving to B or C later is a migration of bytes, not of behaviour.
+
+**Assumes:** that the caps M50.5 sets keep a stored image small enough for a
+column to be uncontroversial — which is true only once those numbers exist, so
+this answer is re-checked when they do; and that no milestone before M50.5
+introduces file storage for its own reasons. None does.
+
+
+### M55 — Does the update checker default on or off?
+
+**Needed by:** [M55](phase-details/m55.md). The milestone builds either way and
+deliberately does not pre-empt this; what changes is a sentence in
+`docs/SECURITY.md` that is part of why somebody self-hosts this product.
+
+`docs/SECURITY.md:73` currently reads *"No telemetry, no phone-home, no
+third-party calls in the default configuration"*, and enumerates the four
+connections that leave this product rather than counting them — because that row
+said *two* until M45 and both of the missing ones were shipped features. An
+update checker is the fifth, and it is the first that would be **on** without an
+operator asking for it.
+
+| Option | Buys | Costs |
+| --- | --- | --- |
+| **Off by default** *(recommended)* | The sentence above stays true, unedited. An operator who wants the check turns it on, which is the same shape `SMTP_HOST` and `FEED_URL` already have — the operator's connections are off until configured, and this joins that group without changing its rule | The people most likely to be running an outdated version are the least likely to find the setting. The feature exists and does nothing on almost every instance, which is close to not having built it. The recommendation states this against itself: the cheapest option to defend is not obviously the useful one |
+| On by default, with an opt-out | The feature works for the operators it was requested for, without them knowing it exists | `SECURITY.md:73` has to be rewritten rather than extended, and *no phone-home in the default configuration* becomes *no phone-home except this*. That is a real change to a claim this product has made since Phase 1, and it is made on behalf of every operator who read it |
+| On by default, prompted at first run | The operator decides knowingly, and the default is whatever they chose | There is no first-run prompt surface for instance-level settings; the setup form claims the instance and does not configure it. This invents one, inside a milestone that is otherwise a daily HTTP GET |
+
+**Default if unanswered:** **off**. It is the only option that does not require
+editing a security claim, and turning a default-off feature on later is a
+configuration change where turning a default-on feature off later is an apology.
+
+**Assumes:** that `docs/SECURITY.md:73` still enumerates rather than counts —
+true and verified 2026-08-06 by reading it — and that no milestone between here
+and M55 adds a sixth outbound connection. [M53](phase-details/m53.md) explicitly
+adds none.
+
 ## Open — nothing forces this
 
 No deadline, no milestone waiting. Read when convenient; an answer here is worth

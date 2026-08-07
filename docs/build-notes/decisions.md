@@ -235,6 +235,11 @@ file. Append a row when you append an entry.
 | [Phase 3 takes four areas, and one of them cannot be planned yet](#2026-08-06--phase-3-takes-four-areas-and-one-of-them-cannot-be-planned-yet) | A, B, E, F in; C, D, G stay candidates; planned in full before anything is built, and why the walkthrough is planning's first input rather than its alternative |
 | [What the resume path reads is the live phase](#2026-08-06--what-the-resume-path-reads-is-the-live-phase) | W35 made: a finished phase's status rows move to their own file; plus Phase 3 starts at M46 and budgets two adversarial reviews, and the walkthrough gates all planning |
 | [The command catches up with the file it writes](#2026-08-06--the-command-catches-up-with-the-file-it-writes) | W8 made: `/preview-decisions` asks after filing; why the order is the substance; where an early answer lives before the milestone that uses it lands |
+| [Phase 3 planned: what each area takes, and the twelve slots](#2026-08-06--phase-3-planned-what-each-area-takes-and-the-twelve-slots) | D109–D113: A takes two defects plus MFA and the key model; E takes the checker and HA under a single-instance constraint; F reverses D11 on its own premise; the redesign is specified by owner walkthrough |
+| [What eighteen blind tasks specified, and the six defects hiding inside a word](#2026-08-07--what-eighteen-blind-tasks-specified-and-the-six-defects-hiding-inside-a-word) | D114 *(its heading says six; seven were filed — corrected by the entry below)*: *irritating* was mostly *defective*, so B stays at three; F160–F166; why the coverage test measures the seed rather than the instance; the workspace-label contradiction |
+| [An independent review of the plan, and the four numbers it caught](#2026-08-07--an-independent-review-of-the-plan-and-the-four-numbers-it-caught) | Fifteen findings before the plan merged: M49's false demo claim, the k6 count, two enforcement mechanisms that could not fail, D103 asserted backwards, and the scope row nobody had scheduled |
+| [QR logos, the first file this product accepts, and the target moving](#2026-08-07--qr-logos-the-first-file-this-product-accepts-and-the-target-moving) | D115: no upload surface exists anywhere; why a logo is a milestone not a parameter; the storage decision M57's test bounds; the target moves to sixteen for this phase only |
+| [The logo milestone was two, and a review found it the same day it was written](#2026-08-07--the-logo-milestone-was-two-and-a-review-found-it-the-same-day-it-was-written) | D116: the split; the erasure limb that was wrong in the dangerous direction; a cap ordering that specified the bomb; a decode test naming a decoder the tree does not have |
 | [Reviewing the specification, not only the thing built from it](#2026-08-07--reviewing-the-specification-not-only-the-thing-built-from-it) | W36 made: a plan is reviewed before it is built against; why a different model from the writer's; what the reviewer is deliberately not given; findings are evidence, not a verdict |
 
 ---
@@ -19247,6 +19252,548 @@ still on them, and only the questions *this run wrote* are asked, so a second ru
 over the same milestones is quiet.
 
 Recorded with no milestone number, per the convention for a process change.
+
+## 2026-08-06 — Phase 3 planned: what each area takes, and the twelve slots
+
+The entry above — *Phase 3 takes four areas, and one of them cannot be planned
+yet* — chose the areas (**D108**). This one is the plan itself: fifteen
+milestones, M46–M58, with what each area takes and why. The owner answered four
+scoping questions the same day, and the answers are **D109**–**D113** in
+[Plan.md](../../Plan.md#phase-3-decisions).
+
+### The arithmetic came first, and it is why the questions were asked
+
+Fifteen is the target. Two of them are adversarial reviews and one is the phase
+close, so **twelve are available for work**, and Phase 2 spent 33 on comparable
+ground. That is the whole reason the areas had to be scoped by the owner rather
+than discovered: four areas and twelve slots does not divide by itself.
+
+The plan spends all twelve. There is no fractional insertion left, which is
+stated in Plan.md rather than left implicit — an insertion is now a
+phase-boundary conversation, and the point of saying so at planning time is that
+nobody has to be the person who works it out at milestone fourteen.
+
+### D109 — area A takes two defects, MFA, and the key model
+
+F44 (deletion and erasure) and F141 (recovery) were never optional: both falsify
+claims the tree makes today, which makes them defects wearing feature clothes.
+The owner added MFA and the multi-organization API key.
+
+**MFA depends on recovery, hard.** A second factor makes lockout strictly more
+likely, and shipping one into a product where a lost password is permanent takes
+a known defect and multiplies it. That edge is what fixes A's internal order —
+M51 before M53 — and it is the only hard edge in the area that is not about
+schema.
+
+**OAuth, OIDC, SSO and SCIM stay out**, and their scope row is amended rather
+than emptied so the deferral keeps its reason. Any one of them is a credential
+model with its own enrolment, its own recovery and its own account-linking
+question; one would consume the phase.
+
+**What planning found that the candidates file had wrong.** Area A was described
+as `internal/auth`, `internal/identity`, the `002xx` migrations and
+`web_account.go`. Two of those four do not exist: there is no
+`internal/identity` — identity lives in `internal/auth` plus `internal/signup`,
+`internal/invite`, `internal/team` and `internal/instance` — and there is no
+`web_account.go`; the account surface is in `internal/httpx/web_keys.go`.
+`002xx` is a single file, `00200_identity.sql`, and is an **area marker rather
+than a free numbering band** — the next free migration number is `03700`. The
+candidates file's grouping is corrected; the areas it drew are unaffected,
+because they were cut by which files a milestone would touch and the files are
+the same ones under different names.
+
+### D110 — area E takes the checker and high availability, under a constraint
+
+The owner's words were *make sure HA doesn't come at the cost of single instance
+installs*, and that is the more interesting half of the answer.
+
+It is treated as a **testable constraint, not an intention**: M57 carries a
+conformance test that stands the product up as one container with no Redis and
+no load balancer, exercises the full surface, and asserts no new required
+dependency was introduced. Postgres stays the only one. A later milestone that
+makes Redis load-bearing fails that test, which is the reason to write it now
+rather than after something does.
+
+Most of high availability turned out to be already built and undocumented as a
+promise: leadership is per job family via `pg_try_advisory_lock`, `/healthz`
+deliberately touches no dependency, `/readyz` already distinguishes *degraded*
+from *unavailable*, and webhook and mail claims already survive a killed replica
+by lease. What is missing is the **contract** — what an operator may rely on —
+and a **measurement** of a rolling deploy. That split is what makes E two
+milestones instead of three or one.
+
+The update checker is small and its cost is a sentence rather than code:
+`docs/SECURITY.md` says *no phone-home in the default configuration*, and a
+default-on checker makes that false. The default is deliberately **not** decided
+here — it is in
+[upcoming-decisions.md](upcoming-decisions.md#m55--does-the-update-checker-default-on-or-off)
+with options, costs and a recommendation, because M55 is what forces it and the
+question deserves a reader who is not mid-planning.
+
+### D111 — area F takes all three, and D11 reverses on its own terms
+
+The owner's answer was *render as svg, allow png download as an option; I would
+expect an svg rendered to the set pixel size to be a close match to the png
+output*. The second clause is the design.
+
+**D11 (SVG only) and D72 both rest on one premise: that a PNG path would never
+be called.** D72 rejected a QR library specifically for pulling `image/png` and
+`compress/zlib` into the binary *"for a PNG path this product will never
+call"*. The owner has now asked for that path, so the reversal honours the
+reasoning rather than overriding it — and it costs no module dependency, because
+`image/png` is standard library. What D11 was actually protecting is *nothing
+rasterises on a request*, and that is preserved as a **bound**: a stated output
+cap, refused rather than clamped above it.
+
+**The match claim becomes a mechanism.** Both outputs come from one module
+matrix, one snapped pixels-per-module and one origin offset — two encoders over
+one arithmetic. A test walks the grid and checks the PNG pixel at each module's
+centre against the SVG's rect coverage. That makes the expectation falsifiable,
+which an expectation stated in prose is not.
+
+**Sizes snap.** A QR grid is a whole number of modules and 300 pixels over 29
+modules is not a whole number of pixels each. The produced size is the nearest
+one that keeps modules whole, reported beside the requested one. The rejected
+alternative — honour the request exactly, let modules land on fractional
+boundaries — is what would make the SVG and the PNG round differently, which is
+the one thing the answer above asked not to happen.
+
+**Per-code counts do not reverse D73.** More than one QR code per link needs a
+per-code identity in the payload; it does not need the `scan_count` column
+02700 removed. Counts are read from `click_events` through the existing
+analytics path, and the identity travels in its own query parameter beside
+`src=qr` rather than inside the closed vocabulary at
+`internal/domain/attribution.go:44` — which stays closed, because being closed is
+the property it was given.
+
+### D112 — the redesign is specified by the owner, in person
+
+Three options were put: a written inventory answered at leisure, a live
+walkthrough with blind tasks, or the actor that will build it specifying it from
+the three recorded complaints. The owner chose the walkthrough.
+
+**Blind tasks are the substance, not the ceremony.** Seven tasks, given with no
+instructions, against the demo instance: retrieve and save a QR code, size one
+for print, change a destination without changing anything else, gate a link on a
+click count, put links into a campaign, read one country figure, list a
+campaign's links. Each targets a structure the recon found — an 803-line link
+page whose edit form spans 214 lines and whose QR panel sits below it, a
+campaigns surface with no entry in a navigation fixed at three destinations by
+F6 and F7, a workspace selector that renders nothing at one membership.
+
+What the choice costs is that planning stalls on owner time, and that is why A,
+E and F were planned in full alongside it rather than after it: the areas that
+rebase onto B could be numbered against B's *band* without B's contents.
+
+### D113 — 0.3.0
+
+On D4's reasoning for 0.2.0. 1.0.0 stays a later phase's promise.
+
+### What this plan does not decide
+
+The update checker's default, above. And the **three areas not taken** — C
+(analytics), D (redirect path), G (commercial) — which stay candidates rather
+than being dropped or re-homed. D's exclusion has a cost that is worth naming
+because this phase pays a version of it anyway: every row in D owes the
+[slo.md](../slo.md) k6 measurement, and six rows meant six runs. Phase 3 pays for
+**two** — M50's second query parameter on the redirect path, and M57's
+rolling-deploy measurement — which is the reasoning holding rather than failing.
+
+## 2026-08-07 — What eighteen blind tasks specified, and the six defects hiding inside a word
+
+D112 chose a live walkthrough over a written question set. This is what it
+produced, and **D114** is the scoping answer it forced.
+
+### The method, and the one thing that made it work
+
+Two rounds. Round one, 2026-08-06, was seven tasks aimed **deliberately narrowly**
+at the link page, because all three recorded complaints were there and it was
+worth confirming they were real before spending owner time on surfaces nobody had
+complained about. They were real: scrolling was named in four of the seven.
+
+Round two, 2026-08-07, was eleven tasks over the shell, members, domains,
+automation, blocked destinations, API keys, folders, notifications and phone
+width. The owner's question between the rounds — *"these tasks seemed to be
+highly targeted at small sections of the link page, will there be more tasks
+that encompass more areas of the UI?"* — is the reason the second round exists
+in this shape, and is worth recording because a walkthrough that had stopped at
+round one would have specified a third of a redesign and called it a redesign.
+
+**Round two added a per-task verdict — *worth fixing? yes / no / later* — and a
+per-area judgement of fine / irritating / broken.** That single column is what
+made the phase scopeable. Without it the output is eleven observations of
+unknown weight; with it, six areas came back *irritating*, four came back *fine*,
+and **nothing came back broken**.
+
+### The finding that changed the budget: *irritating* was mostly *defective*
+
+Six areas were called irritating, and the natural reading is six areas needing
+redesign work — which the phase could not afford, since B had three slots and
+nothing was spare.
+
+Reading each note against the code instead produced the opposite conclusion.
+**Dashboard, domains, members and phone width were substantially defects**, and a
+defect does not need a milestone: it is a row in
+[deferred-findings.md](deferred-findings.md) and it is fixed at
+[M58](phase-details/m58.md) alongside the rest. Seven were filed, F160–F166.
+
+The two worth naming here, because both were found by an observation that was
+itself wrong:
+
+- **F164.** The owner wrote *"clicks per day should be scaled so the highest
+  reading fills the chart"*. The scaling is correct — `niceCeil` rounds an axis
+  to 1, 2 or 5 × 10ᵏ so the label is readable, and fill is therefore between 40%
+  and 100% by construction. But `funcs.go:93` assigns the **rounded ceiling** to
+  `MaxY`, and `series_chart.html:18` renders it as *"peak N/day"*. The demo's
+  front page says *peak 5,000/day* over a true maximum of 2,351. A complaint
+  about whitespace found a wrong number, on the product's first page, with
+  nothing beside it to contradict it.
+- **F162.** The owner noticed a domain reading *Verified* beside a warning that
+  links would stop being served. That pair is D70 working exactly as designed —
+  during the grace window the hostname genuinely is served. Chasing it found two
+  things that are not: a manual *Check DNS* renders *"is not verified"* directly
+  above a badge reading *Verified* (F161), and the demo's one verified custom
+  hostname is guaranteed to unverify 24 hours after every reseed, because
+  `lctl demo` verifies it through a stub resolver that dies with the seeder while
+  the server uses a real one against an RFC 2606 name that can never resolve.
+
+**F162 also produced the sharpest process lesson of the walkthrough**, and it was
+recorded only after a first attempt got it wrong. The initial row said the
+`demoCoverage()` assertion would *fail* when the domain unverified. It will not:
+`newDemoDB` creates a throwaway database, seeds into it and asserts in the same
+instant, so no hourly job ever runs against what it measured. **The coverage test
+measures the seed, not the instance.** That is a whole class of demo defect the
+guard is structurally unable to see, and F160 is the same shape — the demo holds
+8,123 country rollup rows and cannot draw the map, while two coverage rows exist
+to guarantee it can.
+
+### D114 — B stays at three, and what that costs
+
+Four asks had no defect behind them: folders path-entry with search-as-you-type,
+notification click-through and mark-unread, organization switching, and API-key
+scope grouping. The owner was offered three ways to pay — trade
+[M50](phase-details/m50.md)'s slot for a fourth redesign milestone, stay at
+fifteen, or raise the target to sixteen — and **chose to stay at fifteen**.
+
+- **Notifications fold into [M48](phase-details/m48.md)**, because they are the
+  same complaint that milestone exists for: a notification you cannot act on is
+  buried exactly as a QR code eight screens down is. They are also cheap —
+  `notifications.data` already carries the subject identifier and `read_at` is
+  already nullable, so there is no schema change.
+- **Folders, organization switching and API-key scope grouping go to Phase 4**,
+  with reasons, in [phase-3-candidates.md](phase-3-candidates.md). The stated
+  cost, because it is a real one: folders is the only *irritating* area with no
+  defect behind it and no fix scheduled, and it is met every time somebody files
+  a link.
+
+The recommendation put to the owner was the opposite — trade M50, on the
+reasoning that folders came out of using the product while nobody asked for two
+QR codes on one link in eighteen tasks. The owner chose the target. Recorded
+because a recommendation that was not taken is still evidence about what the
+alternatives were.
+
+### The contradiction the tasks contained, and why it resolved backwards
+
+Task 9 could not be completed: the owner could not confirm which workspace they
+were in without using the switcher. The same task's note then asked for the
+current workspace to be **removed** from the switcher as redundant.
+
+It is not redundant. The selected option is the only place the current workspace
+appears anywhere in the shell, so removing it makes task 9 impossible rather than
+merely hard — and below two memberships `partials/nav.html:38` renders nothing at
+all, which is the candidate row recorded on 2026-08-02. M46 resolves it in the
+direction neither note asked for: **a current-workspace label in the header**,
+with the switcher offering the others. That satisfies both notes and closes the
+one-membership case, and it honours M25's *"a control that cannot do anything"*
+rather than reversing it — the decision was always about the control, and the gap
+was always the label.
+
+### One more thing the walkthrough settled without being asked
+
+Task 4's *"unsure if the field is setting additional clicks or total clicks"* has
+an answer — `MaxClicks` is absolute, so 466 rather than 50 — and the page was
+already showing it: `link_detail.html:211` labels the field and `:217` renders
+*"416 used so far"* directly beneath it. **Both facts were adjacent and still did
+not compose.** That is a better argument for M47 than a missing number would have
+been, because it rules out the cheap fix.
+
+## 2026-08-07 — An independent review of the plan, and the four numbers it caught
+
+The Phase 3 plan was reviewed before it merged by an agent that was given the
+plan, the repository's own standards and nothing else — no conclusions, no
+hint of which parts the author thought were weak. It sampled about fifty of the
+plan's `file:line` citations against the tree. **Roughly forty checked out
+exactly**, which is the result worth recording first: the evidence discipline
+held. The exceptions are why this entry exists, and every one of them was
+verified independently before being acted on. One of the review's own items did
+not survive that check — it placed a `docs/deployment.md` sentence one line
+above where it is — so the review was not taken on trust either.
+
+### The one outright false claim, and how it was made
+
+[M49](phase-details/m49.md) said *"The demo has no stored QR styles today —
+every panel renders at defaults."* The demo holds **two** `qr_codes` rows, and
+`cmd/lctl/demo_coverage_test.go:522` carries an M41 row requiring one, bounded
+`Min: 1, Max: 1`.
+
+The mechanism of the error is the point. A query was run over the twelve
+**oldest** links, none of them had a QR row, and the absence was generalised to
+the table. `summer-sale`, which carries the seeded style, was not in the sample.
+This is the failure the standing rule about counting rather than trusting exists
+to catch, committed while writing a plan that cites that rule twice — and it
+landed on the milestone's read-forward compatibility surface, which is the one
+place the claim mattered. Corrected, and the correction *improves* the
+milestone: the behaviour is demonstrated by the demo rather than only asserted
+by a test. M49's proposed new coverage row is withdrawn, because it would have
+collided with the M41 row it did not know existed.
+
+### Three numbers that were load-bearing
+
+- **The k6 count was two and is three.** [M50](phase-details/m50.md) and
+  [M57](phase-details/m57.md) both said two while
+  [M57.9](phase-details/m57.9.md) has always required a re-measurement on the
+  final build. That number was part of the argument for declining work area D —
+  *six rows each owing a run* against *this phase pays for two* — so it was not
+  decoration.
+- **The defect count in the entry above this one.** Its heading says *six
+  defects*; its body says *seven were filed*, and F160–F166 is seven. The
+  heading is wrong. This file is append-only, so that entry is not edited: this
+  sentence is the correction.
+- **[M51.9](phase-details/m51.9.md) planned to re-run seven blind tasks.**
+  Eighteen specified the redesign; seven is round one, which targeted the link
+  page alone. A review to that spec would have re-checked a third of what it was
+  reviewing.
+
+### Two mechanisms that could not fail
+
+The template requires enforcement named as a mechanism — *a test that fails, not
+review vigilance* — and two milestones named tests that cannot catch what they
+were cited for.
+
+[M53](phase-details/m53.md) claimed the existing source scan as its no-egress
+enforcement. That scan is `TestThisPackageOpensNoSocketOfItsOwn`, which does
+`os.ReadDir(".")` and therefore only ever reads `internal/link`; M53's code
+lands in `internal/auth` and `internal/httpx`. It would have passed while the
+thing it guarded went unchecked. The milestone now builds a scan over the
+packages it touches, which is work it had not previously accounted for.
+
+[M49](phase-details/m49.md) claimed it could land ahead of a stalled B under
+[W33](workflow-changes.md#made)'s fallback. It cannot: the fallback requires
+every row in a milestone's `Depends on` column to be `done`, and M49 depends on
+M48. The phase's real fallbacks from a stalled B are M51 and M55, and nobody had
+written that down.
+
+### A recorded decision asserted backwards
+
+[M46](phase-details/m46.md) justified keeping a `<noscript>` submit with *"this
+product's dashboard degrades rather than requires"* JavaScript. **D103 answered
+that the other way on 2026-08-05** — it requires JavaScript, and that is written
+down. The justification is replaced with one that survives D103: the fallback
+exists on that page today, and a decluttering milestone has no business removing
+a capability while moving controls around. Taking it away is a separate
+decision.
+
+The plan format exists to make this visible — [M49](phase-details/m49.md) says
+*"reverses D11"* in as many words — and M46 contradicted a decision without
+noticing it was contradicting one.
+
+### What the scope table was still promising
+
+`Plan.md`'s *Link management* table — the one whose header says it wins where it
+disagrees with prose — put **moving links between workspaces** at Phase 3. It
+appeared in no milestone, no candidate row and no deferral. It was the single
+row in this plan that had been dropped in silence, which is the outcome
+*"nothing leaves a tracker silently"* exists to prevent. Deferred to Phase 4 by
+the owner on 2026-08-07 with its reason, in *Not in Phase 3*. The adjacent row
+for MFA and the SSO family is annotated the same day: MFA is scheduled, the
+other four are not, and the row said Phase 3 for all five.
+
+### The confirmation the planning promised itself and skipped
+
+`phase-details/README.md` says which of Phase 2's inherited rules Phase 3 takes
+*"is confirmed when Phase 3 is planned, one at a time, rather than assumed by
+the table having been left in place"*. It was not done. Validation reads that
+table for every milestone, so an unconfirmed rule is binding without anybody
+having checked it applies.
+
+Done on 2026-08-07 rather than backdated. **All fourteen carry**, none was
+weakened, and the result is recorded as which milestone engages each — so the
+next reader learns where a rule does work rather than where it merely sits. The
+lede is corrected to say when it happened and that a review is what prompted it.
+
+### What this says about reviewing a plan at all
+
+Two adversarial reviews are budgeted inside this phase for the code. Nothing was
+budgeted for the plan, and the plan is what every one of those milestones is
+validated against. Fifteen findings against a document written the same day, by
+an author who had read the standards it was breaking, is the argument for
+reviewing the specification and not only the thing built from it.
+
+## 2026-08-07 — QR logos, the first file this product accepts, and the target moving
+
+**D115.** The owner asked whether logos could be applied to QR codes. They
+cannot: `qr.Style` has five fields and none of them is a logo, and — more to the
+point — **nothing in this product accepts a file at all.** No `multipart`, no
+`FormFile`, no `ParseMultipartForm` anywhere in `internal/` or `cmd/`; no object
+store; every `bytea` column is key material or a hash. The only trace of the
+idea is `00600_phase2_dormant.sql:59`, which has described the style blob as
+holding *"colours, logo reference, error-correction level, margin, shape"* since
+Phase 1. M41 built QR codes and left that comment describing a blob it did not
+fill, so two of those five have never existed — the same shape as F44, found by
+a question rather than by the sweep that should have caught it at M45.
+
+### Why it is a milestone and not a QR parameter
+
+Five things, and only the last is about QR codes:
+
+- It needs an **upload surface**, which is new ground: multipart parsing, a byte
+  cap, a dimension cap, a content-type decision made by sniffing rather than by
+  trusting the client.
+- It **decodes untrusted binary**, which this product has never done. Image
+  decoders are a classic source of memory-safety bugs, so it owes a
+  `docs/SECURITY.md` row before it owes code, and the design does less rather
+  than more: raster only — an SVG upload is refused, because an SVG is a
+  document that can carry script — and what gets stored is re-encoded by this
+  product rather than kept as received.
+- It needs a **storage decision** bounded by a test that already exists.
+  [M57](phase-details/m57.md)'s conformance test asserts a single container with
+  no new required dependency, which rules an object store out; a `bytea` column
+  puts binary in every backup; a filesystem path needs a volume the compose file
+  does not mount and `make demo-update` must not lose. The decision cannot be
+  deferred into the build because it determines whether M57 still passes.
+- It creates the first **user content an erasure routine must reach**.
+  [M52](phase-details/m52.md)'s *what is removed* list was foreign-key cascades
+  only, and a stored file is not one. M52 is amended by M50.5 rather than
+  discovering the gap later, and that ordering is why logos land at M50.5 rather
+  than after M52.
+- And the QR half: a logo occludes modules, so error correction is forced to
+  level H and the occluded area is capped. **This partly reverses M49**, which
+  moved error-correction level out of the interface as *"handled in the
+  background"*. It stays out of the interface — the milestone picks level H on
+  the user's behalf — but level is load-bearing again, and a decode test is what
+  keeps that honest, because a code that looks right and does not scan is the
+  only failure that matters.
+
+It also makes [M49](phase-details/m49.md)'s central claim harder rather than
+leaving it alone. M49 asserts that the SVG at a set pixel size and the PNG
+describe the same image; a logo composites as a `data:` URI in one and a raster
+in the other, so the grid check runs outside the logo's box and the box itself is
+asserted to occupy the same modules in both.
+
+### The target moved, and that is the rule working
+
+Phase 3 was planned at fifteen with every slot spent. The owner was shown that
+logos fitted no milestone and that the phase had no room, was offered the
+priced alternatives — park them for Phase 4, or trade
+[M50](phase-details/m50.md)'s slot — and chose **both**, taking the phase to
+sixteen.
+
+That is the phase-boundary conversation
+[planning.md](planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)
+requires, not a rule being broken. The target is owner-set and explicitly
+revisitable, and what it exists to prevent is a phase growing one insertion at a
+time with nobody ever being the person who decided it was large. Somebody
+decided, with the costs in front of them.
+
+**The standing rule stays at fifteen.** Phase 3 is a recorded exception, not a
+new ceiling for every phase after it — moving the target for one phase and
+moving it for all phases are different decisions, and only the first was taken.
+
+M50's slot has now been offered as the thing to trade twice, on 2026-08-07 for
+the redesign's fourth milestone and again here, and kept both times. Recorded
+because it is evidence about what the owner values, not because the answer needs
+defending: nobody asked for two QR codes on one link in eighteen blind tasks,
+and it is still in the phase.
+
+## 2026-08-07 — The logo milestone was two, and a review found it the same day it was written
+
+**D116.** [M50.5](phase-details/m50.5.md) was written, reviewed by an
+independent agent, and split — all on the day it was added. The split is the
+headline; three of the review's findings are why it is not merely tidier.
+
+### The erasure limb was wrong in the dangerous direction
+
+The original amendment to [M52](phase-details/m52.md) said account deletion
+"removes every logo belonging to the account's workspaces and organizations".
+It cannot, and the reason is a chain nobody had traced: logos hang off
+`qr_codes` → `links` → workspaces and organizations
+(`00600_phase2_dormant.sql:55-57`), never off `users`. M52 also refuses to
+delete an account that is the **sole owner of a surviving organization**. So
+every organization the account belongs to outlives it, and the bullet either
+destroyed a surviving tenant's data or named an empty set.
+
+Its test could not have been written either: a logo needs an organization, a
+deletable account is not that organization's sole owner, so another owner exists
+and the logo has to survive. **Account erasure reaches no logos at all**, and
+M52 now asserts that as the claim — a test that deletes an account and confirms
+a co-owned organization's logo is *still there*. The failure this could have
+had was over-reach, so the test protects against over-reach.
+
+It also dissolved the ordering argument that had been used to place the
+milestone. The real reasons M50.5 precedes M52 are the storage mechanism and the
+orphan sweep, not erasure reach.
+
+### Two mechanisms that specified the vulnerability
+
+The bounding bullet said *a byte cap on the request body, then a dimension cap
+on the decoded image* — under a heading reading **Bounded before it is
+decoded**, and beside a risk section naming *"a cap enforced after the
+allocation it was meant to bound"* as a known failure mode. A decompression bomb
+is a small file declaring an enormous image, so a byte cap does not bound it and
+capping the decoded image is capping afterwards. The mechanism is
+`image.DecodeConfig`, which reads the header and yields dimensions without
+decoding pixels. The file now specifies three ordered steps.
+
+And the decode test — *every logo'd code is read back by a decoder* — named a
+capability this tree does not have. `go.mod` carries `boombuler/barcode`, an
+encoder; nothing in `internal/qr` decodes. A decoder is a new module, and
+[M49](phase-details/m49.md) asserts it adds none, tested against the require
+block. That is a milestone-sized cost hiding in a sub-clause, which is exactly
+what the size target's own trap warns about.
+
+**[M50.6](phase-details/m50.6.md) resolves it rather than importing it.** The
+shipping assertion is geometric — occluded module count against the symbol's
+codeword budget — and the scan check is run **once, by hand, against real
+scanners**, recorded with what was tested. A capability CI cannot assert is
+verified the way this product's SLO numbers are: measured, written down, and
+honest about being a measurement rather than a gate. Adding a decoder as a
+permanent gate stays available and is a decision to take, not a side effect.
+
+### Where the seam is
+
+M50.5 is the upload surface: the endpoint, the caps as numbers, sniffing,
+re-encoding, server-generated names, the storage decision, removal and
+replacement, the orphan sweep, the `docs/SECURITY.md` row, and teaching the
+contract test **multipart, which it has never done** — the phase's only
+genuinely new endpoint had unpriced API-parity work, and the inherited rule is
+not optional.
+
+M50.6 is the compositing: forced level H, the occlusion cap with its derivation,
+SVG-and-PNG parity over the logo's box, a test that pins `img-src` (nothing pins
+it today, so a later widening to `blob:` would pass every assertion this product
+has), and the contract answer for a request that sets `level=L` beside a logo.
+
+**The seam is that M50.5 is finished and useful with no logo ever drawn.** It
+stores an image against a code. That is the test for whether a split is real
+rather than cosmetic, and it passes.
+
+### What the review says about reviewing plans
+
+This is the second independent review of Phase 3's planning in one day, and the
+second to find defects in text written hours earlier by an author who had read
+the rules being broken. The first found fifteen; this one found nine plus six
+judgement calls, in a single milestone file.
+
+Both reviews were given the plan and the repository's standards and nothing
+else — no conclusions, no hint of which parts were thought weak. Both were
+verified rather than trusted, and in each case one item did not survive that
+check. That is the shape worth keeping: an independent reader, the project's own
+rules as the standard, and the findings checked before they are acted on.
+
+The storage question is filed in
+[upcoming-decisions.md](upcoming-decisions.md) with three options and a
+recommendation, because it is the one thing here the loop will stand still on
+and the file exists for exactly that.
 
 ## 2026-08-07 — Reviewing the specification, not only the thing built from it
 

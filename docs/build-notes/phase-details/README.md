@@ -27,21 +27,47 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## Phase 3
 
-**Not planned yet.** Four work areas are chosen — identity and account
+**Planned, unstarted.** Four work areas, chosen 2026-08-06: identity and account
 lifecycle, dashboard UI and UX, infrastructure and resilience, QR codes and
-campaigns — and the phase is planned in full before its first milestone is
-built. Numbering continues from Phase 2, so the first row is **M46**. Two
-adversarial reviews are budgeted inside the fifteen-milestone target, as Phase 2
-had: one mid-phase, one pre-release. What gates the planning, and the three
-questions still open, are in
-[phase-3-candidates.md](../phase-3-candidates.md).
+campaigns. Seventeen milestones — fourteen of work, two adversarial reviews, one
+close — against the size target in
+[planning.md](../planning.md#the-size-target-a-phase-stays-under-sixteen-milestones).
+The phase was planned at **fifteen with every slot spent**. On 2026-08-07 it went
+to sixteen when [M50.5](m50.5.md) was added, and to seventeen when a review found
+that milestone was two and the owner split it into M50.5 and [M50.6](m50.6.md).
+Both were the phase-boundary conversation the target exists to force. The
+standing rule stays at fifteen; this phase is a recorded exception. A milestone that turns out to be
+two is still that conversation rather than an insertion.
 
-Until a row exists here, [step 1](../phase-loop.md#1-validate) has no next
-milestone and `/work phase` enters nothing. That is the accurate state, not a
-missing file.
+**M46–M48 are the redesign, written from the owner's walkthrough** — eighteen
+blind tasks over two rounds, 2026-08-06 and 2026-08-07. Round two also produced
+seven defects, which are rows in [deferred-findings.md](../deferred-findings.md)
+and are fixed at [M58](m58.md) rather than costing a redesign slot.
 
 | # | Milestone | Depends on | Status |
 | --- | --- | --- | --- |
+| [M46](m46.md) | The shell, the navigation, and the links list | — | not started |
+| [M47](m47.md) | The link page, taken apart | M46 | not started |
+| [M48](m48.md) | On-demand panels, and what stops being buried | M47 | not started |
+| [M49](m49.md) | QR codes sized in pixels, and a PNG to download | M48 *(ordering)* | not started |
+| [M50](m50.md) | More than one QR code per link, told apart in the analytics | M49 | not started |
+| [M50.5](m50.5.md) | The first file this product accepts | M50 | not started |
+| [M50.6](m50.6.md) | A logo in the middle of a QR code | M50.5 | not started |
+| [M51](m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | not started |
+| [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | not started |
+| [M52](m52.md) | Account deletion and subject erasure | M50.5 · M51 *(ordering)* | not started |
+| [M53](m53.md) | A second factor: TOTP, enrolment, and recovery codes | M51 | not started |
+| [M54](m54.md) | An API key belongs to an account, not to one organization | M52 | not started |
+| [M55](m55.md) | An update checker, and the fifth thing that leaves this product | — | not started |
+| [M56](m56.md) | High availability: the failover contract | — | not started |
+| [M57](m57.md) | High availability: measured, and still one container | M56 | not started |
+| [M57.9](m57.9.md) | **Pre-release adversarial review** | M46–M57 | not started |
+| [M58](m58.md) | Deferred findings, documentation pass, 0.3.0 | all | not started |
+
+Work areas, so a blocked milestone has an independent row to fall back to per
+[W33](../workflow-changes.md#made): **B** is M46–M48, **F** is M49–M50.6, **A** is
+M51–M54, **E** is M55–M57. An area boundary buys a fallback destination, not
+concurrency — the worker is still forbidden from starting a second milestone.
 
 New milestone files start from [_template.md](_template.md).
 
@@ -51,8 +77,11 @@ Not repeated in the milestone files. **These are Phase 2's**, and they stayed
 here rather than moving with its status table because most are product
 invariants that outlast the phase that wrote them — never permanent redirects,
 the privacy stance, `ui` stays stdlib-only, sabotage a test that passes first
-try. **Which of them Phase 3 inherits is confirmed when Phase 3 is planned**,
-one at a time, rather than assumed by the table having been left in place.
+try. **Which of them Phase 3 inherits was confirmed on 2026-08-07**, one at a
+time, rather than assumed by the table having been left in place — the
+confirmation is below the table, and it did not happen at planning time as this
+sentence promised. A review found the omission; it is recorded rather than
+backdated.
 
 | Rule | Consequence |
 | --- | --- |
@@ -70,6 +99,29 @@ one at a time, rather than assumed by the table having been left in place.
 | Touching the redirect path | Re-run the [docs/slo.md](../../slo.md) k6 measurement on the built image; cached p99 stays under 20ms. |
 | A test that passes first try | Sabotage it, confirm it fails, restore by counter-edit. |
 | A new feature somebody can *see* | Extend the demo seeder (`cmd/lctl/demo.go`, and `demo_phase2.go` beside it) so the demo instance shows it. A feature only reachable by building the state yourself is one nobody evaluating this product will find. Does not apply to work with nothing to look at — a timeout bound, an invalidation path, a permission nobody exercises directly. **Enforced since [M33.5](m33.5.md)**: `demoCoverage()` in `cmd/lctl/demo_coverage_test.go` enumerates what the demo must show and fails when a listed feature has no seeded rows, so a milestone that seeds nothing adds a row there or breaks the build. Rows that assert *zero* for a milestone not yet built are turned into real rows when that milestone lands, rather than deleted. **The number of them is deliberately not written here.** It read *four* from [M33.5](m33.5.md) until 2026-08-05, was true when written, and was wrong within one milestone — M34 converted its own row exactly as this rule instructs and the count beside the rule did not move with it. By M45 every one had been converted and the sentence described nothing that existed. Saying *four* was a fact nothing kept true; saying *its trailing rows* is a fact that stays true however many there are (F69). If the obligation ever proves too heavy, narrow the list deliberately and in writing; never delete the test. |
+
+### Phase 3 inherits all fourteen, confirmed 2026-08-07
+
+One at a time, as the lede requires. **All fourteen carry**, and none was
+weakened. What follows is only the ones a Phase 3 milestone actually engages, so
+a validator knows where the rule does work rather than sits:
+
+| Rule | Which milestone tests it, and how |
+| --- | --- |
+| Redirect tree stays minimal | [M50](m50.md) parses a second query parameter on the hot path. Its tripwires must pass unmodified; if the code identity needs a lookup the resolver does not already hold, M50 says it does not ship in that form. |
+| Redirects are never permanent | Untouched. No Phase 3 milestone writes a redirect status. |
+| Cache is optional | [M56](m56.md) and [M57](m57.md) are where this could quietly break: M57's conformance test asserts one container with **no Redis** exercises the full surface, which is this rule turned into a gate rather than a habit. [M50.5](m50.5.md)'s storage decision is bounded by that same test — an object store would be a new required dependency. |
+| Privacy stance | [M52](m52.md) writes the first erasure routine in the product and [M51](m51.md) audits a reset with an IP prefix only. Neither adds a column the stance forbids. [M50.5](m50.5.md) adds the first *user-uploaded* content — which the stance is not about, and which account erasure deliberately does **not** reach. |
+| Every UI feature has API support | [M51](m51.md) (recovery routes), [M50](m50.md) (QR code CRUD), [M50.5](m50.5.md) (upload and clear — **and teaching the contract test multipart, which it has never done**) and [M54](m54.md) (key reach) each land operations in `api/openapi.yaml`. |
+| Dormant structure is jsonb | [M50](m50.md) touches `qr_codes.style`; [M49](m49.md) reads pre-milestone styles forward out of the same blob; [M50.6](m50.6.md) fills the *logo reference* the blob's comment has promised since Phase 1. |
+| Partitioning | Untouched. No Phase 3 milestone adds a partitioned table. |
+| DDL is additive | [M54](m54.md) makes `api_keys.organization_id` nullable and [M50](m50.md) drops a unique index. Both are additive within 0.3.0; M54's risk section states that the *resolution logic* is what is not reversible, which the rule does not cover. |
+| Permissions | No Phase 3 milestone adds a permission. [M54](m54.md) re-derives D18's delegability reasoning against a credential that crosses tenancies, and [M52](m52.md) declines an administrative delete-somebody-else rather than inventing one. |
+| `ui` stays stdlib-only | [M46](m46.md)–[M48](m48.md) are a redesign, which is exactly where the argument for a framework gets made. All three restate the rule for that reason. |
+| Both themes | Same three. New markup uses the theme tokens and M24.5's template scan applies unchanged. |
+| Touching the redirect path | [M50](m50.md), [M57](m57.md) and [M57.9](m57.9.md) — three k6 runs this phase. |
+| A test that passes first try | Everywhere. [M54](m54.md) names it as doing real work rather than ceremony: there is no existing test that would fail if scope intersection were taken against the wrong role. |
+| A new feature somebody can *see* | [M50](m50.md) and [M53](m53.md) add `demoCoverage()` rows. [M49](m49.md) deliberately adds none and says why; [M57](m57.md) is exempt because there is nothing to look at. |
 
 ## Decisions already taken
 
