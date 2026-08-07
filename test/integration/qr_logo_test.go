@@ -4,6 +4,7 @@ package integration
 
 import (
 	"bytes"
+	"encoding/json"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -506,14 +507,27 @@ func TestTheDefaultCodeCarriesALogoToo(t *testing.T) {
 			format, err)
 	}
 
-	// The style is the one the code was already being drawn at, so materialising
-	// the row changed no picture. Compared against a link whose code is
-	// genuinely untouched rather than against a literal, because the product
-	// default is internal/qr's to define and not this test's.
+	// The style is the one the code was already being drawn at, **except for the
+	// error-correction level** (M50.6, D141). Materialising the row still changes
+	// no picture — that is D139's claim and it is unchanged — but an upload does
+	// two things now, and the second is raising the code to level H, which it
+	// does for a code that already had a row just as much as for one that did
+	// not. So the comparison is field by field against a genuinely untouched
+	// code, with the one field M50.6 moves named rather than excluded silently.
+	//
+	// *(Until M50.6 this compared the whole style and nothing drew a logo, so
+	// there was nothing to raise the level for. The narrowing is M50.6's, and it
+	// is a narrowing rather than a deletion: five fields still have to match.)*
 	fresh := f.createLink("logodefaultb", "https://example.com/y")
-	if got, want := f.qrCode(id).Style, f.qrCode(fresh).Style; got != want {
+	got, want := f.qrCode(id).Style, f.qrCode(fresh).Style
+	if got.Level != qr.LevelH {
+		t.Errorf("the code carries a logo and is stored at level %q, want H", got.Level)
+	}
+	want.Level = qr.LevelH
+	if got != want {
 		t.Errorf("the row an upload created carries style %+v; an untouched code is "+
-			"drawn at %+v, and creating the row must not change the picture", got, want)
+			"drawn at %+v with the level raised, and creating the row must not "+
+			"change anything else about the picture", got, want)
 	}
 	// `stored` turning true is the one visible consequence, and it is honest:
 	// there is a row now.
@@ -586,7 +600,8 @@ func TestTheDashboardReachesTheLogoOnTheDefaultCode(t *testing.T) {
 		t.Fatalf("the panel's upload answered %d, want 303", got)
 	}
 	// Back to the panel it was posted from, carrying the marker that produces
-	// the sentence about nothing being drawn yet.
+	// the sentence about what the upload changed (M50.6 rewrote it; before that
+	// it said nothing drew the logo yet).
 	if !strings.HasPrefix(where, panelPath+"?") || !strings.Contains(where, "qr=logo") {
 		t.Errorf("the upload redirected to %q; want the panel it was posted from, "+
 			"marked qr=logo", where)
@@ -606,4 +621,188 @@ func TestTheDashboardReachesTheLogoOnTheDefaultCode(t *testing.T) {
 	if got := f.storedLogo(t, id, ""); got != nil {
 		t.Errorf("the panel's removal left %d bytes in the column", len(got))
 	}
+}
+
+// --- the logo in the picture (M50.6) -------------------------------------------
+
+// TestALogoRaisesTheCodeToLevelHAndSaysSo is m50.6.md's contract bullet.
+//
+// *"what a request setting `level=L` together with a logo gets back"* — the
+// milestone required the answer be decided and recorded, and D141 decides
+// **accept and override**. What that has to be worth is the second half of the
+// same bullet: *"a `GET` after a `PUT` returns what the server actually
+// applied"*. So this asks three times — after the upload, after a `PUT` that
+// names `L`, and on a fresh `GET` — and the answer is `H` every time.
+//
+// Silent drift between what was sent and what is stored is the one outcome the
+// contract test exists to catch, and the third read is the one that would catch
+// it: a handler could echo `H` back and write `L` to the row.
+func TestALogoRaisesTheCodeToLevelHAndSaysSo(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("poster-level", "https://example.com/summer")
+
+	// Deliberately at L to begin with, so H is never the level it already had.
+	if resp := f.putJSON("/api/v1/links/"+id.String()+"/qr",
+		`{"style":{"level":"L"}}`); resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
+		t.Fatalf("setting the level to L = %d", resp.StatusCode)
+	} else {
+		_ = resp.Body.Close()
+	}
+	if got := f.apiQRLevel(t, id); got != qr.LevelL {
+		t.Fatalf("the code is at level %q before the upload, want L", got)
+	}
+
+	if status, body := f.uploadLogo(
+		t, id, "", "brand.png", "image/png", logoPNG(t, 64, 0x5a),
+	); status != http.StatusOK {
+		t.Fatalf("the upload answered %d: %s", status, body)
+	}
+
+	if got := f.apiQRLevel(t, id); got != qr.LevelH {
+		t.Errorf("after the upload the code reports level %q, want H. A logo "+
+			"occludes modules and the occlusion cap is measured against what H "+
+			"recovers; a code drawn at L with a logo is outside the derivation", got)
+	}
+	// **The column, not the service's view of it.** `qrCodeFrom` reports the
+	// level a logo'd code is *drawn* at, so reading through the service would be
+	// green for a row that still said `L` — which is the drift this is here to
+	// refuse. The row is where the answer has to be.
+	if got := f.storedQRLevel(t, id, "").Level; got != qr.LevelH {
+		t.Errorf("the `qr_codes` row holds level %q after the upload, want H — the "+
+			"response and the row have to agree, or a later read reports something "+
+			"the picture is not", got)
+	}
+
+	// And a PUT that names L is accepted and overridden rather than refused, so
+	// a client restyling a logo'd code does not get a 422 for a field it never
+	// thought about.
+	resp := f.putJSON("/api/v1/links/"+id.String()+"/qr",
+		`{"style":{"level":"L","foreground":"#112233"}}`)
+	raw := readAll(t, resp)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT with level L on a logo'd code = %d, want 200: %s",
+			resp.StatusCode, raw)
+	}
+	if !strings.Contains(string(raw), `"level":"H"`) {
+		t.Errorf("the PUT's own answer does not report level H:\n%s", raw)
+	}
+	if got := f.apiQRLevel(t, id); got != qr.LevelH {
+		t.Errorf("a GET after the PUT reports level %q, want H. The response said "+
+			"one thing and the row holds another, which is exactly the drift this "+
+			"contract test exists to catch", got)
+	}
+	if got := f.storedQRLevel(t, id, "").Level; got != qr.LevelH {
+		t.Errorf("the `qr_codes` row holds level %q after a PUT naming L, want H", got)
+	}
+	// The rest of the style did land, so the override is one field and not a
+	// refusal wearing a 200.
+	if got := f.storedQRStyle(id).Foreground; got != "#112233" {
+		t.Errorf("the foreground is %q, want #112233; the override ate the request", got)
+	}
+}
+
+// storedQRLevel reads `qr_codes.style` out of the database, because the level a
+// row *holds* and the level a code is *drawn at* are two claims and only one of
+// them is answered by the service.
+func (f *ruleFixture) storedQRLevel(t *testing.T, linkID uuid.UUID, slug string) qr.Style {
+	t.Helper()
+	var blob []byte
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT style FROM qr_codes WHERE link_id = $1 AND slug = $2`,
+		linkID, slug).Scan(&blob); err != nil {
+		t.Fatalf("read the stored style for %s/%q: %v", linkID, slug, err)
+	}
+	var out qr.Style
+	if err := json.Unmarshal(blob, &out); err != nil {
+		t.Fatalf("the stored style is not a style: %v", err)
+	}
+	return out
+}
+
+// apiQRLevel reads the level out of the API's own answer, which is the surface
+// the contract is about.
+func (f *ruleFixture) apiQRLevel(t *testing.T, linkID uuid.UUID) qr.Level {
+	t.Helper()
+	resp := f.get("/api/v1/links/"+linkID.String()+"/qr", nil)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET qr = %d", resp.StatusCode)
+	}
+	var out struct {
+		QR struct {
+			Style qr.Style `json:"style"`
+		} `json:"qr"`
+	}
+	if err := json.Unmarshal(readAll(t, resp), &out); err != nil {
+		t.Fatal(err)
+	}
+	return out.QR.Style.Level
+}
+
+// TestBothServedPicturesCarryTheLogo is the compositing, at the layer a reader
+// meets it.
+//
+// internal/qr holds the module-by-module comparison of the two outputs; what
+// this owes is that the two *endpoints* serve them — that the bytes somebody
+// downloads are the picture the dashboard is showing, with the image in it.
+func TestBothServedPicturesCarryTheLogo(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("poster-drawn", "https://example.com/summer")
+
+	before := f.qrSVG(id)
+	if strings.Contains(before, "<image") {
+		t.Fatal("a code with no logo is served with an <image> in it")
+	}
+	beforePNG := f.qrPNGBytes(t, id)
+
+	if status, body := f.uploadLogo(
+		t, id, "", "brand.png", "image/png", logoPNG(t, 64, 0x77),
+	); status != http.StatusOK {
+		t.Fatalf("the upload answered %d: %s", status, body)
+	}
+
+	after := f.qrSVG(id)
+	if !strings.Contains(after, `<image `) ||
+		!strings.Contains(after, `href="data:image/png;base64,`) {
+		t.Errorf("the served SVG carries no embedded image:\n%.400s", after)
+	}
+	// The one directive that makes the embedded form renderable inside the
+	// dashboard, checked on a page rather than only as a constant.
+	page := f.getHTML("/links/" + id.String() + "/qr")
+	if !strings.Contains(page, "<image ") {
+		t.Error("the dashboard's own drawing carries no logo, so the panel shows a " +
+			"different picture from the one the download produces")
+	}
+
+	afterPNG := f.qrPNGBytes(t, id)
+	if bytes.Equal(beforePNG, afterPNG) {
+		t.Error("the rasterised code is byte-identical with and without a logo")
+	}
+	img, format, err := image.Decode(bytes.NewReader(afterPNG))
+	if err != nil {
+		t.Fatalf("the served PNG does not decode: %v", err)
+	}
+	if format != "png" {
+		t.Fatalf("the served bytes decoded as %q", format)
+	}
+	if _, paletted := img.(*image.Paletted); paletted {
+		t.Error("the composited PNG came back paletted; a logo has colours a " +
+			"two-entry palette cannot hold, and pngWithLogo's allocation figure is " +
+			"calculated from the four-byte form")
+	}
+}
+
+// qrPNGBytes fetches the rasterised default code.
+func (f *ruleFixture) qrPNGBytes(t *testing.T, linkID uuid.UUID) []byte {
+	t.Helper()
+	resp := f.get("/api/v1/links/"+linkID.String()+"/qr.png", nil)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET qr.png = %d", resp.StatusCode)
+	}
+	return readAll(t, resp)
 }

@@ -4,7 +4,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strings"
 	"testing"
+
+	"github.com/DevOfPie/LinkCtrl/internal/config"
 )
 
 // resolvedIP runs one request through RealIP and reports the address the
@@ -140,5 +143,49 @@ func TestRealIPMappedDirectPeerMatchesIPv4TrustPrefix(t *testing.T) {
 	got := resolvedIP(t, trusted, "[::ffff:10.0.0.5]:4444", "198.51.100.7")
 	if got != netip.MustParseAddr("198.51.100.7") {
 		t.Errorf("resolved %v, want 198.51.100.7 via the mapped trusted peer", got)
+	}
+}
+
+// TestTheImageSourceIsSelfAndDataAndNothingElse pins `img-src` (M50.6).
+//
+// **Nothing pinned it before this milestone.** The existing CSP assertions check
+// `script-src` and the absence of an `unsafe-` waiver, so a quiet widening of
+// `img-src` to `blob:` or to a host would have passed every test this product
+// had. M50.6 is what makes that matter: a QR code with a logo carries the image
+// as a `data:` URI inside SVG the dashboard inlines, so the page now depends on
+// this directive being exactly what it is — and a feature depending on a
+// directive is the moment to stop taking the directive on trust.
+//
+// The list is written out rather than searched for a substring, because
+// `strings.Contains(csp, "img-src 'self' data:")` is true of
+// `img-src 'self' data: https://cdn.example` as well.
+func TestTheImageSourceIsSelfAndDataAndNothingElse(t *testing.T) {
+	const want = "img-src 'self' data:"
+
+	var found string
+	for _, directive := range strings.Split(csp, ";") {
+		directive = strings.TrimSpace(directive)
+		if strings.HasPrefix(directive, "img-src") {
+			found = directive
+		}
+	}
+	if found == "" {
+		t.Fatalf("the policy names no img-src at all, so images fall back to "+
+			"default-src and a change there moves them silently:\n  %s", csp)
+	}
+	if found != want {
+		t.Errorf("img-src is %q, want %q.\n\nA QR code carrying a logo embeds the "+
+			"image as a data: URI in SVG the dashboard inlines, so `data:` has to "+
+			"stay and nothing may join it. `blob:` or a host here is a place a page "+
+			"can be made to load somebody else's bytes from.", found, want)
+	}
+
+	// And on a real response, because a constant nothing serves is not a policy.
+	rec := httptest.NewRecorder()
+	SecurityHeaders(config.Config{})(http.HandlerFunc(
+		func(http.ResponseWriter, *http.Request) {},
+	)).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+	if got := rec.Header().Get("Content-Security-Policy"); !strings.Contains(got, want+";") {
+		t.Errorf("the served policy does not carry %q:\n  %s", want, got)
 	}
 }

@@ -4898,6 +4898,17 @@ components:
             M49: it is a scannability tradeoff a dashboard user has no basis to
             make and a script might, so it is chosen here and carried forward
             unchanged by a save from the panel.
+
+            **A code carrying a logo is always `H`, and a request naming
+            anything else is accepted and overridden rather than refused.** A
+            logo covers modules and `H` is the level that makes covering them
+            survivable, so it is not a preference while there is one. This
+            request replaces the style whole, and an omitted `level` means its
+            default — so refusing would answer `422` to a caller changing a
+            colour on a code whose logo it never mentioned. Nothing is silent
+            about it: the response to this request, and every later `GET`,
+            report `H`. Removing the logo leaves the level where it is, because
+            lowering it would redraw a picture that may already be printed.
         margin:
           type: integer
           minimum: 0
@@ -4977,6 +4988,14 @@ components:
             is addressed at `/links/{id}/qr/logo`, the same shorthand `qr.svg`
             and `qr.png` use, because the default code's identity is having no
             slug rather than having a reserved one.
+
+            **When this is true, both picture endpoints draw the image into the
+            middle of the code**: a centred square one fifth of the symbol's
+            width — 4% of its area — with the modules under it destroyed and
+            `level` forced to `H` so they can be recovered. The fraction is a
+            cap derived from what `H` corrects, and the logo is centred because
+            the derivation holds for no other placement. `size` reflects the
+            raised level, so a code can grow when a logo is added.
 
     QRCodeResponse:
       type: object

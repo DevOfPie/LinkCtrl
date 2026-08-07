@@ -198,6 +198,25 @@ UPDATE qr_codes SET logo = $3, updated_at = now()
 UPDATE qr_codes SET logo = NULL, updated_at = now()
  WHERE id = $1 AND workspace_id = $2;
 
+-- name: GetQRCodeLogo :one
+-- The bytes, for the one thing they are for (M50.6).
+--
+-- **The only read in this file that projects the column**, and it is separate
+-- from GetQRCode rather than folded into it for exactly the reason the three
+-- reads above stopped saying `q.*`: drawing a list of twenty names must not
+-- fetch twenty images. This is called once, by a surface that is about to
+-- composite one code's logo into one picture, and only for a code whose
+-- `has_logo` already said there is something to fetch.
+--
+-- NULL comes back for a code with no logo, which the service reads as "nothing
+-- to draw" rather than as an error: `has_logo` and this can disagree by exactly
+-- one concurrent clear, and the honest answer to that race is the picture
+-- without the logo.
+SELECT q.logo
+  FROM qr_codes q
+JOIN links l ON l.id = q.link_id
+WHERE q.link_id = $1 AND q.workspace_id = $2 AND q.slug = $3 AND l.deleted_at IS NULL;
+
 -- name: ClearOrphanedQRCodeLogos :execrows
 -- The orphan sweep, run hourly by the maintenance pass.
 --

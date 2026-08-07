@@ -251,11 +251,13 @@ file. Append a row when you append an entry.
 | [M50: two line numbers, and the references that held](#2026-08-07--m50-two-line-numbers-and-the-references-that-held) | An amendment, not a decision. Also the first milestone in the phase whose *migration* number was still right, and why that is not luck |
 | [M50.5: where an uploaded logo lives](#2026-08-07--m505-where-an-uploaded-logo-lives) | D134, owner-set. The answer to the phase's one pre-filed question, and what it obliges M50.5 to measure before M57 is written |
 | [M50.5: the owner overrules D136 — the default code gets a logo too](#2026-08-07--m505-the-owner-overrules-d136-the-default-code-gets-a-logo-too) | Owner-set. Why the bullet counts capabilities rather than operations, why the shorthand and not a reserved slug, and what D130 is protected from |
+| [M50.6: the logo reference that is still not a reference](#2026-08-07--m506-the-logo-reference-that-is-still-not-a-reference) | An amendment, not a decision. Two files said M50.6 fills a Phase 1 promise; D134 is what made that false, one milestone before this one |
 | [M50.5: the shorthand that carries a logo, and the row it has to write](#2026-08-07--m505-the-shorthand-that-carries-a-logo-and-the-row-it-has-to-write) | D139: what the owner's ruling became — two more members of D133's family, the row a `bytea` column obliges a code with no row to acquire, and the style it is written at; the multipart body the dashboard needs because a file cannot travel in a urlencoded form; and the four sabotages |
 | [M50.5: the first file this product accepts](#2026-08-07--m505-the-first-file-this-product-accepts) | D135–D138: the caps as numbers and the worst-case row D134 was owed, including why the upload cap does not bound the database; why only a named code carries a logo and what gap that leaves; what an orphan even is once the bytes are the row; and why an upload does not inherit the API's rate limit |
 | [M48: the panel, the thumbnail that could not go where it was asked, and where a notification leads](#2026-08-07--m48-the-panel-the-thumbnail-that-could-not-go-where-it-was-asked-and-where-a-notification-leads) | D123–D125: a panel is a route first and a popup second, and why that is not D24 reversed or D120 reversed; the QR thumbnail stays below the edit form because M47's fold test refuses a picture above it, and what went in the heading row instead; a map rather than a switch so that *has a mapping* is a question code can ask; the two kinds that lead nowhere and say so; three of seven kinds the demo has never seeded and why no coverage row demands them; and the permission a test fixture had been missing since M47, which hid three sections of the link page from every test that renders it |
 | [M48: the picture goes up — the rule that let it, and the page re-measured](#2026-08-07--m48-the-picture-goes-up-the-rule-that-let-it-and-the-page-re-measured) | D126: what M47's fold guard became — a height class and a 160px budget rather than a blanket refusal of `<svg>`, and why the `height` attribute could not be what is read; one constant, three consumers, and the fixture that would otherwise measure a page nobody is served; `internal/qr` gaining a validated class; and the re-measurement in three engines — 327→349px, 443→465px — checked by reproducing M47's own figures with the picture removed |
 | [M50: the empty slug, the parameter that stayed closed, and the rollup that was not written](#2026-08-07--m50-the-empty-slug-the-parameter-that-stayed-closed-and-the-rollup-that-was-not-written) | D130–D133: why the default code's identity is its *absence* of an identifier and what that bought for every code already printed; why a code identity could not ride inside `src` and how the second parameter is bounded instead; why per-code counts are a filter over the referrer dimension rather than the new rollup campaign analytics was deferred for, and what the Referrers panel therefore still shows; and why the five shipped QR endpoints stayed the default-code shorthand |
+| [M50.6: the logo in the picture](#2026-08-07--m506-the-logo-in-the-picture-a-cap-that-is-arithmetic-a-level-that-is-not-a-preference-and-the-ring-a-measurement-bought) | D140–D142: the occlusion cap as arithmetic rather than a plausible fraction — what level H actually recovers, why a contiguous square costs more than its area, and why it may spend only half; why a request naming another level is accepted and overridden rather than refused, and where the forcing has to happen twice; why the logo is embedded as a data URI rather than served, what that does to the rasteriser's allocation figure, and why `img-src` had to be pinned; and the one module of background a hand decode check bought |
 | [M49: the size, the second encoder, and D11 spent on purpose](#2026-08-07--m49-the-size-the-second-encoder-and-d11-spent-on-purpose) | D127–D129: what bounds a rasteriser that D11 refused to allow at all, stated as an allocation rather than as a word; why the quiet zone became the second knob and what the search costs in tie-breaks; why `qr.Style` gained no field and what that bought for every row already in the table; why a form that stopped asking about error correction needed a new service operation rather than a default; and the two encoders sharing one arithmetic, with the claim they are held to and the one they are not |
 
 ---
@@ -21681,3 +21683,255 @@ Four new claims, four counter-edits, each confirmed red and restored:
   it exists to refuse.
 - The shorthand answering under the `code` key → `TestAPIMatchesItsContract`
   fails on both the response validation and the field it reads.
+
+## 2026-08-07 — M50.6, the logo in the picture: a cap that is arithmetic, a level that is not a preference, and the ring a measurement bought
+
+M50.5 stored a file. This draws it, and the three things it had to decide are
+below. What is not below, because m50.6.md decided it before any of this was
+built, is the **decoder question**: there is no QR decoder in this tree, adding
+one is a module in a require block one milestone after M49 asserted the QR path
+adds none, and the shipping assertion is therefore geometric. The decode check
+is run by hand against real readers and written into
+[m50.6.md](phase-details/m50.6.md) as a measurement. **It is not a gate**, and
+`make check` cannot tell you a logo'd code scans.
+
+### D140 — the occluded area, and where the number comes from
+
+**A centred square one fifth of the symbol's width — 4% of its area — rounded
+down to an odd number of modules so it centres on the grid.**
+
+m50.6.md required *the derivation from H's correction budget written down*,
+because any fraction satisfies a bullet that says "capped as a fraction". The
+derivation has three parts and all three are in
+`internal/qr/composite.go`'s package comment:
+
+1. **What H recovers.** ⌊0.30·C(v)⌋ codewords, where C(v) is the symbol's total.
+   The 30% is ISO/IEC 18004's own figure and it is the *error-correction
+   capacity*, not the EC-codeword share — version 1-H corrects 8 of 26, version
+   4-H 32 of 100, version 10-H 112 of 346. C(v) is arithmetic rather than a
+   forty-row table: the symbol's modules less the finder patterns, the timing
+   patterns, the alignment grid and the format and version information, over
+   eight. `TestTheCodewordCountIsTheStandardsOwn` holds it to the standard's
+   table at ten versions.
+2. **What an occlusion destroys.** ⌈(k+1)/2⌉·⌈(k+3)/4⌉ codewords for a centred
+   k×k region — an upper bound read off the layout, because codeword modules sit
+   in two-module-wide strips filled four rows at a time. This is where *occlusion
+   is spatially correlated* becomes a number: a 5-module box is 25 modules,
+   three codewords' worth, and can destroy six.
+3. **How much of the budget it may have: half.** The other half is claimed by
+   three things that error correction also pays for — the 30% is a total and
+   Reed-Solomon corrects per block, so an uneven spread fails a symbol whose
+   total is fine; print, paper, lighting, angle and blur; and the logo's own
+   edge, which can corrupt the ring of modules just outside the box.
+
+A fifth of the width clears that rule for every version this product produces,
+with the tightest — version 4 — spending 24 of a 30-codeword budget's half.
+`LogoBoxModules` applies the budget check *as well as* the fifth and takes the
+smaller, so the claim is true by construction for all forty versions rather than
+only for the ones a short URL reaches; a test asserts the fifth is what binds
+everywhere the product goes, because a cap the code silently reduced would stop
+being the number the milestone and the dashboard both state.
+
+**Rejected: a bigger logo.** The industry's rule of thumb is 20–30% of area at
+level H, which is four to seven times this. It is a rule of thumb about codes
+scanned from a phone held still in good light; this cap is what the arithmetic
+supports for a code printed on a poster, and the honest place to put the
+difference is in a cap rather than in a hope.
+
+**Rejected: arbitrary placement.** The derivation is about a centred region —
+centring is what keeps the three finder patterns, the format rings and the
+timing patterns clear, none of which error correction protects. A placement
+control would need its own derivation, and not offering it is how the milestone
+avoids having one it cannot write.
+
+**What centring does not keep clear, stated rather than engineered away:** a
+central alignment pattern. Versions whose alignment grid has an odd row count
+put one dead centre — version 7 at (22,22) of 45 — and the box covers it. A
+decoder that cannot find it falls back to a transform from the three finders,
+which is fine flat and worse photographed off a curve. It is part of why the cap
+is half a budget.
+
+### D141 — a code with a logo is at level H, and a request naming another one is accepted and overridden
+
+m50.6.md required the choice be made and recorded: **refuse, or
+accept-and-override**. It is **accept and override**, and the reason is the
+shape of the request rather than politeness.
+
+`PUT /links/{id}/qr` replaces the style whole and an omitted `level` means its
+default — so under *refuse*, a client changing a colour on a code whose logo it
+never mentioned gets a `422` for a field it did not send. Worse, refusing makes
+the invariant true only at the entry points that refuse: overriding makes *a
+code with a logo is at H* true by construction, which is what the occlusion cap
+above is measured against.
+
+**The forcing is in two places and they cannot disagree.** `internal/link`
+writes H into `qr_codes.style` — on upload, and on any style write to a code
+that has a logo — so the row holds what will be drawn. `internal/qr` forces it
+again at the renderer, so a row written before this milestone, or by hand, still
+draws at H rather than occluding modules against a budget a quarter the size.
+The second is what makes the geometric claim unconditional; the first is what
+makes a `GET` honest.
+
+Silence is what the bullet forbids and there is none: the `PUT`'s own answer
+reports H, every later `GET` reports H, and the row holds H. The contract test
+reads the **column** rather than the service, because `qrCodeFrom` reports the
+level a code is *drawn* at and would be green for a row that still said `L`.
+
+**Clearing a logo leaves the level at H.** Lowering it would redraw a picture
+that may already be printed, for a code whose owner asked only to remove an
+image; H is the safer of the two to be left at, and the panel's notice says so.
+
+**A consequence, recorded rather than fixed:** H grows the symbol, and a code
+already near the 2000px raster bound is pushed past it, so its PNG download
+starts answering `422`. Measured, filed as [F171](deferred-findings.md#open),
+and not taken here — the two available fixes are re-fitting the size (which
+restyles a code that may be printed) and refusing the upload (which refuses a
+picture the SVG can still draw), and choosing between them is a decision rather
+than a patch.
+
+**This narrows an M50.5 assertion and does not falsify an M50.5 bullet.** D139
+says an upload against an unstyled default code writes its row *at the style the
+code was already drawn at*, and that is still exactly what
+`materializeDefaultQRCode` does. What changed is that an upload now does a second
+thing afterwards — raises the level — and it does that for a code that already
+had a row just as much as for one that did not. M50.5's integration test compared
+the whole style against an untouched code; it now compares five fields and names
+the sixth. m50.5.md carries no bullet this makes false.
+
+### D142 — the logo travels inside the SVG as a data URI, and `img-src` is pinned because of it
+
+**Embedded, not referenced.** The alternative is an endpoint that serves the
+stored bytes and an `<image href="/api/…">` pointing at it, and it costs three
+things: a route M50.5 deliberately does not have (*there is no operation
+anywhere in this document that returns the bytes*), an authenticated second
+request for a picture the process already has in hand, and a downloaded `.svg`
+that is no longer a picture — it becomes a document that fetches from an origin
+the reader may not be signed into.
+
+**Base64 is what keeps the package's promise true.** `internal/qr` promises the
+bytes of an SVG it emits cannot hold a `<` it did not write, and until now that
+was easy: integers and colours parsed as `#rrggbb`. A logo is workspace bytes.
+The base64 alphabet is `A-Za-z0-9+/=` and cannot express a quote or an angle
+bracket whatever the image holds, so the promise survives the third
+caller-controlled input this package has acquired —
+`TestTheEmbeddedLogoCannotCarryMarkup` puts markup in a real PNG and asserts
+none of it reaches the document.
+
+**And it is what makes `img-src` load-bearing.** `img-src 'self' data:` already
+permitted the embedded form, and nothing pinned it: the existing CSP tests check
+`script-src` and the absence of an `unsafe-` waiver, so a quiet widening to
+`blob:` or a host would have passed every assertion this product had. A page now
+*depends* on the directive, which is the moment to stop taking it on trust.
+
+**The rasteriser's allocation changes with it, and the number changes with it.**
+A QR code has two colours and a logo has whatever it has, so a composited PNG is
+`image.NRGBA` at four bytes a pixel rather than the two-colour paletted form:
+2000 × 2000 × 4 = **16,000,000 bytes**, four times D127's 4,000,000, and that is
+the figure whenever a code carries a logo. The resampled logo is bounded
+separately at 512² × 4 = 1,048,576 — which is `MaxLogoPixels` × 4, so it reuses
+D135's arithmetic instead of inventing a second bound. The 512 is ⌊√262,144⌋ and
+nothing else.
+
+**The scaler is written here rather than imported.** `golang.org/x/image/draw`
+has one; adding it would put a module in the require block one milestone after
+M49 asserted the QR path adds none, and `image/draw` in the standard library
+composites but does not scale. It is an area average, which is the filter the
+case that matters wants — a 512-pixel logo into a 60-pixel box, where dropping
+pixels produces the aliasing a scanner reads as noise.
+
+### The ring, and why a hand check is worth running rather than performing
+
+m50.6.md's decode bullet is a measurement, not a gate, and the temptation with
+one of those is to run it, write *it worked*, and move on. This one changed the
+build.
+
+Composited with the logo filling the whole occluded box, `zbarimg` 0.23.93
+failed **three symbol versions of thirty-four** for a fully opaque logo — 7, 8
+and 32. A box-size sweep said the failures were **not monotonic in the box's
+size**: version 10 failed at three modules and read cleanly at eleven. That
+shape is a detector losing its sampling grid, not error correction running out,
+so shrinking the cap would have been superstition dressed as caution.
+
+Holding the logo back by **one module of the code's own background inside the
+box** took it to thirty-four of thirty-four. That is `logoInsetModules`, and it
+is the one number in the file a measurement chose rather than a derivation — the
+comment says so. It costs the cap nothing: the ring is painted background, so
+the modules under it are destroyed exactly as the ones under the image are, and
+every number in D140 is measured against the box rather than against the image
+inside it.
+
+The full corpus and its results are in
+[m50.6.md](phase-details/m50.6.md#the-decode-check-as-run--2026-08-07): 816
+images from the shipping render path, 34 versions × 6 logo shapes × 4 styles,
+**816 of 816** decoding to the exact payload. **The phone-camera half of the
+bullet is outstanding and is the owner's** — nobody else here has a camera
+pointed at this, and a hand check somebody else reports having run is not a
+measurement.
+
+### Sabotage
+
+Eleven new claims, eleven counter-edits, each confirmed red and restored:
+
+- `raw -= 36` dropped from the codeword arithmetic → the ISO table test fails at
+  every version from 7 up.
+- `LogoBoxDivisor` 5 → 3 → the budget assertion fails: a third of the width
+  spends more than half of H's budget.
+- `ForLogo` made a no-op → the code asked for at L with a logo draws L's
+  symbol.
+- The box's origin moved one module → the two outputs draw different rectangles.
+- The data URI emitting raw bytes instead of base64 → `<script` reaches the
+  document.
+- `prepareLogo`'s error swallowed at both render entry points → three unusable
+  stored logos are composited into pictures this product serves.
+- `fitInside` returning a square → the 4:1 wordmark is squashed.
+- `blob:` added to `img-src` → the directive test fails on the exact-match.
+- `MinProductContent` moved to 26 → internal/link's floor guard fails against
+  the alias and hostname bounds it is derived from.
+- The upload's style write dropped → the `qr_codes` row holds `L` after an
+  upload, while the API still reports `H`, which is the drift the column read
+  exists to catch.
+- The accept-and-override arm disabled → a `PUT` naming `L` on a logo'd code
+  answers `L` and stores `L`.
+
+
+## 2026-08-07 — M50.6, the logo reference that is still not a reference
+
+An amendment under [phase-loop.md](phase-loop.md#amending-a-bullet), taken at
+[step 3.4](phase-loop.md#3-land) and flagged by the worker, which cannot amend.
+A fact, not an assertion.
+
+Two places claimed [M50.6](phase-details/m50.6.md) fills the *logo reference*
+that `00600_phase2_dormant.sql:59` has promised since Phase 1 — m50.6.md's
+*Discharges* line, and the *Dormant structure is jsonb* row in
+[phase-details/README.md](phase-details/README.md). Both are now amended to say
+it does not.
+
+The tree fact: `00600_phase2_dormant.sql:59` describes the **style blob** as
+holding *"colours, logo reference, error-correction level, margin, shape"*. Under
+[D134](../../Plan.md#phase-3-decisions) the logo is a `bytea` column on
+`qr_codes`, added by migration `03800`. So a logo is stored and drawn, and the
+blob holds no reference to it — the same blob, the same comment, and the promise
+still unkept.
+
+**What made it false is the interesting part.** Not this milestone's work: the
+owner's storage answer, given at M50.5's validation, one milestone earlier.
+m50.6.md was written on 2026-08-06 when the question was still open and a `bytea`
+column was one of three candidates — under either of the other two the sentence
+would have been true, because a filesystem path and an object key are both
+*references* and both would have lived in the blob. Answering the question
+decided a fact in a file nobody was looking at.
+
+That is a shape worth naming beside the six citation amendments this phase has
+logged. Those were **references into code an earlier milestone moved**, and the
+defence is to cite a symbol name beside the number. This is a **claim a later
+decision falsified**, and the defence is different: when a filed question is
+answered, the answer's blast radius includes every milestone file written while
+it was open. D134 was checked against M50.5 and M57 when it was given, because
+those are the milestones the entry itself named. It was not checked against
+M50.6, and M50.6 is where it landed.
+
+**What remains true.** Of the comment's five words, **shape** is now the only one
+nothing builds — m50.6.md's *Deliberately not done* already says so and points at
+[M58](phase-details/m58.md)'s documentation sweep, which is where the comment
+gets trued up rather than here. `docs/data-model.md` was corrected by the worker
+under the standing documentation approval and already reads this way.

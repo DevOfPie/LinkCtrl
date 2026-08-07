@@ -334,15 +334,20 @@ func qrNotice(q url.Values) string {
 		return "Code renamed. The name is what the dashboard calls it — what the code " +
 			"says is unchanged, so nothing already printed is affected."
 	case "logo":
-		// Says plainly that nothing is drawn yet, because the picture beside this
-		// message is unchanged and a reader who was not told would reasonably
-		// conclude the upload failed. M50.6 is what removes this sentence.
-		return "Logo stored, re-encoded as a PNG by this server. Nothing draws it into " +
-			"the code yet — that is the next piece of work — so the picture beside " +
-			"this is unchanged."
+		// M50.5's version of this said nothing drew the logo yet, because nothing
+		// did. M50.6 is the milestone that made that sentence false, so it is
+		// M50.6's to replace — and what it replaces it with is the two things that
+		// changed about the picture, because both are visible and neither was
+		// asked for directly.
+		return "Logo stored, re-encoded as a PNG by this server, and drawn in the middle " +
+			"of the code. Error correction is now at level H, which is what makes a " +
+			"code readable with part of it covered — so the picture is a little denser " +
+			"than it was. What the code says is unchanged."
 	case "logo_removed":
 		return "Logo removed. The image is gone from the row rather than merely " +
-			"unreferenced, so nothing is left behind."
+			"unreferenced, so nothing is left behind. The code stays at error " +
+			"correction level H: dropping it back would redraw a picture that may " +
+			"already be printed, and H is the safer of the two to be left at."
 	default:
 		return ""
 	}

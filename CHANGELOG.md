@@ -35,10 +35,38 @@ migrations run at boot.
   how a code is drawn — and an API key that holds it may use it. **The QR panel
   on a link's page does it too**, so a logo is not an API-only feature.
 
-  **Nothing draws it yet.** Storing the image and putting it in the middle of a
-  QR code are two pieces of work, and this is the first: the endpoint, the
-  bounds, and where the bytes live. A code carrying a logo reports `has_logo` and
-  is otherwise unchanged, so upgrading changes no picture anybody has printed.
+  **And it is drawn into the middle of the code** — in the panel, in the
+  thumbnail, and in both downloads, so the picture on the page is the picture in
+  the file. Nothing already printed changes: a code only gains a logo when
+  somebody uploads one to it, and what the code *says* is untouched either way.
+
+  **Two things change about a code the moment it carries one, and both are
+  visible.** The image covers a centred square **one fifth of the code's
+  width** — 4% of its area — and error correction goes to **level H**, the
+  level that lets a reader recover a code with part of it covered. H packs the
+  code tighter, so the picture is a little denser than it was and can come out
+  larger at the same setting. The fraction is not a taste: it is derived from
+  how much level H can actually recover, spends at most half of that budget, and
+  leaves the rest for print, paper, lighting and camera angle. There is no
+  control for the size or the position of the logo, because the derivation only
+  holds for a centred square and a control this product cannot bound is one it
+  will not offer.
+
+  **`level` is therefore not yours to set while a code has a logo.** A request
+  naming another one is accepted and answered with `H` rather than refused —
+  `{}` means "the defaults" in this API, and refusing would fail a request that
+  only changed a colour. The response and every later `GET` report what was
+  applied. Removing the logo leaves the level at H: dropping it would redraw a
+  code that may already be on a poster.
+
+  **Whether a logo'd code scans is measured, not tested.** There is no QR
+  decoder in this product and adding one for a test would be a dependency; what
+  exists instead is a hand-run check against a real reader, recorded with what
+  was tried. As of this release: 816 images from the shipping code path — every
+  symbol size this product produces, six logo shapes, four styles — all read
+  back the exact URL under ZBar 0.23.93. **That is a measurement and not a
+  guarantee**, and no test in this product will tell you if a logo'd code stops
+  scanning on some reader.
 
   **PNG and JPEG, decided by what is in the file** rather than by what it is
   called or what your client says it is — so a `.png` holding a JPEG works and a

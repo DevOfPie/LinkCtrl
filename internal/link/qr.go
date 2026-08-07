@@ -426,6 +426,14 @@ func qrCodeFrom(
 	linkID uuid.UUID, shortURL, slug string, row qrRow, found bool,
 ) QRCode {
 	style := decodeQRStyle(row.Style)
+	// The level a code with a logo is *drawn* at, which is the one a caller has
+	// to be told about (M50.6, D141). SetQRStyleBySlug writes H into the row
+	// whenever there is a logo, so this normally changes nothing; it is what
+	// keeps the answer honest for a row written before this milestone, or by
+	// hand, or by a style write that raced an upload.
+	if found && row.HasLogo {
+		style = style.ForLogo()
+	}
 	content := QRContent(shortURL, slug)
 	out := QRCode{
 		LinkID: linkID, Slug: slug, Content: content,
@@ -473,7 +481,11 @@ func (s *Service) RenderQRBySlug(
 	if err != nil {
 		return nil, err
 	}
-	svg, err := qr.Render(code.Content, code.Style)
+	logo, err := s.qrLogoFor(ctx, actor, linkID, slug, code.HasLogo)
+	if err != nil {
+		return nil, err
+	}
+	svg, err := qr.RenderWithLogo(code.Content, code.Style, logo)
 	if err != nil {
 		// A stored style is normalized before it is written, and the content is
 		// a short URL, so reaching here means the row was edited outside the
@@ -507,7 +519,11 @@ func (s *Service) RenderQRPNGBySlug(
 	if err != nil {
 		return nil, err
 	}
-	out, err := qr.RenderPNG(code.Content, code.Style)
+	logo, err := s.qrLogoFor(ctx, actor, linkID, slug, code.HasLogo)
+	if err != nil {
+		return nil, err
+	}
+	out, err := qr.RenderPNGWithLogo(code.Content, code.Style, logo)
 	if err != nil {
 		if errors.Is(err, qr.ErrTooLarge) {
 			return nil, domain.ValidationErrors{{
@@ -655,6 +671,19 @@ func (s *Service) SetQRStyleBySlug(
 	if !found && slug != "" {
 		return nil, domain.ErrNotFound
 	}
+	// **A code carrying a logo is stored at level H, whatever was asked for**
+	// (M50.6, D141). Accept-and-override rather than refuse: this endpoint is a
+	// PUT that replaces the style whole, so an omitted level means `M`, and
+	// refusing would make every colour change on a logo'd code a 422 for a field
+	// the caller never mentioned. What the milestone forbids is silence, and
+	// there is none — the row holds H, the response below returns H, and a `GET`
+	// after this `PUT` reports what was applied.
+	if existing.HasLogo {
+		normalized = normalized.ForLogo()
+		if blob, err = json.Marshal(normalized); err != nil {
+			return nil, fmt.Errorf("encode qr style: %w", err)
+		}
+	}
 	row, err := s.q.UpsertQRCode(ctx, dbgen.UpsertQRCodeParams{
 		ID: uuid.Must(uuid.NewV7()), LinkID: linkID, WorkspaceID: actor.WorkspaceID,
 		Slug: slug, Label: existing.Label, Style: blob,
@@ -770,6 +799,30 @@ func (s *Service) SetQRCodeLogo(
 		return nil, fmt.Errorf("store qr code logo %s: %w", row.ID, err)
 	}
 	row.HasLogo = true
+
+	// **And the level goes to H, in the row** (M50.6, D141). A logo occludes
+	// modules and H's correction budget is what the occlusion cap is measured
+	// against, so a code that has one is drawn at H — and the row says so, rather
+	// than the renderer quietly disagreeing with what a `GET` reports.
+	//
+	// After the bytes rather than before them, so the failure that can happen
+	// leaves the safe state: a logo stored at a level the row still calls `M`
+	// draws at H anyway, because the renderer forces it too. The other order
+	// would leave a code with no logo restyled for nothing.
+	styled := decodeQRStyle(row.Style).ForLogo()
+	blob, err := json.Marshal(styled)
+	if err != nil {
+		return nil, fmt.Errorf("encode qr style: %w", err)
+	}
+	stored, err := s.q.UpsertQRCode(ctx, dbgen.UpsertQRCodeParams{
+		ID: uuid.Must(uuid.NewV7()), LinkID: linkID, WorkspaceID: actor.WorkspaceID,
+		Slug: slug, Label: row.Label, Style: blob,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("raise qr code %s to level H: %w", row.ID, err)
+	}
+	row = qrRowFromUpsert(stored)
+	row.HasLogo = true
 	// No cache invalidation. A logo is a dashboard fact like a style and a label:
 	// the redirect snapshot carries a link's slugs and nothing else about its
 	// codes, so nothing cached can disagree with this write.
@@ -818,6 +871,70 @@ func (s *Service) ClearQRCodeLogo(
 		return fmt.Errorf("clear qr code logo %s: %w", row.ID, err)
 	}
 	return nil
+}
+
+// Drawing the logo (M50.6).
+//
+// **The bytes are read once, by the thing that is about to draw them, and by
+// nothing else.** M50.5 gave the three reads on `qr_codes` explicit column lists
+// so that listing twenty codes does not fetch twenty images; `GetQRCodeLogo` is
+// the one query that projects the column, and it runs only for a code whose
+// `has_logo` already said there is something to fetch.
+//
+// **There is still no endpoint that returns a logo.** What M50.6 adds is the
+// compositing, so the bytes leave this package inside a picture and never on
+// their own. QRCodeLogo below is how the dashboard gets them, and it is a
+// service call rather than a route.
+
+// QRCodeLogo returns the image stored against one of a link's codes, or nil.
+//
+// **`links.read`, the same permission that renders a code**, because that is
+// what this is for: the dashboard draws its own SVG rather than fetching the API
+// endpoint, so it needs the same input the endpoint's renderer has. Nothing in
+// the API document exposes it — the two operations on a logo are still replace
+// and remove.
+//
+// Nil rather than an error for a code with no logo, and for a default code with
+// no row: "there is nothing to draw" is the answer in both cases, and it is the
+// answer a clear that raced this read should also produce.
+func (s *Service) QRCodeLogo(
+	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, slug string,
+) ([]byte, error) {
+	if !actor.Can(PermRead) {
+		return nil, domain.ErrForbidden
+	}
+	if _, err := s.Get(ctx, actor, linkID); err != nil {
+		return nil, err
+	}
+	return s.qrLogo(ctx, actor.WorkspaceID, linkID, slug)
+}
+
+// qrLogoFor is the read the two renderers make, skipped entirely for a code that
+// has no logo — which is nearly every code.
+func (s *Service) qrLogoFor(
+	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, slug string, hasLogo bool,
+) ([]byte, error) {
+	if !hasLogo {
+		return nil, nil
+	}
+	return s.qrLogo(ctx, actor.WorkspaceID, linkID, slug)
+}
+
+// qrLogo reads the column. The caller has already been authorized — every path
+// here goes through QRCodeBySlug or Get first.
+func (s *Service) qrLogo(
+	ctx context.Context, workspaceID, linkID uuid.UUID, slug string,
+) ([]byte, error) {
+	logo, err := s.q.GetQRCodeLogo(ctx, dbgen.GetQRCodeLogoParams{
+		LinkID: linkID, WorkspaceID: workspaceID, Slug: slug,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read qr code logo for %s: %w", linkID, err)
+	}
+	return logo, nil
 }
 
 // materializeDefaultQRCode writes the row a link's default code has been

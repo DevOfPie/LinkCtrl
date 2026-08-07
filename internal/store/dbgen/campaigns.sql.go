@@ -322,6 +322,39 @@ func (q *Queries) GetQRCode(ctx context.Context, arg GetQRCodeParams) (GetQRCode
 	return i, err
 }
 
+const getQRCodeLogo = `-- name: GetQRCodeLogo :one
+SELECT q.logo
+  FROM qr_codes q
+JOIN links l ON l.id = q.link_id
+WHERE q.link_id = $1 AND q.workspace_id = $2 AND q.slug = $3 AND l.deleted_at IS NULL
+`
+
+type GetQRCodeLogoParams struct {
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+	Slug        string
+}
+
+// The bytes, for the one thing they are for (M50.6).
+//
+// **The only read in this file that projects the column**, and it is separate
+// from GetQRCode rather than folded into it for exactly the reason the three
+// reads above stopped saying `q.*`: drawing a list of twenty names must not
+// fetch twenty images. This is called once, by a surface that is about to
+// composite one code's logo into one picture, and only for a code whose
+// `has_logo` already said there is something to fetch.
+//
+// NULL comes back for a code with no logo, which the service reads as "nothing
+// to draw" rather than as an error: `has_logo` and this can disagree by exactly
+// one concurrent clear, and the honest answer to that race is the picture
+// without the logo.
+func (q *Queries) GetQRCodeLogo(ctx context.Context, arg GetQRCodeLogoParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getQRCodeLogo, arg.LinkID, arg.WorkspaceID, arg.Slug)
+	var logo []byte
+	err := row.Scan(&logo)
+	return logo, err
+}
+
 const listCampaigns = `-- name: ListCampaigns :many
 SELECT c.id, c.workspace_id, c.name, c.slug, c.description, c.settings, c.starts_at, c.ends_at, c.created_at, c.updated_at, c.deleted_at, COALESCE(k.n, 0)::bigint AS link_count
 FROM campaigns c

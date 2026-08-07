@@ -1158,9 +1158,11 @@ func (s *demoSeeder) seedCampaigns(ctx context.Context, cat []demoLink, ids map[
 	// `make demo-update` upload the same image.
 	//
 	// Through the service like everything else here, so the demo's logo went
-	// through the caps, the sniffing and the re-encode a real upload does. What
-	// the demo *shows* is M50.6's — nothing draws it yet — and what it proves
-	// here is that the upload path ran.
+	// through the caps, the sniffing and the re-encode a real upload does. Since
+	// M50.6 it is also drawn: the second code renders with the mark in the middle
+	// of it, at error-correction level H, which is the feature rather than the
+	// proof that an upload succeeded. The seeding is unchanged — M50.5 put it
+	// here so that M50.6 would arrive to find something to composite.
 	if _, err := s.link.SetQRCodeLogo(
 		ctx, s.owner, styled, second.Slug, demoLogoPNG(),
 	); err != nil {
@@ -1173,7 +1175,8 @@ func (s *demoSeeder) seedCampaigns(ctx context.Context, cat []demoLink, ids map[
 	}
 
 	fmt.Fprintf(os.Stderr, "campaigns: %d, holding %d links; 1 QR code styled at %dpx "+
-		"(asked for %dpx); 2 codes on /%s, 1 carrying a logo, %d scans between them\n",
+		"(asked for %dpx); 2 codes on /%s, 1 drawn with a logo at level H, "+
+		"%d scans between them\n",
 		len(demoCampaigns()), labelled, sized.Size, fit.Requested, demoQRStyled, scans)
 	return nil
 }
@@ -1181,9 +1184,8 @@ func (s *demoSeeder) seedCampaigns(ctx context.Context, cat []demoLink, ids map[
 // demoLogoSide is how big the seeded logo is, in pixels.
 //
 // Small on purpose. It stands for a brand mark rather than for a photograph,
-// and M50.6 will draw it at a fraction of a code's own size, so a large one
-// would only make the demo's database bigger for a picture nobody sees at that
-// resolution.
+// and it is drawn at a fifth of the code's width, so a large one would only make
+// the demo's database bigger for a picture nobody sees at that resolution.
 const demoLogoSide = 96
 
 // demoLogoPNG draws the seeded logo: a filled disc with a lighter ring in it,
@@ -1191,8 +1193,10 @@ const demoLogoSide = 96
 //
 // **Transparent, and that is the part worth having.** A logo with an opaque
 // rectangle behind it would sit on a QR code as a white box; the alpha channel
-// is what a real one carries and what M50.6's compositing has to handle, so the
-// demo's example carries it too.
+// is what a real one carries and what the compositing has to handle, so the
+// demo's example carries it too. What shows through it is the code's own
+// background colour, because the box is painted before the image is drawn over
+// it — the disc reads as a disc rather than as a square.
 //
 // Deterministic — no randomness, no clock — because `make demo-update` runs the
 // seeder twice and the second run must produce the same instance as the first.

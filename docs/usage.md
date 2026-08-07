@@ -431,7 +431,7 @@ curl -sS -X DELETE "$BASE/api/v1/links/$LINK_ID/qr/logo" \
 The shorthand answers under `qr` and the collection under `code`, like every
 other operation in their respective families.
 
-Four things are worth knowing before you script it.
+Five things are worth knowing before you script it.
 
 **PNG and JPEG only, decided by the bytes.** Neither the filename nor the
 `Content-Type` you send is read, so a `.png` holding a JPEG works and a `.jpg`
@@ -451,13 +451,25 @@ is checked from the file's header before anything is decoded.
 default) on top of the API's, so a `429` here can arrive while everything else
 is still answering.
 
+**A logo changes the picture in two ways, and one of them is `level`.** The
+image covers a centred square one fifth of the code's width — 4% of its area —
+and the code is drawn at **error-correction level H**, which is what lets a
+reader recover a code with part of it covered. So `level` stops being yours to
+choose while a logo is there: a `PUT` naming another one is **accepted and
+answered with `H`** rather than refused, because this endpoint replaces the
+style whole and an omitted `level` means its default — refusing would fail a
+request that only changed a colour. The response and every later `GET` report
+what was applied, so nothing is silent. Removing the logo leaves the level at H;
+dropping it back would redraw a code that may already be printed. H packs the
+code tighter, so `size` can grow when you add a logo.
+
 There is no operation that reads a logo back: `has_logo` on the code says
-whether one is there, and nothing draws it yet.
+whether one is there, and both picture endpoints draw it.
 
 **Uploading to a default code that has never been styled creates its stored
 row**, so `stored` turns true alongside `has_logo`. The bytes live on the row, so
 there has to be one; the style written is the one the code was already being
-drawn at, so no picture and no download changes.
+drawn at, plus the level above.
 
 ### Reading the analytics
 

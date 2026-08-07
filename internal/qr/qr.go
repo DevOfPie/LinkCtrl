@@ -38,6 +38,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	"image/png"
 	"strconv"
 	"strings"
@@ -284,6 +285,12 @@ func Render(content string, style Style) ([]byte, error) {
 	return RenderClass(content, style, "")
 }
 
+// RenderWithLogo draws a code with an image composited into the middle of it
+// (M50.6). A nil logo is Render.
+func RenderWithLogo(content string, style Style, logo []byte) ([]byte, error) {
+	return RenderClassWithLogo(content, style, "", logo)
+}
+
 // RenderClass is Render with a CSS class on the root `<svg>` (M48).
 //
 // **Why a class is worth an entry point of its own.** `Scale` sizes the drawing
@@ -301,6 +308,17 @@ func Render(content string, style Style) ([]byte, error) {
 //
 // An empty class writes no attribute at all, which is what Render relies on.
 func RenderClass(content string, style Style, class string) ([]byte, error) {
+	return RenderClassWithLogo(content, style, class, nil)
+}
+
+// RenderClassWithLogo is RenderClass with an image composited into the middle
+// (M50.6).
+//
+// **The level is forced to H whenever there is a logo**, here rather than only
+// at the service that stores the style: a logo occludes modules, and the cap
+// composite.go derives is a cap against H's correction budget. A row that says
+// otherwise draws at H anyway, so the picture and the claim cannot come apart.
+func RenderClassWithLogo(content string, style Style, class string, logo []byte) ([]byte, error) {
 	if !validClass(class) {
 		return nil, fmt.Errorf("qr class: %q is not a class list", class)
 	}
@@ -308,11 +326,21 @@ func RenderClass(content string, style Style, class string) ([]byte, error) {
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("qr style: %s", errs[0].Message)
 	}
+	if len(logo) > 0 {
+		st = st.ForLogo()
+	}
 	code, err := Encode(content, st.Level)
 	if err != nil {
 		return nil, err
 	}
-	return code.SVGClass(st, class), nil
+	if len(logo) == 0 {
+		return code.SVGClass(st, class), nil
+	}
+	drawing, err := code.prepareLogo(st, logo)
+	if err != nil {
+		return nil, err
+	}
+	return code.svg(st, class, drawing), nil
 }
 
 // SVG draws the matrix, with no class on the root element.
@@ -329,7 +357,11 @@ func (c *Code) SVG(st Style) []byte { return c.SVGClass(st, "") }
 // and cannot be read back by anything simpler than a path parser. Runs are the
 // middle: about a quarter of the size of per-module rects, and a shape whose
 // test can reconstruct the matrix and compare it to the encoder's.
-func (c *Code) SVGClass(st Style, class string) []byte {
+func (c *Code) SVGClass(st Style, class string) []byte { return c.svg(st, class, nil) }
+
+// svg is SVGClass with the logo it may have to composite. A nil drawing is the
+// picture M49 shipped, byte for byte.
+func (c *Code) svg(st Style, class string, logo *logoDrawing) []byte {
 	g := c.geometry(st)
 	span, px := g.span, g.px
 
@@ -378,7 +410,14 @@ func (c *Code) SVGClass(st Style, class string) []byte {
 		b.WriteString(strconv.Itoa(width))
 		b.WriteString(`" height="1"/>`)
 	})
-	b.WriteString(`</g></svg>`)
+	b.WriteString(`</g>`)
+	// After the modules rather than instead of them: the box is painted over
+	// whatever it covers, so what is occluded is the whole box regardless of the
+	// logo's own shape — which is the area composite.go's cap is a cap on.
+	if logo != nil {
+		logo.writeSVG(&b, st, g.scale)
+	}
+	b.WriteString(`</svg>`)
 	return b.Bytes()
 }
 
@@ -448,15 +487,35 @@ const (
 
 // RenderPNG encodes content and rasterises it, the way Render draws it (M49).
 func RenderPNG(content string, style Style) ([]byte, error) {
+	return RenderPNGWithLogo(content, style, nil)
+}
+
+// RenderPNGWithLogo is RenderPNG with an image composited into the middle
+// (M50.6). A nil logo is RenderPNG, down to the paletted output.
+func RenderPNGWithLogo(content string, style Style, logo []byte) ([]byte, error) {
 	st, errs := style.Normalize()
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("qr style: %s", errs[0].Message)
+	}
+	if len(logo) > 0 {
+		st = st.ForLogo()
 	}
 	code, err := Encode(content, st.Level)
 	if err != nil {
 		return nil, err
 	}
-	return code.PNG(st)
+	if len(logo) == 0 {
+		return code.PNG(st)
+	}
+	if px := OutputSize(code.Size, st); px > MaxSize {
+		return nil, fmt.Errorf("%w: the style draws %dpx and the bound is %dpx",
+			ErrTooLarge, px, MaxSize)
+	}
+	drawing, err := code.prepareLogo(st, logo)
+	if err != nil {
+		return nil, err
+	}
+	return code.pngWithLogo(st, drawing)
 }
 
 // PNG rasterises the matrix at the same geometry SVGClass draws it.
@@ -494,6 +553,50 @@ func (c *Code) PNG(st Style) ([]byte, error) {
 			}
 		}
 	})
+
+	var b bytes.Buffer
+	b.Grow(1024 + g.px*g.px/64)
+	if err := (&png.Encoder{CompressionLevel: png.BestCompression}).Encode(&b, img); err != nil {
+		return nil, fmt.Errorf("encode png: %w", err)
+	}
+	return b.Bytes(), nil
+}
+
+// pngWithLogo rasterises the matrix with an image composited into the middle
+// (M50.6).
+//
+// **A logo costs the paletted form, and the allocation figure with it.** A QR
+// code has two colours and a logo has whatever it has, so this buffer is
+// [image.NRGBA] at four bytes a pixel: at [MaxSize] that is 2000 × 2000 × 4 =
+// **16,000,000 bytes**, four times the 4,000,000 the two-colour path allocates
+// and the number that replaces it whenever a code carries a logo. The resampled
+// logo is bounded separately, at [MaxLogoRasterSide]² × 4 = 1,048,576 — which is
+// [MaxLogoPixels] × 4, the figure M50.5 already derived.
+//
+// **This path is reachable only from [RenderPNGWithLogo]**, which checks the
+// size bound before anything is allocated, exactly as [Code.PNG] does.
+func (c *Code) pngWithLogo(st Style, logo *logoDrawing) ([]byte, error) {
+	g := c.geometry(st)
+	if g.px > MaxSize {
+		return nil, fmt.Errorf("%w: the style draws %dpx and the bound is %dpx",
+			ErrTooLarge, g.px, MaxSize)
+	}
+
+	img := image.NewNRGBA(image.Rect(0, 0, g.px, g.px))
+	// The background is painted rather than left at the zero value, which for
+	// NRGBA is transparent black — D74's whole point is that a code carries its
+	// own background, and a transparent one inverts itself on a dark page.
+	draw.Draw(img, img.Bounds(), &image.Uniform{C: parseHex(st.Background)},
+		image.Point{}, draw.Src)
+
+	fg := image.NewUniform(parseHex(st.Foreground))
+	c.runs(func(x, y, width int) {
+		left := g.origin + x*g.scale
+		top := g.origin + y*g.scale
+		draw.Draw(img, image.Rect(left, top, left+width*g.scale, top+g.scale),
+			fg, image.Point{}, draw.Src)
+	})
+	logo.drawPNG(img, st, g.scale)
 
 	var b bytes.Buffer
 	b.Grow(1024 + g.px*g.px/64)

@@ -52,7 +52,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M49](m49.md) | QR codes sized in pixels, and a PNG to download | M48 *(ordering)* | done |
 | [M50](m50.md) | More than one QR code per link, told apart in the analytics | M49 | done |
 | [M50.5](m50.5.md) | The first file this product accepts | M50 | done |
-| [M50.6](m50.6.md) | A logo in the middle of a QR code | M50.5 | not started |
+| [M50.6](m50.6.md) | A logo in the middle of a QR code | M50.5 | done |
 | [M51](m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | not started |
 | [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | not started |
 | [M52](m52.md) | Account deletion and subject erasure | M50.5 · M51 *(ordering)* | not started |
@@ -113,7 +113,7 @@ a validator knows where the rule does work rather than sits:
 | Cache is optional | [M56](m56.md) and [M57](m57.md) are where this could quietly break: M57's conformance test asserts one container with **no Redis** exercises the full surface, which is this rule turned into a gate rather than a habit. [M50.5](m50.5.md)'s storage decision is bounded by that same test — an object store would be a new required dependency. |
 | Privacy stance | [M52](m52.md) writes the first erasure routine in the product and [M51](m51.md) audits a reset with an IP prefix only. Neither adds a column the stance forbids. [M50.5](m50.5.md) adds the first *user-uploaded* content — which the stance is not about, and which account erasure deliberately does **not** reach. |
 | Every UI feature has API support | [M51](m51.md) (recovery routes), [M50](m50.md) (QR code CRUD), [M50.5](m50.5.md) (upload and clear — **and teaching the contract test multipart, which it has never done**) and [M54](m54.md) (key reach) each land operations in `api/openapi.yaml`. |
-| Dormant structure is jsonb | [M50](m50.md) touches `qr_codes.style`; [M49](m49.md) reads pre-milestone styles forward out of the same blob; [M50.6](m50.6.md) fills the *logo reference* the blob's comment has promised since Phase 1. |
+| Dormant structure is jsonb | [M50](m50.md) touches `qr_codes.style`; [M49](m49.md) reads pre-milestone styles forward out of the same blob; [M50.6](m50.6.md) draws a logo, but **not** out of the blob — [D134](../../../Plan.md#phase-3-decisions) put it in a `bytea` column, so the *logo reference* the blob's comment has promised since Phase 1 is still unbuilt and the rule is untested by it. *(Amended 2026-08-07: written at planning time, made false by M50.5's storage answer.)* |
 | Partitioning | Untouched. No Phase 3 milestone adds a partitioned table. |
 | DDL is additive | [M54](m54.md) makes `api_keys.organization_id` nullable and [M50](m50.md) drops a unique index. Both are additive within 0.3.0; M54's risk section states that the *resolution logic* is what is not reversible, which the rule does not cover. |
 | Permissions | No Phase 3 milestone adds a permission. [M54](m54.md) re-derives D18's delegability reasoning against a credential that crosses tenancies, and [M52](m52.md) declines an administrative delete-somebody-else rather than inventing one. |

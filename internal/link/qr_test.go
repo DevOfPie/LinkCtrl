@@ -1,9 +1,12 @@
 package link
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/DevOfPie/LinkCtrl/internal/alias"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/qr"
 )
 
 // TestTheCodeCarriesTheSourceParameter is the whole attribution mechanism in one
@@ -60,5 +63,43 @@ func TestTheSourceValueIsOneTheRedirectPathAccepts(t *testing.T) {
 		t.Fatalf("the value QR codes encode (%q) is not one the redirect path "+
 			"recognises; every scan would be attributed as direct",
 			domain.ClickSourceQR)
+	}
+}
+
+// TestTheShortestContentIsWhatInternalQRAssumes is the other end of
+// internal/qr's `minProductContent` (M50.6).
+//
+// **The occlusion cap holds for the symbol versions this product's content
+// lengths produce, and the floor of that range is an assumption internal/qr
+// cannot check.** It knows nothing about aliases or hostnames — the layering is
+// deliberate and predates this milestone — so the shortest URL it assumes is
+// written there as a constant. This is where that constant is measured against
+// the two bounds it was derived from, so a change to either one fails here
+// rather than silently widening a range a cap was checked over.
+//
+// Versions 1 and 2 at level H hold 7 and 14 bytes. Anything at or above this
+// floor is version 3 or larger, which is where the cap's arithmetic starts
+// working.
+func TestTheShortestContentIsWhatInternalQRAssumes(t *testing.T) {
+	// The shortest registrable hostname: two labels, the last alphabetic —
+	// internal/domain's ValidateHostname refuses one label and a numeric TLD.
+	const shortestHost = "a.b"
+	shortestAlias := strings.Repeat("a", alias.MinLength)
+
+	got := QRContent("https://"+shortestHost+"/"+shortestAlias, "")
+	if n := len(got); n != qr.MinProductContent {
+		t.Errorf("the shortest content this product can build is %d bytes (%q) and "+
+			"internal/qr's cap is checked from %d. The two have to agree: the range "+
+			"of symbol versions the occlusion cap was asserted over starts at "+
+			"whichever version that floor encodes to",
+			n, got, qr.MinProductContent)
+	}
+
+	// A named code is longer, never shorter, so the floor above is the floor for
+	// every code this product draws rather than only for the default one.
+	named := QRContent("https://"+shortestHost+"/"+shortestAlias, "abcdefgh")
+	if len(named) <= len(got) {
+		t.Errorf("a named code's payload is %d bytes and the default's is %d; the "+
+			"floor is then the wrong one", len(named), len(got))
 	}
 }

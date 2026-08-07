@@ -304,9 +304,12 @@
        code to is nearly every link, and it was the case that could not carry a
        logo at all.
 
-       Nothing draws it yet, and the paragraph says so rather than leaving a
-       reader to conclude from an unchanged picture that the upload failed.
-       Compositing is the next milestone.
+       **What the upload does to the picture is stated here** (M50.6), because
+       two things change and neither was asked for directly: the image appears
+       in the middle of the code, and error correction goes to level H, which
+       is what makes a code readable with part of it covered. The paragraph
+       M50.5 wrote said nothing drew the logo yet; this milestone is what made
+       that false, so this milestone replaces it.
 
        `accept` and `required` are conveniences for the browser and not checks:
        the decoder is chosen by the file's own bytes, and the server refuses an
@@ -314,7 +317,7 @@
 <div class="mt-6 border-t border-line pt-4">
   <h3 class="text-sm font-medium text-ink">Logo</h3>
   <p class="mt-1 text-xs text-subtle">
-    PNG or JPEG, at most {{.QRMaxLogoBytes}} bytes and {{.QRMaxLogoDimension}} pixels a side. What is stored is a PNG this server encodes from your image, so metadata does not survive &mdash; this is not somewhere to keep an original. <strong>Nothing draws it into the code yet</strong>; storing it is this step, and putting it in the middle of the picture is the next one.
+    PNG or JPEG, at most {{.QRMaxLogoBytes}} bytes and {{.QRMaxLogoDimension}} pixels a side. What is stored is a PNG this server encodes from your image, so metadata does not survive &mdash; this is not somewhere to keep an original. It is drawn in the middle of the code, at <strong>a fifth of the code's width</strong>, and a code carrying one is drawn at <strong>error-correction level H</strong> &mdash; the level that lets a reader recover a code with part of it covered. That makes the picture a little denser; what it says is unchanged.
   </p>
   <div class="mt-2 flex flex-wrap items-end gap-2">
     <form method="post" action="/links/{{.Link.ID}}/qr/logo" enctype="multipart/form-data"

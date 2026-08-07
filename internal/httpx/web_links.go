@@ -819,13 +819,18 @@ const qrThumbScale = 3
 // A function rather than four lines in linkQR because the class is the half of
 // this that a test can hold on to without a database — see
 // TestTheQRThumbnailStatesItsOwnHeight.
-func qrThumb(content string, style qr.Style) template.HTML {
+//
+// The logo travels with it (M50.6): the thumbnail is a picture of the code, and
+// one that left the logo out would be a picture of a different code. It costs
+// almost nothing — internal/qr resamples the image to the box it is drawn in,
+// and this box is a fifth of a 96-pixel drawing.
+func qrThumb(content string, style qr.Style, logo []byte) template.HTML {
 	style.Scale = qrThumbScale
-	svg, err := qr.RenderClass(content, style, ui.QRThumbClass)
+	svg, err := qr.RenderClassWithLogo(content, style, ui.QRThumbClass, logo)
 	if err != nil {
 		return ""
 	}
-	//nolint:gosec // G203: internal/qr emits integers, parsed colours and a checked class
+	//nolint:gosec // G203: internal/qr emits integers, parsed colours, a checked class and base64
 	return template.HTML(svg)
 }
 
@@ -883,21 +888,34 @@ func (h *Web) linkQR(
 	view.QRLabel = code.Label
 	view.QRHasLogo = code.HasLogo
 
-	svg, err := qr.Render(code.Content, code.Style)
+	// The image, for the code the panel is open on (M50.6). Read only when there
+	// is one, and failed soft like every other read here: a picture without its
+	// logo is still the code, and losing the section over a megabyte that would
+	// not load would be the wrong trade.
+	var logo []byte
+	if code.HasLogo {
+		logo, _ = h.Links.QRCodeLogo(ctx, actor, l.ID, slug)
+	}
+
+	svg, err := qr.RenderWithLogo(code.Content, code.Style, logo)
 	if err != nil {
 		view.QRError = "The QR code could not be drawn."
 		return view
 	}
-	//nolint:gosec // G203: internal/qr emits integers and parsed colours only
+	//nolint:gosec // G203: internal/qr emits integers, parsed colours and base64
 	view.QRSVG = template.HTML(svg)
 
 	// The thumbnail is always the default code. It is the link page's heading
 	// row and it stands for "this link has a QR code", not for whichever one the
 	// panel was last left open on.
 	if slug == "" {
-		view.QRThumbSVG = qrThumb(code.Content, code.Style)
+		view.QRThumbSVG = qrThumb(code.Content, code.Style, logo)
 	} else if def, derr := h.Links.QRCode(ctx, actor, l.ID); derr == nil {
-		view.QRThumbSVG = qrThumb(def.Content, def.Style)
+		var defLogo []byte
+		if def.HasLogo {
+			defLogo, _ = h.Links.QRCodeLogo(ctx, actor, l.ID, "")
+		}
+		view.QRThumbSVG = qrThumb(def.Content, def.Style, defLogo)
 	}
 	return view
 }

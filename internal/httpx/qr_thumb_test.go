@@ -25,7 +25,7 @@ import (
 // heading row can afford is internal/ui's to state and to re-measure; what this
 // owes is that whatever internal/ui states arrives on the element.
 func TestTheQRThumbnailStatesItsOwnHeight(t *testing.T) {
-	got := string(qrThumb("http://links.test/demo?src=qr", qr.Style{}))
+	got := string(qrThumb("http://links.test/demo?src=qr", qr.Style{}, nil))
 
 	if want := `class="` + ui.QRThumbClass + `"`; !strings.Contains(got, want) {
 		t.Errorf("the thumbnail is drawn without %s.\n\nIts height is then whatever "+
@@ -57,7 +57,7 @@ func TestTheQRThumbnailStatesItsOwnHeight(t *testing.T) {
 // TestTheQRThumbnailFailsSoft is the other half of the same function: a picture
 // that cannot be drawn is not an error the reader can act on.
 func TestTheQRThumbnailFailsSoft(t *testing.T) {
-	if got := qrThumb(strings.Repeat("x", qr.MaxContent+1), qr.Style{}); got != "" {
+	if got := qrThumb(strings.Repeat("x", qr.MaxContent+1), qr.Style{}, nil); got != "" {
 		t.Errorf("a thumbnail that could not be drawn rendered %q; the QR section "+
 			"still draws its worded trigger, so the panel is reachable and there is "+
 			"nothing to tell anybody", got)

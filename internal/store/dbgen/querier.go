@@ -898,6 +898,20 @@ type Querier interface {
 	// drawn with until somebody changes it. For any other slug no rows means the
 	// code does not exist, and the service reports that.
 	GetQRCode(ctx context.Context, arg GetQRCodeParams) (GetQRCodeRow, error)
+	// The bytes, for the one thing they are for (M50.6).
+	//
+	// **The only read in this file that projects the column**, and it is separate
+	// from GetQRCode rather than folded into it for exactly the reason the three
+	// reads above stopped saying `q.*`: drawing a list of twenty names must not
+	// fetch twenty images. This is called once, by a surface that is about to
+	// composite one code's logo into one picture, and only for a code whose
+	// `has_logo` already said there is something to fetch.
+	//
+	// NULL comes back for a code with no logo, which the service reads as "nothing
+	// to draw" rather than as an error: `has_logo` and this can disagree by exactly
+	// one concurrent clear, and the honest answer to that race is the picture
+	// without the logo.
+	GetQRCodeLogo(ctx context.Context, arg GetQRCodeLogoParams) ([]byte, error)
 	// The live-activity feed. Bounded and index-backed on (link_id, occurred_at).
 	GetRecentClicks(ctx context.Context, arg GetRecentClicksParams) ([]GetRecentClicksRow, error)
 	GetRoleBySlug(ctx context.Context, slug string) (Role, error)

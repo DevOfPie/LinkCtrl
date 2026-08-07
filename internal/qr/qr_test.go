@@ -36,7 +36,11 @@ func rendered(t *testing.T, svg []byte) [][]bool {
 		grid[i] = make([]bool, span)
 	}
 
-	body := s[strings.Index(s, "<g "):]
+	// The module group and nothing after it. Since M50.6 a drawing may carry a
+	// logo's box and its image *after* `</g>`, and those are not modules — a
+	// parser that read them would count the box as a rect it could not recognise
+	// and fail every logo'd drawing.
+	body := s[strings.Index(s, "<g ") : strings.Index(s, "</g>")+len("</g>")]
 	rect := regexp.MustCompile(`<rect x="(\d+)" y="(\d+)" width="(\d+)" height="1"/>`)
 	matches := rect.FindAllStringSubmatch(body, -1)
 	if len(matches) == 0 {
