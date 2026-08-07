@@ -238,6 +238,7 @@ file. Append a row when you append an entry.
 | [Phase 3 planned: what each area takes, and the twelve slots](#2026-08-06--phase-3-planned-what-each-area-takes-and-the-twelve-slots) | D109–D113: A takes two defects plus MFA and the key model; E takes the checker and HA under a single-instance constraint; F reverses D11 on its own premise; the redesign is specified by owner walkthrough |
 | [What eighteen blind tasks specified, and the six defects hiding inside a word](#2026-08-07--what-eighteen-blind-tasks-specified-and-the-six-defects-hiding-inside-a-word) | D114 *(its heading says six; seven were filed — corrected by the entry below)*: *irritating* was mostly *defective*, so B stays at three; F160–F166; why the coverage test measures the seed rather than the instance; the workspace-label contradiction |
 | [An independent review of the plan, and the four numbers it caught](#2026-08-07--an-independent-review-of-the-plan-and-the-four-numbers-it-caught) | Fifteen findings before the plan merged: M49's false demo claim, the k6 count, two enforcement mechanisms that could not fail, D103 asserted backwards, and the scope row nobody had scheduled |
+| [QR logos, the first file this product accepts, and the target moving](#2026-08-07--qr-logos-the-first-file-this-product-accepts-and-the-target-moving) | D115: no upload surface exists anywhere; why a logo is a milestone not a parameter; the storage decision M57's test bounds; the target moves to sixteen for this phase only |
 
 ---
 
@@ -19625,3 +19626,79 @@ budgeted for the plan, and the plan is what every one of those milestones is
 validated against. Fifteen findings against a document written the same day, by
 an author who had read the standards it was breaking, is the argument for
 reviewing the specification and not only the thing built from it.
+
+## 2026-08-07 — QR logos, the first file this product accepts, and the target moving
+
+**D115.** The owner asked whether logos could be applied to QR codes. They
+cannot: `qr.Style` has five fields and none of them is a logo, and — more to the
+point — **nothing in this product accepts a file at all.** No `multipart`, no
+`FormFile`, no `ParseMultipartForm` anywhere in `internal/` or `cmd/`; no object
+store; every `bytea` column is key material or a hash. The only trace of the
+idea is `00600_phase2_dormant.sql:59`, which has described the style blob as
+holding *"colours, logo reference, error-correction level, margin, shape"* since
+Phase 1. M41 built QR codes and left that comment describing a blob it did not
+fill, so two of those five have never existed — the same shape as F44, found by
+a question rather than by the sweep that should have caught it at M45.
+
+### Why it is a milestone and not a QR parameter
+
+Five things, and only the last is about QR codes:
+
+- It needs an **upload surface**, which is new ground: multipart parsing, a byte
+  cap, a dimension cap, a content-type decision made by sniffing rather than by
+  trusting the client.
+- It **decodes untrusted binary**, which this product has never done. Image
+  decoders are a classic source of memory-safety bugs, so it owes a
+  `docs/SECURITY.md` row before it owes code, and the design does less rather
+  than more: raster only — an SVG upload is refused, because an SVG is a
+  document that can carry script — and what gets stored is re-encoded by this
+  product rather than kept as received.
+- It needs a **storage decision** bounded by a test that already exists.
+  [M57](phase-details/m57.md)'s conformance test asserts a single container with
+  no new required dependency, which rules an object store out; a `bytea` column
+  puts binary in every backup; a filesystem path needs a volume the compose file
+  does not mount and `make demo-update` must not lose. The decision cannot be
+  deferred into the build because it determines whether M57 still passes.
+- It creates the first **user content an erasure routine must reach**.
+  [M52](phase-details/m52.md)'s *what is removed* list was foreign-key cascades
+  only, and a stored file is not one. M52 is amended by M50.5 rather than
+  discovering the gap later, and that ordering is why logos land at M50.5 rather
+  than after M52.
+- And the QR half: a logo occludes modules, so error correction is forced to
+  level H and the occluded area is capped. **This partly reverses M49**, which
+  moved error-correction level out of the interface as *"handled in the
+  background"*. It stays out of the interface — the milestone picks level H on
+  the user's behalf — but level is load-bearing again, and a decode test is what
+  keeps that honest, because a code that looks right and does not scan is the
+  only failure that matters.
+
+It also makes [M49](phase-details/m49.md)'s central claim harder rather than
+leaving it alone. M49 asserts that the SVG at a set pixel size and the PNG
+describe the same image; a logo composites as a `data:` URI in one and a raster
+in the other, so the grid check runs outside the logo's box and the box itself is
+asserted to occupy the same modules in both.
+
+### The target moved, and that is the rule working
+
+Phase 3 was planned at fifteen with every slot spent. The owner was shown that
+logos fitted no milestone and that the phase had no room, was offered the
+priced alternatives — park them for Phase 4, or trade
+[M50](phase-details/m50.md)'s slot — and chose **both**, taking the phase to
+sixteen.
+
+That is the phase-boundary conversation
+[planning.md](planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)
+requires, not a rule being broken. The target is owner-set and explicitly
+revisitable, and what it exists to prevent is a phase growing one insertion at a
+time with nobody ever being the person who decided it was large. Somebody
+decided, with the costs in front of them.
+
+**The standing rule stays at fifteen.** Phase 3 is a recorded exception, not a
+new ceiling for every phase after it — moving the target for one phase and
+moving it for all phases are different decisions, and only the first was taken.
+
+M50's slot has now been offered as the thing to trade twice, on 2026-08-07 for
+the redesign's fourth milestone and again here, and kept both times. Recorded
+because it is evidence about what the owner values, not because the answer needs
+defending: nobody asked for two QR codes on one link in eighteen blind tasks,
+and it is still in the phase.

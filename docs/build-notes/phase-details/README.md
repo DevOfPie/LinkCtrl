@@ -29,11 +29,14 @@ milestone, is in [workflow.md](../workflow.md).
 
 **Planned, unstarted.** Four work areas, chosen 2026-08-06: identity and account
 lifecycle, dashboard UI and UX, infrastructure and resilience, QR codes and
-campaigns. Fifteen milestones — twelve of work, two adversarial reviews, one
+campaigns. Sixteen milestones — thirteen of work, two adversarial reviews, one
 close — against the size target in
 [planning.md](../planning.md#the-size-target-a-phase-stays-under-sixteen-milestones).
-**Twelve of twelve are spent, so the phase has no slack**: a milestone that turns
-out to be two is a phase-boundary conversation, not an insertion.
+The phase was planned at **fifteen with every slot spent**, and went to sixteen
+on 2026-08-07 when [M50.5](m50.5.md) was added — the phase-boundary conversation
+the target exists to force, taken knowingly by the owner. The standing rule stays
+at fifteen; this phase is a recorded exception. A milestone that turns out to be
+two is still that conversation rather than an insertion.
 
 **M46–M48 are the redesign, written from the owner's walkthrough** — eighteen
 blind tasks over two rounds, 2026-08-06 and 2026-08-07. Round two also produced
@@ -47,6 +50,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M48](m48.md) | On-demand panels, and what stops being buried | M47 | not started |
 | [M49](m49.md) | QR codes sized in pixels, and a PNG to download | M48 *(ordering)* | not started |
 | [M50](m50.md) | More than one QR code per link, told apart in the analytics | M49 | not started |
+| [M50.5](m50.5.md) | A logo in the middle of a QR code, and the first upload this product has | M50 | not started |
 | [M51](m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | not started |
 | [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | not started |
 | [M52](m52.md) | Account deletion and subject erasure | M51 *(ordering)* | not started |
@@ -59,7 +63,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M58](m58.md) | Deferred findings, documentation pass, 0.3.0 | all | not started |
 
 Work areas, so a blocked milestone has an independent row to fall back to per
-[W33](../workflow-changes.md#made): **B** is M46–M48, **F** is M49–M50, **A** is
+[W33](../workflow-changes.md#made): **B** is M46–M48, **F** is M49–M50.5, **A** is
 M51–M54, **E** is M55–M57. An area boundary buys a fallback destination, not
 concurrency — the worker is still forbidden from starting a second milestone.
 
@@ -104,10 +108,10 @@ a validator knows where the rule does work rather than sits:
 | --- | --- |
 | Redirect tree stays minimal | [M50](m50.md) parses a second query parameter on the hot path. Its tripwires must pass unmodified; if the code identity needs a lookup the resolver does not already hold, M50 says it does not ship in that form. |
 | Redirects are never permanent | Untouched. No Phase 3 milestone writes a redirect status. |
-| Cache is optional | [M56](m56.md) and [M57](m57.md) are where this could quietly break: M57's conformance test asserts one container with **no Redis** exercises the full surface, which is this rule turned into a gate rather than a habit. |
-| Privacy stance | [M52](m52.md) writes the first erasure routine in the product and [M51](m51.md) audits a reset with an IP prefix only. Neither adds a column the stance forbids. |
+| Cache is optional | [M56](m56.md) and [M57](m57.md) are where this could quietly break: M57's conformance test asserts one container with **no Redis** exercises the full surface, which is this rule turned into a gate rather than a habit. [M50.5](m50.5.md)'s storage decision is bounded by that same test — an object store would be a new required dependency. |
+| Privacy stance | [M52](m52.md) writes the first erasure routine in the product and [M51](m51.md) audits a reset with an IP prefix only. Neither adds a column the stance forbids. [M50.5](m50.5.md) adds the first *user-uploaded* content, which is not what the stance is about but is what M52 must now reach. |
 | Every UI feature has API support | [M51](m51.md) (recovery routes), [M50](m50.md) (QR code CRUD) and [M54](m54.md) (key reach) each land operations in `api/openapi.yaml`, replayed by the contract test. |
-| Dormant structure is jsonb | [M50](m50.md) touches `qr_codes.style`; [M49](m49.md) reads pre-milestone styles forward out of the same blob. |
+| Dormant structure is jsonb | [M50](m50.md) touches `qr_codes.style`; [M49](m49.md) reads pre-milestone styles forward out of the same blob; [M50.5](m50.5.md) fills the *logo reference* the blob's comment has promised since Phase 1. |
 | Partitioning | Untouched. No Phase 3 milestone adds a partitioned table. |
 | DDL is additive | [M54](m54.md) makes `api_keys.organization_id` nullable and [M50](m50.md) drops a unique index. Both are additive within 0.3.0; M54's risk section states that the *resolution logic* is what is not reversible, which the rule does not cover. |
 | Permissions | No Phase 3 milestone adds a permission. [M54](m54.md) re-derives D18's delegability reasoning against a credential that crosses tenancies, and [M52](m52.md) declines an administrative delete-somebody-else rather than inventing one. |

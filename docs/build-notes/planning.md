@@ -84,6 +84,16 @@ above. Either something moves to the next phase or the target moves knowingly,
 and both are the owner's. What the target removes is the case where a phase grows
 by one insertion at a time and nobody is ever the person who decided it was large.
 
+**It has been tested once, and it worked as designed.** Phase 3 was planned at
+fifteen with every slot spent. On 2026-08-07 the owner asked for QR logos, was
+shown that they fitted no milestone and that the phase had no room, was offered
+the alternatives with their costs — park them, or trade
+[M50](phase-details/m50.md)'s slot — and chose to have both and move the target.
+Phase 3 therefore runs at **sixteen**, and that is a recorded exception rather
+than a new ceiling: **the rule here stays fifteen**. The conversation happened,
+somebody decided, and it is written down, which is the whole of what the target
+was for.
+
 **The trap, stated because a target invites it.** A count is a number people plan
 *to*, so the cheapest way to satisfy this rule is fatter milestones — the same
 scope in fewer files, each one less reviewable, which is worse than the size it
