@@ -34,12 +34,12 @@ rule. Abandoning a proposed change is a decision.
 Asked for, or identified, and not yet made. Approval is the owner's, the same as
 for a deferred finding — an unapproved row is a suggestion, not scheduled work.
 
-**Empty as of 2026-08-06.** Every row that has ever been in this table was made;
-none was abandoned. An empty backlog is a state worth seeing rather than a
-missing table — `/work workflow` run against it enters nothing and says so.
+**Emptied on 2026-08-06 and not empty since 2026-08-08.** Every row that has
+ever been in this table was made; none was abandoned.
 
 | # | Change | Why | Raised | Approved |
 | --- | --- | --- | --- | --- |
+| W37 | **The loop should say what it does when the harness it runs in forbids spawning a worker**, rather than leaving the actor to discover the conflict at the first ordinary build and stop | [phase-loop.md](phase-loop.md#two-actors) gives step 2 to a worker spawned fresh and forbids the orchestrator from editing code, tests or SQL. A session launched with a standing instruction not to spawn subagents can therefore run reviews, amendments and triage output — all of which are the orchestrator's — and then stop dead at the first milestone that is ordinary build work. **That is what happened on 2026-08-08**: M51.9, M46's reopening and F174 all landed, and M52 could not be taken either way. The conflict is silent until it fires, which is the part worth fixing: nothing in the loop's own text says the two-actor split has a hosting requirement, so a run can be planned as unattended and turn out not to be. Three shapes are available and the row does not pick one — say the requirement out loud at [step 0](phase-loop.md#0-resume) so a session finds out before it starts, or name the conditions under which the orchestrator may build and what it costs, or declare that such a session is a review-and-triage session by construction and stops before the first build | 2026-08-08, from M51.9's run | **No.** Raised by the actor that met it, which is the weakest possible evidence that it is worth the owner's time — one run, one harness, and a workaround (start a session without the instruction) that costs a restart and no knowledge |
 
 ## Made
 
