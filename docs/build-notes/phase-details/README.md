@@ -54,7 +54,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M50.5](m50.5.md) | The first file this product accepts | M50 | done |
 | [M50.6](m50.6.md) | A logo in the middle of a QR code | M50.5 | done |
 | [M51](m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | done |
-| [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | not started |
+| [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | done |
 | [M52](m52.md) | Account deletion and subject erasure | M50.5 · M51 *(ordering)* | not started |
 | [M53](m53.md) | A second factor: TOTP, enrolment, and recovery codes | M51 | not started |
 | [M54](m54.md) | An API key belongs to an account, not to one organization | M52 | not started |
@@ -78,10 +78,10 @@ here rather than moving with its status table because most are product
 invariants that outlast the phase that wrote them — never permanent redirects,
 the privacy stance, `ui` stays stdlib-only, sabotage a test that passes first
 try. **Which of them Phase 3 inherits was confirmed on 2026-08-07**, one at a
-time, rather than assumed by the table having been left in place — the
-confirmation is below the table, and it did not happen at planning time as this
-sentence promised. A review found the omission; it is recorded rather than
-backdated.
+time, rather than assumed by the table having been left in place. It did not
+happen at planning time as this sentence once promised — a review found the
+omission, and it is recorded rather than backdated. Where the confirmation lives
+is below the table.
 
 | Rule | Consequence |
 | --- | --- |
@@ -100,28 +100,14 @@ backdated.
 | A test that passes first try | Sabotage it, confirm it fails, restore by counter-edit. |
 | A new feature somebody can *see* | Extend the demo seeder (`cmd/lctl/demo.go`, and `demo_phase2.go` beside it) so the demo instance shows it. A feature only reachable by building the state yourself is one nobody evaluating this product will find. Does not apply to work with nothing to look at — a timeout bound, an invalidation path, a permission nobody exercises directly. **Enforced since [M33.5](m33.5.md)**: `demoCoverage()` in `cmd/lctl/demo_coverage_test.go` enumerates what the demo must show and fails when a listed feature has no seeded rows, so a milestone that seeds nothing adds a row there or breaks the build. Rows that assert *zero* for a milestone not yet built are turned into real rows when that milestone lands, rather than deleted. **The number of them is deliberately not written here.** It read *four* from [M33.5](m33.5.md) until 2026-08-05, was true when written, and was wrong within one milestone — M34 converted its own row exactly as this rule instructs and the count beside the rule did not move with it. By M45 every one had been converted and the sentence described nothing that existed. Saying *four* was a fact nothing kept true; saying *its trailing rows* is a fact that stays true however many there are (F69). If the obligation ever proves too heavy, narrow the list deliberately and in writing; never delete the test. |
 
-### Phase 3 inherits all fourteen, confirmed 2026-08-07
-
-One at a time, as the lede requires. **All fourteen carry**, and none was
-weakened. What follows is only the ones a Phase 3 milestone actually engages, so
-a validator knows where the rule does work rather than sits:
-
-| Rule | Which milestone tests it, and how |
-| --- | --- |
-| Redirect tree stays minimal | [M50](m50.md) parses a second query parameter on the hot path. Its tripwires must pass unmodified; if the code identity needs a lookup the resolver does not already hold, M50 says it does not ship in that form. |
-| Redirects are never permanent | Untouched. No Phase 3 milestone writes a redirect status. |
-| Cache is optional | [M56](m56.md) and [M57](m57.md) are where this could quietly break: M57's conformance test asserts one container with **no Redis** exercises the full surface, which is this rule turned into a gate rather than a habit. [M50.5](m50.5.md)'s storage decision is bounded by that same test — an object store would be a new required dependency. |
-| Privacy stance | [M52](m52.md) writes the first erasure routine in the product and [M51](m51.md) audits a reset with an IP prefix only. Neither adds a column the stance forbids. [M50.5](m50.5.md) adds the first *user-uploaded* content — which the stance is not about, and which account erasure deliberately does **not** reach. |
-| Every UI feature has API support | [M51](m51.md) (recovery routes), [M50](m50.md) (QR code CRUD), [M50.5](m50.5.md) (upload and clear — **and teaching the contract test multipart, which it has never done**) and [M54](m54.md) (key reach) each land operations in `api/openapi.yaml`. |
-| Dormant structure is jsonb | [M50](m50.md) touches `qr_codes.style`; [M49](m49.md) reads pre-milestone styles forward out of the same blob; [M50.6](m50.6.md) draws a logo, but **not** out of the blob — [D134](../../../Plan.md#phase-3-decisions) put it in a `bytea` column, so the *logo reference* the blob's comment has promised since Phase 1 is still unbuilt and the rule is untested by it. *(Amended 2026-08-07: written at planning time, made false by M50.5's storage answer.)* |
-| Partitioning | Untouched. No Phase 3 milestone adds a partitioned table. |
-| DDL is additive | [M54](m54.md) makes `api_keys.organization_id` nullable and [M50](m50.md) drops a unique index. Both are additive within 0.3.0; M54's risk section states that the *resolution logic* is what is not reversible, which the rule does not cover. |
-| Permissions | No Phase 3 milestone adds a permission. [M54](m54.md) re-derives D18's delegability reasoning against a credential that crosses tenancies, and [M52](m52.md) declines an administrative delete-somebody-else rather than inventing one. |
-| `ui` stays stdlib-only | [M46](m46.md)–[M48](m48.md) are a redesign, which is exactly where the argument for a framework gets made. All three restate the rule for that reason. |
-| Both themes | Same three. New markup uses the theme tokens and M24.5's template scan applies unchanged. |
-| Touching the redirect path | [M50](m50.md), [M57](m57.md) and [M57.9](m57.9.md) — three k6 runs this phase. |
-| A test that passes first try | Everywhere. [M54](m54.md) names it as doing real work rather than ceremony: there is no existing test that would fail if scope intersection were taken against the wrong role. |
-| A new feature somebody can *see* | [M50](m50.md) and [M53](m53.md) add `demoCoverage()` rows. [M49](m49.md) deliberately adds none and says why; [M57](m57.md) is exempt because there is nothing to look at. |
+**Which of them Phase 3 inherits was confirmed on 2026-08-07**, one at a time,
+and the confirmation — a table naming, for each rule, the milestone that tests
+it and how — is in
+[phase-3-candidates.md](../phase-3-candidates.md#phase-3-inherits-all-fourteen-confirmed-2026-08-07).
+**It moved there on 2026-08-08, at [M51.9](m51.9.md)'s doc-cost judgement**, and
+the number is why: it is 3,556 bytes charged against every `/work phase` resume,
+while this file's realized read ratio had fallen to 0.71 — evidence that the part
+of it doing planning work was being paid for and skipped. Nothing was dropped.
 
 ## Decisions already taken
 

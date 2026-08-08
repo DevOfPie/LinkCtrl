@@ -252,3 +252,33 @@ snap — has no edge on B at all and can land first if B stalls, which is exactl
 the fallback [W33](workflow-changes.md#made) exists for. What must not happen is
 a settings rewrite landing into a page still being rebuilt, because that writes
 it twice.
+
+## Phase 3 inherits all fourteen, confirmed 2026-08-07
+
+**Moved here from [phase-details/README.md](phase-details/README.md#what-every-milestone-inherits)
+on 2026-08-08**, at [M51.9](phase-details/m51.9.md)'s doc-cost judgement. It is
+planning evidence — produced once, when the phase was scoped — and it was being
+charged against the `/work phase` resume at every milestone. The rules
+themselves have not moved and are still in that file's *What every milestone
+inherits* table, which is what step 1 reads.
+
+One at a time, as the lede requires. **All fourteen carry**, and none was
+weakened. What follows is only the ones a Phase 3 milestone actually engages, so
+a validator knows where the rule does work rather than sits:
+
+| Rule | Which milestone tests it, and how |
+| --- | --- |
+| Redirect tree stays minimal | [M50](phase-details/m50.md) parses a second query parameter on the hot path. Its tripwires must pass unmodified; if the code identity needs a lookup the resolver does not already hold, M50 says it does not ship in that form. |
+| Redirects are never permanent | Untouched. No Phase 3 milestone writes a redirect status. |
+| Cache is optional | [M56](phase-details/m56.md) and [M57](phase-details/m57.md) are where this could quietly break: M57's conformance test asserts one container with **no Redis** exercises the full surface, which is this rule turned into a gate rather than a habit. [M50.5](phase-details/m50.5.md)'s storage decision is bounded by that same test — an object store would be a new required dependency. |
+| Privacy stance | [M52](phase-details/m52.md) writes the first erasure routine in the product and [M51](phase-details/m51.md) audits a reset with an IP prefix only. Neither adds a column the stance forbids. [M50.5](phase-details/m50.5.md) adds the first *user-uploaded* content — which the stance is not about, and which account erasure deliberately does **not** reach. |
+| Every UI feature has API support | [M51](phase-details/m51.md) (recovery routes), [M50](phase-details/m50.md) (QR code CRUD), [M50.5](phase-details/m50.5.md) (upload and clear — **and teaching the contract test multipart, which it has never done**) and [M54](phase-details/m54.md) (key reach) each land operations in `api/openapi.yaml`. |
+| Dormant structure is jsonb | [M50](phase-details/m50.md) touches `qr_codes.style`; [M49](phase-details/m49.md) reads pre-milestone styles forward out of the same blob; [M50.6](phase-details/m50.6.md) draws a logo, but **not** out of the blob — [D134](../../Plan.md#phase-3-decisions) put it in a `bytea` column, so the *logo reference* the blob's comment has promised since Phase 1 is still unbuilt and the rule is untested by it. *(Amended 2026-08-07: written at planning time, made false by M50.5's storage answer.)* |
+| Partitioning | Untouched. No Phase 3 milestone adds a partitioned table. |
+| DDL is additive | [M54](phase-details/m54.md) makes `api_keys.organization_id` nullable and [M50](phase-details/m50.md) drops a unique index. Both are additive within 0.3.0; M54's risk section states that the *resolution logic* is what is not reversible, which the rule does not cover. |
+| Permissions | No Phase 3 milestone adds a permission. [M54](phase-details/m54.md) re-derives D18's delegability reasoning against a credential that crosses tenancies, and [M52](phase-details/m52.md) declines an administrative delete-somebody-else rather than inventing one. |
+| `ui` stays stdlib-only | [M46](phase-details/m46.md)–[M48](phase-details/m48.md) are a redesign, which is exactly where the argument for a framework gets made. All three restate the rule for that reason. |
+| Both themes | Same three. New markup uses the theme tokens and M24.5's template scan applies unchanged. |
+| Touching the redirect path | [M50](phase-details/m50.md), [M57](phase-details/m57.md) and [M57.9](phase-details/m57.9.md) — three k6 runs this phase. |
+| A test that passes first try | Everywhere. [M54](phase-details/m54.md) names it as doing real work rather than ceremony: there is no existing test that would fail if scope intersection were taken against the wrong role. |
+| A new feature somebody can *see* | [M50](phase-details/m50.md) and [M53](phase-details/m53.md) add `demoCoverage()` rows. [M49](phase-details/m49.md) deliberately adds none and says why; [M57](phase-details/m57.md) is exempt because there is nothing to look at. |

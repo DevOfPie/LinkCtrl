@@ -263,6 +263,7 @@ file. Append a row when you append an entry.
 | [M50: the empty slug, the parameter that stayed closed, and the rollup that was not written](#2026-08-07--m50-the-empty-slug-the-parameter-that-stayed-closed-and-the-rollup-that-was-not-written) | D130–D133: why the default code's identity is its *absence* of an identifier and what that bought for every code already printed; why a code identity could not ride inside `src` and how the second parameter is bounded instead; why per-code counts are a filter over the referrer dimension rather than the new rollup campaign analytics was deferred for, and what the Referrers panel therefore still shows; and why the five shipped QR endpoints stayed the default-code shorthand |
 | [M50.6: the logo in the picture](#2026-08-07--m506-the-logo-in-the-picture-a-cap-that-is-arithmetic-a-level-that-is-not-a-preference-and-the-ring-a-measurement-bought) | D140–D142: the occlusion cap as arithmetic rather than a plausible fraction — what level H actually recovers, why a contiguous square costs more than its area, and why it may spend only half; why a request naming another level is accepted and overridden rather than refused, and where the forcing has to happen twice; why the logo is embedded as a data URI rather than served, what that does to the rasteriser's allocation figure, and why `img-src` had to be pinned; and the one module of background a hand decode check bought |
 | [M49: the size, the second encoder, and D11 spent on purpose](#2026-08-07--m49-the-size-the-second-encoder-and-d11-spent-on-purpose) | D127–D129: what bounds a rasteriser that D11 refused to allow at all, stated as an allocation rather than as a word; why the quiet zone became the second knob and what the search costs in tie-breaks; why `qr.Style` gained no field and what that bought for every row already in the table; why a form that stopped asking about error correction needed a new service operation rather than a default; and the two encoders sharing one arithmetic, with the claim they are held to and the one they are not |
+| [M51.9: what the mid-phase review checked, found, and could not run](#2026-08-08--m519-the-mid-phase-review-what-it-checked-what-it-found-and-the-one-bullet-it-could-not-run) | D146: the eighteen blind tasks are recorded nowhere, so the bullet asking for them is struck and the cost — D121's ordering and D124/D126's placement go un-rechecked — is stated. D147: the doc-cost judgement, trimming 2930 bytes of a 6409-byte resume-charge growth and defending the rest. F172–F175, and the two candidates that were refuted |
 
 ---
 
@@ -22129,3 +22130,150 @@ Metadata is empty and the network fact is the request's IP prefix, which
 **An ordinary password change is still not audited**, and its absence has
 minting a key's reason: the person held a session, so the session is the record.
 A reset is the case where they did not.
+
+## 2026-08-08 — M51.9, the mid-phase review: what it checked, what it found, and the one bullet it could not run
+
+The first of Phase 3's two reviews, over [M46](phase-details/m46.md)–[M51](phase-details/m51.md),
+run to [M32.9](phase-details/m32.9.md)'s method. Recorded here rather than
+summarised in a commit message because M32.9 requires the review's own output to
+be written down — *"what was checked, what was found, what was refuted — so a
+later reader can tell coverage from luck"* — and because two of its outcomes are
+decisions rather than findings.
+
+### What was checked, and how
+
+Both gates green on the tree as reviewed: `make check`, and
+`make test-integration` forced with `GOFLAGS=-count=1`. `make check-links` ok.
+
+The eight definitions of done were re-read against the tree rather than against
+the code's intent, and the by-use half of [m51.9.md](phase-details/m51.9.md) was
+run in a browser — Playwright out of `tools/render-verify/node_modules`, against
+a test instance rebuilt from nothing and then seeded with `lctl demo --reset`.
+That rebuild is why the recorded test credential in
+[instances.md](../dev-notes/instances.md) changed, and it cost
+[M50](phase-details/m50.md)'s 100k-link SLO dataset, which is regenerable and
+whose measurement [docs/slo.md](../slo.md) already holds.
+
+**Verified by use, each against the bullet that asked for it:**
+
+| Claim | What was done |
+| --- | --- |
+| M46 — the header names where you are *at every membership count, including one* | A fresh instance claimed through `/setup`: header reads *"Current workspace: Whippy Review · Default"* and draws no `<select>` at all. M25's *"a control that cannot do anything"* is honoured and the label is the thing that closed the gap |
+| M46 — nothing scrolls sideways at 360px | Signed in, all seventeen dashboard routes, `document.documentElement.scrollWidth - window.innerWidth` on every one. **Zero on all seventeen** |
+| M47 — the destination and the alias without scrolling at 1280×800 | Both above the fold, with the QR thumbnail in the heading row where D126 put it |
+| M49 — the SVG and the PNG are the same picture at the same size | Rendered side by side, plain and logo'd. They are |
+| M49 — the snap reports what it produced beside what was asked for | Asking for 400px answered `?got=399&want=400` and said so in a sentence |
+| M51 — recovery **without** a mailer | No link on the sign-in page; `/forgot` states the instance cannot send mail and names the operator's route |
+| M51 — recovery **with** one | *Forgot your password?* appears. The response to a real address and to an address with no account are **byte-identical**. Both receive mail; the non-account's says no link was made. The reset consumed, every session revoked, the new password signed in. A replayed `POST` answered `404` — the same `404` a token that never existed gets. Three requests left **one** live row, so *asking again replaces it* is true. `password_resets` holds only the hash; the audit row is `password.reset` carrying an `ip_prefix` and no address |
+
+### What was found — four rows, F172 to F175
+
+All confirmed against the tree before filing, and all triaged with the owner on
+2026-08-08 before anything was acted on.
+
+- **[F172]** — M46 asserts an overflow guard it does not have. **In spec**, so
+  **M46 reopens** rather than acquiring a successor.
+- **[F173]** — a configured but unreachable SMTP relay blocks the listener for
+  the whole SMTP timeout, measured at **10.05 seconds**. It is
+  [M26](phase-details/m26.md)'s code and out of this review's range; the owner
+  scheduled it into **[M56](phase-details/m56.md)** rather than M58, because it
+  is a failover defect and M56 is the failover contract.
+- **[F174]** — every QR code on the demo hangs off an expired link, so all of
+  them answer `410`. Worked immediately.
+- **[F175]** — the mailer-free `/forgot` page promises the mail it refuses.
+  Carried to [M58](phase-details/m58.md).
+
+**F173 is the one worth naming as a method result.** No test in this repository
+could have found it and no reading of M46–M51 would have: it needed an
+instance configured the way M51 now gives operators a reason to configure one,
+and then a clock. The review found it because the milestone told it to try the
+thing with a mailer and the thing without.
+
+### What was refuted, so it is not re-found
+
+`GET /reset/<token>` answers **200** and renders the password form for a consumed
+token, an expired one, and one that never existed alike. That reads as a missing
+check and is not one: validating on `GET` is precisely what would tell an
+enumerator that a token is live, and the `POST` answers `404` **with** the
+sentence *"This link is no longer valid. It may have been used already, or it may
+have expired. Ask for a new one from the sign-in page."* M51's bullet is met and
+the design is coherent. Not filed.
+
+A second candidate died the same way: the QR panel appeared to offer no way to
+edit a link's non-default codes, which would have made M50's several-codes
+surface half-built. `partials/link_qr.html:122-125` renders each code's name as a
+link to the panel's own route with `?code=`, which is the mechanism M48 asked for
+rather than a second one. The first pass missed it because the extraction that
+listed the panel's controls was read from its tail.
+
+**And one measurement was thrown away rather than reported.** The first
+360px sweep ran signed *out* — every route was the login page, and every one of
+them reported zero overflow truthfully and uselessly. It was re-run signed in
+before F172 was allowed to cite it. A number taken against the wrong page is the
+failure mode this repository's *verify, do not assume* rule exists for, and it
+happened inside the review that exists to catch it.
+
+### D146 — the eighteen blind tasks cannot be re-run, and the bullet is struck
+
+[m51.9.md](phase-details/m51.9.md)'s first by-use bullet asked for the eighteen
+blind tasks to be re-run against the built tree by somebody given the task and no
+instructions. **They are not written down anywhere in this repository.**
+
+- **The bullet as it stood:** *"the **eighteen** blind tasks that produced the
+  redesign's definition of done are re-run against the built tree, by somebody
+  given the task and no instructions — the same exercise that specified B, now
+  used to check it."*
+- **The bullet as amended:** struck, with the reason and the cost stated in its
+  place, and the by-use record above standing as what the review actually ran.
+- **The tree fact that forced it:** a search over `docs/` for the tasks finds
+  their *numbers* and their *notes* — tasks 1, 2, 4, 6, 7 and 9 are each cited by
+  what they found, in
+  [D114](#2026-08-07--what-eighteen-blind-tasks-specified-and-the-six-defects-hiding-inside-a-word),
+  four milestone files and six deferred rows — and not one of the eighteen
+  prompts. D114 records the *method* and the *verdicts* and never the tasks.
+
+The owner was offered three ways out on 2026-08-08 — re-run them personally on
+the demo, hand the texts over for this actor to run, or amend — and chose to
+amend. **The stated cost, because it is a real one:** D121's ordering of the link
+page's eight sections and D124/D126's QR placement were both recorded as
+*"re-measured at M51.9"*, and they are not. Nothing in this phase re-checks them.
+[M57.9](phase-details/m57.9.md) inherits no obligation here either, because it
+cannot run them any more than this review could.
+
+**The process lesson, which is the part that generalises:** an exercise whose
+output is a decision must record its *inputs*, or the decision cannot be
+re-derived and a milestone written to re-run it is written against nothing. D114
+was careful about everything except the eighteen sentences it was made of.
+
+### D147 — the doc-cost judgement: the growth is real, and half of it is paid back
+
+`make doc-cost`, then the judgement [phase-loop.md](phase-loop.md#two-milestones-that-do-not-end-like-the-others)
+requires — defend the growth, or trim to pay for it. Regenerating and moving on
+is neither, and was the gap that rule was written to close.
+
+**The number.** The `/work phase` resume charge went **58214 → 64623 bytes**
+across M46–M51, +11%. **93% of that is one file**:
+`phase-details/README.md` at 8838 → 14821. `phase-loop.md` did not move;
+`workflow.md` grew 417 bytes; Plan.md's longest row grew 9.
+
+**The evidence that the growth was not being read.** That file's *realized* read
+ratio fell from **1.03 to 0.71** over the same span. It is read at every resume,
+so a ratio below one says a part of it is charged and skipped — and the part is
+identifiable: *Phase 3 inherits all fourteen, confirmed 2026-08-07* is planning
+evidence produced once, while the *What every milestone inherits* table above it
+is what step 1 actually reads.
+
+**The judgement: trim.** The confirmation section moved to
+[phase-3-candidates.md](phase-3-candidates.md#phase-3-inherits-all-fourteen-confirmed-2026-08-07),
+which is read three times at a 0.57 ratio rather than at every resume, with a
+pointer left in its place. Nothing was dropped, which is what
+*nothing leaves a tracker silently* requires of a move.
+
+**What it bought, measured rather than promised: 64623 → 61693 bytes.** 2930 of
+the 6409-byte growth, or 46% — not the 3554 the section weighs, because the
+pointer that re-homes it costs about 600 bytes and that is the price of the move
+being legible. The remaining 3479 bytes are defended rather than trimmed: they
+are the Phase 3 preamble, which explains a seventeen-row table against a
+fifteen-milestone target, and amendments inside the inherits table itself. A
+resuming session that does not read the first files the row count as an ordering
+bug.

@@ -112,12 +112,18 @@ It is served only while `users` is empty, and answers `303 → /login` once an
 account exists — so a redirect there means the instance is already claimed, not
 that the route is missing.
 
-**The test instance's account, as rebuilt 2026-08-01:**
+**The test instance's account, as rebuilt 2026-08-08 for [M51.9](../build-notes/phase-details/m51.9.md):**
 
 | | |
 | --- | --- |
-| Address | `dev@killerofpie.com` |
-| Password | `linkctrl-test-owner-2026` |
+| Address | `review@killerofpie.com` |
+| Password | `m51-9-recovered-password-2026` |
+
+The password is the one M51.9 set *through the reset flow*, because walking that
+flow end to end is one of the milestone's bullets and the account it walked it on
+is this one. The instance carries `lctl demo`'s data rather than an SLO dataset:
+the 100k-link set M50 measured against was on the volume this rebuild replaced,
+and `docs/slo.md` already holds the measurement it existed for.
 
 Written down because it is the test instance and it is disposable — this is a
 local development credential for a stack that publishes nothing but HTTP on
