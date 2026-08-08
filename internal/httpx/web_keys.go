@@ -32,8 +32,12 @@ type keysPageData struct {
 	// than seeing it and being refused.
 	CanCreateOrgWide bool
 	Form             struct {
-		Name    string
-		OrgWide bool
+		Name string
+		// Reach is the form's own value for the control, not a derived flag, so a
+		// refused submission redraws what was chosen rather than what it decayed
+		// into. Three options since M54 — "workspace", "organization",
+		// "account" — where there used to be two.
+		Reach string
 	}
 	FieldErrors map[string]string
 	Notice      string
@@ -105,10 +109,18 @@ func (h *Web) KeyCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Three reaches, two fields. "workspace" pins to the workspace being acted
+	// in; "organization" and "account" are both unpinned there and differ one
+	// tier up, which is exactly the shape the two columns have.
+	reach := r.PostFormValue("scope_reach")
 	in := auth.CreateAPIKeyInput{
 		Name:    r.PostFormValue("name"),
 		Scopes:  r.PostForm["scopes"],
-		OrgWide: r.PostFormValue("scope_reach") == "organization",
+		OrgWide: reach == "organization" || reach == "account",
+	}
+	if reach == "organization" {
+		org := IdentityFrom(r.Context()).OrgID
+		in.OrganizationID = &org
 	}
 	if raw := r.PostFormValue("expires_in"); raw != "" {
 		var days int
@@ -138,7 +150,7 @@ func (h *Web) KeyCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data.Form.Name = r.PostFormValue("name")
-		data.Form.OrgWide = in.OrgWide
+		data.Form.Reach = reach
 		data.FieldErrors = fields
 		data.Error = general
 		h.render(w, r, http.StatusUnprocessableEntity, "keys", data)

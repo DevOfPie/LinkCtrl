@@ -14,7 +14,7 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 | `/dashboard` | 30-day totals, clicks-per-day chart, your five newest links. |
 | `/links` | Search the list; filter by status, folder, campaign or hostname; sort; create a link; page through with a cursor. The search box is the first control on the page, filters as you type and updates the address bar, so a reload or a shared URL shows the same view. Everything except search is behind **Filters**, and creating a link is behind **Create a link** — see [The links list](#the-links-list). |
 | `/links/{id}` | Everything about one link: edit destination, alias, title, description, expiry and tags; per-window analytics (7/30/90 days) with device, browser, OS, referrer, language and country breakdowns, each with a share ring, plus a world choropleth over the country figures; recent activity; archive, restore and delete. |
-| `/keys` | Mint, list and revoke API keys, and choose whether a new one reaches one workspace or the organization. Rotation is not here: it replaces the credential that made the request, and a browser session is not one. |
+| `/keys` | Mint, list and revoke API keys, and choose whether a new one reaches one workspace, one organization, or your whole account. The list is your account's, so it shows keys from every organization you belong to. Rotation is not here: it replaces the credential that made the request, and a browser session is not one. |
 | `/links/{id}/qr` | The link's QR code, its style form and the downloads, on their own page. The same thing the **QR code** panel on the link's page opens — see [On-demand panels](#on-demand-panels). |
 | `/forgot`, `/reset/{token}` | Recovering a forgotten password. Public, because whoever needs them has no session. `/forgot` mails a single-use link and answers the same way whatever address you type; `/reset/{token}` is where that link lands. **Both need a mailer** — see [Recovering a forgotten password](#recovering-a-forgotten-password). |
 | `/notifications` | Things the instance wanted you to know about. Opening one goes to what it is about and marks it read; a read one can be marked unread again. |
@@ -580,19 +580,39 @@ Mint one in the dashboard at `/keys`, or on a headless host with
 [`lctl`](cli.md#apikey). The token appears exactly once — only its HMAC is
 stored, so it cannot be recovered afterwards. Lose it, revoke it, mint another.
 
-**Reach.** A key is bound to the workspace you created it in and acts only there.
-The alternative — not pinned to one, rather than acting in all of them at once —
-is the *Reach* control on the form, `"org_wide": true` on the API, or
-`--org-wide` on the CLI. It
+**Reach**, and there are three of them. A key is bound to the workspace you
+created it in and acts only there. The two wider choices are the *Reach* control
+on the form, `"org_wide": true` on the API, or `--org-wide` on the CLI. Either
 needs `apikeys.write` held through an **organization-wide** membership: a role you
 hold in one workspace issues keys for that workspace, which is the same rule that
 stops a workspace-scoped admin re-roling an organization-wide member. The key
-list, `lctl apikey list` and the API all say which of the two a key is.
+list, `lctl apikey list` and the API all say which of the three a key is.
 
-An organization-wide key follows you into that organization's workspaces and no
-further. If you belong to more than one organization, the key stays in the one it
-was issued in whatever workspace you last used or pinned elsewhere — the pin is
-about you, and the key is about a tenancy.
+| Reach | Acts in | Asked for by |
+| --- | --- | --- |
+| **Workspace** | The one you created it in | The default — nothing |
+| **Organization** | Every workspace in that organization, and no further | `organization_id` on the API, `--pin` on the CLI |
+| **Account** | Every organization you hold an organization-wide membership in | Nothing, once the key is unpinned |
+
+Unpinned means account-wide: **a key belongs to your account, not to the tenant
+you happened to be standing in.** Each request still resolves exactly one
+workspace, the way a sign-in does, following where you are working. If you want
+the key frozen to today's organization, pin it — and pin it now, because a
+rotation may narrow a key's reach and never widen it.
+
+An account key **reaches an organization you join later**. That is what account
+means: the alternative is a key whose reach is a snapshot of a membership list
+you cannot see or correct. It does *not* reach an organization where your role is
+scoped to a single workspace — mint a key in that workspace instead.
+
+**Its permissions differ per organization.** The scopes are intersected with your
+role *there*, on every request. Own one organization and the key does what an
+owner can; be a viewer in the next and the identical key can only read. This
+surprises people, and it is the correct behaviour: a credential cannot be more
+than the person it acts as, anywhere.
+
+Every key issued before 0.3.0 is pinned to the organization it was created in and
+stayed that way. The upgrade changed no key's reach.
 
 Scopes are permission slugs you already hold, checked again on every request
 against your current role. Demote the owner and their keys weaken immediately.
@@ -647,11 +667,19 @@ There is no id in that URL, and that is deliberate: the key being rotated is the
 one in the `Authorization` header, and there is no other it could reach. A
 signed-in session gets `403` — a session that wants another key mints one.
 
-The successor is **identical or narrower**. Same workspace, same reach, same name;
-scopes are this key's unless you name a subset, and a scope this key does not hold
-is refused rather than dropped. Its expiry is the predecessor's *lifetime* from
-now, so a 30-day key rotates into another 30-day key and a key that never expires
-rotates into one that never expires.
+The successor is **identical or narrower**. Same workspace, same name; scopes are
+this key's unless you name a subset, and a scope this key does not hold is refused
+rather than dropped. Its expiry is the predecessor's *lifetime* from now, so a
+30-day key rotates into another 30-day key and a key that never expires rotates
+into one that never expires.
+
+Reach is the second axis of *narrower*. Omit it and the successor keeps this key's;
+send `"reach": "organization"` and an account-wide key rotates into one pinned to
+the organization the request resolved into. **The reverse is refused.** A pinned
+key sending `"reach": "account"` gets a `422` — a successor may not reach more
+organizations than the key it replaces, and widening on the strength of a token
+alone is exactly what rotation must not be. Widen by minting a new key from a
+session.
 
 Both secrets verify for a grace window — an hour by default, five minutes to a day
 via `grace_seconds` — so a rolling deployment can hold either. When it closes the
@@ -682,6 +710,26 @@ Two things to know before you rely on it:
   Revoking the key you know about does not touch it. If you suspect a leak, read
   the key list first and look for prefixes you do not recognise —
   [SECURITY.md](SECURITY.md) says what to do about it.
+
+### Revoking a key
+
+`DELETE /api/v1/api-keys/{id}`, or the button on `/keys`. It takes effect on the
+key's next request; nothing about a key is cached. Revoking your own key is not
+audited, because you are the record.
+
+Holding `apikeys.write` through an **organization-wide** membership also lets you
+stop somebody else's key, and what that does depends on the key:
+
+- **Pinned to your organization** — revoked outright. Your organization was all
+  it reached, so cutting the reach and destroying the credential are the same act.
+- **Account-wide** — your organization is cut out of its reach. The key stops
+  resolving into your tenant and keeps working for its owner elsewhere, because
+  it belongs to an account you hold no authority over. The record is
+  `apikey.reach_revoked` rather than `apikey.revoked`, so an incident review can
+  tell "stopped" from "stopped here".
+
+You do not choose between them, and a key you may not act on answers `404` rather
+than `403` so ids cannot be probed.
 
 ### Worked examples
 

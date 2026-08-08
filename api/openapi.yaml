@@ -2960,6 +2960,14 @@ paths:
         reaper removes them, because "which keys existed" is the question
         asked after an incident. The secret is never listed — only its hash
         is stored.
+
+        **Every key you own, from every organization** (0.3.0). It used to be
+        scoped to the organization you were acting in while revoking was scoped
+        to you alone, and the two disagreeing was a weak existence oracle: a key
+        invisible here still answered `204` to a `DELETE`. They ask the same
+        question now — whose key is this — and an account-wide key has no
+        organization to be filtered by. `organization_id` on each row is what
+        tells them apart.
       responses:
         "200":
           description: Your keys, newest first
@@ -2990,8 +2998,15 @@ paths:
 
         The key is bound to the workspace you are acting in unless you ask for
         `org_wide`, which leaves it unpinned — one workspace still resolved per
-        request, the way a sign-in does, within the organization it was issued
-        in — and needs an organization-wide membership to grant.
+        request, the way a sign-in does — and needs an organization-wide
+        membership to grant.
+
+        An unpinned key is **account-wide** unless you also send
+        `organization_id` (0.3.0): it belongs to your account and reaches the
+        organizations your account belongs to, the way a personal access token
+        does, rather than to the tenant you happened to be in when you minted it.
+        Pin it if you want today's memberships frozen — that choice is
+        irreversible, and it is the only one on this operation that is.
       requestBody:
         required: true
         content:
@@ -3026,8 +3041,12 @@ paths:
 
         The successor is *identical or narrower*: scopes are this key's, or a
         subset you name; the workspace binding is copied verbatim and cannot be
-        changed; nothing widens. `apikeys.write` is still not a scope any key
-        may hold, and that is what makes handing rotation to a credential safe.
+        changed; the reach is this key's, or `reach: organization` to pin an
+        account-wide key to the organization this request resolved into; nothing
+        widens. A pinned key asking for `reach: account` is refused. That second
+        axis arrived with account-wide keys in 0.3.0 and is the same rule applied
+        to tenancy. `apikeys.write` is still not a scope any key may hold, and
+        that is what makes handing rotation to a credential safe.
 
         This key keeps working for `grace_seconds` and then stops, on every
         replica, whether or not the housekeeping job that writes its revocation
@@ -3082,7 +3101,19 @@ paths:
         somebody else's writes an `apikey.revoked` audit record; revoking your
         own does not, because you are the record.
 
+        **Somebody else's account-wide key is narrowed, not destroyed** (0.3.0).
+        Such a key belongs to an account that also acts in tenants you hold no
+        authority over, so what this endpoint cuts is your organization out of
+        its reach: the key stops resolving here and keeps working elsewhere, and
+        the record is `apikey.reach_revoked` rather than `apikey.revoked`. You do
+        not choose between the two — which happens is a property of the key, and
+        offering the choice would be offering an outright revoke you may not
+        have. Your own account-wide key is still revoked outright, because it is
+        yours.
+
         A key you may not act on returns 404, not 403, so ids cannot be probed.
+        An account-wide key whose owner holds no organization-wide membership in
+        your organization answers the same way, because it does not reach you.
       parameters:
         - name: id
           in: path
@@ -6534,8 +6565,9 @@ components:
       type: object
       additionalProperties: false
       required:
-        [id, name, prefix, scopes, org_wide, last_used_at, expires_at,
-         revoked_at, rotated_at, grace_expires_at, successor_id, created_at]
+        [id, name, prefix, scopes, org_wide, organization_id, last_used_at,
+         expires_at, revoked_at, rotated_at, grace_expires_at, successor_id,
+         created_at]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
@@ -6556,9 +6588,40 @@ components:
             Not pinned is not *all at once*. There is no per-request workspace
             selector, so a request made with such a key resolves exactly one
             workspace the way a sign-in does — the owner's pinned default,
-            otherwise the one they last used — bounded to the organization the key
-            was issued in. It follows its owner's current choice, a switch made in
-            a browser included.
+            otherwise the one they last used — bounded to one organization. It
+            follows its owner's current choice, a switch made in a browser
+            included.
+
+            Which organization is `organization_id` below, and the two fields are
+            not redundant: this one is about workspaces and that one is about
+            tenants.
+        organization_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The key's **reach** (0.3.0). Set is a key pinned to one organization
+            for its whole life. `null` is an *account-wide* key: it reaches every
+            organization its owner holds an organization-wide membership in, and
+            each request resolves one of them the way a sign-in does.
+
+            Account-wide is what an unpinned key created from 0.3.0 on is unless
+            it was pinned deliberately, and pinning cannot be undone by rotation.
+            Every key issued before 0.3.0 is pinned and stayed pinned; the
+            migration changed no row's reach.
+
+            Two consequences worth stating rather than discovering. An
+            account-wide key reaches an organization its owner joins **after** the
+            key was minted — that is what account-wide means, and somebody who
+            wants a snapshot of today's memberships pins the key instead. And its
+            permissions differ per organization: the scopes are intersected with
+            the owner's role *there*, so the same key is more powerful in one
+            tenant than another, and demoting its owner in one narrows it there
+            and nowhere else.
+
+            `false` on `org_wide` implies this is set: a workspace belongs to
+            exactly one organization, so a workspace-bound key is pinned by
+            construction.
         last_used_at:
           type: string
           format: date-time
@@ -6605,8 +6668,9 @@ components:
         because `additionalProperties: false` on the base would reject the very
         field this schema adds.
       required:
-        [id, name, prefix, scopes, org_wide, last_used_at, expires_at,
-         revoked_at, rotated_at, grace_expires_at, successor_id, created_at, key]
+        [id, name, prefix, scopes, org_wide, organization_id, last_used_at,
+         expires_at, revoked_at, rotated_at, grace_expires_at, successor_id,
+         created_at, key]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
@@ -6615,6 +6679,11 @@ components:
           type: array
           items: { type: string }
         org_wide: { type: boolean }
+        organization_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: The key's reach. See `organization_id` on APIKey.
         last_used_at: { type: string, format: date-time, nullable: true }
         expires_at: { type: string, format: date-time, nullable: true }
         revoked_at: { type: string, format: date-time, nullable: true }
@@ -6633,9 +6702,9 @@ components:
         The successor, plus the fate of the key it replaced. Spelled out for the
         reason CreatedAPIKey is.
       required:
-        [id, name, prefix, scopes, org_wide, last_used_at, expires_at,
-         revoked_at, rotated_at, grace_expires_at, successor_id, created_at,
-         key, predecessor]
+        [id, name, prefix, scopes, org_wide, organization_id, last_used_at,
+         expires_at, revoked_at, rotated_at, grace_expires_at, successor_id,
+         created_at, key, predecessor]
       properties:
         id: { type: string, format: uuid }
         name:
@@ -6646,6 +6715,14 @@ components:
           type: array
           items: { type: string }
         org_wide: { type: boolean }
+        organization_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The successor's reach: the predecessor's, or narrower. `null` only
+            when the key it replaced was already account-wide — a successor may
+            not reach more organizations than its predecessor.
         last_used_at: { type: string, format: date-time, nullable: true }
         expires_at:
           type: string
@@ -6717,8 +6794,32 @@ components:
             workspace.
 
             It does not act in every workspace at once: each request resolves a
-            single workspace the way a sign-in does, bounded to the organization
-            the key is issued in. See `org_wide` on the key itself.
+            single workspace the way a sign-in does, bounded to one organization.
+            See `org_wide` on the key itself.
+        organization_id:
+          type: string
+          format: uuid
+          description: |
+            Pin the key to one organization (0.3.0). Omit it and an `org_wide`
+            key is **account-wide**: it reaches every organization you hold an
+            organization-wide membership in, including ones you join after the
+            key is minted, which is what a personal access token does elsewhere.
+
+            The only value accepted is the organization you are acting in;
+            anything else is a `422` on this field. Minting into a tenant you are
+            not currently in would need authority nothing has checked, and
+            switching organization and creating it there is the same act with the
+            authorization visible.
+
+            Ignored when `org_wide` is `false`: a workspace-bound key is pinned to
+            its workspace's organization by construction. Naming your own
+            organization there is a no-op; naming a different one is still
+            refused.
+
+            Pinning cannot be undone. A pinned key may rotate into another pinned
+            key and never into an account-wide one, so this field is the one
+            irreversible choice on this form — which is why omitting it is the
+            wide answer and supplying it is the narrow one.
 
     RotateAPIKeyRequest:
       type: object
@@ -6745,6 +6846,25 @@ components:
             times the `last_used_at` flush cadence, so "has anything still used
             the old key" is answerable before the window closes; the ceiling is
             what keeps a rotated-away credential's life finite.
+        reach:
+          type: string
+          enum: [organization, account]
+          description: |
+            Narrows the successor's tenancy (0.3.0), which is the second axis of
+            *identical or narrower*. Omit to copy this key's reach, which is what
+            an unattended rotation sends.
+
+            `organization` pins the successor to the organization this request
+            resolved into. Available to an account-wide key, and a no-op for one
+            that is already pinned there.
+
+            `account` asks for an account-wide successor. A no-op for a key that
+            is already account-wide, and a `422` on this field for a pinned one:
+            a successor may not reach more organizations than the key it
+            replaces, and rotation is authorized by the key's own token, so
+            widening would be a credential granting itself a tenant nobody signed
+            in to authorize. It exists so that refusal can be *said* rather than
+            being a shape the API declines to have a word for.
 
     InvitationStatus:
       type: string

@@ -829,8 +829,18 @@ type Querier interface {
 	// with — so the credential is invalid rather than merely powerless. The
 	// predicate matches GetUserPermissions exactly: an organization-wide membership
 	// covers every workspace, a workspace-scoped one covers its own, and an
-	// organization-wide key is covered only by an organization-wide membership,
-	// because NULL = NULL is not true.
+	// unpinned key is covered only by an organization-wide membership, because
+	// NULL = NULL is not true.
+	//
+	// **Which organization it asks about is no longer the key's column** (M54). A
+	// pinned key still asks about the organization it names, and that branch is
+	// unchanged. An account-wide one has no column to ask about: it asks whether
+	// the owner holds an organization-wide membership in *any* organization this
+	// key has not been barred from, which is the same question one step earlier —
+	// can this credential reach anywhere at all. Which organization it then lands
+	// in is ResolveOrganizationForAPIKey's, and the membership covering that one is
+	// guaranteed by the same join, so the precise test and this coarse one cannot
+	// disagree.
 	//
 	// Returned as a column rather than joined into the WHERE clause for the reason
 	// revoked and expired keys are returned rather than filtered: the caller decides
@@ -853,6 +863,21 @@ type Querier interface {
 	// 'deleted' rather than NULL, so the one comparison at the call site covers it
 	// and no branch depends on a scan of an absent row.
 	GetAPIKeyForRotation(ctx context.Context, id uuid.UUID) (GetAPIKeyForRotationRow, error)
+	// The reach of a key named by id, for the administrator's arm of Revoke (M54).
+	//
+	// Read before the write because the write depends on the answer: a pinned key
+	// is revoked outright and an account-wide one has an organization cut out of
+	// it, and those are different statements against different tables. Returns the
+	// owner too, because whichever it turns out to be, the record has to name whose
+	// credential was stopped.
+	//
+	// No organization predicate, deliberately. Scoping the *read* would make an
+	// account-wide key unfindable by every administrator, since it matches none of
+	// them; the authorization is at the call site, which refuses unless the owner
+	// is a member of the organization the actor holds authority in. A key whose
+	// owner has never been in the actor's organization is ErrNotFound, exactly as an
+	// unknown id is.
+	GetAPIKeyReach(ctx context.Context, id uuid.UUID) (GetAPIKeyReachRow, error)
 	GetAutomationRule(ctx context.Context, arg GetAutomationRuleParams) (AutomationRule, error)
 	// Reads one entry by its exact host.
 	//
@@ -1243,8 +1268,18 @@ type Querier interface {
 	//
 	// workspace_id is selected because NULL is a state the owner chose (M44): a key
 	// bound to one workspace and a key valid across the organization look identical
-	// without it.
-	ListAPIKeysForUser(ctx context.Context, arg ListAPIKeysForUserParams) ([]ListAPIKeysForUserRow, error)
+	// without it. organization_id is selected for the same reason one tier up
+	// (M54): NULL there is account-wide and non-NULL is pinned, and a list that
+	// omitted it would show two credentials with different reach as one row shape.
+	//
+	// **Owner alone, no organization predicate** (M54, closing F75). It used to
+	// carry `AND organization_id = $2` while RevokeAPIKey carried only the owner,
+	// and the two statements disagreeing about which keys an actor reaches was the
+	// whole of that finding: a key listed nowhere still revoked, so 204-versus-404
+	// answered "is this id one of mine, elsewhere". They agree now because the
+	// question they both ask is the same one — whose key is this — and an
+	// account-wide key has no organization to filter on in the first place.
+	ListAPIKeysForUser(ctx context.Context, userID uuid.UUID) ([]ListAPIKeysForUserRow, error)
 	//
 	// Newest first, keyed on (occurred_at, id) so the cursor is a position rather
 	// than an offset: an event written while a reader is paginating shifts every
@@ -2339,6 +2374,33 @@ type Querier interface {
 	// PHASE 2: custom domains. Present now because the cache key is already
 	// host-scoped, so enabling it later needs no key change.
 	ResolveDomainByHostname(ctx context.Context, lower string) (ResolveDomainByHostnameRow, error)
+	// Which organization an **account-wide** key's request lands in (M54).
+	//
+	// One tier above ResolveWorkspaceForUser, and deliberately not a second copy of
+	// it. That statement answers "which workspace, given a person and optionally a
+	// bound"; this one answers "which tenant", and the answer then becomes M44's
+	// organization_id bound so the workspace precedence stays stated exactly once.
+	// Feeding it the organization the request resolved to is the whole of M44's
+	// parameter surviving a key that has no organization column to feed it from.
+	//
+	// The rungs are the person's, for the reason D90 gives: what an unpinned key
+	// follows is the person, and where the person is acting is part of that. Their
+	// pinned default's organization wins, then the one they last used, then the
+	// oldest they belong to. There is no session rung because there is no session.
+	//
+	// **Organization-wide memberships only.** An unpinned key has always required
+	// one — GetAPIKeyByPrefix's predicate refuses a workspace-NULL key covered by a
+	// workspace-scoped membership, and MayCreateOrgWide refuses to mint one without
+	// it. Carrying that rule across the tenancy boundary is what stops an
+	// account-wide key widening into an organization where its owner is scoped to a
+	// single workspace: a key minted under organization-wide authority must not
+	// acquire reach its owner could not have granted it there.
+	//
+	// Barred organizations are excluded here as well as in the coarse check, and
+	// both matter: the coarse one decides whether the credential authenticates at
+	// all, this one decides where it lands, and an administrator who cut their
+	// tenant out must not be reachable by a key that simply had nowhere else to go.
+	ResolveOrganizationForAPIKey(ctx context.Context, arg ResolveOrganizationForAPIKeyParams) (uuid.UUID, error)
 	// The workspace a request acts in, and the only place that question is
 	// answered. Every identity — session, API key, CLI — comes through here.
 	//
@@ -2406,7 +2468,26 @@ type Querier interface {
 	// is audited and the record has to name whose credential was stopped. No row
 	// means an id from another organization or none at all, and both answer the same
 	// way at the call site.
+	//
+	// **Pinned keys only** since M54, and by the predicate rather than by a new
+	// clause: `organization_id = $2` is never true of a NULL. That is the right
+	// refusal rather than a gap. This statement destroys a credential outright, and
+	// for a pinned key that is proportionate — the organization is the key's entire
+	// reach, so cutting the reach and cutting the key are the same act. An
+	// account-wide key belongs to an account that acts in tenants this administrator
+	// has no authority over, and RevokeAPIKeyReachInOrganization below is what they
+	// get instead.
 	RevokeAPIKeyInOrganization(ctx context.Context, arg RevokeAPIKeyInOrganizationParams) (RevokeAPIKeyInOrganizationRow, error)
+	// An administrator cutting their organization out of an account-wide key.
+	//
+	// Idempotent for the reason RevokeAPIKey is: the second call reports a row and
+	// keeps the original timestamp, so repeating it is a success rather than a 404,
+	// while an id nobody may act on is still distinguishable.
+	//
+	// ON CONFLICT rather than a prior existence check, because two administrators
+	// reacting to the same incident is the normal case and neither should see an
+	// error about the other.
+	RevokeAPIKeyReachInOrganization(ctx context.Context, arg RevokeAPIKeyReachInOrganizationParams) (int64, error)
 	// Used on password change. Anyone who had the old password must be logged out,
 	// which is the entire point of changing it.
 	// keep_session is optional: pass NULL to revoke everything, or the current

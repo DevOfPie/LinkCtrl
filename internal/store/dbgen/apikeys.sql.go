@@ -24,7 +24,7 @@ RETURNING id, user_id, organization_id, workspace_id, name, prefix, key_hash, sc
 type CreateAPIKeyParams struct {
 	ID             uuid.UUID
 	UserID         uuid.UUID
-	OrganizationID uuid.UUID
+	OrganizationID *uuid.UUID
 	WorkspaceID    *uuid.UUID
 	Name           string
 	Prefix         string
@@ -91,8 +91,15 @@ SELECT
     EXISTS (
         SELECT 1 FROM memberships m
          WHERE m.user_id = k.user_id
-           AND m.organization_id = k.organization_id
            AND (m.workspace_id IS NULL OR m.workspace_id = k.workspace_id)
+           AND (CASE
+                  WHEN k.organization_id IS NOT NULL
+                    THEN m.organization_id = k.organization_id
+                  ELSE NOT EXISTS (
+                         SELECT 1 FROM api_key_org_revocations x
+                          WHERE x.api_key_id = k.id
+                            AND x.organization_id = m.organization_id)
+                END)
     ) AS owner_is_member
 FROM api_keys k
 JOIN users u ON u.id = k.user_id
@@ -103,7 +110,7 @@ WHERE k.prefix = $1
 type GetAPIKeyByPrefixRow struct {
 	ID             uuid.UUID
 	UserID         uuid.UUID
-	OrganizationID uuid.UUID
+	OrganizationID *uuid.UUID
 	WorkspaceID    *uuid.UUID
 	KeyHash        []byte
 	Scopes         []string
@@ -131,8 +138,18 @@ type GetAPIKeyByPrefixRow struct {
 // with — so the credential is invalid rather than merely powerless. The
 // predicate matches GetUserPermissions exactly: an organization-wide membership
 // covers every workspace, a workspace-scoped one covers its own, and an
-// organization-wide key is covered only by an organization-wide membership,
-// because NULL = NULL is not true.
+// unpinned key is covered only by an organization-wide membership, because
+// NULL = NULL is not true.
+//
+// **Which organization it asks about is no longer the key's column** (M54). A
+// pinned key still asks about the organization it names, and that branch is
+// unchanged. An account-wide one has no column to ask about: it asks whether
+// the owner holds an organization-wide membership in *any* organization this
+// key has not been barred from, which is the same question one step earlier —
+// can this credential reach anywhere at all. Which organization it then lands
+// in is ResolveOrganizationForAPIKey's, and the membership covering that one is
+// guaranteed by the same join, so the precise test and this coarse one cannot
+// disagree.
 //
 // Returned as a column rather than joined into the WHERE clause for the reason
 // revoked and expired keys are returned rather than filtered: the caller decides
@@ -166,8 +183,15 @@ SELECT k.id, k.user_id, k.organization_id, k.workspace_id, k.name, k.prefix,
        EXISTS (
            SELECT 1 FROM memberships m
             WHERE m.user_id = k.user_id
-              AND m.organization_id = k.organization_id
               AND (m.workspace_id IS NULL OR m.workspace_id = k.workspace_id)
+              AND (CASE
+                     WHEN k.organization_id IS NOT NULL
+                       THEN m.organization_id = k.organization_id
+                     ELSE NOT EXISTS (
+                            SELECT 1 FROM api_key_org_revocations x
+                             WHERE x.api_key_id = k.id
+                               AND x.organization_id = m.organization_id)
+                   END)
        ) AS owner_is_member,
        COALESCE((SELECT u.status FROM users u
                   WHERE u.id = k.user_id AND u.deleted_at IS NULL), 'deleted') AS owner_status
@@ -179,7 +203,7 @@ FOR UPDATE
 type GetAPIKeyForRotationRow struct {
 	ID             uuid.UUID
 	UserID         uuid.UUID
-	OrganizationID uuid.UUID
+	OrganizationID *uuid.UUID
 	WorkspaceID    *uuid.UUID
 	Name           string
 	Prefix         string
@@ -232,25 +256,62 @@ func (q *Queries) GetAPIKeyForRotation(ctx context.Context, id uuid.UUID) (GetAP
 	return i, err
 }
 
-const listAPIKeysForUser = `-- name: ListAPIKeysForUser :many
-SELECT id, name, prefix, scopes, workspace_id, last_used_at, expires_at,
-       revoked_at, rotated_at, grace_expires_at, successor_id, created_at
-FROM api_keys
-WHERE user_id = $1
-  AND organization_id = $2
-ORDER BY created_at DESC
+const getAPIKeyReach = `-- name: GetAPIKeyReach :one
+SELECT k.id, k.user_id, k.organization_id, k.prefix, k.revoked_at
+FROM api_keys k
+WHERE k.id = $1
 `
 
-type ListAPIKeysForUserParams struct {
+type GetAPIKeyReachRow struct {
+	ID             uuid.UUID
 	UserID         uuid.UUID
-	OrganizationID uuid.UUID
+	OrganizationID *uuid.UUID
+	Prefix         string
+	RevokedAt      *time.Time
 }
+
+// The reach of a key named by id, for the administrator's arm of Revoke (M54).
+//
+// Read before the write because the write depends on the answer: a pinned key
+// is revoked outright and an account-wide one has an organization cut out of
+// it, and those are different statements against different tables. Returns the
+// owner too, because whichever it turns out to be, the record has to name whose
+// credential was stopped.
+//
+// No organization predicate, deliberately. Scoping the *read* would make an
+// account-wide key unfindable by every administrator, since it matches none of
+// them; the authorization is at the call site, which refuses unless the owner
+// is a member of the organization the actor holds authority in. A key whose
+// owner has never been in the actor's organization is ErrNotFound, exactly as an
+// unknown id is.
+func (q *Queries) GetAPIKeyReach(ctx context.Context, id uuid.UUID) (GetAPIKeyReachRow, error) {
+	row := q.db.QueryRow(ctx, getAPIKeyReach, id)
+	var i GetAPIKeyReachRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.OrganizationID,
+		&i.Prefix,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const listAPIKeysForUser = `-- name: ListAPIKeysForUser :many
+SELECT id, name, prefix, scopes, organization_id, workspace_id, last_used_at,
+       expires_at, revoked_at, rotated_at, grace_expires_at, successor_id,
+       created_at
+FROM api_keys
+WHERE user_id = $1
+ORDER BY created_at DESC
+`
 
 type ListAPIKeysForUserRow struct {
 	ID             uuid.UUID
 	Name           string
 	Prefix         string
 	Scopes         []string
+	OrganizationID *uuid.UUID
 	WorkspaceID    *uuid.UUID
 	LastUsedAt     *time.Time
 	ExpiresAt      *time.Time
@@ -267,9 +328,19 @@ type ListAPIKeysForUserRow struct {
 //
 // workspace_id is selected because NULL is a state the owner chose (M44): a key
 // bound to one workspace and a key valid across the organization look identical
-// without it.
-func (q *Queries) ListAPIKeysForUser(ctx context.Context, arg ListAPIKeysForUserParams) ([]ListAPIKeysForUserRow, error) {
-	rows, err := q.db.Query(ctx, listAPIKeysForUser, arg.UserID, arg.OrganizationID)
+// without it. organization_id is selected for the same reason one tier up
+// (M54): NULL there is account-wide and non-NULL is pinned, and a list that
+// omitted it would show two credentials with different reach as one row shape.
+//
+// **Owner alone, no organization predicate** (M54, closing F75). It used to
+// carry `AND organization_id = $2` while RevokeAPIKey carried only the owner,
+// and the two statements disagreeing about which keys an actor reaches was the
+// whole of that finding: a key listed nowhere still revoked, so 204-versus-404
+// answered "is this id one of mine, elsewhere". They agree now because the
+// question they both ask is the same one — whose key is this — and an
+// account-wide key has no organization to filter on in the first place.
+func (q *Queries) ListAPIKeysForUser(ctx context.Context, userID uuid.UUID) ([]ListAPIKeysForUserRow, error) {
+	rows, err := q.db.Query(ctx, listAPIKeysForUser, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -282,6 +353,7 @@ func (q *Queries) ListAPIKeysForUser(ctx context.Context, arg ListAPIKeysForUser
 			&i.Name,
 			&i.Prefix,
 			&i.Scopes,
+			&i.OrganizationID,
 			&i.WorkspaceID,
 			&i.LastUsedAt,
 			&i.ExpiresAt,
@@ -356,6 +428,66 @@ func (q *Queries) MarkAPIKeyRotated(ctx context.Context, arg MarkAPIKeyRotatedPa
 	return result.RowsAffected(), nil
 }
 
+const resolveOrganizationForAPIKey = `-- name: ResolveOrganizationForAPIKey :one
+SELECT o.id
+FROM organizations o
+JOIN memberships m ON m.organization_id = o.id
+                  AND m.user_id = $1
+                  AND m.workspace_id IS NULL
+JOIN users u ON u.id = m.user_id
+LEFT JOIN workspaces dw ON dw.id = u.default_workspace_id AND dw.deleted_at IS NULL
+LEFT JOIN workspaces lw ON lw.id = u.last_workspace_id    AND lw.deleted_at IS NULL
+WHERE o.deleted_at IS NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM api_key_org_revocations x
+       WHERE x.api_key_id = $2
+         AND x.organization_id = o.id
+  )
+ORDER BY
+    (o.id IS NOT DISTINCT FROM dw.organization_id) DESC,
+    (o.id IS NOT DISTINCT FROM lw.organization_id) DESC,
+    o.created_at, o.id
+LIMIT 1
+`
+
+type ResolveOrganizationForAPIKeyParams struct {
+	UserID   uuid.UUID
+	ApiKeyID uuid.UUID
+}
+
+// Which organization an **account-wide** key's request lands in (M54).
+//
+// One tier above ResolveWorkspaceForUser, and deliberately not a second copy of
+// it. That statement answers "which workspace, given a person and optionally a
+// bound"; this one answers "which tenant", and the answer then becomes M44's
+// organization_id bound so the workspace precedence stays stated exactly once.
+// Feeding it the organization the request resolved to is the whole of M44's
+// parameter surviving a key that has no organization column to feed it from.
+//
+// The rungs are the person's, for the reason D90 gives: what an unpinned key
+// follows is the person, and where the person is acting is part of that. Their
+// pinned default's organization wins, then the one they last used, then the
+// oldest they belong to. There is no session rung because there is no session.
+//
+// **Organization-wide memberships only.** An unpinned key has always required
+// one — GetAPIKeyByPrefix's predicate refuses a workspace-NULL key covered by a
+// workspace-scoped membership, and MayCreateOrgWide refuses to mint one without
+// it. Carrying that rule across the tenancy boundary is what stops an
+// account-wide key widening into an organization where its owner is scoped to a
+// single workspace: a key minted under organization-wide authority must not
+// acquire reach its owner could not have granted it there.
+//
+// Barred organizations are excluded here as well as in the coarse check, and
+// both matter: the coarse one decides whether the credential authenticates at
+// all, this one decides where it lands, and an administrator who cut their
+// tenant out must not be reachable by a key that simply had nowhere else to go.
+func (q *Queries) ResolveOrganizationForAPIKey(ctx context.Context, arg ResolveOrganizationForAPIKeyParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, resolveOrganizationForAPIKey, arg.UserID, arg.ApiKeyID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const revokeAPIKey = `-- name: RevokeAPIKey :execrows
 UPDATE api_keys
    SET revoked_at = COALESCE(revoked_at, now())
@@ -389,7 +521,7 @@ RETURNING user_id, prefix
 
 type RevokeAPIKeyInOrganizationParams struct {
 	ID             uuid.UUID
-	OrganizationID uuid.UUID
+	OrganizationID *uuid.UUID
 }
 
 type RevokeAPIKeyInOrganizationRow struct {
@@ -412,11 +544,49 @@ type RevokeAPIKeyInOrganizationRow struct {
 // is audited and the record has to name whose credential was stopped. No row
 // means an id from another organization or none at all, and both answer the same
 // way at the call site.
+//
+// **Pinned keys only** since M54, and by the predicate rather than by a new
+// clause: `organization_id = $2` is never true of a NULL. That is the right
+// refusal rather than a gap. This statement destroys a credential outright, and
+// for a pinned key that is proportionate — the organization is the key's entire
+// reach, so cutting the reach and cutting the key are the same act. An
+// account-wide key belongs to an account that acts in tenants this administrator
+// has no authority over, and RevokeAPIKeyReachInOrganization below is what they
+// get instead.
 func (q *Queries) RevokeAPIKeyInOrganization(ctx context.Context, arg RevokeAPIKeyInOrganizationParams) (RevokeAPIKeyInOrganizationRow, error) {
 	row := q.db.QueryRow(ctx, revokeAPIKeyInOrganization, arg.ID, arg.OrganizationID)
 	var i RevokeAPIKeyInOrganizationRow
 	err := row.Scan(&i.UserID, &i.Prefix)
 	return i, err
+}
+
+const revokeAPIKeyReachInOrganization = `-- name: RevokeAPIKeyReachInOrganization :execrows
+INSERT INTO api_key_org_revocations (api_key_id, organization_id, revoked_by)
+VALUES ($1, $2, $3)
+ON CONFLICT (api_key_id, organization_id) DO NOTHING
+`
+
+type RevokeAPIKeyReachInOrganizationParams struct {
+	ApiKeyID       uuid.UUID
+	OrganizationID uuid.UUID
+	RevokedBy      *uuid.UUID
+}
+
+// An administrator cutting their organization out of an account-wide key.
+//
+// Idempotent for the reason RevokeAPIKey is: the second call reports a row and
+// keeps the original timestamp, so repeating it is a success rather than a 404,
+// while an id nobody may act on is still distinguishable.
+//
+// ON CONFLICT rather than a prior existence check, because two administrators
+// reacting to the same incident is the normal case and neither should see an
+// error about the other.
+func (q *Queries) RevokeAPIKeyReachInOrganization(ctx context.Context, arg RevokeAPIKeyReachInOrganizationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeAPIKeyReachInOrganization, arg.ApiKeyID, arg.OrganizationID, arg.RevokedBy)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const revokeLapsedAPIKeyGraces = `-- name: RevokeLapsedAPIKeyGraces :execrows

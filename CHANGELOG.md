@@ -29,6 +29,56 @@ migrations run at boot.
 
 ### Added
 
+- **An API key belongs to your account, not to one organization.** A key used to
+  be minted *into* the organization you were standing in and could never leave
+  it. It is now minted by your account and reaches the organizations your account
+  belongs to, the way a personal access token does elsewhere.
+
+  **Nothing about the keys you already have changed.** Every key issued before
+  this release stays pinned to the organization it was created in, and the
+  upgrade writes no rows. What changed is what a *new* key is.
+
+  **Three reaches, and the page names each.** *Workspace* is the default and is
+  unchanged — the key acts where you made it. *Organization* pins the key to one
+  tenant for its whole life. *Account* is the new one, and it is what an unpinned
+  key now is unless you pin it: each request resolves one organization the way a
+  sign-in does, following where you are working.
+
+  **The same key is more powerful in one organization than in another, and that
+  is deliberate.** A key's permissions are its scopes intersected with your role
+  *there*, worked out on every request. Own an organization and the key can do
+  what an owner can; be a viewer in the next one and the identical key can only
+  read. Being demoted narrows every key you hold in that organization at once,
+  without touching any of them.
+
+  **An account key reaches an organization you join later.** That is what account
+  means, and the alternative would be a key whose reach is a snapshot of a
+  membership list nobody can see or correct. If you want the snapshot, pin the
+  key. Pinning is irreversible: a rotation may narrow a key's reach and never
+  widen it, so an account key can rotate into a pinned one and a pinned key
+  cannot rotate back.
+
+  **Your key list is your account's, not the current organization's.** It used to
+  show only keys from the organization you were signed into while revoking
+  reached every key you owned — so a key you could not see, you could still
+  delete. Both now answer the same question.
+
+  **An administrator can stop an account key in their organization without
+  destroying it.** Holding `apikeys.write` organization-wide, deleting somebody
+  else's account key cuts your organization out of its reach: the key keeps
+  working for its owner everywhere else, and the record is `apikey.reach_revoked`
+  rather than `apikey.revoked`. A key pinned to your organization is still
+  revoked outright, because your organization is all it ever reached.
+
+  An account key needs an **organization-wide** membership wherever it lands. If
+  your role in an organization is scoped to a single workspace, an account key
+  does not act there — mint a key in that workspace instead.
+
+  For API clients: `POST /api/v1/api-keys` takes an optional `organization_id`
+  which pins the key, `POST /api/v1/api-keys/rotate` takes an optional `reach`,
+  and every key representation gained a nullable `organization_id`. `lctl apikey
+  create` gained `--pin`. The audit log gained `apikey.reach_revoked`.
+
 - **Two-factor authentication, with recovery codes that make it survivable.**
   TOTP — the six digits an authenticator app shows — on top of the password.
 

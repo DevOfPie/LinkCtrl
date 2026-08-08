@@ -1608,6 +1608,14 @@ func (s *demoSeeder) seedAutomation(ctx context.Context) error {
 // `link-checker` is the ordinary case, unrotated and workspace-bound, so the
 // other two read as choices rather than as how keys are.
 //
+// **Four since M54**, because the *Reach* column gained a third value and a
+// column showing two of three states is the same problem the third key was
+// added to solve. `personal-token` is account-wide — the reach a key created
+// without pinning now has — and `reporting` is pinned explicitly so that it
+// keeps saying *Organization* rather than quietly becoming the fourth one's
+// twin. The pin on `reporting` is therefore load-bearing for the page and not
+// an opinion about how a reporting key should be scoped.
+//
 // **No secret survives this.** Every token these calls return is discarded here,
 // which is not tidiness — it is the only correct thing to do with one. The
 // product stores an HMAC and shows the token once, so a demo that kept one would
@@ -1618,16 +1626,21 @@ func demoAPIKeys() []struct {
 	name    string
 	scopes  []string
 	orgWide bool
-	rotate  bool
+	// pinned asks for an organization-scoped key rather than an account-wide
+	// one, and only means anything with orgWide. It is the M54 axis.
+	pinned bool
+	rotate bool
 } {
 	return []struct {
 		name    string
 		scopes  []string
 		orgWide bool
+		pinned  bool
 		rotate  bool
 	}{
 		{name: "ci-deploy", scopes: []string{"links.read", "links.create"}, rotate: true},
-		{name: "reporting", scopes: []string{"links.read"}, orgWide: true},
+		{name: "reporting", scopes: []string{"links.read"}, orgWide: true, pinned: true},
+		{name: "personal-token", scopes: []string{"links.read"}, orgWide: true},
 		{name: "link-checker", scopes: []string{"links.read"}},
 	}
 }
@@ -1648,9 +1661,14 @@ func demoAPIKeys() []struct {
 func (s *demoSeeder) seedAPIKeys(ctx context.Context) error {
 	rotated := 0
 	for _, spec := range demoAPIKeys() {
-		created, err := s.keys.Create(ctx, s.owner, auth.CreateAPIKeyInput{
+		in := auth.CreateAPIKeyInput{
 			Name: spec.name, Scopes: spec.scopes, OrgWide: spec.orgWide,
-		})
+		}
+		if spec.pinned {
+			org := s.owner.OrgID
+			in.OrganizationID = &org
+		}
+		created, err := s.keys.Create(ctx, s.owner, in)
 		if err != nil {
 			return fmt.Errorf("create api key %q: %w", spec.name, err)
 		}
@@ -2204,11 +2222,19 @@ func demoResetPhase2(ctx context.Context, tx pgxExecutor, orgID, userID uuid.UUI
 		// SET NULL rather than CASCADE, so deleting a successor would otherwise
 		// leave its predecessor behind with a dangling rotation.
 		//
-		// Scoped to the organization, which means it also removes any key a demo
-		// visitor minted for themselves. That is the intent: the demo is reset to
-		// what the seeder writes, and a credential somebody created on a public
-		// instance is exactly the sort of thing that should not survive it.
-		{"api keys", `DELETE FROM api_keys WHERE organization_id = $1`, []any{orgID}},
+		// Scoped to the organization **or to the owner**, which means it also
+		// removes any key a demo visitor minted for themselves. That is the
+		// intent: the demo is reset to what the seeder writes, and a credential
+		// somebody created on a public instance is exactly the sort of thing that
+		// should not survive it.
+		//
+		// The owner limb is M54's. An account-wide key has no organization at all,
+		// so the organization predicate alone stopped reaching every key the
+		// seeder mints — and the one it stopped reaching is the one that would
+		// have accumulated a fresh copy on every demo-update.
+		{"api keys",
+			`DELETE FROM api_keys WHERE organization_id = $1 OR user_id = $2`,
+			[]any{orgID, userID}},
 
 		{"invitations", `DELETE FROM invitations WHERE organization_id = $1`, []any{orgID}},
 		{"notifications", `DELETE FROM notifications WHERE user_id = $1`, []any{userID}},

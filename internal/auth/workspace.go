@@ -96,16 +96,28 @@ func (s *Service) resolveWorkspace(
 // for it because it exposes nothing but the caller's own memberships, which is
 // the same reason the notification inbox has none.
 //
-// A key is bounded to the organization it was issued for, and a session is not.
-// That is the difference between a person and a credential rather than a
-// difference in trust: the switcher's whole job is to cross organizations, so a
-// browser has to see all of them, while M44 spent an organization_id parameter
-// specifically so a key could not *act* in a tenant it was never issued for. A
-// key reading the list of every tenant its owner belongs to is the same bound
-// missing from the read — the names and slugs of organizations whose data the
-// key cannot touch, disclosed to whoever holds it. The filter is here and not in
-// ListWorkspacesForUser because that query serves the switcher too, and adding
-// the predicate there would break the one caller that must cross (F103).
+// A **pinned** key is bounded to the organization it was issued for, and a
+// session is not. That is the difference between a person and a credential
+// rather than a difference in trust: the switcher's whole job is to cross
+// organizations, so a browser has to see all of them, while M44 spent an
+// organization_id parameter specifically so a key could not *act* in a tenant it
+// was never issued for. A key reading the list of every tenant its owner belongs
+// to is the same bound missing from the read — the names and slugs of
+// organizations whose data the key cannot touch, disclosed to whoever holds it.
+// The filter is here and not in ListWorkspacesForUser because that query serves
+// the switcher too, and adding the predicate there would break the one caller
+// that must cross (F103).
+//
+// **An account-wide key is not bounded, and the premise is what changed** (M54).
+// F103's reasoning was that a key is issued for one organization, so reading
+// about the others discloses tenants it cannot touch. That is still exactly true
+// of a pinned key and false of an account-wide one, which is issued by an
+// account and acts in the organizations that account belongs to — the tenants it
+// would be reading about are the tenants it works in. Bounding it to the
+// organization the current request happened to resolve into would also hide the
+// only surface that says where else the credential reaches. F103's row is
+// amended rather than closed: the finding it names still stands for the
+// credential it was found on.
 func (s *Service) Workspaces(ctx context.Context, actor *Identity) ([]Workspace, error) {
 	if actor == nil {
 		return nil, domain.ErrUnauthorized
@@ -116,7 +128,7 @@ func (s *Service) Workspaces(ctx context.Context, actor *Identity) ([]Workspace,
 	}
 	out := make([]Workspace, 0, len(rows))
 	for _, r := range rows {
-		if actor.IsAPIKey() && r.OrganizationID != actor.OrgID {
+		if actor.IsAPIKey() && actor.APIKeyOrgID != nil && r.OrganizationID != *actor.APIKeyOrgID {
 			continue
 		}
 		out = append(out, Workspace{

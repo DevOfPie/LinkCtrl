@@ -28,9 +28,11 @@ erDiagram
     organizations ||--o{ invitations : "cascade"
     organizations ||--o{ domains : "cascade"
     organizations ||--o{ api_keys : "cascade"
+    organizations ||--o{ api_key_org_revocations : "cascade"
     users ||--o{ memberships : "cascade"
     users ||--o{ sessions : "cascade"
     users ||--o{ api_keys : "cascade"
+    api_keys ||--o{ api_key_org_revocations : "cascade"
     users ||--o{ notifications : "cascade"
     users ||--o{ instance_grants : "cascade"
     roles ||--o{ role_permissions : "cascade"
@@ -138,7 +140,7 @@ appears in sqlc-visible SQL.
 
 | Table | Cols | Status | Notes |
 | --- | --- | --- | --- |
-| `audit_logs` | 12 | Built, partitioned | 38 actions, enumerated by `audit.AllActions` and checked by a test. `actor_label` is rewritten to a constant tombstone by the erasure sweep; `actor_user_id` is not (D148). |
+| `audit_logs` | 12 | Built, partitioned | 39 actions, enumerated by `audit.AllActions` and checked by a test. `actor_label` is rewritten to a constant tombstone by the erasure sweep; `actor_user_id` is not (D148). |
 | `notifications` | 9 | Built | Scoped to the reader and the workspace they are standing in, with organization-level news visible from every workspace (D102). |
 | `mail_outbox` | 11 | Built | Optional: an instance with no `SMTP_HOST` never queues. Bodies are blanked when a row finishes (F32). |
 | `webhooks` / `webhook_deliveries` | 10 / 11 | Built | Delivery is instance-wide and arrival-ordered, which is a recorded limitation (F90). |

@@ -268,6 +268,28 @@ const (
 	// not know, and "who stopped it" is the question afterwards.
 	ActionAPIKeyRevoked = "apikey.revoked"
 
+	// One administrator cutting their organization out of somebody else's
+	// **account-wide** key (M54).
+	//
+	// A separate action rather than a flag on the one above, because the two
+	// records answer differently and an operator reading either has to know which
+	// happened without opening the metadata. `apikey.revoked` says a credential
+	// stopped existing. This one says a credential this organization can no
+	// longer be reached by is still working for its owner somewhere else — which
+	// is the honest description of what an administrator may do to a key minted
+	// by an account they hold no authority over, and the reason the outright
+	// revoke is refused for one.
+	//
+	// It is also the distinction the incident question turns on. "Was that key
+	// stopped" has two answers now, and a vocabulary that flattened them would
+	// leave somebody believing a leaked credential was dead when it is merely
+	// elsewhere.
+	//
+	//nolint:gosec // G101: an audit action slug, not a credential. The other
+	// entries escape the heuristic only by not containing "revoked" beside a
+	// word it reads as secret-shaped.
+	ActionAPIKeyReachRevoked = "apikey.reach_revoked"
+
 	// A password recovered from a mailbox (M51).
 	//
 	// The first action in this vocabulary with **no organization**, and that is
@@ -595,6 +617,28 @@ func (s *Service) RecordAPIKeyRevocation(
 	keyID := ev.KeyID
 	return s.Record(ctx, actor, Event{
 		Action:     ActionAPIKeyRevoked,
+		TargetType: "api_key",
+		TargetID:   &keyID,
+		Metadata: map[string]any{
+			"prefix":   ev.Prefix,
+			"owner_id": ev.OwnerID.String(),
+		},
+	})
+}
+
+// RecordAPIKeyReachRevocation satisfies auth.APIKeyAuditor, and is the M54 half
+// of the method above.
+//
+// The organization is not in the metadata: every record already carries the
+// organization it was written in, and that is exactly the organization cut out
+// of the key's reach. Repeating it would be a second copy of the same fact,
+// which is how the two come to disagree.
+func (s *Service) RecordAPIKeyReachRevocation(
+	ctx context.Context, actor *auth.Identity, ev auth.APIKeyRevocation,
+) error {
+	keyID := ev.KeyID
+	return s.Record(ctx, actor, Event{
+		Action:     ActionAPIKeyReachRevoked,
 		TargetType: "api_key",
 		TargetID:   &keyID,
 		Metadata: map[string]any{
@@ -941,6 +985,7 @@ func AllActions() []string {
 		ActionAutomationFired,
 		ActionAPIKeyRotated,
 		ActionAPIKeyRevoked,
+		ActionAPIKeyReachRevoked,
 		ActionPasswordReset,
 		ActionAccountDeleted,
 		ActionMFAEnabled,

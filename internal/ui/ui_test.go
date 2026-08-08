@@ -686,13 +686,33 @@ func pageData(t *testing.T) map[string]any {
 		},
 		"keys": map[string]any{
 			"Title": "API keys", "Nav": "keys", "Identity": owner(),
+			// Three rows, one per reach, because the *Reach* cell branches three
+			// ways since M54 and a fixture with one row exercises one branch.
+			// `OrgWide` is the workspace axis and `OrganizationID` the tenancy
+			// one, so the combinations that mean something are: not org-wide
+			// (workspace), org-wide with an organization (organization), and
+			// org-wide without one (account).
 			"Keys": []map[string]any{{
 				"ID": "0198c9c5-0000-7000-8000-000000000002", "Name": "ci",
 				"Prefix": "lk_live_abcdefgh", "Scopes": []string{"links.read"},
 				"LastUsedAt": &now, "ExpiresAt": (*time.Time)(nil),
 				"RevokedAt": (*time.Time)(nil), "CreatedAt": now, "Expired": false,
+				"OrgWide": false, "OrganizationID": "0198c9c5-0000-7000-8000-0000000000aa",
+			}, {
+				"ID": "0198c9c5-0000-7000-8000-000000000003", "Name": "reporting",
+				"Prefix": "lk_live_bbcdefgh", "Scopes": []string{"links.read"},
+				"LastUsedAt": &now, "ExpiresAt": (*time.Time)(nil),
+				"RevokedAt": (*time.Time)(nil), "CreatedAt": now, "Expired": false,
+				"OrgWide": true, "OrganizationID": "0198c9c5-0000-7000-8000-0000000000aa",
+			}, {
+				"ID": "0198c9c5-0000-7000-8000-000000000004", "Name": "personal",
+				"Prefix": "lk_live_cbcdefgh", "Scopes": []string{"links.read"},
+				"LastUsedAt": &now, "ExpiresAt": (*time.Time)(nil),
+				"RevokedAt": (*time.Time)(nil), "CreatedAt": now, "Expired": false,
+				"OrgWide": true, "OrganizationID": nil,
 			}},
-			"ScopeOptions": []string{"links.read", "links.create"},
+			"CanCreateOrgWide": true,
+			"ScopeOptions":     []string{"links.read", "links.create"},
 			"Created": map[string]any{
 				"Key": "lk_live_abcdefgh_0123456789012345678901234567890123456789012",
 			},

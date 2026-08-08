@@ -971,6 +971,32 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.doAsKey(field(t, rotatable, "key"), "POST", p+"/api-keys/rotate",
 		map[string]any{"grace_seconds": 300}, http.StatusCreated)
 
+	// The reach axis (M54). Both the optional organization on creation and the
+	// reach on rotation are replayed, because both are request schemas the
+	// document now promises and neither is exercised by the calls above.
+	//
+	// The organization comes off the workspace-bound key minted first: such a key
+	// is pinned by construction, so its organization_id is this session's own —
+	// and reading it here rather than adding a route to ask for it keeps the
+	// replay to operations the document describes.
+	sessionOrg := field(t, key, "organization_id")
+	accountWide := c.do("POST", p+"/api-keys", map[string]any{
+		"name": "account-wide", "scopes": []string{"links.read"}, "org_wide": true,
+	}, http.StatusCreated)
+	c.do("POST", p+"/api-keys", map[string]any{
+		"name": "pinned", "scopes": []string{"links.read"},
+		"org_wide": true, "organization_id": sessionOrg,
+	}, http.StatusCreated)
+	// Another organization is refused on the field rather than accepted and
+	// quietly reinterpreted, which is the 422 the document promises.
+	c.do("POST", p+"/api-keys", map[string]any{
+		"name": "elsewhere", "scopes": []string{"links.read"},
+		"org_wide": true, "organization_id": "00000000-0000-4000-8000-0000000000ff",
+	}, http.StatusUnprocessableEntity)
+	// Narrowing through rotation, sent as the key because rotation always is.
+	c.doAsKey(field(t, accountWide, "key"), "POST", p+"/api-keys/rotate",
+		map[string]any{"reach": "organization"}, http.StatusCreated)
+
 	c.do("DELETE", p+"/api-keys/"+keyID, nil, http.StatusNoContent)
 
 	// --- audit --------------------------------------------------------------

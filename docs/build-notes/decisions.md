@@ -271,7 +271,10 @@ file. Append a row when you append an entry.
 | [M52: a soft delete fires no cascade, and two comments that said it would](#2026-08-08--m52-a-soft-delete-fires-no-cascade-and-two-comments-that-said-it-would) | Why the deletion path writes out six DELETEs, why two tables joined m52.md's four, and the transaction-scoped audit writer the first operation whose actor it destroys needed |
 | [M52: the cascade the bullet promised, amended at acceptance](#2026-08-08--m52-the-cascade-the-bullet-promised-amended-at-acceptance) | The amendment record for the entry above, made at step 3.4 rather than step 1: the bullet as it stood, as amended to six explicit statements, and the tree fact that `ON DELETE CASCADE` never fires on an `UPDATE`. Why it is a fact and not an assertion, and why that is the difference between an amendment and a rejection |
 | [M53: the two facts the milestone before it moved](#2026-08-08--m53-the-two-facts-the-milestone-before-it-moved) | An amendment, not a decision: M52 moved the session mint out from under M53's bullet and gave `mfa_secret` its first writer, which is the one that clears it. The first time this phase a milestone's validation corrected facts broken by its immediate predecessor |
+| [M54: the second milestone file to reserve a migration number it did not get](#2026-08-08--m54-the-second-milestone-file-to-reserve-a-migration-number-it-did-not-get) | An amendment, not a decision: `037xx` is not merely stale but occupied, so a worker following the bullet would collide rather than fail. Why a reserved migration number is a prediction about build order |
+| [M54: the function the authority bullet named answers one permission](#2026-08-08--m54-the-function-the-authority-bullet-named-answers-one-permission) | An amendment, not a decision: `LoadMembershipAuthority` takes one permission, so a scope set through it is a query per scope on the auth path. Why the assertion is untouched, and why an amendment that widened what is intersected would be this milestone's own failure mode wearing a correction's clothes |
 | [M53: five choices a second factor forced](#2026-08-08--m53-five-choices-a-second-factor-forced) | D150: `MFA_SECRET_KEY` is its own variable and is **optional**, so an instance without one offers no second factor and an instance that loses one falls back to recovery codes. D151: the second factor lives in `internal/auth` behind two seams rather than in a package of its own, and why the reason `internal/account` gives does not apply. D152: the enrolment offer travels in the form because the milestone forbids the alternative. D153: `RecordSuccessfulLogin` is guarded rather than moved, which is the only way both of the login flow's bullets hold at once. D154: four audit actions and one notification kind, because the two surfaces answer different questions |
+| [M54: a key belongs to an account, and the four decisions that had to be re-derived to say so](#2026-08-08--m54-a-key-belongs-to-an-account-and-the-four-decisions-that-had-to-be-re-derived-to-say-so) | D155: reach is a second column rather than a widening of the first, and account-wide is what an unpinned key created from 0.3.0 on *is* — the widening-by-default is deliberate and pinning is the irreversible half. D156: an account-wide key requires an **organization-wide** membership wherever it lands, which is M44's existing bar carried across the tenancy boundary. D157: the organization is resolved one tier above the workspace, by its own query, so M44's parameter survives with a value rather than being deleted. D158: an administrator narrows somebody else's account-wide key instead of destroying it, in a table of subtractions and under an audit action of its own. And the four re-derivations — F103's bound, M44's parameter, D43's cap, D87's rotation rule — each with the limb it matched |
 
 ---
 
@@ -22859,3 +22862,246 @@ the pool, so the transaction is rolled back explicitly before it rather than by
 the deferred call. **The rule, stated so it is not rediscovered: nothing that
 writes a row referencing `users` may run while this package holds a transaction
 open against that account.**
+
+## 2026-08-08 — M54: the second milestone file to reserve a migration number it did not get
+
+**An amendment, not a decision**, at [step 1](phase-loop.md#1-validate). The
+same drift [M51's entry](#2026-08-07--m51-the-migration-number-this-run-used-up)
+recorded, one phase later and with four milestones between the reservation and
+the build instead of two.
+
+**As it stood**, under *The model*:
+
+> `api_keys.organization_id` becomes **nullable** in migration `037xx`.
+
+**As amended:** `04200`.
+
+**The tree fact.** `internal/store/migrations/` runs to `04100_mfa.sql`, which
+[M53](phase-details/m53.md) added an hour ago. `037xx` was written when the
+phase was planned and the highest number was `03600`; `03700`, `03800`, `03900`,
+`04000` and `04100` were taken by M50, M50.6, M51, M52 and M53 in the order they
+were built. The reserved number is not merely wrong, it is **occupied** —
+`03700_qr_codes_per_link.sql` exists — so a worker following the bullet
+literally would collide rather than fail.
+
+Nobody could have decided otherwise: the next free number is arithmetic. What
+this keeps proving is that a migration number written into a milestone file at
+planning time is a prediction about build order, and this project reorders
+build order routinely.
+
+
+## 2026-08-08 — M54: a key belongs to an account, and the four decisions that had to be re-derived to say so
+
+The owner directed on 2026-08-05 that F75's asymmetry is the wrong thing to fix:
+a key should be minted by an *account* and reach the organizations that account
+belongs to, the way a personal access token does. That dissolves the finding
+instead of patching it, and it reverses four things this project had already
+decided. Each is re-derived below rather than inherited, because the milestone
+file said not one of them may be.
+
+### D155 — reach is a second column, and account-wide is the default an unpinned key gets
+
+`api_keys.organization_id` is nullable from `04200`. NULL is account-wide;
+non-NULL is pinned. It sits **beside** `workspace_id` rather than replacing it,
+so a key now answers two questions: which workspaces (M44's axis) and which
+tenants (this one).
+
+Two axes rather than one enumerated column, because they are independent and a
+single `reach` enum would have had to spell out the combinations — including the
+one that cannot exist, a workspace-bound key with no organization. A check
+constraint refuses that row instead, which is the same information in the place
+that can enforce it.
+
+**Account-wide is what an unpinned key created from now on is**, and that is a
+widening by default. Stated plainly because it is the sort of thing a later
+reader will assume was an accident: a caller sending `org_wide: true` and nothing
+else got an organization-scoped key in 0.2.0 and gets an account-wide one in
+0.3.0. The alternative — account-wide only on request — was rejected because it
+makes the *new* model the exception and leaves the product's answer to "what is
+an API key" being "a tenant credential", which is precisely the answer the owner
+overruled.
+
+The safety this rests on is that widening is the reversible direction and pinning
+is not. A key that reaches too far can be pinned by rotation or revoked; a key
+pinned to one tenant can never widen, because a rotation may not reach more
+organizations than its predecessor (D87, below). So the default is the one a
+mistake can be walked back from, and the field somebody fills in is the one that
+cannot.
+
+**No issued key changed reach.** Dropping NOT NULL writes no rows, so every key
+that existed before the migration carries its organization and stays pinned to
+it. `TestAPinnedKeyDoesNotFollowItsOwnerIntoASecondOrganization` is that
+assertion as well as the model's, because "minted before the migration" and
+"pinned" are the same row.
+
+### D156 — an account-wide key needs an organization-wide membership wherever it lands
+
+Not merely *a* membership. An unpinned key has always required an
+organization-wide one — `GetAPIKeyByPrefix`'s predicate refuses a workspace-NULL
+key covered only by a workspace-scoped row, and `MayCreateOrgWide` refuses to
+mint one without it — and the question this milestone had to answer is whether
+that bar travels with the key into a second organization.
+
+It does. The alternative is a key minted under organization-wide authority in one
+tenant acquiring, by its owner joining a second at a narrower scope, reach its
+owner could not have granted it there. That is a widening nobody authorized, and
+it would arrive silently: the owner joining an organization is somebody else's
+act.
+
+The cost, accepted: an account-wide key is invisible in organizations where its
+owner is scoped to a single workspace, and there is no message saying so. The
+credential simply resolves elsewhere. A per-organization reach list on the key
+would say it, and is not built — see the deferred row.
+
+### D157 — the organization is resolved one tier above the workspace
+
+`ResolveWorkspaceForUser` keeps M44's `organization_id` parameter, and for an
+account-wide key it is fed the organization the request resolved into. That
+resolution is a new statement, `ResolveOrganizationForAPIKey`, and it is
+deliberately not a second copy of the workspace precedence.
+
+The two answer different questions. That one is "which workspace, given a person
+and optionally a bound"; this one is "which tenant". Its rungs are the person's,
+for the reason D90 gives — what an unpinned key follows is the person, and where
+the person is acting is part of that — expressed over organizations: the
+organization of their pinned default, then of the one they last used, then the
+oldest they belong to. No session rung, because there is no session.
+
+Deleting M44's parameter was the other option and was rejected on what it would
+cost: a pinned key would then have no bound at all, and the parameter is the only
+thing standing between such a key and a tenant it was never issued for. Keeping
+it with a computed value is the change that leaves the *pinned* case byte for
+byte what M44 built.
+
+### D158 — an administrator narrows somebody else's account-wide key rather than destroying it
+
+`revokeInOrganization` stays organization-scoped, and what it does now depends on
+the key rather than on the request. A pinned key is revoked outright, unchanged:
+the actor's organization is that key's entire reach, so cutting the reach and
+destroying the credential are the same act. An account-wide key gets a row in
+`api_key_org_revocations` — the actor's organization removed from its reach — and
+keeps working everywhere else.
+
+Revoking it outright was rejected because it is authority over an account nobody
+granted: the key's owner acts in tenants this administrator has none over.
+Refusing entirely was rejected because it would make an account-wide key the one
+credential an incident cannot stop.
+
+**The two are distinguishable**, which the milestone file made the requirement
+rather than the mechanism. `apikey.reach_revoked` is a separate audit action from
+`apikey.revoked`, because "was that key stopped" now has two answers and an
+operator reading the log must not have to open the metadata to tell which. The
+caller does not choose between them: offering the choice would be offering an
+administrator the outright revoke they may not have.
+
+The owner cannot see a reach revocation on their key list. That is a real gap and
+it is a deferred row rather than scope.
+
+### The four re-derivations
+
+**[F103](deferred-findings.md)'s bound — amended, not deleted.** A key's reads
+were bounded to the organization it was issued for *because* a key is issued for
+one and the switcher exists to cross organizations. The premise is what M54
+changes, and only for one kind of key: the bound stands unaltered for a pinned
+key, whose reads are still about tenants it cannot touch, and lapses for an
+account-wide one, whose reads are about the tenants it works in. `Identity`
+carries `APIKeyOrgID` so the site can tell them apart, and F103's row records the
+amendment rather than closing.
+
+**M44's `organization_id` parameter — kept.** D157 above.
+
+**[D43](../../Plan.md#phase-2-decisions-taken-after-the-plan-was-finalised)'s
+role cap — per organization, and it always was.** The cap is read from
+`LoadMembershipAuthority(actor.UserID, actor.OrgID, …)`, and `actor.OrgID` is
+where *this request* landed. Nothing in the invitation path changed. What changed
+is that one credential can now produce two different values there, so a check
+that was already per-organization has a second organization to be wrong in — and
+that is exactly the class of thing no test could have caught while there was only
+one. `TestAKeyIssuedInvitationIsCappedWhereTheRequestLanded` is the test that
+could not have existed before.
+
+**[D87](../../Plan.md#phase-2-decisions-taken-after-the-plan-was-finalised)'s
+rotation rule — a second axis.** Rotation is authorized by the key's own token
+and nothing else, which is safe only while a successor is identical or narrower.
+Tenancy is now part of narrower: an account-wide key may rotate into a pinned
+one, and a pinned key may not rotate into an account-wide one. The organization a
+rotation may pin to is the one the request resolved into and is not a parameter,
+because pinning to some other tenant would be choosing a reach on the strength of
+a token that happens to be valid elsewhere.
+
+`reach: account` exists on the request so that the refusal can be *said*. Leaving
+it out would make widening unaskable rather than refused, and an automated
+rotation that asked for something it may not have should be told so rather than
+quietly given something else.
+
+### What the intersection is, and what it is not
+
+m54.md says a key's effective permissions are its stored scopes intersected with
+the owner's authority in the resolved organization, "evaluated at request time
+through `LoadMembershipAuthority`". The tree does it through `identityFor` —
+`GetUserPermissions` for the resolved workspace, which is the union of the
+memberships covering it (D31) and therefore the role that applies in the resolved
+organization — followed by `restrictTo`. Both halves are read on every request.
+
+`LoadMembershipAuthority` answers per *permission*, so intersecting a key's whole
+scope set through it would be one query per scope on the authentication path. It
+is used where the question genuinely is about authority in an organization the
+caller is not acting in: `LoadMemberships`/`Reaches`, new in `authority.go`,
+which is how D158's reach revoke establishes that the key reaches the
+administrator's tenant at all. The behaviour the bullet asserts holds; the
+mechanism named in it is the one that answers the authority half.
+
+### No new permission, and that is the answer the inherited rule wants
+
+M54 adds nothing to `permissions`, nothing to `NonDelegableScopes` and no seed
+migration. The inherited *Permissions* rule asks which limb of D18 a new
+permission matches; there is none to match one, and saying so is what stops the
+next reader assuming the question was skipped.
+
+Two of the three narrower mechanisms beside the map moved, and neither moved by
+gaining a branch on credential type. D43's cap is evaluated against
+`actor.OrgID`, which is where the request landed and was already the right
+question — the only change is that one credential can now produce two answers.
+F103's bound is read from `Identity.APIKeyOrgID`, which is nil for a session and
+for an account-wide key, so `Service.Workspaces` is still one branch and F104's
+count of sites that legitimately branch on credential type is what it was.
+
+## 2026-08-08 — M54: the function the authority bullet named answers one permission
+
+**An amendment, not a decision**, at [step 3.4](phase-loop.md#3-land). The
+worker met the bullet as written, could not satisfy the clause without a cost
+the milestone would not have accepted, built the assertion, and reported —
+which is exactly what a worker does with a bullet it may not amend.
+
+**As it stood**, under *Authority, resolved per request*:
+
+> A key's effective permissions in an organization are its stored scopes
+> **intersected with the owner's authority in that organization**, evaluated at
+> request time through `LoadMembershipAuthority`.
+
+**As amended:** the trailing clause is struck, and a parenthesis in
+[m54.md](phase-details/m54.md) says what the tree does instead.
+
+**The tree fact.** `LoadMembershipAuthority`
+(`internal/auth/authority.go:66-68`) takes a single `permission string` and
+returns the memberships carrying it. It is shaped for *may this actor do this
+one thing here* — the question a write asks under its own lock, which is why the
+queries handle is a parameter. A scope set is not one permission, so taking the
+intersection through it is one round trip per scope, on the authentication path,
+for every key-authenticated request.
+
+**Why a fact and not an assertion.** What the bullet asserts is the
+intersection: stored scopes against the owner's authority in the organization
+the request resolved to, evaluated per request rather than frozen at mint time.
+That is what the tree does and what
+`TestAnAccountWideKeyIsWeakerWhereItsOwnerIsWeaker` holds it to. The struck
+clause named a function that structurally cannot answer the question the
+sentence asks, and nobody could have decided that it takes a set — the signature
+is the whole of the argument.
+
+The distinction matters here more than usual, because this is the milestone
+whose risk section says the failure mode is a key resolving into an organization
+it should not reach. An amendment that quietly widened *what is intersected*
+would be that failure wearing a correction's clothes. This one narrows nothing
+and changes no behaviour; it removes a citation that was wrong about a signature.
+

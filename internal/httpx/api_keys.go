@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 )
@@ -22,6 +24,11 @@ type createKeyRequest struct {
 	Scopes    []string `json:"scopes"`
 	ExpiresAt *string  `json:"expires_at"`
 	OrgWide   bool     `json:"org_wide"`
+	// OrganizationID pins an unpinned key to one organization instead of leaving
+	// it account-wide (M54). A string rather than a uuid.UUID so a malformed one
+	// is a field error naming the field, which is what every other id-shaped
+	// input in this API does.
+	OrganizationID *string `json:"organization_id"`
 }
 
 // rotateKeyRequest carries only what a rotation may narrow. There is no id: the
@@ -32,6 +39,14 @@ type rotateKeyRequest struct {
 	// GraceSeconds is the window during which both secrets verify. Seconds
 	// rather than a duration string, because the callers are scripts.
 	GraceSeconds *int `json:"grace_seconds"`
+	// Reach narrows the successor's tenancy (M54): "organization" pins it to the
+	// organization this request resolved into, "account" asks for account-wide.
+	// Absent copies the predecessor, which is what an unattended rotation sends.
+	//
+	// A string rather than a bool because there are three states and a bool has
+	// two — and the third, "account", exists so that a pinned key asking to widen
+	// is *refused* rather than unable to ask.
+	Reach *string `json:"reach"`
 }
 
 // Create issues a key. The response carries the token, and it is the only
@@ -44,6 +59,18 @@ func (a *KeyAPI) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	in := auth.CreateAPIKeyInput{Name: req.Name, Scopes: req.Scopes, OrgWide: req.OrgWide}
+	if req.OrganizationID != nil && *req.OrganizationID != "" {
+		org, err := uuid.Parse(*req.OrganizationID)
+		if err != nil {
+			WriteError(w, r, domain.ValidationErrors{{
+				Field: "organization_id", Code: "invalid",
+				Message: "organization_id must be a uuid, or omitted for a key that reaches " +
+					"every organization you belong to",
+			}})
+			return
+		}
+		in.OrganizationID = &org
+	}
 	if req.ExpiresAt != nil && *req.ExpiresAt != "" {
 		at, err := time.Parse(time.RFC3339, *req.ExpiresAt)
 		if err != nil {
@@ -95,6 +122,20 @@ func (a *KeyAPI) Rotate(w http.ResponseWriter, r *http.Request) {
 	in := auth.RotateAPIKeyInput{Scopes: req.Scopes}
 	if req.GraceSeconds != nil {
 		in.Grace = rotateGrace(*req.GraceSeconds)
+	}
+	if req.Reach != nil {
+		switch *req.Reach {
+		case "organization":
+			in.Reach = auth.ReachOrganization
+		case "account":
+			in.Reach = auth.ReachAccount
+		default:
+			WriteError(w, r, domain.ValidationErrors{{
+				Field: "reach", Code: "invalid",
+				Message: `reach must be "organization" or "account", or omitted to keep this key's own`,
+			}})
+			return
+		}
 	}
 
 	rotated, err := a.Keys.Rotate(r.Context(), IdentityFrom(r.Context()), in)

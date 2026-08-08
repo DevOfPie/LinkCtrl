@@ -53,7 +53,22 @@ type Identity struct {
 	// of a session cookie. Services consult it for the few operations that
 	// must require an interactive sign-in; everything else is deliberately
 	// blind to which credential was used.
-	APIKeyID    *uuid.UUID
+	APIKeyID *uuid.UUID
+	// APIKeyOrgID is the organization an API key is **pinned** to, and nil for
+	// every other case: a session, and an account-wide key (M54).
+	//
+	// Two nils meaning different things is worth the warning, and IsAPIKey is
+	// what tells them apart. A session has no key and no pin; an account-wide
+	// key has a key and no pin, because it reaches every organization its owner
+	// holds an organization-wide membership in rather than one named at mint
+	// time. OrgID above is where *this request* landed and is set for all three.
+	//
+	// It is carried because one rule still turns on the distinction. F103 bounded
+	// a key's reads to the organization it was issued for, and that reasoning
+	// survives for a pinned key and dies for an account-wide one — the premise
+	// was that a key is issued for one organization, which is no longer true of
+	// every key. Service.Workspaces is the site.
+	APIKeyOrgID *uuid.UUID
 	permissions map[string]struct{}
 }
 

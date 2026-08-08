@@ -20,7 +20,7 @@ type AnalyticsSalt struct {
 type ApiKey struct {
 	ID             uuid.UUID
 	UserID         uuid.UUID
-	OrganizationID uuid.UUID
+	OrganizationID *uuid.UUID
 	WorkspaceID    *uuid.UUID
 	Name           string
 	Prefix         string
@@ -33,6 +33,13 @@ type ApiKey struct {
 	RotatedAt      *time.Time
 	GraceExpiresAt *time.Time
 	SuccessorID    *uuid.UUID
+}
+
+type ApiKeyOrgRevocation struct {
+	ApiKeyID       uuid.UUID
+	OrganizationID uuid.UUID
+	RevokedAt      time.Time
+	RevokedBy      *uuid.UUID
 }
 
 type AuditLog struct {

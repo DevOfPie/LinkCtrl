@@ -141,11 +141,20 @@ revoking a leaked one meaningless.
 fixed to the workspace that user is acting in. It does not act in all of them at
 once: there is no per-request workspace selector, so each request resolves a
 single workspace the way a sign-in does — the workspace that user pinned as their
-default, otherwise the one they used last — bounded to the organization the key
-was issued in. Such a key therefore follows its owner's current choice, including
-a switch they make in a browser. It is refused unless that user holds
-`apikeys.write` through an **organization-wide** membership — the flag asks, it
-does not grant, which is the point of the CLI acting as a named user.
+default, otherwise the one they used last. Such a key therefore follows its
+owner's current choice, including a switch they make in a browser. It is refused
+unless that user holds `apikeys.write` through an **organization-wide**
+membership — the flag asks, it does not grant, which is the point of the CLI
+acting as a named user.
+
+`--pin` narrows it back to one tenant. Without it an `--org-wide` key is
+**account-wide**: it belongs to that account and reaches every organization the
+account holds an organization-wide membership in, including ones joined after the
+key was minted. With it the key is fixed to the organization that user is acting
+in for the rest of its life — and that is irreversible, because a rotation may
+narrow a key's reach and never widen it. `--pin` alone, without `--org-wide`, does
+nothing: a workspace-bound key is pinned to its workspace's organization by
+construction.
 
 ```sh
 $ lctl apikey list --user you@example.com
@@ -153,7 +162,7 @@ ID                                    PREFIX            NAME      REACH      STA
 019fb19b-6fa9-7932-9de0-81810c2db7b2  lk_live_iszzewpi  ci-smoke  workspace  active  never      links.read,links.create
 ```
 
-`REACH` is `workspace` or `organization`. `STATE` is `active`, `expired`,
+`REACH` is `workspace`, `organization` or `account`. `STATE` is `active`, `expired`,
 `revoked`, or `rotated, until <timestamp>` for a key that has replaced itself and
 is serving out its grace window. `LAST USED` is written asynchronously on a coarse
 cadence — it answers "is this key still in use", not "when exactly".
@@ -172,11 +181,14 @@ Revocation takes effect on the key's next request; nothing about keys is cached.
 
 `--user` is the account to act as, not necessarily the key's owner. Its own keys
 always, and — when that account holds `apikeys.write` through an
-organization-wide membership — any key issued into its organization, which is how
-a credential gets stopped when the person holding it cannot be reached. Revoking
-somebody else's writes an `apikey.revoked` audit record; revoking your own does
-not. A key that account may not act on reports not-found rather than refusing, so
-an id cannot be probed.
+organization-wide membership — somebody else's, which is how a credential gets
+stopped when the person holding it cannot be reached. What that does depends on
+the key: one **pinned** to that organization is revoked outright, and an
+**account-wide** one has that organization cut out of its reach and keeps working
+for its owner elsewhere. The two write different audit records —
+`apikey.revoked` and `apikey.reach_revoked` — and neither is written for revoking
+your own. A key that account may not act on reports not-found rather than
+refusing, so an id cannot be probed.
 
 ### `instance principal`
 

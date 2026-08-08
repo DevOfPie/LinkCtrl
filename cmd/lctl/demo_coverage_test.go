@@ -789,20 +789,27 @@ func demoCoverage() []demoFeature {
 			// boundary-row move M34, M36, M39, M40, M41, M42 and M43 each made
 			// before it.
 			//
-			// Four rows for three credentials, and the arithmetic is the feature:
-			// the seeder mints three and rotates one, and a rotation is a fourth
-			// row rather than an edit to the third.
+			// Five rows for four credentials, and the arithmetic is the feature:
+			// the seeder mints four and rotates one, and a rotation is a fifth
+			// row rather than an edit to the fourth.
 			//
 			// Bounded above as well as below, and the ceiling is the load-bearing
 			// half. Every row here is a live credential on a public instance —
 			// unusable, because the token is discarded and only an HMAC is stored,
 			// but a seeder that quietly grew this number would be minting keys
 			// nobody asked for on every demo-update.
-			Milestone: "M44", Feature: "Four key rows: three minted, one of them a successor",
-			Query: `SELECT count(*) FROM api_keys WHERE organization_id = $1`,
-			Min:   4, Max: 4,
+			//
+			// Keyed on the **owner** since M54, not on the organization alone. An
+			// account-wide key has no organization_id, so the old predicate would
+			// have counted four of the five and failed for the one reason this row
+			// is not about.
+			Milestone: "M44", Feature: "Five key rows: four minted, one of them a successor",
+			Query: `SELECT count(*) FROM api_keys
+			         WHERE user_id = $2 AND (organization_id = $1 OR organization_id IS NULL)`,
+			Min: 5, Max: 5,
 			Shows: "the key page as a list rather than as an empty panel, with a " +
-				"rotated pair, an organization-wide key and an ordinary one on it",
+				"rotated pair, an organization-wide key, an account-wide key and " +
+				"an ordinary one on it",
 		},
 		{
 			// The rotation itself, which is the whole of what M44 added and the one
@@ -830,6 +837,37 @@ func demoCoverage() []demoFeature {
 			Min: 2, Max: 2,
 			Shows: "that a key's reach is a choice: one bound to the workspace it " +
 				"was made in, one valid across the organization",
+		},
+		{
+			// The third value the *Reach* column gained (M54). Counted as its own
+			// row rather than folded into the one above, because the two questions
+			// are on different axes: that one is about workspaces and this is about
+			// tenants, and a demo that showed two of three states would read as
+			// though the third did not exist.
+			//
+			// Bounded above for the reason every key row here is: these are live
+			// credentials on a public instance, and an account-wide one is the
+			// widest of them.
+			//
+			// The teardown reaches it by `user_id`, which the organization
+			// predicate cannot — so a ceiling of one is also what catches a
+			// demo-update that stopped cleaning up after itself and started
+			// accumulating a fresh account-wide key on every run.
+			// The membership clause is not decoration. An account-wide key with no
+			// organization-wide membership anywhere reaches nothing and shows
+			// nothing, so the claim is a key the demo's own organization is
+			// reachable from rather than a row with a NULL in it.
+			Milestone: "M54", Feature: "An account-wide key",
+			Query: `SELECT count(*) FROM api_keys k
+			         WHERE k.user_id = $2 AND k.organization_id IS NULL
+			           AND EXISTS (SELECT 1 FROM memberships m
+			                        WHERE m.user_id = k.user_id
+			                          AND m.organization_id = $1
+			                          AND m.workspace_id IS NULL)`,
+			Min: 1, Max: 1,
+			Shows: "that a key can belong to an account rather than to one " +
+				"organization — the third value in the Reach column, beside the " +
+				"workspace-bound and organization-pinned ones",
 		},
 		{
 			// Not a display claim — a safety claim, and the same shape D81 and D86

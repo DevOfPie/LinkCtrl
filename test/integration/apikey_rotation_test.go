@@ -453,8 +453,8 @@ func TestOrgWideKeyNeedsAnOrganizationWideMembership(t *testing.T) {
 		t.Errorf("the organization-wide key returned %d, want 200", authed.StatusCode)
 	}
 
-	// An organization-wide key resolves inside **its own** organization, and not
-	// wherever its owner happens to have been last.
+	// A **pinned** key resolves inside its own organization, and not wherever its
+	// owner happens to have been last.
 	//
 	// The precedence that answers "which workspace is this request in" filters on
 	// membership alone, and a pinned default is a property of the person rather
@@ -462,11 +462,37 @@ func TestOrgWideKeyNeedsAnOrganizationWideMembership(t *testing.T) {
 	// pinned a workspace there would, without a bound, have this key resolve into
 	// that tenant carrying its scopes with it. Nothing could reach that before
 	// M44, because nothing had ever written a NULL workspace_id.
-	var ownerID uuid.UUID
+	//
+	// **The key asserted on is pinned explicitly since M54**, and that one word is
+	// the whole of what changed. This test used `wide` above, which was an
+	// organization-wide key and is now an account-wide one: M54 made the unpinned
+	// default reach the organizations its owner belongs to, so `wide` following
+	// its owner into Elsewhere is now correct rather than the leak this paragraph
+	// describes. The bound itself is untouched and still exactly what M44 built —
+	// what changed is which keys carry it, and a key that carries it is one whose
+	// creator asked for it by naming an organization.
+	var ownerID, sessionOrg uuid.UUID
 	if err := f.pool.QueryRow(t.Context(),
 		`SELECT id FROM users WHERE email_lower = 'owner@example.com'`).Scan(&ownerID); err != nil {
 		t.Fatal(err)
 	}
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT organization_id FROM api_keys WHERE id = $1`, def.ID).Scan(&sessionOrg); err != nil {
+		t.Fatal(err)
+	}
+	pinnedResp := f.do(http.MethodPost, "/api/v1/api-keys", map[string]any{
+		"name": "pinned-here", "scopes": []string{"links.read"},
+		"org_wide": true, "organization_id": sessionOrg.String(),
+	})
+	if pinnedResp.StatusCode != http.StatusCreated {
+		var problem map[string]any
+		f.decode(pinnedResp, &problem)
+		t.Fatalf("pinning a key to the organization being acted in was refused: %d %v",
+			pinnedResp.StatusCode, problem)
+	}
+	var pinned rotatedKey
+	f.decode(pinnedResp, &pinned)
+
 	other := addOrgWithWorkspace(t, f.pool, ownerID, "Elsewhere", "Their Space")
 	if _, err := f.pool.Exec(t.Context(),
 		`UPDATE users SET default_workspace_id = $1, last_workspace_id = $1 WHERE id = $2`,
@@ -474,15 +500,15 @@ func TestOrgWideKeyNeedsAnOrganizationWideMembership(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	meResp := f.doWithKey(wide.Key, http.MethodGet, "/api/v1/me", nil)
+	meResp := f.doWithKey(pinned.Key, http.MethodGet, "/api/v1/me", nil)
 	var me struct {
 		WorkspaceID string `json:"workspace_id"`
 	}
 	f.decode(meResp, &me)
 	if me.WorkspaceID == other.String() {
-		t.Fatalf("an organization-wide key issued in one organization resolved into "+
+		t.Fatalf("a pinned key issued in one organization resolved into "+
 			"workspace %s, which belongs to another one its owner also joined. "+
-			"Organization-wide means every workspace in *this* organization",
+			"Pinned means every workspace in *this* organization",
 			me.WorkspaceID)
 	}
 	var resolvedOrg uuid.UUID
@@ -492,11 +518,25 @@ func TestOrgWideKeyNeedsAnOrganizationWideMembership(t *testing.T) {
 	}
 	var keyOrg uuid.UUID
 	if err := f.pool.QueryRow(t.Context(),
-		`SELECT organization_id FROM api_keys WHERE id = $1`, wide.ID).Scan(&keyOrg); err != nil {
+		`SELECT organization_id FROM api_keys WHERE id = $1`, pinned.ID).Scan(&keyOrg); err != nil {
 		t.Fatal(err)
 	}
 	if resolvedOrg != keyOrg {
 		t.Errorf("the key resolved into organization %s, want its own %s", resolvedOrg, keyOrg)
+	}
+
+	// And the key that named no organization does the opposite, deliberately.
+	// Stated here rather than left implied, because the two rows differ by one
+	// field and reading either one alone would suggest the bound is universal.
+	wideMe := f.doWithKey(wide.Key, http.MethodGet, "/api/v1/me", nil)
+	var wideWhere struct {
+		WorkspaceID string `json:"workspace_id"`
+	}
+	f.decode(wideMe, &wideWhere)
+	if wideWhere.WorkspaceID != other.String() {
+		t.Errorf("an account-wide key resolved into %s, want the organization its "+
+			"owner moved to (%s). Account-wide is the reach a key created without "+
+			"an organization now has", wideWhere.WorkspaceID, other)
 	}
 
 	// Now the same owner, holding the same role, through a membership scoped to

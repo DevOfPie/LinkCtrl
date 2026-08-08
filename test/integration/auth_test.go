@@ -103,14 +103,22 @@ func TestMigrationsProduceExpectedSchema(t *testing.T) {
 	// use needs a server-side record of whether it has been spent, at which point
 	// the table is back and the cookie is an optimisation.
 	//
+	// The last is M54's api_key_org_revocations, and it is the first table whose
+	// rows are *subtractions*: one says an administrator cut their organization
+	// out of an account-wide key's reach. It exists because an account-wide key
+	// belongs to an account that acts in tenants no single administrator has
+	// authority over, so the outright revoke they hold over a pinned key is the
+	// wrong instrument and a narrowing is the right one.
+	//
 	// Each is live and typed rather than dormant jsonb, because the feature that
 	// reads it arrived in the same commit. The number moves and the sentence says
 	// why, rather than the count silently growing whenever somebody adds a table.
-	if tables != 41 {
-		t.Errorf("got %d tables, want 41 (all 20 Plan.md entities, plus mail_outbox, "+
+	if tables != 42 {
+		t.Errorf("got %d tables, want 42 (all 20 Plan.md entities, plus mail_outbox, "+
 			"invitations, pending_registrations, blocked_destinations, "+
 			"destination_disputes, link_click_budget, instance_grants, "+
-			"password_resets, mfa_recovery_codes and mfa_pending_logins)", tables)
+			"password_resets, mfa_recovery_codes, mfa_pending_logins and "+
+			"api_key_org_revocations)", tables)
 	}
 
 	// The UTC guarantee the partition scheme depends on.
