@@ -265,6 +265,7 @@ file. Append a row when you append an entry.
 | [M49: the size, the second encoder, and D11 spent on purpose](#2026-08-07--m49-the-size-the-second-encoder-and-d11-spent-on-purpose) | D127–D129: what bounds a rasteriser that D11 refused to allow at all, stated as an allocation rather than as a word; why the quiet zone became the second knob and what the search costs in tie-breaks; why `qr.Style` gained no field and what that bought for every row already in the table; why a form that stopped asking about error correction needed a new service operation rather than a default; and the two encoders sharing one arithmetic, with the claim they are held to and the one they are not |
 | [M51.9: what the mid-phase review checked, found, and could not run](#2026-08-08--m519-the-mid-phase-review-what-it-checked-what-it-found-and-the-one-bullet-it-could-not-run) | D146: the eighteen blind tasks are recorded nowhere, so the bullet asking for them is struck and the cost — D121's ordering and D124/D126's placement go un-rechecked — is stated. D147: the doc-cost judgement, trimming 2930 bytes of a 6409-byte resume-charge growth and defending the rest. F172–F175, and the two candidates that were refuted |
 | [M46 reopened: the overflow bullet narrowed on the milestone's own instruction](#2026-08-08--m46-the-overflow-bullet-narrowed-on-the-milestones-own-instruction) | F172 closed. Why a claim about a guard that does not exist reopens the milestone rather than arriving as a successor, and why writing the narrowing into the test file discharged nothing |
+| [F174: the demo's QR codes were pictures of a link that answers Gone](#2026-08-08--f174-the-demos-qr-codes-were-pictures-of-a-link-that-answers-gone) | Why four demoCoverage() rows counting qr_codes all passed while every code on the demo resolved to 410, and the row that now counts the reachability they imply |
 
 ---
 
@@ -22314,3 +22315,54 @@ where it is true, complete, and read by nobody validating a later milestone
 against M46's definition of done. Writing an amendment next to the code is
 writing it in the one place the contract does not look. **A licence to narrow a
 bullet is discharged by narrowing the bullet.**
+
+## 2026-08-08 — F174, the demo's QR codes were pictures of a link that answers Gone
+
+Closed out of [M51.9](phase-details/m51.9.md)'s triage, owner-approved to be
+worked immediately rather than carried to [M58](phase-details/m58.md), because
+the demo is the instance the owner evaluates from and it was showing three
+milestones of QR work through codes nobody could scan.
+
+**What it was.** `demoQRStyled` named `summer-sale`, and `summer-sale` is in the
+catalogue precisely to demonstrate expiry — its own description says *"Expired
+campaign: answers 410 Gone, not 404."* Every QR code the demo has ever carried
+hung off it: the styled code [M49](phase-details/m49.md) sizes, the second code
+[M50](phase-details/m50.md) adds, and the logo'd one
+[M50.6](phase-details/m50.6.md) exists for. The pictures rendered correctly on
+the dashboard and the per-code scan counts were real. Pointing a phone at any of
+them got `410`.
+
+**Why nothing caught it, which is the part worth keeping.** Four
+`demoCoverage()` rows count `qr_codes`, and all four passed. They pass because
+they count *what was seeded*, and what was seeded was correct — two codes, two
+labels, one logo, click history against both. The link those codes point at is
+not in any of their queries. That is
+[F160](deferred-findings.md)'s lesson arriving a second time: **the coverage test
+measures the seed, not the instance**, and a whole class of demo defect is
+structurally invisible to it.
+
+**The fix is the guard, not the constant.** Moving the codes to `launch` takes
+about a line. What stops it recurring is a new row — *No QR code points at a link
+that refuses* — which counts codes whose link is expired, exhausted by its click
+budget, gated by a password or deleted, and requires none. It does not drive a
+redirect, because `newDemoDB` seeds into a throwaway database with no server in
+front of it; it counts **the reachability the existing rows already imply**. A
+code is a picture of its link's short URL, so a code on a link that refuses is a
+picture of a refusal, and that is expressible in SQL where *does it actually
+resolve* is not.
+
+**A custom hostname is deliberately outside the query**, and the omission is
+stated rather than left: the demo's one custom domain is an RFC 2606 name that
+can never resolve, so a code seeded on it would be unscannable for a reason this
+query cannot see. `demoQRStyled`'s own comment carries that requirement instead,
+which is the weaker mechanism and is labelled as one.
+
+**The stated cost of `launch`.** `attributeQRScans` rewrites `referrer_host` on
+21% of a link's non-bot clicks, so that reattribution now lands on the demo's
+busiest link. The proportion is unchanged; what changes is that the referrer
+breakdown an evaluator opens first reads a fifth QR. For a link with a printed
+code, that is what the truth would look like.
+
+Two comments naming a link `/qr-styled` were corrected in the same commit. That
+link has never existed in this demo — the constant is named instead now, so the
+citation cannot go stale the next time the codes move.

@@ -580,8 +580,11 @@ func demoCoverage() []demoFeature {
 			// that composites a logo would otherwise have had to seed the
 			// upload too, and the seam between the two would stop being where
 			// the split put it. One row covers both halves because there is one
-			// thing to look at: a code on /qr-styled with a mark in the middle
-			// of it.
+			// thing to look at: a code on the demoQRStyled link with a mark in
+			// the middle of it. *(That comment said `/qr-styled` until
+			// 2026-08-08, which is a link this demo has never had; it is named
+			// by the constant now, which cannot go stale when F174 moved the
+			// codes from `/summer-sale` to `/launch`.)*
 			//
 			// Bounded above at one for the reason the style row is: a demo
 			// where every code carries a logo cannot show that carrying one is
@@ -594,6 +597,45 @@ func demoCoverage() []demoFeature {
 			Shows: "a QR code with a logo drawn in the middle of it — the file " +
 				"this instance accepted, re-encoded and stored, composited into " +
 				"the picture at error-correction level H",
+		},
+		{
+			// **The guard that was missing, and F174 is what it costs to not
+			// have it.** Every row above counts `qr_codes` and every one of
+			// them passed while the link those codes point at answered `410
+			// Gone` — the seeded codes hung off `/summer-sale`, which exists in
+			// the catalogue to demonstrate expiry. The pictures rendered, the
+			// scan counts were there, and scanning any of them got nothing.
+			//
+			// This is the shape F160 named: **a coverage row counts what was
+			// seeded and cannot see what the instance does with it.** The
+			// answer is not to make the test drive a redirect — `newDemoDB`
+			// seeds into a throwaway database and there is no server — but to
+			// count the *reachability the row already implies*. A code is a
+			// picture of a link's short URL, so a code on a link that refuses
+			// is a picture of a refusal.
+			//
+			// Expiry, the click budget, the gate and deletion, because those
+			// are the four ways a link stops resolving for the person holding
+			// the printed picture. A custom hostname is deliberately not one:
+			// the demo's is an RFC 2606 name that never resolves, so a code on
+			// it would be unscannable for a reason this query cannot see, and
+			// the constant's own comment carries that requirement instead.
+			Milestone: "M50", Feature: "No QR code points at a link that refuses",
+			Query: `SELECT count(*) FROM qr_codes q
+			          JOIN links l ON l.id = q.link_id
+			         WHERE q.workspace_id IN (` + demoWorkspaces + `)
+			           AND (l.deleted_at IS NOT NULL
+			                OR (l.expires_at IS NOT NULL AND l.expires_at <= now())
+			                OR (l.max_clicks IS NOT NULL
+			                    AND l.click_count >= l.max_clicks)
+			                OR l.password_hash IS NOT NULL)`,
+			MaxIsZero: true,
+			Shows: "that the demo's QR codes can be scanned. Every code is a " +
+				"picture of its link's short URL, so a code on an expired, " +
+				"exhausted, gated or deleted link is a picture somebody points " +
+				"a phone at and is refused by — which is how three milestones " +
+				"of QR work came to be demonstrated by codes that resolved to " +
+				"410 Gone",
 		},
 		{
 			Milestone: "M41", Feature: "Campaigns, more than one, and one of them over",

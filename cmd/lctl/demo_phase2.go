@@ -1060,13 +1060,32 @@ type demoCampaign struct {
 	links       []string
 }
 
-// demoQRStyled is the link whose QR code carries a stored style.
+// demoQRStyled is the link whose QR codes carry a stored style, a second code
+// and a logo.
 //
 // One, not all of them. Every link has a code — the endpoint answers for any of
 // them — so seeding a style everywhere would show one state; seeding exactly one
 // shows both, and the link detail page's "back to black on white" button only
 // appears on a link that has a stored style at all.
-const demoQRStyled = "summer-sale"
+//
+// **It must be a link that still resolves, which is F174.** This was
+// `summer-sale` until 2026-08-08, and `summer-sale` exists in the catalogue to
+// demonstrate expiry — it answers `410 Gone`. So every QR code the demo carried
+// was a picture of a dead link: three milestones of work, sized codes, several
+// per link and a logo in the middle of one, shown through codes that refused
+// every scan. The dashboard rendered them correctly and `demoCoverage()` passed,
+// because the coverage test measures the seed and not the instance (F160's
+// lesson, and this is the same shape).
+//
+// `launch` instead: the most-visited link on the demo, on the default host, with
+// no expiry, no click budget and no gate — so a code drawn from it can actually
+// be scanned, which is the only property that was missing. **The stated cost:**
+// attributeQRScans below rewrites `referrer_host` on 21% of a link's non-bot
+// clicks, so the reattribution now lands on the demo's busiest link rather than
+// on a quiet one. The proportion is unchanged; what changes is that the referrer
+// breakdown an evaluator opens first has a fifth of it reading as QR scans,
+// which is what a link with a printed code would honestly look like.
+const demoQRStyled = "launch"
 
 // seedCampaigns creates the campaigns, labels the links, and styles one QR code.
 //
