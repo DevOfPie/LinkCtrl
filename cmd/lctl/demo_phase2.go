@@ -1294,8 +1294,15 @@ const (
 	// The two labels the demo's codes carry. Different words, because the point
 	// of the pair is that a reader can tell which number belongs to which
 	// printed thing.
-	demoQRDefaultLabel = "Storefront window card"
-	demoQRSecondLabel  = "Summer print run"
+	//
+	// **Named for the link they sit on, which is why they changed on
+	// 2026-08-08.** They read "Storefront window card" and "Summer print run"
+	// while the codes hung off `/summer-sale`; F174 moved them to
+	// demoQRStyled's `/launch` and left two labels describing a sale that link
+	// is not about. A demo whose labels do not match its link teaches the
+	// reader that the labels are decoration.
+	demoQRDefaultLabel = "Conference booth banner"
+	demoQRSecondLabel  = "Launch press kit"
 )
 
 // demoWebhooks are the registrations the demo shows.
