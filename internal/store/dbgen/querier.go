@@ -37,6 +37,19 @@ type Querier interface {
 	// get their queue delivered. Only the caller decides when this applies: it runs
 	// on the no-mailer path and nowhere else.
 	AbandonUnsendableMail(ctx context.Context, maxAgeDays int32) (int64, error)
+	// The replay guard, applied as a write rather than as a check.
+	//
+	// `mfa_last_step < @step` is the whole mechanism. A code from a step already
+	// accepted updates no rows, and the caller reads zero as *refused*, so two
+	// requests presenting the same code race each other into the same statement and
+	// exactly one wins. Doing it as a read-then-write would leave a window in which
+	// both saw the old value, which for a replay guard is the only window that
+	// matters.
+	//
+	// `mfa_last_step IS NULL` is the first acceptance after an enrolment that
+	// pre-seeded nothing, and is kept for completeness — `EnableUserMFA` stamps the
+	// enrolling step, so in practice the column is never NULL while a secret exists.
+	AcceptMFAStep(ctx context.Context, arg AcceptMFAStepParams) (int64, error)
 	ArchiveLink(ctx context.Context, arg ArchiveLinkParams) (Link, error)
 	//
 	// The archive an automation performs. Idempotent: a link already archived comes
@@ -179,6 +192,9 @@ type Querier interface {
 	// two when both are set. A limit below one can never match, which is correct: a
 	// link nobody may follow.
 	ConsumeClickBudget(ctx context.Context, arg ConsumeClickBudgetParams) (ConsumeClickBudgetRow, error)
+	// Spend it. Single use, decided by the statement rather than by the caller, for
+	// the third time in this file and for the same reason.
+	ConsumeMFAPendingLogin(ctx context.Context, id uuid.UUID) (int64, error)
 	// Spends every unconsumed token for one account.
 	//
 	// **One statement, called from both ends of the flow**, because the two needs
@@ -291,6 +307,9 @@ type Querier interface {
 	// the badge and the list it previews disagree while one of them stops using the
 	// index.
 	CountUnreadNotifications(ctx context.Context, arg CountUnreadNotificationsParams) (int64, error)
+	// What the account page shows. A number somebody acts on: three left is a prompt
+	// to regenerate, and zero with a lost phone is a conversation with the operator.
+	CountUnusedMFARecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Whether an account belongs to anything at all.
 	//
 	// Read by exactly one caller: the first-organization path (D36). An account with
@@ -451,6 +470,12 @@ type Querier interface {
 	CreateInvitation(ctx context.Context, arg CreateInvitationParams) (Invitation, error)
 	// Links, destinations and tags.
 	CreateLink(ctx context.Context, arg CreateLinkParams) (Link, error)
+	// The credential the browser holds between a right password and a session.
+	//
+	// Returned in full so the caller can assert the expiry it asked for rather than
+	// recompute it from its own clock — the TTL m53.md wants a test to hold is the
+	// one the database wrote.
+	CreateMFAPendingLogin(ctx context.Context, arg CreateMFAPendingLoginParams) (MfaPendingLogin, error)
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
 	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (Organization, error)
 	// Account recovery: the reset tokens a forgotten password is repaired with
@@ -533,14 +558,14 @@ type Querier interface {
 	// Everything hanging off the account that must not outlive it, removed in one
 	// statement and counted.
 	//
-	// **Written out because a soft delete fires no foreign key.** All six tables
+	// **Written out because a soft delete fires no foreign key.** All eight tables
 	// below declare `ON DELETE CASCADE` against `users`, and every one of those
 	// clauses triggers on `DELETE`; the account row is kept — that is what
 	// `anonymized_at` marks and what the partial `users_email_key` is shaped for —
 	// so the cascade never runs and these statements are what stands in for it.
 	//
 	// Four of them are the tables M52 enumerates: `memberships`, `sessions`,
-	// `api_keys`, `notifications`. Two more are here because leaving them would
+	// `api_keys`, `notifications`. Four more are here because leaving them would
 	// falsify a claim the schema already makes:
 	//
 	//   * `password_resets`, whose own comment (03900) says *"there is no route by
@@ -551,6 +576,13 @@ type Querier interface {
 	//     who does not exist *"is not a record worth keeping, it is a permission
 	//     nobody can hold"*. The instance principal cannot reach this statement at
 	//     all — deleting it is refused — but a delegated dispute reviewer can.
+	//   * `mfa_recovery_codes` and `mfa_pending_logins` (04100), added by M53 and
+	//     added *by* M53 rather than deferred, because M53 is what creates them: a
+	//     recovery code is a standing credential that admits somebody to an account
+	//     with no password, and a pending login is one that mints a session. Both
+	//     are the `password_resets` defect in a new table, and shipping the tables
+	//     without the statements would have reintroduced it in the same phase that
+	//     closed it.
 	//
 	// The counts come back so the caller can log what went, and so a test can assert
 	// the statement reached each table rather than assert it did not error.
@@ -585,6 +617,21 @@ type Querier interface {
 	// NULL. Nothing here touches `links`, and nothing here may: the moment this
 	// statement grows a link delete, deleting a container starts deleting content.
 	DeleteFolder(ctx context.Context, arg DeleteFolderParams) (int64, error)
+	// Every outstanding pending login for an account.
+	//
+	// Two callers. A fresh password post supersedes whatever was outstanding, so there
+	// is never more than one live prompt per account and somebody who abandoned a tab
+	// is not sharing their window with it. And disabling the second factor takes them
+	// all, because a prompt that outlives the factor it was prompting for is a
+	// credential with nothing left to check.
+	DeleteMFAPendingLoginsFor(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Every code for an account, spent ones included.
+	//
+	// Both callers want exactly this. Regenerating voids the previous set in full, so
+	// keeping the spent rows would leave a count of leftovers from a set that no
+	// longer opens anything. Disabling removes the account's last credential of this
+	// kind, and m53.md names it in the same breath as clearing the secret.
+	DeleteMFARecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (int64, error)
 	// A real delete, not a soft one, and everything in 00200/00300/00500/01200 that
 	// references it cascades: workspaces and everything under them, memberships,
@@ -672,6 +719,33 @@ type Querier interface {
 	// the delete is honest about what it does.
 	DeleteWorkspace(ctx context.Context, arg DeleteWorkspaceParams) (int64, error)
 	DetachAllTags(ctx context.Context, linkID uuid.UUID) error
+	// Taking the second factor away.
+	//
+	// Everything at once, because m53.md asks for exactly that: *clearing
+	// `mfa_enabled_at` clears the secret and every unused recovery code in the same
+	// transaction*. The codes are the caller's second statement — this one is the
+	// account row — and both are in one transaction, which is what makes "the account
+	// has no second factor" a state with no intermediate.
+	//
+	// `mfa_last_step` goes too. It is meaningless without a secret, and leaving it
+	// would mean a later enrolment inherited a replay floor from a secret that no
+	// longer exists — an account that re-enrolled would find its first codes refused
+	// until the clock caught up.
+	DisableUserMFA(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Enrolment, committed.
+	//
+	// **`mfa_enabled_at` and `mfa_secret` are written together and only together**,
+	// which is m53.md's *half-enrolled is not a state this product has* stated as a
+	// single UPDATE. The secret is not parked on the row while the person fetches
+	// their phone: it is held by the enrolment session and reaches the database only
+	// in the statement that also says the second factor is on, and only after a code
+	// computed from it has verified.
+	//
+	// `mfa_enabled_at IS NULL` in the predicate rather than checked beforehand, so
+	// enrolling an account that is already enrolled affects no rows instead of
+	// silently replacing a working secret with a different one. Two tabs finishing the
+	// same enrolment is the ordinary way that happens.
+	EnableUserMFA(ctx context.Context, arg EnableUserMFAParams) (int64, error)
 	// The mail outbox. Queued on the request path, drained by the scheduler.
 	//
 	// The message is stored rendered. Nothing here re-renders from a template, so a
@@ -1022,6 +1096,21 @@ type Querier interface {
 	// accidentally do a case-sensitive lookup and create a duplicate account.
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	// A second factor (M53): TOTP, enrolment, recovery codes, and the step between
+	// a right password and a session.
+	//
+	// Three groups of statements. The enrolment pair writes `users.mfa_secret` and
+	// `users.mfa_enabled_at` — the columns `00200_identity.sql` has carried since the
+	// first migration and only M52's erasure sweep has ever touched. The recovery-code
+	// statements are a hashed single-use credential, the fifth thing in this schema
+	// shaped that way. And the pending-login statements are the state machine that
+	// makes "no session token exists until the second factor is verified" a property
+	// of the database rather than of a handler's control flow.
+	// Everything the second factor needs about one account, and nothing else.
+	//
+	// Not `SELECT *`: the enrolment and challenge paths have no business holding a
+	// password hash, and a narrow row is what keeps that true as columns are added.
+	GetUserMFA(ctx context.Context, id uuid.UUID) (GetUserMFARow, error)
 	// The RBAC evaluator's source of truth. Returns every permission a user holds
 	// in a workspace, via their organization membership and its role.
 	//
@@ -1130,6 +1219,11 @@ type Querier interface {
 	// list, and the second index skips those: every one of them would carry the same
 	// key, and one open homograph dispute must not lock out every other.
 	InsertDestinationDispute(ctx context.Context, arg InsertDestinationDisputeParams) (DestinationDispute, error)
+	// One code of a set. Called ten times inside the transaction that issues them,
+	// rather than as one multi-row insert, because the hashes are computed one at a
+	// time and a loop over a prepared statement is what sqlc gives without a bespoke
+	// array parameter for a fixed ten rows.
+	InsertMFARecoveryCode(ctx context.Context, arg InsertMFARecoveryCodeParams) error
 	// Notifications. The table shipped dormant in 00600; nothing here adds a
 	// column, per the rule that a dormant table's structure goes in its jsonb until
 	// the feature that needs a column arrives. `data` carries whatever a kind needs.
@@ -1597,6 +1691,20 @@ type Querier interface {
 	// adding one here would be a second tenancy check in a statement whose job is
 	// serialization.
 	LockLink(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	// The pending login behind a presented token, locked.
+	//
+	// Joined to `users` because every consumer needs both halves and the alternative
+	// is two round trips with the account's state changing between them. `FOR UPDATE
+	// OF p` locks the pending row and not the user row: the user row is locked
+	// separately by the paths that write it, and locking it here would serialise every
+	// second-factor attempt against every other write to the account.
+	//
+	// Nothing is filtered out. Expired, consumed, an account that stopped being active
+	// while the prompt was open — each is a refusal the caller makes, and each is the
+	// same refusal to whoever is looking at the form. Filtering here would collapse
+	// them into not-found, which is the same answer, and would cost the tests their
+	// ability to tell the five apart.
+	LockMFAPendingLogin(ctx context.Context, tokenHash []byte) (LockMFAPendingLoginRow, error)
 	// The organization's owner memberships, locked.
 	//
 	// Organization-wide only: a workspace-scoped owner membership grants ownership
@@ -1680,6 +1788,13 @@ type Querier interface {
 	// rows the first one already took. Two browsers pressing the button at once is
 	// the ordinary way that happens.
 	LockUserForDeletion(ctx context.Context, id uuid.UUID) (User, error)
+	// The same row, locked for the rest of the transaction.
+	//
+	// Every write below reads through this first. Enrolment, disabling and accepting
+	// a code all read a column and then write it, and two of those are the difference
+	// between a second factor existing and not — a check-then-act on `mfa_enabled_at`
+	// is how an abandoned enrolment and a live one end up in the same account.
+	LockUserMFA(ctx context.Context, id uuid.UUID) (LockUserMFARow, error)
 	//
 	// Every folder in a workspace, locked, for a decision made over the whole tree.
 	//
@@ -2013,6 +2128,15 @@ type Querier interface {
 	// The de-identification step. Once the salt is gone the day's hashes cannot be
 	// linked back to an address.
 	PurgeExpiredSalts(ctx context.Context) (int64, error)
+	// The sweep. Lapsed rows and spent ones, in bounded batches, from the hourly
+	// maintenance pass that already purges finished registrations and password
+	// resets.
+	//
+	// No retention window, unlike those two. A spent pending login is evidence of
+	// nothing — the session it minted is the record, and the audit trail carries the
+	// rest — where a spent registration and a spent reset are each the only trace that
+	// an address was proven.
+	PurgeFinishedMFAPendingLogins(ctx context.Context, batch int32) (int64, error)
 	//
 	// Sent and failed rows past the retention window. The outbox is a record of
 	// what was attempted, not an archive: without this the table is the one thing
@@ -2459,6 +2583,17 @@ type Querier interface {
 	// that the session and key rows going in the same transaction have not already
 	// ended.
 	SoftDeleteUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Match a presented code and spend it, in one statement.
+	//
+	// Scoped by `user_id` as well as by the hash. The pending login already names the
+	// account, and matching on the hash alone would make this table a global lookup —
+	// correct today, because the hash index is unique, and one refactor away from a
+	// code minted for one account opening another.
+	//
+	// `used_at IS NULL` is in the predicate for the reason the replay guard's
+	// comparison is: single use has to be decided by the statement that spends it, or
+	// two simultaneous presentations of the same code both pass their check.
+	SpendMFARecoveryCode(ctx context.Context, arg SpendMFARecoveryCodeParams) (int64, error)
 	// Batch write of last_used_at, from the coalescing tracker rather than from the
 	// request path: authenticating a key must not cost a synchronous write.
 	//

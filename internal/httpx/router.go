@@ -65,6 +65,11 @@ type Deps struct {
 	// itself to — and which is the state F44 describes: no account deletion of
 	// any kind, for anybody.
 	Accounts *account.Service
+	// MFA owns the second factor (M53). Nil leaves its endpoints, its enrolment
+	// page and the code prompt unregistered, which is what the parity test
+	// against openapi.yaml compares itself to — and which is the state every
+	// instance was in before this milestone.
+	MFA *auth.MFAService
 	// Disputes serves the blocked-attempt appeal path and the review queue. Nil
 	// leaves both the endpoints and the dashboard page unregistered, which is
 	// what the parity test against openapi.yaml compares itself to — and which
@@ -193,6 +198,31 @@ func registerAppRoutes(d Deps, app *appMux) {
 			rec := &RecoveryAPI{Recovery: d.Recovery}
 			app.Handle("POST "+APIPrefix+"/auth/forgot", guard(http.HandlerFunc(rec.Forgot)))
 			app.Handle("POST "+APIPrefix+"/auth/reset", guard(http.HandlerFunc(rec.Reset)))
+		}
+
+		// The second factor (M53).
+		//
+		// The challenge is under `guard` with login and recovery, so guessing six
+		// digits and guessing a password draw on one budget — the reasoning the
+		// recovery block above states, applied to the surface that sits between
+		// the password and the session.
+		//
+		// The four management endpoints are behind RequireAuth and not behind
+		// `guard`, and the asymmetry is deliberate: two of them verify a
+		// credential and would belong in the bucket on that reasoning, but they
+		// are reachable only with a session already in hand, so an attacker
+		// spending that budget has already got in. What bounds them is the
+		// account's own lockout, which every failed code charges.
+		if d.MFA != nil {
+			mfaAPI := &MFAAPI{MFA: d.MFA, Config: d.Config}
+			app.Handle("POST "+APIPrefix+"/auth/mfa/challenge",
+				guard(http.HandlerFunc(mfaAPI.Challenge)))
+			app.Handle("GET "+APIPrefix+"/auth/mfa", RequireAuth(http.HandlerFunc(mfaAPI.Status)))
+			app.Handle("POST "+APIPrefix+"/auth/mfa/enrol", RequireAuth(http.HandlerFunc(mfaAPI.Enrol)))
+			app.Handle("POST "+APIPrefix+"/auth/mfa/confirm", RequireAuth(http.HandlerFunc(mfaAPI.Confirm)))
+			app.Handle("POST "+APIPrefix+"/auth/mfa/recovery-codes",
+				RequireAuth(http.HandlerFunc(mfaAPI.RegenerateRecoveryCodes)))
+			app.Handle("DELETE "+APIPrefix+"/auth/mfa", RequireAuth(http.HandlerFunc(mfaAPI.Disable)))
 		}
 
 		// Account deletion (M52). Under the same `guard` as the credential
@@ -642,6 +672,17 @@ func registerAppRoutes(d Deps, app *appMux) {
 			app.Handle("POST /reset/{token}", guard(http.HandlerFunc(web.ResetSubmit)))
 		}
 
+		// The second factor's public half (M53): the prompt that stands between a
+		// right password and a session.
+		//
+		// Public for the reason the recovery pages are — there is no session yet,
+		// which is the whole point — and under the same login limiter, so a sweep
+		// of six-digit guesses and a sweep of passwords draw on one budget.
+		if web.MFA != nil {
+			app.HandleFunc("GET /login/code", web.MFAChallengePage)
+			app.Handle("POST /login/code", guard(http.HandlerFunc(web.MFAChallengeSubmit)))
+		}
+
 		// Everything else redirects anonymous visitors to the login form,
 		// where the API would return a problem document.
 		for pattern, fn := range map[string]http.HandlerFunc{
@@ -770,6 +811,22 @@ func registerAppRoutes(d Deps, app *appMux) {
 		app.Handle("POST /links/{id}/qr/logo",
 			RateLimit(d.Limits.Upload, "upload", d.Metrics, web.tooManyRequests)(
 				signedIn(web.LinkQRLogo)))
+
+		// The second factor's signed-in half (M53). Its own page rather than a
+		// section on /account, because enrolment is a sequence — scan, confirm,
+		// write the recovery codes down — and a sequence sharing a page with six
+		// unrelated panels is one people abandon halfway. /account keeps the
+		// summary and the link.
+		if web.MFA != nil {
+			for pattern, fn := range map[string]http.HandlerFunc{
+				"GET /account/mfa":                 web.MFAPage,
+				"POST /account/mfa":                web.MFAEnrol,
+				"POST /account/mfa/recovery-codes": web.MFARegenerate,
+				"POST /account/mfa/disable":        web.MFADisable,
+			} {
+				app.Handle(pattern, signedIn(fn))
+			}
+		}
 
 		if web.Invites != nil {
 			for pattern, fn := range map[string]http.HandlerFunc{

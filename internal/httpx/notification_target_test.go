@@ -177,6 +177,15 @@ func TestWhereEachNotificationKindLeads(t *testing.T) {
 			why:  "the reader sent it, and this is where its lifecycle is",
 		},
 		{
+			kind: "mfa.changed",
+			data: map[string]any{"change": "recovery_code_used", "recovery_codes_remaining": int64(9)},
+			want: "/account",
+			why: "one kind for four events, because the reader's answer to every " +
+				"one of them is the same: open the account page and look at the " +
+				"second factor. The data says which happened; the destination " +
+				"does not have to",
+		},
+		{
 			kind: "automation.fired",
 			data: map[string]any{"rule_id": "0198c9c5-0000-7000-8000-000000000081"},
 			want: "/automation",

@@ -71,14 +71,14 @@ HAVING count(*) = 1
 -- Everything hanging off the account that must not outlive it, removed in one
 -- statement and counted.
 --
--- **Written out because a soft delete fires no foreign key.** All six tables
+-- **Written out because a soft delete fires no foreign key.** All eight tables
 -- below declare `ON DELETE CASCADE` against `users`, and every one of those
 -- clauses triggers on `DELETE`; the account row is kept — that is what
 -- `anonymized_at` marks and what the partial `users_email_key` is shaped for —
 -- so the cascade never runs and these statements are what stands in for it.
 --
 -- Four of them are the tables M52 enumerates: `memberships`, `sessions`,
--- `api_keys`, `notifications`. Two more are here because leaving them would
+-- `api_keys`, `notifications`. Four more are here because leaving them would
 -- falsify a claim the schema already makes:
 --
 --   * `password_resets`, whose own comment (03900) says *"there is no route by
@@ -89,6 +89,13 @@ HAVING count(*) = 1
 --     who does not exist *"is not a record worth keeping, it is a permission
 --     nobody can hold"*. The instance principal cannot reach this statement at
 --     all — deleting it is refused — but a delegated dispute reviewer can.
+--   * `mfa_recovery_codes` and `mfa_pending_logins` (04100), added by M53 and
+--     added *by* M53 rather than deferred, because M53 is what creates them: a
+--     recovery code is a standing credential that admits somebody to an account
+--     with no password, and a pending login is one that mints a session. Both
+--     are the `password_resets` defect in a new table, and shipping the tables
+--     without the statements would have reintroduced it in the same phase that
+--     closed it.
 --
 -- The counts come back so the caller can log what went, and so a test can assert
 -- the statement reached each table rather than assert it did not error.
@@ -104,13 +111,19 @@ WITH removed_memberships AS (
     DELETE FROM password_resets pr WHERE pr.user_id = @account_id RETURNING 1
 ), removed_instance_grants AS (
     DELETE FROM instance_grants ig WHERE ig.user_id = @account_id RETURNING 1
+), removed_recovery_codes AS (
+    DELETE FROM mfa_recovery_codes rc WHERE rc.user_id = @account_id RETURNING 1
+), removed_pending_logins AS (
+    DELETE FROM mfa_pending_logins pl WHERE pl.user_id = @account_id RETURNING 1
 )
 SELECT (SELECT count(*) FROM removed_memberships)::bigint      AS memberships,
        (SELECT count(*) FROM removed_sessions)::bigint         AS sessions,
        (SELECT count(*) FROM removed_api_keys)::bigint         AS api_keys,
        (SELECT count(*) FROM removed_notifications)::bigint    AS notifications,
        (SELECT count(*) FROM removed_password_resets)::bigint  AS password_resets,
-       (SELECT count(*) FROM removed_instance_grants)::bigint  AS instance_grants;
+       (SELECT count(*) FROM removed_instance_grants)::bigint  AS instance_grants,
+       (SELECT count(*) FROM removed_recovery_codes)::bigint   AS mfa_recovery_codes,
+       (SELECT count(*) FROM removed_pending_logins)::bigint   AS mfa_pending_logins;
 
 -- name: SoftDeleteUser :execrows
 -- The deletion itself: the first writer `status` and `deleted_at` have ever had.

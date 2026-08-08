@@ -183,6 +183,14 @@ func (a *AuthAPI) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The second factor (M53). No cookie is set and no session exists: what comes
+	// back is a 401 carrying the pending token, so a client that has never heard
+	// of this refuses to proceed rather than believing it signed in.
+	if res.SecondFactorRequired() {
+		writeSecondFactorRequired(w, r, res.Pending)
+		return
+	}
+
 	maxAge := int(a.Config.Auth.SessionAbsoluteTTL.Seconds())
 	http.SetCookie(w, NewSessionCookie(res.Token, a.Config.SecureCookies, maxAge))
 

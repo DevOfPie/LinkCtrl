@@ -17,6 +17,7 @@ import (
 	"net/textproto"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
@@ -25,6 +26,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/DevOfPie/LinkCtrl/api"
+	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/recovery"
 )
 
@@ -1253,6 +1255,93 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.do("DELETE", p+"/links/"+linkID, nil, http.StatusNoContent)
 	c.do("POST", p+"/auth/password", map[string]string{
 		"current_password": password, "new_password": "a-brand-new-longer-password",
+	}, http.StatusNoContent)
+
+	// --- the second factor (M53) --------------------------------------------
+	//
+	// The whole lifecycle, replayed in the order a person walks it: read the
+	// state, take an offer, confirm it with a code the offer's own secret
+	// produces, issue a fresh set of recovery codes, sign in through the prompt,
+	// and turn it off again.
+	//
+	// **It ends with the factor off**, which is load-bearing for everything below:
+	// the deletion refusal and the recovery block both drive the account, and a
+	// second factor left on would put a code prompt in front of one of them.
+	c.do("GET", p+"/auth/mfa", nil, http.StatusOK)
+
+	var offer struct {
+		Secret string `json:"secret"`
+		QRSVG  string `json:"qr_svg"`
+	}
+	if err := json.Unmarshal(c.do("POST", p+"/auth/mfa/enrol", nil, http.StatusOK), &offer); err != nil {
+		t.Fatalf("decode the enrolment offer: %v", err)
+	}
+	if offer.Secret == "" || !strings.HasPrefix(offer.QRSVG, "<svg") {
+		t.Fatalf("the enrolment offer carries no secret or no drawing: %+v", offer)
+	}
+
+	// A wrong code is the documented 401, and it must not enrol anything.
+	c.doBadRequest("POST", p+"/auth/mfa/confirm", map[string]string{
+		"secret": offer.Secret, "code": "000000",
+	}, http.StatusUnauthorized)
+
+	// The previous step's code, because EnableUserMFA stamps the enrolling step
+	// as the replay floor — the code that completes an enrolment cannot also be
+	// the one that signs somebody in. Enrolling with the step before leaves the
+	// current one usable at the prompt below, which is what a person experiences
+	// as their first sign-in needing the next code.
+	enrolCode, err := auth.TOTPCode(offer.Secret, auth.TOTPStep(time.Now().Add(-auth.TOTPPeriod)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var enrolled struct {
+		RecoveryCodes []string `json:"recovery_codes"`
+	}
+	if err := json.Unmarshal(c.do("POST", p+"/auth/mfa/confirm", map[string]string{
+		"secret": offer.Secret, "code": enrolCode,
+	}, http.StatusOK), &enrolled); err != nil {
+		t.Fatalf("decode the enrolment: %v", err)
+	}
+	if len(enrolled.RecoveryCodes) != 10 {
+		t.Fatalf("enrolment returned %d recovery codes, want 10", len(enrolled.RecoveryCodes))
+	}
+	// Enrolling twice is the documented conflict.
+	c.doBadRequest("POST", p+"/auth/mfa/enrol", nil, http.StatusConflict)
+
+	var regenerated struct {
+		RecoveryCodes []string `json:"recovery_codes"`
+	}
+	if err := json.Unmarshal(c.do("POST", p+"/auth/mfa/recovery-codes", nil,
+		http.StatusOK), &regenerated); err != nil {
+		t.Fatalf("decode the regenerated codes: %v", err)
+	}
+
+	// The sign-in that stops at the prompt. 401 with an `mfa-required` problem
+	// carrying the token, which is the shape a client has to handle — a 200 with
+	// a flag would be read as success by everything that checks the status.
+	var challenge struct {
+		Type     string `json:"type"`
+		MFAToken string `json:"mfa_token"`
+	}
+	if err := json.Unmarshal(c.doBadRequest("POST", p+"/auth/login", map[string]string{
+		"email": "owner@example.com", "password": "a-brand-new-longer-password",
+	}, http.StatusUnauthorized), &challenge); err != nil {
+		t.Fatalf("decode the second-factor refusal: %v", err)
+	}
+	if !strings.HasSuffix(challenge.Type, "mfa-required") || challenge.MFAToken == "" {
+		t.Fatalf("the refusal is not an mfa-required challenge: %+v", challenge)
+	}
+	c.doBadRequest("POST", p+"/auth/mfa/challenge", map[string]string{
+		"token": challenge.MFAToken, "code": "000000",
+	}, http.StatusUnauthorized)
+	c.do("POST", p+"/auth/mfa/challenge", map[string]string{
+		"token": challenge.MFAToken, "code": regenerated.RecoveryCodes[0],
+	}, http.StatusOK)
+
+	// And off again, on the password and a second recovery code.
+	c.do("DELETE", p+"/auth/mfa", map[string]string{
+		"password": "a-brand-new-longer-password",
+		"code":     regenerated.RecoveryCodes[1],
 	}, http.StatusNoContent)
 
 	// --- account deletion (M52) ---------------------------------------------

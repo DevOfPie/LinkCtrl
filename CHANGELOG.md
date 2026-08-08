@@ -10,10 +10,11 @@ whether an upgrade is safe:
 - **The REST API is `/api/v1`** and is a stable contract. A breaking change there
   becomes `/api/v2`, not a major version bump here.
 - **The product** is pre-1.0 while account lifecycle and identity are incomplete.
-  MFA and SSO are a later phase, and a dashboard redesign is under way. Two
-  entries left this list at 0.3.0 because they were built: account recovery — a
-  forgotten password is recoverable by the person who forgot it, on an instance
-  with a mailer — and account deletion with subject erasure. Each of the rest
+  SSO is a later phase, and a dashboard redesign is under way. Three entries left
+  this list at 0.3.0 because they were built: account recovery — a forgotten
+  password is recoverable by the person who forgot it, on an instance with a
+  mailer — account deletion with subject erasure, and two-factor authentication.
+  Each of the rest
   moves the product surface, so the version stays in the `0.x` range until they
   have settled. `0.x` here means "the product surface may still move", not
   "unfinished": everything documented as built is tested and exercised end to end.
@@ -27,6 +28,60 @@ migrations run at boot.
 ## [Unreleased]
 
 ### Added
+
+- **Two-factor authentication, with recovery codes that make it survivable.**
+  TOTP — the six digits an authenticator app shows — on top of the password.
+
+  **It is off until an operator turns it on, and then off until each person turns
+  it on.** Set `LINKCTRL_MFA_SECRET_KEY` to at least 32 bytes
+  (`openssl rand -base64 48`) and the account page offers enrolment; leave it
+  unset and nothing changes, which is what every instance was before this. The
+  variable encrypts each account's secret at rest, and it is deliberately **not**
+  `LINKCTRL_API_KEY_PEPPER`: sharing one value would mean rotating an API-key
+  secret also locked every account out of its authenticator.
+
+  Enrolling shows a QR code and the secret in text beside it — a phone cannot
+  photograph its own screen — and nothing is written to the account until a code
+  from that secret verifies. An enrolment you abandon leaves the account exactly
+  as it was.
+
+  **Ten single-use recovery codes** are issued at the same time and shown once.
+  They are the answer to a lost phone, and they are why this shipped after account
+  recovery rather than before it: a second factor makes being locked out strictly
+  more likely. Using one is recorded and notifies the account, because it means
+  either the phone is gone or somebody else has your codes. You can issue a new
+  set at any time, which stops the old one working.
+
+  Signing in gains a step: the password, then the code. Wrong codes count against
+  the same lockout a wrong password does, so getting the password right does not
+  buy an unlimited supply of guesses at six digits. A code that has just worked
+  cannot work again inside its own window. Clocks are allowed to be thirty seconds
+  out in either direction, and no more.
+
+  **A password reset does not skip the code.** Proving you can read an email is
+  one factor; letting it stand in for the other would make this worth exactly the
+  mailbox. If you have lost the password *and* the phone, a recovery code is the
+  way in; if you have lost all three, whoever runs the instance can help.
+
+  Turning it off needs the password **and** a code — an authenticator code or a
+  recovery code — and removes the authenticator entry and every recovery code
+  together. An API key cannot do it: a key is not a person.
+
+  Nothing new is downloaded and nothing new is dialled. The algorithm is RFC 6238
+  over the Go standard library, the QR code is the generator the link pages
+  already use, and a source scan now fails the build if anything on the
+  authentication path grows an outbound connection.
+
+  **What is not here, and was considered:** WebAuthn, passkeys, SMS and push, each
+  a separate credential model with its own recovery story; and any way for an
+  organization to *require* a second factor of its members, which needs a
+  permission, an enforcement point and an answer for members who cannot enrol.
+
+  For API clients: `POST /api/v1/auth/login` now answers `401` with an
+  `mfa-required` problem document carrying `mfa_token` when the account has a
+  second factor, and `POST /api/v1/auth/mfa/challenge` completes the sign-in. A
+  client that has not been updated gets no session and an error it does not
+  recognise, rather than believing it signed in.
 
 - **An account can be deleted, and what it leaves behind is erased.** Until now
   nothing in this product removed a user. The schema had said otherwise since the

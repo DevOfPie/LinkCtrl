@@ -35,11 +35,14 @@
 //
 // # What a soft delete does not do
 //
-// It fires no foreign key. Six tables declare `ON DELETE CASCADE` against
+// It fires no foreign key. Eight tables declare `ON DELETE CASCADE` against
 // `users` and every one of those clauses triggers on `DELETE`, so under a kept
 // row the cascade never runs. `DeleteAccountDependents` is what stands in for
-// it, and query/accounts.sql enumerates the six and says why two of them are
-// there beyond the four M52 names.
+// it, and query/accounts.sql enumerates them and says why four are there beyond
+// the four M52 names. Six of them were M52's; `mfa_recovery_codes` and
+// `mfa_pending_logins` joined at M53, which is the milestone that created them —
+// a recovery code admits somebody to an account with no password, so leaving one
+// behind a deleted account is the `password_resets` defect in a new table.
 //
 // Four other columns reference `users` with `ON DELETE SET NULL` —
 // `links.created_by`, `invitations.invited_by`, `invitations.redeemed_by` and
@@ -323,7 +326,9 @@ func (s *Service) Delete(ctx context.Context, actor *auth.Identity, password str
 		slog.Int64("api_keys", removed.ApiKeys),
 		slog.Int64("notifications", removed.Notifications),
 		slog.Int64("password_resets", removed.PasswordResets),
-		slog.Int64("instance_grants", removed.InstanceGrants))
+		slog.Int64("instance_grants", removed.InstanceGrants),
+		slog.Int64("mfa_recovery_codes", removed.MfaRecoveryCodes),
+		slog.Int64("mfa_pending_logins", removed.MfaPendingLogins))
 	return nil
 }
 

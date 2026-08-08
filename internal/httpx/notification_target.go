@@ -48,6 +48,12 @@ var notificationTargets = map[string]notificationDestination{
 	// LINKCTRL_AUDIT_RETENTION_DAYS on the deployment, which no page offers.
 	notify.KindAuditGrowth: func(map[string]any) string { return "" },
 
+	// The account page, which is where the second factor lives: the enrolment
+	// offer, the recovery-code count, the regenerate control and the disable
+	// form. Every one of the four changes this kind carries is answered there,
+	// which is why there is one kind rather than four.
+	notify.KindMFAChanged: func(map[string]any) string { return "/account" },
+
 	// The invitation that was accepted, on the page that holds its lifecycle.
 	// Not /members: the reader is the person who sent it, and what they are
 	// being told is that the thing they created reached its end state.

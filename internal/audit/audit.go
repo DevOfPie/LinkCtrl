@@ -306,6 +306,37 @@ const (
 	// documentation contemplated a caller inside a transaction; RecordTx is
 	// what finally gives one a way to join it.
 	ActionAccountDeleted = "account.deleted"
+
+	// The second factor's four lifecycle events (M53).
+	//
+	// **Instance-wide, on the reasoning `password.reset` and `account.deleted`
+	// already established.** A second factor is a property of a person, not of a
+	// tenant: the account may belong to several organizations or to none, and
+	// filing "this person now has a second factor" under whichever workspace they
+	// were standing in is F36's misattribution again. `audit.read.instance` is the
+	// audience, and it is the right one — who on this box can be signed in as, and
+	// what it takes, is the operator's question.
+	//
+	// **Four rather than two**, and the two beyond what m53.md names by name are
+	// here for the same reason those two are. Enabling is the moment an account
+	// stops being reachable by password alone; regenerating voids ten standing
+	// credentials at once. Both are credential-lifecycle changes with the same
+	// audience as the two the milestone spells out, and a vocabulary that recorded
+	// the removal of a factor but not its arrival would answer half of the only
+	// question it is read for.
+	ActionMFAEnabled  = "mfa.enabled"
+	ActionMFADisabled = "mfa.disabled"
+
+	// A recovery code spent at the sign-in prompt.
+	//
+	// The one m53.md asks for by name, and the reason it asks: a recovery code
+	// being spent is the signal that either the phone is gone or somebody else has
+	// it. The actor is the account itself — there is no session at the prompt and
+	// nobody else was present — which is the attribution `password.reset` makes
+	// for the same situation.
+	ActionMFARecoveryCodeUsed = "mfa.recovery_code_used"
+
+	ActionMFARecoveryCodesRegenerated = "mfa.recovery_codes_regenerated"
 )
 
 // Event is one thing that happened.
@@ -571,6 +602,54 @@ func (s *Service) RecordAPIKeyRevocation(
 			"owner_id": ev.OwnerID.String(),
 		},
 	})
+}
+
+// RecordMFAChange satisfies auth.MFAAuditor, and is on this side of the same
+// seam RecordAPIKeyRotation is (M53).
+//
+// It exists here rather than as a plain Record call from internal/auth because
+// the dependency runs one way: this package imports internal/auth to resolve an
+// actor into the label it stores, so internal/auth cannot import this one. auth
+// declares the narrow interface it needs and this is the implementation.
+//
+// **The metadata carries no secret and no code.** Not the TOTP secret, not a
+// recovery code, not a hash of one — the rule the whole vocabulary is held to, and
+// worth restating here because this is the first action whose subject *is* a
+// secret. What a reader gets is how many recovery codes are left, which is the one
+// number that changes an operator's answer to "should I be worried about this
+// account".
+//
+// The target is the account, `TargetType` "user", which is what
+// `password.reset` and `account.deleted` already use for the same subject.
+func (s *Service) RecordMFAChange(
+	ctx context.Context, actor *auth.Identity, ev auth.MFAChange,
+) error {
+	action, ok := mfaActions[ev.Kind]
+	if !ok {
+		return fmt.Errorf("audit: unknown second-factor change %q", ev.Kind)
+	}
+	userID := ev.UserID
+	return s.Record(ctx, actor, Event{
+		Action:     action,
+		TargetType: "user",
+		TargetID:   &userID,
+		Metadata: map[string]any{
+			"recovery_codes_remaining": ev.RecoveryCodesRemaining,
+		},
+		InstanceWide: true,
+	})
+}
+
+// mfaActions maps the seam's vocabulary onto this package's.
+//
+// A map rather than a switch with a default, so a kind added on the other side of
+// the seam and not here is an error at the call site instead of a record filed
+// under whichever action the default picked.
+var mfaActions = map[auth.MFAChangeKind]string{
+	auth.MFAEnabled:                  ActionMFAEnabled,
+	auth.MFADisabled:                 ActionMFADisabled,
+	auth.MFARecoveryCodeUsed:         ActionMFARecoveryCodeUsed,
+	auth.MFARecoveryCodesRegenerated: ActionMFARecoveryCodesRegenerated,
 }
 
 // actorLabel is the snapshot stored beside the actor's id.
@@ -864,5 +943,9 @@ func AllActions() []string {
 		ActionAPIKeyRevoked,
 		ActionPasswordReset,
 		ActionAccountDeleted,
+		ActionMFAEnabled,
+		ActionMFADisabled,
+		ActionMFARecoveryCodeUsed,
+		ActionMFARecoveryCodesRegenerated,
 	}
 }

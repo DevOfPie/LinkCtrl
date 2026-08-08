@@ -14,6 +14,7 @@ import (
 
 	"github.com/DevOfPie/LinkCtrl/internal/account"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
+	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/automation"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
@@ -77,6 +78,10 @@ type jobRunner struct {
 	// advisory key and a new goroutine for a pass that finds nothing on almost
 	// every run is cost without a reason.
 	accounts *account.Service
+	// mfa sweeps the pending logins that sit between a right password and a
+	// session (M53) — lapsed ones and spent ones. Third instance of the same
+	// waiting-room shape, held on the same terms.
+	mfa *auth.MFAService
 	// links re-verifies custom domains (M40). Nil skips the pass entirely,
 	// which is what a runner built without the link service gets.
 	links *link.Service
@@ -155,7 +160,7 @@ const (
 func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analytics.Roller,
 	log *slog.Logger, metrics *observability.Metrics, notifier *notify.Service,
 	mailer *mail.Service, signups *signup.Service, resets *recovery.Service,
-	accounts *account.Service,
+	accounts *account.Service, mfa *auth.MFAService,
 	links *link.Service,
 	webhooks *webhook.Service, automations *automation.Service, hosts *redirect.HostCache,
 	domains config.DomainsConfig,
@@ -176,6 +181,7 @@ func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analyt
 		signup:                 signups,
 		recovery:               resets,
 		accounts:               accounts,
+		mfa:                    mfa,
 		links:                  links,
 		//nolint:gosec // G115: range-checked above.
 		domainVerifyInterval: domains.VerifyInterval,
@@ -820,6 +826,18 @@ func (j *jobRunner) housekeeping(ctx context.Context) error {
 			errs = append(errs, err)
 		} else if n > 0 {
 			j.log.Debug("finished password resets purged", slog.Int64("count", n))
+		}
+	}
+
+	// Pending second-factor logins that lapsed, and the ones already spent
+	// (M53). Same shape and same reasoning as the reset sweep above; no
+	// retention window, because a spent pending login is evidence of nothing —
+	// the session it minted is the record.
+	if j.mfa != nil {
+		if n, err := j.mfa.PurgePendingLogins(ctx, purgeBatch); err != nil {
+			errs = append(errs, err)
+		} else if n > 0 {
+			j.log.Debug("finished second-factor logins purged", slog.Int64("count", n))
 		}
 	}
 

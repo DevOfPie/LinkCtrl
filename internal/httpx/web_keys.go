@@ -196,6 +196,14 @@ type accountPageData struct {
 	// than a template function that exists for one page.
 	WorkspacePinned bool
 
+	// ShowMFA draws the second-factor summary (M53). False on an instance wired
+	// without the service, where the routes are not registered either. True with
+	// MFA.Available false is a different state and the section says so: the
+	// instance has no MFA_SECRET_KEY, which matters most to somebody already
+	// enrolled.
+	ShowMFA bool
+	MFA     auth.MFAStatus
+
 	// ShowDelete draws the account-deletion section (M52). False on an instance
 	// wired without the service, where the route is not registered either.
 	ShowDelete bool
@@ -262,8 +270,17 @@ func (h *Web) accountPage(r *http.Request) accountPageData {
 		// The section is drawn only where the service exists, for the reason
 		// every other optional section on this page is: an instance wired
 		// without it must not show a button whose route is not registered.
+		ShowMFA:            h.MFA != nil,
 		ShowDelete:         h.Accounts != nil,
 		DeleteConfirmation: accountDeletionConfirmation,
+	}
+	if h.MFA != nil {
+		// A failed read leaves the zero status, which draws the "off" summary and
+		// a link to the page that will report the real error. The same trade
+		// domainSections makes: a panel is not worth replacing the page over.
+		if st, err := h.MFA.Status(r.Context(), IdentityFrom(r.Context())); err == nil {
+			data.MFA = st
+		}
 	}
 	for _, ws := range data.Workspaces {
 		if ws.Default {
@@ -287,6 +304,13 @@ func (h *Web) AccountPage(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Query().Get("bots") == "1" {
 		data.Notice = "Bot blocking updated. Cached links were refreshed, so it applies now."
+	}
+	// Where a completed disable lands (M53). Said here rather than on the page
+	// that performed it, because with the factor gone that page is an offer to
+	// enrol again, and a success notice above an offer reads as an undo button.
+	if r.URL.Query().Get("mfa") == "off" {
+		data.Notice = "Two-factor authentication is off. The authenticator entry and " +
+			"every recovery code have been removed."
 	}
 	h.domainSections(r, &data)
 	h.render(w, r, http.StatusOK, "account", data)

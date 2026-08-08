@@ -290,6 +290,25 @@ type Membership struct {
 	UpdatedAt      time.Time
 }
 
+type MfaPendingLogin struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	TokenHash  []byte
+	IpPrefix   *string
+	UserAgent  *string
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
+	ConsumedAt *time.Time
+}
+
+type MfaRecoveryCode struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	CodeHash  []byte
+	CreatedAt time.Time
+	UsedAt    *time.Time
+}
+
 type Notification struct {
 	ID          uuid.UUID
 	UserID      uuid.UUID
@@ -428,6 +447,7 @@ type User struct {
 	DeletedAt          *time.Time
 	DefaultWorkspaceID *uuid.UUID
 	LastWorkspaceID    *uuid.UUID
+	MfaLastStep        *int64
 }
 
 type Visitor struct {

@@ -96,14 +96,21 @@ func TestMigrationsProduceExpectedSchema(t *testing.T) {
 	// pending_registrations, and the one that closed F141: until it existed a
 	// forgotten password was permanent on every instance.
 	//
+	// The last two are M53's second factor. mfa_recovery_codes holds ten
+	// single-use codes per enrolment, and mfa_pending_logins is the fourth
+	// bearer-token table and the shortest-lived — the five minutes between a right
+	// password and a session. A table rather than a signed cookie, because single
+	// use needs a server-side record of whether it has been spent, at which point
+	// the table is back and the cookie is an optimisation.
+	//
 	// Each is live and typed rather than dormant jsonb, because the feature that
 	// reads it arrived in the same commit. The number moves and the sentence says
 	// why, rather than the count silently growing whenever somebody adds a table.
-	if tables != 39 {
-		t.Errorf("got %d tables, want 39 (all 20 Plan.md entities, plus mail_outbox, "+
+	if tables != 41 {
+		t.Errorf("got %d tables, want 41 (all 20 Plan.md entities, plus mail_outbox, "+
 			"invitations, pending_registrations, blocked_destinations, "+
-			"destination_disputes, link_click_budget, instance_grants and "+
-			"password_resets)", tables)
+			"destination_disputes, link_click_budget, instance_grants, "+
+			"password_resets, mfa_recovery_codes and mfa_pending_logins)", tables)
 	}
 
 	// The UTC guarantee the partition scheme depends on.

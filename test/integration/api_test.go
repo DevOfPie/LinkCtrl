@@ -161,6 +161,21 @@ func newAPI(t *testing.T) *apiFixture {
 		t.Fatal(err)
 	}
 
+	// The second factor (M53). Wired with a real cipher for the reason the
+	// mailer above is real: with none, every enrolment endpoint answers 503 and
+	// the contract test would be replaying a refusal instead of the operation.
+	mfaCipher, err := auth.NewMFACipher(testMFAKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mfaSvc, err := auth.NewMFAService(pool, auth.MFAConfig{
+		Auth: authSvc, Cipher: mfaCipher, Issuer: "linkctrl.test",
+		Audit: audit.NewService(pool), Notify: notify.NewService(pool),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	srv := httptest.NewServer(httpx.NewRouter(httpx.Deps{
 		Config:   cfg,
 		Health:   &httpx.Health{DB: pool},
@@ -175,6 +190,7 @@ func newAPI(t *testing.T) *apiFixture {
 		Signup:   signupSvc,
 		Recovery: recoverySvc,
 		Accounts: accountSvc,
+		MFA:      mfaSvc,
 		Disputes: disputeSvc,
 		Instance: instanceSvc,
 	}))

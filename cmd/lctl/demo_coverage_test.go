@@ -998,6 +998,50 @@ func demoCoverage() []demoFeature {
 			Shows: "what account deletion leaves behind: the record of what " +
 				"happened, correlatable by actor id, with the address gone from it",
 		},
+		{
+			// **One enrolled account, and it is deliberately not the owner's.**
+			// Every seeded account shares the published password and the owner is
+			// who an evaluator signs in as first; a second factor there would put
+			// a step in front of the demo itself. Sam is the viewer, and
+			// `demoMFASecret` is published so anybody can scan it and walk the
+			// whole flow — the code prompt between the password and the session,
+			// and the enrolled state on the account page behind it.
+			//
+			// Counted through `users` joined to nothing, because enrolment is a
+			// property of an account rather than of an organization; scoped to the
+			// demo organization's members so a stray row elsewhere cannot satisfy
+			// it.
+			Milestone: "M53", Feature: "An account with a second factor",
+			Query: `SELECT count(*) FROM users u
+			         WHERE u.mfa_enabled_at IS NOT NULL
+			           AND u.mfa_secret IS NOT NULL
+			           AND u.id IN (
+			               SELECT DISTINCT m.user_id FROM memberships m
+			                WHERE m.organization_id = $1)`,
+			Min: 1, Max: 1,
+			Shows: "the enrolled state of the account page, and the code prompt " +
+				"between a right password and a session. Without it every " +
+				"second-factor surface on the demo is an empty offer",
+		},
+		{
+			// The other half, and the one that is about the schema rather than the
+			// page: an enrolment issues ten single-use codes, and a demo that
+			// showed the factor without them would be showing the half of the
+			// milestone that cannot lock anybody out.
+			//
+			// Exactly ten, unspent. The seeder discards them, so a spent one here
+			// would mean something in this instance signed in with a recovery code
+			// — which nothing seeded does.
+			Milestone: "M53", Feature: "Recovery codes behind the second factor",
+			Query: `SELECT count(*) FROM mfa_recovery_codes rc
+			         WHERE rc.used_at IS NULL
+			           AND rc.user_id IN (
+			               SELECT DISTINCT m.user_id FROM memberships m
+			                WHERE m.organization_id = $1)`,
+			Min: 10, Max: 10,
+			Shows: "that enrolling issues the codes that make a lost phone " +
+				"recoverable, which is the dependency the whole milestone rests on",
+		},
 	}
 }
 
@@ -1321,6 +1365,11 @@ func demoTestConfig() config.Config {
 	// test cannot be weaker than a deployed one. Any 32 bytes will do here: the
 	// tokens are discarded and nothing verifies one afterwards.
 	cfg.APIKeyPepper = config.Secret("a-demo-seeder-pepper-of-32-plus-bytes")
+	// The seeder enrols one account in the second factor (M53), and the MFA
+	// service refuses a key below the configuration floor — deliberately, for the
+	// reason the pepper above does. Any 32 bytes will do here: the secret is
+	// written and read back inside this process.
+	cfg.MFASecretKey = config.Secret("a-demo-seeder-mfa-key-of-32-plus-bytes")
 	return cfg
 }
 

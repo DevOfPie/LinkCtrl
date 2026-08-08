@@ -270,6 +270,8 @@ file. Append a row when you append an entry.
 | [M52: three answers at step 1, and the conflict resolved by the command that meets it](#2026-08-08--m52-three-answers-at-step-1-and-the-conflict-resolved-by-the-command-that-meets-it) | D148: the tombstone is a constant and the ids survive, what that costs the SECURITY.md claim, and why A can migrate to B but not back. D149: the update checker is on by default and asks at first run, overruling the recommendation and obliging M55 to build a surface that does not exist. And the hosting conflict — `/work phase` is the request, reversing the previous run's ruling on evidence it did not have |
 | [M52: a soft delete fires no cascade, and two comments that said it would](#2026-08-08--m52-a-soft-delete-fires-no-cascade-and-two-comments-that-said-it-would) | Why the deletion path writes out six DELETEs, why two tables joined m52.md's four, and the transaction-scoped audit writer the first operation whose actor it destroys needed |
 | [M52: the cascade the bullet promised, amended at acceptance](#2026-08-08--m52-the-cascade-the-bullet-promised-amended-at-acceptance) | The amendment record for the entry above, made at step 3.4 rather than step 1: the bullet as it stood, as amended to six explicit statements, and the tree fact that `ON DELETE CASCADE` never fires on an `UPDATE`. Why it is a fact and not an assertion, and why that is the difference between an amendment and a rejection |
+| [M53: the two facts the milestone before it moved](#2026-08-08--m53-the-two-facts-the-milestone-before-it-moved) | An amendment, not a decision: M52 moved the session mint out from under M53's bullet and gave `mfa_secret` its first writer, which is the one that clears it. The first time this phase a milestone's validation corrected facts broken by its immediate predecessor |
+| [M53: five choices a second factor forced](#2026-08-08--m53-five-choices-a-second-factor-forced) | D150: `MFA_SECRET_KEY` is its own variable and is **optional**, so an instance without one offers no second factor and an instance that loses one falls back to recovery codes. D151: the second factor lives in `internal/auth` behind two seams rather than in a package of its own, and why the reason `internal/account` gives does not apply. D152: the enrolment offer travels in the form because the milestone forbids the alternative. D153: `RecordSuccessfulLogin` is guarded rather than moved, which is the only way both of the login flow's bullets hold at once. D154: four audit actions and one notification kind, because the two surfaces answer different questions |
 
 ---
 
@@ -22649,3 +22651,211 @@ comment asserting the row cannot outlive the account, each was true while the
 only deletion was hypothetical, and this milestone's soft delete is what would
 have falsified them — a defect introduced by the work in flight is in that
 work's spec, not a finding to defer. Both comments are corrected in place.
+
+## 2026-08-08 — M53: the two facts the milestone before it moved
+
+**An amendment, not a decision**, at [step 1](phase-loop.md#1-validate). Both
+were true when written and both were falsified by [M52](phase-details/m52.md),
+which landed an hour earlier in the same run — the first time in this phase that
+a milestone's validation has had to correct facts broken by its immediate
+predecessor rather than by something months old.
+
+### The session mint moved, and the line it moved to is blank
+
+**As it stood**, under *The login flow*:
+
+> The interposition is between `RecordSuccessfulLogin`
+> (`internal/auth/service.go:412`) and the session mint (`:430`).
+
+**As amended:** the mint is `:449`, and the symbol is named — `s.q.CreateSession`
+— so the next reader can find it if it moves again.
+
+**The tree fact.** `internal/auth/service.go:430` is now an empty line;
+`CreateSessionParams` is assembled at `:438` and `CreateSession` called at
+`:449`. M52 extracted `auth.Service.VerifyPassword` so that account deletion and
+`ChangePassword` confirm through one function rather than two that agree, and
+that extraction pushed everything below it down. `RecordSuccessfulLogin` at
+`:412` is above the insertion and did not move, which is why one half of the
+range is still right — the failure mode a bullet naming two line numbers has.
+
+### `mfa_secret` acquired a writer, and it is the one that takes MFA away
+
+**As it stood**, under *Discharges*:
+
+> It also gives `users.mfa_secret` and `users.mfa_enabled_at`
+> (`00200_identity.sql:31-33`, marked `-- Phase 3.` since the first migration)
+> their first writer.
+
+**As amended:** their first writer that **sets** them.
+
+**The tree fact.** `EraseDeletedAccounts`
+(`internal/store/query/accounts.sql:209-210`) clears both columns to `NULL` as
+part of scrubbing an erased account's row. It is a writer, it landed today, and
+it is the opposite of enrolment. The distinction is worth keeping rather than
+smoothing over: after M52 the columns are no longer dormant, so the *"nothing
+writes this"* argument that made them safe to build on has one exception, and
+M53's own disabling path has a precedent in the tree it can read.
+
+Both are facts. Nobody could have decided that M52's `UPDATE` does not exist, or
+that a blank line is a function call, so neither is a prompt.
+
+
+## 2026-08-08 — M53: five choices a second factor forced
+
+Written while [M53](phase-details/m53.md) was being built. Each is a choice the
+milestone file left to the work rather than one it made, and each would have been
+re-derived differently by the next reader.
+
+### D150 — `MFA_SECRET_KEY` is its own variable, and it is optional
+
+m53.md settles the first half by name: the key comes from **its own configuration
+variable**, not from `LINKCTRL_API_KEY_PEPPER`, because the pepper is bound to
+retained API-key rows and rotating it silently invalidates every issued key.
+Sharing one value would give two credential lifecycles one lifetime.
+
+What it does not settle is whether the new variable is **required**. It is not,
+and the reason is an upgrade rather than a preference: making it required would
+refuse to boot every existing instance until its operator generated a secret, to
+buy a feature nobody had asked for yet. Unset is therefore a supported state and
+is exactly the instance every deployment already was — the enrolment offer is
+replaced by a sentence naming the variable, in the shape `/forgot` uses for a
+mail-free instance.
+
+**Losing it after accounts have enrolled is the interesting case**, and it is the
+one the milestone bounds: *every enrolled account loses the second factor and no
+further*. The chain that makes that true, and that is now documented in
+`docs/configuration.md` beside the variable:
+
+1. The stored secret will not decrypt, so no authenticator code can be verified
+   and the account stops at the prompt. It does **not** silently sign in on the
+   password alone — that would turn losing a key into quietly removing everybody's
+   second factor, which is the worse of the two failures.
+2. A **recovery code** still works, because those are SHA-256 hashes and this key
+   is not involved in them.
+3. The account disables the factor with a second recovery code and enrols again.
+4. An account with neither is the operator's, which is the same last resort a
+   forgotten password has had since M51.
+
+The refusal is deliberately indistinguishable from a wrong code at the prompt.
+Telling whoever is standing there that the *server* cannot read the secret hands a
+stranger a way to probe which accounts are enrolled and what state the instance's
+configuration is in; the operator's copy of that fact is a log line that names it
+plainly.
+
+### D151 — the second factor lives in `internal/auth`
+
+`internal/recovery` and `internal/account` are each their own package, and both
+give the same reason: `internal/audit` imports `internal/auth`, so a service that
+writes an audit record cannot live inside `internal/auth`. Following that
+precedent would have put this in `internal/mfa`.
+
+It does not apply here, and the difference is the interposition. m53.md puts the
+second factor *inside* `auth.Service.Login`, between the password and the session
+mint. A package outside `internal/auth` cannot be there, so the mint would have to
+be exported — and a second factor is worth exactly as much as the guarantee that
+there is one place a session token comes into existence.
+
+So this follows the other precedent already in the package: `APIKeyService`
+declares the narrow interface it needs (`APIKeyAuditor`) and `internal/audit`
+implements it on the other side of the seam. `MFAAuditor` and `MFANotifier` are
+that seam again, in the same shape, and `internal/notify` grows the matching
+method.
+
+`mintSession` was extracted from `Login` as part of this, and the extraction is
+the mechanism rather than a tidy-up: `Login` reaches it when the account has no
+second factor and `CompleteSecondFactor` reaches it when one has been verified.
+Two call sites that agree today are how a third gets added without the factor.
+
+### D152 — the enrolment offer travels in the form, because the milestone forbids the alternative
+
+A secret is minted on the enrolment page and confirmed by a code computed from it
+on the next request. Something has to hold it in between, and there are two
+places: the account row, or the form.
+
+m53.md decides it without appearing to. *An enrolment that is started and
+abandoned leaves the account exactly as it was, asserted by test. Half-enrolled is
+not a state this product has.* Parking a candidate secret on `users.mfa_secret`
+with `mfa_enabled_at` still null **is** the half-enrolled state, so the form is
+what is left.
+
+The cost is stated rather than hidden: the confirm step trusts the browser to
+return the secret it was handed, so a third party who could post that form could
+enrol a factor of their own. Origin-checked CSRF is what stops it, and it is the
+same protection every other state-changing form in this product rests on. The
+secret is shown in plain text on the page beside the QR code anyway, because a
+person enrolling from the device they are reading cannot photograph their own
+screen — so the form field discloses nothing the page does not.
+
+### D153 — `RecordSuccessfulLogin` is guarded, not moved
+
+Two bullets in m53.md's *login flow* section pull against each other, and the
+resolution is worth recording because the obvious readings of either one break the
+other.
+
+- *The interposition is between `RecordSuccessfulLogin` and the session mint.*
+- *Failed second-factor attempts count against the **same** lockout policy as
+  failed passwords. A separate counter would give an attacker a fresh budget for
+  having got the password right, which is backwards.*
+
+`RecordSuccessfulLogin` sets `failed_login_count = 0` and `locked_until = NULL`.
+Call it before the second factor and every password post clears the budget: an
+attacker holding the password posts it, fails a code, posts it again, and the
+counter never reaches the threshold. The lockout the second bullet demands would
+never fire — the *fresh budget* it names, arrived at from the other direction.
+
+Moving the call after the factor satisfies the second bullet and falsifies the
+first. So neither was moved. The call stays exactly where it is and is wrapped in
+`if user.MfaEnabledAt == nil`; the second-factor branch sits immediately below it
+and above the mint, which is literally between the two, and
+`CompleteSecondFactor` records the successful login at the point the sign-in
+actually succeeds.
+
+That is not a reinterpretation of either bullet — both hold as written — and it is
+also the honest reading of what `RecordSuccessfulLogin` means. An account with a
+second factor has not finished signing in when its password is verified.
+
+### D154 — four audit actions, one notification kind
+
+The same four events reach two surfaces, and they are shaped differently on each
+because the surfaces answer different questions.
+
+**The audit log gets four**: `mfa.enabled`, `mfa.disabled`,
+`mfa.recovery_code_used`, `mfa.recovery_codes_regenerated`. m53.md names two of
+them — a recovery code being spent, and disabling — and the other two are here for
+the same reason those are. Enabling is the moment an account stops being reachable
+by password alone; regenerating voids ten standing credentials at once. A
+vocabulary recording the removal of a factor but not its arrival would answer half
+of the only question this surface is read for. All four are **instance-wide**, on
+the reasoning `password.reset` and `account.deleted` already established: a second
+factor is a property of a person, and an account may belong to several
+organizations or to none.
+
+**The inbox gets one**, `mfa.changed`, carrying which of the four happened in its
+`data`. The recipient is the same person every time and what they do about any of
+them is the same thing — open `/account` and look. Four kinds would be four
+entries in `internal/httpx`'s `notificationTargets` all returning `/account`,
+which is a vocabulary describing the sender rather than the reader.
+
+No mail, on the baseline this product has always taken: in-app is the delivery and
+mail is the addition. Three of the four are things the person has just done on a
+page they are looking at, and the fourth reaches them as they sign in.
+
+### The bug this milestone found in itself
+
+Not a decision, and recorded because it cost the test suite seven minutes and
+would have cost a reader longer.
+
+The first version announced a spent recovery code from inside `consumeFactor`,
+which runs inside the caller's transaction. The notification inserts into
+`notifications`, which carries a foreign key to `users`, and an insert against a
+foreign key takes a `KEY SHARE` lock on the referenced row — which
+`auth.MFAService.Disable` was holding `FOR UPDATE` at that moment, on a different
+connection. It deadlocked until the test timeout killed it.
+
+`consumeFactor` now returns *which* credential it accepted and announces nothing;
+`CompleteSecondFactor` announces after its commit. The same rule caught a second
+instance: charging a failed code to the lockout counter is a write to `users` from
+the pool, so the transaction is rolled back explicitly before it rather than by
+the deferred call. **The rule, stated so it is not rediscovered: nothing that
+writes a row referencing `users` may run while this package holds a transaction
+open against that account.**

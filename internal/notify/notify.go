@@ -43,6 +43,23 @@ const (
 	// redeemed. The organization gained a member, and the one account that
 	// certainly wants to know is the one that chose to add them.
 	KindInviteAccepted = "invite.accepted"
+
+	// KindMFAChanged tells an account that its second factor changed (M53).
+	//
+	// **One kind for four events, and that is the decision rather than an
+	// economy.** Enrolled, disabled, a recovery code spent, the codes
+	// regenerated — the recipient is the same person and what they do about any
+	// of them is the same thing: open /account and look. Four kinds would be four
+	// entries in internal/httpx's notificationTargets all returning the same
+	// path, which is a vocabulary describing the sender rather than the reader.
+	// The audit log is where the four are distinguished, because there the
+	// reader is an operator asking a different question.
+	//
+	// m53.md asks for the notification on the path that matters most — *a
+	// recovery code being spent is the signal that either the phone is gone or
+	// somebody else has it* — and the title is what carries which of the four
+	// happened.
+	KindMFAChanged = "mfa.changed"
 )
 
 // MailAuditGrowth names the mail template for the same warning. It is the
@@ -187,6 +204,81 @@ func (s *Service) Notify(ctx context.Context, userID uuid.UUID, e Event) error {
 		return fmt.Errorf("notify: write %s: %w", e.Kind, err)
 	}
 	return nil
+}
+
+// NotifyMFAChange satisfies auth.MFANotifier (M53).
+//
+// The seam's implementation, on this side for the reason internal/audit's
+// RecordMFAChange is on that one: this package imports internal/auth, so
+// internal/auth cannot import it.
+//
+// **In-app only, and no mail.** That is the baseline this package is built on —
+// WithMail is an addition every consumer may decline — and here it is also the
+// right answer on its own terms. Three of the four events are things the person
+// just did, on a page they are looking at; the fourth reaches them at the moment
+// they are signing in, which is when they open the dashboard anyway. A mail would
+// make a second factor's ordinary use noisy, and noisy security mail is mail
+// people filter.
+//
+// The body names the number of recovery codes left, because that is the one fact
+// that turns "your second factor changed" into something to act on.
+func (s *Service) NotifyMFAChange(ctx context.Context, ev auth.MFAChange) error {
+	title, body := mfaNotice(ev)
+	return s.Notify(ctx, ev.UserID, Event{
+		Kind:  KindMFAChanged,
+		Title: title,
+		Body:  body,
+		Data: map[string]any{
+			"change":                   string(ev.Kind),
+			"recovery_codes_remaining": ev.RecoveryCodesRemaining,
+		},
+	})
+}
+
+// mfaNotice is the wording for each change.
+//
+// Written out per kind rather than assembled from fragments: these are the
+// sentences a person reads when something has happened to how they sign in, and
+// the one that matters is deliberately the bluntest of the four.
+func mfaNotice(ev auth.MFAChange) (title, body string) {
+	switch ev.Kind {
+	case auth.MFAEnabled:
+		return "Two-factor authentication is on",
+			fmt.Sprintf("Signing in to this account now needs a code from your authenticator app. "+
+				"You have %d recovery codes; keep them somewhere you can reach without your phone.",
+				ev.RecoveryCodesRemaining)
+	case auth.MFADisabled:
+		return "Two-factor authentication is off",
+			"This account now signs in with a password alone. Your authenticator entry and " +
+				"every recovery code have been removed. If you did not do this, change your " +
+				"password immediately."
+	case auth.MFARecoveryCodeUsed:
+		return "A recovery code was used to sign in",
+			fmt.Sprintf("Somebody signed in to this account with a recovery code instead of an "+
+				"authenticator code. That means either you no longer have your phone, or "+
+				"somebody else has your codes. %s",
+				remainingSentence(ev.RecoveryCodesRemaining))
+	case auth.MFARecoveryCodesRegenerated:
+		return "New recovery codes were issued",
+			fmt.Sprintf("Your previous recovery codes no longer work. You have %d new ones.",
+				ev.RecoveryCodesRemaining)
+	default:
+		return "Two-factor authentication changed",
+			"Something about this account's second factor changed. Open the account page to see."
+	}
+}
+
+// remainingSentence is the tail of the recovery-code notice.
+//
+// Zero gets its own sentence rather than "you have 0 remaining", because zero is
+// the state where the next lost phone is a conversation with whoever runs the
+// instance, and saying so is the whole value of counting.
+func remainingSentence(n int64) string {
+	if n == 0 {
+		return "That was your last recovery code. Sign in and issue a new set, or a lost " +
+			"phone will need whoever runs this instance to help."
+	}
+	return fmt.Sprintf("You have %d left.", n)
 }
 
 // Recipient is one person to tell, in both forms: the id an inbox row is keyed

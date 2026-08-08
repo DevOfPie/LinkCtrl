@@ -320,6 +320,17 @@ this command refuses `APP_ENV=production` without `--force`. Anywhere reachable
 that is not a demo, treat a run of this as three live accounts with a known
 password and remove them.
 
+**`sam@example.com` also carries a second factor**, and its TOTP secret is
+published for the same reason the password is: a code prompt nobody can pass is
+a feature nobody can look at. Enter
+`MFZWIZLTMVZGKZBAMFZWIZLTMVZGKZBA` into an authenticator app — it is a fixed
+value, so it survives every `make demo-update` — and that account walks the
+whole flow, the prompt between the password and the session and the enrolled
+state on its account page. The owner's account has no second factor on purpose;
+putting one there would put a step in front of the demo itself. The same warning
+applies twice over: on anything reachable that is not a demo, this is a live
+account whose password *and* second factor are both public.
+
 Three properties are worth stating because they are what make it trustworthy.
 
 **It goes through the service layer.** Links, invitations, redemptions,

@@ -56,7 +56,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M51](m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | done |
 | [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | done |
 | [M52](m52.md) | Account deletion and subject erasure | M50.5 · M51 *(ordering)* | done |
-| [M53](m53.md) | A second factor: TOTP, enrolment, and recovery codes | M51 | not started |
+| [M53](m53.md) | A second factor: TOTP, enrolment, and recovery codes | M51 | done |
 | [M54](m54.md) | An API key belongs to an account, not to one organization | M52 | not started |
 | [M55](m55.md) | An update checker, and the fifth thing that leaves this product | — | not started |
 | [M56](m56.md) | High availability: the failover contract | — | not started |

@@ -280,7 +280,24 @@ paths:
               schema:
                 $ref: "#/components/schemas/SessionCreated"
         "401":
-          $ref: "#/components/responses/Unauthorized"
+          description: |
+            A credential failure, or a sign-in that stopped at the second factor
+            (M53).
+
+            The two are told apart by `type`. Every credential failure is
+            `invalid-credentials` and says nothing more. A second factor is
+            `mfa-required`, and carries `mfa_token` and `mfa_expires_at` as
+            extension members — post them to `/auth/mfa/challenge` with a code.
+
+            **A 401 rather than a 200 with a flag, deliberately.** A client that
+            has never heard of a second factor treats this as a failed sign-in,
+            which is correct: it has no session and must not proceed. A 200
+            carrying `mfa_required: true` would be read as success by every
+            client that checks the status code.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "422":
           $ref: "#/components/responses/Validation"
         "429":
@@ -436,6 +453,280 @@ paths:
           $ref: "#/components/responses/RateLimited"
         "503":
           $ref: "#/components/responses/NoMailer"
+
+  /auth/mfa:
+    get:
+      tags: [auth]
+      operationId: getMFAStatus
+      summary: Whether this account has a second factor
+      description: |
+        `available` is the instance's answer rather than the account's: it is
+        `false` when no `LINKCTRL_MFA_SECRET_KEY` is configured, which means
+        nobody can enrol. An account that enrolled while a key was present and is
+        read while it is absent reports `available: false` with `enabled: true`,
+        which is a real state and the one an operator needs to see — those
+        accounts sign in with a recovery code until the key comes back.
+      responses:
+        "200":
+          description: The account's second factor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MFAStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [auth]
+      operationId: disableMFA
+      summary: Turn the second factor off
+      description: |
+        The password **and** a code, because either alone is a downgrade somebody
+        else can perform: a stolen session would otherwise remove the factor it
+        was meant to be stopped by. `code` takes an authenticator code or a
+        recovery code.
+
+        Requires an interactive session — an API key is refused, on D87's limb
+        that the session is the authority for operations whose subject is the
+        person.
+
+        Clearing the factor clears the stored secret and every recovery code in
+        the same transaction.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [password, code]
+              properties:
+                password:
+                  type: string
+                code:
+                  type: string
+                  description: An authenticator code, or a recovery code.
+      responses:
+        "204":
+          description: The second factor is off
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: This account has no second factor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /auth/mfa/enrol:
+    post:
+      tags: [auth]
+      operationId: beginMFAEnrolment
+      summary: Offer a TOTP secret and the QR code that carries it
+      description: |
+        **Nothing is stored.** The account is untouched until `POST
+        /auth/mfa/confirm` presents a code computed from this secret, so an
+        enrolment that is started and abandoned leaves the account exactly as it
+        was. Calling this twice offers two different secrets and at most one of
+        them ever becomes real.
+
+        `qr_svg` is the `otpauth://` URI drawn by the same generator the link
+        pages use. It is here so a client has the picture without knowing how to
+        encode one; `secret` is the same value in text, for anybody enrolling on
+        the device they are reading — a phone cannot photograph its own screen.
+
+        RFC 6238 with the parameters every authenticator app assumes: HMAC-SHA-1,
+        six digits, a thirty-second period. They are in the URI and repeated in
+        the body so a client never has to parse one to know the other.
+      responses:
+        "200":
+          description: An enrolment offer
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [secret, uri, qr_svg, digits, period]
+                properties:
+                  secret:
+                    type: string
+                    description: Base32, unpadded, as an authenticator app expects it.
+                  uri:
+                    type: string
+                    description: The `otpauth://totp/…` URI.
+                  qr_svg:
+                    type: string
+                    description: The URI drawn as an SVG document.
+                  digits:
+                    type: integer
+                    example: 6
+                  period:
+                    type: integer
+                    description: Seconds in one step.
+                    example: 30
+                  issuer:
+                    type: string
+                  message:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: This account already has a second factor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: |
+            This instance has no `MFA_SECRET_KEY`, so a secret has nowhere safe
+            to be kept.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /auth/mfa/confirm:
+    post:
+      tags: [auth]
+      operationId: confirmMFAEnrolment
+      summary: Turn an offered secret into the account's second factor
+      description: |
+        `secret` is the value `POST /auth/mfa/enrol` returned and `code` is a
+        current code computed from it. The secret is written, `mfa_enabled_at` is
+        stamped and ten recovery codes are issued, all in one transaction — an
+        account never has a factor without codes or codes without a factor.
+
+        **`recovery_codes` is returned here and nowhere else.** Only their hashes
+        are stored, so a client that discards this body has
+        `POST /auth/mfa/recovery-codes` and nothing else.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [secret, code]
+              properties:
+                secret:
+                  type: string
+                code:
+                  type: string
+      responses:
+        "200":
+          description: Enrolled, with the recovery codes shown once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MFARecoveryCodes"
+        "401":
+          description: |
+            The code is not valid. Codes last about thirty seconds and each one
+            works once.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: This account already has a second factor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: This instance has no `MFA_SECRET_KEY`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /auth/mfa/recovery-codes:
+    post:
+      tags: [auth]
+      operationId: regenerateMFARecoveryCodes
+      summary: Void the previous recovery codes and issue a new set
+      description: |
+        Every code goes, spent ones included: the previous set is void in full,
+        and a count of leftovers from a void set would be a lie. The TOTP secret
+        is unchanged — this is the answer to a lost piece of paper, not to a lost
+        phone.
+      responses:
+        "200":
+          description: A new set, shown once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MFARecoveryCodes"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: This account has no second factor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /auth/mfa/challenge:
+    post:
+      tags: [auth]
+      operationId: completeSecondFactor
+      summary: Finish a sign-in that stopped at the second factor
+      description: |
+        `POST /auth/login` answers `401` with an `mfa-required` problem carrying
+        `mfa_token` when the password was right and the account has a second
+        factor. This is where that token is spent, and the success body is
+        `POST /auth/login`'s byte for byte — the same operation finished.
+
+        `code` takes an authenticator code or a recovery code. A recovery code is
+        single use, is audited, and notifies the account: a recovery code being
+        spent means either the phone is gone or somebody else has it.
+
+        **Failed attempts count against the account's own lockout**, the same
+        counter and the same policy failed passwords use. A second factor with a
+        budget of its own would hand an attacker who already has the password an
+        unlimited supply of guesses.
+
+        The pending token is single use and lives for minutes. A wrong code does
+        not spend it — a typo would otherwise cost a full re-authentication.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token, code]
+              properties:
+                token:
+                  type: string
+                  description: The `mfa_token` from the sign-in refusal.
+                code:
+                  type: string
+                  description: An authenticator code, or a recovery code.
+      responses:
+        "200":
+          description: Signed in; the session cookie is set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionCreated"
+        "401":
+          description: |
+            The code is not valid, the sign-in can no longer be completed, or the
+            account locked itself out while guessing. One answer for all of them.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /auth/password:
     post:
@@ -4322,6 +4613,40 @@ components:
             $ref: "#/components/schemas/Problem"
 
   schemas:
+    MFAStatus:
+      type: object
+      required: [available, enabled, recovery_codes_remaining]
+      properties:
+        available:
+          type: boolean
+          description: |
+            Whether this **instance** can store a second factor at all, which is
+            whether `LINKCTRL_MFA_SECRET_KEY` is configured.
+        enabled:
+          type: boolean
+        enabled_at:
+          type: string
+          format: date-time
+          nullable: true
+        recovery_codes_remaining:
+          type: integer
+          format: int64
+          description: Unspent codes. Zero on an account with no second factor.
+
+    MFARecoveryCodes:
+      type: object
+      required: [recovery_codes]
+      properties:
+        enabled:
+          type: boolean
+        recovery_codes:
+          type: array
+          description: |
+            Shown once. Only their hashes are stored, so this is the only
+            response that ever carries them.
+          items:
+            type: string
+
     Problem:
       type: object
       description: RFC 9457 problem details. Clients should branch on `type`, not prose.

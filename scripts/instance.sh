@@ -113,6 +113,12 @@ LINKCTRL_RESTART=$restart
 
 # ─── Secrets ─────────────────────────────────────────────────────────────────
 LINKCTRL_API_KEY_PEPPER=$(openssl rand -base64 48 | tr -d '\n')
+# Optional in the product and minted here anyway (M53). An instance without it
+# offers no second factor, and a local instance that silently could not do a
+# thing the product does is the shape a feature goes unnoticed in. Its own value
+# and never the pepper: rotating an API-key secret must not lock every account
+# out of its authenticator.
+LINKCTRL_MFA_SECRET_KEY=$(openssl rand -base64 48 | tr -d '\n')
 POSTGRES_PASSWORD=$(openssl rand -base64 36 | tr -dc 'A-Za-z0-9' | cut -c1-40)
 
 # ─── Local ───────────────────────────────────────────────────────────────────

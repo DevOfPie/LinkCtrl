@@ -73,6 +73,25 @@ type Config struct {
 
 	APIKeyPepper Secret `env:"API_KEY_PEPPER,required,unset"`
 
+	// MFASecretKey encrypts the TOTP secret at rest (M53).
+	//
+	// **Its own variable, never the pepper**, which m53.md refuses by name. The
+	// pepper is bound to retained API-key rows and rotating it silently
+	// invalidates every issued key; sharing it would mean rotating an API-key
+	// secret also locks every account out of its second factor, coupling two
+	// credential lifecycles that have nothing to do with each other.
+	//
+	// **Optional, unlike the pepper, and the asymmetry is deliberate.** Unset is
+	// an instance with no second factor available, which is exactly what every
+	// deployment was before this milestone — making it required would refuse to
+	// boot every existing instance on upgrade to buy a feature nobody had asked
+	// for. Losing it after accounts have enrolled locks those accounts out of the
+	// second factor and no further: recovery codes are SHA-256 and do not involve
+	// this key, so an enrolled account signs in with one, disables the factor with
+	// another, and enrols again. docs/configuration.md states that chain beside
+	// the variable, in the same terms the pepper's consequence is stated in.
+	MFASecretKey Secret `env:"MFA_SECRET_KEY,unset"`
+
 	DocsEnabled    bool `env:"DOCS_ENABLED" envDefault:"true"`
 	SecureCookies  bool `env:"SECURE_COOKIES" envDefault:"true"`
 	MigrateOnStart bool `env:"MIGRATE_ON_START" envDefault:"true"`
@@ -470,6 +489,7 @@ func Load() (Config, error) {
 // for Docker and Swarm secrets mounted under /run/secrets.
 var FileSecretVars = []string{
 	"API_KEY_PEPPER",
+	"MFA_SECRET_KEY",
 	"DATABASE_URL",
 	"SMTP_PASSWORD",
 	"FEED_AUTH_TOKEN",
@@ -773,6 +793,22 @@ func (c Config) Validate() error {
 	if c.APIKeyPepper.Len() < 32 {
 		add("API_KEY_PEPPER: must be at least 32 bytes, got %d (generate: openssl rand -base64 48). "+
 			"Changing this invalidates every existing API key.", c.APIKeyPepper.Len())
+	}
+	// Checked only when set, because unset is a supported state: an instance with
+	// no MFA_SECRET_KEY offers no second factor, which is what every instance was
+	// before M53. A value too short to be meant seriously is refused rather than
+	// hashed into a working key — the derivation accepts anything, so the floor is
+	// the only thing that stops `MFA_SECRET_KEY=changeme` producing an instance
+	// that looks configured.
+	//
+	// 32 is written out here rather than imported from auth.MFAKeyMinBytes, for
+	// the reason the pepper's floor above is: this package reads the environment
+	// for every other package and depends on none of them. The two are held
+	// together by TestTheMFAKeyFloorIsTheOneConfigEnforces in internal/auth.
+	if !c.MFASecretKey.IsZero() && c.MFASecretKey.Len() < 32 {
+		add("MFA_SECRET_KEY: must be at least 32 bytes, got %d (generate: openssl rand -base64 48). "+
+			"Losing it locks every enrolled account out of its second factor; they fall back "+
+			"to recovery codes.", c.MFASecretKey.Len())
 	}
 	if c.DB.URL.IsZero() {
 		add("DATABASE_URL: is required")

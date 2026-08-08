@@ -321,6 +321,22 @@ type LoginResult struct {
 	Identity *Identity
 	Token    string
 	Expires  time.Time
+	// Pending is set instead of the three fields above when the account has a
+	// second factor and it has not been presented yet (M53).
+	//
+	// **Set means nothing else is.** Identity is nil, Token is empty and Expires
+	// is the zero time, so a surface that forgets to check this hands the browser
+	// an empty cookie rather than a working one — a failure that is visible on
+	// the first request instead of being an authentication bypass. Callers use
+	// SecondFactorRequired rather than testing the field, so the invariant has one
+	// name.
+	Pending *PendingSecondFactor
+}
+
+// SecondFactorRequired reports whether this result is a challenge rather than a
+// session.
+func (r *LoginResult) SecondFactorRequired() bool {
+	return r != nil && r.Pending != nil
 }
 
 // Login authenticates and starts a session.
@@ -409,10 +425,51 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 		}
 	}
 
-	if err := s.q.RecordSuccessfulLogin(ctx, user.ID); err != nil {
-		return nil, fmt.Errorf("record login: %w", err)
+	// The password is right, and for an account with no second factor that is
+	// the whole of the sign-in — which is what this records.
+	//
+	// **Guarded since M53, and the guard is a security property rather than
+	// tidiness.** RecordSuccessfulLogin clears `failed_login_count` and
+	// `locked_until`. An account with a second factor has not finished signing in
+	// here, so clearing the counter at this point would hand somebody who already
+	// holds the password a fresh lockout budget on every post while they guessed
+	// at six digits — and the lockout m53.md requires failed codes to share would
+	// then never fire. It runs at CompleteSecondFactor instead, where the login
+	// actually completes.
+	if user.MfaEnabledAt == nil {
+		if err := s.q.RecordSuccessfulLogin(ctx, user.ID); err != nil {
+			return nil, fmt.Errorf("record login: %w", err)
+		}
 	}
 
+	// --- the second factor is interposed exactly here (M53) ------------------
+	//
+	// Between the line above and the mint below: the password is verified, and
+	// no session token exists until the second factor is. What comes back is a
+	// LoginResult carrying a Pending challenge and no Token — the type makes
+	// "signed in" and "half signed in" different values rather than the same
+	// value with a flag, so a caller that ignores the distinction sets an empty
+	// cookie instead of a valid one.
+	if user.MfaEnabledAt != nil {
+		return s.pendingSecondFactor(ctx, user.ID, in.IP, in.UserAgent)
+	}
+
+	return s.mintSession(ctx, user.ID, user.Email, user.Name, in.IP, in.UserAgent)
+}
+
+// mintSession creates the session row and the identity that goes with it.
+//
+// **Extracted from Login by M53, and the extraction is the mechanism rather than
+// a tidy-up.** A second factor is only worth anything if there is exactly one
+// place a session token comes into existence; two call sites that agree today are
+// how the third one gets added without the factor. Login reaches it when the
+// account has no second factor, and CompleteSecondFactor reaches it when one has
+// been verified. There is no third caller and there is nothing else in this
+// package that calls CreateSession.
+func (s *Service) mintSession(
+	ctx context.Context, userID uuid.UUID, email, name string,
+	ip netip.Addr, userAgent string,
+) (*LoginResult, error) {
 	// No session id: this is the request that creates one. So a sign-in starts
 	// at the pinned default, or at the last workspace used, and the session
 	// carries that from its first row rather than being corrected afterwards.
@@ -422,7 +479,7 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 	// sessions.workspace_id is nullable and is SET NULL when a workspace is
 	// deleted, so a signed-in browser was always going to reach this state; what
 	// changes here is that signing in can start in it.
-	ws, err := s.resolveWorkspace(ctx, user.ID, nil, nil)
+	ws, err := s.resolveWorkspace(ctx, userID, nil, nil)
 	if err != nil && !errors.Is(err, ErrNoWorkspace) {
 		return nil, err
 	}
@@ -434,13 +491,13 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 	}
 	expires := time.Now().Add(s.ttl.Absolute)
 
-	ipPrefix := AnonymizeIP(in.IP)
+	ipPrefix := AnonymizeIP(ip)
 	params := dbgen.CreateSessionParams{
 		ID:        uuid.Must(uuid.NewV7()),
-		UserID:    user.ID,
+		UserID:    userID,
 		TokenHash: hash,
 		IpPrefix:  nullable(ipPrefix),
-		UserAgent: nullable(truncate(in.UserAgent, 512)),
+		UserAgent: nullable(truncate(userAgent, 512)),
 		ExpiresAt: expires,
 	}
 	if !orphaned {
@@ -453,10 +510,9 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 
 	var identity *Identity
 	if orphaned {
-		identity, err = s.identityWithoutOrganization(ctx, user.ID, user.Email, user.Name)
+		identity, err = s.identityWithoutOrganization(ctx, userID, email, name)
 	} else {
-		identity, err = s.identityFor(
-			ctx, user.ID, user.Email, user.Name, ws.ID, ws.OrganizationID)
+		identity, err = s.identityFor(ctx, userID, email, name, ws.ID, ws.OrganizationID)
 	}
 	if err != nil {
 		return nil, err

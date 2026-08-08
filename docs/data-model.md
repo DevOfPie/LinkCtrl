@@ -91,7 +91,7 @@ appears in sqlc-visible SQL.
 
 | Table | Cols | Status | Notes |
 | --- | --- | --- | --- |
-| `users` | 18 | Built | Deletion is **soft** (M52): `deleted_at` and `status = 'deleted'` are written and the row stays, which is what releases the address through the partial `users_email_key` and what gives the erasure sweep something to mark. `anonymized_at` is that mark, set by the hourly pass once the residue is scrubbed. `status = 'suspended'` still has **no writer**, deliberately. |
+| `users` | 19 | Built | Deletion is **soft** (M52): `deleted_at` and `status = 'deleted'` are written and the row stays, which is what releases the address through the partial `users_email_key` and what gives the erasure sweep something to mark. `anonymized_at` is that mark, set by the hourly pass once the residue is scrubbed. `status = 'suspended'` still has **no writer**, deliberately. `mfa_secret` and `mfa_enabled_at` waited from the first migration until 0.3.0 for a writer that *sets* them ([M53](build-notes/phase-details/m53.md)); M52's erasure sweep was the first writer of either and it clears them. `mfa_last_step` (`04100`) is the replay guard: the highest TOTP step accepted, so a code from that step or earlier is refused inside its own window. |
 | `organizations` | 8 | Built | `deleted_at` exists and **nothing writes it**; `DeleteOrganization` is a hard `DELETE`. |
 | `workspaces` | 9 | Built | |
 | `memberships` | 7 | Built | `workspace_id` NULL means organization-wide; a set one scopes the membership to that workspace (D31, D44). |
@@ -103,6 +103,8 @@ appears in sqlc-visible SQL.
 | `invitations` | 12 | Built | Single-use, address-bound (D27), expiring (D29). |
 | `pending_registrations` | 9 | Built | Self-serve signup (M29). Swept when its window lapses. |
 | `password_resets` | 6 | Built | Account recovery (M51, `03900`). The third bearer-token table, after invitations and registrations: only a SHA-256 is stored, single-use, one hour. Swept hourly, and every row for an account is spent when one of them is used. |
+| `mfa_recovery_codes` | 5 | Built | Ten single-use codes per enrolment ([M53](build-notes/phase-details/m53.md), `04100`). SHA-256 only, globally unique so two accounts cannot hold one secret, and kept after being spent so the account page can count what is left. Regenerating deletes the set outright — the previous one is void in full, and a count of leftovers from a void set would be a lie. |
+| `mfa_pending_logins` | 8 | Built | The step between a right password and a session (`04100`). The fourth bearer-token table and the shortest-lived: SHA-256 only, single-use, five minutes. A table rather than a signed cookie because single use needs a server-side record of whether it has been spent, at which point the table is back and the cookie is an optimisation. Carries the sign-in's `ip_prefix` and user agent, so the session it mints records where the sign-in *started*. Swept hourly with no retention window — a spent one is evidence of nothing, because the session it minted is the record. |
 
 ### Links and routing
 
@@ -136,7 +138,7 @@ appears in sqlc-visible SQL.
 
 | Table | Cols | Status | Notes |
 | --- | --- | --- | --- |
-| `audit_logs` | 12 | Built, partitioned | 34 actions, enumerated by `audit.AllActions` and checked by a test. `actor_label` is rewritten to a constant tombstone by the erasure sweep; `actor_user_id` is not (D148). |
+| `audit_logs` | 12 | Built, partitioned | 38 actions, enumerated by `audit.AllActions` and checked by a test. `actor_label` is rewritten to a constant tombstone by the erasure sweep; `actor_user_id` is not (D148). |
 | `notifications` | 9 | Built | Scoped to the reader and the workspace they are standing in, with organization-level news visible from every workspace (D102). |
 | `mail_outbox` | 11 | Built | Optional: an instance with no `SMTP_HOST` never queues. Bodies are blanked when a row finishes (F32). |
 | `webhooks` / `webhook_deliveries` | 10 / 11 | Built | Delivery is instance-wide and arrival-ordered, which is a recorded limitation (F90). |

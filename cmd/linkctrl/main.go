@@ -485,6 +485,33 @@ func run(cfg config.Config, _ io.Writer) error {
 		return err
 	}
 
+	// The second factor (M53). Built after recovery and deletion because it is
+	// the third thing in the same lifecycle, and after recovery specifically
+	// because it depends on it: a second factor makes lockout strictly more
+	// likely, and shipping one where a lost password was permanent would take a
+	// known defect and multiply it.
+	//
+	// **The cipher is nil when MFA_SECRET_KEY is unset**, which is a supported
+	// instance rather than a misconfiguration — every deployment was that
+	// instance before this milestone. The service is still built, because
+	// enrolled accounts must still stop at the second-factor prompt on an
+	// instance whose key went missing, and their route on is a recovery code.
+	mfaCipher, err := mfaCipherFor(cfg, log)
+	if err != nil {
+		return err
+	}
+	mfaSvc, err := auth.NewMFAService(pools.App, auth.MFAConfig{
+		Auth:   authSvc,
+		Cipher: mfaCipher,
+		Issuer: mfaIssuer(cfg),
+		Audit:  auditSvc,
+		Notify: notifySvc,
+		Log:    log,
+	})
+	if err != nil {
+		return err
+	}
+
 	// Invitations. Built after the mailer, because whether one exists is the
 	// whole difference between "we emailed it" and "copy this link" — and a nil
 	// Enqueuer here is the mail-free instance, not an error.
@@ -840,7 +867,7 @@ func run(cfg config.Config, _ io.Writer) error {
 
 	roller := analytics.NewRoller(pools.App, log)
 	jobs := newJobRunner(pools.App, salts, roller, log, metrics, notifySvc, mailSvc, signupSvc,
-		recoverySvc, accountSvc,
+		recoverySvc, accountSvc, mfaSvc,
 		linkSvc, webhookSvc, automationSvc, hostCache, cfg.Domains,
 		cfg.Analytics.RetentionDays, cfg.Audit.RetentionDays, cfg.Audit.SizeWarnBytes)
 	jobs.start(ctx)
@@ -902,6 +929,7 @@ func run(cfg config.Config, _ io.Writer) error {
 		Signup:   signupSvc,
 		Recovery: recoverySvc,
 		Accounts: accountSvc,
+		MFA:      mfaSvc,
 		Disputes: disputeSvc,
 		Instance: instanceSvc,
 		Metrics:  metrics,
@@ -910,7 +938,7 @@ func run(cfg config.Config, _ io.Writer) error {
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
 			Links: linkSvc, Stats: stats, Notify: notifySvc, Invites: inviteSvc,
 			Team: teamSvc, Signup: signupSvc, Recovery: recoverySvc,
-			Accounts: accountSvc,
+			Accounts: accountSvc, MFA: mfaSvc,
 			Disputes: disputeSvc, Instance: instanceSvc,
 		},
 	})
@@ -1061,4 +1089,43 @@ func recoveryMailer(m *mail.Service) recovery.Enqueuer {
 		return nil
 	}
 	return m
+}
+
+// mfaCipherFor builds the TOTP secret's cipher, or reports that there is none.
+//
+// **Unset is not an error**, which is the whole of this function's shape: an
+// instance without MFA_SECRET_KEY offers no second factor, and that is what every
+// instance was before M53. It is warned about once at boot rather than refused,
+// for the reason the mail-free recovery warning above exists — the page that says
+// so is one nobody is watching, and the operator who has enrolled accounts and has
+// lost the key needs to read it in the log.
+//
+// A key that is present and unusable *is* an error. That is a value somebody
+// typed, so booting past it would leave an instance that looks configured and
+// refuses every code.
+func mfaCipherFor(cfg config.Config, log *slog.Logger) (*auth.MFACipher, error) {
+	if cfg.MFASecretKey.IsZero() {
+		log.Warn("no LINKCTRL_MFA_SECRET_KEY is set, so two-factor authentication is " +
+			"unavailable on this instance. Accounts already enrolled cannot use an " +
+			"authenticator code and must sign in with a recovery code")
+		return nil, nil
+	}
+	c, err := auth.NewMFACipher(cfg.MFASecretKey.Reveal())
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// mfaIssuer is what an authenticator app files the entry under.
+//
+// The dashboard's host, so somebody with three of these on their phone can tell
+// them apart, falling back to the product name on an instance with no parsed
+// origin — which is a configuration this product otherwise refuses, so the
+// fallback is a guard rather than a path.
+func mfaIssuer(cfg config.Config) string {
+	if u := cfg.AppBaseURLParsed(); u != nil && u.Host != "" {
+		return u.Host
+	}
+	return "LinkCtrl"
 }

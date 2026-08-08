@@ -124,6 +124,37 @@ const (
 	demoPassword = "demo-account-password"
 )
 
+// The second factor's demo (M53).
+const (
+	// demoMFASecret is the TOTP secret sam@example.com enrols with, fixed and
+	// published rather than random.
+	//
+	// **Written in the clear for the reason demoPassword and demoLinkPassword
+	// are: publishing it is the point.** A second factor nobody can produce a
+	// code for is an account nobody can sign in as, and the demo would then show
+	// the prompt and nothing behind it. With the secret published, anybody can
+	// scan it into an authenticator and walk the whole flow — the code prompt
+	// between the password and the session, and the enrolled state on the
+	// account page afterwards.
+	//
+	// **Not the owner's account, deliberately.** Every seeded account shares
+	// demoPassword, and the owner is who an evaluator signs in as first; putting
+	// a second factor on it would put a step in front of the demo itself. Sam is
+	// the viewer, so an evaluator who wants the second factor asks for it and
+	// everybody else is unaffected.
+	//
+	// Twenty bytes of base32, which is what NewTOTPSecret produces and what an
+	// authenticator app expects. Fixed rather than generated so the published
+	// value in docs stays true across every `make demo-update`.
+	demoMFASecret = "MFZWIZLTMVZGKZBAMFZWIZLTMVZGKZBA" //nolint:gosec // G101: a published demo credential, deliberately
+
+	// demoMFAIssuer is what an authenticator app files the entry under. The
+	// demo's own hostname rather than cfg.AppBaseURLParsed()'s, so the published
+	// secret and the label a scanner shows do not drift apart when the demo is
+	// rebuilt behind a different origin.
+	demoMFAIssuer = "linkctrl-demo.devofpie.com"
+)
+
 // demoWorkspace2 is the second workspace, which is the entire difference between
 // a switcher that renders nothing and one somebody can use.
 const (
@@ -314,6 +345,9 @@ type demoSeeder struct {
 	// scheduler, and a demo rebuilt from nothing at every milestone would
 	// otherwise show the lag rather than the outcome.
 	accounts *account.Service
+	// mfa enrols the one seeded account that has a second factor (M53), through
+	// the same service call the dashboard makes.
+	mfa *auth.MFAService
 
 	// owner is whoever claimed the instance, acting in their first workspace.
 	owner *auth.Identity
@@ -363,6 +397,27 @@ func newDemoSeeder(
 		return nil, fmt.Errorf("demo accounts: %w", err)
 	}
 
+	// The second factor (M53). The cipher comes from the instance's own
+	// MFA_SECRET_KEY, which `scripts/instance.sh init` mints for every local
+	// instance — an unset key leaves this nil, seedSecondFactor refuses, and the
+	// coverage row fails, which is the right direction for a demo that is
+	// supposed to show the feature.
+	mfaCipher, err := auth.NewMFACipher(cfg.MFASecretKey.Reveal())
+	if err != nil {
+		return nil, fmt.Errorf("demo second factor: %w", err)
+	}
+	mfaSvc, err := auth.NewMFAService(pool, auth.MFAConfig{
+		Auth:   authSvc,
+		Cipher: mfaCipher,
+		Issuer: demoMFAIssuer,
+		Audit:  auditSvc,
+		Notify: notifySvc,
+		Log:    discardLogger(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("demo second factor: %w", err)
+	}
+
 	return &demoSeeder{
 		pool: pool, q: dbgen.New(pool), cfg: cfg, now: now, opt: opt,
 		auth:     authSvc,
@@ -374,6 +429,7 @@ func newDemoSeeder(
 		dispute:  disputeSvc,
 		instance: instance.NewService(pool, instance.Config{Audit: auditSvc}),
 		accounts: accountSvc,
+		mfa:      mfaSvc,
 		gates:    gateSvc,
 		keys:     keySvc,
 		owner:    owner,
@@ -428,6 +484,9 @@ func (s *demoSeeder) run(ctx context.Context, primary []demoLink, ids map[int]uu
 		return err
 	}
 	if err := s.seedDeletedAccount(ctx); err != nil {
+		return err
+	}
+	if err := s.seedSecondFactor(ctx, people); err != nil {
 		return err
 	}
 	return s.readSomeNotifications(ctx)
@@ -1891,6 +1950,42 @@ func (s *demoSeeder) readSomeNotifications(ctx context.Context) error {
 	if len(items)-read == 0 {
 		return errors.New("the demo owner has no unread notifications; the bell would be empty")
 	}
+	return nil
+}
+
+// seedSecondFactor enrols one seeded account (M53).
+//
+// Through the service the dashboard calls, not by writing rows: the secret is
+// encrypted under this instance's MFA_SECRET_KEY, `mfa_enabled_at` is stamped by
+// the same statement, ten recovery codes are issued and the change is audited and
+// notified. A demo that wrote `mfa_enabled_at = now()` directly would show a state
+// the product never produces.
+//
+// **The secret is fixed and published**, so somebody evaluating this can scan it
+// and drive the whole flow rather than look at a prompt they cannot pass. See
+// demoMFASecret for why it is not the owner's account.
+//
+// The recovery codes are discarded here on purpose. They are shown once by
+// design, and a demo that kept them would be publishing ten standing credentials
+// for an account anybody can already sign into with the published password and
+// the published secret — ten more ways in, for nothing.
+func (s *demoSeeder) seedSecondFactor(ctx context.Context, people demoPeople) error {
+	if people.viewer == nil {
+		return errors.New("the demo viewer was not seeded, so there is nobody to enrol")
+	}
+	// The code the account's authenticator would be showing. Computed rather than
+	// fixed, because a fixed code stops being current thirty seconds after it is
+	// written down.
+	code, err := auth.TOTPCode(demoMFASecret, auth.TOTPStep(time.Now()))
+	if err != nil {
+		return fmt.Errorf("compute the demo enrolment code: %w", err)
+	}
+	out, err := s.mfa.ConfirmEnrolment(ctx, people.viewer, demoMFASecret, code)
+	if err != nil {
+		return fmt.Errorf("enrol %s in the second factor: %w", demoViewerEmail, err)
+	}
+	fmt.Fprintf(os.Stderr, "second factor: %s enrolled, %d recovery codes issued\n",
+		demoViewerEmail, len(out.RecoveryCodes))
 	return nil
 }
 

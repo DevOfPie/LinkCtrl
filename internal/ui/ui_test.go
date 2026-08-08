@@ -708,6 +708,15 @@ func pageData(t *testing.T) map[string]any {
 			// somebody chooses otherwise, and the one the control has to show
 			// as *Last-Used*.
 			"WorkspacePinned": false,
+			// The second factor's summary (M53), drawn in its enrolled state so
+			// the recovery-code count and the "Manage" wording are both
+			// exercised. The unenrolled and unavailable branches are the "mfa"
+			// page's, below.
+			"ShowMFA": true,
+			"MFA": map[string]any{
+				"Available": true, "Enabled": true,
+				"RecoveryCodesRemaining": int64(7),
+			},
 		},
 		// Every state in one render. A read notification and an unread one, so
 		// the dot, "Mark read" and "Mark unread" are each exercised; and since
@@ -923,6 +932,32 @@ func pageData(t *testing.T) map[string]any {
 			"Form":        map[string]string{"Email": "someone@example.com"},
 			"FieldErrors": map[string]string{"email": "that does not look like an email address"},
 			"Error":       "",
+		},
+		// The enrolment offer, which is the state with the most markup in it: the
+		// QR, the secret in text, the otpauth link and the confirm form. The
+		// enrolled and unavailable branches render strictly less.
+		"mfa": map[string]any{
+			"Title": "Two-factor authentication", "Nav": "account", "Identity": owner(),
+			"Secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+			"QR":     template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"></svg>`),
+			"URI": template.URL("otpauth://totp/example.test:owner@example.com" +
+				"?algorithm=SHA1&digits=6&issuer=example.test&period=30&secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"),
+			"RecoveryCodes": []string(nil),
+			"Regenerated":   false,
+			"Status": map[string]any{
+				"Available": true, "Enabled": false,
+				"RecoveryCodesRemaining": int64(0),
+			},
+			"FieldErrors": map[string]string{
+				"code": "that code is not valid",
+			},
+			"Error": "",
+		},
+		"mfa_challenge": map[string]any{
+			"Title": "Enter your code", "Nav": "", "Identity": (*identityStub)(nil),
+			"Token": "2ZQ3jd0eGkEaBcDeFgHiJkLmNoPqRsTuVwXyZ012",
+			"Next":  "/dashboard",
+			"Error": "that code is not valid",
 		},
 		"reset": map[string]any{
 			"Title": "Choose a new password", "Nav": "", "Identity": (*identityStub)(nil),

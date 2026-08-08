@@ -29,8 +29,16 @@ const (
 // a different reason from the other three: each is served to somebody with no
 // session — no account at all, in the first three, and a lost password in the
 // last two — which is the whole point of them, so there is no identity to draw.
+//
+// `mfa_challenge` is the newest of them and the most exactly so (M53). It is the
+// page between a right password and a session: the password has been accepted
+// and no session exists yet, which is the state the whole milestone is built
+// around. Drawing a header there would mean the layout had an identity to read,
+// and that would be the authentication bypass the milestone's own risk note
+// names.
 var chromelessPages = []string{
 	"login", "setup", "error", "invite", "signup", "verify", "forgot", "reset",
+	"mfa_challenge",
 }
 
 // hasOrganization reads the shell flag out of a page's test data.

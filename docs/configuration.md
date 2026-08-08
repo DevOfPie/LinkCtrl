@@ -38,12 +38,40 @@ No defaults. The process refuses to start without them.
 | `LINKCTRL_API_KEY_PEPPER` | ≥32 bytes. `openssl rand -base64 48`. Keys the HMAC that protects every API key hash, so **changing it invalidates every existing API key**. Not rotatable in place. |
 | `LINKCTRL_DATABASE_URL` | pgx-compatible DSN. Compose builds it from the `POSTGRES_*` variables. |
 
-Four variables accept a `_FILE` suffix pointing at a file, for mounted secrets:
-`API_KEY_PEPPER` and `DATABASE_URL` here, and `SMTP_PASSWORD` and
-`FEED_AUTH_TOKEN` in their own sections below. Setting both forms of the same
-secret is an error, not a precedence rule. (This said two until 0.2.0, while the
-loader accepted four and the two missing ones were documented correctly in their
-own rows — a summary that had fallen behind the table it summarises, F45.)
+Five variables accept a `_FILE` suffix pointing at a file, for mounted secrets:
+`API_KEY_PEPPER` and `DATABASE_URL` here, `MFA_SECRET_KEY` below, and
+`SMTP_PASSWORD` and `FEED_AUTH_TOKEN` in their own sections. Setting both forms
+of the same secret is an error, not a precedence rule. (This said two until
+0.2.0, while the loader accepted four and the two missing ones were documented
+correctly in their own rows — a summary that had fallen behind the table it
+summarises, F45.)
+
+## Two-factor authentication
+
+One variable, and it is optional. Leaving it unset is a supported instance: the
+second factor is simply not offered, which is what every instance was before
+0.3.0.
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `LINKCTRL_MFA_SECRET_KEY` | *(unset)* | ≥32 bytes. `openssl rand -base64 48`. Encrypts each account's TOTP secret at rest. Unset means nobody can enrol and the account page says so. |
+
+**Losing it locks every enrolled account out of the second factor, and no
+further.** The secret cannot be decrypted, so no authenticator code can be
+verified and an enrolled account stops at the code prompt. What still works is a
+**recovery code** — those are SHA-256 hashes and this key is not involved in
+them. The route back is: sign in with a recovery code, turn the second factor off
+with another one, then enrol again. An account that has neither is the operator's
+to repair, which is the same last resort a forgotten password has.
+
+**It is deliberately not `API_KEY_PEPPER`, and must not be set to the same
+value.** The pepper is bound to retained API-key rows and rotating it invalidates
+every issued key. Sharing one value would mean rotating an API-key secret also
+locked every account out of its authenticator — two credential lifecycles with
+nothing to do with each other, given one lifetime.
+
+Like the pepper, it is not rotatable in place: there is no re-encrypting sweep.
+Changing it has exactly the effect of losing it.
 
 ## Core
 

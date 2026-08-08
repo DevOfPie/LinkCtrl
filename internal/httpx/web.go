@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/DevOfPie/LinkCtrl/internal/account"
@@ -60,6 +61,12 @@ type Web struct {
 	// instance was in before this existed — no account deletion of any kind,
 	// for anybody (F44).
 	Accounts *account.Service
+	// MFA owns the second factor (M53). Nil leaves the enrolment page, the code
+	// prompt and the account page's section unregistered, which is the state
+	// every instance was in before this existed. Non-nil with no MFA_SECRET_KEY
+	// is a different state and the page says so: enrolled accounts still stop at
+	// the prompt, and their route on is a recovery code.
+	MFA *auth.MFAService
 	// Disputes serves the review queue and the appeal a refused creator files.
 	// Nil leaves the page unregistered and takes the "ask for a review" button
 	// off the link form, because a refusal must not offer a door that is not
@@ -461,6 +468,20 @@ func (h *Web) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.render(w, r, http.StatusUnauthorized, "login", data)
+		return
+	}
+
+	// The second factor (M53). No cookie, and the token travels in the redirect
+	// rather than in one: it is a credential for one operation with a five-minute
+	// life, where a cookie would send it on every request to the origin for the
+	// rest of the browser's session.
+	//
+	// A redirect rather than rendering the prompt in place, so the code form is a
+	// GET a browser can reload without re-posting the password — the same reason
+	// every other successful post here answers 303.
+	if res.SecondFactorRequired() {
+		seeOther(w, r, "/login/code?t="+url.QueryEscape(res.Pending.Token)+
+			"&next="+url.QueryEscape(safeNext(r.PostFormValue("next"))))
 		return
 	}
 

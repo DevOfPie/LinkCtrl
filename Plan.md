@@ -148,7 +148,7 @@ rather than rendering a world uniformly colored "unknown".
 | Password links, one-time links, max-click links, signed URLs | 2 |
 | Malicious destination blocking: tiers, logging, notification, disputes | 2 |
 | Third-party reputation and malware feeds — opt-in, off by default | 2 |
-| MFA, OAuth, OIDC, SSO, SCIM | 3 for **MFA only** ([M53](docs/build-notes/phase-details/m53.md)); OAuth, OIDC, SSO and SCIM stay 3+ and unscheduled (D109) |
+| MFA, OAuth, OIDC, SSO, SCIM | **MFA built in 3** ([M53](docs/build-notes/phase-details/m53.md)) — TOTP only, off until `LINKCTRL_MFA_SECRET_KEY` is set. OAuth, OIDC, SSO and SCIM stay 3+ and unscheduled (D109) |
 
 Destination blocking is two threat models wearing one name, and the *Abuse
 prevention* row above is the other half. What Phase 1 already refuses — non-`http(s)`
@@ -761,11 +761,13 @@ so more than one can be worked at a time or a blocked one has somewhere to fall
 back to (owner directive, 2026-08-06). It schedules nothing and restates nothing —
 a row there is a pointer back to this list plus an area.
 
-- MFA, OAuth, OIDC, SSO, SCIM — Phase 3 by the scope table. **Partially
-  scheduled 2026-08-06: MFA is [M53](docs/build-notes/phase-details/m53.md),
-  TOTP only.** OAuth, OIDC, SSO and SCIM stay on this row and stay unscheduled —
-  each is a separate credential model, and the row is amended rather than
-  removed so their deferral keeps its reason.
+- MFA, OAuth, OIDC, SSO, SCIM — Phase 3 by the scope table. **MFA is built:
+  [M53](docs/build-notes/phase-details/m53.md), TOTP only, 2026-08-08.** OAuth,
+  OIDC, SSO and SCIM stay on this row and stay unscheduled — each is a separate
+  credential model, and the row is amended rather than removed so their deferral
+  keeps its reason. Two absences inside the MFA limb are decisions rather than
+  remainders and are recorded with it: no WebAuthn, passkeys, SMS or push, and no
+  organization-level *require MFA* policy.
 - **An API key that reaches more than one organization.** Owner-directed on
   2026-08-05, after [F75](docs/build-notes/deferred-findings.md): a key should be
   minted by an *account* and reach the organizations that account belongs to,
@@ -1152,6 +1154,7 @@ produced a minority of them (F37).
 | --- | --- |
 | A default instance still has no account recovery, and says so | [M51](docs/build-notes/phase-details/m51.md) built the mechanism and it is delivered by mail, so `SMTP_HOST` unset means there is no route back into an account whose password was lost. The product **refuses out loud** rather than degrading (D143): the sign-in page draws no link, `/forgot` answers with the reason instead of a form, and the API answers `503 no-mailer`. The operator's route is unchanged and is what the refusal names — setting the hash directly, or `lctl instance principal move` for the one account that administers the box. This is the only consumer of the mailer whose absence is a refusal; every other one has a second channel. |
 | Erasure reaches the actor snapshot, not an address inside an audit record's detail | [M52](docs/build-notes/phase-details/m52.md)'s hourly sweep replaces `audit_logs.actor_label` and both of `destination_disputes`'s label columns with a constant tombstone. It does **not** touch `audit_logs.metadata`, and six writers put an address there — the invitation and membership vocabularies, keyed `"email"`, counted rather than recalled. So an erased account's address survives in the detail of records where it is the *subject* of somebody else's action, and in the detail of its own redemption record. Bounded rather than open: nothing there is readable without `audit.read`, which is not delegable to an API key, and the rows age out at `AUDIT_RETENTION_DAYS`. It is a limitation rather than a defect because closing it means editing a live actor's audit entry to remove somebody else's address from it, and the only mechanism that finds one is a sequential scan of the largest partitioned table after analytics. [F177](docs/build-notes/deferred-findings.md) is the row; `docs/SECURITY.md` states it where a compliance reader will meet it. |
+| Nothing can *require* a second factor, and the key that protects one is not rotatable | [M53](docs/build-notes/phase-details/m53.md) builds TOTP for anybody who wants it, and stops there. There is no organization-level *require MFA for all members* policy: it needs a permission of its own, an enforcement point on every session resolution, and an answer for members who cannot enrol — a policy feature wearing an authentication milestone's clothes, named in m53.md so a later reader knows it was considered. So an administrator who needs a second factor across a team has to ask rather than enforce. Separately, `LINKCTRL_MFA_SECRET_KEY` has no re-encrypting sweep, so changing it has exactly the effect of losing it: every enrolled account falls back to a recovery code, then to the operator. That is the second piece of configuration in this product whose loss destroys something that cannot be recomputed, and it is counted as a new class of operator mistake rather than as a defect — the consequence is bounded and `docs/configuration.md` states the chain beside the variable. |
 | DNS rebinding not defended against | A host resolving public at creation and private at click time is not caught. Detection needs resolution on the hot path. |
 | Invalidation needs Redis to cross replicas | Invalidations are broadcast on Redis pub/sub. With Redis down each replica falls back to `REDIRECT_TTL` staleness, which is correct but slower to converge; a reconnecting subscriber flushes its in-process tiers because pub/sub cannot replay what it missed. A Redis that accepts and then stalls is bounded rather than waited on: an edit spends at most `REDIS_INVALIDATE_BUDGET` (250ms) on the cache before committing anyway and logging the staleness (D26, [M26.6](docs/build-notes/phase-details/m26.6.md)). |
 | Rate limits are shared only while Redis is reachable | The credential and API limits are enforced in Redis, so they hold across replicas. **On any Redis error each replica falls back to its own in-memory bucket, and the configured limit then applies per replica — N replicas allow N times it** until Redis returns. A restart also resets the local buckets. The 404-probe limiter is deliberately never shared: a Redis round trip on the redirect path would put an optional dependency on the 20ms budget. |
