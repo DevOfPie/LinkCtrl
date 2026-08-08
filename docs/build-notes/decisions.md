@@ -264,6 +264,7 @@ file. Append a row when you append an entry.
 | [M50.6: the logo in the picture](#2026-08-07--m506-the-logo-in-the-picture-a-cap-that-is-arithmetic-a-level-that-is-not-a-preference-and-the-ring-a-measurement-bought) | D140–D142: the occlusion cap as arithmetic rather than a plausible fraction — what level H actually recovers, why a contiguous square costs more than its area, and why it may spend only half; why a request naming another level is accepted and overridden rather than refused, and where the forcing has to happen twice; why the logo is embedded as a data URI rather than served, what that does to the rasteriser's allocation figure, and why `img-src` had to be pinned; and the one module of background a hand decode check bought |
 | [M49: the size, the second encoder, and D11 spent on purpose](#2026-08-07--m49-the-size-the-second-encoder-and-d11-spent-on-purpose) | D127–D129: what bounds a rasteriser that D11 refused to allow at all, stated as an allocation rather than as a word; why the quiet zone became the second knob and what the search costs in tie-breaks; why `qr.Style` gained no field and what that bought for every row already in the table; why a form that stopped asking about error correction needed a new service operation rather than a default; and the two encoders sharing one arithmetic, with the claim they are held to and the one they are not |
 | [M51.9: what the mid-phase review checked, found, and could not run](#2026-08-08--m519-the-mid-phase-review-what-it-checked-what-it-found-and-the-one-bullet-it-could-not-run) | D146: the eighteen blind tasks are recorded nowhere, so the bullet asking for them is struck and the cost — D121's ordering and D124/D126's placement go un-rechecked — is stated. D147: the doc-cost judgement, trimming 2930 bytes of a 6409-byte resume-charge growth and defending the rest. F172–F175, and the two candidates that were refuted |
+| [M46 reopened: the overflow bullet narrowed on the milestone's own instruction](#2026-08-08--m46-the-overflow-bullet-narrowed-on-the-milestones-own-instruction) | F172 closed. Why a claim about a guard that does not exist reopens the milestone rather than arriving as a successor, and why writing the narrowing into the test file discharged nothing |
 
 ---
 
@@ -22277,3 +22278,39 @@ are the Phase 3 preamble, which explains a seventeen-row table against a
 fifteen-milestone target, and amendments inside the inherits table itself. A
 resuming session that does not read the first files the row count as an ordering
 bug.
+
+## 2026-08-08 — M46, the overflow bullet narrowed on the milestone's own instruction
+
+[M46](phase-details/m46.md) reopened for one sentence.
+[F172](deferred-findings.md), found by [M51.9](phase-details/m51.9.md): the
+milestone asserted a guard that does not exist, and had done since the day it
+shipped.
+
+- **The bullet as it stood:** *"Enforced by a template scan in M24.5's idiom
+  rather than by looking: any element that can exceed the viewport — tables
+  first — is inside a container that scrolls on its own, asserted across every
+  page template so a page added later cannot reintroduce it."*
+- **The bullet as amended:** every `<table>` and every `<pre>`, over every
+  rendered page, with the remainder — the header bar, and everything that can
+  exceed the viewport without saying so in markup — named as unenforced.
+- **The tree fact that forced it:** `internal/ui/overflow_test.go` checks
+  `wideElements = {table, pre}` (`:49`) over rendered pages rather than template
+  sources (`:30-34`). Its own comment at `:21-28` quotes the bullet, states that
+  the set it names *"cannot be enumerated from markup"*, and cites this
+  milestone's Risks section as licensing a narrowing — *"narrow the bullet to
+  what the scan checks and say what is left over, never the other way round."*
+
+**Reopened rather than corrected in place, and that is the whole point of the
+distinction.** Nothing about the product changed: all seventeen dashboard routes
+were measured at 360px on 2026-08-08 and not one scrolls sideways. What was wrong
+was a `done` row asserting a mechanism nobody had, and workflow.md sends that
+back to the milestone that made the claim rather than forward to a successor,
+because a successor would leave M46's row reading `done` over something untrue.
+
+**The failure mode is worth naming because it is not carelessness.** M46
+anticipated this exactly — its Risks section is where the narrowing was licensed
+in advance — and the milestone then wrote the narrowing into the *test file*,
+where it is true, complete, and read by nobody validating a later milestone
+against M46's definition of done. Writing an amendment next to the code is
+writing it in the one place the contract does not look. **A licence to narrow a
+bullet is discharged by narrowing the bullet.**
