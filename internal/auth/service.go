@@ -605,11 +605,27 @@ func WritePassword(
 	return nil
 }
 
-// ChangePassword updates a password and logs out every other session.
-func (s *Service) ChangePassword(ctx context.Context, userID, keepSession uuid.UUID, current, next string) error {
-	if err := validatePasswordLength(next, "new_password"); err != nil {
-		return err
-	}
+// VerifyPassword confirms an account's own password, and answers nothing else.
+//
+// **The product's one re-verification path**, exported for the reason
+// WritePassword above is: there is now more than one operation that asks
+// somebody to prove they are still the person holding the account, and two
+// copies of this would be two places deciding what a missing hash means and two
+// places mapping a mismatch onto a refusal. ChangePassword is the first caller
+// and account deletion (M52) is the second — irreversible operations gated on
+// the credential rather than on the session alone.
+//
+// A NULL `password_hash` is ErrInvalidCredentials rather than an error of its
+// own. The column is nullable for an SSO-only account (Phase 3) and for one this
+// milestone's erasure pass has scrubbed, and neither of those can confirm a
+// password by typing one — which is precisely what "invalid credentials" says.
+//
+// No lockout counting, deliberately, and the same choice ChangePassword has
+// always made: the caller already holds a live session for this account, so
+// there is no credential-stuffing budget to spend and locking somebody out of
+// their own settings page for mistyping is a denial of service against them. The
+// rate limit on the routes that reach here is what bounds the guessing.
+func (s *Service) VerifyPassword(ctx context.Context, userID uuid.UUID, password string) error {
 	user, err := s.q.GetUserByID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("look up user: %w", err)
@@ -617,8 +633,19 @@ func (s *Service) ChangePassword(ctx context.Context, userID, keepSession uuid.U
 	if user.PasswordHash == nil {
 		return ErrInvalidCredentials
 	}
-	if err := s.hasher.Verify(current, *user.PasswordHash); err != nil {
+	if err := s.hasher.Verify(password, *user.PasswordHash); err != nil {
 		return ErrInvalidCredentials
+	}
+	return nil
+}
+
+// ChangePassword updates a password and logs out every other session.
+func (s *Service) ChangePassword(ctx context.Context, userID, keepSession uuid.UUID, current, next string) error {
+	if err := validatePasswordLength(next, "new_password"); err != nil {
+		return err
+	}
+	if err := s.VerifyPassword(ctx, userID, current); err != nil {
+		return err
 	}
 
 	if err := WritePassword(ctx, s.q, s.hasher, userID, next); err != nil {

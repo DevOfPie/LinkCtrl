@@ -24,9 +24,17 @@
 CREATE TABLE password_resets (
     id          uuid        PRIMARY KEY,
 
-    -- The account being recovered. ON DELETE CASCADE, so an outstanding token
-    -- cannot outlive its user: there is no route by which a reset for a deleted
-    -- account could still be consumed, because the row is gone with the account.
+    -- The account being recovered. An outstanding token cannot outlive its
+    -- user: there is no route by which a reset for a deleted account could still
+    -- be consumed, because the row goes with the account.
+    --
+    -- **Two mechanisms, and this comment named only the first until M52.** ON
+    -- DELETE CASCADE covers a hard `DELETE FROM users`, which nothing in this
+    -- product performs. What M52 added is a *soft* delete — `deleted_at` and
+    -- `status = 'deleted'` on a row that stays — and a soft delete fires no
+    -- foreign key, so the cascade alone would have left a live password-setting
+    -- token behind an account nobody can sign into. `DeleteAccountDependents`
+    -- removes these rows in the deleting transaction for exactly that reason.
     --
     -- The address is deliberately *not* copied here, unlike
     -- `pending_registrations.email`. That table has no user to point at — it

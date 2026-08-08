@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/DevOfPie/LinkCtrl/internal/account"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
@@ -58,6 +59,12 @@ type Deps struct {
 	// against openapi.yaml compares itself to — and which is the state F141
 	// describes: no route back into an account whose password was lost.
 	Recovery *recovery.Service
+	// Accounts ends an account's life and erases what ending it leaves behind
+	// (M52). Nil leaves the endpoint and the dashboard's delete section
+	// unregistered, which is what the parity test against openapi.yaml compares
+	// itself to — and which is the state F44 describes: no account deletion of
+	// any kind, for anybody.
+	Accounts *account.Service
 	// Disputes serves the blocked-attempt appeal path and the review queue. Nil
 	// leaves both the endpoints and the dashboard page unregistered, which is
 	// what the parity test against openapi.yaml compares itself to — and which
@@ -186,6 +193,22 @@ func registerAppRoutes(d Deps, app *appMux) {
 			rec := &RecoveryAPI{Recovery: d.Recovery}
 			app.Handle("POST "+APIPrefix+"/auth/forgot", guard(http.HandlerFunc(rec.Forgot)))
 			app.Handle("POST "+APIPrefix+"/auth/reset", guard(http.HandlerFunc(rec.Reset)))
+		}
+
+		// Account deletion (M52). Under the same `guard` as the credential
+		// endpoints above, because the confirmation is the account's own
+		// password and this is therefore a third surface on which one can be
+		// guessed — sharing the bucket is what stops an attacker doubling their
+		// budget by alternating between it and /login.
+		//
+		// **Not under `signedIn`'s web equivalent, and RequireAuth is the whole
+		// gate.** Handing over every organization on the way out is exactly how
+		// somebody arrives at deletion, so the caller belonging to nothing (D36)
+		// is the ordinary case here rather than the exception.
+		if d.Accounts != nil {
+			acct := &AccountAPI{Accounts: d.Accounts, Config: d.Config}
+			app.Handle("DELETE "+APIPrefix+"/account",
+				guard(RequireAuth(http.HandlerFunc(acct.Delete))))
 		}
 
 		// The switcher. On the auth service because which workspace a request
@@ -558,6 +581,19 @@ func registerAppRoutes(d Deps, app *appMux) {
 		app.HandleFunc("POST /theme", web.ThemeSet)
 		app.Handle("POST /setup", guard(http.HandlerFunc(web.SetupSubmit)))
 		app.Handle("POST /account/password", guard(signedIn(web.PasswordChange)))
+		// Account deletion (M52), on the same limiter as the password change
+		// beside it and for the same reason: both verify the account's own
+		// password, so both are surfaces one can be guessed on.
+		//
+		// Under `signedIn` like its sibling, which means an account belonging to
+		// nothing (D36) reaches it through the API rather than through this
+		// page. That is the existing shape of `GET /account` rather than a
+		// choice this route makes — every dashboard page but two requires an
+		// organization — and changing it would be a decision about the
+		// dashboard, not about deletion.
+		if web.Accounts != nil {
+			app.Handle("POST /account/delete", guard(signedIn(web.AccountDelete)))
+		}
 		app.Handle("POST /account/domain", signedIn(web.DomainUpdate))
 		app.Handle("POST /account/bots", signedIn(web.BotBlockingUpdate))
 

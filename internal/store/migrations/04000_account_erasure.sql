@@ -1,0 +1,61 @@
+-- +goose Up
+--
+-- Account deletion and subject erasure (M52), which discharges F44.
+--
+-- **No new table and no new column, and that is the point of the migration
+-- rather than an economy.** `users.status`, `users.deleted_at` and
+-- `users.anonymized_at` have existed since `00200_identity.sql` and not one of
+-- them has ever had a writer; the schema described a lifecycle nobody built,
+-- which is exactly what F44 is. This milestone writes the code, so what is left
+-- for a migration is the one index that code needs.
+--
+-- The shape those columns were designed for, restated here because it is the
+-- thing an implementation can get backwards:
+--
+--   * **Deletion is soft.** `deleted_at` and `status = 'deleted'` are set, the
+--     row stays, and `users_email_key` — partial on `deleted_at IS NULL`
+--     (`00200:57`) — releases the address for reuse. A hard `DELETE` would make
+--     that partial index pointless and would leave `anonymized_at` no row to
+--     mark.
+--   * **Erasure is later, and separate.** The hourly sweep scrubs the
+--     identifying residue and stamps `anonymized_at`. The gap between the two
+--     timestamps is the sweep's lag and is documented as a number in
+--     `docs/SECURITY.md`.
+--
+-- **A soft delete fires no foreign key.** Every `ON DELETE CASCADE` pointing at
+-- `users` — `memberships`, `sessions`, `api_keys`, `notifications`,
+-- `password_resets`, `instance_grants` — triggers on `DELETE` and not on
+-- `UPDATE`, so the deletion path removes those rows with statements of its own,
+-- inside the same transaction. `internal/account` is where they are enumerated
+-- and why; nothing here changes to make that work.
+--
+-- **`status = 'suspended'` still has no writer**, deliberately. The CHECK
+-- constraint has admitted it since the first migration and no path in this
+-- product sets it. Suspension is a moderation feature nobody has asked for, it
+-- is not erasure, and it is not being smuggled in beside erasure because the
+-- enum already had a slot for it. `TestSuspendedStatusHasNoWriter` is what keeps
+-- that a stated absence rather than a thing a reader has to discover.
+
+-- What the erasure sweep reads, and the only reason this file exists.
+--
+-- Partial, for the reason `qr_codes_logo_idx` (03800) is: the sweep runs every
+-- hour on every instance and finds nothing on almost all of them, so the cost
+-- that matters is the cost of asking. Without this the question is a sequential
+-- scan of `users` an hour, forever, on a table that is one row per person.
+--
+-- Keyed on `deleted_at` because that is also the order the sweep takes rows in —
+-- oldest deletion first, so a backlog drains in the order the requests arrived
+-- rather than in whatever order the heap hands back.
+--
+-- Nothing is added for `destination_disputes`. The sweep updates it by
+-- `created_by` and `decided_by`, neither of which is indexed, and that is a
+-- sequential scan *only on the runs that find a deleted account* — rare by
+-- construction — over a table bounded to one open dispute per host. An index
+-- that earns its write cost on every dispute filed, to save a scan of a small
+-- table a few times a year, is the wrong trade; it is named here so the next
+-- reader knows it was weighed.
+CREATE INDEX users_pending_erasure_idx
+    ON users (deleted_at) WHERE deleted_at IS NOT NULL AND anonymized_at IS NULL;
+
+-- +goose Down
+DROP INDEX IF EXISTS users_pending_erasure_idx;

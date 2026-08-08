@@ -472,6 +472,72 @@ paths:
         "429":
           $ref: "#/components/responses/RateLimited"
 
+  /account:
+    delete:
+      tags: [auth]
+      operationId: deleteAccount
+      summary: Delete the authenticated account
+      description: |
+        Acts on the **calling account and no other**. There is no
+        administrative delete-somebody-else: who may end another person's
+        account is a permission-model question, and this endpoint does not
+        answer it.
+
+        Requires an interactive session — an API key is refused, for the reason
+        a password change refuses one. The subject of this operation is the
+        person, not the credential.
+
+        **What happens immediately, in one transaction.** Sessions, API keys,
+        memberships, notifications, outstanding password-reset tokens and any
+        instance-level grants are removed; the account is marked deleted; the
+        address becomes available for a new account. When this returns, no
+        credential reaches the account.
+
+        **What happens within the hour.** The two tables that deliberately
+        carry no foreign key to the account — the audit log and destination
+        disputes — keep their rows, because they are records of what happened
+        rather than records of a person. An hourly pass replaces the actor
+        snapshot in them with a fixed label and clears the account's remaining
+        fields. Until it runs, the snapshot still holds the address; access is
+        already gone either way. `docs/SECURITY.md` states the bound.
+
+        **Two refusals**, both `409`, both naming what to do about it: the
+        account that administers the instance (move the principal first), and
+        the sole owner of an organization that still exists (hand it over or
+        delete it first, and the detail says which organizations).
+
+        Belonging to no organization is **not** a refusal. Handing over every
+        organization you own alone is how most people arrive here.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [password]
+              properties:
+                password:
+                  type: string
+                  description: >-
+                    The account's own password, re-verified. In the body rather
+                    than in a query parameter, which is why this DELETE carries
+                    one: a password in a URL lands in access logs and browser
+                    history.
+      responses:
+        "204":
+          description: >-
+            Account deleted. The session cookie is expired on this response;
+            the residue is erased by the hourly pass.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
   /me:
     get:
       tags: [auth]
@@ -2757,13 +2823,19 @@ paths:
         wrong custodian for that.
 
         Actors are stored as a snapshot taken when the event was written, so a
-        record would stay readable if the account it names were ever deleted —
-        and nothing in this product deletes one, so in practice `actor_label` is
-        belt and braces rather than the load-bearing field it was designed as.
-        `actor_id` is the acting user, and it is **never cleared**: it is absent
-        only on records written by something that is not a person, such as the
-        domain-verification job. This said "present only while the user still
-        exists" until 0.2.0, which described a lifecycle nothing implements.
+        record stays readable after the account it names is deleted. Since 0.3.0
+        that is a lifecycle rather than a hypothetical: `DELETE /account` exists,
+        and an hourly pass replaces the snapshot of an erased actor with the
+        fixed label `deleted account`.
+
+        `actor_id` is the acting user and it is **never cleared**, erasure
+        included. It is absent only on records written by something that is not
+        a person, such as the domain-verification job. That is deliberate and it
+        is what makes an erased actor's entries still correlate with each other:
+        the label is a constant, so it distinguishes nobody, and the id is the
+        only thing that tells one erased actor from another. The id identifies
+        nobody from inside this instance once the account is erased — see
+        `docs/SECURITY.md` for what that does and does not claim.
 
         Addresses are never recorded. `ip_prefix` is a network — `/24` for
         IPv4, `/48` for IPv6 — which is enough to tell "the usual office" from
@@ -6481,14 +6553,18 @@ components:
           description: |
             Who acted, snapshotted when the event was written so the record
             survives the account being deleted. Usually an email address;
-            `system` for an action with no signed-in actor.
+            `system` for an action with no signed-in actor; `deleted account`
+            once the account has been deleted and the hourly erasure pass has
+            run, which is a constant and therefore identical for every erased
+            actor.
         actor_id:
           type: string
           format: uuid
           description: >-
             The acting user. Absent on records written by something that is not
-            a person — the domain-verification job, a migration. Never cleared:
-            nothing in this product deletes a user.
+            a person — the domain-verification job, a migration. Never cleared,
+            erasure included, which is what keeps one erased actor's entries
+            distinguishable from another's.
         actor_api_key_id:
           type: string
           format: uuid

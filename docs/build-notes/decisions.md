@@ -266,6 +266,10 @@ file. Append a row when you append an entry.
 | [M51.9: what the mid-phase review checked, found, and could not run](#2026-08-08--m519-the-mid-phase-review-what-it-checked-what-it-found-and-the-one-bullet-it-could-not-run) | D146: the eighteen blind tasks are recorded nowhere, so the bullet asking for them is struck and the cost — D121's ordering and D124/D126's placement go un-rechecked — is stated. D147: the doc-cost judgement, trimming 2930 bytes of a 6409-byte resume-charge growth and defending the rest. F172–F175, and the two candidates that were refuted |
 | [M46 reopened: the overflow bullet narrowed on the milestone's own instruction](#2026-08-08--m46-the-overflow-bullet-narrowed-on-the-milestones-own-instruction) | F172 closed. Why a claim about a guard that does not exist reopens the milestone rather than arriving as a successor, and why writing the narrowing into the test file discharged nothing |
 | [F174: the demo's QR codes were pictures of a link that answers Gone](#2026-08-08--f174-the-demos-qr-codes-were-pictures-of-a-link-that-answers-gone) | Why four demoCoverage() rows counting qr_codes all passed while every code on the demo resolved to 410, and the row that now counts the reachability they imply |
+| [M52: the residue column nobody counted, and a comment that moved](#2026-08-08--m52-the-residue-column-nobody-counted-and-a-comment-that-moved) | An amendment, not a decision: the actor snapshot label moved because M45 rewrote it, and `destination_disputes` holds two address-bearing snapshots where the bullet scrubbed one. Why the second is a fact and not an assertion, and what would have made it a prompt |
+| [M52: three answers at step 1, and the conflict resolved by the command that meets it](#2026-08-08--m52-three-answers-at-step-1-and-the-conflict-resolved-by-the-command-that-meets-it) | D148: the tombstone is a constant and the ids survive, what that costs the SECURITY.md claim, and why A can migrate to B but not back. D149: the update checker is on by default and asks at first run, overruling the recommendation and obliging M55 to build a surface that does not exist. And the hosting conflict — `/work phase` is the request, reversing the previous run's ruling on evidence it did not have |
+| [M52: a soft delete fires no cascade, and two comments that said it would](#2026-08-08--m52-a-soft-delete-fires-no-cascade-and-two-comments-that-said-it-would) | Why the deletion path writes out six DELETEs, why two tables joined m52.md's four, and the transaction-scoped audit writer the first operation whose actor it destroys needed |
+| [M52: the cascade the bullet promised, amended at acceptance](#2026-08-08--m52-the-cascade-the-bullet-promised-amended-at-acceptance) | The amendment record for the entry above, made at step 3.4 rather than step 1: the bullet as it stood, as amended to six explicit statements, and the tree fact that `ON DELETE CASCADE` never fires on an `UPDATE`. Why it is a fact and not an assertion, and why that is the difference between an amendment and a rejection |
 
 ---
 
@@ -22366,3 +22370,282 @@ code, that is what the truth would look like.
 Two comments naming a link `/qr-styled` were corrected in the same commit. That
 link has never existed in this demo — the constant is named instead now, so the
 citation cannot go stale the next time the codes move.
+
+## 2026-08-08 — M52: the residue column nobody counted, and a comment that moved
+
+**An amendment, not a decision.** Two facts in
+[m52.md](phase-details/m52.md) stopped describing the tree, found at
+[step 1](phase-loop.md#1-validate) while reading the bullets against it. Both
+are corrected in place; neither changes what the milestone asserts, which is why
+this is an amendment rather than a prompt.
+
+### The actor snapshot label moved fourteen lines down
+
+**As it stood**, twice — once in *What survives, and is erased in place
+instead*, once in *Documentation this milestone must true up*:
+
+> The identifying residue is the actor snapshot label
+> (`internal/audit/audit.go:517-528`), which holds an address.
+
+**As amended:** `internal/audit/audit.go:532-556`.
+
+**The tree fact.** `actorLabel`'s comment begins at 532 and the function at 546,
+ending at 556. The range in the bullet holds `RecordAPIKeyRevocation`, which is
+a different thing entirely. M45 rewrote that comment — it is where *"after the
+account is deleted"* became *"if"* — and the rewrite made it longer, which is
+what pushed the function down. The fifth line-number drift this phase, and the
+first where the drift was caused by the very finding the milestone discharges.
+
+### `destination_disputes` holds two addresses, and the bullet named one
+
+**As it stood:**
+
+> `created_by` has no FK and the table's own comment says the row must stay
+> readable after the account is gone (`01600_destination_disputes.sql:53-60`).
+> It also holds addresses, and F44 names it as the second table with **no
+> deletion path of any kind**. Erasure scrubs the address; the dispute and its
+> outcome stay.
+
+**As amended:** the bullet now names both columns, both id columns to find them
+by, and scrubs both — the text is in [m52.md](phase-details/m52.md).
+
+**The tree fact.** `01600_destination_disputes.sql` declares `created_by` (`:60`)
+with `created_by_label` (`:64`), and then `decided_by` (`:67`) with
+`decided_by_label` (`:68`). The second pair is the moderator who resolved the
+dispute, and the label is a snapshot of the same shape holding the same kind of
+value. An erasure pass reasoning from the bullet as written would scrub the
+filer's address and leave the decider's, on a table whose whole design note is
+that its rows outlive the accounts in them.
+
+The plural in *"it also holds addresses"* is what makes this a fact and not an
+assertion: the bullet already knew there was more than one and then wrote a
+singular instruction. Nothing is being decided here that the bullet had not
+already decided — only counted, which is what *counted, not recalled* two
+paragraphs later in the same file asks for and did not get. Both id columns
+exist, so both are findable; had `decided_by` been absent this would have been a
+prompt instead, because scrubbing a column you can only locate by matching the
+address you are removing is a different design.
+
+## 2026-08-08 — M52: three answers at step 1, and the conflict resolved by the command that meets it
+
+Owner-set, all three, in one prompt at [step 1](phase-loop.md#1-validate) of
+M52. Two are `D` numbers; the third is how this loop runs in a harness that
+forbids spawning. The entry carries M52's number because M52 was under way when
+it was appended, which is the rule even for the answer that belongs to
+[M55](phase-details/m55.md).
+
+### D148 — the erased actor's tombstone is a constant, and the ids stay
+
+**`actor_label` becomes a fixed string; `actor_user_id`, `created_by` and
+`decided_by` survive erasure.** Of the three options put, this is the one that
+builds no new mechanism: correlation across an erased actor's entries is the id
+that is already there, on the index already built for it —
+`audit_logs_actor_idx (actor_user_id, occurred_at DESC)`
+(`00600_phase2_dormant.sql:162`) — and the tombstone is therefore not derived
+from anything, so there is nothing for anybody to reverse. The id points at a
+`users` row that survives erasure with its identifying fields scrubbed, which is
+what `anonymized_at` has always meant and what separates it from `deleted_at`.
+
+**What it costs, recorded because the recommendation was made against itself.**
+The surviving uuid is pseudonymous personal data, not nothing. Somebody holding
+an *external* id-to-person mapping — an old backup, an exported audit CSV, a
+webhook payload — re-identifies the actor. So `docs/SECURITY.md` claims **the
+residue identifies nobody from inside this instance**, and not *the residue is
+anonymous*; a compliance reader is entitled to that distinction, and writing the
+weaker sentence is part of the milestone rather than a caveat about it.
+
+Two erased actors also render identically. Telling them apart is the audit
+surface's problem and is display rather than storage — the id is in the row —
+but M52 has no bullet for it, and the milestone owes one.
+
+**Why not the alternatives.** A random stored token with the ids nulled is the
+stronger claim and the only one that survives an external mapping; it costs a
+column on `users`, a migration, the retirement of the actor index for exactly
+the rows that need it, and an idempotence argument the constant gets for free.
+It stays available: **A migrates to B later** by nulling ids and assigning
+tokens to rows already erased, where B cannot migrate to A at all, because A's
+correlator would have been thrown away. A keyed hash was refused in every
+combination — m52.md's own *Risks* section argues against deriving from the id,
+the id stays in the row under this decision so a guess is confirmable, and the
+only instance-wide secret is `LINKCTRL_API_KEY_PEPPER`, documented as not
+rotatable in place.
+
+### D149 — the update checker is on by default, and asks at first run
+
+**The owner overruled the recommendation**, which was *off by default* and was
+argued from `docs/SECURITY.md:73` staying true unedited. On by default with a
+first-run prompt was the third option, and the reasoning it was chosen against
+is what the row now owes: **there is no first-run prompt surface for
+instance-level settings.** The setup form claims the instance; it does not
+configure it. [M55](phase-details/m55.md) therefore builds one, inside a
+milestone that is otherwise a daily HTTP GET, and that is a real widening of it
+rather than a footnote.
+
+The claim at `SECURITY.md:73` — *"No telemetry, no phone-home, no third-party
+calls in the default configuration"* — is edited rather than extended, and the
+edit is on behalf of every operator who read it. What makes the prompt the
+answer rather than a compromise is that the operator decides knowingly: the
+default is whatever they chose, so the sentence describes a choice that was put
+to them instead of a connection they were not told about. Recorded here on the
+date it was **given**; it is used when M55 lands.
+
+### The hosting conflict: `/work phase` is the request
+
+[W37](workflow-changes.md#proposed) is the row; it is still *Proposed* and this
+does not approve it. What was settled is narrower and immediate: **invoking
+`/work phase` is the owner requesting the worker that phase-loop.md mandates**,
+so a session carrying a standing instruction not to spawn subagents may spawn
+one for step 2 and the loop runs as written.
+
+This reverses the 2026-08-08 ruling from the previous run — *hand it to a
+session launched without the instruction, and not spawn anyway* — on evidence
+that ruling did not have: the next session was launched the same way, because
+the instruction is not something the owner sets per run. A resolution that
+depends on a session being launched differently is not a resolution when every
+session is launched identically.
+
+The two-actor split is untouched. The orchestrator still edits no code, no tests
+and no SQL, a rejected milestone still gets a fresh worker, and the reason the
+split exists — that the second attempt must not inherit the first's reasoning —
+is exactly what this preserves by spawning rather than by the orchestrator
+building.
+
+
+## 2026-08-08 — M52: a soft delete fires no cascade, and two comments that said it would
+
+Three things this milestone had to settle that its own file does not, each
+recorded because the next reader would otherwise re-derive it differently.
+
+### The four tables do not go by cascade, and cannot
+
+m52.md's *What is removed* says `memberships`, `sessions`, `api_keys` and
+`notifications` go **"by foreign-key cascade, already in the schema"**. Every
+other bullet in the same file requires the `users` row to *survive*:
+`deleted_at` and `status = 'deleted'` are written by the deletion path,
+`anonymized_at` is written later and *"marks the row whose residue has been
+scrubbed"*, and `users_email_key` being partial on `deleted_at IS NULL` only
+matters at all under a kept row — under a hard delete the address would be free
+without an index shaped for it.
+
+`ON DELETE CASCADE` fires on `DELETE` and not on `UPDATE`, so under the soft
+delete every other bullet mandates, **no cascade fires**. The two readings cannot
+both hold.
+
+Built against the assertion rather than the mechanism: the deletion path removes
+those rows with statements of its own, in the same transaction, and the test
+counts each table before and after exactly as the bullet asks. Nobody could have
+decided that an UPDATE fires a delete trigger, so this is a fact the bullet is
+wrong about rather than a choice it makes — which is why it is written here for
+the orchestrator to amend rather than answered as a prompt.
+
+**Two tables joined the four**, and they are here because M52's own mechanism
+would otherwise make a schema comment false:
+
+- `password_resets` (`03900:27-29`) says *"there is no route by which a reset for
+  a deleted account could still be consumed, because the row is gone with the
+  account"*. Under a soft delete the row is not gone, and it is the one
+  credential in this schema that sets a password.
+- `instance_grants` (`03400:44-47`) says a grant naming a user who does not exist
+  *"is not a record worth keeping, it is a permission nobody can hold"*. The
+  principal cannot reach the deletion path at all, but a delegated dispute
+  reviewer can.
+
+Both comments are corrected in place as well, because the cascade they name is
+no longer what enforces them. Counted rather than recalled: ten foreign keys
+reference `users` — six `ON DELETE CASCADE` and four `ON DELETE SET NULL`. The
+four SET NULL ones (`links.created_by`, `invitations.invited_by`,
+`invitations.redeemed_by`, `instance_grants.granted_by`) are deliberately left
+pointing at the erased row, because D148 keeps the ids and nulling them would
+destroy the correlation the decision chose to preserve.
+
+### The audit record goes inside the transaction, which no other one does
+
+`account.deleted` is the first action in this vocabulary whose **actor is the
+subject**. Every other service in this tree records after it commits, on Record's
+own stated reasoning — losing the change is worse than losing the record of it —
+and that ordering is wrong exactly once: the erasure sweep decides what to scrub
+by reading `users.anonymized_at`, so a record inserted after the commit can
+arrive after the sweep has already been past, and its `actor_label` then holds
+the address forever.
+
+The window is microseconds against an hourly sweep and would never be
+reproduced. It is closed by construction anyway, because the alternative is a
+correctness claim that rests on a race nobody can lose deliberately.
+`audit.Service.RecordTx` takes the caller's `*dbgen.Queries`; `Record` is now
+that function called with the service's own. One writer of `audit_logs`, two
+entry points, and the cost Record's documentation already named — inside a
+transaction a failed audit write fails the operation — accepted here and nowhere
+else.
+
+The action is **instance-wide**, and that is F36's reasoning rather than a new
+one. An account may belong to several organizations and is *about* none of them,
+so filing the record under whichever one the person happened to be standing in
+would be visible to one tenant with no claim to it and invisible to the others it
+changed. `password.reset` is the precedent, one milestone earlier and for the
+adjacent reason.
+
+### What erasure reaches, and the limb it does not
+
+The sweep scrubs the actor snapshot: `audit_logs.actor_label` and **both** of
+`destination_disputes`'s label columns. It does not reach an address held in an
+audit record's `metadata`, and six sites write one — the invitation and
+membership vocabularies, keyed `"email"`, counted rather than recalled.
+
+Out of spec, and deliberately not decided inside the milestone. m52.md identifies
+the residue as the actor snapshot with a file:line, and D148 settles only what
+the tombstone is. Closing it is a design question in both directions: the address
+usually sits inside a record of what somebody *else* did, so removing it edits a
+live actor's audit entry, and the only mechanism that finds it — matching
+`metadata->>'email'` against the erased address — is a sequential scan of the
+largest partitioned table in this schema after analytics. Filed as
+[F177](deferred-findings.md), stated in `docs/SECURITY.md`'s *What is not
+defended*, and pointed at from the Plan.md row this milestone discharges. The
+milestone ships a true claim about a bounded feature rather than a broad claim
+with an undocumented hole in it.
+
+## 2026-08-08 — M52: the cascade the bullet promised, amended at acceptance
+
+**An amendment, not a decision**, made by the orchestrator at
+[step 3.4](phase-loop.md#3-land) rather than at step 1 — which is why the rule
+puts amendment at both. Reading the tree against the bullets is what surfaced
+it, and the worker was right to build against the assertion and report rather
+than amend: a worker never amends.
+
+The *why* is not repeated here. It is the entry above,
+[*a soft delete fires no cascade*](#2026-08-08--m52-a-soft-delete-fires-no-cascade-and-two-comments-that-said-it-would),
+written by the actor that met the problem. This entry is the amendment record
+the loop requires, and it exists to hold the three things that one does not: the
+bullet as it stood, the bullet as amended, and the tree fact.
+
+**As it stood**, under *What is removed*:
+
+> By foreign-key cascade, already in the schema and asserted here rather than
+> assumed: `memberships` (`00200:141`), `sessions` (`00200:162`), `api_keys`
+> (`00500:5`), `notifications` (`00600:118`). A test counts rows before and
+> after for an account holding at least one of each.
+
+**As amended:** *by statements in the deleting transaction, one per table* —
+and six tables, `password_resets` (`03900:44`) and `instance_grants`
+(`03400:31`) joining the four, with the parenthesis in
+[m52.md](phase-details/m52.md) carrying the reason.
+
+**The tree fact.** `ON DELETE CASCADE` fires on `DELETE`. This milestone's
+deletion is an `UPDATE`, and it has to be: `anonymized_at` is defined in the
+same file as marking *"the row whose residue has been scrubbed"*, and
+`users_email_key` is partial on `deleted_at IS NULL` (`00200:57`) precisely so a
+surviving row stops holding its address. Both require the row to stay. So the
+four cascade clauses exist, are correct, and never run.
+
+**Why this is a fact and not an assertion**, which is the whole test: nobody
+could have decided otherwise. The alternative mechanism — hard-delete the row
+and let the cascades fire — contradicts three other bullets in the same file,
+so the bullet was not offering a choice between two designs. It named the wrong
+mechanism for the only design available. What it *asserted* — those tables are
+emptied, counted before and after — is met exactly as written, which is why the
+milestone was accepted rather than rejected.
+
+The two additional tables are the same fact one step on. Each has a schema
+comment asserting the row cannot outlive the account, each was true while the
+only deletion was hypothetical, and this milestone's soft delete is what would
+have falsified them — a defect introduced by the work in flight is in that
+work's spec, not a finding to defer. Both comments are corrected in place.

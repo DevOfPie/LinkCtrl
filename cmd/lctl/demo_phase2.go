@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/DevOfPie/LinkCtrl/internal/account"
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
@@ -92,6 +93,30 @@ const (
 	// demoPendingEmail is invited and never redeems, so the invitations page has
 	// an outstanding row beside the redeemed ones.
 	demoPendingEmail = "riley@example.com"
+
+	// demoDepartedEmail joins, and then deletes their own account (M52).
+	//
+	// **The one seeded person nobody can sign in as, on purpose.** A deleted
+	// account shows nothing — that is what deleting it means — so what the demo
+	// has to show is the *residue*: an audit entry whose actor is an erased
+	// tombstone, sitting in the same trail as entries from live actors. An
+	// evaluator wanting to know what this product does with erasure is asking
+	// what is left afterwards, and that is the only place it can be seen.
+	//
+	// They arrive the way morgan and sam do — registered by the seeder, then
+	// invited and redeemed — because this seeder's invitation service sets
+	// `NewAccounts: false` unconditionally (D7) and an invitation here can only
+	// ever attach a membership to an account that already exists. The redemption
+	// is what puts an entry with *their* name in the demo organization's audit
+	// trail; being granted a membership would put the owner's name there instead.
+	//
+	// Registration means they own a personal organization alone, so the seed has
+	// to delete that before it can delete the account. That is the product
+	// working correctly rather than an obstacle: an account that is the sole
+	// owner of a surviving organization is refused, and the demo goes through the
+	// same door everybody else does.
+	demoDepartedEmail = "jordan@example.com"
+	demoDepartedName  = "Jordan Vale"
 
 	// demoPassword is what the seeded accounts sign in with. Written in the
 	// clear because publishing it is the point — the demo instance exists to be
@@ -284,6 +309,11 @@ type demoSeeder struct {
 	// instance appoints the demo's second dispute reviewer (M45, D98), through
 	// the same service call the dashboard makes.
 	instance *instance.Service
+	// accounts deletes the one seeded person who leaves, and runs the erasure
+	// pass by hand afterwards (M52) — the demo cannot wait an hour for the
+	// scheduler, and a demo rebuilt from nothing at every milestone would
+	// otherwise show the lag rather than the outcome.
+	accounts *account.Service
 
 	// owner is whoever claimed the instance, acting in their first workspace.
 	owner *auth.Identity
@@ -324,6 +354,15 @@ func newDemoSeeder(
 		return nil, fmt.Errorf("demo api keys: %w", err)
 	}
 
+	accountSvc, err := account.NewService(pool, account.Config{
+		Auth:  authSvc,
+		Audit: auditSvc,
+		Log:   discardLogger(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("demo accounts: %w", err)
+	}
+
 	return &demoSeeder{
 		pool: pool, q: dbgen.New(pool), cfg: cfg, now: now, opt: opt,
 		auth:     authSvc,
@@ -334,6 +373,7 @@ func newDemoSeeder(
 		link:     linkSvc,
 		dispute:  disputeSvc,
 		instance: instance.NewService(pool, instance.Config{Audit: auditSvc}),
+		accounts: accountSvc,
 		gates:    gateSvc,
 		keys:     keySvc,
 		owner:    owner,
@@ -385,6 +425,9 @@ func (s *demoSeeder) run(ctx context.Context, primary []demoLink, ids map[int]uu
 		return err
 	}
 	if err := s.seedBlockingAndDisputes(ctx, people); err != nil {
+		return err
+	}
+	if err := s.seedDeletedAccount(ctx); err != nil {
 		return err
 	}
 	return s.readSomeNotifications(ctx)
@@ -1851,6 +1894,92 @@ func (s *demoSeeder) readSomeNotifications(ctx context.Context) error {
 	return nil
 }
 
+// seedDeletedAccount joins somebody, has them leave, and erases them (M52).
+//
+// Three service calls, all of them the ones the product makes: the invitation is
+// redeemed the same way the admin's and the viewer's are, the account is deleted
+// through the same call `DELETE /api/v1/account` reaches, and the erasure is the
+// hourly sweep run once by hand. Nothing here writes a row directly, so what the
+// demo shows is what the feature does rather than an impression of it.
+//
+// **The sweep is run inline because the demo cannot wait an hour.** On a real
+// instance the lag between deletion and erasure is the scheduler's cadence, and
+// `docs/SECURITY.md` states it as a number. A demo rebuilt from nothing at every
+// milestone boundary would spend that hour showing an address, which is the one
+// state an evaluator must not mistake for the feature.
+//
+// What is left afterwards, and is the whole point: the `invitation.redeemed`
+// record this person wrote is still in the organization's audit trail, still
+// correlatable by `actor_user_id`, and its actor now reads `deleted account`.
+func (s *demoSeeder) seedDeletedAccount(ctx context.Context) error {
+	departing, err := s.auth.Register(ctx, auth.RegisterInput{
+		Email: demoDepartedEmail, Name: demoDepartedName, Password: demoPassword,
+	})
+	if err != nil {
+		return fmt.Errorf("create demo account %s: %w", demoDepartedEmail, err)
+	}
+	personalOrg, personalWorkspace := departing.OrgID, departing.WorkspaceID
+
+	created, err := s.invite.Create(ctx, s.owner, invite.CreateInput{
+		Email: demoDepartedEmail, Role: "editor",
+	})
+	if err != nil {
+		return fmt.Errorf("invite %s: %w", demoDepartedEmail, err)
+	}
+	if created.Emailed {
+		return fmt.Errorf("invitation to %s was queued for delivery; "+
+			"the demo seeder must need no mailer", demoDepartedEmail)
+	}
+	if _, err := s.invite.Redeem(ctx, invite.RedeemInput{
+		Token:    demoInviteToken(created.URL),
+		Email:    demoDepartedEmail,
+		Name:     demoDepartedName,
+		Password: demoPassword,
+	}); err != nil {
+		return fmt.Errorf("redeem invitation for %s: %w", demoDepartedEmail, err)
+	}
+
+	// The personal organization goes first, and it goes through M28.5's own
+	// call. Acting *in* it, because DeleteOrganization answers not-found for an
+	// id that is not the caller's current organization — the path parameter is a
+	// confirmation rather than a selector, which is the right shape for an
+	// irreversible operation and the reason this needs actAs rather than an id.
+	inPersonal, err := s.actAs(ctx, demoDepartedEmail, personalWorkspace)
+	if err != nil {
+		return err
+	}
+	if err := s.team.DeleteOrganization(ctx, inPersonal, personalOrg); err != nil {
+		return fmt.Errorf("delete %s's personal organization: %w", demoDepartedEmail, err)
+	}
+
+	// Re-resolved, because the only membership left is the demo organization's
+	// and the identity above still points at an organization that no longer
+	// exists.
+	departing, err = s.auth.IdentityForEmail(ctx, demoDepartedEmail)
+	if err != nil {
+		return fmt.Errorf("resolve %s: %w", demoDepartedEmail, err)
+	}
+	if err := s.accounts.Delete(ctx, departing, demoPassword); err != nil {
+		return fmt.Errorf("delete %s: %w", demoDepartedEmail, err)
+	}
+
+	// Asserted rather than assumed. A sweep that took nothing would leave the
+	// demo showing an ordinary redeemed invitation and no erasure at all, and the
+	// coverage row would be the only thing that noticed — one milestone later,
+	// when somebody read the failure and had to work out which of the two steps
+	// had stopped happening.
+	erased, err := s.accounts.ErasePending(ctx, 1000)
+	if err != nil {
+		return fmt.Errorf("erase deleted accounts: %w", err)
+	}
+	if erased == 0 {
+		return errors.New("the erasure pass took no accounts, so the demo's audit " +
+			"trail still names the person who left")
+	}
+	fmt.Fprintf(os.Stderr, "deleted account: %s, erased (%d)\n", demoDepartedEmail, erased)
+	return nil
+}
+
 // demoResetPhase2 removes everything the Phase 2 seeding wrote.
 //
 // Runs inside demoReset's transaction, and every statement is scoped to the demo
@@ -1859,7 +1988,14 @@ func (s *demoSeeder) readSomeNotifications(ctx context.Context) error {
 // costs: a feature seeded above without a line here makes the second run of
 // `make demo-update` differ from the first.
 func demoResetPhase2(ctx context.Context, tx pgxExecutor, orgID, userID uuid.UUID) error {
-	emails := []string{demoAdminEmail, demoViewerEmail, demoPendingEmail}
+	// demoDepartedEmail is here for the run that does not finish. In a complete
+	// run the account has been deleted and erased, so its address is blank and
+	// the two statements keyed on this list cannot match it — the
+	// `deleted_at IS NOT NULL` step at the end is what takes it. In a run that
+	// failed between registering the account and deleting it, this is what
+	// stops the personal organization and the account surviving into the next
+	// one.
+	emails := []string{demoAdminEmail, demoViewerEmail, demoPendingEmail, demoDepartedEmail}
 
 	// Routing rules (M34) have no step of their own, and that is a cascade
 	// rather than an omission. Their rows hang off `destinations`, which
@@ -1982,6 +2118,20 @@ func demoResetPhase2(ctx context.Context, tx pgxExecutor, orgID, userID uuid.UUI
 		{"invitations", `DELETE FROM invitations WHERE organization_id = $1`, []any{orgID}},
 		{"notifications", `DELETE FROM notifications WHERE user_id = $1`, []any{userID}},
 		{"audit records", `DELETE FROM audit_logs WHERE organization_id = $1`, []any{orgID}},
+		// The account deletion's own record (M52), which the statement above
+		// cannot reach: `account.deleted` is instance-wide, so its
+		// `organization_id` is NULL by design — an account may belong to several
+		// organizations and is about none of them.
+		//
+		// By action rather than by organization, and therefore reaching a record
+		// a demo visitor wrote by deleting an account they made. That is the same
+		// trade the workspace and API-key statements above already make and it is
+		// stated for the same reason: the demo is reset to what the seeder
+		// writes. `password.reset` is the other NULL-organization action and is
+		// deliberately not matched.
+		{"the account-deletion record",
+			`DELETE FROM audit_logs WHERE organization_id IS NULL AND action = $1`,
+			[]any{audit.ActionAccountDeleted}},
 		// Cascades the workspace's links, tags and destinations.
 		//
 		// **Every workspace but the default one, rather than the one slug this
@@ -2035,6 +2185,23 @@ func demoResetPhase2(ctx context.Context, tx pgxExecutor, orgID, userID uuid.UUI
 			[]any{orgID, emails}},
 		// Last: cascades memberships, sessions and notifications.
 		{"seeded accounts", `DELETE FROM users WHERE email_lower = ANY($1::text[])`, []any{emails}},
+		// The account that deleted itself (M52), which the statement above
+		// cannot reach for the reason it is here at all: erasure blanked the
+		// address, so there is no address left to name it by. Matched on
+		// `deleted_at` instead, which is the column the deletion writes and the
+		// only durable mark such a row carries.
+		//
+		// Not narrowed to the erased ones. An account deleted and not yet swept
+		// is the same row one hour earlier, and leaving it would make the reset
+		// depend on whether the sweep had run — which on the demo it always has,
+		// because the seeder runs it inline, and which is exactly the kind of
+		// *almost always* that turns into a growing table.
+		//
+		// It reaches a demo visitor's deleted account too, on the same terms as
+		// the API keys and the extra workspaces above, and it cannot reach a live
+		// one: nothing else in this product writes `users.deleted_at`.
+		{"accounts that deleted themselves",
+			`DELETE FROM users WHERE deleted_at IS NOT NULL`, nil},
 	}
 	for _, st := range steps {
 		if _, err := tx.Exec(ctx, st.sql, st.args...); err != nil {

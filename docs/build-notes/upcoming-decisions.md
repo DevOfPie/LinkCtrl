@@ -42,33 +42,44 @@ conclusions are what this file exists to stop.
 
 ## Open — a milestone needs this
 
+*Both questions this section held were answered by the owner on 2026-08-08, at
+[M52](phase-details/m52.md)'s step 1, and have left it in the direction this
+file only travels: the answers are in
+[decisions.md](decisions.md#2026-08-08--m52-three-answers-at-step-1-and-the-conflict-resolved-by-the-command-that-meets-it)
+as **D148** (the erased actor's tombstone) and **D149** (the update checker's
+default), and in [Plan.md](../../Plan.md#phase-3-decisions)'s decision table.
+D149 was given ahead of the milestone that uses it, which is what this file is
+for; it is recorded with the date it was given and is used when
+[M55](phase-details/m55.md) lands.*
+
+*Nothing is waiting here. The next entry is written by
+[`/preview-decisions`](../../.claude/commands/preview-decisions.md) or by a
+[step 1](phase-loop.md#1-validate) that meets a choice no `D` number has made.*
+
+## Answered, awaiting the milestone that uses it
+
+One heading, kept for one reason: **other files link to it.** An answered
+question leaves this file, and this section is what stops that removal breaking
+a reference somebody wrote in good faith. It holds pointers, never answers —
+the rule at the top of this file is not weakened by a section that says *the
+answer is over there*. A heading leaves here for good once the milestone that
+uses it has landed and the references have moved with it.
+
 ### M55 — Does the update checker default on or off?
 
-**Needed by:** [M55](phase-details/m55.md). The milestone builds either way and
-deliberately does not pre-empt this; what changes is a sentence in
-`docs/SECURITY.md` that is part of why somebody self-hosts this product.
+**Answered 2026-08-08** by the owner, as
+[D149](../../Plan.md#phase-3-decisions) — recorded in
+[decisions.md](decisions.md#2026-08-08--m52-three-answers-at-step-1-and-the-conflict-resolved-by-the-command-that-meets-it)
+with the date it was given, and read by [M55](phase-details/m55.md), which
+carries what it obliges. The question, its three options and its recommendation
+are in the history of this file; they are not restated here, because a question
+whose answer exists is no longer a question.
 
-`docs/SECURITY.md:73` currently reads *"No telemetry, no phone-home, no
-third-party calls in the default configuration"*, and enumerates the four
-connections that leave this product rather than counting them — because that row
-said *two* until M45 and both of the missing ones were shipped features. An
-update checker is the fifth, and it is the first that would be **on** without an
-operator asking for it.
-
-| Option | Buys | Costs |
-| --- | --- | --- |
-| **Off by default** *(recommended)* | The sentence above stays true, unedited. An operator who wants the check turns it on, which is the same shape `SMTP_HOST` and `FEED_URL` already have — the operator's connections are off until configured, and this joins that group without changing its rule | The people most likely to be running an outdated version are the least likely to find the setting. The feature exists and does nothing on almost every instance, which is close to not having built it. The recommendation states this against itself: the cheapest option to defend is not obviously the useful one |
-| On by default, with an opt-out | The feature works for the operators it was requested for, without them knowing it exists | `SECURITY.md:73` has to be rewritten rather than extended, and *no phone-home in the default configuration* becomes *no phone-home except this*. That is a real change to a claim this product has made since Phase 1, and it is made on behalf of every operator who read it |
-| On by default, prompted at first run | The operator decides knowingly, and the default is whatever they chose | There is no first-run prompt surface for instance-level settings; the setup form claims the instance and does not configure it. This invents one, inside a milestone that is otherwise a daily HTTP GET |
-
-**Default if unanswered:** **off**. It is the only option that does not require
-editing a security claim, and turning a default-off feature on later is a
-configuration change where turning a default-on feature off later is an apology.
-
-**Assumes:** that `docs/SECURITY.md:73` still enumerates rather than counts —
-true and verified 2026-08-06 by reading it — and that no milestone between here
-and M55 adds a sixth outbound connection. [M53](phase-details/m53.md) explicitly
-adds none.
+Two entries link to this heading and were written while it was open —
+[the Phase 3 area-scoping decision](decisions.md#2026-08-06--phase-3-planned-what-each-area-takes-and-the-twelve-slots)
+and [phase-3-candidates.md](phase-3-candidates.md). Both say the default *is
+deliberately not decided here*, which was true when written; D149 is the later
+entry that corrects them, and neither is edited.
 
 ## Open — nothing forces this
 

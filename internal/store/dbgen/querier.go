@@ -530,6 +530,31 @@ type Querier interface {
 	// no-rows, rather than a last-writer-wins that leaves the audit record and the
 	// blocklist disagreeing about what happened.
 	DecideDestinationDispute(ctx context.Context, arg DecideDestinationDisputeParams) (DestinationDispute, error)
+	// Everything hanging off the account that must not outlive it, removed in one
+	// statement and counted.
+	//
+	// **Written out because a soft delete fires no foreign key.** All six tables
+	// below declare `ON DELETE CASCADE` against `users`, and every one of those
+	// clauses triggers on `DELETE`; the account row is kept — that is what
+	// `anonymized_at` marks and what the partial `users_email_key` is shaped for —
+	// so the cascade never runs and these statements are what stands in for it.
+	//
+	// Four of them are the tables M52 enumerates: `memberships`, `sessions`,
+	// `api_keys`, `notifications`. Two more are here because leaving them would
+	// falsify a claim the schema already makes:
+	//
+	//   * `password_resets`, whose own comment (03900) says *"there is no route by
+	//     which a reset for a deleted account could still be consumed, because the
+	//     row is gone with the account"*. Under a soft delete the row is not gone,
+	//     and it is the one credential in this schema that sets a password.
+	//   * `instance_grants`, whose own comment (03400) says a grant naming a user
+	//     who does not exist *"is not a record worth keeping, it is a permission
+	//     nobody can hold"*. The instance principal cannot reach this statement at
+	//     all — deleting it is refused — but a delegated dispute reviewer can.
+	//
+	// The counts come back so the caller can log what went, and so a test can assert
+	// the statement reached each table rather than assert it did not error.
+	DeleteAccountDependents(ctx context.Context, accountID uuid.UUID) (DeleteAccountDependentsRow, error)
 	DeleteAutomationRule(ctx context.Context, arg DeleteAutomationRuleParams) (int64, error)
 	// Removes one host from the low-confidence runtime list.
 	//
@@ -677,6 +702,44 @@ type Querier interface {
 	// caller generates the candidate bytes, because a random source belongs in the
 	// application rather than in an extension this schema does not require.
 	EnsureWorkspaceSigningSecret(ctx context.Context, arg EnsureWorkspaceSigningSecretParams) ([]byte, error)
+	// The erasure pass. One batch, one statement, one transaction.
+	//
+	// **What it scrubs is what deletion could not reach**: the two tables that carry
+	// an address snapshot and no foreign key to `users`, because both are records of
+	// the past that must stay readable after their subject is gone.
+	//
+	//   * `audit_logs.actor_label` (`00600:137,150`). An audit trail that vanishes
+	//     with its actor is not an audit trail.
+	//   * `destination_disputes.created_by_label` **and** `decided_by_label`
+	//     (`01600:64,68`). Two snapshots, not one: an account is as identifiable as
+	//     the moderator of a dispute as it is as the filer of one, and F44 names this
+	//     as the second table with no deletion path of any kind.
+	//
+	// **The label is a constant and the ids survive** — D148, owner-set 2026-08-08.
+	// Nothing is derived from anything, so there is no derivation to reverse.
+	// Correlating one erased actor's entries is `audit_logs_actor_idx`, which is
+	// keyed on `actor_user_id` and never reads the label. The accepted cost is that a
+	// surviving uuid is pseudonymous rather than anonymous data, which
+	// `docs/SECURITY.md` states in those words.
+	//
+	// **Re-entrant, because the two-leader window during a rolling deploy is a
+	// stated property of this scheduler** (`cmd/linkctrl/jobs.go:117-127`).
+	// `FOR UPDATE SKIP LOCKED` means a second leader takes a disjoint batch instead
+	// of waiting for the first, and the `<>` guards on each label make a second pass
+	// over the same row a no-op rather than a rewrite. Running the pass twice and
+	// diffing is what the test asserts.
+	//
+	// Ordered by `deleted_at`, oldest first, which is the order
+	// `users_pending_erasure_idx` stores and the order the requests arrived in.
+	// The account row itself, scrubbed in place. It survives, which is the whole
+	// difference between `anonymized_at` and `deleted_at`: foreign keys and audit
+	// records go on pointing at a row that identifies nobody.
+	//
+	// `email` becomes the empty string rather than a placeholder address. No live
+	// query can reach it — every read of `users` filters `deleted_at IS NULL` — and
+	// the partial unique index excludes the row, so the address it held was already
+	// reusable the moment the account was deleted.
+	EraseDeletedAccounts(ctx context.Context, arg EraseDeletedAccountsParams) ([]uuid.UUID, error)
 	// The verification lookup, on the unique prefix index, joined with the user so
 	// authentication is one round trip. Revoked and expired keys are returned
 	// rather than filtered out: the caller distinguishes them so the response can
@@ -1579,6 +1642,44 @@ type Querier interface {
 	// the target is inside this set, so it is already locked by the time anything
 	// else touches it.
 	LockOrganizations(ctx context.Context) ([]uuid.UUID, error)
+	// The organizations this account owns alone, locked before they are counted.
+	//
+	// The refusal M28.5 makes from the other side. `team.guardOwnerSet` blocks
+	// removing or demoting an organization's last owner; this blocks deleting the
+	// *account* that is one, because otherwise the rule is bypassable by leaving
+	// through a different door.
+	//
+	// **Organization-wide owner memberships only**, the sentence
+	// `LockOrganizationOwners` states and for the same reason: a workspace-scoped
+	// owner membership is ownership of one workspace, so counting it would either
+	// hide a sole owner or invent one.
+	//
+	// The owner rows are locked before the count is taken, so this is a rule rather
+	// than a check-then-act — a second administrator promoting or removing an owner
+	// blocks until this transaction ends. Ordered by membership id inside the
+	// locking CTE so two accounts deleting themselves at once take the rows in the
+	// same order and cannot deadlock. MATERIALIZED because the lock has to be taken
+	// once, on the rows this counts, rather than folded into the outer query by the
+	// planner.
+	LockOrganizationsSolelyOwnedBy(ctx context.Context, userID uuid.UUID) ([]LockOrganizationsSolelyOwnedByRow, error)
+	// Account deletion and subject erasure (M52).
+	//
+	// Two operations that look like one and are deliberately kept apart. **Deletion**
+	// is interactive, immediate and one transaction: it ends every route into the
+	// account and releases the address. **Erasure** is the hourly sweep that scrubs
+	// what deletion could not reach — the rows with no foreign key to `users`, which
+	// exist precisely so a record outlives its subject.
+	//
+	// The statements below are the whole of the database side. `04000` adds the one
+	// index the sweep reads and nothing else; the columns have existed, unwritten,
+	// since `00200_identity.sql`.
+	// The account being deleted, locked for the rest of the transaction.
+	//
+	// `deleted_at IS NULL` is in the predicate rather than checked afterwards, so a
+	// second deletion of the same account is not-found instead of a second pass over
+	// rows the first one already took. Two browsers pressing the button at once is
+	// the ordinary way that happens.
+	LockUserForDeletion(ctx context.Context, id uuid.UUID) (User, error)
 	//
 	// Every folder in a workspace, locked, for a decision made over the whole tree.
 	//
@@ -2344,6 +2445,20 @@ type Querier interface {
 	// a link someone deleted by accident is a common request, and the alias stays
 	// reserved while the row exists.
 	SoftDeleteLink(ctx context.Context, arg SoftDeleteLinkParams) (SoftDeleteLinkRow, error)
+	// The deletion itself: the first writer `status` and `deleted_at` have ever had.
+	//
+	// `status = 'deleted'` and `deleted_at` are set together and only together. The
+	// timestamp is what every query in this product filters on and what releases the
+	// address through the partial unique index; the status is what a person reading
+	// the row sees. Setting one without the other would make the two disagree about
+	// the same fact, which is the state the CHECK constraint cannot catch.
+	//
+	// `password_hash` is **not** cleared here. Scrubbing is the erasure pass's, and
+	// clearing it early would take the one field that makes a mistaken deletion
+	// recoverable by an operator inside the sweep's window, while ending no access
+	// that the session and key rows going in the same transaction have not already
+	// ended.
+	SoftDeleteUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Batch write of last_used_at, from the coalescing tracker rather than from the
 	// request path: authenticating a key must not cost a synchronous write.
 	//

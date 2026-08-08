@@ -1,0 +1,218 @@
+-- Account deletion and subject erasure (M52).
+--
+-- Two operations that look like one and are deliberately kept apart. **Deletion**
+-- is interactive, immediate and one transaction: it ends every route into the
+-- account and releases the address. **Erasure** is the hourly sweep that scrubs
+-- what deletion could not reach — the rows with no foreign key to `users`, which
+-- exist precisely so a record outlives its subject.
+--
+-- The statements below are the whole of the database side. `04000` adds the one
+-- index the sweep reads and nothing else; the columns have existed, unwritten,
+-- since `00200_identity.sql`.
+
+-- name: LockUserForDeletion :one
+-- The account being deleted, locked for the rest of the transaction.
+--
+-- `deleted_at IS NULL` is in the predicate rather than checked afterwards, so a
+-- second deletion of the same account is not-found instead of a second pass over
+-- rows the first one already took. Two browsers pressing the button at once is
+-- the ordinary way that happens.
+SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE;
+
+-- name: LockOrganizationsSolelyOwnedBy :many
+-- The organizations this account owns alone, locked before they are counted.
+--
+-- The refusal M28.5 makes from the other side. `team.guardOwnerSet` blocks
+-- removing or demoting an organization's last owner; this blocks deleting the
+-- *account* that is one, because otherwise the rule is bypassable by leaving
+-- through a different door.
+--
+-- **Organization-wide owner memberships only**, the sentence
+-- `LockOrganizationOwners` states and for the same reason: a workspace-scoped
+-- owner membership is ownership of one workspace, so counting it would either
+-- hide a sole owner or invent one.
+--
+-- The owner rows are locked before the count is taken, so this is a rule rather
+-- than a check-then-act — a second administrator promoting or removing an owner
+-- blocks until this transaction ends. Ordered by membership id inside the
+-- locking CTE so two accounts deleting themselves at once take the rows in the
+-- same order and cannot deadlock. MATERIALIZED because the lock has to be taken
+-- once, on the rows this counts, rather than folded into the outer query by the
+-- planner.
+WITH mine AS MATERIALIZED (
+    SELECT m.organization_id
+      FROM memberships m
+      JOIN roles r ON r.id = m.role_id
+     WHERE m.user_id = @user_id
+       AND m.workspace_id IS NULL
+       AND r.slug = 'owner'
+       AND r.organization_id IS NULL
+),
+owners AS MATERIALIZED (
+    SELECT m.id, m.organization_id
+      FROM memberships m
+      JOIN roles r ON r.id = m.role_id
+     WHERE m.organization_id IN (SELECT organization_id FROM mine)
+       AND m.workspace_id IS NULL
+       AND r.slug = 'owner'
+       AND r.organization_id IS NULL
+     ORDER BY m.id
+       FOR UPDATE OF m
+)
+SELECT o.id, o.name, o.slug
+  FROM organizations o
+  JOIN owners w ON w.organization_id = o.id
+ WHERE o.deleted_at IS NULL
+ GROUP BY o.id, o.name, o.slug
+HAVING count(*) = 1
+ ORDER BY o.name;
+
+-- name: DeleteAccountDependents :one
+-- Everything hanging off the account that must not outlive it, removed in one
+-- statement and counted.
+--
+-- **Written out because a soft delete fires no foreign key.** All six tables
+-- below declare `ON DELETE CASCADE` against `users`, and every one of those
+-- clauses triggers on `DELETE`; the account row is kept — that is what
+-- `anonymized_at` marks and what the partial `users_email_key` is shaped for —
+-- so the cascade never runs and these statements are what stands in for it.
+--
+-- Four of them are the tables M52 enumerates: `memberships`, `sessions`,
+-- `api_keys`, `notifications`. Two more are here because leaving them would
+-- falsify a claim the schema already makes:
+--
+--   * `password_resets`, whose own comment (03900) says *"there is no route by
+--     which a reset for a deleted account could still be consumed, because the
+--     row is gone with the account"*. Under a soft delete the row is not gone,
+--     and it is the one credential in this schema that sets a password.
+--   * `instance_grants`, whose own comment (03400) says a grant naming a user
+--     who does not exist *"is not a record worth keeping, it is a permission
+--     nobody can hold"*. The instance principal cannot reach this statement at
+--     all — deleting it is refused — but a delegated dispute reviewer can.
+--
+-- The counts come back so the caller can log what went, and so a test can assert
+-- the statement reached each table rather than assert it did not error.
+WITH removed_memberships AS (
+    DELETE FROM memberships m WHERE m.user_id = @account_id RETURNING 1
+), removed_sessions AS (
+    DELETE FROM sessions s WHERE s.user_id = @account_id RETURNING 1
+), removed_api_keys AS (
+    DELETE FROM api_keys k WHERE k.user_id = @account_id RETURNING 1
+), removed_notifications AS (
+    DELETE FROM notifications n WHERE n.user_id = @account_id RETURNING 1
+), removed_password_resets AS (
+    DELETE FROM password_resets pr WHERE pr.user_id = @account_id RETURNING 1
+), removed_instance_grants AS (
+    DELETE FROM instance_grants ig WHERE ig.user_id = @account_id RETURNING 1
+)
+SELECT (SELECT count(*) FROM removed_memberships)::bigint      AS memberships,
+       (SELECT count(*) FROM removed_sessions)::bigint         AS sessions,
+       (SELECT count(*) FROM removed_api_keys)::bigint         AS api_keys,
+       (SELECT count(*) FROM removed_notifications)::bigint    AS notifications,
+       (SELECT count(*) FROM removed_password_resets)::bigint  AS password_resets,
+       (SELECT count(*) FROM removed_instance_grants)::bigint  AS instance_grants;
+
+-- name: SoftDeleteUser :execrows
+-- The deletion itself: the first writer `status` and `deleted_at` have ever had.
+--
+-- `status = 'deleted'` and `deleted_at` are set together and only together. The
+-- timestamp is what every query in this product filters on and what releases the
+-- address through the partial unique index; the status is what a person reading
+-- the row sees. Setting one without the other would make the two disagree about
+-- the same fact, which is the state the CHECK constraint cannot catch.
+--
+-- `password_hash` is **not** cleared here. Scrubbing is the erasure pass's, and
+-- clearing it early would take the one field that makes a mistaken deletion
+-- recoverable by an operator inside the sweep's window, while ending no access
+-- that the session and key rows going in the same transaction have not already
+-- ended.
+UPDATE users
+   SET status     = 'deleted',
+       deleted_at = now(),
+       updated_at = now()
+ WHERE id = @user_id
+   AND deleted_at IS NULL;
+
+-- name: EraseDeletedAccounts :many
+-- The erasure pass. One batch, one statement, one transaction.
+--
+-- **What it scrubs is what deletion could not reach**: the two tables that carry
+-- an address snapshot and no foreign key to `users`, because both are records of
+-- the past that must stay readable after their subject is gone.
+--
+--   * `audit_logs.actor_label` (`00600:137,150`). An audit trail that vanishes
+--     with its actor is not an audit trail.
+--   * `destination_disputes.created_by_label` **and** `decided_by_label`
+--     (`01600:64,68`). Two snapshots, not one: an account is as identifiable as
+--     the moderator of a dispute as it is as the filer of one, and F44 names this
+--     as the second table with no deletion path of any kind.
+--
+-- **The label is a constant and the ids survive** — D148, owner-set 2026-08-08.
+-- Nothing is derived from anything, so there is no derivation to reverse.
+-- Correlating one erased actor's entries is `audit_logs_actor_idx`, which is
+-- keyed on `actor_user_id` and never reads the label. The accepted cost is that a
+-- surviving uuid is pseudonymous rather than anonymous data, which
+-- `docs/SECURITY.md` states in those words.
+--
+-- **Re-entrant, because the two-leader window during a rolling deploy is a
+-- stated property of this scheduler** (`cmd/linkctrl/jobs.go:117-127`).
+-- `FOR UPDATE SKIP LOCKED` means a second leader takes a disjoint batch instead
+-- of waiting for the first, and the `<>` guards on each label make a second pass
+-- over the same row a no-op rather than a rewrite. Running the pass twice and
+-- diffing is what the test asserts.
+--
+-- Ordered by `deleted_at`, oldest first, which is the order
+-- `users_pending_erasure_idx` stores and the order the requests arrived in.
+WITH pending AS (
+    SELECT id
+      FROM users
+     WHERE deleted_at IS NOT NULL
+       AND anonymized_at IS NULL
+     ORDER BY deleted_at
+     LIMIT sqlc.arg(batch)::int
+       FOR UPDATE SKIP LOCKED
+), scrubbed_audit AS (
+    UPDATE audit_logs a
+       SET actor_label = sqlc.arg(tombstone)::text
+      FROM pending p
+     WHERE a.actor_user_id = p.id
+       AND a.actor_label <> sqlc.arg(tombstone)::text
+    RETURNING 1
+), scrubbed_filed AS (
+    UPDATE destination_disputes d
+       SET created_by_label = sqlc.arg(tombstone)::text
+      FROM pending p
+     WHERE d.created_by = p.id
+       AND d.created_by_label <> sqlc.arg(tombstone)::text
+    RETURNING 1
+), scrubbed_decided AS (
+    UPDATE destination_disputes d
+       SET decided_by_label = sqlc.arg(tombstone)::text
+      FROM pending p
+     WHERE d.decided_by = p.id
+       AND d.decided_by_label <> sqlc.arg(tombstone)::text
+    RETURNING 1
+)
+-- The account row itself, scrubbed in place. It survives, which is the whole
+-- difference between `anonymized_at` and `deleted_at`: foreign keys and audit
+-- records go on pointing at a row that identifies nobody.
+--
+-- `email` becomes the empty string rather than a placeholder address. No live
+-- query can reach it — every read of `users` filters `deleted_at IS NULL` — and
+-- the partial unique index excludes the row, so the address it held was already
+-- reusable the moment the account was deleted.
+UPDATE users u
+   SET email              = '',
+       name               = '',
+       password_hash      = NULL,
+       email_verified_at  = NULL,
+       mfa_secret         = NULL,
+       mfa_enabled_at     = NULL,
+       last_login_at      = NULL,
+       failed_login_count = 0,
+       locked_until       = NULL,
+       anonymized_at      = now(),
+       updated_at         = now()
+  FROM pending p
+ WHERE u.id = p.id
+RETURNING u.id;

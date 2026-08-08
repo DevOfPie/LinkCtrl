@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/DevOfPie/LinkCtrl/internal/account"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
@@ -969,6 +970,33 @@ func demoCoverage() []demoFeature {
 			Shows: "that seeding the demo hands nobody a way into an account: the " +
 				"recovery pages are reachable and working on the demo, and every " +
 				"link they issue is one a visitor asked for",
+		},
+		{
+			// **The residue, because there is nothing else to show.** A deleted
+			// account renders as an absence everywhere in this product — no row on
+			// the members page, no name in a list — and an absence is
+			// indistinguishable from a feature nobody built, which is precisely
+			// what F44 was for five releases. What an evaluator can actually check
+			// is what erasure left: the same audit trail, with the person taken
+			// out of it.
+			//
+			// Scoped to the organization, so it counts the `invitation.redeemed`
+			// record the departed person wrote while they were a member. The
+			// `account.deleted` record is instance-wide and deliberately outside
+			// this count — the point is a tombstone standing beside live actors in
+			// an ordinary trail, not one on a surface only the principal reads.
+			//
+			// The label comes from the constant rather than being spelled out, so
+			// a change to the tombstone is a change in one place. The M21 row
+			// above is what asserts live actors are there too; between them, the
+			// trail has both kinds in it.
+			Milestone: "M52", Feature: "An erased actor in the audit trail",
+			Query: `SELECT count(*) FROM audit_logs
+			         WHERE organization_id = $1 AND actor_label = '` +
+				account.TombstoneLabel + `'`,
+			Min: 1,
+			Shows: "what account deletion leaves behind: the record of what " +
+				"happened, correlatable by actor id, with the address gone from it",
 		},
 	}
 }

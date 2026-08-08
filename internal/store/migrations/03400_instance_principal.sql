@@ -46,6 +46,14 @@ CREATE TABLE instance_grants (
     -- records of the past and must stay readable after their subject is gone;
     -- this is a live authorization fact, and a grant naming a user who does not
     -- exist is not a record worth keeping, it is a permission nobody can hold.
+    --
+    -- The cascade is not what enforces that any more, and since M52 it never
+    -- runs: account deletion is *soft*, so `user_id`'s ON DELETE CASCADE does
+    -- not fire and `DeleteAccountDependents` removes these rows in the deleting
+    -- transaction instead. The principal itself cannot reach that path — it is
+    -- refused, because deleting the account that administers the box leaves no
+    -- route back — but a delegated dispute reviewer can, and their grant goes
+    -- with them.
     PRIMARY KEY (user_id, permission_id)
 );
 

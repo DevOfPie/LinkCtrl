@@ -1255,6 +1255,23 @@ func TestAPIMatchesItsContract(t *testing.T) {
 		"current_password": password, "new_password": "a-brand-new-longer-password",
 	}, http.StatusNoContent)
 
+	// --- account deletion (M52) ---------------------------------------------
+	//
+	// **The refusal, and only the refusal.** This account claimed the instance,
+	// so it is the instance principal and `DELETE /account` answers 409 naming
+	// `lctl instance principal move` — which is the documented response being
+	// replayed, and is also the only one this test can reach. The success is 204
+	// and it ends the session everything below depends on; it is asserted in
+	// account_test.go against the rows, which is where the interesting part of
+	// this operation is anyway.
+	//
+	// Before the recovery block rather than after it, because the reset there
+	// revokes every session on the account and this would then be answering 401
+	// for a reason that has nothing to do with deletion.
+	c.do("DELETE", p+"/account", map[string]string{
+		"password": "a-brand-new-longer-password",
+	}, http.StatusConflict)
+
 	// --- account recovery (M51) ---------------------------------------------
 	//
 	// Last of the authenticated flow on purpose: the reset revokes every session

@@ -29,7 +29,7 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 | `/webhooks` | Outbound subscriptions and their delivery log. |
 | `/automation` | Standing rules the scheduler runs unattended, and whether each is paused. |
 | `/campaigns` | Campaign labels, and the links filed under each. |
-| `/account` | Your profile, password and appearance. |
+| `/account` | Your profile, password, appearance — and deleting the account. |
 
 This table listed eight of these pages until 0.2.0 and omitted the rest, including three that share the identity menu with pages it did list ([F45](build-notes/deferred-findings.md)).
 
@@ -1376,6 +1376,61 @@ Recovery shares the sign-in rate limit, per address, so alternating between the
 two surfaces does not double anybody's budget. The cost of the identical answer
 is stated rather than hidden: this instance will mail an address that never
 registered, if somebody types one in.
+
+## Deleting your account
+
+At the bottom of `/account`, or `DELETE /api/v1/account`. Both act on **your own
+account and nothing else**: there is no way to delete somebody else's, and there
+is deliberately no administrative one — who may end another person's account is
+a permission question this product has not answered.
+
+You confirm with your own password and, on the page, by typing `DELETE`. **An
+API key cannot do this**, however it is scoped. The credential is not the
+person, and a leaked key must not be able to delete its owner.
+
+**Two things stop it, and each says what to do about it.**
+
+- **You administer this instance.** Move the principal to another account first
+  with `lctl instance principal move --to <email>` — see
+  [operations.md](operations.md#moving-the-instance-principal). Deleting the one
+  account that can administer the box leaves no way back that does not involve
+  the database.
+- **You are the only owner of an organization that still exists.** Make somebody
+  else an owner, or delete the organization, and the refusal says which
+  organizations are blocking. Every self-registered account owns a personal
+  organization, so this is the one most people meet.
+
+Being left belonging to **no** organization is not a refusal. It is the ordinary
+way to arrive here, and an account in that state can still sign in and still
+delete itself — through the API, since every dashboard page but the ones about
+joining an organization needs one.
+
+**What goes immediately**, in a single transaction: every session, every API key,
+every membership, your notifications, any outstanding password-reset link, and
+any instance-level grant you hold. Your address becomes available for a new
+account. When the call returns there is no credential that reaches the account.
+
+**What stays, with you taken out of it.** The audit log and the
+destination-dispute queue keep their rows — they record what happened, and one
+that vanishes with the person is not a record. An hourly job replaces your name
+and address in them with `deleted account`, and clears the address, name and
+password from your account row. Access does not wait for that job; only what is
+left of your name does.
+
+**What is not deleted at all: your links.** They belong to the workspace, and the
+workspace outlives you leaving it — as do the QR codes, folders and campaigns
+inside it. If you want them gone, delete them before you delete the account.
+
+Two things worth knowing before you rely on this:
+
+- **The audit log still tells one erased person apart from another**, because the
+  actor id survives while the name becomes a constant. That is deliberate — a
+  trail in which every departed actor looks identical cannot be read — and it
+  means the remainder is pseudonymous rather than anonymous. `docs/SECURITY.md`
+  says exactly what is and is not claimed.
+- **Your address can be registered again**, by you or by somebody else, and the
+  new account is a different account. It inherits nothing. Old audit entries
+  under `deleted account` are not theirs, and the ids differ.
 
 ## Which workspace you are in
 

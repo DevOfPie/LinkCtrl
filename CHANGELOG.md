@@ -10,10 +10,10 @@ whether an upgrade is safe:
 - **The REST API is `/api/v1`** and is a stable contract. A breaking change there
   becomes `/api/v2`, not a major version bump here.
 - **The product** is pre-1.0 while account lifecycle and identity are incomplete.
-  There is no account deletion or erasure of any kind; MFA and SSO are a later
-  phase, and a dashboard redesign is under way. Account recovery was on this list
-  until 0.3.0 and has been built — a forgotten password is recoverable by the
-  person who forgot it, on an instance with a mailer configured. Each of the rest
+  MFA and SSO are a later phase, and a dashboard redesign is under way. Two
+  entries left this list at 0.3.0 because they were built: account recovery — a
+  forgotten password is recoverable by the person who forgot it, on an instance
+  with a mailer — and account deletion with subject erasure. Each of the rest
   moves the product surface, so the version stays in the `0.x` range until they
   have settled. `0.x` here means "the product surface may still move", not
   "unfinished": everything documented as built is tested and exercised end to end.
@@ -27,6 +27,57 @@ migrations run at boot.
 ## [Unreleased]
 
 ### Added
+
+- **An account can be deleted, and what it leaves behind is erased.** Until now
+  nothing in this product removed a user. The schema had said otherwise since the
+  first migration — `users.anonymized_at` carried the comment *"set by the GDPR
+  erasure routine"* and had no writer — and by 0.2.0 five separate places
+  described erasure in the present tense while none of it existed. Those
+  sentences were corrected then. This is the feature.
+
+  **`DELETE /api/v1/account`, and a section on the account page.** Both act on
+  the calling account and nothing else: there is no administrative
+  delete-somebody-else, because who may end another person's account is a
+  permission question this release does not answer. Confirmation is the
+  account's own password, and an API key is refused — a leaked credential must
+  not be able to delete the person who owns it.
+
+  **Two refusals, each naming what to do about it.** The account that
+  administers the instance cannot be deleted; move the principal first with
+  `lctl instance principal move --to <email>`. Nor can the sole owner of an
+  organization that still exists — hand it over or delete it first, and the
+  refusal says which organizations are blocking. Being left belonging to no
+  organization at all is *not* refused: it is the ordinary way to arrive here.
+
+  **What happens at once, in one transaction.** Sessions, API keys,
+  memberships, notifications, outstanding password-reset links and any
+  instance-level grants are removed. The account is marked deleted, and the
+  address becomes available for a new account. When the call returns, no
+  credential reaches the account.
+
+  **What happens within the hour.** The audit log and the destination-dispute
+  queue keep their rows — they are records of what happened, and one that
+  vanishes with its subject is not a record — and an hourly pass replaces the
+  name and address in them with the fixed label `deleted account`, then clears
+  the account row's own fields. Access does not wait for that pass; only the
+  residue does.
+
+  **Two consequences worth knowing before you rely on it.** The surviving actor
+  id is what keeps an erased person's entries correlated with each other, and
+  that makes it pseudonymous rather than anonymous data: the residue identifies
+  nobody from inside this instance, and anybody holding an external
+  id-to-person mapping can still re-identify the actor. And an address held
+  inside an audit record's detail — the invited address on an invitation
+  record, for instance — is not reached by the sweep. `docs/SECURITY.md` states
+  both.
+
+  **Reusing a deleted address is correct, and will look wrong the first time.**
+  A new account can be created at an address that appears in old audit entries
+  under a tombstone. They are different people, and nothing about the old
+  account carries over.
+
+  Your links are not deleted. They belong to the workspace, which outlives you
+  leaving it.
 
 - **A forgotten password stops being permanent.** Until now the only route back
   into an account whose password was lost was an operator editing an argon2 hash

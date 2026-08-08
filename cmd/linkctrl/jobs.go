@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/DevOfPie/LinkCtrl/internal/account"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/automation"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
@@ -71,6 +72,11 @@ type jobRunner struct {
 	// above and for the same reason: a waiting-room table with no sweep is the
 	// one shape that grows forever with nothing watching it.
 	recovery *recovery.Service
+	// accounts erases the residue of deleted accounts (M52), on the same terms
+	// as recovery above: it is a sweep rather than a job family, because a new
+	// advisory key and a new goroutine for a pass that finds nothing on almost
+	// every run is cost without a reason.
+	accounts *account.Service
 	// links re-verifies custom domains (M40). Nil skips the pass entirely,
 	// which is what a runner built without the link service gets.
 	links *link.Service
@@ -149,6 +155,7 @@ const (
 func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analytics.Roller,
 	log *slog.Logger, metrics *observability.Metrics, notifier *notify.Service,
 	mailer *mail.Service, signups *signup.Service, resets *recovery.Service,
+	accounts *account.Service,
 	links *link.Service,
 	webhooks *webhook.Service, automations *automation.Service, hosts *redirect.HostCache,
 	domains config.DomainsConfig,
@@ -168,6 +175,7 @@ func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analyt
 		mailer:                 mailer,
 		signup:                 signups,
 		recovery:               resets,
+		accounts:               accounts,
 		links:                  links,
 		//nolint:gosec // G115: range-checked above.
 		domainVerifyInterval: domains.VerifyInterval,
@@ -812,6 +820,33 @@ func (j *jobRunner) housekeeping(ctx context.Context) error {
 			errs = append(errs, err)
 		} else if n > 0 {
 			j.log.Debug("finished password resets purged", slog.Int64("count", n))
+		}
+	}
+
+	// The residue of accounts somebody deleted (M52).
+	//
+	// **The one sweep here that is not reclaiming space.** Everything else in
+	// this pass removes rows whose deadline passed; this one *keeps* the rows and
+	// takes the person out of them, because the two tables it touches —
+	// `audit_logs` and `destination_disputes` — deliberately have no foreign key
+	// to `users` so that a record survives its subject. Deleting them would be
+	// destroying the trail; leaving them as they were would be keeping an address
+	// somebody asked to have removed.
+	//
+	// Hourly is the whole bound on how long the residue lasts, and it is
+	// documented as a number in docs/SECURITY.md rather than left to be
+	// discovered here: access ends inside the deleting transaction, and only the
+	// residue waits. Batched at purgeBatch for the reason the link purge is.
+	//
+	// Info rather than Debug: this is the irreversible destruction of somebody's
+	// identifying data, done on their instruction, and — like the link purge —
+	// this line is its only record. The count and nothing else; naming the
+	// account here would write the identifier into a log the sweep cannot reach.
+	if j.accounts != nil {
+		if n, err := j.accounts.ErasePending(ctx, purgeBatch); err != nil {
+			errs = append(errs, err)
+		} else if n > 0 {
+			j.log.Info("deleted accounts erased", slog.Int64("count", n))
 		}
 	}
 

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/DevOfPie/LinkCtrl/internal/account"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
@@ -54,6 +55,11 @@ type Web struct {
 	// state every instance was in before this existed — a lockout with no route
 	// back but the operator's database client (F141).
 	Recovery *recovery.Service
+	// Accounts ends an account's life (M52). Nil leaves the delete section off
+	// the account page and its route unregistered, which is the state every
+	// instance was in before this existed — no account deletion of any kind,
+	// for anybody (F44).
+	Accounts *account.Service
 	// Disputes serves the review queue and the appeal a refused creator files.
 	// Nil leaves the page unregistered and takes the "ask for a review" button
 	// off the link form, because a refusal must not offer a door that is not
@@ -407,6 +413,15 @@ func (h *Web) LoginPage(w http.ResponseWriter, r *http.Request) {
 	// is proven; all that is left is the password they chose at the form.
 	if r.URL.Query().Get("verified") == "1" {
 		data.Notice = "Your address is confirmed and your account is ready. Sign in below."
+	}
+	// Where a completed deletion lands (M52). Said on this page rather than on
+	// a page of its own because there is no signed-in surface left to say it
+	// on, and the sentence has to name the lag: access ended in the transaction
+	// that deleted the account, and the remaining trace is scrubbed by a sweep
+	// that runs hourly.
+	if r.URL.Query().Get("deleted") == "1" {
+		data.Notice = "Your account has been deleted. Anything recorded about you " +
+			"elsewhere is erased within the hour."
 	}
 	h.render(w, r, http.StatusOK, "login", data)
 }

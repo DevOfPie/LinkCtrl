@@ -284,6 +284,28 @@ const (
 	// the session is the record. A reset is the case where they did not, and
 	// "who set this password, and from what network" is the question afterwards.
 	ActionPasswordReset = "password.reset"
+
+	// An account deleted by the person who owns it (M52).
+	//
+	// **Instance-wide, for the reason `password.reset` above is**, and the
+	// reasoning is F36's rather than a new one. An account is not a tenant: it
+	// may belong to several organizations, none of which it is *about*, and
+	// filing this under whichever one the person happened to be standing in
+	// would be the misattribution F36 names — visible to one tenant with no
+	// claim to it, invisible to the others it changed. An account that belongs
+	// to nothing at all, which is the ordinary state to delete from once every
+	// solely-owned organization has been handed over, would have no
+	// organization to be filed under in the first place.
+	//
+	// **It is written inside the deleting transaction**, which no other action
+	// in this vocabulary is, and the reason is specific to this one: the actor
+	// *is* the subject. A record written after the commit sits in the window
+	// between deletion and erasure carrying the account's address, and if the
+	// hourly sweep lands in that window the address stays in `audit_logs`
+	// forever, because `anonymized_at` is by then already set. Record's own
+	// documentation contemplated a caller inside a transaction; RecordTx is
+	// what finally gives one a way to join it.
+	ActionAccountDeleted = "account.deleted"
 )
 
 // Event is one thing that happened.
@@ -401,6 +423,28 @@ type Recorder interface {
 // generally logs and continues, because losing the change is worse than losing
 // the record of it.
 func (s *Service) Record(ctx context.Context, actor *auth.Identity, e Event) error {
+	return s.RecordTx(ctx, s.q, actor, e)
+}
+
+// RecordTx writes one event through the caller's own handle.
+//
+// The same function as Record — Record is this with the service's pool-backed
+// Queries — and it exists because M52 produced the first operation whose actor
+// the operation itself destroys. Everything else in this tree records *after* it
+// commits, deliberately: losing the change is worse than losing the record of
+// it. Account deletion cannot, because the erasure sweep scrubs the address out
+// of `audit_logs` by reading `users.anonymized_at`, and a record inserted after
+// the commit can arrive after the sweep has already been past. One transaction
+// makes the ordering a fact rather than a probability.
+//
+// The cost is the one Record's own documentation named: inside a transaction a
+// failed write fails the whole operation. That is the right answer here — an
+// account deletion nobody can find afterwards is worse than a deletion that did
+// not happen — and it is the wrong answer nearly everywhere else, which is why
+// this is a second entry point rather than a change to the first.
+func (s *Service) RecordTx(
+	ctx context.Context, q *dbgen.Queries, actor *auth.Identity, e Event,
+) error {
 	if e.Action == "" {
 		return errors.New("audit: event has no action")
 	}
@@ -465,7 +509,7 @@ func (s *Service) Record(ctx context.Context, actor *auth.Identity, e Event) err
 		params.IpPrefix = &prefix
 	}
 
-	if err := s.q.InsertAuditLog(ctx, params); err != nil {
+	if err := q.InsertAuditLog(ctx, params); err != nil {
 		return fmt.Errorf("audit: write %s: %w", e.Action, err)
 	}
 	return nil
@@ -532,17 +576,23 @@ func (s *Service) RecordAPIKeyRevocation(
 // actorLabel is the snapshot stored beside the actor's id.
 //
 // Email, because that is how a person is identified everywhere else in this
-// product and it stays meaningful if the account is ever deleted. Falling back
-// to the display name, then to a fixed string: a record with no readable actor
-// is still a record that something happened, and dropping the event instead
-// would lose more than it protects.
+// product and it stays meaningful after the account is deleted. Falling back to
+// the display name, then to a fixed string: a record with no readable actor is
+// still a record that something happened, and dropping the event instead would
+// lose more than it protects.
 //
-// *"If"* rather than *"after"*, corrected at M45: **no path in this product
-// deletes a user** (F44). `users` appears in none of the schema's DELETE
-// statements, nothing writes `users.deleted_at`, and `anonymized_at` has no
-// writer either. The snapshot is still the right design — it is what makes the
-// record survive a deletion that does not exist yet — but the present tense
-// described a lifecycle nobody had built.
+// **What this writes is not the last word on it.** M52's erasure sweep replaces
+// the label of an erased actor with a constant tombstone — internal/account's
+// TombstoneLabel — so what a reader sees is the address until the account is
+// deleted and swept, and a fixed string afterwards. Correlating one erased
+// actor's entries is `actor_user_id`, which erasure leaves alone (D148); this
+// function is why there is anything to replace rather than a row to delete.
+//
+// It said *"if the account is ever deleted"* between M45 and M52, and that was
+// correct at the time: no path in this product deleted a user, `users` appeared
+// in none of the schema's DELETE statements, and neither `deleted_at` nor
+// `anonymized_at` had a writer (F44). The snapshot was the right design for a
+// lifecycle nobody had built; M52 built it.
 func actorLabel(actor *auth.Identity) string {
 	if actor == nil {
 		return "system"
@@ -813,5 +863,6 @@ func AllActions() []string {
 		ActionAPIKeyRotated,
 		ActionAPIKeyRevoked,
 		ActionPasswordReset,
+		ActionAccountDeleted,
 	}
 }

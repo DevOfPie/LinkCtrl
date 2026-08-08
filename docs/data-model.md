@@ -91,7 +91,7 @@ appears in sqlc-visible SQL.
 
 | Table | Cols | Status | Notes |
 | --- | --- | --- | --- |
-| `users` | 18 | Built | No deletion path exists — see *What is not built*. `anonymized_at` has no writer. |
+| `users` | 18 | Built | Deletion is **soft** (M52): `deleted_at` and `status = 'deleted'` are written and the row stays, which is what releases the address through the partial `users_email_key` and what gives the erasure sweep something to mark. `anonymized_at` is that mark, set by the hourly pass once the residue is scrubbed. `status = 'suspended'` still has **no writer**, deliberately. |
 | `organizations` | 8 | Built | `deleted_at` exists and **nothing writes it**; `DeleteOrganization` is a hard `DELETE`. |
 | `workspaces` | 9 | Built | |
 | `memberships` | 7 | Built | `workspace_id` NULL means organization-wide; a set one scopes the membership to that workspace (D31, D44). |
@@ -136,7 +136,7 @@ appears in sqlc-visible SQL.
 
 | Table | Cols | Status | Notes |
 | --- | --- | --- | --- |
-| `audit_logs` | 12 | Built, partitioned | 33 actions, enumerated by `audit.AllActions` and checked by a test. |
+| `audit_logs` | 12 | Built, partitioned | 34 actions, enumerated by `audit.AllActions` and checked by a test. `actor_label` is rewritten to a constant tombstone by the erasure sweep; `actor_user_id` is not (D148). |
 | `notifications` | 9 | Built | Scoped to the reader and the workspace they are standing in, with organization-level news visible from every workspace (D102). |
 | `mail_outbox` | 11 | Built | Optional: an instance with no `SMTP_HOST` never queues. Bodies are blanked when a row finishes (F32). |
 | `webhooks` / `webhook_deliveries` | 10 / 11 | Built | Delivery is instance-wide and arrival-ordered, which is a recorded limitation (F90). |
@@ -148,9 +148,12 @@ appears in sqlc-visible SQL.
 Structure that exists and has no writer, or that a document has promised. Listed
 because a reader finding the column otherwise concludes the feature is there.
 
-- **`users.anonymized_at`** — carries a comment naming a GDPR erasure routine
-  since the first migration and has no writer. There is no account deletion of
-  any kind; see [Plan.md](../Plan.md)'s *Not in Phase 2*.
+- **`users.status = 'suspended'`** — admitted by the CHECK constraint since the
+  first migration and written by nothing. `active` is the default and `deleted`
+  is M52's; suspension is a moderation feature nobody has asked for, and its
+  absence is asserted by `TestNothingWritesTheSuspendedStatus` rather than left
+  to be discovered. *(`users.anonymized_at` was on this list until 0.3.0. It has
+  a writer now — the erasure sweep — which is what M52 built.)*
 - **`organizations.deleted_at`** — no writer. `DeleteOrganization` is a hard
   `DELETE`, so the column is available for a restore window nobody has built.
   `ResolveWorkspaceForUser` filters it anyway, which is

@@ -10,11 +10,17 @@
 -- and is out of scope for subject-access and erasure requests entirely.
 --
 -- That says nothing about whether such requests can be *served*, and until 0.2.0
--- it read as though it did. **This product has no erasure mechanism at all**
--- (F44): the tables that do hold addresses — users, destination_disputes —
--- have no deletion path, and `anonymized_at` in 00200 has no writer. The claim
--- above is about this table's contents and is true of them; it is not a claim
--- that the other tables are in scope and handled.
+-- it read as though it did. The claim above is about this table's contents and
+-- is true of them; it was never a claim that the other tables were in scope and
+-- handled, and until 0.3.0 they were not — this product had no erasure mechanism
+-- at all (F44).
+--
+-- **It does now, and this table is still outside it** (M52). Account deletion
+-- and the hourly erasure sweep reach `users`, `audit_logs` and
+-- `destination_disputes`, which are the tables that hold an address. They do not
+-- reach here, and they do not need to: there is no account identity in
+-- click_events or visitors to erase, and both age out by partition at
+-- ANALYTICS_RETENTION_DAYS.
 --
 -- NOTE: no CREATE TABLE ... PARTITION OF appears in this file, by rule.
 -- sqlc emits a duplicate junk model for every child partition it sees, so

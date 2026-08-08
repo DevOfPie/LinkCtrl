@@ -16,7 +16,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/DevOfPie/LinkCtrl/internal/account"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
+	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
@@ -33,6 +35,10 @@ type webFixture struct {
 	server *httptest.Server
 	client *http.Client
 	pool   *pgxpool.Pool
+	// auth is the same service the server runs on, exposed so a test can put a
+	// second account on the instance. The forms cannot: registration needs the
+	// signup mode open *and* a mailer, and this fixture configures neither.
+	auth *auth.Service
 }
 
 func newWeb(t *testing.T) *webFixture { return newWebOn(t, newDB(t)) }
@@ -76,17 +82,30 @@ func newWebOn(t *testing.T, pool *pgxpool.Pool) *webFixture {
 		t.Fatalf("parse templates: %v", err)
 	}
 
+	// Account deletion (M52). Wired here rather than in the one test that drives
+	// it, because a nil service takes the section off the page and leaves the
+	// route unregistered — so a fixture without it would let a test about the
+	// form pass by never rendering one.
+	accountSvc, err := account.NewService(pool, account.Config{
+		Auth: authSvc, Audit: audit.NewService(pool),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	srv := httptest.NewServer(httpx.NewRouter(httpx.Deps{
-		Config: cfg,
-		Health: &httpx.Health{DB: pool},
-		Auth:   authSvc,
-		Keys:   keySvc,
-		Links:  linkSvc,
-		Stats:  stats,
-		Notify: notifySvc,
+		Config:   cfg,
+		Health:   &httpx.Health{DB: pool},
+		Auth:     authSvc,
+		Keys:     keySvc,
+		Links:    linkSvc,
+		Stats:    stats,
+		Notify:   notifySvc,
+		Accounts: accountSvc,
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
 			Links: linkSvc, Stats: stats, Notify: notifySvc,
+			Accounts: accountSvc,
 		},
 	}))
 	t.Cleanup(srv.Close)
@@ -96,6 +115,7 @@ func newWebOn(t *testing.T, pool *pgxpool.Pool) *webFixture {
 		t:      t,
 		server: srv,
 		pool:   pool,
+		auth:   authSvc,
 		client: &http.Client{
 			Jar: jar,
 			// Redirects are the assertions in these tests; following them
@@ -634,5 +654,140 @@ func TestTheLinkPageNamesTheDomainTheLinkIsServedOn(t *testing.T) {
 		strings.Contains(body, "what default does today") {
 		t.Errorf("the link detail page explains the bot control in terms of the "+
 			"instance default domain for a link served on %q", hostname)
+	}
+}
+
+// The dashboard's half of M52: the section, the two ways it refuses, and where
+// a completed deletion lands.
+//
+// The row-level claims — what is removed, what is scrubbed, what survives — are
+// asserted in account_test.go against the database. What is only true of this
+// surface is the rest: that the form is drawn at all, that a refusal comes back
+// beside it rather than on an error page, and that a browser whose account no
+// longer exists is not left holding a cookie for it.
+func TestWebAccountDeletion(t *testing.T) {
+	f := newWeb(t)
+	f.claim()
+
+	page := f.body(f.get("/account", nil))
+	for _, want := range []string{
+		`action="/account/delete"`, `name="confirm"`, "DELETE", "Delete my account",
+	} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("the account page does not draw %q, so the rest of this test "+
+				"would be posting to a form nobody can see", want)
+		}
+	}
+
+	// The account that claimed the instance is the principal, and the refusal
+	// comes back on the page rather than on an error page — the remedy is
+	// somewhere this reader can go, and an error page would send them back a
+	// step first.
+	resp := f.postForm("/account/delete", url.Values{
+		"password": {webPassword}, "confirm": {"DELETE"},
+	}, nil)
+	body := f.body(resp)
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("deleting the principal from the dashboard = %d, want 409", resp.StatusCode)
+	}
+	if !strings.Contains(body, "lctl instance principal move") {
+		t.Error("the refusal does not name the route back, which is the whole reason it refuses")
+	}
+
+	// A second account, co-owning its own organization so the sole-owner rule
+	// does not answer first. Registration provisions an organization it owns
+	// alone; the insert below makes the first owner an owner of it too, which is
+	// exactly what the refusal tells somebody to do.
+	second, err := f.auth.Register(t.Context(), auth.RegisterInput{
+		Email: "leaver@example.com", Name: "Leaver", Password: webPassword,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(t.Context(),
+		`INSERT INTO memberships (id, user_id, organization_id, role_id)
+		 SELECT gen_random_uuid(), u.id, m.organization_id, m.role_id
+		   FROM memberships m, users u
+		  WHERE m.user_id = $1 AND m.workspace_id IS NULL
+		    AND u.email_lower = 'owner@example.com'`, second.UserID); err != nil {
+		t.Fatal(err)
+	}
+
+	jar, _ := newCookieJar()
+	f.client.Jar = jar
+	f.wantRedirect(f.postForm("/login", url.Values{
+		"email": {"leaver@example.com"}, "password": {webPassword},
+	}, nil), "/dashboard")
+
+	// Neither half of the confirmation is optional, and each says which one it
+	// was: a mistyped word is not a wrong password, and telling somebody the
+	// password was wrong when it was not is how they change it by mistake.
+	for _, tc := range []struct {
+		what     string
+		vals     url.Values
+		contains string
+	}{
+		{"an empty confirmation",
+			url.Values{"password": {webPassword}}, "Type DELETE to confirm."},
+		{"the wrong word",
+			url.Values{"password": {webPassword}, "confirm": {"delete"}}, "Type DELETE to confirm."},
+		{"the wrong password",
+			url.Values{"password": {"not-the-password"}, "confirm": {"DELETE"}},
+			"That password is not correct."},
+	} {
+		resp := f.postForm("/account/delete", tc.vals, nil)
+		got := f.body(resp)
+		if resp.StatusCode != http.StatusUnprocessableEntity {
+			t.Errorf("%s = %d, want 422", tc.what, resp.StatusCode)
+		}
+		if !strings.Contains(got, tc.contains) {
+			t.Errorf("%s did not say %q", tc.what, tc.contains)
+		}
+	}
+	var deleted *time.Time
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT deleted_at FROM users WHERE id = $1`, second.UserID).Scan(&deleted); err != nil {
+		t.Fatal(err)
+	}
+	if deleted != nil {
+		t.Fatal("a refused deletion marked the account deleted anyway")
+	}
+
+	// And the real one. The cookie is expired on the way out, because a browser
+	// still sending a session for an account that no longer exists gets a 401 on
+	// every request until something clears it.
+	resp = f.postForm("/account/delete", url.Values{
+		"password": {webPassword}, "confirm": {"DELETE"},
+	}, nil)
+	f.wantRedirect(resp, "/login?deleted=1")
+	var cleared bool
+	for _, ck := range resp.Cookies() {
+		// CookieName(false), because this fixture runs without Secure cookies —
+		// hardcoding one of the two names would pass or fail on the fixture's
+		// configuration rather than on the handler.
+		if ck.Name == auth.CookieName(false) && ck.MaxAge < 0 {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Error("the response did not expire the session cookie")
+	}
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT deleted_at FROM users WHERE id = $1`, second.UserID).Scan(&deleted); err != nil {
+		t.Fatal(err)
+	}
+	if deleted == nil {
+		t.Fatal("the redirect said the account was deleted and the row says otherwise")
+	}
+
+	// Where they land says what happened, and names the lag — there is no
+	// signed-in surface left to say it on.
+	landing := f.body(f.get("/login?deleted=1", nil))
+	if !strings.Contains(landing, "Your account has been deleted") {
+		t.Error("the sign-in page does not confirm the deletion")
+	}
+	if !strings.Contains(landing, "within the hour") {
+		t.Error("the confirmation does not say the residue is erased later, which is " +
+			"the one thing about this that is not immediate")
 	}
 }

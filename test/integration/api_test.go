@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/DevOfPie/LinkCtrl/internal/account"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
@@ -150,6 +151,16 @@ func newAPI(t *testing.T) *apiFixture {
 	// spec operations nothing exercises.
 	instanceSvc := instance.NewService(pool, instance.Config{Audit: audit.NewService(pool)})
 
+	// Account deletion and erasure (M52). Wired for the same reason as the
+	// roster above: without it the endpoint is unregistered and the contract
+	// test reports a spec operation nothing exercises.
+	accountSvc, err := account.NewService(pool, account.Config{
+		Auth: authSvc, Audit: audit.NewService(pool),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	srv := httptest.NewServer(httpx.NewRouter(httpx.Deps{
 		Config:   cfg,
 		Health:   &httpx.Health{DB: pool},
@@ -163,6 +174,7 @@ func newAPI(t *testing.T) *apiFixture {
 		Team:     teamSvc,
 		Signup:   signupSvc,
 		Recovery: recoverySvc,
+		Accounts: accountSvc,
 		Disputes: disputeSvc,
 		Instance: instanceSvc,
 	}))

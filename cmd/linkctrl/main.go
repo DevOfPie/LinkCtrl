@@ -39,6 +39,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/DevOfPie/LinkCtrl/internal/account"
 	"github.com/DevOfPie/LinkCtrl/internal/alias"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
@@ -470,6 +471,20 @@ func run(cfg config.Config, _ io.Writer) error {
 			"the operator's only route back into an account is setting its hash directly")
 	}
 
+	// Account deletion and subject erasure (M52). Built after recovery because
+	// it is the other end of the same lifecycle and shares its two collaborators
+	// — the hasher that confirms a password, and the audit writer — and because
+	// both are the answer to a finding rather than to a feature request: F141
+	// was no route back into an account, F44 is no route out of one.
+	accountSvc, err := account.NewService(pools.App, account.Config{
+		Auth:  authSvc,
+		Audit: auditSvc,
+		Log:   log,
+	})
+	if err != nil {
+		return err
+	}
+
 	// Invitations. Built after the mailer, because whether one exists is the
 	// whole difference between "we emailed it" and "copy this link" — and a nil
 	// Enqueuer here is the mail-free instance, not an error.
@@ -825,7 +840,7 @@ func run(cfg config.Config, _ io.Writer) error {
 
 	roller := analytics.NewRoller(pools.App, log)
 	jobs := newJobRunner(pools.App, salts, roller, log, metrics, notifySvc, mailSvc, signupSvc,
-		recoverySvc,
+		recoverySvc, accountSvc,
 		linkSvc, webhookSvc, automationSvc, hostCache, cfg.Domains,
 		cfg.Analytics.RetentionDays, cfg.Audit.RetentionDays, cfg.Audit.SizeWarnBytes)
 	jobs.start(ctx)
@@ -886,6 +901,7 @@ func run(cfg config.Config, _ io.Writer) error {
 		Team:     teamSvc,
 		Signup:   signupSvc,
 		Recovery: recoverySvc,
+		Accounts: accountSvc,
 		Disputes: disputeSvc,
 		Instance: instanceSvc,
 		Metrics:  metrics,
@@ -894,6 +910,7 @@ func run(cfg config.Config, _ io.Writer) error {
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
 			Links: linkSvc, Stats: stats, Notify: notifySvc, Invites: inviteSvc,
 			Team: teamSvc, Signup: signupSvc, Recovery: recoverySvc,
+			Accounts: accountSvc,
 			Disputes: disputeSvc, Instance: instanceSvc,
 		},
 	})

@@ -136,12 +136,18 @@ CREATE INDEX notifications_user_unread_idx
 --
 -- actor_user_id has no foreign key on purpose: an audit record must survive
 -- the deletion of the user it refers to, and actor_label is a snapshot so the
--- record stays readable. Erasure **would** overwrite the label rather than
--- delete the row, since audit records of actions are retained under legitimate
--- interest — that is the design, and it is not built: no erasure routine exists
--- anywhere in this product (F44). Written in the present tense here until 0.2.0,
--- which is one of the five sites that made an absent feature read as a shipped
--- one.
+-- record stays readable. Erasure overwrites the label rather than deleting the
+-- row, since audit records of actions are retained under legitimate interest —
+-- and since M52 that is what happens rather than what was designed for. The
+-- sweep sets actor_label to a constant tombstone and leaves actor_user_id alone
+-- (D148), so one erased actor's entries stay correlated by the id
+-- audit_logs_actor_idx already keys on and nothing is derived from anything.
+--
+-- Written in the present tense here from the first migration until 0.2.0, when
+-- no such routine existed at all (F44) — one of the five sites that made an
+-- absent feature read as a shipped one. The tense is the same now and the
+-- sentence is finally true; the history stays because a reader meeting it in an
+-- old checkout needs to know which of the two applied.
 CREATE TABLE audit_logs (
     id            uuid        NOT NULL,
     occurred_at   timestamptz NOT NULL,
