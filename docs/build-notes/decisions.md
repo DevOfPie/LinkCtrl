@@ -284,6 +284,7 @@ file. Append a row when you append an entry.
 | [M55: where an upgraded instance is asked, and what the third state costs](#2026-08-09--m55-where-an-upgraded-instance-is-asked-and-what-the-third-state-costs) | D165: the question D164 owes an upgraded instance is put on the dashboard, to a holder of `instance.admin`, once — not in an interstitial, not in the shell, and not on the settings page D161 declined to build. Why *omitted* on the API's setup field now means unanswered rather than yes, why the write is conditional rather than guarded by a read, and the audit row that is deliberately not written |
 | [M56: the failover contract, and the probe that was holding the door open](#2026-08-09--m56-the-failover-contract-and-the-probe-that-was-holding-the-door-open) | D166: the boot-time relay probe moves into a goroutine rather than after the listener, because *after* is not available at the cost it implies and nothing was ever reading its result — F173's ten seconds of dead server bought the order of two log lines. D167: the readiness contract is two status codes rather than three words, because the failure it prevents is an operator wiring `degraded` to *remove* and taking the whole deployment out during a Redis outage. And the two things the Risks section asked to be recorded either way: the kill-a-leader test stayed an assertion rather than becoming M57's measurement, and the per-replica job count is now a test rather than a sentence |
 | [M57: a rolling deploy that cost nothing, and the window that turned out to be closed](#2026-08-09--m57-a-rolling-deploy-that-cost-nothing-and-the-window-that-turned-out-to-be-closed) | D168: the deploy-shaped two-leader window is **closed** — generation 1 shipped whole in 0.2.0 and several replicas became supported in 0.3.0, so no supported upgrade puts a generation-0 binary in a deploy, and a test freezes the released key assignments so a renumber cannot re-open it one family at a time. What is left is the crash-shaped window, which has no bound and keeps its second-layer defences; seven families are safe under two leaders and domain verification is not (F180). D169: the single-instance guarantee is a behavioural run of the release image on a Postgres-only network rather than a list of required dependencies, and it rides `ci-image-smoke` rather than a workflow step. D170: the rolling deploy is measured through a balancer that satisfies M56's own inequality, in two columns — SIGTERM and SIGKILL — because one column is a number with nothing to compare it to, and the difference between them is the drain delay priced. D171: the server histogram is summed per replica rather than deltaed, because a rolling deploy destroys the counters a delta needs, and the size of the resulting undercount is itself the drain |
+| [M57.9: the pre-release review — what it checked, what it found, and what it refuted](#2026-08-09--m579-the-pre-release-review-what-it-checked-what-it-found-and-what-it-refuted) | The by-use record: an upgrade from a 0.2.0-built database, a second factor driven by an independent RFC 6238 implementation, an account deleted and its residue read back, the SLO on the final build, and the conformance test sabotaged into failing. F181–F184, four candidates refuted, and D172: the doc-cost growth is one amendment to one line and is defended rather than trimmed |
 
 ---
 
@@ -23852,3 +23853,120 @@ it cannot see a window shorter than its own interval, and most families hold
 their key for a single indexed query, which is why only the four with real work
 were ever observed holding one. It is corroboration for D168 and is written down
 as corroboration, not as the proof.
+
+## 2026-08-09 — M57.9, the pre-release review: what it checked, what it found, and what it refuted
+
+The second of Phase 3's reviews, over [M46](phase-details/m46.md)–[M57](phase-details/m57.md),
+run to [M32.9](phase-details/m32.9.md)'s method. Recorded here because M32.9
+requires the review's own output to be written down — *"what was checked, what
+was found, what was refuted — so a later reader can tell coverage from luck"* —
+and because one of its outcomes is a decision rather than a finding.
+
+### What was checked, and how
+
+Gates on the tree as reviewed, forced with `GOFLAGS=-count=1` because a cached
+result is not a measurement: `make check`, `make test-integration` (173s in
+`test/integration`), `make check-links` (2559 links resolve).
+
+The twelve definitions of done were re-read against the tree, and the by-use
+half of [m57.9.md](phase-details/m57.9.md) was run against a test instance
+rebuilt from nothing — Playwright out of `tools/render-verify/node_modules`, and
+`curl` where a browser bought nothing. The instance was pointed at a **relay
+that cannot be reached** (`192.0.2.1:2525`) rather than at no relay, because
+that is the configuration in which invitation and verification mail lands in
+`mail_outbox` where a reviewer can read the token out of it.
+
+**Verified by use, each against the bullet that asked for it:**
+
+| Claim | What was done |
+| --- | --- |
+| M57.9 — a fresh instance, end to end | `/setup` claimed, a second workspace created, a second organization created and switched into, an invitation sent and redeemed into a **new** account, and open signup taken through the emailed confirmation. No 5xx and no page error on any step |
+| M57.9 — **an upgrade from 0.2.0** | A database created and migrated by the **v0.2.0 image**, claimed under it, and two keys minted by 0.2.0's `lctl` — one workspace-pinned, one organization-wide. Then this build on the same volume. It migrated 03700–04300 on boot; both keys keep their `organization_id`, the pinned one lands on the **same user and the same workspace** it did before, and the schema diff is **249 lines added against three removals**, each intended and each named by the milestone that made it: `api_keys.organization_id` losing `NOT NULL` (M54), `api_keys_org_idx` rebuilt for it (M54), and `qr_codes_link_key` dropped (M50) |
+| M57.9 — no configuration became silently required | The compose file demands the same three variables it did at 0.2.0, and `MFA_SECRET_KEY` is optional by construction (`cmd/linkctrl/main.go:1138`). Checked by running this build with the variable **deleted from the env file**: it boots, warns once, and `/account/mfa` says *"Not available on this instance"* and names the variable. `POST /account/mfa` answers **503** with the same sentence rather than a nil dereference |
+| M57.9 — the second factor, on a real authenticator | TOTP implemented from RFC 6238 in the harness rather than borrowed from the product. Enrolled with a code that implementation produced; a code from the enrolment window was then **refused on replay**; a fresh code signed in; a recovery code signed in and the count moved 10 → 9; the same recovery code was refused on replay; disabling took a password and a code, and left `mfa_recovery_codes`, `mfa_pending_logins` and `users.mfa_secret` at **zero rows** with `mfa.enabled`, `mfa.recovery_code_used` and `mfa.disabled` in the audit log |
+| M57.9 — an account deleted, and its residue read back | The instance principal and the sole owner of a surviving organization are both refused **409**, each naming its remedy. An ordinary member's deletion went through; the erasure pass (`onStart` on the maintenance family, so a restart runs it) then set `anonymized_at`, emptied the address and replaced the actor snapshot with `deleted account` on both entries. The audit API still returns `actor_id`, so the entries still correlate — and `metadata` still carries the address, which is [F177](deferred-findings.md) reproduced rather than a new row |
+| M57.9 — the SLO on the final build | `make seed-slo` then `make load`: **240,001 cached redirects, 100% under 0.5ms** against a 20ms target. `make load-uncached` drove 24,536 database reads in the same shape |
+| M57.9 — the conformance test constrains something | `scripts/single-instance-check.sh` passes on `linkctrl:test`. The nil-Redis guard at `internal/redirect/resolver.go:258` was then deleted, the image rebuilt, and the check **failed at the redirect step, exit 52** — *"Empty reply from server"*, the process down. Restored by counter-edit, never `git checkout`; `git status` clean afterwards |
+| M51.9's findings, confirmed rather than assumed | **F173** — a configured but unreachable relay measured at **10.05s** before M56 now costs **0.10s**, and `GET /login` answered in 0.8ms while its retries were in flight. **F174** — both demo QR codes now hang off `launch`, which answers **302**. **F172** — closed by narrowing M46's bullet, and the narrowing is what F184 below now exercises. **F175** stands, carried to M58 |
+| M55's outbound connection | One `GET`, two headers, no query string and no identifier (`internal/update/update.go:179-187`) — the enumeration in [m55.md](phase-details/m55.md) is exact |
+| M57's *runs in CI* | `.github/workflows/ci.yml:173` runs `make ci-image-smoke`, and `single-instance` is its prerequisite |
+| The demo shows the phase | One erased user and eight tombstoned audit rows, one enrolled account with ten recovery codes, one account-wide key beside four pinned ones — read from `linkctrl-demo-postgres-1` |
+
+### What was found — four rows, F181 to F184
+
+All four confirmed against the tree before filing, all four **out of spec**: not
+one of them makes a shipped milestone's own claim false, so none was fixed here.
+They are [M58](phase-details/m58.md)'s to triage.
+
+- **[F181]** — a deleted **and erased** account's address is still rendered on
+  `/invites`, because nothing purges invitations. The residue `docs/SECURITY.md`
+  names is the audit metadata; this is a second one, and unlike that one it is
+  bounded by nothing.
+- **[F182]** — the invitation form and the members grant form both default to
+  the **most privileged role the actor can assign**, because neither marks an
+  option `selected` and the options are in rank order. The per-member *change*
+  form, ten lines away, gets it right.
+- **[F183]** — an administrator who cuts their organization out of an
+  account-wide key's reach stops it **acting** there and not **reading** about
+  it: `Service.Workspaces` filters on `APIKeyOrgID != nil`, which is exactly the
+  half a revoked account-wide key is not.
+- **[F184]** — `/account/mfa` overflows sideways by **174px at 360px**, and the
+  offender is the enrolment QR: a 488px `<svg>` on a 360px viewport.
+
+**F184 is the one worth naming as a method result.** M46's bullet was narrowed
+at its reopening to the two tags the scan checks, and the amendment named what
+that leaves unenforced — *"a flex row of six controls, an unbroken URL in a
+table cell, **a fixed-width SVG**"*. Two milestones later M53 added a page with
+a fixed-width SVG on it. The narrowing was correct and the prediction inside it
+came true inside the same phase, which is the argument for the scan being
+extended rather than for the bullet being widened again.
+
+### What was refuted, so it is not re-found
+
+Four candidates died before they could be filed.
+
+- **A TOTP code refused seconds after enrolment** read as a broken verifier. It
+  is the product refusing a code already spent: enrolment consumed that window,
+  and a code from the next one signed in.
+- **`POST /account/mfa` answering without a CSRF token** read as a missing
+  check. There are no CSRF tokens anywhere in this product: protection is
+  `http.NewCrossOriginProtection` (`internal/httpx/router.go:976`), which reads
+  `Sec-Fetch-Site` and `Origin`, and a client sending neither is a non-browser
+  client by design. `curl` is that client.
+- **`account.Delete` open-coding its API-key refusal** rather than calling
+  `requireSessionActor` read as the credential-type branching the inherited
+  Permissions rule forbids. It is D87's limb, correctly applied, with the reason
+  quoted at `internal/account/account.go:218-221`; the helper is unexported in
+  `internal/auth`.
+- **Three removals in the 0.2.0 → this-build schema diff** read as DDL that is
+  not additive. All three ship in a **minor** version bump, which is the bound
+  the inherited rule states, and each is named by the milestone that made it.
+
+### D172 — the doc-cost judgement: the growth is one amendment, and it is defended
+
+`make doc-cost`, then the judgement
+[phase-loop.md](phase-loop.md#two-milestones-that-do-not-end-like-the-others)
+requires.
+
+**The number.** The `/work phase` resume charge went **61693 → 62297 bytes**
+across M52–M57, **+1.0%** for six milestones. All of it is one file —
+`phase-details/README.md`, 11884 → 12495 — and inside that file it is one line:
+the *Permissions* row of *What every milestone inherits*, amended a third time
+by M54. Measured, not attributed: `git diff 4167735 HEAD` over that file adds
+3295 bytes and removes the status words it replaces.
+
+**The judgement: defend.** The comparison is M51.9's, which trimmed: there the
+growth was +11% into a file whose realized read ratio had fallen to **0.71**,
+which is what *charged and skipped* looks like. This file's ratio is **0.88**,
+second only to workflow.md's 0.91, so the bytes added are bytes being read — and
+the line they were added to is the one [step 1](phase-loop.md#1-validate)
+consults before every milestone. The amendment is also not optional: the
+amending rule requires the bullet as it stood, the bullet as amended, and the
+tree fact that forced it, and M54 moved which credentials the *see* limb reaches.
+
+**What is not defended is a fourth amendment.** That row is now roughly a fifth
+of the file it sits in, and it carries three amendment notes that decisions.md
+already holds in full. If M58 or a later phase amends it again, the M51.9 move
+is the right one: leave the rule and the pointers, and let the history live where
+history lives. Said here so the next reader inherits the threshold rather than
+re-deriving it.
