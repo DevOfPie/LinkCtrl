@@ -58,7 +58,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M52](m52.md) | Account deletion and subject erasure | M50.5 · M51 *(ordering)* | done |
 | [M53](m53.md) | A second factor: TOTP, enrolment, and recovery codes | M51 | done |
 | [M54](m54.md) | An API key belongs to an account, not to one organization | M52 | done |
-| [M55](m55.md) | An update checker, and the fifth thing that leaves this product | — | not started |
+| [M55](m55.md) | An update checker, and the fifth thing that leaves this product | — | done |
 | [M56](m56.md) | High availability: the failover contract | — | not started |
 | [M57](m57.md) | High availability: measured, and still one container | M56 | not started |
 | [M57.9](m57.9.md) | **Pre-release adversarial review** | M46–M57 | not started |

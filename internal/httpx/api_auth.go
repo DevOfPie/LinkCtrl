@@ -7,6 +7,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/instance"
 	"github.com/DevOfPie/LinkCtrl/internal/signup"
 )
 
@@ -22,13 +23,27 @@ type AuthAPI struct {
 	// all, and the two halves of an accepted one. Nil refuses every
 	// registration, which is the direction an unwired dependency has to fail in.
 	Signup *signup.Service
-	Config config.Config
+	// Instance records the first-run answer to the update-check prompt (M55).
+	// Nil leaves the field on POST /auth/setup accepted and inert, which is the
+	// same state the dashboard's checkbox is in on a deployment wired without
+	// this service.
+	Instance *instance.Service
+	Config   config.Config
 }
 
 type credentials struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 	Name     string `json:"name"`
+	// UpdateCheck is the first-run prompt's answer, on the API's side of it
+	// (M55, D149). A pointer because omitted and `false` have to be different
+	// things, and D164 is what makes the difference land somewhere: omitted
+	// leaves the question **unanswered**, which is a state the setting has, and
+	// the check stays off until somebody answers it at the dashboard prompt. So
+	// an API client that has never heard of this field claims an instance exactly
+	// as it always did *and* cannot silently consent to an outbound connection on
+	// its operator's behalf. Present is the operator answering.
+	UpdateCheck *bool `json:"update_check,omitempty"`
 }
 
 // Setup creates the first user. Available only while no users exist, so a
@@ -51,6 +66,31 @@ func (a *AuthAPI) Setup(w http.ResponseWriter, r *http.Request) {
 	if err := decodeJSON(w, r, &req); err != nil {
 		WriteError(w, r, err)
 		return
+	}
+
+	// The first-run answer, before the claim, exactly as the form does it and for
+	// the same reason: SetUpdateCheckAtSetup refuses once an account exists, and
+	// a Register that fails after it must not be able to lose a *no*.
+	//
+	// Silently ignored when the deployment has already said no with
+	// LINKCTRL_UPDATE_CHECK=false. Not a 422: the caller asked for the check to be
+	// off or on, the instance is off either way, and refusing the whole setup over
+	// a field that agrees with the outcome would be a strange way to claim a box.
+	// What the answer *was* is not recoverable from the response, and the variable
+	// is where the operator looks.
+	//
+	// ErrClaimed is the NeedsSetup check above losing a race with another setup
+	// request, and it answers 404 for the reason that check does: the endpoint
+	// genuinely does not exist any more.
+	if req.UpdateCheck != nil && a.Instance != nil && a.Config.UpdateCheck {
+		switch err := a.Instance.SetUpdateCheckAtSetup(r.Context(), *req.UpdateCheck); {
+		case errors.Is(err, instance.ErrClaimed):
+			WriteError(w, r, domain.ErrNotFound)
+			return
+		case err != nil:
+			WriteError(w, r, err)
+			return
+		}
 	}
 
 	id, err := a.Auth.Register(r.Context(), auth.RegisterInput{

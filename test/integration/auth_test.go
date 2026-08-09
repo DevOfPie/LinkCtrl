@@ -110,15 +110,21 @@ func TestMigrationsProduceExpectedSchema(t *testing.T) {
 	// authority over, so the outright revoke they hold over a pinned key is the
 	// wrong instrument and a narrowing is the right one.
 	//
+	// M55's instance_settings is the newest, and the first table in this schema
+	// that is about the *box* rather than about anybody in it: one row, held to
+	// one by its primary key, carrying the answers an operator gives for the
+	// instance as a whole. Today that is whether it may check for releases, which
+	// D149 made a question somebody is asked rather than a constant.
+	//
 	// Each is live and typed rather than dormant jsonb, because the feature that
 	// reads it arrived in the same commit. The number moves and the sentence says
 	// why, rather than the count silently growing whenever somebody adds a table.
-	if tables != 42 {
-		t.Errorf("got %d tables, want 42 (all 20 Plan.md entities, plus mail_outbox, "+
+	if tables != 43 {
+		t.Errorf("got %d tables, want 43 (all 20 Plan.md entities, plus mail_outbox, "+
 			"invitations, pending_registrations, blocked_destinations, "+
 			"destination_disputes, link_click_budget, instance_grants, "+
-			"password_resets, mfa_recovery_codes, mfa_pending_logins and "+
-			"api_key_org_revocations)", tables)
+			"password_resets, mfa_recovery_codes, mfa_pending_logins, "+
+			"api_key_org_revocations and instance_settings)", tables)
 	}
 
 	// The UTC guarantee the partition scheme depends on.

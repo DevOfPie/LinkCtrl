@@ -29,6 +29,49 @@ migrations run at boot.
 
 ### Added
 
+- **This instance can now tell you when a new LinkCtrl is released — and it asks
+  you first. Read this one even if you read nothing else here.**
+
+  Once a day the instance asks GitHub whether a newer version exists and, if
+  there is one, puts a notification in the instance principal's inbox. Nobody
+  else is told: upgrading is the operator's, and a workspace member can only be
+  made anxious by it.
+
+  **What the request carries, in full.** This server's source address, and the
+  version it is running, in the `User-Agent`. Nothing else — no instance
+  identifier, no deployment size, no link counts, no configuration, nothing
+  about the people using it. There is no request body, no query string and no
+  credential. The response is read for a version number and discarded.
+
+  **Nothing leaves your instance until somebody here has been asked and said
+  yes.** On a fresh instance the question is on the setup page that claims it,
+  ticked. **On an instance you are upgrading, it is put to the first
+  administrator who signs in afterwards, and the check does nothing until they
+  answer** — an upgrade cannot consent on your behalf, and neither can this
+  release note. The consequence is worth stating: an instance nobody signs into
+  never asks, and never tells you a release exists.
+
+  Either way it is asked once. `LINKCTRL_UPDATE_CHECK=false` on the deployment
+  is the answer given from the other side, it overrides whatever was said in a
+  browser, and it cannot be overridden from one; air-gapped and
+  egress-restricted deployments want it, and `docs/deployment.md` says what
+  leaving it on costs them. A client claiming an instance through
+  `POST /api/v1/auth/setup` can send `update_check`; omitting it leaves the
+  question for whoever signs in.
+
+  **`docs/SECURITY.md` no longer says there is no phone-home in the default
+  configuration**, because there is one. That sentence was part of why somebody
+  would self-host this, so it is edited rather than qualified: the *Egress* row
+  now enumerates **five** outbound connections instead of four, and this is the
+  only one of them that an ordinary instance turns on by agreeing to a question
+  rather than by being configured.
+
+  A failed check is silent — one debug line, no retry until the next day, and
+  never a startup failure or anything a user sees. **So no notification is not
+  evidence of being up to date:** GitHub's unauthenticated API is rate-limited
+  per source address, and a throttled check looks exactly like a check that
+  found nothing.
+
 - **An API key belongs to your account, not to one organization.** A key used to
   be minted *into* the organization you were standing in and could never leave
   it. It is now minted by your account and reaches the organizations your account

@@ -27,6 +27,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/update"
 	"github.com/DevOfPie/LinkCtrl/internal/webhook"
 )
 
@@ -105,7 +106,16 @@ type jobRunner struct {
 	// and which is what makes "evaluation runs here and nowhere else" a property
 	// of the wiring rather than a promise.
 	automation *automation.Service
-	cancel     context.CancelFunc
+	// updates asks whether a newer LinkCtrl has been published (M55).
+	//
+	// **Nil is LINKCTRL_UPDATE_CHECK=false**, and it is where that variable takes
+	// effect: main does not build the service at all, so the pass has nothing to
+	// call and this process opens no socket outwards on any schedule. The
+	// operator's *other* half of the switch — the answer they gave at first run —
+	// is inside the service, in the statement that claims the day, because that
+	// is a row somebody may change after boot.
+	updates *update.Service
+	cancel  context.CancelFunc
 	// wg accounts for every family goroutine start launches; stop waits on it,
 	// so shutdown never leaves a pass mid-flight against a pool that is about
 	// to close. The single scheduler goroutine had a done channel doing this
@@ -155,6 +165,13 @@ const (
 	advisoryLockKeyMaintenance int64 = 0x6c63_6a6f_6273_0105 // 7810203205416190213
 	advisoryLockKeyDomains     int64 = 0x6c63_6a6f_6273_0106 // 7810203205416190214
 	advisoryLockKeyAutomation  int64 = 0x6c63_6a6f_6273_0107 // 7810203205416190215
+
+	// The update check (M55). Its own key because it is its own family, and it
+	// is its own family because it is the only scheduled work in this product
+	// that opens a socket to a host outside the deployment — putting the one
+	// outbound job inside a family called *maintenance* is how egress stops
+	// being auditable in one place.
+	advisoryLockKeyUpdates int64 = 0x6c63_6a6f_6273_0108 // 7810203205416190216
 )
 
 func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analytics.Roller,
@@ -163,6 +180,7 @@ func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analyt
 	accounts *account.Service, mfa *auth.MFAService,
 	links *link.Service,
 	webhooks *webhook.Service, automations *automation.Service, hosts *redirect.HostCache,
+	updates *update.Service,
 	domains config.DomainsConfig,
 	analyticsRetentionDays, auditRetentionDays int, auditSizeWarnBytes int64,
 ) *jobRunner {
@@ -189,6 +207,7 @@ func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analyt
 		webhooks:             webhooks,
 		automation:           automations,
 		hosts:                hosts,
+		updates:              updates,
 	}
 }
 
@@ -330,6 +349,28 @@ func (j *jobRunner) families() []jobFamily {
 			// one subject.
 			name: "automation", key: advisoryLockKeyAutomation, every: domain.AutomationInterval,
 			onStart: j.runAutomation, onTick: j.runAutomation,
+		},
+		{
+			// The update check (M55), and the one family whose work leaves the
+			// deployment. It is separate from `maintenance` on the same grounds
+			// its advisory key is separate: an operator asking *what does this
+			// process connect to, and when* has one family to read, and a later
+			// step added to the hourly pass cannot quietly become a second
+			// outbound call under a name that does not suggest one.
+			//
+			// **The ticker is hourly and the period is daily**, which is not a
+			// contradiction. The day is bounded by the row ClaimUpdateCheck
+			// updates, so a fast ticker cannot produce a second request; what it
+			// buys is that an instance redeployed most afternoons still checks,
+			// where a 24-hour ticker on a process that rarely lives 24 hours
+			// would check on the startup run and never again. One indexed UPDATE
+			// an hour that usually matches nothing is the whole cost.
+			//
+			// The startup run is deliberate for the same reason and is safe for
+			// the same one: a box that has been off for a week asks on the way
+			// up, and a box restarted twice in ten minutes asks once.
+			name: "update-check", key: advisoryLockKeyUpdates, every: time.Hour,
+			onStart: j.runUpdateCheck, onTick: j.runUpdateCheck,
 		},
 	}
 }
@@ -646,6 +687,35 @@ func (j *jobRunner) runAutomation(ctx context.Context) {
 
 	j.withLeadership(runCtx, advisoryLockKeyAutomation, "automation", func(ctx context.Context) error {
 		return j.automation.Evaluate(ctx)
+	})
+}
+
+// runUpdateCheck asks whether a newer LinkCtrl has been published (M55).
+//
+// **Under leadership, so an eight-replica deployment makes one request a day and
+// not eight.** That is the milestone's own bullet, and it is belt-and-braces
+// with the row: ClaimUpdateCheck would already stop the other seven, since only
+// one UPDATE can match a row whose timestamp the first one moved. Leadership is
+// what stops the race being run at all, and the pair is the same choice D77 made
+// for webhook delivery and for the same reason — an advisory lock is released
+// the moment its holder dies, so two leaders is a window rather than an
+// impossibility, and here that window would be a second socket opened to a host
+// outside the deployment.
+//
+// Nil service is LINKCTRL_UPDATE_CHECK=false and nothing runs, not even the
+// lock acquisition.
+//
+// The timeout is short because the work is one small GET with its own ten-second
+// bound inside this one. Nothing here is retried: see update.Service.Run.
+func (j *jobRunner) runUpdateCheck(ctx context.Context) {
+	if j.updates == nil {
+		return
+	}
+	runCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	j.withLeadership(runCtx, advisoryLockKeyUpdates, "update-check", func(ctx context.Context) error {
+		return j.updates.Run(ctx)
 	})
 }
 

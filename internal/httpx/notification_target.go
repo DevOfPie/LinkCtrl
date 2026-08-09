@@ -48,6 +48,14 @@ var notificationTargets = map[string]notificationDestination{
 	// LINKCTRL_AUDIT_RETENTION_DAYS on the deployment, which no page offers.
 	notify.KindAuditGrowth: func(map[string]any) string { return "" },
 
+	// Nowhere, and for the same reason the audit-growth warning leads nowhere.
+	// The recipient is the instance principal, and what they do about a new
+	// release is pull an image and restart a service — there is no page in this
+	// product that upgrades it, and there is not going to be one. Sending them to
+	// a dashboard page would be pretending the product can act on its own
+	// version.
+	notify.KindUpdateAvailable: func(map[string]any) string { return "" },
+
 	// The account page, which is where the second factor lives: the enrolment
 	// offer, the recovery-code count, the regenerate control and the disable
 	// form. Every one of the four changes this kind carries is answered there,

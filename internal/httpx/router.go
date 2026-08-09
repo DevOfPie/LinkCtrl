@@ -172,7 +172,7 @@ func (m *appMux) HandleFunc(pattern string, h func(http.ResponseWriter, *http.Re
 // it. TestReservedListCoversRegisteredRoutes enforces that.
 func registerAppRoutes(d Deps, app *appMux) {
 	if d.Auth != nil {
-		authAPI := &AuthAPI{Auth: d.Auth, Signup: d.Signup, Config: d.Config}
+		authAPI := &AuthAPI{Auth: d.Auth, Signup: d.Signup, Instance: d.Instance, Config: d.Config}
 		// Credential endpoints carry the login limit rather than the API one.
 		// Per-account lockout already exists and is not enough on its own: it
 		// answers "many guesses at one account", while this answers "many guesses
@@ -686,11 +686,23 @@ func registerAppRoutes(d Deps, app *appMux) {
 		// Everything else redirects anonymous visitors to the login form,
 		// where the API would return a problem document.
 		for pattern, fn := range map[string]http.HandlerFunc{
-			"GET /dashboard":   web.Dashboard,
-			"GET /links":       web.LinksPage,
-			"POST /links":      web.LinkCreate,
-			"GET /links/{id}":  web.LinkDetail,
-			"POST /links/{id}": web.LinkUpdate,
+			"GET /dashboard": web.Dashboard,
+			// The answer to the question an upgraded instance is asked at its
+			// first administrative sign-in (M55, D164). Under `signedIn` like
+			// everything else here, and gated a second time in the service on
+			// `instance.admin` — the session only says who is asking.
+			//
+			// `/instance/` rather than `/dashboard/` or `/settings/`: the thing
+			// being written belongs to the box, and naming it after the page that
+			// happens to draw the prompt would make the next instance-level
+			// answer either misfiled or a third prefix. It cost one line in
+			// internal/alias/reserved.txt, which is the reserved-list guard doing
+			// its job rather than an obstacle to route around.
+			"POST /instance/update-check": web.UpdateCheckAnswer,
+			"GET /links":                  web.LinksPage,
+			"POST /links":                 web.LinkCreate,
+			"GET /links/{id}":             web.LinkDetail,
+			"POST /links/{id}":            web.LinkUpdate,
 			// Folders (M38). Four POSTs and no JavaScript: creating, renaming,
 			// moving and deleting are each a form that submits on its own, so the
 			// page works with scripting off. htmx swaps the tree in place when it

@@ -23,6 +23,31 @@
                class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
         <p class="mt-1 text-xs text-subtle">At least 12 characters. Length is the only rule.</p>
       </div>
+      <div class="rounded-md border border-line bg-surface p-3">
+        {{if .UpdateCheckOffered}}
+        <label for="update_check" class="flex items-start gap-2">
+          <input id="update_check" name="update_check" type="checkbox" value="1" {{if .UpdateCheck}}checked{{end}}
+                 class="mt-0.5 h-4 w-4 rounded border-line-strong text-accent focus:ring-accent">
+          <span class="text-sm font-medium text-ink">Tell me when a new LinkCtrl is released</span>
+        </label>
+        <p class="mt-2 text-xs text-subtle">
+          Once a day this instance asks GitHub whether a newer version exists, and
+          puts a notification in your inbox if there is one. The request carries
+          this server's address and the version it is running, in the
+          <code>User-Agent</code>. Nothing else &mdash; no instance identifier, no
+          link counts, no configuration, and nothing about the people using it.
+          Your answer is recorded now and can be overridden later by setting
+          <code>LINKCTRL_UPDATE_CHECK=false</code> on the deployment.
+        </p>
+        {{else}}
+        <p class="text-xs text-subtle">
+          <span class="font-medium text-ink">Update checks are off.</span>
+          This deployment sets <code>LINKCTRL_UPDATE_CHECK=false</code>, so this
+          instance will not contact GitHub to ask whether a newer version exists.
+          Nothing here leaves the network you run it on.
+        </p>
+        {{end}}
+      </div>
       <button type="submit" class="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Create account</button>
     </form>
   </div>

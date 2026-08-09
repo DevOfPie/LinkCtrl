@@ -273,8 +273,12 @@ file. Append a row when you append an entry.
 | [M53: the two facts the milestone before it moved](#2026-08-08--m53-the-two-facts-the-milestone-before-it-moved) | An amendment, not a decision: M52 moved the session mint out from under M53's bullet and gave `mfa_secret` its first writer, which is the one that clears it. The first time this phase a milestone's validation corrected facts broken by its immediate predecessor |
 | [M54: the second milestone file to reserve a migration number it did not get](#2026-08-08--m54-the-second-milestone-file-to-reserve-a-migration-number-it-did-not-get) | An amendment, not a decision: `037xx` is not merely stale but occupied, so a worker following the bullet would collide rather than fail. Why a reserved migration number is a prediction about build order |
 | [M54: the function the authority bullet named answers one permission](#2026-08-08--m54-the-function-the-authority-bullet-named-answers-one-permission) | An amendment, not a decision: `LoadMembershipAuthority` takes one permission, so a scope set through it is a query per scope on the auth path. Why the assertion is untouched, and why an amendment that widened what is intersected would be this milestone's own failure mode wearing a correction's clothes |
+| [M55: four line references, and the one that pointed at the wrong claim](#2026-08-08--m55-four-line-references-and-the-one-that-pointed-at-the-wrong-claim) | An amendment, not a decision. `SECURITY.md:73` had become the QR-codes row, so the citation still landed on a real claim and read as correct — the failure mode a moved line does not have. And how one stale reference became two the same day |
+| [M55: D159 corrected — an upgraded instance is asked, not assumed](#2026-08-08--m55-d159-corrected--an-upgraded-instance-is-asked-not-assumed) | D164, owner-set. Why D149 bought knowing consent rather than a default, why that makes *unanswered* a third state the column has to hold, and the bound this inherits from the option it resembles |
 | [M53: five choices a second factor forced](#2026-08-08--m53-five-choices-a-second-factor-forced) | D150: `MFA_SECRET_KEY` is its own variable and is **optional**, so an instance without one offers no second factor and an instance that loses one falls back to recovery codes. D151: the second factor lives in `internal/auth` behind two seams rather than in a package of its own, and why the reason `internal/account` gives does not apply. D152: the enrolment offer travels in the form because the milestone forbids the alternative. D153: `RecordSuccessfulLogin` is guarded rather than moved, which is the only way both of the login flow's bullets hold at once. D154: four audit actions and one notification kind, because the two surfaces answer different questions |
 | [M54: a key belongs to an account, and the four decisions that had to be re-derived to say so](#2026-08-08--m54-a-key-belongs-to-an-account-and-the-four-decisions-that-had-to-be-re-derived-to-say-so) | D155: reach is a second column rather than a widening of the first, and account-wide is what an unpinned key created from 0.3.0 on *is* — the widening-by-default is deliberate and pinning is the irreversible half. D156: an account-wide key requires an **organization-wide** membership wherever it lands, which is M44's existing bar carried across the tenancy boundary. D157: the organization is resolved one tier above the workspace, by its own query, so M44's parameter survives with a value rather than being deleted. D158: an administrator narrows somebody else's account-wide key instead of destroying it, in a table of subtractions and under an audit action of its own. And the four re-derivations — F103's bound, M44's parameter, D43's cap, D87's rotation rule — each with the limb it matched |
+| [M55: an update checker, and the five choices a daily GET turned out to need](#2026-08-08--m55-an-update-checker-and-the-five-choices-a-daily-get-turned-out-to-need) | D159: an instance **upgrading** into 0.3.0 gets the default — on — because it has no first run left to be asked at, which is the one case D149's prompt cannot reach. D160: two switches, ANDed, and the environment variable only ever says *no*. D161: a singleton `instance_settings` table and a control on the setup form, rather than a key/value store or the settings page nobody asked for. D162: the comparison reads the leading `vX.Y.Z` and drops everything after it, because `git describe` means *past this tag* and semver would read it as *before* it. D163: the re-notify guard is keyed on the version and lives in the notification itself, not on a clock and not in a column |
+| [M55: where an upgraded instance is asked, and what the third state costs](#2026-08-09--m55-where-an-upgraded-instance-is-asked-and-what-the-third-state-costs) | D165: the question D164 owes an upgraded instance is put on the dashboard, to a holder of `instance.admin`, once — not in an interstitial, not in the shell, and not on the settings page D161 declined to build. Why *omitted* on the API's setup field now means unanswered rather than yes, why the write is conditional rather than guarded by a read, and the audit row that is deliberately not written |
 
 ---
 
@@ -23105,3 +23109,327 @@ it should not reach. An amendment that quietly widened *what is intersected*
 would be that failure wearing a correction's clothes. This one narrows nothing
 and changes no behaviour; it removes a citation that was wrong about a signature.
 
+
+## 2026-08-08 — M55: four line references, and the one that pointed at the wrong claim
+
+**An amendment, not a decision**, at [step 1](phase-loop.md#1-validate). Four
+references in [m55.md](phase-details/m55.md) named lines the tree no longer has.
+Three are ordinary drift. The fourth is worth separating out, because a stale
+reference that still lands on *something* is the kind that gets copied forward.
+
+| As it stood | As amended | The tree fact |
+| --- | --- | --- |
+| `cmd/linkctrl/jobs.go:210`'s `families()` | `:231` | `func (j *jobRunner) families()` is at 231; 210 is inside the comment block above it |
+| the advisory key block at `:128-142` | `:145-155` | The `const` block runs 145–155, ending at `advisoryLockKeyMaintenance`. 128–142 is the prose explaining generation 0 |
+| `internal/build.Get().Version` at `build.go:17-21` | `:40` | 17–21 is the `var (version, commit, date)` block the linker stamps. `func Get()` is at 40. The `"dev"` fallback at `:52-75` was right and is unchanged |
+| `docs/SECURITY.md:73`, twice | `:78`, twice | 78 is the Egress row. **73 is the QR-codes row** |
+
+**The fourth is the one that mattered.** A reference to a line that has moved
+fails loudly the moment somebody opens it. A reference to a line that now holds
+a *different table row* reads as correct: `SECURITY.md:73` is a real row making
+a real claim about what a QR code does not carry, and a worker checking the
+citation would have found prose about metadata and destinations rather than the
+egress enumeration this milestone has to re-count from four to five. The
+milestone's own instruction is *the count is written by counting the
+enumeration, not by adding one to the previous sentence* — and the pointer to
+the enumeration was aimed at the wrong sentence.
+
+Both mentions were amended, including the one written into this file's header
+earlier the same day when [D149](../../Plan.md#phase-3-decisions) was recorded.
+That one was copied from the bullet below it, which is exactly how a wrong
+citation propagates: it was already stale when it was reused, and reusing it is
+what made it two.
+
+All four are facts. A line number is not a choice.
+
+
+## 2026-08-08 — M55: an update checker, and the five choices a daily GET turned out to need
+
+[D149](../../Plan.md#phase-3-decisions) settled the only question m55.md said
+the milestone needed answered: the checker is on by default and asks at first
+run. Building it raised five more, each with a real alternative, and each
+recorded here because the next reader would otherwise re-derive it differently.
+
+### D159 — an instance upgrading into 0.3.0 gets the default, which is on
+
+**On, with the CHANGELOG and `docs/SECURITY.md` saying so plainly and naming the
+variable that turns it off.**
+
+D149 bought the default with a prompt: *what makes the prompt the answer rather
+than a compromise is that the operator decides knowingly*. An instance that
+already exists has no first run left, so there is nobody to ask, and the
+knowingly is exactly what it does not get. That is a real gap in the argument
+and it deserved a decision of its own rather than falling out of the
+implementation.
+
+Three options, and the one taken is the middle of them:
+
+| | Buys | Costs |
+| --- | --- | --- |
+| **On** (taken) | *On by default* means what it says on every instance, and the fleet answer is one sentence rather than two | An existing operator's box starts making a request they were not asked about, and learns of it from a release note they may not read |
+| Off for upgrades only | Nobody is surprised | The default is then off for every instance that exists today, which is the recommendation D149 overruled, arrived at through the back door |
+| Prompt the principal at next sign-in | Everybody is asked | A second prompt surface, in a milestone that already grew one; and the check would be off for however long nobody signs in, which on an unattended instance is forever |
+
+What tipped it is that the second option is not a smaller version of the first —
+it is the overruled answer wearing an upgrade path. An owner who chose *on* over
+*off* did not choose *on for new instances and off for the ones that exist*, and
+inferring that would be the loop editing the decision it was given.
+
+The cost is paid where an upgrade is read rather than where the code is: the
+`[Unreleased]` entry leads with it, `docs/SECURITY.md`'s egress row says the
+sentence about phone-home is edited rather than qualified, and
+`docs/configuration.md` states the upgrade case in its own paragraph. That is
+the whole mitigation, it is not much, and saying so is better than implying the
+prompt covers everybody.
+
+### D160 — two switches, ANDed, and the variable only ever says no
+
+**`LINKCTRL_UPDATE_CHECK` is the deployment's answer and
+`instance_settings.update_check_enabled` is the operator's, and the check runs
+only when both allow it.**
+
+Two controls are unavoidable once D149 exists: an operator cannot set an
+environment variable from a browser, and an air-gapped deployment cannot depend
+on whoever claims the instance knowing why the box has no egress. So the
+question is not whether there are two but which wins.
+
+The variable wins, and only downwards. `false` there means the instance never
+asks whatever a browser said; `true` there is permission rather than
+instruction, and the stored answer decides. That asymmetry is what makes the
+variable usable as a hard bound by somebody who does not control the dashboard —
+which is the actual deployment shape it is for.
+
+Where each is enforced is deliberate too. The variable is read once, at boot, in
+`main`: an instance with it off builds no client and registers nothing with the
+job family, so the socket cannot be opened by any path. The row is read on every
+pass, inside the statement that claims the day, because it can change after boot
+and a value cached at startup would keep a *no* from taking effect until the
+next restart.
+
+Rejected: a single tri-state variable (`on`/`off`/`ask`). It reads as three
+behaviours when there are two, and it puts the operator's answer somewhere they
+cannot write it.
+
+### D161 — a singleton settings table, and a control on the setup form
+
+**`instance_settings` with `id boolean PRIMARY KEY DEFAULT true CHECK (id)`, one
+row inserted by migration 04300, and the prompt is a checkbox on the existing
+setup form rather than a page of its own.**
+
+D149 named the cost as *there is no first-run prompt surface for instance-level
+settings*, which invites building one. The narrow reading is the right one, for
+the reason `internal/notify`'s package comment gives about itself: the risk in a
+milestone like this is building the general thing nobody asked for. One setting
+exists. A key/value table cannot be typed, defaulted or constrained, and a
+settings *page* would need a permission, a route, a nav entry and a second way
+to change something the first-run prompt already answered — none of which any
+scope row asks for.
+
+The singleton is enforced by the primary key rather than by convention, so a
+second row is a conflict rather than a state where "the settings" means
+whichever row was read first. DDL stays additive, so the next instance-level
+setting is a column here.
+
+The row is inserted by the migration rather than created lazily, because a
+lazily-created settings row gives "nobody has changed anything" two
+representations and the defaults then have to live in Go as well as in the DDL.
+
+The write is guarded by the service rather than by its caller.
+`SetUpdateCheckAtSetup` counts the users itself and refuses once the instance is
+claimed — unlike `MovePrincipal` one screen down, which takes no actor because
+nothing routes to it. This one is reached by two HTTP handlers, so an unchecked
+version would be one route registration away from being a public endpoint for
+changing what an instance connects to.
+
+And the write happens **before** the account is created, on both surfaces. The
+ordering is forced by the refusal above, and it is also the safe direction: a
+`Register` that fails afterwards leaves the answer standing and the operator's
+retry rewrites it, where the other order would claim the instance and lose a
+*no* to any error after it.
+
+### D162 — the comparison reads `vX.Y.Z` and drops everything after it
+
+**A leading `v` is optional, the three numbers are the version, and any `-…` or
+`+…` suffix is discarded rather than ordered.**
+
+This looks like a parsing detail and is a correctness one. The Makefile stamps
+`git describe`, so a build 39 commits past the v0.2.0 tag reports
+`v0.2.0-39-g888dbcd` — which is what the demo instance runs today. Read as
+semver, a pre-release suffix sorts *below* its release, so `0.2.0-39-g888dbcd`
+is older than `0.2.0` and an instance running code newer than the tag would be
+told to upgrade to the tag it is already past. Read the way the string is
+actually produced, the suffix means *past this tag*, and comparing the tag
+itself with a strict `>` on the remote side is the honest answer.
+
+The same rule is what makes **a build reporting `dev` never notify**, without a
+special case on the word: `dev` and `dev-dirty` have no leading numbers, so they
+do not parse, so there is nothing for a release to be newer than. m55.md asks
+for that behaviour and this is where it is enforced — one predicate rather than
+a name check that the next fallback string would slip past.
+
+An unparseable *remote* tag takes the same path and is a no-op, which is the
+milestone's other bullet, so three of its four version rules are one function.
+The fourth — drafts and pre-releases — is checked where the response is read,
+because it is a fact about the release rather than about its number.
+
+### D163 — the guard is the notification, keyed on the version
+
+**`update.available` is not repeated for a version already notified, and what
+records that is the notification row itself, read by
+`CountNotificationsAboutVersion` on `data->>'version'`.**
+
+`WarnAuditGrowth` suppresses on a clock, because the condition it reports stays
+true and gets worse while it is ignored — a week of silence is a week of
+somebody planning the work. A release is the opposite shape: it does not get
+worse, and re-raising it would be the product nagging about a decision the
+operator has already made. So the key is the version and there is no window at
+all.
+
+Two alternatives were available and both put the fact in a second place. A
+`notified_version` column on the settings row would disagree with the inbox the
+first time one write succeeded and the other did not, and it cannot express *this
+principal was told and that one was not* — which matters, because appointing a
+second principal after a release should tell the new one without re-telling the
+first. Reusing `CountRecentNotificationsOfKind` with a long window would answer
+the wrong question: it suppresses 0.5.0 because 0.4.0 was announced last month.
+
+The consequence is that `instance_settings` stores the *time* of the check and
+not the version it found, which is a narrower reading of m55.md's *nothing from
+it is stored beyond the version string and the time of the check* than the
+sentence permits. The version is stored — in the notification that carries it —
+and nowhere twice.
+
+## 2026-08-08 — M55: D159 corrected — an upgraded instance is asked, not assumed
+
+**Owner-set, 2026-08-08, at [step 3.4](phase-loop.md#3-land)**, on the question
+the worker raised rather than answered. **D164**, and it corrects
+[D159](#2026-08-08--m55-an-update-checker-and-the-five-choices-a-daily-get-turned-out-to-need) in the direction
+this log corrects things: the earlier entry stands as written and this one is
+what is true.
+
+**An instance upgrading into 0.3.0 is asked at the first administrative sign-in
+after the upgrade.** Until it answers, the check is **off**.
+
+**What D159 got wrong, and it was not the reasoning.** D159 argued that an
+upgrading instance has no first run, that the CHANGELOG leads on the change, and
+that the default should therefore apply. Every clause of that is true. What it
+missed is that [D149](../../Plan.md#phase-3-decisions) did not buy *on* — it
+bought *the operator decides knowingly*, and paid for it with a prompt surface
+this milestone had to build. Applying the default to the population the prompt
+cannot reach spends the guarantee on the smaller half: a fresh instance is asked,
+and every instance that has been running long enough to need an update checker
+is not.
+
+**So the setting has three states, not two.** Unanswered is a state, and it is
+what an upgraded instance is in. `update_check_enabled` cannot be a
+`boolean NOT NULL DEFAULT true` that already holds an answer nobody gave; the
+absence of an answer has to be representable, and *off while unanswered* is the
+only coherent behaviour in the window between the upgrade and somebody signing
+in.
+
+**The cost, stated rather than discovered.** This is the *off for upgrading
+instances* option wearing a friendlier name for as long as nobody signs in, and
+it inherits that option's weakness — an instance nobody administers stays quiet
+forever, which is the case the feature exists for. The prompt is what buys it
+back, and it buys it back only for instances somebody still logs into. That is
+the honest bound and it belongs in `docs/deployment.md` beside the air-gapped
+note, not in a footnote here.
+
+`LINKCTRL_UPDATE_CHECK=false` is unchanged and still only ever says no, so an
+air-gapped deployment is unaffected by any of this — it never reaches the
+question.
+
+
+
+## 2026-08-09 — M55: where an upgraded instance is asked, and what the third state costs
+
+[D164](../../Plan.md#phase-3-decisions) settled *when* an upgraded instance is
+asked — the first administrative sign-in — and that the check is off until it
+answers. Building that raised the questions an owner-set decision does not
+reach: which surface, how many times, and what the third state does to the two
+callers that already existed. **D165**, and it is one number because every part
+of it follows from *unanswered is a state a human closes, once*.
+
+### The surface is the dashboard, and the prompt persists until it is answered
+
+`Root` sends a signed-in visitor to `/dashboard`, so *at the first
+administrative sign-in* is a description of where the dashboard already is
+rather than of a route that had to be invented. The prompt is drawn for a reader
+holding `instance.admin`, on that page, and it stays there until somebody
+answers — an administrator who signed in with a `?next=` and went straight to
+the dispute queue meets it the next time they are on the page, which is what
+makes *first sign-in* a promise about the earliest opportunity rather than about
+the only one.
+
+Two alternatives, both rejected for reasons about cost rather than taste:
+
+| | Buys | Costs |
+| --- | --- | --- |
+| **Dashboard, persistent** (taken) | One query, on one page, for one kind of reader, and only while the question is open | An administrator who never opens the dashboard is never asked |
+| An interstitial after sign-in | Cannot be missed | It hijacks the sign-in for a question about a checkbox, and it has to decide what to do with `?next=` — either dropping where somebody was going or letting them past the question, which is the dashboard's behaviour with extra machinery |
+| A banner in the shell, on every page | Cannot be missed either | A query on **every** page render for a principal, forever — not only while unanswered, because *is it answered* is the query. The badge and the workspace switcher already cost two, and this would be the first one paid on behalf of a question that has been settled |
+
+The read that draws it is the last of four conditions and the only one that
+touches the database, so an ordinary member costs nothing and an answered
+instance costs one query on one page. A failed read draws no prompt, which is
+the trade `shell` already makes for the notification badge: a page somebody
+asked for must not fail because a control could not be decided.
+
+### It is asked once, in one statement
+
+`AnswerUpdateCheck` writes `WHERE id AND update_check_enabled IS NULL`, so the
+guard and the write are the same statement. Two tabs, a double click, or a
+second principal who was also looking at the prompt produce one answer and one
+no-op rather than last-write-wins, with no read-then-write window between them.
+
+The second submission answers `ErrAlreadyAnswered` and the handler treats it as a
+success — a 303 back to the dashboard, where the prompt is now gone. The reader
+wanted the question settled and it is; an error page would be reporting the state
+they asked for as a failure.
+
+**This is what keeps [D161](#2026-08-08--m55-an-update-checker-and-the-five-choices-a-daily-get-turned-out-to-need)
+standing.** D161 declined to build a settings page on the grounds that one
+setting does not need a permission, a route, a nav entry and a second way to
+change what the prompt already answered. A route that accepted a *second* answer
+would be that page, arrived at sideways: it would be the only way in the product
+to change an instance-level setting from a browser, and the next one would land
+beside it. There is exactly one answer to give, and afterwards the control is
+`LINKCTRL_UPDATE_CHECK`, where a deployment's decisions belong and where somebody
+with shell access can always find it.
+
+The write is therefore *not* the same statement as the setup form's.
+`SetUpdateCheckEnabled` stays unconditional, because the instance is unclaimed
+when it runs and an operator whose `Register` failed on a short password has to
+be able to retry with the box unticked — a conditional write there would make
+their first attempt's answer permanent, which is the failure the ordering in D161
+exists to prevent, reintroduced one layer down.
+
+### `update_check` omitted at `POST /api/v1/auth/setup` now means unanswered
+
+The field was a pointer so that *omitted* and *false* could differ, and under
+D159 omitted meant "keep the default, which is on". There is no default to keep
+any more, and the change is an improvement rather than a consequence to be
+absorbed: a client written before the field existed claims an instance exactly as
+it always did **and** cannot agree to an outbound connection on its operator's
+behalf by saying nothing. Such an instance is then in the same state an upgraded
+one is in, and is asked at the same prompt — one state, one surface, rather than
+a fourth case documented in a footnote.
+
+### No audit row, and the omission is the decision
+
+The three actions in `internal/instance` record changes to *who may act on every
+organization's disputes*. This is an operator answering a question about their
+own box, once, with no subject, no counterparty, and nobody to be accountable to
+but themselves. There is no surface that would read the row and no dispute it
+could settle. Writing one would be the appearance of rigour, and the reason not
+to is worth recording precisely because adding it later is cheap while removing
+it would not be.
+
+### The route cost one line in the reserved list
+
+`POST /instance/update-check`, which made `instance` a reserved alias.
+`/dashboard/…` would have named the setting after the page that happens to draw
+the prompt, and `/settings/…` would have registered the prefix D161 refused,
+inviting a `GET` beside it. The reserved-list guard failing on the new segment is
+that test doing its job; routing around it by picking an already-reserved prefix
+would have been choosing the name for the test's convenience.

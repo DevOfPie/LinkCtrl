@@ -16,6 +16,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/instance"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/qr"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
@@ -61,6 +62,39 @@ type dashboardPageData struct {
 	Series     []ui.DayCount
 	Recent     []domain.Link
 	TotalLinks *int64
+	// AskUpdateCheck draws the question an instance upgrading into 0.3.0 is put
+	// at its first administrative sign-in (M55, D164). See updateCheckAsked.
+	AskUpdateCheck bool
+}
+
+// updateCheckAsked reports whether this reader is the one being asked whether
+// the instance may check for releases (M55, D164).
+//
+// Four things have to hold, and the order is the cost order rather than the
+// argument's.
+//
+//  1. The deployment allows the check at all. `LINKCTRL_UPDATE_CHECK=false` has
+//     already answered, from the side that outranks the browser (D160), so
+//     asking would be theatre.
+//  2. There is a service to record the answer with.
+//  3. The reader holds `instance.admin`. Whether the box phones home is the
+//     operator's to decide and nobody else's, which is the same bound the
+//     release notification itself is under.
+//  4. Nobody has answered yet — and this is the only one that costs a query,
+//     which is why it is last. A fresh instance answered at setup and never
+//     reaches it; an upgraded one reaches it once per page render until somebody
+//     answers, and then never again.
+//
+// A failed read draws no prompt. This is one control on a page the reader asked
+// for something else from, and failing the whole dashboard because the database
+// would not answer a question about a checkbox is the wrong trade — the same one
+// the notification badge in `shell` makes, for the same reason.
+func (h *Web) updateCheckAsked(r *http.Request, actor *auth.Identity) bool {
+	if !h.Config.UpdateCheck || h.Instance == nil || !actor.Can(instance.PermAdmin) {
+		return false
+	}
+	answered, err := h.Instance.UpdateCheckAnswered(r.Context(), actor)
+	return err == nil && !answered
 }
 
 func (h *Web) Dashboard(w http.ResponseWriter, r *http.Request) {
@@ -83,12 +117,62 @@ func (h *Web) Dashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.render(w, r, http.StatusOK, "dashboard", dashboardPageData{
-		shell:      h.shell(r, "Dashboard", "dashboard"),
-		Overview:   overview,
-		Series:     fillSeries(overview.Series, from, to),
-		Recent:     recent.Items,
-		TotalLinks: recent.Total,
+		shell:          h.shell(r, "Dashboard", "dashboard"),
+		Overview:       overview,
+		Series:         fillSeries(overview.Series, from, to),
+		Recent:         recent.Items,
+		TotalLinks:     recent.Total,
+		AskUpdateCheck: h.updateCheckAsked(r, actor),
 	})
+}
+
+// UpdateCheckAnswer records the answer to the prompt above (M55, D164).
+//
+// **On the dashboard rather than on a settings page**, because the dashboard is
+// where a sign-in lands — `Root` sends a signed-in visitor to `/dashboard` — so
+// *at the first administrative sign-in* is where the question actually appears
+// rather than where a route diagram says it does. The prompt stays until it is
+// answered, so an administrator who signed in with a `?next=` and went straight
+// somewhere else meets it the next time they are on the page. D161 refused a
+// settings page and this is not one: it is one question, asked once, and
+// `instance.AnswerUpdateCheck` refuses a second answer.
+//
+// Both buttons post here and the value is what differs, so *no* costs the same
+// one click *yes* does. A prompt whose refusal is harder than its acceptance is
+// a prompt with a preferred answer, which is not what an operator is being asked
+// to decide about their own egress.
+//
+// An answer already given is not an error: the reader wanted the question
+// settled and it is. They go back to the dashboard, where the prompt is now
+// gone, which is the honest report of what happened.
+func (h *Web) UpdateCheckAnswer(w http.ResponseWriter, r *http.Request) {
+	if h.Instance == nil {
+		h.errorPage(w, r, http.StatusNotFound, "Not found",
+			"This instance has no update-check setting to answer.")
+		return
+	}
+	if err := parseForm(w, r); err != nil {
+		h.errorPage(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
+		return
+	}
+
+	// Absence is not "no" here, unlike the setup form's checkbox: this is two
+	// buttons and a missing value means neither was pressed, which is a request
+	// that did not come from the prompt. Recording it as a refusal would let a
+	// stray POST answer for the operator.
+	answer := r.PostFormValue("answer")
+	if answer != "yes" && answer != "no" {
+		h.errorPage(w, r, http.StatusBadRequest, "Bad request",
+			"That form did not carry an answer.")
+		return
+	}
+
+	err := h.Instance.AnswerUpdateCheck(r.Context(), IdentityFrom(r.Context()), answer == "yes")
+	if err != nil && !errors.Is(err, instance.ErrAlreadyAnswered) {
+		h.webError(w, r, err)
+		return
+	}
+	seeOther(w, r, "/dashboard")
 }
 
 // --- links list and create ---------------------------------------------------

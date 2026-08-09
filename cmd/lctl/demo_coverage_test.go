@@ -1080,6 +1080,44 @@ func demoCoverage() []demoFeature {
 			Shows: "that enrolling issues the codes that make a lost phone " +
 				"recoverable, which is the dependency the whole milestone rests on",
 		},
+		{
+			// **The demo runs the check; it does not seed the notification.**
+			//
+			// m55.md decides that outright, and D149 is why: on the *default off*
+			// limb the row would have had to seed a notification directly, because
+			// a demo cannot show a feature it also has switched off — and seeding
+			// one would have meant the demo asserting that its own instance found
+			// a release it never asked about. D149 chose on, so the honest row is
+			// that the demo really is an instance whose operator said yes, making
+			// the same daily request every such instance makes.
+			//
+			// **`IS TRUE` rather than a bare test, because the column has three
+			// states** (D164). The demo's instance is claimed by a script rather
+			// than by somebody filling in the setup form, so it arrives in the
+			// state an upgraded instance is in — unanswered, and therefore quiet —
+			// and `seedUpdateCheck` answers it through the same service call the
+			// dashboard prompt reaches. Spelling the assertion this way is what
+			// makes it fail on *unanswered* rather than silently counting it with
+			// *declined*: those are different demos and only one of them is this
+			// one.
+			//
+			// So this asserts the setting rather than an inbox row, and it is a
+			// safety-and-configuration claim of the shape M51's row has rather
+			// than a display claim. There is deliberately nothing to look at: a
+			// notification appears if and only if a newer LinkCtrl has actually
+			// been published, and a demo that manufactured one would be showing a
+			// release that does not exist.
+			//
+			// It is also the row that would fail if somebody quietly gave the demo
+			// an exemption from what docs/SECURITY.md tells every operator their
+			// instance does.
+			Milestone: "M55", Feature: "The daily update check, on, as on any instance whose operator said yes",
+			Query: `SELECT count(*) FROM instance_settings WHERE id AND update_check_enabled IS TRUE`,
+			Min:   1, Max: 1,
+			Shows: "that the demo is not exempt from what its operator was asked " +
+				"and agreed to: it makes the same outbound request, once a day, " +
+				"that docs/SECURITY.md's egress row now counts",
+		},
 	}
 }
 

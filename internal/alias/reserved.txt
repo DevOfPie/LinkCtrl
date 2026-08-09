@@ -40,6 +40,7 @@ invite
 invites
 disputes
 dispute
+instance
 feeds
 feed
 oauth

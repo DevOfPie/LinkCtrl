@@ -506,6 +506,15 @@ type setupPageData struct {
 	Name  string
 	Email string
 	Error string
+	// UpdateCheckOffered draws the first-run prompt (M55, D149). False when the
+	// deployment already answered with LINKCTRL_UPDATE_CHECK=false, and then the
+	// page says so in place of the control rather than offering a checkbox whose
+	// state nothing would read — an air-gapped instance must not appear to be
+	// asking a question it has already had answered for it.
+	UpdateCheckOffered bool
+	// UpdateCheck is the box's state, so a submission that fails validation
+	// comes back with the operator's answer rather than with the default.
+	UpdateCheck bool
 }
 
 func (h *Web) SetupPage(w http.ResponseWriter, r *http.Request) {
@@ -520,7 +529,24 @@ func (h *Web) SetupPage(w http.ResponseWriter, r *http.Request) {
 		seeOther(w, r, "/login")
 		return
 	}
-	h.render(w, r, http.StatusOK, "setup", setupPageData{shell: h.shell(r, "Set up", "")})
+	h.render(w, r, http.StatusOK, "setup", setupPageData{
+		shell:              h.shell(r, "Set up", ""),
+		UpdateCheckOffered: h.updateCheckOffered(),
+		// Pre-ticked, which is D149: on by default, and asked rather than
+		// assumed. A default the operator has to opt *into* would be the
+		// recommendation the owner overruled, dressed as a form.
+		UpdateCheck: true,
+	})
+}
+
+// updateCheckOffered reports whether the first-run prompt has anything to ask.
+//
+// Two things have to be true. The deployment must allow the check at all, and
+// there must be somewhere to record the answer — `Instance` is nil on a
+// deployment wired without that service, and a control whose write would land
+// nowhere is worse than no control.
+func (h *Web) updateCheckOffered() bool {
+	return h.Config.UpdateCheck && h.Instance != nil
 }
 
 func (h *Web) SetupSubmit(w http.ResponseWriter, r *http.Request) {
@@ -540,19 +566,48 @@ func (h *Web) SetupSubmit(w http.ResponseWriter, r *http.Request) {
 
 	email := r.PostFormValue("email")
 	password := r.PostFormValue("password")
+	// An unticked checkbox sends nothing at all, so absence is "no" and any value
+	// is "yes". Read before the validation branches below so the answer survives
+	// a rejected password.
+	updateCheck := r.PostFormValue("update_check") != ""
 
 	fail := func(msg string) {
 		h.render(w, r, http.StatusUnprocessableEntity, "setup", setupPageData{
-			shell: h.shell(r, "Set up", ""),
-			Name:  r.PostFormValue("name"),
-			Email: email,
-			Error: msg,
+			shell:              h.shell(r, "Set up", ""),
+			Name:               r.PostFormValue("name"),
+			Email:              email,
+			Error:              msg,
+			UpdateCheckOffered: h.updateCheckOffered(),
+			UpdateCheck:        updateCheck,
 		})
 	}
 
 	if len(password) < auth.MinPasswordLength {
 		fail("The password must be at least 12 characters.")
 		return
+	}
+
+	// The first-run answer, written **before** the instance is claimed (M55).
+	//
+	// Order is the whole point. SetUpdateCheckAtSetup refuses once an account
+	// exists, so it has to run first — and running first is also what makes the
+	// failure direction safe: a Register that then fails leaves the answer
+	// standing and the operator's retry rewrites it, where the other order would
+	// claim the instance and lose a *no* to any error after it.
+	//
+	// ErrClaimed here is the NeedsSetup check above losing a race with another
+	// setup request, and it gets the same answer that check gives: the page is
+	// gone. A 500 would be technically honest and would tell whoever won nothing
+	// useful about an instance that is now claimed.
+	if h.updateCheckOffered() {
+		switch err := h.Instance.SetUpdateCheckAtSetup(r.Context(), updateCheck); {
+		case errors.Is(err, instance.ErrClaimed):
+			seeOther(w, r, "/login")
+			return
+		case err != nil:
+			h.webError(w, r, err)
+			return
+		}
 	}
 
 	if _, err := h.Auth.Register(r.Context(), auth.RegisterInput{

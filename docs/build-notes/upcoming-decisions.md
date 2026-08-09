@@ -52,9 +52,12 @@ D149 was given ahead of the milestone that uses it, which is what this file is
 for; it is recorded with the date it was given and is used when
 [M55](phase-details/m55.md) lands.*
 
-*Nothing is waiting here. The next entry is written by
-[`/preview-decisions`](../../.claude/commands/preview-decisions.md) or by a
-[step 1](phase-loop.md#1-validate) that meets a choice no `D` number has made.*
+*Nothing is waiting. The one question that arrived here today came from
+[step 3.4](phase-loop.md#3-land) rather than from
+[`/preview-decisions`](../../.claude/commands/preview-decisions.md) — the gap in
+an answer already given, found by building against it — and was answered the same
+day as **D164**, which corrects D159 in
+[decisions.md](decisions.md#2026-08-08--m55-d159-corrected--an-upgraded-instance-is-asked-not-assumed).*
 
 ## Answered, awaiting the milestone that uses it
 

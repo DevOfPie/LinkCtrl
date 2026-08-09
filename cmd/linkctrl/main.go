@@ -69,6 +69,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 	"github.com/DevOfPie/LinkCtrl/internal/team"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
+	"github.com/DevOfPie/LinkCtrl/internal/update"
 	"github.com/DevOfPie/LinkCtrl/internal/webhook"
 )
 
@@ -865,10 +866,27 @@ func run(cfg config.Config, _ io.Writer) error {
 		Observer: metrics,
 	})
 
+	// The update check (M55). **Nil unless LINKCTRL_UPDATE_CHECK allows it**, and
+	// that is where the variable takes effect: an instance with it off builds no
+	// client, registers no work in the job family, and therefore cannot open the
+	// one socket in this product that leaves the deployment on a schedule.
+	//
+	// The operator's other half of the switch — the answer they gave at the
+	// first-run prompt (D149) — is a row rather than a variable, so it is read on
+	// every pass instead of at boot: it can change after this line has run.
+	var updateSvc *update.Service
+	if cfg.UpdateCheck {
+		updateSvc = update.NewService(pools.App, update.Config{
+			Version:  build.Get().Version,
+			Announce: notifySvc,
+			Log:      log,
+		})
+	}
+
 	roller := analytics.NewRoller(pools.App, log)
 	jobs := newJobRunner(pools.App, salts, roller, log, metrics, notifySvc, mailSvc, signupSvc,
 		recoverySvc, accountSvc, mfaSvc,
-		linkSvc, webhookSvc, automationSvc, hostCache, cfg.Domains,
+		linkSvc, webhookSvc, automationSvc, hostCache, updateSvc, cfg.Domains,
 		cfg.Analytics.RetentionDays, cfg.Audit.RetentionDays, cfg.Audit.SizeWarnBytes)
 	jobs.start(ctx)
 	defer jobs.stop()

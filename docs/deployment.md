@@ -387,6 +387,18 @@ neither is a failed check:
 Visit `https://links.example.com`. A fresh instance redirects to a setup form
 that creates the first account as an owner, then returns 404 forever after.
 
+The form asks one question besides your name, address and password: **whether
+this instance may check for new LinkCtrl releases.** It is ticked by default,
+and what it does is one `GET` a day carrying this server's address and the
+version it runs and nothing else — the full enumeration is beside the control
+and in [configuration.md](configuration.md#update-check). Answering *no* here is
+recorded on the instance; `LINKCTRL_UPDATE_CHECK=false` in your environment is
+the same answer given from the deployment's side, and it overrides this one.
+
+**Upgrading an existing instance instead?** It has no first run left to be asked
+at, so the question is put on the dashboard to the first administrator who signs
+in after the upgrade, and **the check does nothing until they answer it**.
+
 On a headless box, or if you would rather not use a browser:
 
 ```sh
@@ -402,6 +414,12 @@ curl -sS -X POST https://links.example.com/api/v1/auth/setup \
   -H 'Content-Type: application/json' \
   -d '{"email":"you@example.com","name":"You","password":"a-long-passphrase"}'
 ```
+
+`"update_check": false` in that body is the API's half of the same question, and
+`true` is the other half. **Omitting it answers nothing**, which leaves the
+check off and the question waiting on the dashboard for the first administrator
+who signs in — a client that has never heard of the field cannot agree to an
+outbound connection on your behalf by staying silent.
 
 `SIGNUP_MODE=closed` (the default) means nobody else can register, and nothing
 inside the running instance changes that — there is no runtime toggle, so
@@ -571,6 +589,49 @@ Worth knowing so you do not spend an afternoon re-adding it:
   choose. Anonymising the IPv4 side is not an option the product can take: a
   `/24` key would let one host exhaust the budget of 255 neighbours.
 - Log files rotate at 10 MB × 3 per service.
+
+## Air-gapped and egress-restricted deployments
+
+One thing in a default 0.3.0 instance reaches the public internet on a schedule:
+the daily release check. Set
+
+```sh
+LINKCTRL_UPDATE_CHECK=false
+```
+
+and restart. Nothing else in this product opens a socket outwards unless you
+configure it (`SMTP_HOST`, `FEED_URL`) or a workspace registers a webhook or a
+custom domain; the full accounting is the *Egress* row of
+[SECURITY.md](SECURITY.md).
+
+**What happens if you leave it on with no route out.** Nothing breaks. The check
+runs on the scheduler, times out after ten seconds, writes one line at debug
+level and does not retry until the next day. It cannot fail a startup, delay a
+shutdown, or surface to a user. What it does cost you is the attempt: an egress
+policy that logs or alerts on denied outbound connections will see one a day
+from the leader replica, to `api.github.com` on 443, and somebody will
+eventually have to explain it. Turning it off is cheaper than explaining it
+annually.
+
+**How loud it is, exactly.** At `LOG_LEVEL=info` — the default — you will see
+nothing at all. At `debug` you get one `update check did not complete` line per
+day. There is no metric, no alert and no notification for a check that fails,
+because a failed check is a question that went unanswered rather than a fault.
+
+**And the converse.** *No notification* is not evidence of being up to date. A
+blocked check and a check that found nothing look identical from the dashboard.
+If knowing about releases matters on a restricted network, watch the repository
+rather than this instance.
+
+**The same is true of an instance nobody signs into, and for a different
+reason.** The check is off until an operator answers the question — on the setup
+form for a fresh instance, on the dashboard at the first administrative sign-in
+for an upgraded one — and an instance that is deployed, left running and never
+signed into is never asked, so it never checks and never tells anybody a release
+exists. That is the case a release notification would be most use for, and it is
+the price of not answering on an operator's behalf: an upgrade cannot consent for
+you. If you run instances like that, watch the repository, or claim them and
+answer the question once.
 
 ## Scaling, honestly
 

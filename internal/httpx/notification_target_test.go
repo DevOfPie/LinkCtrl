@@ -186,6 +186,14 @@ func TestWhereEachNotificationKindLeads(t *testing.T) {
 				"does not have to",
 		},
 		{
+			kind: "update.available",
+			data: map[string]any{"version": "0.4.0", "running": "0.3.0"},
+			want: "",
+			why: "there is no page in this product that upgrades it, and the " +
+				"recipient's next act is at a shell rather than in a browser — " +
+				"the same answer, for the same reason, as the audit-growth warning",
+		},
+		{
 			kind: "automation.fired",
 			data: map[string]any{"rule_id": "0198c9c5-0000-7000-8000-000000000081"},
 			want: "/automation",

@@ -12,6 +12,41 @@ import (
 	"github.com/google/uuid"
 )
 
+const countNotificationsAboutVersion = `-- name: CountNotificationsAboutVersion :one
+SELECT count(*) FROM notifications
+ WHERE user_id = $1
+   AND kind = $2
+   AND data->>'version' = $3::text
+`
+
+type CountNotificationsAboutVersionParams struct {
+	UserID  uuid.UUID
+	Kind    string
+	Version string
+}
+
+// The other re-notify guard, and it is keyed on the thing rather than on the
+// clock (M55).
+//
+// CountRecentNotificationsOfKind above suppresses a warning that is *still
+// true* — the audit log is still too big — so it asks "was this said lately".
+// A release is a different shape: the answer is not that it was said lately, it
+// is that this exact version has already been reported and reporting it again
+// says nothing new. So the version is the key, and there is no window: an
+// operator who was told about 0.4.0 a year ago is not told again, and 0.5.0 is
+// a new fact that arrives once.
+//
+// Reading `data->>'version'` rather than a column of its own is deliberate. The
+// notification is the record that the operator was told; a column beside it
+// would be a second place for the same fact, and the two would disagree the
+// first time one write succeeded and the other did not.
+func (q *Queries) CountNotificationsAboutVersion(ctx context.Context, arg CountNotificationsAboutVersionParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countNotificationsAboutVersion, arg.UserID, arg.Kind, arg.Version)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countRecentNotificationsOfKind = `-- name: CountRecentNotificationsOfKind :one
 SELECT count(*) FROM notifications
  WHERE user_id = $1

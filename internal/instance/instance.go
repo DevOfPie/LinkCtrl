@@ -1,5 +1,6 @@
-// Package instance is the instance-level principal: who administers the box
-// rather than a tenant in it, and what they may hand to somebody else.
+// Package instance is what belongs to the box rather than to a tenant in it:
+// who administers it, what they may hand to somebody else, and — since M55 —
+// the settings an operator answers for the instance as a whole.
 //
 // D38 recorded that this product had no such principal, and three findings
 // bottomed out there. D98 introduces one, with two constraints that shape
@@ -60,6 +61,145 @@ const (
 	// MovePrincipal.
 	ActionPrincipalMoved = "instance.principal_moved"
 )
+
+// ErrClaimed is what a setup-only operation answers once the instance has an
+// account on it.
+//
+// Its own error so a caller can tell "the window has closed" from a database
+// failure, and so the refusal reads the same way `POST /setup` already answers
+// a claimed instance.
+var ErrClaimed = errors.New("instance: this instance has already been claimed")
+
+// ErrAlreadyAnswered is what AnswerUpdateCheck says when the question is closed.
+//
+// Its own error because the handler's response to it is *not* an error page: the
+// operator asked for a state the instance is already in, which is a success from
+// where they are standing. Distinguishing it from a database failure is the
+// whole reason it exists — the two must not produce the same page.
+var ErrAlreadyAnswered = errors.New("instance: the update-check question has already been answered")
+
+// SetUpdateCheckAtSetup records the operator's answer to the first-run prompt
+// (M55, D149).
+//
+// # Why this is here and takes no actor
+//
+// The instance-level settings row belongs to the box rather than to a tenant in
+// it, which is this package, and the only thing that writes it is the setup
+// form — where there is no actor, because there is no account yet. That is the
+// same authority `auth.Register` rests the whole setup flow on: whoever reaches
+// the page had filesystem or deploy access to reach it.
+//
+// **The precondition is checked here rather than trusted from the caller**, and
+// that is the difference between this and MovePrincipal one screen down. That
+// one is unreachable from HTTP and says so; this one is reached by two HTTP
+// handlers, so an unchecked version would be a public endpoint for changing what
+// an instance connects to, one route registration away from existing. Counting
+// the users is the same question `auth.Service.NeedsSetup` asks, asked again at
+// the moment of the write.
+//
+// Not atomic with the account's creation, and it does not need to be: the caller
+// writes the answer *before* claiming the instance, so a claim that then fails
+// leaves the answer standing and the operator's retry rewrites it. The failure
+// this ordering rules out is the one that matters — an operator declining the
+// check and being checked on anyway.
+func (s *Service) SetUpdateCheckAtSetup(ctx context.Context, enabled bool) error {
+	users, err := s.q.CountUsers(ctx)
+	if err != nil {
+		return fmt.Errorf("count users: %w", err)
+	}
+	if users > 0 {
+		return ErrClaimed
+	}
+
+	n, err := s.q.SetUpdateCheckEnabled(ctx, enabled)
+	if err != nil {
+		return fmt.Errorf("record the update-check choice: %w", err)
+	}
+	if n == 0 {
+		// The row is inserted by migration 04300, so this is a schema that has
+		// not run rather than a value that did not change. Loud, because the
+		// alternative is an operator who declined the check being checked on and
+		// nothing anywhere saying why.
+		return errors.New("instance: the settings row is missing; migration 04300 has not run")
+	}
+	return nil
+}
+
+// UpdateCheckAnswered reports whether anybody has answered the update-check
+// question on this instance (M55, D164).
+//
+// False is the state an instance **upgrading** into 0.3.0 arrives in, and it is
+// the one thing the prompt at the first administrative sign-in is drawn from. It
+// is not *the check is off* — that is decided in the statement that claims the
+// day, and asking two places the same question is how the two answers eventually
+// differ. Unanswered does imply off, and only in that direction.
+//
+// Gated on PermAdmin, like Reviewers and for a narrower version of the same
+// reason: this is the state of the box's own configuration, and the only caller
+// is drawing a control that only a principal may use. A read whose answer nobody
+// else may act on has no business being readable by everybody.
+func (s *Service) UpdateCheckAnswered(ctx context.Context, actor *auth.Identity) (bool, error) {
+	if !actor.Can(PermAdmin) {
+		return false, fmt.Errorf("%w: reading the instance's update-check setting requires %s",
+			domain.ErrForbidden, PermAdmin)
+	}
+	answered, err := s.q.UpdateCheckAnswered(ctx)
+	if err != nil {
+		return false, fmt.Errorf("read the update-check setting: %w", err)
+	}
+	return answered, nil
+}
+
+// AnswerUpdateCheck records an administrator's answer to the question an
+// upgraded instance is asked at its first administrative sign-in (M55, D164).
+//
+// # Once, and never a change of mind
+//
+// The write is conditional on the question still being open, in one statement,
+// so this is a first answer or it is nothing. That bound is what keeps the route
+// from becoming the instance-settings page D161 declined to build: there is no
+// second answer to give through it, so it cannot grow into a control surface,
+// and the one thing an operator can always still do is set
+// `LINKCTRL_UPDATE_CHECK=false` where the rest of the deployment is configured.
+//
+// A second submission — two tabs, a double click, a second principal who was
+// also looking at the prompt — answers ErrAlreadyAnswered, which the caller
+// treats as *the question is closed* rather than as a failure. That is why it is
+// its own error and not a row count returned to a handler to interpret.
+//
+// # Why it takes an actor when SetUpdateCheckAtSetup does not
+//
+// Its sibling runs before there is anybody to be, and rests on the same
+// filesystem-access authority `auth.Register` rests the setup flow on. This one
+// runs on a claimed instance where there are accounts, most of which must not be
+// able to decide what the box connects to. So it is the ordinary permission
+// check, in the service rather than in the handler, for the reason
+// SetUpdateCheckAtSetup guards itself: what is reachable from HTTP is guarded
+// where the write is.
+//
+// No audit row. The three actions above are changes to *who may act on every
+// organization's disputes*; this is an operator answering a question about their
+// own box, once, with no subject and nobody to be accountable to but themselves.
+// A record of it that no surface reads would be a row written to look thorough.
+func (s *Service) AnswerUpdateCheck(ctx context.Context, actor *auth.Identity, enabled bool) error {
+	if !actor.Can(PermAdmin) {
+		return fmt.Errorf("%w: answering the instance's update-check question requires %s",
+			domain.ErrForbidden, PermAdmin)
+	}
+
+	n, err := s.q.AnswerUpdateCheck(ctx, enabled)
+	if err != nil {
+		return fmt.Errorf("record the update-check answer: %w", err)
+	}
+	if n == 0 {
+		// Either the question was answered between the page being drawn and this
+		// submission, or migration 04300 has not run — and the second cannot be
+		// reached from here, because the control this answers is drawn from a read
+		// of that same row. So the honest report is the first.
+		return ErrAlreadyAnswered
+	}
+	return nil
+}
 
 // Reviewer is somebody holding instance-level review, as the principal sees
 // them.

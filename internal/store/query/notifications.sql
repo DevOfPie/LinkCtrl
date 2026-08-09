@@ -166,6 +166,28 @@ SELECT count(*) FROM notifications
    AND kind = @kind
    AND created_at > @since;
 
+-- name: CountNotificationsAboutVersion :one
+--
+-- The other re-notify guard, and it is keyed on the thing rather than on the
+-- clock (M55).
+--
+-- CountRecentNotificationsOfKind above suppresses a warning that is *still
+-- true* — the audit log is still too big — so it asks "was this said lately".
+-- A release is a different shape: the answer is not that it was said lately, it
+-- is that this exact version has already been reported and reporting it again
+-- says nothing new. So the version is the key, and there is no window: an
+-- operator who was told about 0.4.0 a year ago is not told again, and 0.5.0 is
+-- a new fact that arrives once.
+--
+-- Reading `data->>'version'` rather than a column of its own is deliberate. The
+-- notification is the record that the operator was told; a column beside it
+-- would be a second place for the same fact, and the two would disagree the
+-- first time one write succeeded and the other did not.
+SELECT count(*) FROM notifications
+ WHERE user_id = @user_id
+   AND kind = @kind
+   AND data->>'version' = @version::text;
+
 -- name: ListOrganizationIDs :many
 --
 -- Every organization on the instance. Phase 1 has exactly one; this is written

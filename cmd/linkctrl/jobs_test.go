@@ -109,7 +109,7 @@ func jobsDSNFor(name string) string {
 func TestEachJobFamilyHasItsOwnAdvisoryLockKey(t *testing.T) {
 	fams := (&jobRunner{}).families()
 
-	const wantFamilies = 7
+	const wantFamilies = 8
 	if len(fams) != wantFamilies {
 		t.Fatalf("got %d job families, want %d; a family added or merged has to update this count and the key block in jobs.go together",
 			len(fams), wantFamilies)

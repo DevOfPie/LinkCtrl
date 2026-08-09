@@ -92,6 +92,28 @@ type Config struct {
 	// the variable, in the same terms the pepper's consequence is stated in.
 	MFASecretKey Secret `env:"MFA_SECRET_KEY,unset"`
 
+	// UpdateCheck is whether this instance may ask, once a day, whether a newer
+	// LinkCtrl has been published (M55).
+	//
+	// **The deployment's half of a two-part switch, and it only ever says no.**
+	// The other half is `instance_settings.update_check_enabled`, which is the
+	// answer an operator gave when they were asked (D149, D164). The check runs
+	// when both allow it: this variable is what an air-gapped or egress-restricted
+	// deployment sets to `false` in the place such a deployment configures
+	// everything else, and setting it there cannot be undone from a browser by
+	// somebody who does not know why the box has no egress.
+	//
+	// **Default true, and true is permission rather than instruction.** The owner
+	// overruled a recommendation of off-by-default on the grounds that the
+	// operator is asked and therefore chooses knowingly (D149) — so what this
+	// default buys is that the question gets asked, not that the request gets
+	// made. The other half starts unanswered and reads as off (D164), which is
+	// where an instance upgrading into 0.3.0 sits until an administrator signs in.
+	// What the request carries is enumerated in docs/configuration.md beside this
+	// variable, and in internal/update's package comment, where a test holds the
+	// enumeration to the wire.
+	UpdateCheck bool `env:"UPDATE_CHECK" envDefault:"true"`
+
 	DocsEnabled    bool `env:"DOCS_ENABLED" envDefault:"true"`
 	SecureCookies  bool `env:"SECURE_COOKIES" envDefault:"true"`
 	MigrateOnStart bool `env:"MIGRATE_ON_START" envDefault:"true"`

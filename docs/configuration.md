@@ -401,6 +401,93 @@ are all in [usage.md](usage.md#webhooks). What the address checks do and do not
 cover — in particular on a deployment with an egress proxy — is in
 [SECURITY.md](SECURITY.md).
 
+## Update check
+
+Once somebody administering this instance has been asked and said yes, it asks
+GitHub once a day whether a newer LinkCtrl has been released and, if there is
+one, puts a notification in the instance principal's inbox. It is **the only
+scheduled work in this product that opens a socket to a host outside your
+deployment**, which is why it is a job family of its own rather than a step in
+the hourly maintenance pass: what this instance connects to, and when, is one
+thing to read rather than several.
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `LINKCTRL_UPDATE_CHECK` | `true` | Whether this instance may perform the check at all. `false` disables it outright: no client is built, no work is scheduled, and the prompts below are replaced by a line saying so. `true` is permission, not instruction — somebody here still has to be asked and say yes. |
+
+### What the request carries, enumerated
+
+Not summarized, because a summary is what you would have to trust:
+
+- **This server's source address.** A property of opening a socket, not
+  something the product chooses to send.
+- **The version it is running**, in the `User-Agent`, as `LinkCtrl/0.3.0`. No
+  platform, no Go version, no hostname.
+
+And nothing else. No instance identifier, no deployment size, no link counts, no
+account, no configuration, no request body, no query string, no cookie and no
+credential. The response is read for a version number and discarded — nothing
+else from it is stored anywhere.
+
+The destination is a constant in the source, not a setting. There is no variable
+that points the check somewhere else, deliberately: the value of a disclosed,
+auditable daily request is lost the moment it can be redirected.
+
+A test in `internal/update` compares the outgoing request against an exact
+expected form — method, URL, body and every header — so a field added to it
+fails the build rather than shipping quietly.
+
+### Two switches, and either one is enough
+
+The variable above is the **deployment's** answer, and it only ever says no. The
+other is the **operator's**, and it has three states rather than two: yes, no,
+and *nobody has been asked yet*. The check runs only when the variable allows it
+**and** somebody has said yes, so:
+
+- `LINKCTRL_UPDATE_CHECK=false` wins over any answer given in a browser. That is
+  deliberate — a deployment with no egress should not depend on somebody in the
+  dashboard knowing why.
+- Answering *no* stops the check on an instance whose configuration never
+  mentioned it.
+- An instance where the question is still open **does not check.** Unanswered is
+  off.
+
+### Where the question is asked
+
+| The instance | Asked | Until then |
+| --- | --- | --- |
+| Fresh | On the setup page that claims it, with the box ticked | It has no accounts, so nothing is running |
+| **Upgraded** into 0.3.0 | On the dashboard, at the first sign-in by an account holding `instance.admin` | The check is **off** |
+| Claimed through `POST /api/v1/auth/setup` without the `update_check` field | As an upgraded one: on the dashboard | The check is **off** |
+
+It is asked once. There is no settings page and no way to change the answer from
+a browser afterwards — the control that remains is `LINKCTRL_UPDATE_CHECK`,
+which is where a deployment's decisions belong and where somebody with shell
+access can always find it.
+
+**The bound this puts on the feature is real and is stated rather than left to
+be discovered: an instance nobody signs into stays quiet forever.** No
+administrator, no question, no answer, no check — on the very instance a release
+notification would be most use to. That is the price of not answering on an
+operator's behalf, and if it applies to you, watch the repository instead. See
+[deployment.md](deployment.md#air-gapped-and-egress-restricted-deployments).
+
+### What failure looks like
+
+A check that cannot complete is logged at debug and does nothing else. It never
+fails a startup, never delays a shutdown, never reaches a user, and is never
+retried — the day's attempt is recorded before the request is made, so a
+failure costs one attempt rather than one per tick.
+
+**No notification is not evidence of being up to date.** GitHub's
+unauthenticated API is rate-limited per source address, so a deployment behind a
+large NAT can be throttled into checking successfully rarely or never, and the
+symptom is silence. If being current matters, watch the releases rather than
+this.
+
+Air-gapped and egress-restricted deployments want `false`; see
+[deployment.md](deployment.md#air-gapped-and-egress-restricted-deployments).
+
 ## Authentication
 
 | Variable | Default | Notes |

@@ -489,6 +489,9 @@ func (s *demoSeeder) run(ctx context.Context, primary []demoLink, ids map[int]uu
 	if err := s.seedSecondFactor(ctx, people); err != nil {
 		return err
 	}
+	if err := s.seedUpdateCheck(ctx); err != nil {
+		return err
+	}
 	return s.readSomeNotifications(ctx)
 }
 
@@ -2004,6 +2007,37 @@ func (s *demoSeeder) seedSecondFactor(ctx context.Context, people demoPeople) er
 	}
 	fmt.Fprintf(os.Stderr, "second factor: %s enrolled, %d recovery codes issued\n",
 		demoViewerEmail, len(out.RecoveryCodes))
+	return nil
+}
+
+// seedUpdateCheck answers the update-check question as the demo's operator
+// (M55, D164).
+//
+// **The demo has to answer it, because nothing else would.** The instance is
+// claimed by `scripts/instance.sh`, not by somebody filling in the setup form, so
+// it arrives here in the state an upgraded instance is in: unanswered, and
+// therefore quiet. Left alone the demo would be showing the *absence* of the
+// feature — a box that never asks — while `docs/SECURITY.md` tells every reader
+// this is one of five things that leave a default instance.
+//
+// So the answer is given the way an operator gives it, through the same service
+// call the dashboard prompt reaches, by the account that holds `instance.admin`.
+// The demo is then an instance whose operator said yes, which is a real
+// configuration rather than a seeded one, and the coverage row asserts the
+// setting rather than an inbox: a notification appears if and only if a newer
+// LinkCtrl has actually been published, and manufacturing one would be showing a
+// release that does not exist.
+//
+// ErrAlreadyAnswered is a re-run over an instance that already answered, which is
+// every rebuild after the first, and it is a success.
+func (s *demoSeeder) seedUpdateCheck(ctx context.Context) error {
+	switch err := s.instance.AnswerUpdateCheck(ctx, s.owner, true); {
+	case errors.Is(err, instance.ErrAlreadyAnswered):
+		return nil
+	case err != nil:
+		return fmt.Errorf("answer the demo's update-check question: %w", err)
+	}
+	fmt.Fprintln(os.Stderr, "update check: on, answered by the demo's operator")
 	return nil
 }
 

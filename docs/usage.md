@@ -56,10 +56,12 @@ bell and on the page alike. A dispute filing opens the queue at the row that is
 waiting; an automation firing opens `/automation`; a domain warning opens
 `/domains`; an accepted invitation opens `/invites`; a dispute decided in your
 favour opens `/links`, which is where you can now create the link that was
-refused. Two kinds lead nowhere and say so by offering nothing to click — an
+refused. Three kinds lead nowhere and say so by offering nothing to click — an
 audit-growth warning, because the audit log has no page and what to do about it
-is `LINKCTRL_AUDIT_RETENTION_DAYS`; and a dispute whose refusal was upheld,
-because no page shows a refusal that stands.
+is `LINKCTRL_AUDIT_RETENTION_DAYS`; a dispute whose refusal was upheld, because
+no page shows a refusal that stands; and, since 0.3.0, a new release being
+available, because nothing in this product upgrades it and what the reader does
+next is at a shell.
 
 **A read notification can be marked unread**, which is the undo for having
 opened one by accident. It sets the read timestamp back to nothing, so "when did

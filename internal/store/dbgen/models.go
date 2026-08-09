@@ -182,6 +182,13 @@ type InstanceGrant struct {
 	GrantedAt    time.Time
 }
 
+type InstanceSetting struct {
+	ID                 bool
+	UpdateCheckEnabled *bool
+	UpdateCheckedAt    *time.Time
+	UpdatedAt          time.Time
+}
+
 type Invitation struct {
 	ID             uuid.UUID
 	OrganizationID uuid.UUID

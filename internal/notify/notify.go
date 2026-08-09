@@ -60,6 +60,21 @@ const (
 	// somebody else has it* — and the title is what carries which of the four
 	// happened.
 	KindMFAChanged = "mfa.changed"
+
+	// KindUpdateAvailable tells the instance principal that a newer LinkCtrl has
+	// been published (M55).
+	//
+	// **The instance principal, not every account.** Whether the box is up to
+	// date is an operator's question: upgrading it means pulling an image and
+	// restarting a service, which a workspace member cannot do and would only be
+	// made anxious by. Same recipient and same reasoning as KindAuditGrowth, and
+	// the same correction F49 recorded about telling people who cannot act.
+	//
+	// **No mail.** The audit-growth warning earned mail because the thing it warns
+	// about gets worse while it is ignored — the table keeps growing. A newer
+	// release does not: it is exactly as available next month, and the inbox is
+	// where somebody who signs in will see it.
+	KindUpdateAvailable = "update.available"
 )
 
 // MailAuditGrowth names the mail template for the same warning. It is the
@@ -807,6 +822,82 @@ func (s *Service) WarnAuditGrowth(ctx context.Context, size, threshold int64) er
 			continue
 		}
 		if err := s.mailAuditGrowth(ctx, owner, size, threshold); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// AnnounceRelease tells the instance principal that a newer LinkCtrl exists
+// (M55), at most once for any one version.
+//
+// Here rather than in internal/update for the reason WarnAuditGrowth is here
+// rather than in the job runner: who hears it, and how often, is policy worth
+// testing, and internal/update should be able to be a client and a comparison
+// without also knowing what an instance principal is.
+//
+// # Once per version, not once per week
+//
+// WarnAuditGrowth suppresses on a clock because the condition it reports stays
+// true and gets worse. This one is keyed on the version itself: an operator told
+// about 0.4.0 is not told again about 0.4.0, ever, and 0.5.0 is a new fact that
+// arrives once. A weekly re-raise would be the product nagging about a decision
+// the operator has already made, which is how an inbox stops being read.
+//
+// The guard is per recipient, so appointing a second principal after a release
+// lands tells the new one and does not re-tell the first.
+//
+// # No mail, and an empty recipient set is not a failure
+//
+// See KindUpdateAvailable for the first. For the second: an instance whose
+// principal grants were all revoked hears nothing, exactly as it hears no
+// audit-growth warning, and fanning out to every tenant instead would be the
+// defect F49 recorded.
+//
+// `running` is what this binary reports and is used for the sentence alone —
+// internal/update has already decided that `available` is newer, and deciding it
+// twice in two places is how the two answers eventually differ. It is a
+// parameter rather than a read of internal/build so that this policy is
+// testable without a linker flag.
+func (s *Service) AnnounceRelease(ctx context.Context, running, available string) error {
+	if available == "" {
+		return errors.New("notify: a release announcement needs a version")
+	}
+
+	holders, err := s.q.ListInstanceGrantHolders(ctx, auth.PermInstanceAdmin)
+	if err != nil {
+		return fmt.Errorf("notify: list instance principals: %w", err)
+	}
+
+	var errs []error
+	for _, h := range holders {
+		told, err := s.q.CountNotificationsAboutVersion(ctx, dbgen.CountNotificationsAboutVersionParams{
+			UserID: h.ID, Kind: KindUpdateAvailable, Version: available,
+		})
+		if err != nil {
+			errs = append(errs, fmt.Errorf("notify: check whether %s knows about %s: %w",
+				h.ID, available, err))
+			continue
+		}
+		if told > 0 {
+			continue
+		}
+		if err := s.Notify(ctx, h.ID, Event{
+			Kind:  KindUpdateAvailable,
+			Title: "LinkCtrl " + available + " has been released",
+			// No link. Rendering one would mean this package deciding where
+			// somebody's releases live, and the notification's job is to say that
+			// there is something to look at rather than to be the release notes.
+			Body: fmt.Sprintf(
+				"This instance is running %s. Upgrading is the operator's to schedule; "+
+					"nothing here changes until you do. To stop this instance asking, set "+
+					"LINKCTRL_UPDATE_CHECK=false.", running),
+			// The version is in the data as well as in the title, and it is what
+			// the guard above reads: the record that this operator was told is the
+			// notification itself, so there is no second place for it to disagree
+			// with.
+			Data: map[string]any{"version": available, "running": running},
+		}); err != nil {
 			errs = append(errs, err)
 		}
 	}

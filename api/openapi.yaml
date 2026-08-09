@@ -160,7 +160,7 @@ paths:
         reach a fresh instance's setup endpoint deployed it.
       security: []
       requestBody:
-        $ref: "#/components/requestBodies/Credentials"
+        $ref: "#/components/requestBodies/SetupCredentials"
       responses:
         "201":
           description: Instance claimed
@@ -4575,6 +4575,54 @@ components:
                 type: string
                 description: Display name; defaults to the mailbox part of the email.
 
+    SetupCredentials:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [email, password]
+            properties:
+              email:
+                type: string
+                format: email
+              password:
+                type: string
+                minLength: 12
+                description: Length is the only rule (NIST SP 800-63B).
+              name:
+                type: string
+                description: Display name; defaults to the mailbox part of the email.
+              update_check:
+                type: boolean
+                description: |
+                  The API's half of the first-run prompt the dashboard's setup
+                  page shows: whether this instance may ask GitHub, once a day,
+                  whether a newer LinkCtrl has been released.
+
+                  **Omitted answers nothing**, which is a third state the
+                  setting has: the check stays off, and the question is put to
+                  the first account holding `instance.admin` that signs in to
+                  the dashboard. A client written before this field existed
+                  claims an instance exactly as it always did, and cannot agree
+                  to an outbound connection on its operator's behalf by staying
+                  silent.
+
+                  What the check sends, in full: this server's source address,
+                  and the version it is running, in the `User-Agent`. Nothing
+                  else — no instance identifier, no deployment size, no link
+                  counts, no configuration. The response is read for a version
+                  and discarded.
+
+                  `LINKCTRL_UPDATE_CHECK=false` on the deployment overrides this
+                  downwards and cannot be overridden by it; a value sent to an
+                  instance configured that way is accepted and has no effect.
+
+                  There is no endpoint that changes the answer afterwards. It
+                  is asked once, and the control that remains is the
+                  environment variable.
+
   responses:
     Unauthorized:
       description: No valid credential, or the credential itself is being rejected
@@ -7066,7 +7114,10 @@ components:
           description: |
             Per-kind detail, returned verbatim. `audit.growth` carries `bytes`
             and `threshold`, so a client can render the numbers without parsing
-            them back out of the sentence.
+            them back out of the sentence. `update.available` carries `version`
+            and `running`, for the same reason — and `version` is also what
+            records that this reader has already been told about that release,
+            so it is never repeated.
         workspace_id:
           type: string
           format: uuid

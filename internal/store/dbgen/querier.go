@@ -50,6 +50,20 @@ type Querier interface {
 	// pre-seeded nothing, and is kept for completeness — `EnableUserMFA` stamps the
 	// enrolling step, so in practice the column is never NULL while a secret exists.
 	AcceptMFAStep(ctx context.Context, arg AcceptMFAStepParams) (int64, error)
+	// Record the answer given at the first administrative sign-in after an upgrade
+	// (D164).
+	//
+	// **Conditional on the question still being open**, so this is a first answer
+	// and never a change of one. Two things fall out of that and both are the point:
+	// two browser tabs racing produce one answer and one no-op rather than
+	// last-write-wins, and the route cannot become the instance-settings page D161
+	// refused to build — there is no second answer to give through it.
+	//
+	// Row count 1 means this caller's answer is the one that landed. Zero means the
+	// question was already answered, by them or by somebody else holding
+	// `instance.admin`, and the caller's own read has already established that the
+	// row exists.
+	AnswerUpdateCheck(ctx context.Context, enabled bool) (int64, error)
 	ArchiveLink(ctx context.Context, arg ArchiveLinkParams) (Link, error)
 	//
 	// The archive an automation performs. Idempotent: a link already archived comes
@@ -140,6 +154,30 @@ type Querier interface {
 	// the drainer needs both for every claimed delivery, and N+1 round trips to
 	// assemble a batch of network calls is the wrong shape.
 	ClaimDueWebhookDeliveries(ctx context.Context, arg ClaimDueWebhookDeliveriesParams) ([]ClaimDueWebhookDeliveriesRow, error)
+	// Take the day's update check, if it is available to take.
+	//
+	// **The daily bound is this statement, not a ticker.** One UPDATE decides
+	// whether the check may run and records that it did, so the bound is a property
+	// of the instance rather than of one process's uptime: a replica restarted
+	// every ten minutes reads a row that says the check already happened and
+	// declines, where a bare timer would ask GitHub on every boot.
+	//
+	// It writes the timestamp *before* the request rather than after it, which is
+	// what makes a failure cost one attempt instead of one per tick. The milestone
+	// forbids a retry storm and this is where that is enforced; a check that fails
+	// waits out the same day a check that succeeded does.
+	//
+	// **`IS TRUE` rather than a bare test, because the column has three states**
+	// (D164). A bare `AND update_check_enabled` would already decline on NULL —
+	// unknown is not true — so the behaviour is the same and the spelling is not:
+	// *off while unanswered* is a decision this statement enforces, and a reader
+	// should not have to recover it from SQL's three-valued logic to be sure it was
+	// meant.
+	//
+	// Row count 1 means the caller holds the check. Zero means the operator turned
+	// it off, or has not been asked yet, or somebody has already run it today, and
+	// the caller does not need to know which — all three are "do nothing".
+	ClaimUpdateCheck(ctx context.Context, arg ClaimUpdateCheckParams) (int64, error)
 	// The orphan sweep, run hourly by the maintenance pass.
 	//
 	// **What is orphaned under a column, and what is not.** Removing a code, a
@@ -259,6 +297,23 @@ type Querier interface {
 	// failure.
 	CountMembershipsForEmail(ctx context.Context, arg CountMembershipsForEmailParams) (int64, error)
 	CountMembershipsForUser(ctx context.Context, arg CountMembershipsForUserParams) (int64, error)
+	//
+	// The other re-notify guard, and it is keyed on the thing rather than on the
+	// clock (M55).
+	//
+	// CountRecentNotificationsOfKind above suppresses a warning that is *still
+	// true* — the audit log is still too big — so it asks "was this said lately".
+	// A release is a different shape: the answer is not that it was said lately, it
+	// is that this exact version has already been reported and reporting it again
+	// says nothing new. So the version is the key, and there is no window: an
+	// operator who was told about 0.4.0 a year ago is not told again, and 0.5.0 is
+	// a new fact that arrives once.
+	//
+	// Reading `data->>'version'` rather than a column of its own is deliberate. The
+	// notification is the record that the operator was told; a column beside it
+	// would be a second place for the same fact, and the two would disagree the
+	// first time one write succeeded and the other did not.
+	CountNotificationsAboutVersion(ctx context.Context, arg CountNotificationsAboutVersionParams) (int64, error)
 	// What the queue's heading says there is to do. Served by the partial unique
 	// index, whose predicate this matches exactly.
 	CountOpenDestinationDisputes(ctx context.Context) (int64, error)
@@ -2641,6 +2696,37 @@ type Querier interface {
 	// repointed, and revoked sessions are excluded because moving one would be
 	// writing to a credential that no longer authenticates.
 	SetSessionWorkspace(ctx context.Context, arg SetSessionWorkspaceParams) (int64, error)
+	// Instance-level settings: the answers an operator gives about the box rather
+	// than about a tenant in it (M55). One row, guaranteed by 04300's primary key,
+	// so every statement here is written against `id` and returns or touches
+	// exactly one.
+	//
+	// **The column is nullable and NULL means unanswered** (D164). Three statements
+	// rather than two because that third state has to be readable — the prompt an
+	// upgraded instance gets at its first administrative sign-in is drawn from
+	// exactly one fact, *has anybody answered this yet*, and there is nowhere else
+	// to read it from. A `GetInstanceSettings` returning the whole row was written,
+	// generated unused into the Querier interface, and removed: nothing renders
+	// these settings, and a read of everything is the shape a settings API grows out
+	// of before anything has asked for one.
+	//
+	// Two statements write the answer, and the difference between them is which
+	// state they are allowed to leave. Setup may rewrite, because nothing has been
+	// committed to until the instance is claimed; the principal answers once.
+	// Record the operator's answer to the first-run prompt, at setup (D149).
+	//
+	// **Unconditional, which is deliberate and is the difference from
+	// AnswerUpdateCheck below.** The instance is unclaimed — `SetUpdateCheckAtSetup`
+	// has just counted the users to be sure of it — so an answer already sitting in
+	// the row is a previous setup attempt whose `Register` failed, and the operator
+	// retrying with the box unticked must be able to replace a yes with a no. A
+	// conditional write here would make the first attempt's answer the permanent one.
+	//
+	// The row count is the check: the row is inserted by migration 04300, so zero
+	// means the settings row is missing and the answer went nowhere. The setup path
+	// reads it rather than assuming, because the failure it guards against is an
+	// operator declining the update check and being checked on anyway.
+	SetUpdateCheckEnabled(ctx context.Context, enabled bool) (int64, error)
 	// Soft, unlike a folder. A domain is the namespace its links' aliases live in
 	// and `links.domain_id` is NOT NULL with no cascade, so a hard delete is refused
 	// by the database the moment one link exists; a soft delete keeps the row that
@@ -2725,6 +2811,13 @@ type Querier interface {
 	// and "this campaign no longer ends" are different requests and one nullable
 	// parameter cannot express both.
 	UpdateCampaign(ctx context.Context, arg UpdateCampaignParams) (Campaign, error)
+	// Has anybody answered the update-check question on this instance?
+	//
+	// The whole of what the prompt needs, and deliberately not the value: whether
+	// the check is *on* is decided inside ClaimUpdateCheck, and a second reader of
+	// that fact is a second place for it to be got wrong. This answers only *is the
+	// question still open*, which is what decides whether an administrator is asked.
+	UpdateCheckAnswered(ctx context.Context) (bool, error)
 	// The trigger on destinations mirrors this into links.primary_url, so the hot
 	// path never joins.
 	//
