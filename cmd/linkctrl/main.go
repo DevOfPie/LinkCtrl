@@ -394,18 +394,31 @@ func run(cfg config.Config, _ io.Writer) error {
 		// A *configuration* mistake is still fatal — config.Validate refuses an
 		// unparseable sender or credentials that would go over the wire in
 		// clear — so this is only ever about reachability.
-		if err := sender.Verify(ctx); err != nil {
-			log.Error("smtp relay did not accept a connection at startup; "+
-				"queued mail will be retried until it does",
-				slog.String("relay", sender.Addr()),
-				slog.String("tls", cfg.SMTP.TLS),
-				slog.Any("error", err))
-		} else {
+		//
+		// **In its own goroutine, and that is the whole of finding F173** (D166).
+		// Called inline, the sentence above was false: an unreachable relay held
+		// this function for the whole of SMTP_TIMEOUT — ten seconds by default,
+		// measured at 10.05 — before the listener below was ever reached, so a
+		// link shortener with a dead relay stopped serving redirects at every
+		// boot. Nothing between here and ListenAndServe reads the result, so
+		// there was never anything to wait for; the outbox retries regardless of
+		// what this probe finds, which is why its answer can arrive late without
+		// changing a single decision. It is bounded by SMTP_TIMEOUT and by ctx,
+		// so a shutdown during startup cancels it rather than outliving it.
+		go func() {
+			if err := sender.Verify(ctx); err != nil {
+				log.Error("smtp relay did not accept a connection at startup; "+
+					"queued mail will be retried until it does",
+					slog.String("relay", sender.Addr()),
+					slog.String("tls", cfg.SMTP.TLS),
+					slog.Any("error", err))
+				return
+			}
 			log.Info("smtp relay reachable",
 				slog.String("relay", sender.Addr()),
 				slog.String("tls", cfg.SMTP.TLS),
 				slog.Bool("authenticated", cfg.SMTP.Username != ""))
-		}
+		}()
 
 		mailSvc, err = mail.NewService(pools.App, mail.Config{
 			Renderer: renderer, Sender: sender, Logger: log,

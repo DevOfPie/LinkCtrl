@@ -635,10 +635,26 @@ answer the question once.
 
 ## Scaling, honestly
 
-More than one `app` container works. Each replica keeps its own in-process cache
-in front of Redis, and invalidations are broadcast on a Redis pub/sub channel, so
-an edit on one replica clears every replica's copy rather than only the one that
-handled it. That was the limitation that made 0.1.0 a single-instance product.
+More than one `app` container is a **supported configuration** since 0.3.0, and
+what that means is narrow enough to state: there is a written contract for what
+each health endpoint promises, what a load balancer must do with it, and what
+happens to work in flight when a replica dies rather than shutting down
+politely. It is in
+[operations.md](operations.md#the-load-balancer-contract), each clause has a
+test behind it, and until it existed running two replicas was something you did
+at your own risk. Read it before you run several; the rest of this section is
+what to know first.
+
+**No component is added.** No coordinator, no external lock service, no second
+Postgres, no session affinity. Leadership for scheduled work is a Postgres
+advisory lock, which is released the instant the session holding it ends — so
+failover is *the absence* of a mechanism rather than one, and a single-container
+deployment is unaffected by every word of it.
+
+Each replica keeps its own in-process cache in front of Redis, and invalidations
+are broadcast on a Redis pub/sub channel, so an edit on one replica clears every
+replica's copy rather than only the one that handled it. That was the limitation
+that made 0.1.0 a single-instance product.
 
 What to know before running several:
 
@@ -659,6 +675,18 @@ What to know before running several:
   direction the cache-is-optional rule requires. The 404-probe limiter stays per
   instance permanently, because it guards the redirect path: N replicas allow
   roughly N times its configured limit.
+- **The drain delay is per-deployment arithmetic, not a default to leave
+  alone.** `LINKCTRL_SHUTDOWN_DRAIN_DELAY` must outlast your load balancer's
+  health-check interval times its failure threshold, or the listener closes
+  while the balancer still believes the replica is healthy and clients see
+  resets during every deploy. The shipped `5s` is sized for having no balancer
+  at all. The arithmetic, and the 25-second ceiling it trades against, are in
+  [operations.md](operations.md#sizing-the-drain-delay).
+- **A replica killed without draining loses at most its buffered click events**,
+  and nothing else. Webhook deliveries and outbox mail are claimed under a
+  60-second lease, so a dead replica's claims come back on their own; scheduled
+  work moves to a follower within one tick of its family. Delivery is therefore
+  at-least-once, and `X-LinkCtrl-Delivery` is the key to dedupe on.
 - Vertical growth first: Postgres `shared_buffers` and the two pool sizes
   (`DB_MAX_CONNS`, `DB_REDIRECT_MAX_CONNS`) are the knobs that matter. Keep
   their total under the server's `max_connections`; startup refuses to run when

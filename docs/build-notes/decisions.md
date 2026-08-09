@@ -275,10 +275,13 @@ file. Append a row when you append an entry.
 | [M54: the function the authority bullet named answers one permission](#2026-08-08--m54-the-function-the-authority-bullet-named-answers-one-permission) | An amendment, not a decision: `LoadMembershipAuthority` takes one permission, so a scope set through it is a query per scope on the auth path. Why the assertion is untouched, and why an amendment that widened what is intersected would be this milestone's own failure mode wearing a correction's clothes |
 | [M55: four line references, and the one that pointed at the wrong claim](#2026-08-08--m55-four-line-references-and-the-one-that-pointed-at-the-wrong-claim) | An amendment, not a decision. `SECURITY.md:73` had become the QR-codes row, so the citation still landed on a real claim and read as correct — the failure mode a moved line does not have. And how one stale reference became two the same day |
 | [M55: D159 corrected — an upgraded instance is asked, not assumed](#2026-08-08--m55-d159-corrected--an-upgraded-instance-is-asked-not-assumed) | D164, owner-set. Why D149 bought knowing consent rather than a default, why that makes *unanswered* a third state the column has to hold, and the bound this inherits from the option it resembles |
+| [M56: nine references that moved, and one job on the wrong side of a distinction](#2026-08-08--m56-nine-references-that-moved-and-one-job-on-the-wrong-side-of-a-distinction) | An amendment, not a decision. The heaviest drift in the phase, including sixty lines in `deployment.md` — and a bullet that counted three per-replica jobs when the third runs under `withLeadership`, which is the distinction the bullet exists to document |
+| [M56: a milestone file that had not heard about D104](#2026-08-08--m56-a-milestone-file-that-had-not-heard-about-d104) | An amendment, not a decision. A milestone file instructed a README edit that D104 forbids, and D104 predates it — so the conflict the worker reported had no live choice in it. Why the substance never conflicted, and what would have made it a prompt |
 | [M53: five choices a second factor forced](#2026-08-08--m53-five-choices-a-second-factor-forced) | D150: `MFA_SECRET_KEY` is its own variable and is **optional**, so an instance without one offers no second factor and an instance that loses one falls back to recovery codes. D151: the second factor lives in `internal/auth` behind two seams rather than in a package of its own, and why the reason `internal/account` gives does not apply. D152: the enrolment offer travels in the form because the milestone forbids the alternative. D153: `RecordSuccessfulLogin` is guarded rather than moved, which is the only way both of the login flow's bullets hold at once. D154: four audit actions and one notification kind, because the two surfaces answer different questions |
 | [M54: a key belongs to an account, and the four decisions that had to be re-derived to say so](#2026-08-08--m54-a-key-belongs-to-an-account-and-the-four-decisions-that-had-to-be-re-derived-to-say-so) | D155: reach is a second column rather than a widening of the first, and account-wide is what an unpinned key created from 0.3.0 on *is* — the widening-by-default is deliberate and pinning is the irreversible half. D156: an account-wide key requires an **organization-wide** membership wherever it lands, which is M44's existing bar carried across the tenancy boundary. D157: the organization is resolved one tier above the workspace, by its own query, so M44's parameter survives with a value rather than being deleted. D158: an administrator narrows somebody else's account-wide key instead of destroying it, in a table of subtractions and under an audit action of its own. And the four re-derivations — F103's bound, M44's parameter, D43's cap, D87's rotation rule — each with the limb it matched |
 | [M55: an update checker, and the five choices a daily GET turned out to need](#2026-08-08--m55-an-update-checker-and-the-five-choices-a-daily-get-turned-out-to-need) | D159: an instance **upgrading** into 0.3.0 gets the default — on — because it has no first run left to be asked at, which is the one case D149's prompt cannot reach. D160: two switches, ANDed, and the environment variable only ever says *no*. D161: a singleton `instance_settings` table and a control on the setup form, rather than a key/value store or the settings page nobody asked for. D162: the comparison reads the leading `vX.Y.Z` and drops everything after it, because `git describe` means *past this tag* and semver would read it as *before* it. D163: the re-notify guard is keyed on the version and lives in the notification itself, not on a clock and not in a column |
 | [M55: where an upgraded instance is asked, and what the third state costs](#2026-08-09--m55-where-an-upgraded-instance-is-asked-and-what-the-third-state-costs) | D165: the question D164 owes an upgraded instance is put on the dashboard, to a holder of `instance.admin`, once — not in an interstitial, not in the shell, and not on the settings page D161 declined to build. Why *omitted* on the API's setup field now means unanswered rather than yes, why the write is conditional rather than guarded by a read, and the audit row that is deliberately not written |
+| [M56: the failover contract, and the probe that was holding the door open](#2026-08-09--m56-the-failover-contract-and-the-probe-that-was-holding-the-door-open) | D166: the boot-time relay probe moves into a goroutine rather than after the listener, because *after* is not available at the cost it implies and nothing was ever reading its result — F173's ten seconds of dead server bought the order of two log lines. D167: the readiness contract is two status codes rather than three words, because the failure it prevents is an operator wiring `degraded` to *remove* and taking the whole deployment out during a Redis outage. And the two things the Risks section asked to be recorded either way: the kill-a-leader test stayed an assertion rather than becoming M57's measurement, and the per-replica job count is now a test rather than a sentence |
 
 ---
 
@@ -23433,3 +23436,195 @@ the prompt, and `/settings/…` would have registered the prefix D161 refused,
 inviting a `GET` beside it. The reserved-list guard failing on the new segment is
 that test doing its job; routing around it by picking an already-reserved prefix
 would have been choosing the name for the test's convenience.
+
+## 2026-08-08 — M56: nine references that moved, and one job on the wrong side of a distinction
+
+**An amendment, not a decision**, at [step 1](phase-loop.md#1-validate). The
+heaviest drift any milestone file in this phase has carried, which is what a
+milestone written at planning time and built last looks like.
+
+Nine line references were corrected and none of them changes what
+[m56.md](phase-details/m56.md) asks for: `health.go`'s liveness handler,
+its readiness cache and degraded arm; `jobs.go`'s advisory-lock acquisition, its
+release-on-death comment, `runHostReload` and `reportJobStaleness`;
+`server.go`'s drain sequence; `main.go`'s SMTP probe comment; and
+`docs/deployment.md`'s *Scaling, honestly*, which had moved **sixty lines**.
+`jobs.go` moved again the same day, when [M55](phase-details/m55.md) added an
+eighth job family. `README.md:117` and `Plan.md:374-375` were checked and still
+resolve.
+
+**One of the nine is not a line number, and it is the one worth the entry.**
+
+**As it stood**, under *Failover of scheduled work*:
+
+> The three jobs that deliberately run on **every** replica — `runHostReload`
+> (`jobs.go:585`), `reportJobStaleness` (`:451`) and the audit-size gauge
+> (`:690`) — are documented as such with the reason.
+
+**As amended:** **two** jobs, `runHostReload` and `reportJobStaleness`.
+
+**The tree fact.** Neither of those two calls `withLeadership` — counted by
+reading each function body. The audit-size gauge does: it is inside
+`runMaintenance`, wrapped in
+`j.withLeadership(runCtx, advisoryLockKeyMaintenance, "audit-growth-warning", …)`
+at `jobs.go:792-794`. It is leader-only, and it is on the opposite side of the
+exact distinction the bullet exists to document.
+
+**Why a fact rather than an assertion.** The bullet's job is to write down what
+the tree already does so an operator does not have to reverse-engineer it. It
+counted wrong. Nobody could have decided that a function wrapped in
+`withLeadership` runs on every replica — the wrapper is the whole of the
+argument. What would have made this a prompt is the opposite direction: a
+proposal that the gauge *should* run per-replica is a change to behaviour, and
+this milestone is not making one.
+
+It is also the enumeration rule earning its place again. *Three* was written at
+planning time and was wrong about a tree that existed when it was written; the
+correction came from counting `withLeadership` calls rather than from re-reading
+the sentence.
+
+
+## 2026-08-09 — M56: the failover contract, and the probe that was holding the door open
+
+Most of this milestone wrote down what the tree already did. Three things needed
+deciding, and one of them is a behaviour change rather than a sentence.
+
+### D166 — the relay probe moves into a goroutine, not to after the listener
+
+[F173](deferred-findings.md), scheduled here by [M51.9](phase-details/m51.9.md)'s
+triage. A configured but unreachable `LINKCTRL_SMTP_HOST` held `run` for the
+whole of `LINKCTRL_SMTP_TIMEOUT` before `ListenAndServe` was reached — measured
+at **10.05 seconds** on the shipped default, and at a raised timeout the
+container never became healthy at all.
+
+[m56.md](phase-details/m56.md) left the placement open in as many words:
+*"whether it moves after it or into a goroutine is this milestone's to decide
+and to record"*. **A goroutine**, at the point the sender is constructed.
+
+*After the listener* is the option that sounds tidier and is not available at
+the cost it implies. `srv.Run(ctx)` blocks until shutdown, and it is the last
+statement of `run`; putting the probe after it means either probing during
+shutdown — useless — or restructuring the boot sequence so the listener starts
+on a goroutine of its own and `run` waits on something else. That is a change to
+how this program starts, made to relocate a diagnostic, and it would put the
+listener's own failure to bind (the port is taken) into a channel nobody was
+reading before. The goroutine changes one line and moves nothing.
+
+**What makes it safe is that nothing was ever waiting for the answer.** Between
+the probe and the listener there is no reader of its result: the mailer is
+constructed either way, the outbox drains on its own schedule and retries
+regardless of what the probe found, and a *configuration* mistake — an
+unparseable sender, credentials that would cross the wire in clear — is still
+fatal and is caught by `config.Validate` long before this. So the only thing
+sequencing bought was that `smtp relay reachable` printed before
+`http server listening`. That ordering is what was being paid for with ten
+seconds of dead server at every boot.
+
+`SMTPSender` is immutable and `Verify` opens a connection of its own, so there
+is nothing to race. The goroutine is bounded twice — by `SMTP_TIMEOUT` and by
+`ctx` — so a shutdown during startup cancels it instead of outliving it.
+
+Guarded by `TestTheSMTPProbeDoesNotGateTheListener`, which parses `main.go` and
+fails if the `Verify` call is not lexically inside a `go` statement. Its limit is
+written into the test: a probe moved into a helper that `run` then calls
+synchronously would pass. What it catches is the change that would actually
+happen — somebody deleting the `go` because the sequential form reads better.
+
+### D167 — the readiness contract is a rule about status codes, not about words
+
+`/readyz` answers `ok`, `degraded` or `unavailable`, and the temptation when
+writing this down was to give an operator a three-way table. It gives a two-way
+one instead: **503 → remove from rotation, 200 → keep, and `degraded` is a
+200.**
+
+The word is diagnostic and the code is the instruction, because the failure this
+contract exists to prevent is an operator reading `degraded` as *bad* and wiring
+it to *remove*. Redis down is `degraded` on **every** replica at once, so that
+wiring takes the whole deployment out over a cache problem — while every replica
+is still resolving every link from Postgres. A three-way table invites exactly
+that reading by presenting three things to act on. Two states, stated as codes,
+cannot be wired that way by accident.
+
+The same reasoning is why there is no startup probe and why saying so is part of
+the contract: migrations run before the listener binds, so *not yet ready* and
+*not yet listening* are one observable state, and a probe for it would be a
+second name for a connection refused.
+
+### The kill-a-leader test stayed an assertion, and did not become M57's problem
+
+[m56.md](phase-details/m56.md)'s Risks section named this as the milestone's
+genuine unknown — *"a flaky-test shape, and the bound has to be loose enough to
+survive CI while still meaning something"* — and required the swap to M57 be
+recorded rather than made quietly. **No swap.** It is an assertion, here.
+
+What made it tractable is that the kill did not have to be a process. Postgres
+releases a session-level advisory lock when the *session* ends, so
+`pg_terminate_backend` on the leader's own backend is exactly what a killed
+container looks like from the database's side: the connection goes away and no
+unlock is ever sent. That is deterministic — there is no scheduling to lose a
+race with — and it is the real mechanism rather than a stand-in for it.
+`TestLeadershipMovesToAFollowerWhenTheLeaderDies` measured the follower taking
+over **39ms** after the terminate, against a 5-second bound.
+
+The honest limit is written into the test: a Go test cannot kill the leader's
+*goroutine* with its connection, so the pass is abandoned by hand at the same
+moment. A leader that keeps working after its lock is gone is the two-leaders
+window D107 already documents, and it is a different claim from this one.
+
+### The per-replica job list is now enforced rather than described
+
+The amendment logged at step 1 corrected *three* per-replica jobs to *two* by
+counting `withLeadership` calls. A count that drifted once will drift again, so
+`TestOnlyTheDocumentedJobsRunOnEveryReplica` parses `jobs.go` and fails when the
+set of passes taking no advisory lock stops matching the documented pair. The
+failure message names the new pass and points at the paragraph in
+`docs/operations.md` that has to change with it.
+
+This is the enumeration rule — *counted rather than trusted* — moved from a
+habit into the build. The alternative was writing the number down more carefully,
+which is what was done last time.
+
+## 2026-08-08 — M56: a milestone file that had not heard about D104
+
+**An amendment, not a decision**, at [step 3.4](phase-loop.md#3-land), on a
+conflict the worker reported verbatim and refused to resolve. It was right to
+refuse: [phase-loop.md](phase-loop.md) says a conflict between the contract's
+files is a bug to report rather than a choice to make. This entry is the report,
+and the resolution is that there was no live choice in it.
+
+**As it stood**, in m56.md's *Documentation* section:
+
+> `README.md:117` and `Plan.md:374-375` follow. Every one of these is part of
+> the milestone.
+
+**As amended:** `Plan.md:374-375` were read and are unchanged deliberately;
+`README.md` does not follow here, and the file now says why.
+
+**The conflict, stated.** [workflow.md](workflow.md)'s *Before completing a
+commit* table carries D104 — *"`README.md` is not in this gate. It describes the
+released product, so a mid-phase commit does not touch it."* m56.md said the
+opposite about the same file in the same commit.
+
+**Why this resolves rather than prompts.** D104 is **owner-set and already
+recorded**, and it predates m56.md: it landed at
+[M45](phase-details/m45.md)'s close on 2026-08-05, and this file was written at
+Phase 3's planning on 2026-08-06. So the milestone file is not offering a second
+answer to a live question — it is stale with respect to a decision taken before
+it was written and never propagated into it. Applying an existing decision is
+not picking between two.
+
+The substance never conflicted either, which is what makes the amendment safe.
+`README.md:117` is the *Operations* feature row, and nothing M56 built makes it
+false. Multi-replica support is an **addition** to that row, and an addition is
+precisely the case D104 defers to the close — where `CHANGELOG.md`'s
+`[Unreleased]` section is what carries it until the tag. Had M56 falsified a
+claim README makes, D104's own reasoning would not have covered it and this
+would have been a prompt.
+
+**What is worth keeping is that the file said it at all.** A milestone file can
+carry an instruction that a later — or in this case *earlier* — rule forbids,
+and nothing checks for it: `make check-links` resolves every anchor in the
+sentence. It was found because a worker read both documents and would not choose
+between them. That is the split working, and it is cheaper than the alternative,
+which is a README edit landing mid-phase and nobody noticing for a phase.
+

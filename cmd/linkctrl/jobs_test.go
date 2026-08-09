@@ -204,6 +204,116 @@ func TestOneFamilysLockDoesNotBlockAnothers(t *testing.T) {
 	}
 }
 
+// TestLeadershipMovesToAFollowerWhenTheLeaderDies is the failover mechanism,
+// run as one (M56).
+//
+// Every claim in the failover contract rests on a single Postgres property: a
+// session-level advisory lock is released the instant the session holding it
+// ends, whether it ended politely or was killed. Nothing in this product
+// watches for a dead leader, holds a heartbeat, or elects anything — the next
+// follower to tick simply finds the lock free. That is the whole of it, and it
+// is why running several replicas needs no coordinator.
+//
+// The kill is real rather than simulated. `pg_terminate_backend` on the
+// leader's own backend is exactly what Postgres sees when a replica's container
+// is killed: the connection goes away without an unlock ever being sent. What
+// this cannot reproduce is the leader's *goroutine* dying with it, so the pass
+// is abandoned by hand at the same moment — which is the honest half, because
+// a leader that keeps working after its lock is gone is the two-leaders window
+// D77 already documents rather than the failover this test is about.
+//
+// Bounded, not instant, and the bound is a family's tick interval away in
+// production: the fastest family ticks every 60 seconds, so a killed leader
+// costs at most one interval of that family's work. Here the follower is ticked
+// in a loop, so what is measured is the lock becoming free — the part this
+// product is responsible for.
+func TestLeadershipMovesToAFollowerWhenTheLeaderDies(t *testing.T) {
+	pool := jobsPool(t)
+	ctx := context.Background()
+
+	// A scratch table so "the work" is a row somebody can count, rather than a
+	// boolean only this test can see. The database is this test's own.
+	if _, err := pool.Exec(ctx, `CREATE TABLE failover_probe (replica text NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+
+	log := slog.New(slog.DiscardHandler)
+
+	// The leader takes a connection of its own so the kill has one target.
+	leaderConn, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaderPID := leaderConn.Conn().PgConn().PID()
+
+	var held bool
+	if err := leaderConn.QueryRow(ctx,
+		"SELECT pg_try_advisory_lock($1)", advisoryLockKeyRollup).Scan(&held); err != nil {
+		t.Fatal(err)
+	}
+	if !held {
+		t.Fatal("could not take the rollup key on a fresh database; the rest of this test would prove nothing")
+	}
+
+	follower := &jobRunner{pool: pool, log: log}
+	work := func(replica string) func(context.Context) error {
+		return func(ctx context.Context) error {
+			_, err := pool.Exec(ctx, `INSERT INTO failover_probe (replica) VALUES ($1)`, replica)
+			return err
+		}
+	}
+
+	// While the leader is up, the follower skips. Work is not done twice.
+	follower.withLeadership(ctx, advisoryLockKeyRollup, "rollup", work("follower"))
+	if n := probeRows(t, pool); n != 0 {
+		t.Fatalf("the follower did %d passes while the leader held the family's lock, want 0; "+
+			"two replicas are running the same job", n)
+	}
+
+	// The leader dies. No unlock is sent — that is the point of terminating the
+	// backend rather than releasing the lock.
+	var terminated bool
+	if err := pool.QueryRow(ctx, "SELECT pg_terminate_backend($1)", leaderPID).Scan(&terminated); err != nil {
+		t.Fatal(err)
+	}
+	if !terminated {
+		t.Fatal("could not terminate the leader's backend; nothing below would be a failover")
+	}
+	leaderConn.Release()
+
+	const bound = 5 * time.Second
+	start := time.Now()
+	var took time.Duration
+	for time.Since(start) < bound {
+		follower.withLeadership(ctx, advisoryLockKeyRollup, "rollup", work("follower"))
+		if probeRows(t, pool) > 0 {
+			took = time.Since(start)
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	switch n := probeRows(t, pool); {
+	case n == 0:
+		t.Errorf("no follower picked the family up within %s of the leader dying; "+
+			"the advisory lock is not the failover mechanism the contract says it is", bound)
+	case n > 1:
+		t.Errorf("the family ran %d times after one failover, want 1; work is being done twice", n)
+	default:
+		t.Logf("the follower took leadership %s after the leader's backend was terminated", took)
+	}
+}
+
+func probeRows(t *testing.T, pool *pgxpool.Pool) int {
+	t.Helper()
+	var n int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM failover_probe`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
 // TestTheHostReloadRunsWithoutASubscriberAndWithoutLeadership is F73's fix as a
 // claim that can be shown false.
 //

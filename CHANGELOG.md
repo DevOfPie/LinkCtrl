@@ -29,6 +29,51 @@ migrations run at boot.
 
 ### Added
 
+- **Running more than one replica is now a supported configuration, because
+  there is finally a contract to support.**
+
+  Multi-replica operation already worked and was already documented. What did
+  not exist was a statement of what each health endpoint promises, what a load
+  balancer must do with it, and what happens to work in flight when a replica is
+  killed rather than shut down politely. Without those, running two containers
+  was something you did at your own risk.
+
+  **The load-balancer contract, in one rule.** Wire liveness to `/healthz` and
+  readiness to `/readyz`. Then act on the status **code**: 503 means take the
+  replica out of rotation, 200 means keep it — *including* `degraded`. A
+  `degraded` replica is one whose Redis is unreachable, and it still resolves
+  every link, because redirects fall through to Postgres. An operator who reads
+  `degraded` as *remove* takes their entire deployment out during a Redis
+  outage, which is the exact failure the word exists to prevent. `/healthz`
+  touches neither Postgres nor Redis, ever — a liveness probe that followed the
+  database would restart every replica at once during one blip.
+
+  **There is no startup probe, and that is now a stated choice** rather than
+  something you might notice missing. Migrations run before the listener binds,
+  so *not yet ready* and *not yet listening* are the same observable state.
+
+  **What a killed replica loses: at most its buffered click events, and nothing
+  else.** Scheduled jobs move to a follower within one tick of that job's family,
+  because a Postgres advisory lock is released the instant the session holding
+  it ends — nothing detects the death, the next follower simply finds the lock
+  free. Webhook deliveries and outbox mail are claimed under a 60-second lease,
+  so a dead replica's claims come back on their own and are completed elsewhere.
+  Delivery is at-least-once and now says so: dedupe on the `X-LinkCtrl-Delivery`
+  uuid.
+
+  **`LINKCTRL_SHUTDOWN_DRAIN_DELAY` gets arithmetic instead of a
+  recommendation.** It must exceed your load balancer's health-check interval
+  times its failure threshold, plus a check's worth of slack. The shipped `5s`
+  is sized for having no balancer at all and is explicitly not a
+  recommendation — and because the drain delay and `SHUTDOWN_TIMEOUT` are spent
+  in sequence under a 25-second ceiling, raising one trades against the other.
+
+  **No component was added for any of this.** No coordinator, no external lock
+  service, no second Postgres, no session affinity. A one-container deployment
+  is unaffected: with one replica the holder of every lock is the only
+  candidate. The contract is in `docs/operations.md`, and every clause of it
+  that is a promise rather than an instruction has a test behind it.
+
 - **This instance can now tell you when a new LinkCtrl is released — and it asks
   you first. Read this one even if you read nothing else here.**
 
@@ -530,6 +575,23 @@ migrations run at boot.
   would silently redefine every limit already set.
 
 ### Fixed
+
+- **An unreachable mail relay no longer keeps the whole server dark at every
+  boot.** With `LINKCTRL_SMTP_HOST` set to something that does not answer, the
+  reachability probe ran before the HTTP listener bound, so nothing was
+  served — redirects included — for the whole of `LINKCTRL_SMTP_TIMEOUT`.
+  Measured at **10.05 seconds** on the shipped default; at a raised timeout the
+  container never became healthy at all and `docker compose up --wait` gave up.
+  The code's own comment said "the relay being down is not a reason for a link
+  shortener to stop serving redirects", and it was not true.
+
+  The probe now runs in a goroutine. Nothing between it and the listener ever
+  read its result, and the outbox retries regardless of what it finds, so
+  waiting bought only the order of two log lines: `smtp relay reachable` now
+  arrives after `http server listening` rather than before it. A rolling deploy
+  is where this bit hardest — every new replica was unready for the timeout at
+  every start, and a health check with a shorter start period failed it
+  outright.
 
 - **No dashboard page scrolls sideways on a phone.** At 360px, sixteen of the
   twenty-three pages did: the header could not fit the workspace switcher on one
