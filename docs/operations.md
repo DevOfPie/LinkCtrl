@@ -58,6 +58,16 @@ Readiness is a rule about the status **code**, not about the word in the body:
 
 Read the word to know how worried to be; act on the code.
 
+**Wired that way, a rolling deploy costs nothing, and that is measured.** Three
+replicas behind a balancer polling `/readyz` every second and deregistering
+after two failures, every replica destroyed and rebuilt while 2,000 requests a
+second went through it: **zero requests failed, zero retried, cached p99 295µs,
+the whole replacement in 35 seconds** — 11 to 12 seconds per replica. The run,
+the two columns it has, and what the numbers cannot show are in
+[slo.md](slo.md#measured-during-a-rolling-deploy-for-m57-2026-08-09). The
+balancer's configuration is in `test/ha/haproxy.cfg`, which is the contract
+above written out in one vendor's syntax and is worth reading beside it.
+
 **There is no startup probe, and that is a choice rather than an omission.**
 Migrations run before the listener binds, so *not yet ready* and *not yet
 listening* are the same observable state — a startup probe would be a second
@@ -85,6 +95,18 @@ recommendation** — it is what a deployment with no load balancer in front of i
 needs, and behind one that polls every 5s it is too short by half. What a delay
 that is too short costs is connection resets on every deploy: the listener
 closes while the balancer still believes the replica is healthy.
+
+**What a delay that is too short costs, as a number.** The inequality was tested
+from both sides on the same three-replica deployment, at 2,000 rps, replacing
+every replica. Satisfied — 5s of drain against 1s × 2 of detection — **zero
+requests failed and zero were retried**. Removed entirely, by killing each
+replica with SIGKILL instead of stopping it, **905 requests of 239,833 were
+retried, four drew a response error, the slowest took a full second, and the
+generator went from 3 concurrent connections to 212 to hold the rate.** Still
+zero failures, and the credit for that belongs to the balancer's `retries` and
+`redispatch` rather than to this product: a balancer without them answers 503 to
+all 905. The measurement is
+[here](slo.md#measured-during-a-rolling-deploy-for-m57-2026-08-09).
 
 `LINKCTRL_SHUTDOWN_TIMEOUT` is the separate budget for finishing in-flight
 requests *after* the listener closes, and buffered click events are flushed
@@ -120,6 +142,38 @@ delivery carries a stable `X-LinkCtrl-Delivery` uuid for exactly this — dedupe
 on it in the receiver. Making the click queue durable would mean a work queue in
 Redis, which would make Redis required, which is a trade this product has not
 made.
+
+### Can two replicas lead the same job at once
+
+Not because of a deploy, and the distinction is the whole answer.
+
+**A rolling deploy does not produce two leaders.** Every binary from 0.2.0 on
+asks for the same per-family advisory keys, so the old replica and the new one
+contend for one lock and `pg_try_advisory_lock` gives it to exactly one of them.
+The only binary that ever behaved otherwise is 0.1.x, which took a single key
+for every job — and running more than one replica was not a supported
+configuration until 0.3.0, so no upgrade path a deployment is allowed to take
+puts one in a rolling deploy. `TestAReleasedFamilyKeepsItsAdvisoryKey` is what
+keeps that true: renumbering a family that has already shipped would re-open the
+window one family at a time, and it fails when anybody does.
+
+**A leader that loses its database connection while still working does.** The
+lock is held on a connection of its own; the pass works on another. A terminated
+backend, a dropped network or a pause long enough to break keepalives releases
+the lock while the pass keeps running, and the next follower to tick takes it.
+Nothing bounds that window, because nothing detects it — which is the same
+property that makes failover need no coordinator.
+
+**So the window is real and it costs duplicate effort rather than duplicate
+effects.** Every pass is written to survive being run twice: the mail and webhook
+drains claim rows with `FOR UPDATE SKIP LOCKED`, the rollups recompute whole
+days idempotently, partition creation is `IF NOT EXISTS`, the automation
+watermark is compare-and-set, and the daily update check is one `UPDATE` that a
+second replica cannot match. **One exception**, and it is a logging defect rather
+than a data one: custom-domain re-verification decides whether to write an audit
+record from a read taken before its own write, so two leaders can record one
+verification twice. It is
+[F180](build-notes/deferred-findings.md#open), open and unscheduled.
 
 ### Which jobs run on every replica
 

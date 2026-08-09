@@ -323,8 +323,24 @@ IMAGE         ?= linkctrl:ci
 IMAGE_VERSION ?= ci
 
 .PHONY: ci-image-smoke
-ci-image-smoke: ## Check a built container image runs and reports its version
+ci-image-smoke: single-instance ## Check a built image reports its version and serves everything on Postgres alone
 	@scripts/ci-image-smoke.sh "$(IMAGE)" "$(IMAGE_VERSION)"
+
+# The single-instance guarantee, as a gate rather than an intention (M57).
+#
+# It rides `ci-image-smoke` because that is the one CI job holding a Docker
+# daemon and no service containers, which is exactly what a one-container
+# conformance run needs — and because adding a *step* to the workflow needs the
+# owner while adding a check to a target reaches CI on the next push. The
+# comment at the head of this section is where that bargain is argued; this is
+# the second thing to take it.
+#
+# Prerequisite rather than a second recipe line, so a run that never reaches the
+# version check still runs this one: the version stamp is the cheaper failure and
+# the conformance is the one somebody's milestone will break.
+.PHONY: single-instance
+single-instance: ## One container, no Redis, no load balancer — the whole surface
+	@scripts/single-instance-check.sh "$(IMAGE)"
 
 .PHONY: workflow-proposals
 workflow-proposals: ## Which ci/proposed/ workflow proposals the owner has not applied yet

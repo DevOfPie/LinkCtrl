@@ -141,16 +141,33 @@ type jobRunner struct {
 // across binaries instead of within one: an old binary still holds its keys
 // for as long as a rolling deploy keeps it alive.
 //
-// Deploy overlap, stated as a cost rather than discovered: the generation-0
-// binary holds advisoryLockKeyRetiredV1 for everything, and none of the keys
-// below contend with it, so for the length of a rolling deploy each family can
-// have two leaders — one old, one new. The window costs duplicate effort, not
-// duplicate effects: the drains claim rows with FOR UPDATE SKIP LOCKED, the
-// rollups recompute whole days idempotently, partition creation is
-// IF-NOT-EXISTS-shaped, and the automation watermark is compare-and-set — all
-// of which already had to hold, because an advisory lock is released the
-// moment its holder dies and two leaders was always a window, not an
-// impossibility.
+// Deploy overlap, and the bound M57 put on it. This paragraph used to say that
+// for the length of a rolling deploy each family can have two leaders, because
+// the generation-0 binary holds advisoryLockKeyRetiredV1 for everything and
+// none of the keys below contend with it. That is still true of a generation-0
+// binary — and a generation-0 binary cannot be in a supported rolling deploy.
+// Generation 1 shipped in 0.2.0, several replicas became a supported
+// configuration in 0.3.0 (docs/deployment.md, "Scaling, honestly"), so both
+// binaries in any upgrade a deployment is allowed to perform take the keys
+// below and pg_try_advisory_lock is what excludes the second leader.
+// TestAReleasedFamilyKeepsItsAdvisoryKey is what keeps that true: a family that
+// has shipped may not be renumbered, because renumbering it re-opens exactly
+// the window generation 0 had.
+//
+// What is left is not deploy-shaped and is not bounded by one. The lock is held
+// on a connection of its own while fn works on another (see withLeadership), so
+// a leader whose *lock* connection dies — terminated backend, dropped network,
+// a pause long enough for keepalives to give up — releases the lock while its
+// pass keeps running. The next follower to tick then takes it. That is the
+// window, it costs duplicate effort rather than duplicate effects, and the
+// defences are second-layer by design: the drains claim rows with FOR UPDATE
+// SKIP LOCKED, the rollups recompute whole days idempotently, partition
+// creation is IF-NOT-EXISTS-shaped, the automation watermark is compare-and-set,
+// and ClaimUpdateCheck is one UPDATE nobody can match twice. All of it already
+// had to hold, because an advisory lock is released the moment its holder dies
+// and two leaders was always a window, not an impossibility. The one pass whose
+// second layer is a read rather than a write is domain verification — F180,
+// deferred rather than fixed here.
 const (
 	// advisoryLockKeyRetiredV1 is generation 0: one key serializing every job
 	// on one goroutine. Nothing takes it any more. It stays declared so no

@@ -339,9 +339,18 @@ tasks:
       - go test -tags=integration -race -count=1 ./test/integration/... ./cmd/lctl/... ./cmd/linkctrl/...
 
   ci-image-smoke:
-    desc: Check a built container image runs and reports its version
+    desc: Check a built image reports its version and serves everything on Postgres alone
     cmds:
+      # The single-instance guarantee first, for the reason the Makefile gives:
+      # the version stamp is the cheaper failure and the conformance is the one
+      # somebody's milestone will break.
+      - bash scripts/single-instance-check.sh "{{.IMAGE}}"
       - bash scripts/ci-image-smoke.sh "{{.IMAGE}}" "{{.IMAGE_VERSION}}"
+
+  single-instance:
+    desc: One container, no Redis, no load balancer — the whole surface
+    cmds:
+      - bash scripts/single-instance-check.sh "{{.IMAGE}}"
 
   workflow-proposals:
     desc: Which ci/proposed/ workflow proposals the owner has not applied yet

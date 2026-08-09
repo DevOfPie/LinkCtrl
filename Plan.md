@@ -389,6 +389,27 @@ Invariants:
   deployment is unaffected by all of it ([M56](docs/build-notes/phase-details/m56.md),
   D110). The one thing a kill loses is the in-process click queue, which is the
   *Queue* row above and the reason its upgrade path is named there.
+- **A single container is a tested configuration, not merely an unaffected
+  one.** The release image is started on a network carrying only Postgres and
+  the whole surface is driven over HTTP — redirect, dashboard, API, jobs,
+  invalidation, rate limiting — in CI on every push
+  ([M57](docs/build-notes/phase-details/m57.md), `scripts/single-instance-check.sh`).
+  The required dependency set is Postgres, and a change that adds to it fails
+  the build.
+- **A rolling deploy of every replica drops nothing, measured rather than
+  claimed**: 240,002 requests at 2,000 rps through a load balancer while all
+  three replicas were destroyed and rebuilt, zero failed, zero retried, cached
+  p99 295µs (M57,
+  [docs/slo.md](docs/slo.md#measured-during-a-rolling-deploy-for-m57-2026-08-09)).
+  It holds because `SHUTDOWN_DRAIN_DELAY` outlasts the balancer's detection; the
+  same run with the drain removed retried 905 of 239,833.
+- **Two replicas cannot both lead one job family because of a deploy.** Every
+  binary from 0.2.0 on takes the same per-family advisory keys, so a rolling
+  deploy has the two contending for one lock rather than holding one each, and
+  `TestAReleasedFamilyKeepsItsAdvisoryKey` freezes the released assignments so a
+  rename cannot re-open it (M57, D168). The residual window is a leader losing
+  its lock connection while still working, which no deploy causes and every pass
+  is written to survive.
 - The HTTP layer is two handler trees. The redirect tree carries no session
   lookup, CSRF check or template rendering. Enforced by test.
 - The redirect pool is separate from the application pool.

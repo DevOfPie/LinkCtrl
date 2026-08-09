@@ -60,7 +60,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M54](m54.md) | An API key belongs to an account, not to one organization | M52 | done |
 | [M55](m55.md) | An update checker, and the fifth thing that leaves this product | — | done |
 | [M56](m56.md) | High availability: the failover contract | — | done |
-| [M57](m57.md) | High availability: measured, and still one container | M56 | not started |
+| [M57](m57.md) | High availability: measured, and still one container | M56 | done |
 | [M57.9](m57.9.md) | **Pre-release adversarial review** | M46–M57 | not started |
 | [M58](m58.md) | Deferred findings, documentation pass, 0.3.0 | all | not started |
 

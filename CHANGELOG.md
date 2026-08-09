@@ -29,6 +29,49 @@ migrations run at boot.
 
 ### Added
 
+- **A rolling deploy of every replica, under load, costs nothing — and a single
+  container is still a tested configuration.**
+
+  The multi-replica contract below is a promise. This is the measurement of it,
+  and the guarantee that it was not bought at the expense of the deployment
+  almost everybody actually runs.
+
+  **Three replicas behind a load balancer, every one destroyed and rebuilt while
+  2,000 requests a second went through it: zero requests failed, zero were
+  retried, cached p99 295µs against a 20ms target, and the whole replacement
+  took 35 seconds.** No request ever waited — the load generator never needed
+  more than three concurrent connections for the entire run.
+
+  **The drain delay is why, and it now has a price rather than a rationale.**
+  The same replacement performed with SIGKILL instead — no drain, no readiness
+  change, the listener simply gone — cost 905 retried requests of 239,833, four
+  response errors, and a worst case of a full second. Still no failures, and the
+  credit for that belongs to the load balancer retrying rather than to this
+  product: a balancer configured without retries answers 503 to all 905. If you
+  run several replicas, `LINKCTRL_SHUTDOWN_DRAIN_DELAY` is the number that
+  decides which of those two paragraphs describes your deploys.
+
+  **A single container remains a supported, tested configuration, and nothing in
+  the high-availability work is required to run it.** The release image is
+  started on a network carrying nothing but Postgres — no Redis, no load
+  balancer, no second replica — and the redirect path, the dashboard, the API,
+  the scheduler, cache invalidation and rate limiting are each driven over HTTP
+  until they answer. It runs in CI on every push. A future change that makes any
+  of them need a second component fails the build, which is the entire reason it
+  was written now rather than after something did.
+
+  **Two replicas can no longer both lead the same scheduled job during a
+  deploy.** Every binary from 0.2.0 on asks for the same per-family advisory
+  locks, so the old replica and the new one contend for one lock rather than
+  holding one each, and a test now freezes those assignments so a future rename
+  cannot quietly undo it. What remains is a leader that loses its database
+  connection while still working, which no deploy causes and every job is
+  written to survive being run twice.
+
+  Both runs were taken on the built image against the seeded 100,000-link
+  dataset; the figures, the method and what they cannot show are in
+  [docs/slo.md](docs/slo.md).
+
 - **Running more than one replica is now a supported configuration, because
   there is finally a contract to support.**
 

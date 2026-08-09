@@ -651,6 +651,27 @@ advisory lock, which is released the instant the session holding it ends — so
 failover is *the absence* of a mechanism rather than one, and a single-container
 deployment is unaffected by every word of it.
 
+**A single container remains a supported, tested configuration, and nothing in
+the high-availability work is required to run it.** That is a gate rather than
+an intention: `scripts/single-instance-check.sh` starts the release image on a
+network carrying nothing but Postgres — no Redis, no load balancer, no second
+replica — and drives the redirect path, the dashboard, the API, the scheduler,
+cache invalidation and rate limiting over HTTP until each one answers. It runs
+in CI on every push, and a later change that makes any of those need a second
+component fails it. The required set is **Postgres**; everything else is
+optional.
+
+**What a rolling deploy actually costs, measured rather than described.** Three
+replicas behind a load balancer, every one of them destroyed and rebuilt while
+2,000 requests a second went through it: **zero requests failed, zero retried,
+cached p99 295µs, the whole replacement in 35 seconds.** The same replacement
+performed with SIGKILL instead — no drain — cost 905 retried requests, a worst
+case of a full second, and still zero failures, because the balancer retried
+them. Both runs, the method, and what the numbers cannot show are in
+[slo.md](slo.md#measured-during-a-rolling-deploy-for-m57-2026-08-09). The
+difference between the two columns is the drain delay, which is the next
+paragraph's whole subject.
+
 Each replica keeps its own in-process cache in front of Redis, and invalidations
 are broadcast on a Redis pub/sub channel, so an edit on one replica clears every
 replica's copy rather than only the one that handled it. That was the limitation
@@ -681,7 +702,12 @@ What to know before running several:
   while the balancer still believes the replica is healthy and clients see
   resets during every deploy. The shipped `5s` is sized for having no balancer
   at all. The arithmetic, and the 25-second ceiling it trades against, are in
-  [operations.md](operations.md#sizing-the-drain-delay).
+  [operations.md](operations.md#sizing-the-drain-delay). This is the one bullet
+  here with a measurement behind it rather than a reason: satisfied, a rolling
+  deploy of every replica dropped and retried **nothing**; unsatisfied — the
+  same replacement with the drain skipped entirely — **905 requests of 239,833
+  had to be retried and the worst one took a second**
+  ([slo.md](slo.md#measured-during-a-rolling-deploy-for-m57-2026-08-09)).
 - **A replica killed without draining loses at most its buffered click events**,
   and nothing else. Webhook deliveries and outbox mail are claimed under a
   60-second lease, so a dead replica's claims come back on their own; scheduled

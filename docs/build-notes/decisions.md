@@ -277,11 +277,13 @@ file. Append a row when you append an entry.
 | [M55: D159 corrected — an upgraded instance is asked, not assumed](#2026-08-08--m55-d159-corrected--an-upgraded-instance-is-asked-not-assumed) | D164, owner-set. Why D149 bought knowing consent rather than a default, why that makes *unanswered* a third state the column has to hold, and the bound this inherits from the option it resembles |
 | [M56: nine references that moved, and one job on the wrong side of a distinction](#2026-08-08--m56-nine-references-that-moved-and-one-job-on-the-wrong-side-of-a-distinction) | An amendment, not a decision. The heaviest drift in the phase, including sixty lines in `deployment.md` — and a bullet that counted three per-replica jobs when the third runs under `withLeadership`, which is the distinction the bullet exists to document |
 | [M56: a milestone file that had not heard about D104](#2026-08-08--m56-a-milestone-file-that-had-not-heard-about-d104) | An amendment, not a decision. A milestone file instructed a README edit that D104 forbids, and D104 predates it — so the conflict the worker reported had no live choice in it. Why the substance never conflicted, and what would have made it a prompt |
+| [M57: the proof got a job bigger while the phase was running](#2026-08-08--m57-the-proof-got-a-job-bigger-while-the-phase-was-running) | An amendment, not a decision: seven job families became eight when M55 landed hours earlier, and the count is the size of M57's obligation rather than decoration. The new family is the only one that opens a socket outwards |
 | [M53: five choices a second factor forced](#2026-08-08--m53-five-choices-a-second-factor-forced) | D150: `MFA_SECRET_KEY` is its own variable and is **optional**, so an instance without one offers no second factor and an instance that loses one falls back to recovery codes. D151: the second factor lives in `internal/auth` behind two seams rather than in a package of its own, and why the reason `internal/account` gives does not apply. D152: the enrolment offer travels in the form because the milestone forbids the alternative. D153: `RecordSuccessfulLogin` is guarded rather than moved, which is the only way both of the login flow's bullets hold at once. D154: four audit actions and one notification kind, because the two surfaces answer different questions |
 | [M54: a key belongs to an account, and the four decisions that had to be re-derived to say so](#2026-08-08--m54-a-key-belongs-to-an-account-and-the-four-decisions-that-had-to-be-re-derived-to-say-so) | D155: reach is a second column rather than a widening of the first, and account-wide is what an unpinned key created from 0.3.0 on *is* — the widening-by-default is deliberate and pinning is the irreversible half. D156: an account-wide key requires an **organization-wide** membership wherever it lands, which is M44's existing bar carried across the tenancy boundary. D157: the organization is resolved one tier above the workspace, by its own query, so M44's parameter survives with a value rather than being deleted. D158: an administrator narrows somebody else's account-wide key instead of destroying it, in a table of subtractions and under an audit action of its own. And the four re-derivations — F103's bound, M44's parameter, D43's cap, D87's rotation rule — each with the limb it matched |
 | [M55: an update checker, and the five choices a daily GET turned out to need](#2026-08-08--m55-an-update-checker-and-the-five-choices-a-daily-get-turned-out-to-need) | D159: an instance **upgrading** into 0.3.0 gets the default — on — because it has no first run left to be asked at, which is the one case D149's prompt cannot reach. D160: two switches, ANDed, and the environment variable only ever says *no*. D161: a singleton `instance_settings` table and a control on the setup form, rather than a key/value store or the settings page nobody asked for. D162: the comparison reads the leading `vX.Y.Z` and drops everything after it, because `git describe` means *past this tag* and semver would read it as *before* it. D163: the re-notify guard is keyed on the version and lives in the notification itself, not on a clock and not in a column |
 | [M55: where an upgraded instance is asked, and what the third state costs](#2026-08-09--m55-where-an-upgraded-instance-is-asked-and-what-the-third-state-costs) | D165: the question D164 owes an upgraded instance is put on the dashboard, to a holder of `instance.admin`, once — not in an interstitial, not in the shell, and not on the settings page D161 declined to build. Why *omitted* on the API's setup field now means unanswered rather than yes, why the write is conditional rather than guarded by a read, and the audit row that is deliberately not written |
 | [M56: the failover contract, and the probe that was holding the door open](#2026-08-09--m56-the-failover-contract-and-the-probe-that-was-holding-the-door-open) | D166: the boot-time relay probe moves into a goroutine rather than after the listener, because *after* is not available at the cost it implies and nothing was ever reading its result — F173's ten seconds of dead server bought the order of two log lines. D167: the readiness contract is two status codes rather than three words, because the failure it prevents is an operator wiring `degraded` to *remove* and taking the whole deployment out during a Redis outage. And the two things the Risks section asked to be recorded either way: the kill-a-leader test stayed an assertion rather than becoming M57's measurement, and the per-replica job count is now a test rather than a sentence |
+| [M57: a rolling deploy that cost nothing, and the window that turned out to be closed](#2026-08-09--m57-a-rolling-deploy-that-cost-nothing-and-the-window-that-turned-out-to-be-closed) | D168: the deploy-shaped two-leader window is **closed** — generation 1 shipped whole in 0.2.0 and several replicas became supported in 0.3.0, so no supported upgrade puts a generation-0 binary in a deploy, and a test freezes the released key assignments so a renumber cannot re-open it one family at a time. What is left is the crash-shaped window, which has no bound and keeps its second-layer defences; seven families are safe under two leaders and domain verification is not (F180). D169: the single-instance guarantee is a behavioural run of the release image on a Postgres-only network rather than a list of required dependencies, and it rides `ci-image-smoke` rather than a workflow step. D170: the rolling deploy is measured through a balancer that satisfies M56's own inequality, in two columns — SIGTERM and SIGKILL — because one column is a number with nothing to compare it to, and the difference between them is the drain delay priced. D171: the server histogram is summed per replica rather than deltaed, because a rolling deploy destroys the counters a delta needs, and the size of the resulting undercount is itself the drain |
 
 ---
 
@@ -23628,3 +23630,225 @@ sentence. It was found because a worker read both documents and would not choose
 between them. That is the split working, and it is cheaper than the alternative,
 which is a README edit landing mid-phase and nobody noticing for a phase.
 
+
+## 2026-08-08 — M57: the proof got a job bigger while the phase was running
+
+**An amendment, not a decision**, at [step 1](phase-loop.md#1-validate).
+
+**As it stood**, twice in [m57.md](phase-details/m57.md) — in *The two-leader
+window* and again in *Risks*:
+
+> …what each of the seven families actually does when it opens.
+
+> Establishing that all seven job families are safe under two leaders is a proof
+> about seven different pieces of code, and the honest answer may be *six are
+> and one is not*.
+
+**As amended:** **eight**, at both, and *seven are and one is not*.
+
+**The tree fact.** `families()` returns eight entries, and
+`cmd/linkctrl/jobs_test.go` asserts the number — it moved from 7 to 8 earlier
+the same day when [M55](phase-details/m55.md) added `update-check`, with its own
+advisory key `0x6c63_6a6f_6273_0108`. The two-leader comment moved with it, from
+`jobs.go:117-127` to `:145-155`.
+
+**Why this one is worth an entry rather than a silent fix.** The number is not
+decoration in this file: M57's obligation is *a proof about N different pieces
+of code*, so N is the size of the work. The new family is also the only one in
+the product that opens a socket outwards, which makes it the least obviously
+safe under two leaders — and it is bounded by a database row rather than by a
+ticker precisely so a second leader cannot double the request. That is a claim
+M57 now has to check rather than inherit, and it would not have been on the list
+at seven.
+
+A count written at planning time and read at build time is a prediction about
+what the phase will add to the thing being counted. This phase added to it.
+
+
+
+## 2026-08-09 — M57: a rolling deploy that cost nothing, and the window that turned out to be closed
+
+Four decisions, and the first is the one the milestone existed to force: *close
+the two-leader window, or measure it, and record which.* It is closed, and the
+argument is not the one that was expected.
+
+This closes the third clause of the
+[2026-08-06 negative](#2026-08-06--two-queue-rows-closed-as-already-built-and-where-the-behaviour-lives) —
+*"no measurement of behaviour during a rolling deploy beyond the two-leaders
+window D107 states"* — and the owner's constraint of the same date, that high
+availability must not come at the cost of single-instance installs. The first
+two clauses were M56's.
+
+### D168 — the deploy-shaped two-leader window is closed by construction, and the crash-shaped one is not closable
+
+`jobs.go` has said since D107 that during a rolling deploy each job family can
+have two leaders, one old and one new, for the length of the deploy — because
+the generation-0 binary holds `advisoryLockKeyRetiredV1` for everything and
+none of the per-family keys contend with it. m57.md's instruction was to close
+that or bound it, and *"what is not acceptable is carrying the sentence forward
+unchanged for a third phase"*.
+
+**It is closed, and the mechanism was already in the tree.** Generation 1 —
+seven per-family keys — shipped whole in **0.2.0**; the count checks out against
+`git show v0.2.0:cmd/linkctrl/jobs.go`. Running more than one replica became a
+supported configuration in **0.3.0**, which is what M56 wrote and what
+`docs/deployment.md` now says. So the only binary that takes the retired key is
+0.1.x, and there is no upgrade path a deployment is allowed to perform that puts
+a 0.1.x replica beside a 0.3.0 one in a rolling deploy — because running several
+0.1.x replicas was never a thing anybody was told they could do. Both binaries
+in any supported deploy ask for the same keys, and `pg_try_advisory_lock` is
+mutually exclusive. That is the whole of it.
+
+**Which means the way to re-open it is a rename or a renumber, and nothing
+else.** A family that has shipped and is then given a different key gives the
+two binaries one lock each, neither excluding the other — generation 0's failure
+reproduced one family at a time, with no generation bump to make it visible. So
+the released assignments are frozen in
+`TestAReleasedFamilyKeepsItsAdvisoryKey`, read out of the 0.2.0 tree rather than
+copied from the constant block, which would agree with itself. Adding a family
+is free and stays free: `update-check` (0x0108, M55) arrived mid-phase and could
+not have contended with anything, because no older binary asks for it.
+
+**What is left is not deploy-shaped and cannot be closed the same way.**
+`withLeadership` holds the lock on a connection of its own while `fn` works on
+another, so a leader whose *lock* connection dies — a terminated backend, a
+dropped network, a pause long enough to break keepalives — releases the lock
+while its pass keeps running. Nothing detects that, which is the same absence
+that makes failover need no coordinator, so it is a window with no bound on it.
+The defences stay second-layer and stay necessary: `FOR UPDATE SKIP LOCKED` on
+both drains, idempotent whole-day rollups, `IF NOT EXISTS` partitions, the
+compare-and-set automation watermark, and `ClaimUpdateCheck`'s single matching
+`UPDATE`.
+
+**All eight, one at a time, because m57.md asks what each family actually does
+when the window opens and eight is the size of the obligation:**
+
+| Family | Under two leaders | What holds it |
+| --- | --- | --- |
+| `rollup` | Both recompute the same whole days and upsert the same values. No difference. | Idempotent by design — an incremental "add what arrived since the watermark" design was declined precisely because it double-counts on retry |
+| `dimension-rollup` | The same, on the same statement shape | The same |
+| `mail` | Each claims a disjoint set of rows; nobody's message is sent twice | `ClaimDueMail`'s `FOR UPDATE SKIP LOCKED` under a 60s lease, asserted by `TestAKilledReplicaSMailClaimReturnsAndIsSentOnce` |
+| `webhooks` | The same, and the residual duplicate is the one the contract already admits to | `ClaimDueWebhookDeliveries`, same shape, same test beside it; `X-LinkCtrl-Delivery` is where the receiver closes the rest |
+| `maintenance` | Partition creation is `IF NOT EXISTS`; the purges and the retention drop are deletes whose second run finds nothing; the audit-size gauge is a measurement and already runs on every replica on purpose | Each statement, not the lock. **One read-then-write guard here** — `WarnAuditGrowth` reads `NotifiedSince` and then inserts — and it was probed and did not reproduce; see F180's evidence |
+| `domains` | **Records one verification twice.** The audit record is written on `full.VerifiedAt == nil`, read a DNS round trip before the write it is predicating | Nothing. `MarkDomainVerified` is idempotent and `UnverifyDomain` is properly compare-and-set, but the *record* is decided from the stale read |
+| `automation` | The second replica loses rather than duplicates | The compare-and-set watermark, which D77 chose knowing leadership was a window and not a fence |
+| `update-check` | One request a day, not two | `ClaimUpdateCheck` — only one `UPDATE` can match a row whose timestamp the first one moved |
+
+**So seven are and one is not, which is exactly what m57.md's Risks section
+predicted.** The domains pass is filed as [F180](deferred-findings.md#open)
+rather than fixed, because m57.md says in as many words that the unsafe one is a
+finding. It is also the family most exposed to the window it fails under, being
+the longest pass in the product — a batch of DNS lookups bounded at ten minutes,
+against a rollup measured in seconds.
+
+The pattern worth carrying out of the table is not the count. **Every family
+that survives two leaders does so because a single statement decides the
+outcome; the one that does not is the one where a Go `if` decides it.** That is
+the thing to check when a ninth family arrives.
+
+**D107 is not wrong and is not being corrected.** Every sentence it wrote about
+generation 0 is still true of generation 0. What this adds is the bound it could
+not have: that generation 0 cannot be in the room.
+
+### D169 — the single-instance guarantee is a behavioural check against the release image, not a list of required dependencies
+
+The owner's constraint of 2026-08-06 is that high availability must not cost
+single-instance installs, and m57.md asks for it as a test rather than an
+intention. Two shapes were available.
+
+A **structural** one: enumerate the required dependencies somewhere and assert
+the list has not grown. Cheap, runs in milliseconds, and worthless — it is a
+list somebody updates, and the failure worth catching is not a configuration
+change but some code path that starts assuming a client is non-nil.
+
+A **behavioural** one, which is what was built. `scripts/single-instance-check.sh`
+starts the release image on a Docker network carrying **only Postgres** — the
+name `redis` does not resolve, and the script asserts that before it asserts
+anything else — and then drives the whole surface over HTTP: `/healthz` and
+`/readyz`, claiming the instance, minting a key with the image's own `lctl`,
+creating a link, redirecting twice, editing it and confirming the redirect moved,
+the login form and a session and the dashboard, the scheduler having reported a
+success, and eleven wrong passwords drawing a 429. Then a second limb with Redis
+**configured and unreachable**, which is a different branch — a client is built
+and every call through it fails — asserting `degraded`, 200, and a working
+redirect.
+
+It costs about ninety seconds and two container images. That is the price of the
+guarantee being a fact rather than a promise, and both sabotages confirmed it
+bites: making a nil Redis fatal in `Health.check` failed it at the readiness
+assertion, and moving `mem.delete` below the `redis == nil` return in
+`InvalidateAlias` failed it at the invalidation one, with the message naming the
+new required dependency in both cases.
+
+**It rides `make ci-image-smoke` rather than becoming a workflow step.** That is
+the one CI job holding a Docker daemon and no service containers, which is
+exactly what a one-container run needs; and the standing rule is that what a CI
+step *does* lives in a make target and reaches CI on the next push, while what CI
+*is* needs the owner to apply a proposal. The target's help text changed with it,
+because a target that now does two things and describes one is the drift this
+repository keeps finding.
+
+### D170 — the rolling deploy is measured through a load balancer that satisfies the contract, in two columns
+
+Measuring a rolling deploy without a load balancer measures **DNS caching**. The
+generator would resolve the service name once, keep dialling a replica that no
+longer exists, and produce a failure count that says nothing about this product.
+M56's contract is *stated* in load-balancer terms — 503 removes, 200 keeps,
+`degraded` is a 200, and the drain delay must outlast interval × threshold — so
+the honest instrument is a balancer that obeys it. `test/ha/haproxy.cfg` is that
+contract in one vendor's syntax, and it is in the repository rather than in
+`slo.md` because it is the measurement's most load-bearing input: change `inter`
+or `fall` and the deploy column means something else.
+
+It also supplies a number m57.md asks for and nothing else could. **Requests
+retried** is only a quantity if something retries; HAProxy's `wretr`/`wredis`
+counters are that number, read from the balancer rather than inferred from the
+generator's view.
+
+**Two columns, because one would be a number with nothing to compare it to.**
+The graceful column — SIGTERM, drain, replace — read **zero failed and zero
+retried** across 240,002 requests while every replica was destroyed and rebuilt.
+On its own that reads as *rolling deploys are fine*, which is not the finding.
+The killed column is the same replacement with the drain removed: 905 retried,
+four response errors, a worst case of a full second, and a generator that went
+from three concurrent connections to 212 to hold the rate. **The difference
+between the columns is the drain delay**, and it is the first time that number
+has been priced rather than argued.
+
+One thing the pair establishes that is worth saying against this product's own
+interest: **nothing failed in the killed column either, and the credit belongs
+to the balancer.** `retries 3` with `option redispatch` turned all 905 into
+latency. A balancer configured without them answers 503 to every one of them, and
+`operations.md` now says so.
+
+### D171 — the server-side histogram is summed per replica, because a rolling deploy destroys the counters a delta would need
+
+Every other section of `slo.md` reads the server histogram as a
+before-and-after delta, which works because one process holds it for the whole
+window. A rolling deploy replaces all three processes: two thirds of the
+counters are destroyed mid-run and the survivors are new ones starting at zero.
+
+So each replica is scraped when the window opens **and again immediately before
+it is replaced**, and its replacement is scraped at the end from a counter that
+began at zero; the three contributions are summed. That is why
+`scripts/rolling-deploy.sh` snapshots a replica before stopping it rather than
+only at the two ends, and it is the only structural difference from
+`scripts/load-test.sh`, whose bucket reader it otherwise shares deliberately —
+two readers of one histogram is two things that can disagree about what the SLO
+is.
+
+**The sum undercounts and the size of the undercount is itself a reading.**
+236,575 against the generator's 240,002 in the graceful column; 239,470 against
+239,833 in the killed one. The gap is what a replica served between its final
+scrape and actually stopping — so the graceful gap is nearly ten times the
+killed one, and *that difference is the drain, measured by accident*. The
+direction is always the same, which is what makes the figure safe to quote: the
+server-side percentages are computed over requests that were certainly served
+inside the window.
+
+The advisory-lock poll is recorded on the same terms. It samples `pg_locks`
+every 100ms and found no key held by two sessions in 1,482 samples per run — but
+it cannot see a window shorter than its own interval, and most families hold
+their key for a single indexed query, which is why only the four with real work
+were ever observed holding one. It is corroboration for D168 and is written down
+as corroboration, not as the proof.

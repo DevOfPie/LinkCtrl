@@ -1069,6 +1069,130 @@ Twenty-eight cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%,
 100%, 100%, 99.405%, 100%, 99.826%, 100%, **100%**, **100%** and **100%** under
 20ms.
 
+### Measured during a rolling deploy, for M57 (2026-08-09)
+
+[M57](build-notes/phase-details/m57.md) does not change the redirect path. It
+measures what that path does while the processes serving it are **replaced one
+at a time underneath live traffic**, which is the one thing every figure above
+was taken with carefully held still.
+
+It is the second of the phase's three, after
+[M50](#re-measured-for-m50-2026-08-07)'s and before
+[M57.9](build-notes/phase-details/m57.9.md)'s re-measurement on the final build.
+
+Every earlier section is a single container serving 240,000 requests. This is
+**three replicas behind a load balancer**, with each replica destroyed and
+rebuilt during the measured window. The harness is `scripts/rolling-deploy.sh`,
+`test/ha/compose.yml` and `test/ha/haproxy.cfg`, and none of it ships: it exists
+so the contract in [operations.md](operations.md#the-load-balancer-contract) can
+be checked against a running thing rather than argued from the shape of the
+code.
+
+**Two columns, because the drain delay has to be worth something.** *Deploy* is
+`docker compose up -d --force-recreate`: SIGTERM, `/readyz` turns 503, the drain
+delay elapses, then the listener closes. *Kill* is SIGKILL — no drain, no
+readiness change, the listener simply stops existing, which is a crash, an OOM
+kill or a yanked cable. Running only the first would produce a number without
+saying what it bought.
+
+| | Target | **Rolling deploy** | **Rolling kill** |
+| --- | --- | --- | --- |
+| **Requests failed** | — | **0** of 240,002 | **0** of 239,833 |
+| **Requests retried** | — | **0** | **905** redispatched to another replica |
+| Cached p99, generator-side | — | **295.24µs** | **313.16µs** |
+| Cached, server-side | p99 < 20ms | **100% of 236,575 under 20ms**; 100% under 5ms; 99.987% under 0.5ms | **100% of 239,470 under 20ms**; 100% under 2.5ms; 99.983% under 0.5ms |
+| Mean / median | — | 154.63µs / 141.51µs | **2.72ms** / 141.82µs |
+| Max | — | 7.91ms | **1.00s** |
+| Sustained rate | 2,000 rps for 2m | 2,000.00 rps, zero dropped iterations | 1,998.6 rps, **168 dropped iterations** |
+| Checks (`is 302`, `has Location`) | 100% | 100.00%, 480,004 of 480,004 | 100.00%, 479,666 of 479,666 |
+| Cache mix | hits only | 221,575 memory · 15,000 redis · **0 database** | 224,470 memory · 15,000 redis · **0 database** |
+| Response errors at the balancer | — | 0 | 4 |
+| Concurrency the generator needed | — | max **3** VUs | max **212** VUs |
+| Each replica replaced in | — | 12s, 12s, 11s | 7s, 6s, 7s |
+| Whole replacement | — | **35s** | **20s** |
+
+**The deploy column is the headline and it is a zero.** Every one of three
+replicas was destroyed and rebuilt while 2,000 requests a second went through
+the balancer, and not one request failed, not one was retried, and the cached
+p99 was 295µs against a 20ms budget. The generator never needed more than three
+concurrent connections, which is the same thing said from the other side: no
+request ever waited.
+
+**The reason is the drain delay, and the kill column is what it costs to not
+have one.** The arithmetic
+[operations.md](operations.md#sizing-the-drain-delay) asks an operator to
+satisfy is `DRAIN_DELAY > interval × threshold`; here that is 5s against
+`inter 1s fall 2`, so the balancer has three seconds of margin to stop routing
+before the listener closes. Take the drain away and the same replacement costs
+**905 redispatched requests, four response errors, a worst case of a full
+second** — `timeout connect 1s`, a request dialling an address that no longer
+exists — and a generator that had to spin from 3 to 212 concurrent connections
+to hold the rate, dropping 168 iterations anyway.
+
+**Nothing failed even in the kill column, and the credit does not go to this
+product.** `retries 3` with `option redispatch` is what turned every one of
+those 905 into latency instead of an error. A balancer configured without them
+would have answered 503 to all of them. That is worth stating plainly because it
+is the difference between what the product guarantees and what the deployment
+around it does: the product's contribution is that `/readyz` tells the truth
+early enough to be acted on, and acting on it is the balancer's.
+
+**The cache mix is 15,000 redis hits in both columns, and that is not a
+coincidence.** It is exactly 3 × 5,000 hot aliases: each replacement replica
+started with an empty in-process tier and read each hot alias from the shared
+tier once. **Postgres was never reached** — zero database-tier observations in
+either run — which is the shared tier doing the job it exists for, in the one
+situation that produces a guaranteed cold cache on purpose.
+
+#### What the server-side column can and cannot be
+
+A rolling deploy destroys two thirds of the counters mid-run, so the
+before-and-after delta every section above takes is not available here. Each
+replica is instead scraped when the window opens and again immediately before it
+is replaced, and its replacement is scraped at the end from a counter that
+started at zero; the three contributions are summed.
+
+**That sum undercounts, always in the same direction, and by an amount worth
+reading.** 236,575 against the generator's 240,002 in the deploy column — 3,427
+requests — and 239,470 against 239,833 in the kill column, 363. The gap is the
+traffic a replica served between its final scrape and actually stopping, which
+is why the graceful column's gap is nearly ten times the killed one's: **that
+difference is the drain, measured by accident.**
+
+#### The two-leader window, sampled
+
+`pg_locks` was polled every **100ms** for the length of each run — 1,482 samples
+each — counting distinct sessions holding each advisory key. Four keys were seen
+held during the deploy run (rollup, dimension-rollup, webhooks, domains) and
+three during the kill run; **the most holders any sample found on any key was
+one, and no sample found two.**
+
+Read that as corroboration and not as the argument, for two reasons. Sampling at
+100ms cannot see a window shorter than the gap between samples, and most
+families hold their key for a single indexed query — which is why the four
+observed are the four with work long enough to be caught. What actually closes
+the deploy-shaped window is that from 0.2.0 on every binary asks for the same
+per-family keys, so `pg_try_advisory_lock` excludes the second leader; the
+decision log's M57 entry has the whole argument, and
+`TestAReleasedFamilyKeepsItsAdvisoryKey` is what keeps it true.
+
+Taken on image `sha256:465e33d27b653f8e1119692915766527f553ecbb28b1cdd85d57689f007370db`
+(`linkctrl:test`, built 2026-08-09 from the M57 working tree at
+`v0.2.0-41-gadcdf02-dirty`), rebuilt from the tree by the harness immediately
+before the runs, against a freshly seeded `make seed-slo` dataset of 100,000
+links and 5,023,001 click events. Every replica's in-process tier was warmed
+individually before the window opened — round-robin warm-up through the balancer
+would have left two thirds of each replica's hot set cold and measured that
+instead. HAProxy 3.1, `balance roundrobin`, `option httpchk GET /readyz`,
+`inter 1s fall 2 rise 1`. Same host as
+[M35](#re-measured-for-m35-2026-08-03) onward.
+
+Thirty cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%, 100%,
+100%, 100%, 100%, 100%, 99.743%, 100%, 100%, 99.505%, 100%, 100%, 100%, 100%,
+100%, 99.405%, 100%, 99.826%, 100%, 100%, 100%, 100%, **100%** and **100%**
+under 20ms — the last two being the rolling deploy and the rolling kill, which
+are the only two taken while the processes serving them were being replaced.
+
 ## Reproducing it
 
 ```sh
@@ -1189,6 +1313,47 @@ The script also prints the cache mix and the redirect pool's acquire waits. Read
 them before believing the latency: a cached measurement with database reads in it
 is not a cached measurement, and a starved pool is the difference between "the
 query was slow" and "the request never got a connection".
+
+### Reproducing the rolling-deploy measurement
+
+A different script, because it is a different question: not *how fast is a
+redirect* but *what does replacing every process serving them cost*.
+
+```sh
+make seed-slo                             # the same dataset every column uses
+scripts/rolling-deploy.sh deploy 2000 2m  # SIGTERM, drain, replace
+scripts/rolling-deploy.sh kill   2000 2m  # SIGKILL, no drain
+```
+
+It builds the image from the working tree itself rather than trusting the one
+that is running, brings up three replicas and a load balancer as an overlay on
+the instance's own Postgres and Redis, warms each replica's in-process tier
+separately, starts the generator, and only then begins replacing replicas. The
+overlay stops the single-replica `app` first: a fourth replica against the same
+database would hold job leadership for the whole run and is not what is being
+measured.
+
+Read three things out of the report before the latency.
+
+**The cache mix.** A column with database-tier observations in it is measuring
+cold resolution rather than a deploy — it would mean the shared tier did not
+absorb the replacement replicas' cold reads, which is a finding rather than a
+number to quote.
+
+**The load-balancer counters.** `wretr`/`wredis` are what "requests retried"
+means here, taken from the balancer rather than inferred from the generator;
+`hrsp_5xx` is what "requests failed" means. A run reporting zero of both while
+the generator reports failures is a run where the generator could not reach the
+balancer at all.
+
+**The advisory-lock poll**, whose sampling interval is printed with it. It can
+only see a window longer than one sample, so a clean result is corroboration
+rather than proof — see the [M57 section](#measured-during-a-rolling-deploy-for-m57-2026-08-09).
+
+The load balancer's own configuration is the measurement's most load-bearing
+input and is deliberately in the repository rather than in this document:
+`test/ha/haproxy.cfg` satisfies `DRAIN_DELAY > interval × threshold` on purpose,
+and changing either number changes what the deploy column means.
 
 ### Re-measured for M45's redirect-path batch (2026-08-05)
 

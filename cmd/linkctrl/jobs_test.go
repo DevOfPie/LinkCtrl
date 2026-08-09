@@ -157,6 +157,64 @@ func TestEachJobFamilyHasItsOwnAdvisoryLockKey(t *testing.T) {
 	}
 }
 
+// TestAReleasedFamilyKeepsItsAdvisoryKey is what closes the deploy-shaped
+// two-leader window, and it is the only thing that can (M57).
+//
+// Two binaries in a rolling deploy contend for leadership only if they ask for
+// the same key. Generation 0 asked for one key for everything, so a generation-0
+// binary beside a generation-1 one gives every family two leaders for the length
+// of the deploy — jobs.go says so, and it is why advisoryLockKeyRetiredV1 is
+// still declared. Generation 1 shipped whole in **0.2.0**, and running more than
+// one replica became a supported configuration in 0.3.0, so no deployment an
+// operator is allowed to perform can put a generation-0 binary in a rolling
+// deploy. The window is closed by that, and by nothing else.
+//
+// Which means the way to re-open it is to renumber a family that has already
+// shipped. The old binary keeps taking the old key, the new one takes the new
+// key, neither excludes the other, and the deploy has two leaders for that
+// family — the generation-0 failure, one family at a time and with no
+// generation bump to make it obvious. So the released assignments are frozen
+// here, by name, and a rename counts: `families()` is keyed by name in
+// ObserveJobSkipped and in every metric an operator alerts on.
+//
+// Adding a family is free and is meant to be. A key the old binary never took
+// cannot be contended for, which is why update-check (0x0108, M55) could arrive
+// mid-phase without touching this.
+func TestAReleasedFamilyKeepsItsAdvisoryKey(t *testing.T) {
+	// Read out of `git show v0.2.0:cmd/linkctrl/jobs.go` rather than copied from
+	// the block above, which would agree with itself by construction.
+	released := map[string]int64{
+		"rollup":           0x6c63_6a6f_6273_0101,
+		"dimension-rollup": 0x6c63_6a6f_6273_0102,
+		"mail":             0x6c63_6a6f_6273_0103,
+		"webhooks":         0x6c63_6a6f_6273_0104,
+		"maintenance":      0x6c63_6a6f_6273_0105,
+		"domains":          0x6c63_6a6f_6273_0106,
+		"automation":       0x6c63_6a6f_6273_0107,
+		// 0.3.0. Frozen from the moment it ships, which is what this line is for.
+		"update-check": 0x6c63_6a6f_6273_0108,
+	}
+
+	got := make(map[string]int64)
+	for _, f := range (&jobRunner{}).families() {
+		got[f.name] = f.key
+	}
+
+	for name, key := range released {
+		switch have, ok := got[name]; {
+		case !ok:
+			t.Errorf("family %q has shipped and is gone from families(); an older binary in a "+
+				"rolling deploy still runs it, and whatever replaced it does not exclude it. "+
+				"Retire the key the way generation 0 was retired rather than dropping the row",
+				name)
+		case have != key:
+			t.Errorf("family %q shipped on key %#x and now asks for %#x; the two binaries in a "+
+				"rolling deploy would each hold their own and each believe they lead",
+				name, key, have)
+		}
+	}
+}
+
 // TestOneFamilysLockDoesNotBlockAnothers is the defect's mechanism, run
 // directly: a session holding one family's key must not stop a different
 // family running, and must stop that same family exactly.
