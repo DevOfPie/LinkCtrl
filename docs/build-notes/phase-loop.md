@@ -27,6 +27,7 @@ it, and when to stop. A conflict between them is a bug: report it, do not pick.
 1 validate  ORCH    the next milestone, against the tree as it is now
 2 build     WORKER  that milestone, and nothing else
 3 land      WORKER  gates, then stop before the commit
+            REVIEW  an independent read of the tree, before anybody decides
             ORCH    accept or reject → commit → demo-update → push
 4 repeat    ORCH    from 1, unless a stop condition fired
 ```
@@ -43,12 +44,13 @@ Five rules outrank every step:
 
 ---
 
-## Two actors
+## Three actors
 
 | | Holds | Never |
 | --- | --- | --- |
 | **Orchestrator** | Steps 0, 1, 3.4–3.9, 4. Every prompt to the owner. Runs `X.9` reviews and M45 itself. | Builds. Edits no code, no tests, no SQL. |
 | **Worker** | Steps 2 and 3.1–3.3, for exactly one milestone. | Commits, pushes, runs `make demo-update`, answers a prompt, or starts a second milestone. |
+| **Reviewer** | [The independent read](#reviewer--between-33-and-acceptance) between 3.3 and acceptance, for exactly one milestone. | Edits anything at all. It reports; the orchestrator acts. |
 
 One worker per attempt, spawned fresh. A rejected milestone gets a **new**
 worker, never the same one continued — the split exists so the second attempt
@@ -232,6 +234,48 @@ Order is load-bearing. Do not reorder. The actor changes in the middle.
 Then stop and report. **The worker does not commit.** One that commits, pushes,
 or runs `make demo-update` has broken the split; the milestone is unaccepted and
 gets a new worker.
+
+### Reviewer — between 3.3 and acceptance
+
+One reviewer per milestone, spawned fresh by the orchestrator and run
+synchronously, because acceptance waits on it.
+
+It exists for one failure the two-actor split cannot see. Both existing actors
+are looking at *this* milestone — the worker builds its bullets, the
+orchestrator checks the tree against those same bullets — and the defects that
+keep costing this project a **reopening** are the other kind: a change that
+makes some already-shipped milestone's claim false, which nobody in the loop was
+looking at. Owner-set 2026-08-09, in exactly those terms.
+
+Pass it the milestone number, the branch, and this file. Nothing else — a
+reviewer handed the worker's report reviews the report.
+
+Two halves, and they do not cost the same:
+
+| Half | Ask |
+| --- | --- |
+| **This milestone** | Does the tree satisfy every bullet in `mN.md`, read against the code rather than against anybody's account of it |
+| **Every other** | Does anything in this diff make a **shipped** milestone's claim false — in its own file, in Plan.md, in `docs/SECURITY.md`, in README.md, or in a decisions.md entry |
+
+**The second half is why the step exists**, and most of the effort belongs
+there. It is answered by reading what the diff touches and asking which shipped
+promises rest on it — not by re-reading the phase.
+
+The reviewer **changes nothing**: no code, no tests, no records, not even a
+deferred row. It reports with `file:line` evidence, and a reviewer that found
+nothing says so in as many words rather than returning silence, because silence
+and *did not look* are the same string.
+
+A finding is **not** a rejection. The orchestrator weighs it at acceptance the
+way it weighs the worker's report, and dispositions it like anything else — in
+spec for this milestone, or a row in
+[deferred-findings.md](deferred-findings.md). A finding that falsifies a shipped
+milestone's claim is a [reopening](workflow.md), which is scheduling and
+therefore the owner's.
+
+This is not the `X.9` adversarial review. That one is scheduled, spans a whole
+phase, and is the orchestrator's own work. This one is per milestone, costs one
+agent, and reads one diff.
 
 **Orchestrator — accept, or reject:**
 

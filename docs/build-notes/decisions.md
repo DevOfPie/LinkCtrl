@@ -287,6 +287,7 @@ file. Append a row when you append an entry.
 | [M57.9: the pre-release review — what it checked, what it found, and what it refuted](#2026-08-09--m579-the-pre-release-review-what-it-checked-what-it-found-and-what-it-refuted) | The by-use record: an upgrade from a 0.2.0-built database, a second factor driven by an independent RFC 6238 implementation, an account deleted and its residue read back, the SLO on the final build, and the conformance test sabotaged into failing. F181–F184, four candidates refuted, and D172: the doc-cost growth is one amendment to one line and is defended rather than trimmed |
 | [M57.9's triage: four rows approved, and the one the owner widened](#2026-08-09--m579s-triage-four-rows-approved-and-the-one-the-owner-widened) | D173: F181 is scrubbed in the erasure pass rather than documented, F182 defaults **both** creation forms to the lowest role rather than the invitation form alone, F183's read half is closed rather than stated as a bound, and F184 is fixed **and** made visible to a test — the one answer that took more than was recommended, on the reasoning that a fix no test can see regresses the way this one arrived |
 | [M58's triage: sixteen rows, and the conflict that decided seven of them](#2026-08-09--m58s-triage-sixteen-rows-and-the-conflict-that-decided-seven-of-them) | D174: every remaining open row is dispositioned, and the count was **sixteen** rather than the twenty the row above and the run's note both claimed. D114 is held to have approved F160–F166 at planning, so seven stale *Reviewed* columns are corrected rather than the rows approved a second time; F167, F169, F170, F171, F177, F178 and F180 are approved as work; F171's design question is answered in the same breath — re-fit at H on upload, silently; F176 and F179's reorder need no decision at all, being documentation under the standing approval; and F179's test half is approved because it is F143 recurring |
+| [A third actor, for the claim nobody was checking](#2026-08-09--a-third-actor-for-the-claim-nobody-was-checking) | W38: an independent reviewer reads the tree between the worker's report and acceptance, on every milestone. Why the two-actor split cannot see the failure it is aimed at, why the reviewer is given the milestone file and not the worker's report, why it edits nothing at all, and why a reviewer that found nothing has to say so |
 
 ---
 
@@ -24138,3 +24139,74 @@ The scope gate permits it: *no more than one milestone per commit* forbids
 bundling two, and splitting one across several commits is explicitly fine. So M58
 being large is a question about how much one worker can hold, not about whether
 the tree can represent it.
+## 2026-08-09 — A third actor, for the claim nobody was checking
+
+Owner-set at [M58](phase-details/m58.md)'s acceptance, in these words: *add an
+additional independent sub-agent review to each work milestone before moving off
+of it to catch these mistakes that keep making us re-open closed milestones.*
+Not a milestone's decision — a change to the loop — so it carries no milestone
+number, and this line is what prompted it. [W38](workflow-changes.md#made).
+
+### What the two-actor split cannot see
+
+Both existing actors read the same document. The worker builds `mN.md`'s
+bullets; the orchestrator, at acceptance, checks the tree against those same
+bullets. The split is real and it works — a builder is the worst judge of its
+own work — but both judgements are bounded by *this milestone's* definition of
+done, and **nothing in the loop reads the diff against what the rest of the
+repository already promises**.
+
+That is the gap the reopenings come through. A reopening happens when a shipped
+milestone's claim turns out false, and by construction the loop never looked:
+the milestone that shipped it was accepted long ago against bullets that were
+satisfied at the time, and the milestone in flight is checked against bullets
+that say nothing about it.
+
+The evidence was in the room when the owner asked. M58's own worker filed
+[F187](deferred-findings.md) — a two-CTE erasure hazard that has been in the
+pass since M52 wrote it, that `TestErasureScrubsBothDisputeLabels` cannot see
+because it erases its accounts on separate passes, and that falsifies what M52
+says about itself. It was found by an agent building something else and noticing
+the same hazard twice. Nothing in the loop would have caught it, and the reason
+is structural rather than a lapse: no step was looking.
+
+### Why the reviewer gets the milestone file and not the report
+
+Same reason a worker does. A reviewer handed the worker's account of what it
+built reviews the account — it inherits the framing, the vocabulary and the
+blind spot in one read, and the finding it is most likely to miss is the one the
+report does not mention. It gets the milestone number, the branch, and
+phase-loop.md, and it reads the tree.
+
+### Why it edits nothing at all
+
+Not the code, not the records, not even a deferred row for what it finds. Two
+reasons, and the second is the load-bearing one.
+
+A reviewer that can act is a second builder, and the loop already has one
+builder too many for its own comfort. But more than that: **its findings have
+dispositions that are not its to make.** A finding in spec for this milestone is
+the worker's next attempt; a finding out of spec is a deferred row; a finding
+that falsifies a *shipped* milestone's claim is a **reopening**, and reopening is
+scheduling, which is the owner's. A reviewer writing rows would be pre-empting
+all three from the position with the least context.
+
+### Why silence had to be forbidden
+
+A reviewer that found nothing must say so in as many words. An empty report and
+a reviewer that did not look produce the same string, and the whole value of the
+step is that somebody looked — so the one thing it must never return is nothing.
+
+### What it costs, stated
+
+One agent per milestone, run synchronously, because acceptance waits on it. On a
+seventeen-milestone phase that is seventeen more agents and a longer wall clock
+on every iteration. The cost is accepted rather than argued away: this phase has
+reopened milestones repeatedly, each reopening costs more than a review does,
+and the reopenings arrive later — after a `done` row has been asserting
+something untrue for a while.
+
+**What it does not fix.** A reviewer reads one diff. A claim falsified by the
+*accumulation* of several milestones is still nobody's job, and the `X.9`
+adversarial reviews remain the only thing looking at that. This step narrows the
+gap; it does not close it.
