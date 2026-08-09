@@ -285,6 +285,7 @@ file. Append a row when you append an entry.
 | [M56: the failover contract, and the probe that was holding the door open](#2026-08-09--m56-the-failover-contract-and-the-probe-that-was-holding-the-door-open) | D166: the boot-time relay probe moves into a goroutine rather than after the listener, because *after* is not available at the cost it implies and nothing was ever reading its result — F173's ten seconds of dead server bought the order of two log lines. D167: the readiness contract is two status codes rather than three words, because the failure it prevents is an operator wiring `degraded` to *remove* and taking the whole deployment out during a Redis outage. And the two things the Risks section asked to be recorded either way: the kill-a-leader test stayed an assertion rather than becoming M57's measurement, and the per-replica job count is now a test rather than a sentence |
 | [M57: a rolling deploy that cost nothing, and the window that turned out to be closed](#2026-08-09--m57-a-rolling-deploy-that-cost-nothing-and-the-window-that-turned-out-to-be-closed) | D168: the deploy-shaped two-leader window is **closed** — generation 1 shipped whole in 0.2.0 and several replicas became supported in 0.3.0, so no supported upgrade puts a generation-0 binary in a deploy, and a test freezes the released key assignments so a renumber cannot re-open it one family at a time. What is left is the crash-shaped window, which has no bound and keeps its second-layer defences; seven families are safe under two leaders and domain verification is not (F180). D169: the single-instance guarantee is a behavioural run of the release image on a Postgres-only network rather than a list of required dependencies, and it rides `ci-image-smoke` rather than a workflow step. D170: the rolling deploy is measured through a balancer that satisfies M56's own inequality, in two columns — SIGTERM and SIGKILL — because one column is a number with nothing to compare it to, and the difference between them is the drain delay priced. D171: the server histogram is summed per replica rather than deltaed, because a rolling deploy destroys the counters a delta needs, and the size of the resulting undercount is itself the drain |
 | [M57.9: the pre-release review — what it checked, what it found, and what it refuted](#2026-08-09--m579-the-pre-release-review-what-it-checked-what-it-found-and-what-it-refuted) | The by-use record: an upgrade from a 0.2.0-built database, a second factor driven by an independent RFC 6238 implementation, an account deleted and its residue read back, the SLO on the final build, and the conformance test sabotaged into failing. F181–F184, four candidates refuted, and D172: the doc-cost growth is one amendment to one line and is defended rather than trimmed |
+| [M57.9's triage: four rows approved, and the one the owner widened](#2026-08-09--m579s-triage-four-rows-approved-and-the-one-the-owner-widened) | D173: F181 is scrubbed in the erasure pass rather than documented, F182 defaults **both** creation forms to the lowest role rather than the invitation form alone, F183's read half is closed rather than stated as a bound, and F184 is fixed **and** made visible to a test — the one answer that took more than was recommended, on the reasoning that a fix no test can see regresses the way this one arrived |
 
 ---
 
@@ -23970,3 +23971,45 @@ already holds in full. If M58 or a later phase amends it again, the M51.9 move
 is the right one: leave the rule and the pointers, and let the history live where
 history lives. Said here so the next reader inherits the threshold rather than
 re-deriving it.
+
+## 2026-08-09 — M57.9's triage: four rows approved, and the one the owner widened
+
+[M57.9](phase-details/m57.9.md)'s findings put to the owner on the day they were
+filed, per [phase-loop.md](phase-loop.md#two-milestones-that-do-not-end-like-the-others) —
+*their product is findings, and findings are the owner's to schedule*. Recorded
+here rather than left in the conversation because a decision made in prose
+evaporates, and because one of the four answers is not the option that was
+recommended.
+
+### D173 — all four are work, and they are M58's
+
+**[F181]** — the erased address on `/invites` is **scrubbed in the erasure
+pass**, over documenting it as a second residue beside [F177](deferred-findings.md).
+The cost was stated when the choice was offered and is not discovered later: the
+scrub edits an organization's record of whom *they* invited, which is the exact
+objection that keeps F177 a design question, and it has to read the address
+before the same pass clears it, so the statements inside one pass acquire an
+order. What the organization keeps is the row, the role, the state and who
+invited; what goes is the address of somebody who asked to be forgotten.
+
+**[F182]** — both creation forms **default to the lowest role**, over requiring a
+deliberate choice. The narrower fix — the invitation form alone — was declined,
+so the members grant form moves with it and the three role controls on those two
+pages finally agree.
+
+**[F183]** — the read half of a reach revocation is **closed**, over being stated
+as a bound. It costs a clause on `internal/auth/workspace.go:131` and, unless it
+rides the resolution that already happened, a query per listing.
+
+**[F184]** — the SVG is constrained **and the test is made able to see it**. This
+is the answer that widened: the recommendation was the one-attribute fix, with
+extending the scan named as a separate and larger decision about false positives.
+The owner took both. That is the right call on this row's own evidence — M46's
+amendment predicted a fixed-width SVG would be what the scan missed, and a fix no
+test can see is a fix that regresses the same silent way — and it means M58 owes
+a measurement of rendered width rather than a check of two tag names.
+
+**None of the four was in spec**, so none was fixed inside the review; approving
+them is what makes them work, and M58 is where the work happens. The other twenty
+open rows are untouched by this and still owe the owner the same review, one at a
+time, which is M58's first act rather than this entry's.
