@@ -286,6 +286,7 @@ file. Append a row when you append an entry.
 | [M57: a rolling deploy that cost nothing, and the window that turned out to be closed](#2026-08-09--m57-a-rolling-deploy-that-cost-nothing-and-the-window-that-turned-out-to-be-closed) | D168: the deploy-shaped two-leader window is **closed** — generation 1 shipped whole in 0.2.0 and several replicas became supported in 0.3.0, so no supported upgrade puts a generation-0 binary in a deploy, and a test freezes the released key assignments so a renumber cannot re-open it one family at a time. What is left is the crash-shaped window, which has no bound and keeps its second-layer defences; seven families are safe under two leaders and domain verification is not (F180). D169: the single-instance guarantee is a behavioural run of the release image on a Postgres-only network rather than a list of required dependencies, and it rides `ci-image-smoke` rather than a workflow step. D170: the rolling deploy is measured through a balancer that satisfies M56's own inequality, in two columns — SIGTERM and SIGKILL — because one column is a number with nothing to compare it to, and the difference between them is the drain delay priced. D171: the server histogram is summed per replica rather than deltaed, because a rolling deploy destroys the counters a delta needs, and the size of the resulting undercount is itself the drain |
 | [M57.9: the pre-release review — what it checked, what it found, and what it refuted](#2026-08-09--m579-the-pre-release-review-what-it-checked-what-it-found-and-what-it-refuted) | The by-use record: an upgrade from a 0.2.0-built database, a second factor driven by an independent RFC 6238 implementation, an account deleted and its residue read back, the SLO on the final build, and the conformance test sabotaged into failing. F181–F184, four candidates refuted, and D172: the doc-cost growth is one amendment to one line and is defended rather than trimmed |
 | [M57.9's triage: four rows approved, and the one the owner widened](#2026-08-09--m579s-triage-four-rows-approved-and-the-one-the-owner-widened) | D173: F181 is scrubbed in the erasure pass rather than documented, F182 defaults **both** creation forms to the lowest role rather than the invitation form alone, F183's read half is closed rather than stated as a bound, and F184 is fixed **and** made visible to a test — the one answer that took more than was recommended, on the reasoning that a fix no test can see regresses the way this one arrived |
+| [M58's triage: sixteen rows, and the conflict that decided seven of them](#2026-08-09--m58s-triage-sixteen-rows-and-the-conflict-that-decided-seven-of-them) | D174: every remaining open row is dispositioned, and the count was **sixteen** rather than the twenty the row above and the run's note both claimed. D114 is held to have approved F160–F166 at planning, so seven stale *Reviewed* columns are corrected rather than the rows approved a second time; F167, F169, F170, F171, F177, F178 and F180 are approved as work; F171's design question is answered in the same breath — re-fit at H on upload, silently; F176 and F179's reorder need no decision at all, being documentation under the standing approval; and F179's test half is approved because it is F143 recurring |
 
 ---
 
@@ -24013,3 +24014,127 @@ a measurement of rendered width rather than a check of two tag names.
 them is what makes them work, and M58 is where the work happens. The other twenty
 open rows are untouched by this and still owe the owner the same review, one at a
 time, which is M58's first act rather than this entry's.
+## 2026-08-09 — M58's triage: sixteen rows, and the conflict that decided seven of them
+
+[M58](phase-details/m58.md)'s first bullet is that every row in
+[deferred-findings.md](deferred-findings.md) has been owner-reviewed. The phase
+loop stopped on it twice — at the end of the [M57.9](phase-details/m57.9.md) run
+and again on the next `/work phase`, because M58 is the only un-`done` row and
+[step 1](phase-loop.md#1-validate)'s fallback has nowhere to fall. This entry is
+what unblocks it, and it is written before any of the work it approves, for the
+reason the entry above it was.
+
+### The count was twenty, and it is sixteen
+
+The entry above ends *"the other twenty open rows"*, and the run's note said
+twenty too. It is **sixteen**, counted mechanically rather than recalled: 22
+rows in the *Open* table, minus [F90](deferred-findings.md) — reviewed and
+deliberately carried at M45's third triage — minus the five already approved
+into M58, being F175 from M51.9's triage and F181–F184 from D173. Nothing moved
+to produce the difference. The number was simply wrong, in two files, and
+survived a review whose whole subject was that file. Counting a tracker rather
+than quoting it is the correction, and it is the same lesson F69 and the
+demoCoverage row count taught.
+
+### The conflict, and why seven rows were not approved a second time
+
+Three places in this repository schedule F160–F166 as M58's work:
+[phase-3-candidates.md](phase-3-candidates.md) at its Phase 3 section,
+[phase-details/README.md](phase-details/README.md)'s Phase 3 preamble, and
+**D114** itself — *"a defect does not need a milestone: it is a row in
+deferred-findings.md and it is fixed at M58 alongside the rest. Seven were
+filed, F160–F166."* All seven rows nevertheless read `Unreviewed`, against
+[workflow.md](workflow.md)'s *approval is per item, not per batch — an
+unreviewed row is not scheduled work*.
+
+That is two records disagreeing, which the loop reports rather than resolves.
+Put to the owner as its own question, ahead of the dispositions, because it
+decides seven of the sixteen on its own.
+
+**The owner held that D114 stands.** The seven were approved at planning on
+2026-08-07; the *Reviewed* columns are stale rather than open, and they are
+corrected to say so rather than being stamped with today's date. The date on an
+approval is evidence about when somebody looked, so back-filling it with the day
+the omission was noticed would destroy the only fact the column carries.
+
+What the conflict cost is worth naming, since it will recur: a batch decision
+recorded in decisions.md and in two planning files did not reach the tracker the
+rule is enforced from, and nothing noticed for two days. The rule is not wrong —
+per-item approval is what keeps *I noticed something* from becoming scope — but
+it is enforced by a column that a batch approval has no path to write.
+
+### D174 — the dispositions
+
+**Fourteen of the sixteen are work, and they are M58's.**
+
+**F160–F166**, the seven from the Phase 3 walkthrough: approved as of D114, per
+above. Four of them are the demo failing to demonstrate — the choropleth and
+country list suppressed on a GeoIP *configuration* check the demo does not
+satisfy (F160), the demo's only verified hostname unverifying 24 hours after
+every reseed (F162), five zero-click links on the dashboard's front page (F165),
+and one link reporting two different click totals (F166). Three are the product:
+a *Check DNS* that flashes *not verified* above a *Verified* badge (F161), a role
+grant that reports success and changes nothing (F163), and every bar chart in
+the product labelling its axis ceiling as the peak (F164).
+
+**F167, F169, F170, F177, F178, F180**: all six approved, over a recommendation
+that carried F178. Two of them are siblings of rows D173 already approved, and
+that is why they were put as a group rather than one at a time:
+
+- **F177** is F181 with the address in an audit record's `metadata` instead of
+  on `/invites`. D173 opens the erasure pass for F181; doing F177 anywhere else
+  would open it twice. The design objection that kept F177 unscheduled — that
+  removing the address edits somebody *else's* audit entry — is unchanged and is
+  now accepted rather than answered.
+- **F178** is F183's other half. D173 closes the read a reach revocation missed;
+  F178 is that same revocation being invisible on the key list. **The owner took
+  it against the recommendation**, so M54's story closes on the seeing side as
+  well as the acting side. The cost is what the row already priced: a query, a
+  response field, an OpenAPI change and two surfaces, inside the phase's largest
+  milestone.
+
+**F171** is approved **and its design question answered in the same breath**,
+which is why it was asked separately: the row says in as many words that the fix
+is a decision rather than a patch. Uploading a logo forces error correction to
+level H, the symbol grows, and a code already near the 2000px raster bound stops
+downloading as a PNG. The owner chose **re-fit the size at H on upload,
+silently** — the payload is unchanged, so a code already printed still scans,
+and refusing the upload would say no to a picture the SVG draws correctly. **The
+recommendation was to re-fit *and say so*, and the owner took less**: no message.
+Recorded because the loop proposed the larger behaviour and did not get it, which
+is the shape of answer most likely to be re-derived differently later. What it
+means for M58 is one behaviour and no copy.
+
+**F176 and F179's reorder are not decisions at all.** Both are corrections to a
+record — Plan.md's Phase 3 decisions table is short by twelve D-numbers
+(D146, D147, D150–D154, D166, D167, D169–D171, counted 2026-08-09 against the
+file rather than against the row's own headline of two), and decisions.md's index
+is out of file order at five rows. workflow.md's standing approval covers a
+documentation change in advance, so M58's documentation pass makes both and no
+prompt was owed. Saying so is the point: two of the sixteen never needed the
+owner at all, and treating them as though they did would have been the loop
+spending attention it had been told not to spend.
+
+**F179's second half is a decision, and it is approved.** The index has now
+drifted out of order twice — F143 was closed by fixing it, and nothing was added
+that would notice a third — and `make check-links` is structurally unable to see
+it, because every one of those anchors resolves and resolving is all it checks.
+A ten-line test comparing index anchor order to heading order is approved as
+work. It needs sabotage-verifying like any other test, and this entry's own index
+row is the first thing it will be run against.
+
+### What M58 now carries, and the honest reading of it
+
+Nineteen fixes — the five D173 and M51.9 approved, plus the fourteen here — on
+top of the comment-truth sweep, the candidates-file update, the full
+documentation pass over every documentation file, the doc-cost judgement and the
+0.3.0 release. [m58.md](phase-details/m58.md)'s own *Risks* section says the
+phase's budget is the risk and that a milestone turning out to be two is a
+phase-boundary conversation rather than an insertion. That prediction now has a
+number against it, and it was stated to the owner as the cost of the option they
+took rather than discovered during the build.
+
+The scope gate permits it: *no more than one milestone per commit* forbids
+bundling two, and splitting one across several commits is explicitly fine. So M58
+being large is a question about how much one worker can hold, not about whether
+the tree can represent it.
