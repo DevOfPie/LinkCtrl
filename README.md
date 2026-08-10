@@ -345,12 +345,7 @@ Known limitations and deferred work, so nobody discovers them in production:
   legitimate interest, with the actor's name replaced by a constant tombstone.
   The surviving `user_id` is pseudonymous rather than absent, which is why
   [SECURITY.md](docs/SECURITY.md) says the residue identifies nobody *from
-  inside this instance* rather than that it is anonymous. **One field is a known
-  exception at 0.3.0** and it is stated here rather than after it is fixed: a
-  destination dispute that was both *filed* and *decided* by accounts the same
-  pass erases keeps one of its two address labels, and which one is not defined.
-  The ordinary case — one erased account, a dispute somebody else decided — is
-  unaffected; [SECURITY.md](docs/SECURITY.md) has the mechanism and the repair.
+  inside this instance* rather than that it is anonymous.
   `status = 'suspended'` still has no writer: there is no moderation feature,
   deliberately.
 - **Account recovery needs a mailer, and there is no recovery for the instance

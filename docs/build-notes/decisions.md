@@ -299,6 +299,7 @@ file. Append a row when you append an entry.
 | [M58: the fifth pass, a scope, a scan, and two counts that missed a member](#2026-08-10--m58-the-fifth-pass-a-scope-a-scan-and-two-counts-that-missed-a-member) | Four findings, bounded by the owner. F160's fix is per link and per window while twenty-two of the twenty-nine statements written for it said *instance* or *history* — corrected, and the behaviour deferred as F195 rather than widened, because widening it needs a query the page is defined by not making. The column scan that closed F193 assumed a trailing pipe, which is exactly and only the shape it missed; its replacement is a gate in `check-links.sh` and it was proven red on F103 before F103 was touched — 2,100 rows in 40 files, one mismatch. Area G's close-out counted one entitlement anchor and there are two, the missed one in a shipped milestone's file again. The release-notes `awk` run and recorded, clean, with the false comment above it routed as F196. Plus five secondaries, including the demo interval that turns off two jobs and the pinned default D61 said could not be repointed |
 | [M58, amendment: the third move of one number, so the number goes](#2026-08-10--m58-amendment-the-third-move-of-one-number-so-the-number-goes) | Eight, then nine, then twelve — a bullet counting the rows this milestone filed, inside a milestone that kept filing them. The count is deleted rather than corrected a third time, and the property is stated with the command that takes it. F69 chose this remedy once already |
 | [M58: the sixth pass, the response that disagreed with its own transaction, and the demo that would not have resolved](#2026-08-10--m58-the-sixth-pass-the-response-that-disagreed-with-its-own-transaction-and-the-demo-that-would-not-have-resolved) | Two release blockers and four false sentences on surfaces the tag publishes, fixed; seven rows filed. `POST /api/v1/api-keys/rotate` now reads the successor's carried bars back rather than hardcoding an empty array, and `make demo-update` recreates the app **after** the reseed, which is what makes `DOMAIN_VERIFY_INTERVAL=0` safe on the demo rather than merely cheap |
+| [M52, reopened: both dispute labels in one statement](#2026-08-10--m52-reopened-both-dispute-labels-in-one-statement) | The reopening [D175](../../Plan.md#phase-3-decisions) scheduled, and its whole scope: [F187](deferred-findings.md#closed). `scrubbed_filed` and `scrubbed_decided` were two data-modifying CTEs writing one `destination_disputes` row, so Postgres applied one and dropped the other whenever a batch held both halves of a dispute — which two ordinary situations produce. Merged into the shape `scrubbed_audit` already had, sabotage-verified against the split, and the six sites in three documents that stated it as a live exception at 0.3.0 now state the requirement. Plus why one link this diff staled was fixed while [F203](deferred-findings.md#open)'s sixty-four stay |
 
 ---
 
@@ -25338,3 +25339,131 @@ next attribute, F201 is F167's exact mechanism on the two forms it did not
 reach — and that is the argument for filing rather than fixing at this hour: a
 class that has recurred once is a class somebody should decide about, not one a
 sixth pass should patch a third site of.
+
+## 2026-08-10 — M52, reopened: both dispute labels in one statement
+
+[D175](../../Plan.md#phase-3-decisions) sent
+[F187](deferred-findings.md#closed) here rather than to M58, and this is the
+whole of the reopening. Scope was one finding, and nothing else in `m52.md` was
+reopened with it.
+
+### The defect, and why six months of green runs did not show it
+
+`EraseDeletedAccounts` scrubbed `destination_disputes` with two data-modifying
+CTEs — `scrubbed_filed` on `created_by_label`, `scrubbed_decided` on
+`decided_by_label`. Two such CTEs may not both write one row: Postgres applies
+one and drops the other, silently, with no defined winner. The note on the
+`batch` CTE twelve lines above them had said exactly that since M58 corrected
+the audit pair, and the two statements it describes were still sitting under it.
+
+A single dispute row is in both halves of one batch in two ordinary situations,
+and neither is a corner:
+
+- somebody files a dispute and then rules on it — one account, one deletion, no
+  second party needed at all;
+- two accounts are deleted within the same hour and one had decided the other's
+  dispute, which is what a review queue and a sweep that takes everything since
+  the last pass produce between them.
+
+Either way one address survived in a record about the person who asked to be
+erased, and no later pass came back for it: both accounts leave the sweep
+stamped `anonymized_at`, so neither is ever pending again.
+
+**What hid it was the test.** `TestErasureScrubsBothDisputeLabels` asserts both
+columns and asserts each against a live counterpart, which is the right shape for
+the claim it makes — and it erases its two accounts on **separate passes**, so
+the two statements never contend for one row. It passes on the broken shape. It
+passed on the broken shape throughout the sabotage run below.
+
+### The fix, which already existed in this file once
+
+One `UPDATE`, a `CASE` per column, joined against `batch` rather than `pending`
+— the shape `scrubbed_audit` was corrected into when the same hazard cost
+[F186](deferred-findings.md#closed) a deterministic zero in the demo coverage
+test. `batch` rather than `pending` is the load-bearing half: `batch` aggregates
+the pending ids into arrays and is therefore one row, so the join is
+single-valued and a dispute is matched once however many of the batch's accounts
+name it. Joining `pending` twice inside one `UPDATE` would have traded one limb
+of the hazard for the other one that note describes.
+
+An undecided dispute keeps its empty `decided_by_label` through the `ELSE` arm,
+because `NULL = ANY (...)` is never true. The `<>` guards survive unchanged and
+still make a second pass over a tombstoned row a no-op.
+
+### Sabotage, because the test had to be shown to test something
+
+The split shape was restored, `sqlc generate` re-run, and the new test failed on
+both contended rows at once:
+
+```
+pair.example: created_by_label reads "filer@example.com", want "deleted account"
+self.example: created_by_label reads "both@example.com",  want "deleted account"
+```
+
+The `decided` write won and the `created` write was dropped, deterministically,
+on both — while `survivor.example`, whose decider is still here and whose only
+erased party is its filer, passed throughout, and
+`TestErasureScrubsBothDisputeLabels` passed beside it. That is the defect
+verbatim and the reason it was invisible. The merged shape was then restored by
+counter-edit, never `git checkout`, and both the query and the generated file
+checksummed against the pre-sabotage state to prove the restore was
+byte-for-byte.
+
+`survivor.example` is in the test for the direction the *fix* could fail in,
+which nothing else asserts: the merged statement selects rows by a disjunction,
+so one taken because its filer was erased must still leave a live decider's
+label alone. A statement setting both columns unconditionally would satisfy the
+two assertions above and destroy a surviving person's record.
+
+### Six sites in three documents, counted rather than recalled
+
+The exception was written down in more places than the finding named, because
+M58 deliberately stated it wherever a reader would meet the erasure claim:
+`README.md` once, `docs/SECURITY.md` three times — the *Account deletion and
+subject erasure* row, the *six things, not two* paragraph, and an entry of its
+own in *What is not defended* — and `Plan.md` twice, in M52's discharge row and
+in the *Erasure leaves a queued message and an outstanding offer* limitation
+row. Each now states the requirement instead of the exception, and each says the
+defect reached no release, because it did not: 0.3.0 is untagged.
+
+`README.md` is touched despite [D104](../../Plan.md#phase-2-decisions-taken-after-the-plan-was-finalised) confining
+it to the documentation pass. The premise D104 rests on — *there is no mid-phase
+README to drift* — does not hold here: the pass has already run, so the sentence
+exists and this commit is what makes it false. Correcting a document that a diff
+falsifies is the standing pre-approved change, and leaving it would ship a
+release note describing a defect the release does not have.
+
+`CHANGELOG.md` needed nothing, which was checked rather than assumed. Its 0.3.0
+entry describes the pass as replacing the name and address in both tables and
+never carved out the exception, so the fix makes it true rather than stale.
+
+### Two stale links fixed, two knowingly left, and the class grows by both
+
+Closing the row staled **four** cross-references that reached F187 through the
+`#open` anchor. Two were fixed because this commit is what made them wrong:
+F186's own *Closed by* prose in `deferred-findings.md`, and `Plan.md`'s D175
+row.
+
+Two are left, and they are *this file's* — the entries at `decisions.md:24540`
+and `:24661`, which describe F187 as open because it was open when they were
+written. decisions.md is append-only and a past entry saying a row was open is a
+true statement about its own date, so rewriting them would be editing history to
+flatter a link checker.
+
+**The count moves as a direct result**, and is stated rather than left for the
+next reader to discover: [F203](deferred-findings.md#open) goes from sixty-four
+to **sixty-six** — 59 in deferred-findings.md, 6 in this file, 1 at `Plan.md`.
+An earlier draft of this paragraph said *two* staled and named *"the four in
+decisions.md"*, which were F68, F169, F171 and F180 — F203's four, not F187's
+two. Corrected before the commit rather than after, which is the only reason the
+correction is an edit and not a fifth entry.
+
+That is the class [F203](deferred-findings.md#open) tracks, and F203 is open and
+unreviewed, so the sixty-four it counts are untouched: its own severity cell says
+a blanket rewrite is the wrong fix and would restale itself the next time a row
+closes. The distinction taken here is authorship rather than convenience — these
+two were correct until this diff, and a diff that falsifies a link and walks past
+it is the failure the third actor exists to catch. Two links this commit broke
+are not a sweep of a class somebody else has to decide about. The four in
+`decisions.md` stay for the reason F203 gives: it is append-only, and an entry
+saying a row was open is a true statement about the moment it was written.

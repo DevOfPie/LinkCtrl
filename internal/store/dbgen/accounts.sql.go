@@ -205,19 +205,48 @@ WITH pending AS (
       FROM batch b
      WHERE lower(n.data->>'email') = ANY (b.emails)
     RETURNING 1
-), scrubbed_filed AS (
+), scrubbed_disputes AS (
+    -- Both snapshots in **one** UPDATE, joined against ` + "`" + `batch` + "`" + `, and that is the
+    -- same correctness requirement ` + "`" + `scrubbed_audit` + "`" + ` states rather than a second
+    -- tidiness choice (F187).
+    --
+    -- This was two CTEs — ` + "`" + `scrubbed_filed` + "`" + ` and ` + "`" + `scrubbed_decided` + "`" + ` — from the day
+    -- the pass was written until 2026-08-10, and the note on ` + "`" + `batch` + "`" + ` above says
+    -- exactly what that costs: two data-modifying CTEs may not both write one
+    -- row, so Postgres applies one and drops the other, silently and without a
+    -- defined winner. One dispute row satisfies both predicates in two ordinary
+    -- situations — a dispute somebody filed and then decided themselves, and a
+    -- batch holding both the filer of a dispute and whoever decided it, which is
+    -- what an hourly sweep over everything deleted since the last one produces.
+    -- Either way one address survived in a record about the person who asked to
+    -- be erased, and no later pass returned for it: both accounts leave the pass
+    -- stamped ` + "`" + `anonymized_at` + "`" + `, so neither is ever pending again.
+    --
+    -- ` + "`" + `batch` + "`" + ` rather than ` + "`" + `pending` + "`" + ` for the reason the audit scrub uses it. The
+    -- arrays are one row, so the join is single-valued and each dispute is
+    -- matched exactly once even when its two columns name two different erased
+    -- accounts; joining ` + "`" + `pending` + "`" + ` twice inside one UPDATE would be the other
+    -- half of the same hazard.
+    --
+    -- The ` + "`" + `<>` + "`" + ` guards make a second pass over an already-tombstoned row a no-op,
+    -- and an undecided dispute keeps its empty ` + "`" + `decided_by_label` + "`" + ` through the
+    -- ELSE arm, since ` + "`" + `NULL = ANY (...)` + "`" + ` is never true.
     UPDATE destination_disputes d
-       SET created_by_label = $2::text
-      FROM pending p
-     WHERE d.created_by = p.id
-       AND d.created_by_label <> $2::text
-    RETURNING 1
-), scrubbed_decided AS (
-    UPDATE destination_disputes d
-       SET decided_by_label = $2::text
-      FROM pending p
-     WHERE d.decided_by = p.id
-       AND d.decided_by_label <> $2::text
+       SET created_by_label = CASE
+                                  WHEN d.created_by = ANY (b.ids)
+                                    THEN $2::text
+                                  ELSE d.created_by_label
+                              END,
+           decided_by_label = CASE
+                                  WHEN d.decided_by = ANY (b.ids)
+                                    THEN $2::text
+                                  ELSE d.decided_by_label
+                              END
+      FROM batch b
+     WHERE (d.created_by = ANY (b.ids)
+            AND d.created_by_label <> $2::text)
+        OR (d.decided_by = ANY (b.ids)
+            AND d.decided_by_label <> $2::text)
     RETURNING 1
 ), scrubbed_invitations AS (
     UPDATE invitations i

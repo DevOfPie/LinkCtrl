@@ -496,6 +496,13 @@ func TestErasureTombstonesTheActorAndKeepsTheEntriesCorrelated(t *testing.T) {
 // `created_by_label` for whoever filed a dispute and `decided_by_label` for
 // whoever decided it, and an account is as identifiable as the moderator of a
 // dispute as it is as the filer of one.
+//
+// **One erasure per pass, and that is this test's limit rather than an
+// oversight.** Deleting the filer, erasing, then deleting the decider is what
+// makes the two halves independent and lets each be asserted against a live
+// counterpart — and it is also why nothing here can see two writes contending
+// for one row. That case is F187, and the test immediately below is where it
+// lives.
 func TestErasureScrubsBothDisputeLabels(t *testing.T) {
 	f := newAccounts(t)
 	ctx := t.Context()
@@ -576,6 +583,100 @@ func TestErasureScrubsBothDisputeLabels(t *testing.T) {
 	}
 	if decidedLabel != account.TombstoneLabel {
 		t.Errorf("decided_by_label reads %q after the decider was erased", decidedLabel)
+	}
+}
+
+// F187, and the reason M52 was reopened rather than succeeded by another
+// milestone: **one dispute row written by two statements keeps one of its two
+// labels.**
+//
+// `created_by_label` and `decided_by_label` were scrubbed by two data-modifying
+// CTEs, `scrubbed_filed` and `scrubbed_decided`, from the day the pass was
+// written. Postgres applies one of two CTEs that write the same row and drops
+// the other — no error, no defined winner — so a row that satisfies both
+// predicates keeps one address, and both accounts leave the pass stamped
+// `anonymized_at`, which means no later pass ever comes back for it.
+//
+// **The test above cannot see it**, and that is the point of this one. It erases
+// its two accounts on separate passes, so the two statements never contend for
+// one row. The sweep does not work that way: it takes everything deleted since
+// the last run in one batch of a thousand.
+//
+// Three rows, because F187 names two ways a single batch reaches both halves of
+// one dispute and they are not the same situation:
+//
+//   - `pair.example` — filed by one account, decided by another, and the two
+//     leave together. What an hourly sweep over a review queue produces.
+//   - `self.example` — filed and decided by the same account, which needs no
+//     second deletion at all. A reviewer who disputes a host and then rules on
+//     it is one row satisfying both predicates by itself.
+//   - `survivor.example` — the direction the *fix* could fail in, which nothing
+//     else here asserts. The merged statement selects rows by a disjunction, so
+//     a row taken because its filer was erased must still leave a decider who is
+//     still here alone. A single UPDATE that set both columns unconditionally
+//     would pass the first two assertions and destroy a live person's record.
+func TestErasureScrubsBothDisputeLabelsWhenOneBatchTakesBothAccounts(t *testing.T) {
+	f := newAccounts(t)
+	ctx := t.Context()
+	filer := f.joined(t, "filer@example.com", "editor")
+	decider := f.joined(t, "decider@example.com", "admin")
+	both := f.joined(t, "both@example.com", "admin")
+	survivor := f.joined(t, "survivor@example.com", "admin")
+
+	// Written directly, for the reason the test above states: reaching these
+	// columns through the dispute service means a blocked destination, a refused
+	// link write and a review decision, none of which this is about.
+	file := func(host string, createdBy uuid.UUID, createdByLabel string, decidedBy uuid.UUID, decidedByLabel string) {
+		t.Helper()
+		if _, err := f.pool.Exec(ctx,
+			`INSERT INTO destination_disputes
+			   (id, host, url_defanged, reason_code, status,
+			    created_by, created_by_label, decided_by, decided_by_label, decided_at)
+			 VALUES ($1, $2, $3, 'shortener.known', 'upheld', $4, $5, $6, $7, now())`,
+			uuid.Must(uuid.NewV7()), host, "hxxp://"+strings.ReplaceAll(host, ".", "[.]")+"/",
+			createdBy, createdByLabel, decidedBy, decidedByLabel); err != nil {
+			t.Fatalf("write a decided dispute on %s: %v", host, err)
+		}
+	}
+	file("pair.example", filer.UserID, "filer@example.com", decider.UserID, "decider@example.com")
+	file("self.example", both.UserID, "both@example.com", both.UserID, "both@example.com")
+	file("survivor.example", filer.UserID, "filer@example.com", survivor.UserID, "survivor@example.com")
+
+	// All three leave before the pass runs, which is what puts them in one batch.
+	// Deleting them one at a time and erasing between would be the test above.
+	for _, id := range []*auth.Identity{filer, decider, both} {
+		if err := f.svc.Delete(ctx, id, accountPassword); err != nil {
+			t.Fatalf("delete %s: %v", id.UserID, err)
+		}
+	}
+	if n := f.erase(t, ctx); n != 3 {
+		t.Fatalf("the erasure pass took %d accounts, want 3 in one batch — the "+
+			"contention this test exists for only happens inside a single pass", n)
+	}
+
+	for _, want := range []struct{ host, created, decided, why string }{
+		{"pair.example", account.TombstoneLabel, account.TombstoneLabel,
+			"the filer and the decider were erased in the same batch, so both snapshots are residue"},
+		{"self.example", account.TombstoneLabel, account.TombstoneLabel,
+			"one account filed this dispute and decided it, so one row carries its address twice"},
+		{"survivor.example", account.TombstoneLabel, "survivor@example.com",
+			"the decider is still here and their record is not the filer's to erase"},
+	} {
+		var created, decided string
+		if err := f.pool.QueryRow(ctx,
+			`SELECT created_by_label, decided_by_label
+			   FROM destination_disputes WHERE host = $1`, want.host).
+			Scan(&created, &decided); err != nil {
+			t.Fatalf("read the dispute on %s: %v", want.host, err)
+		}
+		if created != want.created {
+			t.Errorf("%s: created_by_label reads %q, want %q — %s",
+				want.host, created, want.created, want.why)
+		}
+		if decided != want.decided {
+			t.Errorf("%s: decided_by_label reads %q, want %q — %s",
+				want.host, decided, want.decided, want.why)
+		}
 	}
 }
 
