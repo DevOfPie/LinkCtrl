@@ -300,6 +300,7 @@ file. Append a row when you append an entry.
 | [M58, amendment: the third move of one number, so the number goes](#2026-08-10--m58-amendment-the-third-move-of-one-number-so-the-number-goes) | Eight, then nine, then twelve — a bullet counting the rows this milestone filed, inside a milestone that kept filing them. The count is deleted rather than corrected a third time, and the property is stated with the command that takes it. F69 chose this remedy once already |
 | [M58: the sixth pass, the response that disagreed with its own transaction, and the demo that would not have resolved](#2026-08-10--m58-the-sixth-pass-the-response-that-disagreed-with-its-own-transaction-and-the-demo-that-would-not-have-resolved) | Two release blockers and four false sentences on surfaces the tag publishes, fixed; seven rows filed. `POST /api/v1/api-keys/rotate` now reads the successor's carried bars back rather than hardcoding an empty array, and `make demo-update` recreates the app **after** the reseed, which is what makes `DOMAIN_VERIFY_INTERVAL=0` safe on the demo rather than merely cheap |
 | [M52, reopened: both dispute labels in one statement](#2026-08-10--m52-reopened-both-dispute-labels-in-one-statement) | The reopening [D175](../../Plan.md#phase-3-decisions) scheduled, and its whole scope: [F187](deferred-findings.md#closed). `scrubbed_filed` and `scrubbed_decided` were two data-modifying CTEs writing one `destination_disputes` row, so Postgres applied one and dropped the other whenever a batch held both halves of a dispute — which two ordinary situations produce. Merged into the shape `scrubbed_audit` already had, sabotage-verified against the split, and the six sites in three documents that stated it as a live exception at 0.3.0 now state the requirement. Plus why one link this diff staled was fixed while [F203](deferred-findings.md#open)'s sixty-four stay |
+| [A queue row typed `issue` against a design that was deliberate](#2026-08-10--a-queue-row-typed-issue-against-a-design-that-was-deliberate) | The routing judgement `/process-queue` forces and does not name: when the tree says the behaviour is exactly as designed and the owner has typed the row `issue` anyway, the type stands and the as-designed conflict becomes the row's evidence. Why that is not the *typed issue, is neither* dispute, and why F204 carries three fix shapes rather than a prompt |
 
 ---
 
@@ -25467,3 +25468,48 @@ it is the failure the third actor exists to catch. Two links this commit broke
 are not a sweep of a class somebody else has to decide about. The four in
 `decisions.md` stay for the reason F203 gives: it is append-only, and an entry
 saying a row was open is a true statement about the moment it was written.
+## 2026-08-10 — A queue row typed `issue` against a design that was deliberate
+
+Prompted by draining `.queue.md` after Phase 3 closed. One row, typed `issue` by
+the owner: *the text displaying the current workspace should be what shows on the
+workspace switcher, not be displayed next to it.*
+
+The tree says that arrangement is deliberate.
+[`partials/nav.html:41-56`](../../internal/ui/templates/partials/nav.html) spends
+twenty lines explaining that M46 removed the current workspace from the switcher
+because the owner asked for it on blind task 9, that it could not be done until a
+label existed elsewhere, and that the label is what made it possible. Three
+assertions in `internal/ui/workspace_test.go` hold the result.
+
+### Why the type stands
+
+[`/process-queue`](../../.claude/commands/process-queue.md)'s dispute table has a
+row for *typed `issue`, is neither* — **the behaviour is as designed and the note
+is a preference** — and on a fast reading this is it. It is not, and the
+distinction is worth writing down because it will recur.
+
+That dispute is for a note **reporting a defect** that turns out to be intended:
+somebody says *this is broken*, the tree says *this is what we chose*, and the
+disagreement is about a fact. This note reports nothing. It states what the design
+should be, from the person whose design it is. [workflow.md](workflow.md) defines
+an issue as *a change to existing function or design*, and a change to existing
+design is precisely what it asks for.
+
+Reclassifying it would have been the loop telling the owner their note was really
+a preference, on the strength of a comment recording an earlier answer from the
+same owner. **An owner is allowed to change their mind, and the mechanism for
+that is a row, not a prompt asking whether they meant it.**
+
+### Why it carries three fix shapes and no prompt
+
+The substance is real and it is not the classification. `workspace_switch` is
+gated at more than one membership and `workspace_label` is not, so on the
+one-membership account every instance actually has today, moving the text into the
+switcher names the workspace **nowhere** — reopening the exact defect M46 added
+the label to close, while M25 refuses a control that can do nothing.
+
+That belongs in the row's evidence rather than in a prompt, because approving a
+deferred row **is** the conversation. Prompting now would ask the owner to decide
+the shape of a fix before they have decided whether to schedule it at all, which
+inverts the order the deferral system exists to hold. F204 states three shapes and
+what each costs; whichever is chosen is chosen when the row is approved.
