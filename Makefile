@@ -155,7 +155,7 @@ lint: ## Run golangci-lint
 	golangci-lint run
 
 .PHONY: check-links
-check-links: ## Verify every relative link and anchor in tracked markdown
+check-links: ## Verify tracked markdown: every link and anchor resolves, every table row matches its header
 	@scripts/check-links.sh
 
 # A gate, after a phase of being a tool someone remembered to run by hand. This
@@ -542,6 +542,19 @@ DEMO_URL = http://localhost$(addprefix :,$(shell sed -n 's/^LINKCTRL_HTTP_PORT=/
 # validated milestone, and building it from a tree with uncommitted work puts
 # something nobody has validated in front of the person judging the milestone.
 # Pass FORCE=1 when the point is to look at work in progress.
+#
+# **The app is recreated twice, and the second one is the load-bearing one.**
+# The first brings up the new image so the reseed runs against this milestone's
+# schema. The reseed then deletes and rewrites the `domains` rows — new ids for
+# `go.linkctrl.example` — while the app has held its verified-hostname set in
+# memory since boot, from before those rows existed. Nothing else puts the new
+# set in front of it: `lctl` runs on the host with no Redis, so it publishes no
+# invalidation; `internal/redirect/hosts.go` holds the whole set precisely so a
+# miss costs no query, so there is no lazy reload to fall back on; and the demo
+# runs `DOMAIN_VERIFY_INTERVAL=0`, which stops the periodic reload with the
+# verification pass. Without the second recreate a fresh demo serves nothing on
+# its custom hostname and a repeat serves a cached entry pointing at a deleted
+# domain id.
 .PHONY: demo-update
 demo-update: ## Rebuild the demo from the current commit and refresh its data
 	@test -f .env.demo || scripts/instance.sh init demo
@@ -560,6 +573,8 @@ demo-update: ## Rebuild the demo from the current commit and refresh its data
 		echo "then run make demo-update again."; \
 		exit 1; \
 	}
+	@echo
+	docker compose -p linkctrl-demo --env-file .env.demo up -d --force-recreate --wait app
 	@echo
 	@echo "demo updated to $(VERSION) at $(DEMO_URL)"
 

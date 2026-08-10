@@ -932,11 +932,20 @@ func (j *jobRunner) housekeeping(ctx context.Context) error {
 	//
 	// **The one sweep here that is not reclaiming space.** Everything else in
 	// this pass removes rows whose deadline passed; this one *keeps* the rows and
-	// takes the person out of them, because the two tables it touches —
-	// `audit_logs` and `destination_disputes` — deliberately have no foreign key
-	// to `users` so that a record survives its subject. Deleting them would be
-	// destroying the trail; leaving them as they were would be keeping an address
-	// somebody asked to have removed.
+	// takes the person out of them. Deleting them would be destroying the trail;
+	// leaving them as they were would be keeping an address somebody asked to
+	// have removed.
+	//
+	// **Five tables, not two**, and *no foreign key to `users`* stopped being the
+	// criterion that finds them: this comment read that way until M58, describing
+	// `audit_logs` and `destination_disputes` alone. The sweep writes those two,
+	// `notifications` and `invitations` — which do carry a foreign key, but to a
+	// *different* reader, so ending this account was never going to remove
+	// them — and the account row itself. What holds over all five is *a record
+	// about this person that ending the account does not remove*. The
+	// enumeration is kept once, on `EraseDeletedAccounts` in
+	// `internal/store/query/accounts.sql`, and this comment deliberately does not
+	// restate it; a second copy is how the first one went stale.
 	//
 	// Hourly is the whole bound on how long the residue lasts, and it is
 	// documented as a number in docs/SECURITY.md rather than left to be

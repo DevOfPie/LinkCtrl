@@ -25,13 +25,23 @@
 // reaches the account and the address is free for a new one.
 //
 // **Erasure is a batched sweep, and it lags.** The identifying residue lives in
-// the two tables that deliberately have no foreign key to `users` —
-// `audit_logs` and `destination_disputes` — because a record that vanishes with
-// its subject is not a record. Those cannot be cascaded away; they are scrubbed
-// in place, and `anonymized_at` marks the row whose residue has gone. The gap
-// between the two timestamps is the sweep's cadence, it is bounded by an hour,
-// and `docs/SECURITY.md` states that as a number because a compliance reader is
-// entitled to know erasure is not instantaneous.
+// **four** tables, and *no foreign key to `users`* is no longer the criterion
+// that finds them. It was M52's, and it named two: `audit_logs` and
+// `destination_disputes`, which deliberately carry none because a record that
+// vanishes with its subject is not a record. The sweep since reaches
+// `notifications` (`00600:127`) and `invitations` (`01200:62`), which do carry
+// one — the row belongs to a *different* reader, so a cascade off this account
+// would never have touched it, and nothing else expires it. The criterion that
+// holds over all four is *a record about this person that ending the account
+// does not remove*. They are scrubbed in place, and `anonymized_at` marks the
+// row whose residue has gone. The gap between the two timestamps is the sweep's
+// cadence, it is bounded by an hour, and `docs/SECURITY.md` states that as a
+// number because a compliance reader is entitled to know erasure is not
+// instantaneous.
+//
+// What each scrub reaches and why is in `query/accounts.sql`'s header on
+// `EraseDeletedAccounts`, which is where the count is kept — one enumeration,
+// beside the statement, rather than a second one here that can drift from it.
 //
 // # What a soft delete does not do
 //
@@ -70,9 +80,21 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 )
 
-// TombstoneLabel is what an erased actor's snapshot becomes, everywhere one is
-// stored: `audit_logs.actor_label`, `destination_disputes.created_by_label` and
-// `destination_disputes.decided_by_label`.
+// TombstoneLabel is what an erased person's address or name becomes wherever the
+// sweep replaces one rather than blanking it — **seven sites, not the three
+// actor snapshots this comment named until M58**: `audit_logs.actor_label`, the
+// `"email"` key and each matching element of the `"from"` array inside
+// `audit_logs.metadata`, `notifications.data`'s `"email"` key and the address
+// inside the title beside it, and `destination_disputes.created_by_label` and
+// `decided_by_label`.
+//
+// Two places take the empty string instead, and neither is an omission:
+// `invitations.email`, because redemption compares an address against that
+// column and a placeholder reading like a label is a value the comparison would
+// then have to rule out, and `users.email`/`name` for the same reason one column
+// over. `query/accounts.sql` is where that list is kept current; this comment
+// says what the constant *means* and defers the enumeration to the statement
+// that writes it.
 //
 // **A constant, and the ids survive.** That is D148, owner-set 2026-08-08 and
 // answered before any of this was written. The alternative shapes were a
@@ -343,9 +365,29 @@ func (s *Service) Delete(ctx context.Context, actor *auth.Identity, password str
 // Idempotent and re-entrant, because the two-leader window during a rolling
 // deploy is a stated property of this scheduler rather than something this
 // milestone may assume away. `FOR UPDATE SKIP LOCKED` gives a second leader a
-// disjoint batch instead of a wait, and every label update is guarded on the
-// label not already being the tombstone, so a second pass over the same row
-// writes nothing. The integration test runs the pass twice and diffs.
+// disjoint batch instead of a wait, and a second pass over the same row writes
+// nothing.
+//
+// **Two reasons, not one**, which is what the *Re-entrant* note on
+// `EraseDeletedAccounts` says and what this comment claimed until M58. **Four**
+// scrubs are keyed on an **id** — the actor label, the two dispute labels and
+// `invitations.email` on the rows the account redeemed — and **three** on the
+// **address**: the `"email"` key and the `"from"` array inside
+// `audit_logs.metadata`, and the notification the inviter received.
+//
+// The id-keyed ones carry a guard, and it is not one guard. Three compare
+// against the tombstone they are about to write. `invitations` cannot: it blanks
+// the column rather than labelling it, so its guard is an emptiness test on
+// `i.email` beside `i.redeemed_at IS NOT NULL`, which is the same claim in the
+// vocabulary that column uses. The address-keyed ones carry none and need none —
+// after one pass the value they matched on is no longer in the column, so the
+// second pass finds nothing to rewrite.
+//
+// Counted against the statement rather than recalled, twice now: this comment
+// was rewritten at M58 to fix a miscount and said *three* where the tree says
+// four, because `scrubbed_invitations` fits neither branch of a dichotomy drawn
+// between tombstone guards and no guard at all. The integration test runs the
+// pass twice and diffs.
 func (s *Service) ErasePending(ctx context.Context, batch int32) (int64, error) {
 	erased, err := s.q.EraseDeletedAccounts(ctx, dbgen.EraseDeletedAccountsParams{
 		Batch:     batch,

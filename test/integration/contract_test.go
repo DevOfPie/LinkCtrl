@@ -1305,6 +1305,16 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	if offer.Secret == "" || !strings.HasPrefix(offer.QRSVG, "<svg") {
 		t.Fatalf("the enrolment offer carries no secret or no drawing: %+v", offer)
 	}
+	// And the drawing carries nothing that only resolves inside this product.
+	// `qr.Render`'s default class is two Tailwind utilities the dashboard's own
+	// stylesheet defines (F184); a client reading `qr_svg` has never seen it, so
+	// the class is markup naming a rule it cannot satisfy — the same reason the
+	// downloaded SVG is drawn with the empty class.
+	if strings.Contains(offer.QRSVG, "class=") {
+		t.Errorf("qr_svg carries a class attribute: %.140s…\n\nThis body leaves the "+
+			"product, and a class list means nothing outside the dashboard.",
+			offer.QRSVG)
+	}
 
 	// A wrong code is the documented 401, and it must not enrol anything.
 	c.doBadRequest("POST", p+"/auth/mfa/confirm", map[string]string{

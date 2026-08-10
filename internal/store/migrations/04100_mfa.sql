@@ -4,7 +4,7 @@
 --
 -- **The two columns this milestone was waiting for already exist.**
 -- `users.mfa_secret` and `users.mfa_enabled_at` have been in `00200_identity.sql`
--- since the first migration, marked `-- Phase 3.`, and until M52 nothing wrote
+-- since the first migration, marked `-- Phase 3.` at the time, and until M52 nothing wrote
 -- them at all. M52's erasure sweep gave them their first writer and it is the one
 -- that clears them; this milestone gives them the writer that sets them. So what
 -- is left for a migration is the state TOTP needs and the columns cannot hold:

@@ -4,8 +4,10 @@ package integration
 
 import (
 	"errors"
+	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -508,6 +510,463 @@ func TestAnAdministratorCutsTheirOrganizationOutOfAnAccountWideKey(t *testing.T)
 	if err := f.keys.Revoke(t.Context(), f.owner, theirs.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("an owner cut their organization out of a key that never reached "+
 			"it: %v", err)
+	}
+}
+
+// F183 — the read half of the same revocation.
+//
+// M54 built the acting half and stopped there: a key cut out of an organization
+// stopped resolving into it and went on listing its name, its slug and its
+// workspace ids through GET /api/v1/workspaces. The bound applied was
+// pinned-or-not, and a reach revocation applies to exactly the keys that are not
+// pinned, so the one credential the bound was reached for was the one it skipped.
+//
+// Three assertions, and the second two are what stop the fix being an
+// over-correction. The barred organization goes; the one the key still works in
+// stays, or the credential has been blinded rather than bounded; and the owner's
+// own session still sees both, because the revocation is about a key and the
+// switcher's whole job is to cross organizations (F103's other direction).
+func TestAKeyCutOutOfAnOrganizationIsNoLongerToldAboutIt(t *testing.T) {
+	f := newTeamFixture(t)
+	ctx := t.Context()
+	bob := f.member(t, "bob-read-half@example.com", "admin")
+	_, betaWS := joinOrganization(t, f.pool, bob.UserID, "Beta", "Beta Space", "owner")
+
+	key, err := f.keys.Create(ctx, bob, auth.CreateAPIKeyInput{
+		Name: "bobs-reader", Scopes: []string{"links.read"}, OrgWide: true,
+	})
+	if err != nil {
+		t.Fatalf("mint bob's account-wide key: %v", err)
+	}
+	actIn(t, f.pool, bob.UserID, betaWS)
+
+	orgs := func(list []auth.Workspace) map[uuid.UUID]bool {
+		seen := make(map[uuid.UUID]bool, len(list))
+		for _, w := range list {
+			seen[w.OrganizationID] = true
+		}
+		return seen
+	}
+	listedTo := func(t *testing.T, actor *auth.Identity) map[uuid.UUID]bool {
+		t.Helper()
+		list, err := f.auth.Workspaces(ctx, actor)
+		if err != nil {
+			t.Fatalf("list workspaces: %v", err)
+		}
+		return orgs(list)
+	}
+	asKey := func(t *testing.T) *auth.Identity {
+		t.Helper()
+		id, err := f.keys.Authenticate(ctx, key.Key)
+		if err != nil {
+			t.Fatalf("the key stopped authenticating: %v", err)
+		}
+		return id
+	}
+
+	// Before the cut it is told about both, which is M54's premise: the tenants
+	// an account-wide key reads about are the tenants it works in.
+	if before := listedTo(t, asKey(t)); !before[f.owner.OrgID] || !before[bob.OrgID] {
+		t.Fatalf("an account-wide key was not told about both of its owner's "+
+			"organizations before anything was revoked (saw %v)", before)
+	}
+
+	// Acme's owner cuts Acme out. The credential is untouched everywhere else.
+	if err := f.keys.Revoke(ctx, f.owner, key.ID); err != nil {
+		t.Fatalf("cut Acme out of the key's reach: %v", err)
+	}
+
+	after := listedTo(t, asKey(t))
+	if after[f.owner.OrgID] {
+		t.Error("a key an administrator cut out of their organization is still " +
+			"told its name, its slug and its workspace ids. That is the half of " +
+			"the revocation the administrator was not told was missing")
+	}
+	if len(after) == 0 {
+		t.Error("the key was told about no organization at all. The revocation " +
+			"names one tenant, and a bound that took the rest with it is worse " +
+			"than the disclosure it closed")
+	}
+
+	// The person is not the credential. Bob's own session crosses both, and an
+	// administrator of one organization cannot narrow what he sees of the other.
+	session := listedTo(t, f.identity(t, "bob-read-half@example.com"))
+	if !session[f.owner.OrgID] || !session[bob.OrgID] {
+		t.Errorf("the owner's own session lost an organization to a revocation "+
+			"aimed at one of his keys (saw %v)", session)
+	}
+}
+
+// F178 — the seeing half, which is the same revocation from the owner's side.
+//
+// The key list reported one reach, pinned or account-wide, and nothing else. A
+// credential that had silently stopped resolving into one tenant read on the
+// page exactly as it did the day before, and the record that says why is written
+// in the administrator's organization, which the owner may hold no audit.read
+// in. The support question is *why does my key work in Acme and not in Beta*,
+// and until this field the product could not answer it anywhere.
+func TestAKeysOwnerSeesWhichOrganizationWasCutOutOfIt(t *testing.T) {
+	f := newTeamFixture(t)
+	ctx := t.Context()
+	bob := f.member(t, "bob-sees-the-cut@example.com", "admin")
+	joinOrganization(t, f.pool, bob.UserID, "Beta", "Beta Space", "owner")
+
+	wide, err := f.keys.Create(ctx, bob, auth.CreateAPIKeyInput{
+		Name: "account-wide", Scopes: []string{"links.read"}, OrgWide: true,
+	})
+	if err != nil {
+		t.Fatalf("mint the account-wide key: %v", err)
+	}
+	// The control. A pinned key's organization is its entire reach, so cutting it
+	// is an outright revoke and nothing writes a bar — this row must stay empty
+	// however loudly the other one fills.
+	acme := bob.OrgID
+
+	// Renamed to something that appears nowhere else. The fixture's organization
+	// is called "Owner", which the chrome prints on every page, so asserting the
+	// dashboard shows the name would pass against a page that never drew it.
+	if _, err := f.pool.Exec(ctx,
+		`UPDATE organizations SET name = 'Cutoutistan Holdings' WHERE id = $1`, acme); err != nil {
+		t.Fatalf("rename the organization: %v", err)
+	}
+	pinned, err := f.keys.Create(ctx, bob, auth.CreateAPIKeyInput{
+		Name: "pinned", Scopes: []string{"links.read"}, OrgWide: true, OrganizationID: &acme,
+	})
+	if err != nil {
+		t.Fatalf("mint the pinned key: %v", err)
+	}
+
+	barsOn := func(t *testing.T, id uuid.UUID) []auth.APIKeyOrgRevocation {
+		t.Helper()
+		list, err := f.keys.List(ctx, bob)
+		if err != nil {
+			t.Fatalf("list bob's keys: %v", err)
+		}
+		for _, k := range list {
+			if k.ID != id {
+				continue
+			}
+			if k.RevokedOrganizations == nil {
+				t.Errorf("key %q reported a null reach-revocation list; it is an "+
+					"array on the wire and an absent one reads as unknown rather "+
+					"than as none", k.Name)
+			}
+			return k.RevokedOrganizations
+		}
+		t.Fatalf("key %s was not in its owner's own list", id)
+		return nil
+	}
+
+	if bars := barsOn(t, wide.ID); len(bars) != 0 {
+		t.Fatalf("a key nobody has touched reports %d organizations cut out of it", len(bars))
+	}
+
+	if err := f.keys.Revoke(ctx, f.owner, wide.ID); err != nil {
+		t.Fatalf("cut Acme out of the account-wide key: %v", err)
+	}
+
+	bars := barsOn(t, wide.ID)
+	if len(bars) != 1 {
+		t.Fatalf("the owner's list reports %d organizations cut out of a key that "+
+			"one was cut out of; before this the page said nothing at all", len(bars))
+	}
+	if bars[0].OrganizationID != acme {
+		t.Errorf("the list names organization %s as cut out, want Acme (%s)",
+			bars[0].OrganizationID, acme)
+	}
+	var name string
+	if err := f.pool.QueryRow(ctx,
+		`SELECT name FROM organizations WHERE id = $1`, acme).Scan(&name); err != nil {
+		t.Fatalf("read the organization's name: %v", err)
+	}
+	if bars[0].OrganizationName != name {
+		t.Errorf("the entry names the organization %q, want %q. A uuid answers "+
+			"nobody's *why does my key work in Acme and not in Beta*",
+			bars[0].OrganizationName, name)
+	}
+	if bars[0].RevokedAt.IsZero() {
+		t.Error("the entry carries no revoked_at, so the owner cannot tell a cut " +
+			"made this morning from one made last year")
+	}
+
+	// On the page, not only in the struct. A field the dashboard does not draw
+	// answers nobody's support question, and a template ranging over an empty
+	// slice executes none of its body — so a typo inside it would survive every
+	// assertion above.
+	srv, client := f.browser(t)
+	signIn(t, srv, client, "bob-sees-the-cut@example.com")
+	status, page := webRequest(t, srv, client, http.MethodGet, "/keys", nil)
+	if status != http.StatusOK {
+		t.Fatalf("the API keys page returned %d\n%s", status, page)
+	}
+	// Whitespace-collapsed and matched as one phrase. `strings.Contains(page,
+	// name)` on its own proves nothing: the chrome prints the current
+	// organization's name on every page, so that assertion passed against a
+	// template rendering the bare uuid.
+	flat := strings.Join(strings.Fields(page), " ")
+	if want := "cut out of " + name; !strings.Contains(flat, want) {
+		t.Errorf("the API keys page does not say %q. The owner's only other route "+
+			"to that fact is an audit log in an organization they may hold no "+
+			"audit.read in", want)
+	}
+
+	// The key itself is not revoked, which is the distinction the whole mechanism
+	// exists to make, and the list has to keep saying so.
+	list, err := f.keys.List(ctx, bob)
+	if err != nil {
+		t.Fatalf("list bob's keys: %v", err)
+	}
+	for _, k := range list {
+		switch k.ID {
+		case wide.ID:
+			if k.RevokedAt != nil {
+				t.Error("the account-wide key reads as revoked. A reach revocation " +
+					"is not a revoke, and a list that conflates them tells its owner " +
+					"a credential is dead when it is working in another tenant")
+			}
+		case pinned.ID:
+			if len(k.RevokedOrganizations) != 0 {
+				t.Errorf("the pinned key reports %d organizations cut out of it. "+
+					"Nothing writes a bar for a pinned key — an administrator "+
+					"revokes it outright — so this is the query having been keyed "+
+					"on the wrong thing", len(k.RevokedOrganizations))
+			}
+		}
+	}
+}
+
+// The reach revocation was escapable by the credential it was aimed at.
+//
+// A bar names an `api_key_id`; rotation mints a new id; nothing carried the rows
+// across. So the holder of a barred key sent `POST /api/v1/api-keys/rotate` —
+// authorized by the key's own token, with no session, no permission and no
+// administrator anywhere near it — and came back reaching the organization they
+// had been cut out of. Found while closing F183, driven through the product
+// rather than read off the schema, and fixed here rather than deferred because
+// workflow.md puts a recorded abuse path in the running fix milestone by default.
+//
+// **Both halves, because the probe showed both open.** The successor acted in the
+// barred organization and `GET /api/v1/workspaces` told it about that
+// organization again — the acting bound and the reading bound this milestone had
+// just finished closing, both reopened by one unattended rotation.
+func TestRotatingABarredKeyDoesNotEscapeTheBar(t *testing.T) {
+	f := newTeamFixture(t)
+	ctx := t.Context()
+	bob := f.member(t, "bob-rotation-escape@example.com", "admin")
+	betaOrg, _ := joinOrganization(t, f.pool, bob.UserID, "Beta", "Beta Space", "owner")
+
+	key, err := f.keys.Create(ctx, bob, auth.CreateAPIKeyInput{
+		Name: "escaper", Scopes: []string{"links.read"}, OrgWide: true,
+	})
+	if err != nil {
+		t.Fatalf("mint bob's account-wide key: %v", err)
+	}
+	if err := f.keys.Revoke(ctx, f.owner, key.ID); err != nil {
+		t.Fatalf("cut Acme out of the key's reach: %v", err)
+	}
+
+	// The bar as written, so the copy can be compared against it rather than
+	// against an expectation.
+	var barredAt time.Time
+	var barredBy *uuid.UUID
+	if err := f.pool.QueryRow(ctx,
+		`SELECT revoked_at, revoked_by FROM api_key_org_revocations WHERE api_key_id = $1`,
+		key.ID).Scan(&barredAt, &barredBy); err != nil {
+		t.Fatalf("read the bar the administrator wrote: %v", err)
+	}
+	if barredBy == nil {
+		t.Fatal("the administrator's bar recorded nobody, so the carried-across " +
+			"assertion below would hold vacuously")
+	}
+
+	// Pointed at Acme, so resolution lands there if anything lets it.
+	actIn(t, f.pool, bob.UserID, f.owner.WorkspaceID)
+	barred, err := f.keys.Authenticate(ctx, key.Key)
+	if err != nil {
+		t.Fatalf("the barred key stopped authenticating: %v", err)
+	}
+	if barred.OrgID == f.owner.OrgID {
+		t.Fatal("the reach revocation is not working before the rotation, so " +
+			"nothing below would mean anything")
+	}
+
+	// Rotation, authorized by the key's own token. `barred` is an API-key
+	// identity, which is the whole point: no session is involved anywhere.
+	rotated, err := f.keys.Rotate(ctx, barred, auth.RotateAPIKeyInput{})
+	if err != nil {
+		t.Fatalf("rotate the barred key: %v", err)
+	}
+	succ, err := f.keys.Authenticate(ctx, rotated.Key)
+	if err != nil {
+		t.Fatalf("the successor does not authenticate: %v", err)
+	}
+
+	// ── the acting half ───────────────────────────────────────────────────────
+
+	if succ.OrgID == f.owner.OrgID {
+		t.Error("the successor of a barred key resolves into the organization its " +
+			"predecessor was cut out of. An administrator's reach revocation is " +
+			"escapable by the credential it was aimed at, using only that " +
+			"credential's own token")
+	}
+	if succ.OrgID != betaOrg {
+		t.Errorf("the successor landed in %s, want Beta (%s). Carrying the bars "+
+			"must not cost the key the tenant it still reaches", succ.OrgID, betaOrg)
+	}
+
+	// ── the reading half ──────────────────────────────────────────────────────
+
+	list, err := f.auth.Workspaces(ctx, succ)
+	if err != nil {
+		t.Fatalf("list the successor's workspaces: %v", err)
+	}
+	var reachesBeta bool
+	for _, w := range list {
+		if w.OrganizationID == f.owner.OrgID {
+			t.Errorf("the successor is told the name, slug and workspace ids of %q, "+
+				"which its predecessor was barred from. F183's bound reads the "+
+				"revocation rows, so a successor without them is told everything "+
+				"again", w.OrganizationName)
+		}
+		if w.OrganizationID == betaOrg {
+			reachesBeta = true
+		}
+	}
+	if !reachesBeta {
+		t.Error("the successor is told about no organization it still reaches, " +
+			"which is the bar having been copied onto everything rather than onto " +
+			"the organizations it names")
+	}
+
+	// ── the columns, which are the substance of the copy ──────────────────────
+
+	rows, err := f.pool.Query(ctx,
+		`SELECT organization_id, revoked_at, revoked_by
+		   FROM api_key_org_revocations WHERE api_key_id = $1`, rotated.ID)
+	if err != nil {
+		t.Fatalf("read the successor's bars: %v", err)
+	}
+	defer rows.Close()
+	var carried int
+	for rows.Next() {
+		var org uuid.UUID
+		var at time.Time
+		var by *uuid.UUID
+		if err := rows.Scan(&org, &at, &by); err != nil {
+			t.Fatal(err)
+		}
+		carried++
+		if org != f.owner.OrgID {
+			t.Errorf("the successor carries a bar naming %s, want Acme (%s)", org, f.owner.OrgID)
+		}
+		if !at.Equal(barredAt) {
+			t.Errorf("the carried bar is dated %s and the administrator wrote it at "+
+				"%s. Re-dating it to the rotation puts an administrator's act on the "+
+				"clock of whoever rotated, and makes an old bar read as this "+
+				"morning's every time the credential is replaced", at, barredAt)
+		}
+		if by == nil || *by != *barredBy {
+			t.Errorf("the carried bar is attributed to %v, want the administrator "+
+				"who wrote it (%s). The bar is their statement and naming anybody "+
+				"else for it — least of all the holder who rotated — is false", by, *barredBy)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if carried != 1 {
+		t.Errorf("the successor carries %d bars, want the one its predecessor had", carried)
+	}
+
+	// ── and the rotation's own answer, which is where a caller reads first ────
+	//
+	// The response used to hardcode an empty array, on a comment saying nothing
+	// can have barred an id that did not exist when the bar would have been
+	// written — which the copy above makes false, in the same transaction, a
+	// statement earlier. A caller that rotates and reads what it got back was
+	// told its credential is unrestricted while the row saying otherwise had
+	// already been written, and had to call `GET /api/v1/api-keys` to find out.
+	if len(rotated.RevokedOrganizations) != 1 {
+		t.Fatalf("the rotation response reports %d organizations cut out of the "+
+			"successor, want the one its predecessor was barred from. The bars are "+
+			"copied inside this transaction, so an empty array here is the response "+
+			"disagreeing with the rows the same call wrote",
+			len(rotated.RevokedOrganizations))
+	}
+	if got := rotated.RevokedOrganizations[0]; got.OrganizationID != f.owner.OrgID ||
+		!got.RevokedAt.Equal(barredAt) {
+		t.Errorf("the rotation response names %s barred at %s, want Acme (%s) at "+
+			"%s — the response has to carry the administrator's own timestamp, "+
+			"exactly as the row does", got.OrganizationID, got.RevokedAt,
+			f.owner.OrgID, barredAt)
+	}
+
+	// And the owner still sees it, so F178's answer survives a rotation instead
+	// of the page going quiet the moment the credential is replaced.
+	keys, err := f.keys.List(ctx, bob)
+	if err != nil {
+		t.Fatalf("list bob's keys: %v", err)
+	}
+	for _, k := range keys {
+		if k.ID == rotated.ID && len(k.RevokedOrganizations) != 1 {
+			t.Errorf("the successor reports %d organizations cut out of it on its "+
+				"owner's own list, want 1", len(k.RevokedOrganizations))
+		}
+	}
+}
+
+// The pinned direction, which must copy nothing.
+//
+// An account-wide key may rotate into one pinned to the organization the request
+// resolved into (D87's narrowing axis), and that organization is by construction
+// one the key was not barred from — a barred one cannot be resolved into. Copying
+// the bars onto it would leave rows no resolution path reads, put *cut out of
+// Acme* on a key pinned to Beta, and break 04200's stated invariant that a pinned
+// key never carries one.
+func TestRotatingABarredKeyIntoAPinnedOneCarriesNoBar(t *testing.T) {
+	f := newTeamFixture(t)
+	ctx := t.Context()
+	bob := f.member(t, "bob-pins-away@example.com", "admin")
+	betaOrg, betaWS := joinOrganization(t, f.pool, bob.UserID, "Beta", "Beta Space", "owner")
+
+	key, err := f.keys.Create(ctx, bob, auth.CreateAPIKeyInput{
+		Name: "pins-away", Scopes: []string{"links.read"}, OrgWide: true,
+	})
+	if err != nil {
+		t.Fatalf("mint: %v", err)
+	}
+	if err := f.keys.Revoke(ctx, f.owner, key.ID); err != nil {
+		t.Fatalf("cut Acme out: %v", err)
+	}
+
+	actIn(t, f.pool, bob.UserID, betaWS)
+	barred, err := f.keys.Authenticate(ctx, key.Key)
+	if err != nil {
+		t.Fatalf("authenticate: %v", err)
+	}
+	rotated, err := f.keys.Rotate(ctx, barred, auth.RotateAPIKeyInput{
+		Reach: auth.ReachOrganization,
+	})
+	if err != nil {
+		t.Fatalf("rotate into a pinned key: %v", err)
+	}
+	if rotated.OrganizationID == nil || *rotated.OrganizationID != betaOrg {
+		t.Fatalf("the successor is pinned to %v, want Beta (%s)", rotated.OrganizationID, betaOrg)
+	}
+	if n := f.count(t,
+		`SELECT count(*) FROM api_key_org_revocations WHERE api_key_id = $1`,
+		rotated.ID); n != 0 {
+		t.Errorf("a key pinned to Beta carries %d reach revocations. Nothing reads "+
+			"them for a pinned key, and its owner's list would say it was cut out "+
+			"of an organization it never reached", n)
+	}
+	// The response says the same thing the rows do. It reads them back now
+	// rather than hardcoding an empty array, so the direction that must copy
+	// nothing has to be asserted here too — an empty answer that is right by
+	// accident is what the hardcoded one was.
+	if len(rotated.RevokedOrganizations) != 0 {
+		t.Errorf("the rotation response reports %d organizations cut out of a key "+
+			"pinned to Beta, want none", len(rotated.RevokedOrganizations))
 	}
 }
 

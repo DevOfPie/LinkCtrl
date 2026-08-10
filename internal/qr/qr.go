@@ -280,15 +280,42 @@ func Encode(content string, level Level) (*Code, error) {
 	return code, nil
 }
 
+// FluidClass is the class an inlined code carries so that the box it is drawn
+// into can shrink it (F184).
+//
+// **`width` and `height` are pixels and the page is not.** The drawing is in
+// module units inside a viewBox, so the two attributes decide an intrinsic size
+// and nothing else — a consumer that sizes the element with CSS gets the same
+// code at any size. What they *also* decide, for a consumer that sizes nothing,
+// is how far the element reaches: a 488px enrolment code inside a 160px frame
+// took `/account/mfa` 174px past a 360px viewport and made it the one page in
+// the dashboard that scrolled sideways. `max-w-full` is the constraint and
+// `h-auto` is what keeps the picture square while it applies.
+//
+// Tailwind's names, in a package that knows nothing else about the dashboard,
+// because the alternative is an inline `style` attribute and the dashboard's
+// CSP is `style-src 'self'` with no `unsafe-inline`. Both utilities are already
+// in the generated stylesheet, so no build step depends on this constant.
+// Anything that wants the bare document — a file somebody downloads — asks for
+// it, by naming the empty class through [RenderClass]; see
+// link.Service.RenderQRBySlug.
+const FluidClass = "max-w-full h-auto"
+
 // Render encodes content and draws it, in one call, for the common case.
+//
+// **The common case is a code inlined into a page**, so it carries [FluidClass]
+// and fits the box it is put in. A caller that has stated the element's size
+// itself passes its own class to [RenderClass] — see ui.QRThumbClass, which
+// fixes the link page's thumbnail at 6rem — and a caller that wants no class at
+// all passes the empty string, which writes no attribute.
 func Render(content string, style Style) ([]byte, error) {
-	return RenderClass(content, style, "")
+	return RenderClass(content, style, FluidClass)
 }
 
 // RenderWithLogo draws a code with an image composited into the middle of it
-// (M50.6). A nil logo is Render.
+// (M50.6). A nil logo is Render, [FluidClass] and all.
 func RenderWithLogo(content string, style Style, logo []byte) ([]byte, error) {
-	return RenderClassWithLogo(content, style, "", logo)
+	return RenderClassWithLogo(content, style, FluidClass, logo)
 }
 
 // RenderClass is Render with a CSS class on the root `<svg>` (M48).

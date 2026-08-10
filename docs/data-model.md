@@ -6,8 +6,11 @@ pointed at since Phase 1. It existed as a reference in two files and nowhere
 else until 0.2.0.
 
 **Derived from the migrated schema, not from the migrations.** Every table,
-column count and foreign key below was read out of a database with all 35
-migrations applied, so this describes what a running instance has rather than
+column count and foreign key below was read out of a database with **all 43**
+migrations applied — the count as of 0.3.0, counted from
+`internal/store/migrations/` rather than recalled. It said *35* until then, and
+was already one short when 0.2.0 shipped with 36; Phase 3 added the other seven.
+It describes what a running instance has rather than
 what the files appear to say. The distinction matters here: partitions are
 created by application code and never appear in sqlc-visible SQL, so a reader
 walking the migration files alone would not find them.
@@ -106,6 +109,8 @@ appears in sqlc-visible SQL.
 | `pending_registrations` | 9 | Built | Self-serve signup (M29). Swept when its window lapses. |
 | `password_resets` | 6 | Built | Account recovery (M51, `03900`). The third bearer-token table, after invitations and registrations: only a SHA-256 is stored, single-use, one hour. Swept hourly, and every row for an account is spent when one of them is used. |
 | `mfa_recovery_codes` | 5 | Built | Ten single-use codes per enrolment ([M53](build-notes/phase-details/m53.md), `04100`). SHA-256 only, globally unique so two accounts cannot hold one secret, and kept after being spent so the account page can count what is left. Regenerating deletes the set outright — the previous one is void in full, and a count of leftovers from a void set would be a lie. |
+| `api_keys` | 15 | Built | `user_id` is the owner and is what a revoke keys on. **`organization_id` is nullable since M54 (`04200`)**: NULL is account-wide — the key reaches every organization its owner holds an organization-wide membership in — and non-NULL is pinned to that one. `workspace_id` is the third, narrowest reach, and the two axes are independent, which is why they are two columns and not a `reach` enum. Only an HMAC of the token is stored. **This table was absent from this document until 0.3.0**, while appearing in the diagram above. |
+| `api_key_org_revocations` | 4 | Built | One row per organization an administrator has cut an **account-wide** key out of ([M54](build-notes/phase-details/m54.md), `04200`). A pinned key never has one — its organization is its whole reach. Read on the authentication path to decide where a request lands, and since M58 also to bound what the key may be *told* about ([F183](build-notes/deferred-findings.md)). Also absent from this document until 0.3.0. |
 | `mfa_pending_logins` | 8 | Built | The step between a right password and a session (`04100`). The fourth bearer-token table and the shortest-lived: SHA-256 only, single-use, five minutes. A table rather than a signed cookie because single use needs a server-side record of whether it has been spent, at which point the table is back and the cookie is an optimisation. Carries the sign-in's `ip_prefix` and user agent, so the session it mints records where the sign-in *started*. Swept hourly with no retention window — a spent one is evidence of nothing, because the session it minted is the record. |
 
 ### Links and routing
@@ -140,11 +145,12 @@ appears in sqlc-visible SQL.
 
 | Table | Cols | Status | Notes |
 | --- | --- | --- | --- |
-| `audit_logs` | 12 | Built, partitioned | 39 actions, enumerated by `audit.AllActions` and checked by a test. `actor_label` is rewritten to a constant tombstone by the erasure sweep; `actor_user_id` is not (D148). |
-| `notifications` | 9 | Built | Scoped to the reader and the workspace they are standing in, with organization-level news visible from every workspace (D102). |
+| `audit_logs` | 12 | Built, partitioned | 39 actions, enumerated by `audit.AllActions` and checked by a test. `actor_label` is rewritten to a constant tombstone by the erasure sweep; `actor_user_id` is not (D148). Since M58 the same statement also rewrites `metadata`'s `"email"` key and the `"from"` array beside it, matched on the value because there is no key to match on. **One statement, not several**: two data-modifying CTEs writing one row leave Postgres to apply one and drop the other, which a record that is both the erased actor's and carries their address hits every time. |
+| `notifications` | 9 | Built | Scoped to the reader and the workspace they are standing in, with organization-level news visible from every workspace (D102). Deleted with their own reader's account, and **scrubbed** when somebody else's account is erased: the row telling an inviter that their invitation was accepted names the person who accepted it, in `data` and in `title` alike, and belongs to neither of the two sweeps that would otherwise reach it (M58, D176). |
 | `mail_outbox` | 11 | Built | Optional: an instance with no `SMTP_HOST` never queues. Bodies are blanked when a row finishes (F32). |
 | `webhooks` / `webhook_deliveries` | 10 / 11 | Built | Delivery is instance-wide and arrival-ordered, which is a recorded limitation (F90). |
-| `automation_rules` | 11 | Built | `last_fired_at` is the watermark that stops a rule firing twice for one subject. |
+| `automation_rules` | 12 | Built | `last_fired_at` is the watermark that stops a rule firing twice for one subject. *(Counted 11 here until 0.3.0; `03600` added the watermark's subject column and the count did not move with it.)* |
+| `instance_settings` | 4 | Built | A singleton — the instance's own settings, which had nowhere to live before D161. Today it holds `update_check_enabled`, three-valued: NULL means the operator has not been asked yet, which is what makes *never answering* a refusal rather than a default (`04300`). Absent from this document until 0.3.0. |
 | `job_state` | 6 | Built | The scheduler's cursors and watermarks. |
 
 ## What is not built
@@ -165,9 +171,16 @@ because a reader finding the column otherwise concludes the feature is there.
 - **Custom roles** — `roles.organization_id` exists and nothing creates a row
   with it set. Every role today is built-in.
 - **Dormant jsonb** — `00600` added columns for structure whose feature had not
-  arrived. The rule is that dormant structure is jsonb until the feature lands;
-  what remains dormant is listed in that migration's header rather than repeated
-  here.
+  arrived. The rule is that dormant structure is jsonb until the feature lands.
+  **Its header no longer describes what is dormant, because almost nothing in it
+  is**: every table that file created has a writer now, and the blob comments
+  inside it were trued up at 0.3.0 against the structs that actually fill them.
+  What is left dormant is a *shape inside a blob* rather than a table —
+  `qr_codes.style` has five fields and its comment named two more, one of which
+  (a module shape) is still unbuilt and is now recorded as unscheduled in
+  [phase-3-candidates.md](build-notes/phase-3-candidates.md). *(This row pointed
+  at that header for the list until 0.3.0, and the header had never carried
+  one.)*
 
 ## Keeping this true
 

@@ -51,8 +51,9 @@ type Organization struct {
 // Gated on orgs.create (D16), which on a default instance is held by the account
 // from the setup form and nobody else — see 01300_orgs_create.sql for why that
 // is a role grant rather than a check against how the account was made. The
-// permission is also the call site a future entitlement check would hang on
-// (Phase 3+); nothing here is billing-shaped, and the point of naming it now is
+// permission is also the call site a future entitlement check would hang on —
+// unscheduled, and Phase 3 left commercial work a candidate rather than taking
+// it (D108); nothing here is billing-shaped, and the point of naming it now is
 // that the check has somewhere to go without a schema change.
 //
 // The caller becomes the owner. Not a parameter, and not settable: an

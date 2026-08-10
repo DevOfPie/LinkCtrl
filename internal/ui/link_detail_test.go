@@ -344,3 +344,228 @@ func TestTheClickLimitNamesTheTotalAndWhatIsSpent(t *testing.T) {
 			"total:\n  %s", found)
 	}
 }
+
+// checkboxNamed pulls one checkbox out of a rendered page and reports whether it
+// is ticked.
+//
+// By tag rather than by substring, because the attribute F167 counted —
+// `name="one_time" value="1" checked` — is not what the template emits: the
+// class sits between the value and the checked, so a literal search returns 0
+// whichever limb ran. A search that cannot tell the two states apart is how six
+// branches went unrendered under tests that read this page byte by byte.
+func checkboxNamed(t *testing.T, page, name string) (tag string, checked, present bool) {
+	t.Helper()
+	m := regexp.MustCompile(`<input\b[^>]*\bname="` + name + `"[^>]*>`).FindString(page)
+	if m == "" {
+		return "", false, false
+	}
+	return strings.Join(strings.Fields(m), " "), strings.Contains(m, "checked"), true
+}
+
+// TestEveryGateOnTheEditFormDrawsBothStates is F167.
+//
+// Six `{{if}}` branches on the product's largest form had never been rendered by
+// any test in this repository, because the fixture passed `Form` as a
+// `map[string]string` where production passes a struct with `bool` fields. A
+// missing key in a map yields `""`, `{{if}}` reads that as false, and so every
+// one of them took its else limb on every run — while `TestEveryPageRenders`,
+// `TestWideElementsScrollInsideTheirOwnContainer`,
+// `TestTemplatesUseThemeTokensOnly` and M47's three tests all read this page.
+// Nothing shipped wrongly; a browser renders all six correctly. What was missing
+// is any way for a change that breaks one of them to fail `make check`.
+//
+// Three states, because the six branches are not six independent booleans: the
+// *Remove the password* control exists only inside `HasPassword`, so its own
+// unticked limb needs a state where the password is set and the request to
+// remove it is not.
+func TestEveryGateOnTheEditFormDrawsBothStates(t *testing.T) {
+	base := linkForm{URL: "https://example.com/x", Alias: "demo", MaxClicks: "466"}
+
+	on := base
+	on.ForwardQuery, on.ForwardPath = true, true
+	on.HasPassword, on.ClearPassword = true, true
+	on.OneTime, on.RequireSignature = true, true
+
+	kept := on
+	kept.ClearPassword = false
+
+	pages := map[string]string{
+		// The package's own fixture first, because it is the one the finding is
+		// about: every other test in this package renders it, and it is what put
+		// all six branches on their else limb.
+		"the package fixture": renderPage(t, "link_detail", nil),
+		"every gate on":       renderPage(t, "link_detail", map[string]any{"Form": on}),
+		"a password kept":     renderPage(t, "link_detail", map[string]any{"Form": kept}),
+		"every gate off":      renderPage(t, "link_detail", map[string]any{"Form": base}),
+	}
+	ticked := map[string]bool{
+		"the package fixture": true, "every gate on": true,
+		"a password kept": true, "every gate off": false,
+	}
+
+	// The four checkboxes whose only state is their own boolean.
+	for _, name := range []string{
+		"forward_query", "forward_path", "one_time", "require_signature",
+	} {
+		for state, page := range pages {
+			tag, checked, present := checkboxNamed(t, page, name)
+			if !present {
+				t.Errorf("%s: the %s checkbox is not on the page at all", state, name)
+				continue
+			}
+			if checked != ticked[state] {
+				t.Errorf("%s: %s is checked=%v, want %v:\n  %s",
+					state, name, checked, ticked[state], tag)
+			}
+		}
+	}
+
+	// The password box says which of two things it is for, and the sentence is
+	// the only thing that distinguishes them — the value is always empty,
+	// because the password is stored as an argon2id hash and there is nothing
+	// to render.
+	for state, page := range pages {
+		set, want := "Set — type to replace", ticked[state]
+		if strings.Contains(page, set) != want {
+			t.Errorf("%s: the password box %s say %q. Its value is empty in both "+
+				"states, so the placeholder is the only thing telling a reader "+
+				"whether this link has a password",
+				state, map[bool]string{true: "does not", false: "does"}[want], set)
+		}
+		if strings.Contains(page, "No password") == want {
+			t.Errorf("%s: the password box's empty-state placeholder is wrong", state)
+		}
+	}
+
+	// And the control that exists only when there is a password to remove.
+	for state, page := range pages {
+		tag, checked, present := checkboxNamed(t, page, "clear_password")
+		wantPresent := ticked[state]
+		if present != wantPresent {
+			t.Errorf("%s: the clear_password checkbox present=%v, want %v. It is "+
+				"the one control on this form that is drawn or not drawn rather "+
+				"than ticked or not, and it was counted 0 times on the page this "+
+				"package renders", state, present, wantPresent)
+			continue
+		}
+		if !present {
+			if strings.Contains(page, "Remove the password") {
+				t.Errorf("%s: the page offers to remove a password this link does not have", state)
+			}
+			continue
+		}
+		if !strings.Contains(page, "Remove the password") {
+			t.Errorf("%s: the clear_password checkbox has no label", state)
+		}
+		// Ticked in the state that came back from a rejected save with the box
+		// already checked; unticked when the password is simply set.
+		if want := state != "a password kept"; checked != want {
+			t.Errorf("%s: clear_password is checked=%v, want %v:\n  %s",
+				state, checked, want, tag)
+		}
+	}
+}
+
+// TestTheFolderSelectDrawsAndSaysWhereTheLinkIsFiled is F192's first half,
+// and it is F167's finding at a different key.
+//
+// **A fixture that omits a slice yields the zero value, `{{range}}` over it
+// emits nothing, and the branch inside is unreachable.** The link page's
+// fixture carried no `FolderOptions`, and the only one in this package sits on
+// the `links` filter panel — a different template — so link_edit.html's whole
+// folder control, the option loop and the `{{if eq .Form.FolderID ""}} selected`
+// branch inside it were rendered by no test in the repository. Nothing shipped
+// wrongly; a browser draws it correctly. What was missing is any way for a
+// change that breaks it to fail `make check`, which is the same sentence F167
+// earned.
+//
+// Three states, because the control has three: filed, unfiled, and a workspace
+// that has never made a folder — where the select is absent rather than empty,
+// which is the template's own decision and worth holding.
+func TestTheFolderSelectDrawsAndSaysWhereTheLinkIsFiled(t *testing.T) {
+	const summer = "0198c9c5-0000-7000-8000-000000000041"
+	unfiled := []map[string]any{
+		{"ID": summer, "Label": "‒ Summer", "Selected": false},
+	}
+
+	unfiledForm := linkForm{URL: "https://example.com/x", Alias: "demo"}
+
+	// The package's own fixture first, because it is the one the finding is
+	// about: every rendered-page scan here reads it, and it drew no select.
+	filed := renderPage(t, "link_detail", nil)
+	loose := renderPage(t, "link_detail", map[string]any{
+		"FolderOptions": unfiled, "Form": unfiledForm,
+	})
+	none := renderPage(t, "link_detail", map[string]any{
+		"FolderOptions": []map[string]any{}, "Form": unfiledForm,
+	})
+
+	for state, page := range map[string]string{"filed": filed, "unfiled": loose} {
+		if !strings.Contains(page, `name="folder_id"`) {
+			t.Fatalf("%s: the folder select is not on the page at all, so neither "+
+				"branch below is being read", state)
+		}
+		if !strings.Contains(page, `>No folder</option>`) {
+			t.Errorf("%s: the select has no empty entry. This form posts every "+
+				"field, so an empty value is the only way a link is taken out of a "+
+				"folder", state)
+		}
+		if !strings.Contains(page, `>‒ Summer</option>`) {
+			t.Errorf("%s: the workspace's folder is not among the options", state)
+		}
+	}
+
+	// Exactly one option carries `selected`, and which one is the whole claim:
+	// a select that marks both, or neither, tells the reader nothing about
+	// where the link actually is. Read out of the folder select alone — the page
+	// carries several, and counting across all of them would answer about the
+	// campaign and the date range as well.
+	filedSelect := folderSelect(t, filed)
+	looseSelect := folderSelect(t, loose)
+
+	if n := strings.Count(filedSelect, " selected>"); n != 1 {
+		t.Errorf("the folder select marks %d options selected, want 1:\n  %s",
+			n, filedSelect)
+	}
+	if !strings.Contains(filedSelect, `value="`+summer+`" selected>`) {
+		t.Errorf("the link is filed in %s and no option says so; the select opens "+
+			"on \"No folder\" for a link that is in one:\n  %s", summer, filedSelect)
+	}
+
+	if n := strings.Count(looseSelect, " selected>"); n != 1 {
+		t.Errorf("an unfiled link's folder select marks %d options selected, want "+
+			"1:\n  %s", n, looseSelect)
+	}
+	if !strings.Contains(looseSelect, `value="" selected>No folder`) {
+		t.Errorf("an unfiled link does not open the select on \"No folder\". That is "+
+			"the `{{if eq .Form.FolderID \"\"}}` branch, and it was rendered by "+
+			"nothing in this package before F192:\n  %s", looseSelect)
+	}
+	// And a workspace with no folders carries no control at all, rather than one
+	// holding a single meaningless option.
+	if strings.Contains(none, `name="folder_id"`) {
+		t.Error("a workspace that has never made a folder is shown a folder select " +
+			"whose only entry is \"No folder\"")
+	}
+	if strings.Contains(none, ">Folder<") {
+		t.Error("the folder label is drawn without the select it labels")
+	}
+}
+
+// folderSelect is the `<select name="folder_id">` element and its options.
+//
+// The page draws several selects and the assertions above are about one of
+// them, so they are read out of the element rather than out of the document.
+func folderSelect(t *testing.T, page string) string {
+	t.Helper()
+	i := strings.Index(page, `name="folder_id"`)
+	if i < 0 {
+		t.Fatal("the folder select is not on the page")
+	}
+	open := strings.LastIndex(page[:i], "<select")
+	end := strings.Index(page[i:], "</select>")
+	if open < 0 || end < 0 {
+		t.Fatal("the folder select is not a closed <select> element")
+	}
+	return page[open : i+end+len("</select>")]
+}

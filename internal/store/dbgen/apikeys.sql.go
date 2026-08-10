@@ -12,6 +12,69 @@ import (
 	"github.com/google/uuid"
 )
 
+const carryAPIKeyReachRevocations = `-- name: CarryAPIKeyReachRevocations :exec
+INSERT INTO api_key_org_revocations (api_key_id, organization_id, revoked_at, revoked_by)
+SELECT $1, x.organization_id, x.revoked_at, x.revoked_by
+  FROM api_key_org_revocations x
+  JOIN api_keys k ON k.id = $1
+ WHERE x.api_key_id = $2
+   AND k.organization_id IS NULL
+`
+
+type CarryAPIKeyReachRevocationsParams struct {
+	SuccessorID   uuid.UUID
+	PredecessorID uuid.UUID
+}
+
+// The predecessor's bars, carried onto its successor inside the rotation
+// transaction.
+//
+// **Without this a reach revocation is escapable by the credential it was aimed
+// at.** A bar names an `api_key_id`; rotation mints a new id; nothing copied the
+// rows. So the holder of a key an administrator had cut out of an organization
+// sent `POST /api/v1/api-keys/rotate` — authenticated by the key's own token,
+// with no session and no permission anywhere — and the successor resolved back
+// into that organization and was told about it again. Driven through the product
+// 2026-08-09, both halves: it acted there and it read there. That is the case the
+// whole mechanism exists for, because the credential a reach revocation is aimed
+// at is the one that is *not* in legitimate hands, and it is exactly the holder
+// of that credential who has a reason to rotate.
+//
+// **Both columns are copied rather than rewritten**, and that is the substance of
+// the statement rather than a detail of it.
+//
+//   - `revoked_at` is the predecessor's. It is when the reach was cut, and
+//     rotating does not move that moment. `now()` would date an administrator's
+//     act by the clock of whoever rotated, make an old bar read as this
+//     morning's, and hand the owner's key list (F178) a date that resets every
+//     time the credential is replaced — which is precisely the reading somebody
+//     evading the bar would want it to have.
+//   - `revoked_by` is the predecessor's. The bar is that administrator's
+//     statement and they are who answers for it; attributing it to the rotating
+//     actor would name a credential's holder as the author of a bar against
+//     itself. NULL is carried unchanged and is already a state the schema means:
+//     `revoked_by` is `ON DELETE SET NULL` exactly so a bar outlives the
+//     administrator's account.
+//
+// **The two cases that copy nothing do so by data, not by a branch here.** A
+// **pinned predecessor** has no rows to select — nothing writes a bar for a key
+// whose organization is its whole reach, because cutting that reach and revoking
+// the key are the same act (`revokeInOrganization` sends it to
+// `revokePinnedKey`). And a **pinned successor** is excluded by the join, which
+// reads the reach off the row `insertSuccessor` has just written rather than off
+// a parameter that could disagree with it: an account-wide key may rotate into a
+// pinned one, and copying bars onto that would leave rows no resolution path
+// reads and put *cut out of Acme* on a key pinned to Beta. It would also break
+// 04200's stated invariant that a pinned key never carries one.
+//
+// Nothing is re-derived. Which organizations are barred is not recomputed from
+// memberships or from anything else — the rows are the record, and a copy is the
+// only operation that cannot disagree with them.
+func (q *Queries) CarryAPIKeyReachRevocations(ctx context.Context, arg CarryAPIKeyReachRevocationsParams) error {
+	_, err := q.db.Exec(ctx, carryAPIKeyReachRevocations, arg.SuccessorID, arg.PredecessorID)
+	return err
+}
+
 const createAPIKey = `-- name: CreateAPIKey :one
 
 INSERT INTO api_keys (
@@ -297,6 +360,66 @@ func (q *Queries) GetAPIKeyReach(ctx context.Context, id uuid.UUID) (GetAPIKeyRe
 	return i, err
 }
 
+const listAPIKeyOrgRevocations = `-- name: ListAPIKeyOrgRevocations :many
+SELECT x.api_key_id, x.organization_id, o.name AS organization_name, x.revoked_at
+FROM api_key_org_revocations x
+JOIN organizations o ON o.id = x.organization_id
+WHERE x.api_key_id = ANY ($1::uuid[])
+ORDER BY x.revoked_at, x.organization_id
+`
+
+type ListAPIKeyOrgRevocationsRow struct {
+	ApiKeyID         uuid.UUID
+	OrganizationID   uuid.UUID
+	OrganizationName string
+	RevokedAt        time.Time
+}
+
+// Which organizations have been cut out of which of these keys (F178).
+//
+// The other half of the reach revocation M54 built. An administrator can bar an
+// account-wide key from their organization and the key's owner had no way to
+// learn it: the list above reports one reach — pinned or account-wide — and a
+// credential that had silently stopped resolving into one tenant read exactly as
+// it did the day before. The audit record that says why is written in the
+// administrator's organization, which the owner may hold no `audit.read` in.
+//
+// Keyed on the ids already listed rather than on the owner, so it is one round
+// trip after the list and not one per key, and so it cannot return a bar on a
+// key the caller was not shown.
+//
+// The organization's name is joined because an id answers nobody's support
+// question, and it discloses nothing new: a bar only ever exists on a key whose
+// owner held an organization-wide membership there when it was written.
+//
+// Soft-deleted organizations are not filtered out. The bar is a fact about the
+// key, it outlives the tenant, and hiding the row would make a key look
+// unrestricted when it is not.
+func (q *Queries) ListAPIKeyOrgRevocations(ctx context.Context, apiKeyIds []uuid.UUID) ([]ListAPIKeyOrgRevocationsRow, error) {
+	rows, err := q.db.Query(ctx, listAPIKeyOrgRevocations, apiKeyIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAPIKeyOrgRevocationsRow{}
+	for rows.Next() {
+		var i ListAPIKeyOrgRevocationsRow
+		if err := rows.Scan(
+			&i.ApiKeyID,
+			&i.OrganizationID,
+			&i.OrganizationName,
+			&i.RevokedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAPIKeysForUser = `-- name: ListAPIKeysForUser :many
 SELECT id, name, prefix, scopes, organization_id, workspace_id, last_used_at,
        expires_at, revoked_at, rotated_at, grace_expires_at, successor_id,
@@ -429,8 +552,14 @@ func (q *Queries) MarkAPIKeyRotated(ctx context.Context, arg MarkAPIKeyRotatedPa
 }
 
 const resolveOrganizationForAPIKey = `-- name: ResolveOrganizationForAPIKey :one
-SELECT o.id
+WITH barred AS (
+    SELECT coalesce(array_agg(x.organization_id), '{}')::uuid[] AS ids
+      FROM api_key_org_revocations x
+     WHERE x.api_key_id = $2
+)
+SELECT o.id, barred.ids AS barred_organization_ids
 FROM organizations o
+CROSS JOIN barred
 JOIN memberships m ON m.organization_id = o.id
                   AND m.user_id = $1
                   AND m.workspace_id IS NULL
@@ -438,11 +567,7 @@ JOIN users u ON u.id = m.user_id
 LEFT JOIN workspaces dw ON dw.id = u.default_workspace_id AND dw.deleted_at IS NULL
 LEFT JOIN workspaces lw ON lw.id = u.last_workspace_id    AND lw.deleted_at IS NULL
 WHERE o.deleted_at IS NULL
-  AND NOT EXISTS (
-      SELECT 1 FROM api_key_org_revocations x
-       WHERE x.api_key_id = $2
-         AND x.organization_id = o.id
-  )
+  AND NOT (o.id = ANY (barred.ids))
 ORDER BY
     (o.id IS NOT DISTINCT FROM dw.organization_id) DESC,
     (o.id IS NOT DISTINCT FROM lw.organization_id) DESC,
@@ -453,6 +578,11 @@ LIMIT 1
 type ResolveOrganizationForAPIKeyParams struct {
 	UserID   uuid.UUID
 	ApiKeyID uuid.UUID
+}
+
+type ResolveOrganizationForAPIKeyRow struct {
+	ID                    uuid.UUID
+	BarredOrganizationIds []uuid.UUID
 }
 
 // Which organization an **account-wide** key's request lands in (M54).
@@ -481,11 +611,24 @@ type ResolveOrganizationForAPIKeyParams struct {
 // both matter: the coarse one decides whether the credential authenticates at
 // all, this one decides where it lands, and an administrator who cut their
 // tenant out must not be reachable by a key that simply had nowhere else to go.
-func (q *Queries) ResolveOrganizationForAPIKey(ctx context.Context, arg ResolveOrganizationForAPIKeyParams) (uuid.UUID, error) {
+//
+// **The bar comes back with the answer** (F183). Cutting an organization out of
+// an account-wide key's reach stopped it *acting* there and not *reading about*
+// it: `auth.Service.Workspaces` bounded a key by pinned-or-not, and an
+// account-wide key is by definition not pinned, so the barred organization's
+// name, slug and workspace ids went on being listed to the revoked credential.
+// Closing that needs the whole barred set rather than the one organization this
+// request landed in, and this statement is the only place an account-wide key's
+// reach is already being resolved — so the set rides back with it as an array
+// and the read bound costs no query of its own. `barred` is aggregated in its
+// own CTE so it is computed once rather than per candidate organization, and the
+// exclusion below reads it instead of repeating the subquery: one expression of
+// the fact, which is what a reader of a security predicate should have to check.
+func (q *Queries) ResolveOrganizationForAPIKey(ctx context.Context, arg ResolveOrganizationForAPIKeyParams) (ResolveOrganizationForAPIKeyRow, error) {
 	row := q.db.QueryRow(ctx, resolveOrganizationForAPIKey, arg.UserID, arg.ApiKeyID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i ResolveOrganizationForAPIKeyRow
+	err := row.Scan(&i.ID, &i.BarredOrganizationIds)
+	return i, err
 }
 
 const revokeAPIKey = `-- name: RevokeAPIKey :execrows

@@ -941,3 +941,125 @@ func (f *ruleFixture) deleteAPI(path string) int {
 	defer func() { _ = resp.Body.Close() }()
 	return resp.StatusCode
 }
+
+// --- M58: the refusal, and where it lands (F170) -------------------------------
+
+// TestARefusedStyleStaysOnThePageItWasTypedOn is F170.
+//
+// **The panel is a route, so a refusal has two honest destinations and only the
+// form knows which.** The success path has matched `next` against them since
+// M48; the refusal path rendered the link page whatever the form said, which
+// answered somebody working at /links/{id}/qr with a different page and left
+// them to find their way back to the one they were standing on. M49 is what made
+// it ordinary rather than rare: the size box is the panel's only free-text field
+// and an out-of-range size is now the everyday refusal.
+//
+// What must not change is the refusal itself — 422, the message beside the form,
+// nothing stored — so both halves are asserted on both surfaces.
+func TestARefusedStyleStaysOnThePageItWasTypedOn(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("refused", "https://example.com/x")
+	named := f.createQRCode(t, id, "Shop window card")
+	page := "/links/" + id.String()
+	panel := page + "/qr"
+
+	refuse := func(next string) (int, string) {
+		t.Helper()
+		resp := f.postForm(panel, url.Values{
+			"next": {next}, "code": {named.Slug},
+			"foreground": {"#000000"}, "background": {"#ffffff"},
+			// Nine pixels is nothing that can be printed, and the message that
+			// comes back names the range.
+			"size": {"9"},
+		})
+		defer func() { _ = resp.Body.Close() }()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp.StatusCode, string(body)
+	}
+
+	const refusal = "is not a size anything can be printed at"
+
+	status, body := refuse(panel)
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf("a 9px code posted from the panel's page = %d, want 422", status)
+	}
+	if !strings.Contains(body, ">QR code</h1>") {
+		t.Error("a refusal typed at /links/{id}/qr came back as some other page. The " +
+			"form carries `next` precisely so a reader is answered on the surface " +
+			"they are standing on, and the success path has honoured it since M48")
+	}
+	if strings.Contains(body, "← Links") {
+		t.Error("the refusal rendered the link page's heading; that is the page " +
+			"F170 is about not being sent to")
+	}
+	if !strings.Contains(body, refusal) {
+		t.Errorf("the panel page came back without the reason:\n%.400s", body)
+	}
+	// The code being worked on survives the refusal, exactly as it survives a
+	// save: a refusal that reset the selection would lose the reader's place as
+	// well as their number.
+	if !strings.Contains(body, named.Slug) {
+		t.Errorf("the refusal dropped the reader off code %q and onto another",
+			named.Slug)
+	}
+
+	// And the link page is still where a refusal from the link page lands.
+	status, body = refuse(page)
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf("a 9px code posted from the link page = %d, want 422", status)
+	}
+	if !strings.Contains(body, "← Links") || strings.Contains(body, ">QR code</h1>") {
+		t.Error("a refusal typed on the link page came back as the panel's own page; " +
+			"`next` is a choice between two surfaces, not a redirect to one")
+	}
+	if !strings.Contains(body, refusal) {
+		t.Errorf("the link page came back without the reason:\n%.400s", body)
+	}
+
+	// Nothing was stored by either, which is the half of the refusal that was
+	// already correct and has to stay correct.
+	if n := f.qrRowCount(id); n != 1 {
+		t.Errorf("%d qr_codes rows after two refusals, want the named code's own 1", n)
+	}
+}
+
+// TestARefusedLogoStaysOnThePageItWasUploadedFrom is F170 on the upload, which
+// is the path where `next` arrives as a part of a multipart body rather than as
+// an encoded field — the same two hidden inputs, in the only body a file has.
+func TestARefusedLogoStaysOnThePageItWasUploadedFrom(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("refusedlogo", "https://example.com/x")
+	panel := "/links/" + id.String() + "/qr"
+
+	// Not an image at all: internal/qr decides by content, so the refusal is the
+	// decoder's and it is a 422 with a sentence beside the form.
+	contentType, body := logoBody(t, "brand.png", "image/png",
+		[]byte("this is not a picture"), map[string]string{"next": panel, "code": ""})
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+		f.server.URL+panel+"/logo", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", contentType)
+	resp, err := f.client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	page, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("a logo that is not an image = %d, want 422", resp.StatusCode)
+	}
+	if !strings.Contains(string(page), ">QR code</h1>") {
+		t.Errorf("a refused upload from the panel's page came back as some other "+
+			"page:\n%.400s", page)
+	}
+}

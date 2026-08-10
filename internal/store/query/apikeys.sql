@@ -89,8 +89,27 @@ WHERE k.prefix = $1
 -- both matter: the coarse one decides whether the credential authenticates at
 -- all, this one decides where it lands, and an administrator who cut their
 -- tenant out must not be reachable by a key that simply had nowhere else to go.
-SELECT o.id
+--
+-- **The bar comes back with the answer** (F183). Cutting an organization out of
+-- an account-wide key's reach stopped it *acting* there and not *reading about*
+-- it: `auth.Service.Workspaces` bounded a key by pinned-or-not, and an
+-- account-wide key is by definition not pinned, so the barred organization's
+-- name, slug and workspace ids went on being listed to the revoked credential.
+-- Closing that needs the whole barred set rather than the one organization this
+-- request landed in, and this statement is the only place an account-wide key's
+-- reach is already being resolved — so the set rides back with it as an array
+-- and the read bound costs no query of its own. `barred` is aggregated in its
+-- own CTE so it is computed once rather than per candidate organization, and the
+-- exclusion below reads it instead of repeating the subquery: one expression of
+-- the fact, which is what a reader of a security predicate should have to check.
+WITH barred AS (
+    SELECT coalesce(array_agg(x.organization_id), '{}')::uuid[] AS ids
+      FROM api_key_org_revocations x
+     WHERE x.api_key_id = @api_key_id
+)
+SELECT o.id, barred.ids AS barred_organization_ids
 FROM organizations o
+CROSS JOIN barred
 JOIN memberships m ON m.organization_id = o.id
                   AND m.user_id = @user_id
                   AND m.workspace_id IS NULL
@@ -98,11 +117,7 @@ JOIN users u ON u.id = m.user_id
 LEFT JOIN workspaces dw ON dw.id = u.default_workspace_id AND dw.deleted_at IS NULL
 LEFT JOIN workspaces lw ON lw.id = u.last_workspace_id    AND lw.deleted_at IS NULL
 WHERE o.deleted_at IS NULL
-  AND NOT EXISTS (
-      SELECT 1 FROM api_key_org_revocations x
-       WHERE x.api_key_id = @api_key_id
-         AND x.organization_id = o.id
-  )
+  AND NOT (o.id = ANY (barred.ids))
 ORDER BY
     (o.id IS NOT DISTINCT FROM dw.organization_id) DESC,
     (o.id IS NOT DISTINCT FROM lw.organization_id) DESC,
@@ -133,6 +148,33 @@ SELECT id, name, prefix, scopes, organization_id, workspace_id, last_used_at,
 FROM api_keys
 WHERE user_id = $1
 ORDER BY created_at DESC;
+
+-- name: ListAPIKeyOrgRevocations :many
+-- Which organizations have been cut out of which of these keys (F178).
+--
+-- The other half of the reach revocation M54 built. An administrator can bar an
+-- account-wide key from their organization and the key's owner had no way to
+-- learn it: the list above reports one reach — pinned or account-wide — and a
+-- credential that had silently stopped resolving into one tenant read exactly as
+-- it did the day before. The audit record that says why is written in the
+-- administrator's organization, which the owner may hold no `audit.read` in.
+--
+-- Keyed on the ids already listed rather than on the owner, so it is one round
+-- trip after the list and not one per key, and so it cannot return a bar on a
+-- key the caller was not shown.
+--
+-- The organization's name is joined because an id answers nobody's support
+-- question, and it discloses nothing new: a bar only ever exists on a key whose
+-- owner held an organization-wide membership there when it was written.
+--
+-- Soft-deleted organizations are not filtered out. The bar is a fact about the
+-- key, it outlives the tenant, and hiding the row would make a key look
+-- unrestricted when it is not.
+SELECT x.api_key_id, x.organization_id, o.name AS organization_name, x.revoked_at
+FROM api_key_org_revocations x
+JOIN organizations o ON o.id = x.organization_id
+WHERE x.api_key_id = ANY (sqlc.arg(api_key_ids)::uuid[])
+ORDER BY x.revoked_at, x.organization_id;
 
 -- name: GetAPIKeyForRotation :one
 -- The predecessor, locked, so two rotations of one key serialize instead of
@@ -271,6 +313,58 @@ WHERE k.id = $1;
 INSERT INTO api_key_org_revocations (api_key_id, organization_id, revoked_by)
 VALUES ($1, $2, $3)
 ON CONFLICT (api_key_id, organization_id) DO NOTHING;
+
+-- name: CarryAPIKeyReachRevocations :exec
+-- The predecessor's bars, carried onto its successor inside the rotation
+-- transaction.
+--
+-- **Without this a reach revocation is escapable by the credential it was aimed
+-- at.** A bar names an `api_key_id`; rotation mints a new id; nothing copied the
+-- rows. So the holder of a key an administrator had cut out of an organization
+-- sent `POST /api/v1/api-keys/rotate` — authenticated by the key's own token,
+-- with no session and no permission anywhere — and the successor resolved back
+-- into that organization and was told about it again. Driven through the product
+-- 2026-08-09, both halves: it acted there and it read there. That is the case the
+-- whole mechanism exists for, because the credential a reach revocation is aimed
+-- at is the one that is *not* in legitimate hands, and it is exactly the holder
+-- of that credential who has a reason to rotate.
+--
+-- **Both columns are copied rather than rewritten**, and that is the substance of
+-- the statement rather than a detail of it.
+--
+--   * `revoked_at` is the predecessor's. It is when the reach was cut, and
+--     rotating does not move that moment. `now()` would date an administrator's
+--     act by the clock of whoever rotated, make an old bar read as this
+--     morning's, and hand the owner's key list (F178) a date that resets every
+--     time the credential is replaced — which is precisely the reading somebody
+--     evading the bar would want it to have.
+--   * `revoked_by` is the predecessor's. The bar is that administrator's
+--     statement and they are who answers for it; attributing it to the rotating
+--     actor would name a credential's holder as the author of a bar against
+--     itself. NULL is carried unchanged and is already a state the schema means:
+--     `revoked_by` is `ON DELETE SET NULL` exactly so a bar outlives the
+--     administrator's account.
+--
+-- **The two cases that copy nothing do so by data, not by a branch here.** A
+-- **pinned predecessor** has no rows to select — nothing writes a bar for a key
+-- whose organization is its whole reach, because cutting that reach and revoking
+-- the key are the same act (`revokeInOrganization` sends it to
+-- `revokePinnedKey`). And a **pinned successor** is excluded by the join, which
+-- reads the reach off the row `insertSuccessor` has just written rather than off
+-- a parameter that could disagree with it: an account-wide key may rotate into a
+-- pinned one, and copying bars onto that would leave rows no resolution path
+-- reads and put *cut out of Acme* on a key pinned to Beta. It would also break
+-- 04200's stated invariant that a pinned key never carries one.
+--
+-- Nothing is re-derived. Which organizations are barred is not recomputed from
+-- memberships or from anything else — the rows are the record, and a copy is the
+-- only operation that cannot disagree with them.
+INSERT INTO api_key_org_revocations (api_key_id, organization_id, revoked_at, revoked_by)
+SELECT sqlc.arg(successor_id), x.organization_id, x.revoked_at, x.revoked_by
+  FROM api_key_org_revocations x
+  JOIN api_keys k ON k.id = sqlc.arg(successor_id)
+ WHERE x.api_key_id = sqlc.arg(predecessor_id)
+   AND k.organization_id IS NULL;
 
 -- name: TouchAPIKeys :exec
 -- Batch write of last_used_at, from the coalescing tracker rather than from the

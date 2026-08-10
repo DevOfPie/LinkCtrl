@@ -220,6 +220,109 @@ behind keep their reason and stay candidates.
 
 ---
 
+## What Phase 3 shipped, and what is still on this list
+
+Written at [M58](phase-details/m58.md), the phase close, against the tree rather
+than against the plan. **Seven areas were listed and the phase took four**; C, D
+and G stay candidates — not dropped, not re-homed, and *we stopped caring about
+this* is the decision this project keeps losing.
+
+The third column is the one this section exists for. A candidate can survive a
+phase and still not be the same candidate: the work that landed beside it moves
+what it would cost, what it would touch, or what is already true of it. A row
+that changed shape and says nothing is a row somebody re-derives from scratch.
+
+### A — Identity and account lifecycle
+
+| Candidate | Now | What moved |
+| --- | --- | --- |
+| MFA, OAuth, OIDC, SSO, SCIM | **MFA shipped** ([M53](phase-details/m53.md)); the other four stay candidates | D109 discharged only the MFA limb. The `password_hash` nullability comment and `auth.Service.verifyPassword` promised SSO *"(Phase 3)"* and no longer carry a phase number — M58's sweep. The row is now a candidate with no date rather than a promise |
+| Account recovery (F141) | **Shipped** — [M51](phase-details/m51.md) | — |
+| Account deletion and erasure (F44) | **Shipped** — [M52](phase-details/m52.md) | The residue is smaller than M52 left it: [F177](deferred-findings.md) and [F181](deferred-findings.md) closed at M58, so the erasure pass reaches audit `metadata` and invitation addresses too |
+| An API key reaching more than one organization (F75) | **Shipped** — [M54](phase-details/m54.md) | New ground the candidate did not anticipate: an administrator can cut their own organization out of somebody's account-wide key (D158), and M58 closed both halves of it — the read bound ([F183](deferred-findings.md)) and the owner's view of it ([F178](deferred-findings.md)) |
+| A runtime signup toggle from the dashboard | **Stays a candidate** | Still parked at D38. But the phase built the surface the parking was partly about: D161's `instance_settings` singleton and its checkbox exist now, so the toggle has somewhere to live that it did not have |
+
+### B — Dashboard UI and UX
+
+| Candidate | Now | What moved |
+| --- | --- | --- |
+| The UI/UX redesign | **Shipped** — [M46](phase-details/m46.md)–[M48](phase-details/m48.md), plus the seven defects it produced, fixed at M58 | All three complaints answered. The blind tasks that specified it are recorded nowhere (D146), so the exercise cannot be re-run |
+| The workspace selector should always render | **Half shipped** | M46 added the label, which the row itself identified as the real gap — the current workspace and organization now appear in the shell unconditionally. The control still renders only above one membership, and D117 settled *why*: a switcher offers the places you can go. What is left of this row is a preference, not a gap |
+| Mobile navigation rework | **Stays a candidate**, narrowed | M46 made *no horizontal scroll at 360px* a scanned property of the shell, and [F184](deferred-findings.md) closed the one page that broke it. The header hiding the signed-in address below `sm` is untouched and is what the row is now about |
+| Notification severity, grouping, filtering | **Stays a candidate** | Unchanged — still needs the column M22's model has no room for |
+| Trash/restore UI · Bulk operations · An **All Workspaces** scope | **Stay candidates** | Unchanged. The all-workspaces question is still a question, in [upcoming-decisions.md](upcoming-decisions.md) |
+
+### C — Analytics and reporting *(area not taken)*
+
+Every row stays. Two changed shape:
+
+- **Campaign analytics** — [M50](phase-details/m50.md) gave per-code counts by
+  making the code *its own stored referrer value* (D132) rather than by building
+  the rollup this row was deferred for. The row's reason was job load, and that
+  reason is intact; what moved is that the cheapest version of it is now done and
+  the row is about the expensive part only.
+- **Distinguishing a blocked bot click from an observed one** — unchanged as
+  work, but M58 removed the phase number from the *bypass* promise beside it, so
+  this row and D's first row no longer imply a shared schedule.
+
+### D — Redirect path and routing *(area not taken)*
+
+Every row stays. One changed shape:
+
+- **A human check or dispute path for a blocked bot** — **seven** sites promised
+  it *"in Phase 3"*, counted across the tracked tree at M58 rather than recalled,
+  and all seven now say it is unscheduled: `01800_bot_blocking.sql:29`,
+  `internal/link/domain_settings.go:276`, Plan.md's *Known limitations* row,
+  `docs/SECURITY.md`'s *A human blocked as a bot cannot get through*,
+  `test/integration/bots_test.go:291`, and both of
+  [m32.5.md](phase-details/m32.5.md)'s — its *Deliberately not in this
+  milestone* bullet and its *Risks* paragraph. This entry said *the three sites*
+  and then listed four; the count is stated because a section whose method is
+  counting cannot afford to recall. `decisions.md`'s two mentions are the
+  exception and stay: the log is append-only, and *why the bypass was Phase 3* is
+  a true record of a decision taken when it was. The candidate is unchanged; what
+  changed is that the product no longer tells a reader it is coming.
+
+### E — Infrastructure and resilience
+
+| Candidate | Now | What moved |
+| --- | --- | --- |
+| High availability as a claim somebody could rely on | **Shipped** — [M56](phase-details/m56.md), [M57](phase-details/m57.md) | The load-balancer contract is D167's; the two-leader window is D168's, closed for deploys and bounded for crashes |
+| The update checker | **Shipped** — [M55](phase-details/m55.md) | D149 defaults it on and asks at first run, which required the instance-settings surface the row did not anticipate |
+| Redis Streams as a work queue | **Stays a candidate** | Verified unexercised at M58, not assumed: `cmd/linkctrl/recorder.go` and `internal/webhook/webhook.go` both state it as an upgrade path nothing is written against, and both are still true |
+| Redis resilience beyond a bounded failure | **Stays a candidate** | Unchanged |
+
+### F — QR codes and campaigns
+
+| Candidate | Now | What moved |
+| --- | --- | --- |
+| A PNG QR code | **Shipped** — [M49](phase-details/m49.md), D11 reversed | — |
+| More than one QR code per link, and per-code scan counts | **Shipped** — [M50](phase-details/m50.md) | — |
+
+This area's *Leaves on this list* cell read **Nothing**, and after the phase it
+is nearly true — but not quite, and the exception was found by M58's comment
+sweep rather than by the plan. Logos were not on this list at all and shipped
+anyway ([M50.5](phase-details/m50.5.md), [M50.6](phase-details/m50.6.md)), from
+the walkthrough. **Module shape is the one thing `qr_codes.style`'s comment
+claimed and nothing built** — square modules only — and it is named here so that
+removing the claim from the schema does not also remove the idea.
+
+### G — Commercial and entitlements *(area not taken)*
+
+The row stays, and **both** its anchors in the tree lost their dates.
+`orgs.create` names itself the call site an entitlement check would hang on in
+two places — `CreateOrganization`'s doc in `internal/team/organization.go`, and
+[M28](phase-details/m28.md)'s own bullet — and each said *"(Phase 3+)"* until
+[M58](phase-details/m58.md); each now says unscheduled. **This close-out counted
+one of them**, corrected 2026-08-10: the one it missed is in a shipped
+milestone's file, which is exactly where the bot-bypass count had been caught
+hiding two more of itself hours earlier. A third mention, `Plan.md`'s D16 row,
+carries no phase number and needs nothing — it is named here so the next sweep
+does not re-find it and wonder. The seam argument is unchanged and is still the
+urgent half.
+
+---
+
 ## Open questions
 
 **Which areas does Phase 3 take?** **Answered 2026-08-06 — A, B, E and F.** See

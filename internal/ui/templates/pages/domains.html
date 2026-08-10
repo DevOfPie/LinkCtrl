@@ -93,8 +93,18 @@
           {{if .CheckError}}
           <p class="text-xs text-danger-ink">Last check: {{.CheckError}}</p>
           {{end}}
+          {{/* Two tenses, because the deadline can already have passed while the
+               hostname is still served. The hourly re-verification pass is what
+               stops serving, so between the window expiring and that pass
+               arriving — up to an hour — this row correctly says links are served
+               here, and a future-tense deadline behind it would have the page
+               contradict itself (F161). */}}
           {{if .StopsAt}}
+          {{if .StopsAtPassed}}
+          <p class="text-xs text-danger-ink">The grace window for this hostname ran out at {{.StopsAt}}. Links on it are still served, and stop at the next check unless the record comes back.</p>
+          {{else}}
           <p class="text-xs text-danger-ink">Links on this hostname stop being served at {{.StopsAt}} unless the record comes back.</p>
+          {{end}}
           {{end}}
           {{if .SSLLabel}}
           <p class="text-xs text-subtle">{{.SSLLabel}}</p>

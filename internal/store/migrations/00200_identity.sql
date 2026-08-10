@@ -17,8 +17,11 @@ CREATE TABLE users (
     email_lower       text        GENERATED ALWAYS AS (lower(email)) STORED,
     email_verified_at timestamptz,
     name              text        NOT NULL DEFAULT '',
-    -- Nullable: an SSO-only user (Phase 3) has no local password, and an
-    -- erased user has had theirs removed.
+    -- Nullable: an SSO-only user has no local password, and an erased user has
+    -- had theirs removed. **SSO is not built and nothing schedules it.** This
+    -- read "(Phase 3)" until M58; Phase 3 discharged only the MFA limb of that
+    -- scope row (D109 — OAuth, OIDC, SSO and SCIM were all declined), so the
+    -- phase number came off rather than moving to the next one.
     password_hash     text,
     status            text        NOT NULL DEFAULT 'active'
                       CHECK (status IN ('active', 'suspended', 'deleted')),
@@ -28,7 +31,11 @@ CREATE TABLE users (
     failed_login_count int        NOT NULL DEFAULT 0,
     locked_until       timestamptz,
 
-    -- Phase 3.
+    -- **Written since M53 (0.3.0).** These shipped in the first migration
+    -- marked `-- Phase 3.` and waited five releases for a writer; 04100_mfa.sql
+    -- gives them one. `mfa_secret` holds the confirmed TOTP secret and nothing
+    -- else — a candidate secret mid-enrolment lives in the form, not here, so
+    -- half-enrolled is not a state this product has (D152).
     mfa_secret        text,
     mfa_enabled_at    timestamptz,
 
@@ -44,7 +51,8 @@ CREATE TABLE users (
     --
     -- **The sentence here read "Set by the GDPR erasure routine", in the present
     -- tense, from the first migration until 0.2.0 — and no such routine existed**
-    -- (F44). Four lines above, mfa_secret is marked "Phase 3": this file knew how
+    -- (F44). Above, mfa_secret carried a `-- Phase 3.` marker until M58 replaced
+    -- it with what M53 built: this file knew how
     -- to mark something forward-looking and did not do it here, so the absence
     -- read as a feature rather than as a recorded deferral. The history is kept
     -- because the column is now doing what the original sentence claimed, and a

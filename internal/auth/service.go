@@ -8,6 +8,7 @@ import (
 	"net/mail"
 	"net/netip"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -69,7 +70,43 @@ type Identity struct {
 	// was that a key is issued for one organization, which is no longer true of
 	// every key. Service.Workspaces is the site.
 	APIKeyOrgID *uuid.UUID
-	permissions map[string]struct{}
+	// APIKeyBarredOrgIDs are the organizations an administrator has cut this
+	// **account-wide** key out of (M54's reach revocation), and it is empty for
+	// every other case: a session, and a pinned key, which never has a
+	// revocation row because its organization is its whole reach.
+	//
+	// Carried rather than fetched because F183 is a read bound and a read bound
+	// that costs a query per listing is one somebody will later be tempted to
+	// drop. ResolveOrganizationForAPIKey has to consult these rows anyway to
+	// decide where the request lands, so the whole barred set rides back with
+	// the one organization it chose, on the round trip that was already
+	// happening.
+	//
+	// Nil for a pinned key is not the same nil as APIKeyOrgID's: there is
+	// nothing to bar, not an unknown. keyReaches is where the two are read
+	// together.
+	APIKeyBarredOrgIDs []uuid.UUID
+	permissions        map[string]struct{}
+}
+
+// keyReaches reports whether an API key identity may reach an organization —
+// the read bound, which is not the same question as where this request landed.
+//
+// Two reaches, one predicate. A **pinned** key reaches the organization it was
+// issued for and no other: F103's finding, and the premise M54 left standing for
+// the credential it was found on. An **account-wide** key reaches every
+// organization its owner does, less the ones an administrator has cut it out of
+// — which is F183, where the bound applied was pinned-or-not and the keys a
+// reach revocation applies to are exactly the ones that are not pinned.
+//
+// Not exported, and not an authorization check for *acting*: what a key may act
+// on is bounded by the organization the request resolved into, one tier up in
+// ResolveOrganizationForAPIKey. This answers only what it may be told about.
+func (i *Identity) keyReaches(orgID uuid.UUID) bool {
+	if i.APIKeyOrgID != nil {
+		return orgID == *i.APIKeyOrgID
+	}
+	return !slices.Contains(i.APIKeyBarredOrgIDs, orgID)
 }
 
 // Can reports whether the identity holds a permission.
@@ -687,7 +724,9 @@ func WritePassword(
 // the credential rather than on the session alone.
 //
 // A NULL `password_hash` is ErrInvalidCredentials rather than an error of its
-// own. The column is nullable for an SSO-only account (Phase 3) and for one this
+// own. The column is nullable for an SSO-only account — **unbuilt, and nothing
+// schedules it**; this read "(Phase 3)" until M58, and Phase 3 discharged only
+// the MFA limb of that scope row (D109) — and for one this
 // milestone's erasure pass has scrubbed, and neither of those can confirm a
 // password by typing one — which is precisely what "invalid credentials" says.
 //

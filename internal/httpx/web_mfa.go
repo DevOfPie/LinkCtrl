@@ -7,6 +7,7 @@ import (
 
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/qr"
 )
 
 // The browser half of the second factor (M53): enrolment, the code prompt that
@@ -102,7 +103,9 @@ func (h *Web) MFAPage(w http.ResponseWriter, r *http.Request) {
 		h.mfaFail(w, r, data, err)
 		return
 	}
-	svg, err := mfaEnrolmentQR(out.URI)
+	// Inlined into the page, so it carries the class that lets a 360px viewport
+	// shrink it (F184). The API's own call site passes the empty string.
+	svg, err := mfaEnrolmentQR(out.URI, qr.FluidClass)
 	if err != nil {
 		h.webError(w, r, err)
 		return
@@ -137,7 +140,7 @@ func (h *Web) MFAEnrol(w http.ResponseWriter, r *http.Request) {
 			uri := auth.TOTPURI(h.mfaIssuer(), actor.Email, secret)
 			data.Secret = secret
 			data.URI = template.URL(uri) //nolint:gosec // G203: see mfaPageData.URI.
-			if svg, qerr := mfaEnrolmentQR(uri); qerr == nil {
+			if svg, qerr := mfaEnrolmentQR(uri, qr.FluidClass); qerr == nil {
 				data.QR = template.HTML(svg) //nolint:gosec // G203: see mfaPageData.QR.
 			}
 		}

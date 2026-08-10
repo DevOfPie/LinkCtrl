@@ -169,11 +169,14 @@ effects.** Every pass is written to survive being run twice: the mail and webhoo
 drains claim rows with `FOR UPDATE SKIP LOCKED`, the rollups recompute whole
 days idempotently, partition creation is `IF NOT EXISTS`, the automation
 watermark is compare-and-set, and the daily update check is one `UPDATE` that a
-second replica cannot match. **One exception**, and it is a logging defect rather
-than a data one: custom-domain re-verification decides whether to write an audit
-record from a read taken before its own write, so two leaders can record one
-verification twice. It is
-[F180](build-notes/deferred-findings.md#open), open and unscheduled.
+second replica cannot match. **There was one exception until 0.3.0**, and it was
+a logging defect rather than a data one: custom-domain re-verification decided
+whether to write an audit record from a read taken before its own write, so two
+leaders could record one verification twice. It was
+[F180](build-notes/deferred-findings.md#closed), **closed at 0.3.0** together
+with [F185](build-notes/deferred-findings.md#closed), the same defect at the
+manual *Check DNS* button twelve lines away: both now decide from what the write
+returned, so the leader that did not move the row records nothing.
 
 ### Which jobs run on every replica
 

@@ -377,15 +377,72 @@ func TestAClassGoesOnTheRootElementAndNowhereElse(t *testing.T) {
 			"not styled individually and never should be", n)
 	}
 
-	// And Render is still the same bytes it was, so every caller that wants no
-	// class gets no attribute rather than an empty one.
-	plain, err := Render(sample, Style{})
+	// And the empty class still writes no attribute rather than an empty one,
+	// which is what the document served at /qr.svg is rendered with: a class
+	// list resolves against the dashboard's stylesheet and a downloaded file is
+	// nowhere near it. *(Until F184 this was asserted of Render, because Render
+	// was the empty class. It is not any more — see below — so the claim moved
+	// to the call that actually makes it.)*
+	plain, err := RenderClass(sample, Style{}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(plain), "class=") {
-		t.Error("Render writes a class attribute; an empty class must write nothing, " +
-			"because this is also the document served at /qr.svg and downloaded")
+		t.Error("an empty class writes a class attribute; it must write nothing, " +
+			"because this is the document served at /qr.svg and downloaded")
+	}
+}
+
+// TestAnInlinedCodeFitsTheBoxItIsDrawnInto is F184: the drawing states its size
+// in pixels, and a page is not measured in pixels.
+//
+// **Why it is asserted here rather than only in the page that broke.**
+// /account/mfa reached 174px past a 360px viewport because internal/qr wrote
+// `width="488"` onto an element inside a 160px frame, and the caller — the MFA
+// enrolment handler — states no class of its own. The constraint therefore has
+// to come from the default, and a default is a claim about every call site that
+// has not overridden it. internal/ui's overflow scan is the other half; it reads
+// the class off rendered markup and cannot see this function at all.
+func TestAnInlinedCodeFitsTheBoxItIsDrawnInto(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		draw func() ([]byte, error)
+	}{
+		{"Render", func() ([]byte, error) { return Render(sample, Style{}) }},
+		{"RenderWithLogo/none", func() ([]byte, error) {
+			return RenderWithLogo(sample, Style{}, nil)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svg, err := tc.draw()
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := `class="` + FluidClass + `"`
+			if !strings.Contains(string(svg), want) {
+				t.Errorf("%s draws a code carrying no %s.\n  %.140s…\n\n"+
+					"The width and height attributes are an intrinsic size, and an "+
+					"inlined code with nothing bounding it drags the page sideways "+
+					"on a phone — which is what /account/mfa did, by 174px at 360px.",
+					tc.name, want, svg)
+			}
+		})
+	}
+
+	// The picture itself is untouched: the class bounds the element, and the
+	// geometry inside the viewBox is what the PNG has to match.
+	fluid, err := Render(sample, Style{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bare, err := RenderClass(sample, Style{}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.Replace(string(fluid), ` class="`+FluidClass+`"`, "", 1),
+		string(bare); got != want {
+		t.Error("the fluid class changes more than the class attribute; it must be " +
+			"the only difference, or the two outputs stop being the same picture")
 	}
 }
 

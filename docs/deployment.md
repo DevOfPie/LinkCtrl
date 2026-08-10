@@ -28,11 +28,12 @@ cd LinkCtrl
 cp .env.example .env
 ```
 
-Generate two independent secrets:
+Generate three independent secrets — two required, one for the second factor:
 
 ```sh
 openssl rand -base64 48   # LINKCTRL_API_KEY_PEPPER
 openssl rand -base64 32   # POSTGRES_PASSWORD
+openssl rand -base64 48   # LINKCTRL_MFA_SECRET_KEY  (optional; see below)
 ```
 
 Edit `.env`:
@@ -41,13 +42,14 @@ Edit `.env`:
 LINKCTRL_BASE_URL=https://links.example.com
 LINKCTRL_API_KEY_PEPPER=<48 random bytes>
 POSTGRES_PASSWORD=<32 random bytes>
+LINKCTRL_MFA_SECRET_KEY=<48 random bytes>   # omit to ship without a second factor
 
 LINKCTRL_APP_ENV=production
 LINKCTRL_SIGNUP_MODE=closed
 LINKCTRL_TRUSTED_PROXIES=172.16.0.0/12
 ```
 
-Four things about that file are worth more than a glance:
+Five things about that file are worth more than a glance:
 
 - **`LINKCTRL_BASE_URL` must be the public origin, with `https`.** It builds
   every short URL, scopes cookies, and is trusted as a CSRF origin. Getting it
@@ -57,6 +59,14 @@ Four things about that file are worth more than a glance:
   the `__Host-` prefix and browsers silently discard those over plain HTTP.
 - **`API_KEY_PEPPER` is not rotatable in place.** Every API key's hash is keyed
   with it; changing it invalidates every existing key at once.
+- **`MFA_SECRET_KEY` is optional and decides whether this instance has a second
+  factor at all.** Unset, nobody can enrol and the account page does not offer
+  it — which is what every instance before 0.3.0 was, so leaving it out is a
+  supported configuration rather than a broken one. Set it and it must be at
+  least 32 bytes; it encrypts each account's TOTP secret at rest, it is **not**
+  the pepper and must not be the same value, and losing it locks every enrolled
+  account out of its authenticator until they use a recovery code. See
+  [configuration.md](configuration.md) for the route back.
 - **`TRUSTED_PROXIES` must list your proxy and nothing else.** It is empty by
   default, and that default is the safe one: with it set, `X-Forwarded-For` is
   believed, and anything in that list can claim any client address — which
@@ -86,9 +96,16 @@ secrets:
 LINKCTRL_API_KEY_PEPPER_FILE=/run/secrets/api_key_pepper
 ```
 
-Supported for `API_KEY_PEPPER` and `DATABASE_URL`. Setting both the inline and
-`_FILE` form for the same secret is an error rather than a silent precedence
-rule.
+Supported for **five**, and the list is `config.FileSecretVars` rather than
+recollection: `API_KEY_PEPPER`, `MFA_SECRET_KEY`, `DATABASE_URL`,
+`SMTP_PASSWORD` and `FEED_AUTH_TOKEN`. Setting both the inline and `_FILE` form
+for the same secret is an error rather than a silent precedence rule.
+
+*(This said "`API_KEY_PEPPER` and `DATABASE_URL`" until 0.3.0, while the loader
+accepted five. It is [F45](build-notes/deferred-findings.md)'s class exactly — an
+enumeration that presents itself as complete and falls behind the code it
+describes — and it is the second time this particular list has done it, which is
+why the count leads and the source is named.)*
 
 Save `.env` with **LF line endings**. A CRLF makes `POSTGRES_PASSWORD` end in an
 invisible carriage return, Postgres initialises with a password nobody can type,
@@ -468,7 +485,7 @@ without you choosing to:
 
 ```sh
 # In .env
-LINKCTRL_TAG=0.1.0
+LINKCTRL_TAG=0.3.0
 ```
 
 ```sh
@@ -505,7 +522,7 @@ Every release also publishes static binaries — linux amd64/arm64, macOS
 amd64/arm64, and Windows amd64 — with a `SHA256SUMS` file:
 
 ```sh
-tar xzf linkctrl_0.1.0_linux_amd64.tar.gz
+tar xzf linkctrl_0.3.0_linux_amd64.tar.gz
 sha256sum -c SHA256SUMS --ignore-missing
 ./linkctrl version
 ```
@@ -529,9 +546,20 @@ loses whatever those columns held.
 ## Optional: geographic analytics
 
 Off unless you supply a database. MaxMind's licence does not allow redistributing
-one in the image, which is why this is optional at runtime rather than built in —
-without it the dashboard says geographic data is unavailable instead of drawing an
-empty chart.
+one in the image, which is why this is optional at runtime rather than built in.
+
+**What the dashboard draws follows the data, not this setting.** A link with
+countries in the window on screen gets its map and its ranked list whether or not
+a database is configured now — the rows are resolved and stored, and the
+database is only how new clicks join them. The *geographic data is unavailable*
+sentence is reached when nothing resolved **in that window** and nothing could
+resolve, which is the state it describes; with a database and no clicks yet it
+is the ordinary *no data yet* instead of an empty chart. The test is per link and
+per window rather than per instance, so a link whose countries all predate the
+selected window meets the sentence until the window is widened. **Removing the database
+therefore stops new clicks resolving and leaves the history readable**, which is
+worth knowing before you unmount the file. This section said the dashboard
+states the data unavailable without a database until 0.3.0.
 
 Download a **GeoLite2-Country** `.mmdb` (a free MaxMind account; the City database
 also works), mount it read-only, and point the variable at it:

@@ -118,6 +118,20 @@ func (s *Service) resolveWorkspace(
 // only surface that says where else the credential reaches. F103's row is
 // amended rather than closed: the finding it names still stands for the
 // credential it was found on.
+//
+// **Except where a revocation has removed that premise** (F183). *The tenants it
+// works in* is what an account-wide key reads about, and an administrator
+// cutting their organization out of its reach is precisely the act that makes an
+// organization one the key no longer works in. The bound applied here was
+// pinned-or-not, and a reach revocation applies to exactly the keys that are not
+// pinned — so the barred organization's name, slug and workspace ids went on
+// being listed to the credential it had been taken away from. That the holder is
+// usually a legitimate member who can see all of it in a browser is why this is
+// minor; the case the revocation exists for is the credential that is **not** in
+// legitimate hands, which is the case where the administrator has been told the
+// key is cut out and half of it was not. keyReaches is the one predicate now,
+// and it costs no query: the barred set rode back on the resolution that had
+// already happened.
 func (s *Service) Workspaces(ctx context.Context, actor *Identity) ([]Workspace, error) {
 	if actor == nil {
 		return nil, domain.ErrUnauthorized
@@ -128,7 +142,7 @@ func (s *Service) Workspaces(ctx context.Context, actor *Identity) ([]Workspace,
 	}
 	out := make([]Workspace, 0, len(rows))
 	for _, r := range rows {
-		if actor.IsAPIKey() && actor.APIKeyOrgID != nil && r.OrganizationID != *actor.APIKeyOrgID {
+		if actor.IsAPIKey() && !actor.keyReaches(r.OrganizationID) {
 			continue
 		}
 		out = append(out, Workspace{

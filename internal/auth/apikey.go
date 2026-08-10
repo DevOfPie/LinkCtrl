@@ -293,9 +293,24 @@ type APIKeyInfo struct {
 	// OrgWide false implies this is set, while OrgWide true says nothing about
 	// it either way.
 	OrganizationID *uuid.UUID `json:"organization_id"`
-	LastUsedAt     *time.Time `json:"last_used_at"`
-	ExpiresAt      *time.Time `json:"expires_at"`
-	RevokedAt      *time.Time `json:"revoked_at"`
+	// RevokedOrganizations are the organizations an administrator has cut this
+	// key out of, and it closes F178 — the seeing half of M54's reach
+	// revocation, whose acting half shipped without it.
+	//
+	// A credential that has silently stopped resolving into one tenant read on
+	// this page exactly as it did the day before, and the audit record that says
+	// why is written in the administrator's organization, which the owner may
+	// hold no audit.read in. The support question that produced the row is *why
+	// does my key work in Acme and not in Beta*, and until this field there was
+	// no answer anywhere the owner could reach.
+	//
+	// Always an array, never null, and empty for every pinned key: an
+	// organization is a pinned key's whole reach, so cutting it is an outright
+	// revoke and RevokedAt is where that shows.
+	RevokedOrganizations []APIKeyOrgRevocation `json:"revoked_organizations"`
+	LastUsedAt           *time.Time            `json:"last_used_at"`
+	ExpiresAt            *time.Time            `json:"expires_at"`
+	RevokedAt            *time.Time            `json:"revoked_at"`
 	// RotatedAt, GraceExpiresAt and SuccessorID describe a key that has been
 	// replaced. All three are set together, on the predecessor, and all three
 	// are nil on a key that has not been rotated. GraceExpiresAt is the moment
@@ -304,6 +319,25 @@ type APIKeyInfo struct {
 	GraceExpiresAt *time.Time `json:"grace_expires_at"`
 	SuccessorID    *uuid.UUID `json:"successor_id"`
 	CreatedAt      time.Time  `json:"created_at"`
+}
+
+// APIKeyOrgRevocation is one organization cut out of an account-wide key's
+// reach, as the key's owner sees it.
+//
+// The name is carried and not only the id, because the question this answers is
+// asked in words — *why does my key work in Acme and not in Beta* — and a uuid
+// answers it in none of them. It discloses nothing the owner did not already
+// have: a bar can only exist on a key whose owner held an organization-wide
+// membership there when it was written.
+//
+// Who did it is deliberately absent. api_key_org_revocations carries revoked_by,
+// and naming an administrator of another organization to a credential's holder
+// is a disclosure this field was not asked for; the audit record in that
+// organization is where the actor is recorded, for the people who may read it.
+type APIKeyOrgRevocation struct {
+	OrganizationID   uuid.UUID `json:"organization_id"`
+	OrganizationName string    `json:"organization_name"`
+	RevokedAt        time.Time `json:"revoked_at"`
 }
 
 // CreatedAPIKey is the response to creating a key: the record, plus the only
@@ -538,7 +572,10 @@ func (s *APIKeyService) Create(ctx context.Context, actor *Identity, in CreateAP
 			return nil, fmt.Errorf("create api key: %w", err)
 		}
 
-		return &CreatedAPIKey{APIKeyInfo: keyInfo(row), Key: token}, nil
+		// No bars, and here it is a fact rather than a shortcut: this id was
+		// allocated a statement ago, and a bar names an id. Rotation is the case
+		// that cannot say this — see keyInfo.
+		return &CreatedAPIKey{APIKeyInfo: keyInfo(row, nil), Key: token}, nil
 	}
 	return nil, errors.New("auth: could not allocate an unused api key prefix")
 }
@@ -607,13 +644,40 @@ func (s *APIKeyService) List(ctx context.Context, actor *Identity) ([]APIKeyInfo
 		return nil, fmt.Errorf("list api keys: %w", err)
 	}
 
+	// The reach revocations for the keys just listed, in one round trip keyed on
+	// their ids (F178). Second query rather than a join, because the relation is
+	// one-to-many and joining would multiply every key row by its bars and make
+	// the list's own shape depend on them. Skipped entirely when there are no
+	// keys, which is the common case on a fresh account.
+	bars := map[uuid.UUID][]APIKeyOrgRevocation{}
+	if len(rows) > 0 {
+		ids := make([]uuid.UUID, 0, len(rows))
+		for _, r := range rows {
+			ids = append(ids, r.ID)
+		}
+		// Asked for every listed key rather than only the account-wide ones.
+		// Nothing writes a bar for a pinned key — revokeInOrganization revokes
+		// those outright — and asking anyway costs nothing, while assuming it
+		// here would make this list quietly wrong if that ever stopped holding.
+		revocations, err := s.q.ListAPIKeyOrgRevocations(ctx, ids)
+		if err != nil {
+			return nil, fmt.Errorf("list api key reach revocations: %w", err)
+		}
+		bars = barsByKey(revocations)
+	}
+
 	out := make([]APIKeyInfo, 0, len(rows))
 	for _, r := range rows {
+		revoked := bars[r.ID]
+		if revoked == nil {
+			revoked = []APIKeyOrgRevocation{}
+		}
 		out = append(out, APIKeyInfo{
 			ID: r.ID, Name: r.Name, Prefix: r.Prefix, Scopes: r.Scopes,
-			OrgWide:        r.WorkspaceID == nil,
-			OrganizationID: r.OrganizationID,
-			LastUsedAt:     r.LastUsedAt, ExpiresAt: r.ExpiresAt,
+			OrgWide:              r.WorkspaceID == nil,
+			OrganizationID:       r.OrganizationID,
+			RevokedOrganizations: revoked,
+			LastUsedAt:           r.LastUsedAt, ExpiresAt: r.ExpiresAt,
 			RevokedAt: r.RevokedAt, RotatedAt: r.RotatedAt,
 			GraceExpiresAt: r.GraceExpiresAt, SuccessorID: r.SuccessorID,
 			CreatedAt: r.CreatedAt,
@@ -835,6 +899,11 @@ func (s *APIKeyService) Authenticate(ctx context.Context, token string) (*Identi
 	}
 
 	var wsID, orgID uuid.UUID
+	// Empty for every branch but the account-wide one, which is the only branch
+	// where a bar can exist: a pinned key's organization is its whole reach, so
+	// cutting the reach and cutting the key are the same act and nothing writes
+	// a revocation row for one.
+	var barredOrgs []uuid.UUID
 	switch {
 	case row.WorkspaceID != nil:
 		// Pinned to a workspace, and therefore to that workspace's organization:
@@ -872,6 +941,12 @@ func (s *APIKeyService) Authenticate(ctx context.Context, token string) (*Identi
 		// organization-wide membership in and the key has not been barred from —
 		// and *that* answer is what M44's parameter is fed. The parameter survives
 		// the model change unaltered; what changed is where its value comes from.
+		//
+		// The resolution also answers what the key may *read* about, which is
+		// F183: it consults api_key_org_revocations to decide where the request
+		// lands, so the whole barred set comes back with the one organization it
+		// chose and Service.Workspaces bounds the listing without a query of its
+		// own.
 		keyOrg := row.OrganizationID
 		if keyOrg == nil {
 			resolved, err := s.q.ResolveOrganizationForAPIKey(ctx, dbgen.ResolveOrganizationForAPIKeyParams{
@@ -888,7 +963,8 @@ func (s *APIKeyService) Authenticate(ctx context.Context, token string) (*Identi
 				}
 				return nil, fmt.Errorf("resolve organization for api key: %w", err)
 			}
-			keyOrg = &resolved
+			keyOrg = &resolved.ID
+			barredOrgs = resolved.BarredOrganizationIds
 		}
 		ws, err := s.auth.resolveWorkspace(ctx, row.UserID, nil, keyOrg)
 		if errors.Is(err, ErrNoWorkspace) {
@@ -924,6 +1000,7 @@ func (s *APIKeyService) Authenticate(ctx context.Context, token string) (*Identi
 	keyID := row.ID
 	identity.APIKeyID = &keyID
 	identity.APIKeyOrgID = row.OrganizationID
+	identity.APIKeyBarredOrgIDs = barredOrgs
 
 	// Recorded, not written: the request must not wait on a database write to
 	// a column nothing reads on the hot path.
@@ -1038,12 +1115,47 @@ func requireSessionActor(actor *Identity, action string) error {
 	return nil
 }
 
-func keyInfo(row dbgen.ApiKey) APIKeyInfo {
+// barsByKey groups reach revocation rows by the key each one names.
+//
+// Shared by the two readers of those rows — the owner's key list and the
+// rotation response — so that one cannot report a bar the other would have
+// spelled differently. Ordering inside a key is the query's, which is oldest
+// first.
+func barsByKey(rows []dbgen.ListAPIKeyOrgRevocationsRow) map[uuid.UUID][]APIKeyOrgRevocation {
+	bars := map[uuid.UUID][]APIKeyOrgRevocation{}
+	for _, x := range rows {
+		bars[x.ApiKeyID] = append(bars[x.ApiKeyID], APIKeyOrgRevocation{
+			OrganizationID:   x.OrganizationID,
+			OrganizationName: x.OrganizationName,
+			RevokedAt:        x.RevokedAt,
+		})
+	}
+	return bars
+}
+
+// keyInfo builds the record for a key that has just come into existence.
+//
+// **The bars are a parameter rather than an empty slice**, and the difference is
+// a defect this function used to carry. It read "nothing can have barred an id
+// that did not exist when the bar would have been written", which is true of
+// creation and false of rotation the moment [CarryAPIKeyReachRevocations]
+// exists: a successor is minted with its predecessor's bars copied onto it,
+// inside the same transaction, before anything here runs. Each caller therefore
+// states what it has rather than inheriting an answer that is right for one of
+// them.
+//
+// nil is normalized to an empty slice, because `revoked_organizations` is a
+// documented array on every key shape and `null` is not one.
+func keyInfo(row dbgen.ApiKey, revoked []APIKeyOrgRevocation) APIKeyInfo {
+	if revoked == nil {
+		revoked = []APIKeyOrgRevocation{}
+	}
 	return APIKeyInfo{
 		ID: row.ID, Name: row.Name, Prefix: row.Prefix, Scopes: row.Scopes,
-		OrgWide:        row.WorkspaceID == nil,
-		OrganizationID: row.OrganizationID,
-		LastUsedAt:     row.LastUsedAt, ExpiresAt: row.ExpiresAt,
+		OrgWide:              row.WorkspaceID == nil,
+		OrganizationID:       row.OrganizationID,
+		RevokedOrganizations: revoked,
+		LastUsedAt:           row.LastUsedAt, ExpiresAt: row.ExpiresAt,
 		RevokedAt: row.RevokedAt, RotatedAt: row.RotatedAt,
 		GraceExpiresAt: row.GraceExpiresAt, SuccessorID: row.SuccessorID,
 		CreatedAt: row.CreatedAt,

@@ -17,6 +17,41 @@ and nothing done to one can reach the other.
 | Image | `linkctrl:demo`, rebuilt by `make demo-update` | `linkctrl:test`, rebuilt whenever |
 | Lifetime | Survives everything except `make demo-update` | Disposable; `make rebuild` is routine |
 | Data | The `lctl demo` installation — two workspaces, three accounts, a review queue — re-anchored to today at each milestone | Whatever the current test needs |
+| Custom-domain re-verification | **Off in a generated `.env.demo`** — `LINKCTRL_DOMAIN_VERIFY_INTERVAL=0`, the one setting here a real deployment must not copy. A demo whose env file predates that change is still **on**, and the paragraph directly below this table says why and what to do about it | On, at the shipped default |
+
+**Why the demo does not re-verify its hostname.** `lctl demo` verifies
+`go.linkctrl.example` through the real `VerifyDomain` against a stub resolver
+that lives inside the seeder process and dies with it. The name is an RFC 2606
+`.example` one that resolves for nobody, so the long-running server failed that
+check every hour and unverified the hostname 24 hours after every reseed —
+silently, because the coverage row asserting one verified domain seeds a
+throwaway database and asserts in the same instant, so it measures the seed and
+never the instance. Zero disables the pass, which is what the setting is
+documented to mean. `scripts/instance.sh` writes it into a freshly generated
+`.env.demo` with the full reasoning; **an existing `.env.demo` does not get it,
+because `instance.sh init` refuses to touch a file that is already there.**
+
+**Zero switches off a second job with it**, and the demo is arranged around that
+rather than unaffected by it. `jobRunner.runHostReload` returns immediately on a
+non-positive interval, so each replica's periodic re-read of the
+verified-hostname set stops too — the backstop F73 bought for a replica that
+missed a pub/sub invalidation. One replica is why the demo can spend it. The
+part that is not free is the reseed: `lctl demo --reset` deletes and rewrites the
+`domains` rows, `lctl` runs on the host with no Redis so it publishes no
+invalidation, and the set is held whole in memory precisely so an unknown `Host`
+costs no query — so nothing reloads it lazily either. **`make demo-update`
+therefore recreates the app container after the reseed, not only before it**, and
+that ordering is what keeps this setting safe here. Reversed, a fresh demo serves
+nothing on `go.linkctrl.example` and a repeat serves a cached entry naming a
+domain id the reseed deleted.
+
+**So the running demo needs the line added by hand, once**, before the next
+`make demo-update`: `.env.demo` is gitignored and generated, `Makefile`'s
+`instance.sh init` runs only when the file is absent, and no commit can reach it.
+Until it is there the pass runs, whatever this page says the setting is — which
+is why the row above states what the generator writes rather than what the
+instance is doing. Check with `docker exec linkctrl-demo-app-1 env | grep
+DOMAIN_VERIFY`.
 
 `test` is the default. Every target acts on it unless `INSTANCE=demo` is passed,
 because the alternative — a default that follows whichever stack is running — is

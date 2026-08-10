@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -56,10 +57,22 @@ type membersPageData struct {
 	GrantTargets  []team.Member
 	// CanWrite draws the controls that change something. The service refuses
 	// again on the way in; this is the affordance, not the control.
-	CanWrite    bool
-	FieldErrors map[string]string
-	Notice      string
-	Error       string
+	CanWrite bool
+	// Form.Role is which role the grant form arrives on, and it is the *lowest*
+	// one the actor may assign (D173, F182). It used to be unset, so the browser
+	// selected the first option of a list ordered most powerful first, and an
+	// owner who filled in nothing but the address granted owner.
+	Form struct{ Role string }
+	// GrantNote is what the grant form says the button will actually do for the
+	// target, workspace and role selected in it, and GrantNoteWarn is whether
+	// that answer is one to stop at. Conditioned rather than generic (F163): the
+	// sentence above the form is true of every grant and therefore says nothing
+	// about the one about to be made.
+	GrantNote     string
+	GrantNoteWarn bool
+	FieldErrors   map[string]string
+	Notice        string
+	Error         string
 }
 
 func (h *Web) loadMembersPage(w http.ResponseWriter, r *http.Request) (membersPageData, bool) {
@@ -113,7 +126,157 @@ func (h *Web) loadMembersPage(w http.ResponseWriter, r *http.Request) (membersPa
 			data.OrgWorkspaces = append(data.OrgWorkspaces, ws)
 		}
 	}
+
+	// The grant form's state. Read from the query string because the two selects
+	// ask for this note again on change — the same hx-get the links filters use —
+	// and from the defaults otherwise, which is what a plain GET renders and what
+	// a reader without script keeps.
+	data.Form.Role = weakestRole(data.RoleOptions, func(r team.Role) (string, int32) {
+		return r.Slug, r.Rank
+	})
+	if picked, ok := pickRole(data.RoleOptions, r.URL.Query().Get("role")); ok {
+		data.Form.Role = picked.Slug
+	}
+	target, tok := pickMember(data.GrantTargets, r.URL.Query().Get("user_id"))
+	ws, wok := pickWorkspace(data.OrgWorkspaces, r.URL.Query().Get("workspace_id"))
+	role, rok := pickRole(data.RoleOptions, data.Form.Role)
+	if tok && wok && rok {
+		data.GrantNote, data.GrantNoteWarn = grantNote(data.Members, target, ws, role)
+	}
 	return data, true
+}
+
+// weakestRole is the slug of the least powerful role in a list, and it is what
+// both forms that hand out authority now arrive on (D173, F182).
+//
+// Rank counts downward — owner is 10 and viewer 40 in 00700_seed.sql — so the
+// weakest role is the *highest* rank. Read from the ranks rather than by taking
+// the last entry, even though both lists happen to be ordered most powerful
+// first: a default that silently becomes "owner" when an ordering changes is
+// precisely the defect this closes.
+//
+// Generic over an accessor because invite.Role and team.Role are the same four
+// fields declared twice, in packages that do not import one another. Empty for
+// an empty list, which selects nothing — the honest answer when there is
+// nothing to select, and a state in which neither form is drawn at all.
+func weakestRole[T any](roles []T, of func(T) (slug string, rank int32)) string {
+	slug, weakest := "", int32(0)
+	for _, r := range roles {
+		s, rank := of(r)
+		if slug == "" || rank > weakest {
+			slug, weakest = s, rank
+		}
+	}
+	return slug
+}
+
+// pickMember, pickWorkspace and pickRole resolve one option of a select, and
+// they answer only from the list the page itself drew. An id that is not in it
+// is not a lookup that failed but an input that has no meaning here, and the
+// note is then left off rather than computed against a guess.
+func pickMember(targets []team.Member, id string) (team.Member, bool) {
+	for _, m := range targets {
+		if m.UserID.String() == id {
+			return m, true
+		}
+	}
+	if id == "" && len(targets) > 0 {
+		return targets[0], true
+	}
+	return team.Member{}, false
+}
+
+func pickWorkspace(workspaces []team.Workspace, id string) (team.Workspace, bool) {
+	for _, ws := range workspaces {
+		if ws.ID.String() == id {
+			return ws, true
+		}
+	}
+	if id == "" && len(workspaces) > 0 {
+		return workspaces[0], true
+	}
+	return team.Workspace{}, false
+}
+
+func pickRole(roles []team.Role, slug string) (team.Role, bool) {
+	for _, r := range roles {
+		if r.Slug == slug {
+			return r, true
+		}
+	}
+	return team.Role{}, false
+}
+
+// orgWideMembership is the organization-wide membership a person holds, if any:
+// the row with no workspace, which covers every workspace in the organization.
+// At most one can exist — the COALESCE unique index in 00200_identity.sql is
+// what says so — and it is the only membership that can make a workspace-scoped
+// grant redundant.
+func orgWideMembership(members []team.Member, userID uuid.UUID) (team.Member, bool) {
+	for _, m := range members {
+		if m.UserID == userID && m.WorkspaceID == nil {
+			return m, true
+		}
+	}
+	return team.Member{}, false
+}
+
+// membershipInWorkspace is the row scoped to exactly one workspace, which is
+// what the uniqueness index refuses a second of.
+func membershipInWorkspace(members []team.Member, userID, workspaceID uuid.UUID) (team.Member, bool) {
+	for _, m := range members {
+		if m.UserID == userID && m.WorkspaceID != nil && *m.WorkspaceID == workspaceID {
+			return m, true
+		}
+	}
+	return team.Member{}, false
+}
+
+// grantNote answers what pressing Grant access would do, for one selection.
+//
+// Three outcomes, and only the middle one is the case D31 kept this path open
+// for. The grant is refused outright when a membership in that workspace
+// already exists; it changes nothing when an organization-wide role the person
+// already holds reaches everything the chosen one does; otherwise it widens,
+// which is what the form is for.
+//
+// **It reports, and it never refuses.** D31 rejected refusing a redundant grant
+// and F163 did not reopen that: the same path carries the useful *org editor
+// plus workspace admin* case, and what was wrong was a page claiming an effect
+// that had not occurred. The bool is whether the answer is one to stop at, not
+// whether the button is disabled.
+//
+// Rank rather than a permission-set comparison, and the assumption is worth
+// naming: the four built-in roles nest — viewer ⊂ editor ⊂ admin ⊂ owner, in the
+// order their ranks put them — and 00700_seed.sql is the only INSERT INTO roles
+// in the tree, so nothing else can be held. A composed role at an intermediate
+// rank would break the implication, and the day one is writable this has to
+// compare the permissions instead.
+func grantNote(members []team.Member, target team.Member, ws team.Workspace, role team.Role) (string, bool) {
+	if held, ok := membershipInWorkspace(members, target.UserID, ws.ID); ok {
+		return fmt.Sprintf(
+			"%s already has a role in %s — %s. This form only adds, so a second one "+
+				"there is refused; remove that membership first to change it.",
+			target.Email, ws.Name, held.Role), true
+	}
+	orgWide, ok := orgWideMembership(members, target.UserID)
+	if ok && orgWide.RoleRank <= role.Rank {
+		return fmt.Sprintf(
+			"%s already holds %s across every workspace, which reaches everything "+
+				"%s does. This would add a membership to the list and nothing to what "+
+				"they can do.",
+			target.Email, orgWide.Role, role.Slug), true
+	}
+	if ok {
+		return fmt.Sprintf(
+			"%s holds %s across every workspace. This makes them %s in %s as well, "+
+				"and leaves the rest as it was.",
+			target.Email, orgWide.Role, role.Slug, ws.Name), false
+	}
+	return fmt.Sprintf(
+		"This makes %s %s in %s. Their access to the workspaces they already hold "+
+			"is unchanged.",
+		target.Email, role.Slug, ws.Name), false
 }
 
 // MembersPage lists the organization's memberships.
@@ -130,6 +293,16 @@ func (h *Web) MembersPage(w http.ResponseWriter, r *http.Request) {
 			"invite them again to restore access."
 	case "granted":
 		data.Notice = "Access granted. It adds to whatever they already had."
+	case "granted-nochange":
+		// F163. The line above is what this page used to say for every grant,
+		// including one whose role is weaker than an organization-wide role the
+		// person already holds — where a row is inserted, an audit entry is
+		// written, a second line appears in the list, and nothing they can do
+		// changes at all. The membership is real and is not a failure; the
+		// sentence is about what it did.
+		data.Notice = "The membership was created, and it changes nothing they can do: " +
+			"a role they already hold across every workspace reaches everything this " +
+			"one does."
 	}
 	h.render(w, r, http.StatusOK, "members", data)
 }
@@ -148,14 +321,29 @@ func (h *Web) MemberGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := h.Team.Grant(r.Context(), IdentityFrom(r.Context()), team.GrantInput{
+	actor := IdentityFrom(r.Context())
+	member, err := h.Team.Grant(r.Context(), actor, team.GrantInput{
 		UserID: userID, WorkspaceID: workspaceID, Role: r.PostFormValue("role"),
 	})
 	if err != nil {
 		h.renderMembersError(w, r, err)
 		return
 	}
-	seeOther(w, r, "/members?done=granted")
+
+	// Whether the grant *changed* anything is a second question, and F163 is
+	// that the confirmation used to answer it wrongly. Asked of the list rather
+	// than of the grant, because the answer is about the memberships this person
+	// holds elsewhere and the returned row knows only itself. One extra query on
+	// an action somebody performs by hand; a failure here loses the distinction
+	// and says the weaker thing, which is the truthful direction to fail in.
+	done := "granted"
+	if members, merr := h.Team.Members(r.Context(), actor); merr == nil {
+		if orgWide, ok := orgWideMembership(members, member.UserID); ok &&
+			orgWide.RoleRank <= member.RoleRank {
+			done = "granted-nochange"
+		}
+	}
+	seeOther(w, r, "/members?done="+done)
 }
 
 // MemberRole re-roles one membership.

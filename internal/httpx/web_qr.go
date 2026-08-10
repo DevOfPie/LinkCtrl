@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/qr"
@@ -137,7 +139,7 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 	if r.PostFormValue("add") != "" {
 		code, aerr := h.Links.CreateQRCode(r.Context(), actor, id, r.PostFormValue("label"))
 		if aerr != nil {
-			h.finishQRAction(w, r, id, aerr)
+			h.finishQRAction(w, r, id, next, slug, aerr)
 			return
 		}
 		// Landing on the code just made, because somebody who added one is about
@@ -147,7 +149,7 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.PostFormValue("remove") != "" {
 		if derr := h.Links.DeleteQRCode(r.Context(), actor, id, slug); derr != nil {
-			h.finishQRAction(w, r, id, derr)
+			h.finishQRAction(w, r, id, next, slug, derr)
 			return
 		}
 		// Back to the default code: the one just removed has no page left.
@@ -158,7 +160,7 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 		if _, rerr := h.Links.SetQRCodeLabel(
 			r.Context(), actor, id, slug, r.PostFormValue("label"),
 		); rerr != nil {
-			h.finishQRAction(w, r, id, rerr)
+			h.finishQRAction(w, r, id, next, slug, rerr)
 			return
 		}
 		seeOther(w, r, qrReturn(next, id, "renamed", slug, nil))
@@ -172,7 +174,7 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 	// to the panel the way every other refusal in this handler does.
 	if r.PostFormValue("remove_logo") != "" {
 		if lerr := h.Links.ClearQRCodeLogo(r.Context(), actor, id, slug); lerr != nil {
-			h.finishQRAction(w, r, id, lerr)
+			h.finishQRAction(w, r, id, next, slug, lerr)
 			return
 		}
 		seeOther(w, r, qrReturn(next, id, "logo_removed", slug, nil))
@@ -183,7 +185,7 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 	// service sees an ordinary style rather than a second operation.
 	if r.PostFormValue("reset") != "" {
 		if rerr := h.Links.ResetQRStyle(r.Context(), actor, id); rerr != nil {
-			h.finishQRAction(w, r, id, rerr)
+			h.finishQRAction(w, r, id, next, slug, rerr)
 			return
 		}
 		seeOther(w, r, qrReturn(next, id, "reset", "", nil))
@@ -200,7 +202,7 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 	}
 	_, fit, serr := h.Links.SetQRSizeBySlug(r.Context(), actor, id, slug, in)
 	if serr != nil {
-		h.finishQRAction(w, r, id, serr)
+		h.finishQRAction(w, r, id, next, slug, serr)
 		return
 	}
 
@@ -241,31 +243,72 @@ func (h *Web) LinkQRLogo(w http.ResponseWriter, r *http.Request) {
 		h.webError(w, r, err)
 		return
 	}
+	// Read before the refusal is routed, and read from whatever the reader got
+	// through: readUploadedFile walks every part and returns what it collected
+	// alongside its error, so a body that failed after the two hidden inputs
+	// still says which surface it came from. A body that failed before them
+	// falls back to the link page, which is where this path always landed.
 	upload, err := readUploadedFile(w, r, "logo")
+	next, slug := upload.Fields.Get("next"), upload.Fields.Get("code")
 	if err != nil {
-		h.finishQRAction(w, r, id, err)
+		h.finishQRAction(w, r, id, next, slug, err)
 		return
 	}
-	slug := upload.Fields.Get("code")
 	if _, serr := h.Links.SetQRCodeLogo(
 		r.Context(), IdentityFrom(r.Context()), id, slug, upload.File,
 	); serr != nil {
-		h.finishQRAction(w, r, id, serr)
+		h.finishQRAction(w, r, id, next, slug, serr)
 		return
 	}
-	seeOther(w, r, qrReturn(upload.Fields.Get("next"), id, "logo", slug, nil))
+	seeOther(w, r, qrReturn(next, id, "logo", slug, nil))
 }
 
 // finishQRAction puts a refusal back on the page it was made from, with the
 // reason beside the code — the same trade finishFolderAction makes, and for the
 // same reason: every refusal here is something the reader can fix in the form
 // they are looking at.
-func (h *Web) finishQRAction(w http.ResponseWriter, r *http.Request, id interface{ String() string }, err error) {
+//
+// **"The page it was made from" is two pages, and `next` is which** (F170,
+// D174). The panel is a route since M48, so the same form is submitted from the
+// link page and from `/links/{id}/qr`; the success path has always honoured the
+// field through qrReturn and this one rendered the link page whatever the form
+// said, which answered somebody working in the panel with a different page and
+// left them to find their way back. The refusal itself is unchanged — 422, the
+// message beside the form, nothing stored.
+//
+// `next` is **matched, never followed**, on exactly qrReturn's terms: it is
+// compared against a path this function builds from the id it was given, so the
+// field chooses between two surfaces rather than naming one.
+func (h *Web) finishQRAction(
+	w http.ResponseWriter, r *http.Request, id uuid.UUID, next, slug string, err error,
+) {
 	var ve domain.ValidationErrors
 	if !errors.As(err, &ve) {
 		h.webError(w, r, err)
 		return
 	}
+
+	if self := "/links/" + id.String() + "/qr"; next == self {
+		actor := IdentityFrom(r.Context())
+		l, lerr := h.Links.Get(r.Context(), actor, id)
+		if lerr != nil {
+			h.webError(w, r, lerr)
+			return
+		}
+		// The same assembly LinkQRPage makes, on the code the form was editing:
+		// a refusal that dropped the reader back onto the default code would
+		// lose the selection along with the save. No notice — the ?qr= markers
+		// are what a *redirect* carries, and nothing here redirects.
+		view := h.linkQR(r.Context(), actor, l, self, slug)
+		view.QRError = ve[0].Message
+		h.render(w, r, http.StatusUnprocessableEntity, "link_qr", linkQRPageData{
+			shell:      h.shell(r, "QR code · /"+l.Alias, "links"),
+			Link:       l,
+			linkQRView: view,
+		})
+		return
+	}
+
 	data, ok := h.loadLinkDetail(w, r)
 	if !ok {
 		return

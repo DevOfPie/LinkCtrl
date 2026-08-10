@@ -87,6 +87,75 @@ func TestDemoSeederLeavesSignupModeAlone(t *testing.T) {
 	})
 }
 
+// The demo instance must not re-verify the hostname the seeder verified through
+// a stub (F162).
+//
+// The two halves are asserted together because neither is wrong on its own and
+// the pair is fatal. `lctl demo` verifies exactly one hostname, through
+// link.Service.VerifyDomain against demoChallengeResolver — the real check, and
+// a resolver that lives in the seeder process and dies with it. The name it
+// verifies is an RFC 2606 `.example` one, which is right: a demo must not claim
+// a name somebody could own. The consequence is that the long-running server,
+// which wires the real resolver, fails that check every hour and calls
+// UnverifyDomain one grace window later. The demo lost its only verified custom
+// hostname 24 hours after every reseed, and `demoCoverage()`'s row asserting
+// exactly one verified domain could not catch it: newDemoDB seeds a throwaway
+// database and asserts in the same instant, so it measures the seed and never
+// the instance the job runs against.
+//
+// This is the assertion that can. It reads the generator rather than
+// `.env.demo`, because that file is untracked, written once, and never rewritten
+// — a change made only there survives nothing.
+//
+// The pair, stated as a rule: **while the demo verifies a hostname no resolver
+// can answer for, the demo instance must have the re-verification pass off.**
+// Break either half and this fails. Give the seeder a hostname a real resolver
+// satisfies — a name in a zone somebody owns, with the TXT record published —
+// and the honest move is to delete the setting and this test with it.
+func TestTheDemoInstanceDoesNotReverifyWhatTheSeederStubbed(t *testing.T) {
+	var verified []string
+	for _, d := range demoDomains() {
+		if d.verify {
+			verified = append(verified, d.hostname)
+		}
+	}
+	if len(verified) == 0 {
+		t.Skip("the seeder verifies no hostname, so there is nothing for the hourly " +
+			"pass to take away; delete this test and the setting it guards")
+	}
+	for _, h := range verified {
+		if !strings.HasSuffix(h, ".example") {
+			t.Fatalf("the demo seeder verifies %s, which is not an RFC 2606 .example "+
+				"name. If a real resolver can now answer for it, re-verification is no "+
+				"longer a threat to the demo and LINKCTRL_DOMAIN_VERIFY_INTERVAL=0 "+
+				"should go; if it cannot, the seeder is claiming a name somebody else "+
+				"may own.", h)
+		}
+	}
+
+	const generator = "../../scripts/instance.sh"
+	src, err := os.ReadFile(generator)
+	if err != nil {
+		t.Fatalf("read %s: %v", generator, err)
+	}
+	// The demo branch only, so the setting cannot be satisfied by the test
+	// instance's half of the same file.
+	body := string(src)
+	demoBranch := body[strings.Index(body, `if [ "$inst" = demo ]; then`):]
+	if i := strings.Index(demoBranch, "\n\telse\n"); i > 0 {
+		demoBranch = demoBranch[:i]
+	}
+	if !strings.Contains(demoBranch, "LINKCTRL_DOMAIN_VERIFY_INTERVAL=0") {
+		t.Errorf("%s does not set LINKCTRL_DOMAIN_VERIFY_INTERVAL=0 for the demo "+
+			"instance, and the seeder verifies %v through a stub resolver. The hourly "+
+			"pass will fail that check against the real resolver from the moment the "+
+			"seed finishes and unverify the hostname one DOMAIN_VERIFY_GRACE later, "+
+			"so the demo stops showing the feature M40 built a day after every "+
+			"reseed — with nothing failing and no coverage row able to see it.",
+			generator, verified)
+	}
+}
+
 // forbidden scans this package's non-test sources for an import path or a struct
 // field key that must not appear.
 //

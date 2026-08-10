@@ -506,6 +506,13 @@ type linkDetailPageData struct {
 	// country, region or city rule on an instance without one never matches, and
 	// the page says so beside the boxes rather than letting somebody discover it
 	// from traffic that did not move.
+	//
+	// **It is a fact about routing, not about reporting**, and F160 is what
+	// happens when the two are conflated. A rule matches going forward, which
+	// depends on the database configured now; a breakdown reports backwards,
+	// which depends on the rows already written. The map and the ranked list
+	// therefore branch on data presence — see fillLinkAnalytics — and only the
+	// rule form reads this.
 	GeoAvailable bool
 
 	// The country choropleth and the per-dimension rings (M37). Laid out in Go
@@ -517,10 +524,10 @@ type linkDetailPageData struct {
 	// the anchor of the ranked country list, which stays one click from the map.
 	GeoBase string
 	GeoList string
-	// GeoUnavailable is the sentence the ranked list shows with no GeoIP
-	// database configured. It comes from the same constant the map uses, so the
-	// two views of this data cannot disagree about whether the instance can
-	// resolve a country at all.
+	// GeoUnavailable is the sentence the ranked list shows when this link's
+	// window holds no country to report and the instance has no way to acquire
+	// one. It comes from the same constant the map uses, so the two views of this
+	// data cannot disagree about whether a country can be reported for it.
 	GeoUnavailable string
 	// Countries is the ranked country list, and it is deliberately not
 	// Stats.Dimensions.country.
@@ -531,8 +538,12 @@ type linkDetailPageData struct {
 	// "unknown", so the list rendered "unknown — 4,102" and never the sentence.
 	// M37 asks the map to say it "exactly as the ranked list already does",
 	// which turned out to be a claim about something the list did not do. So the
-	// list is given nothing to rank when the instance cannot resolve a country,
-	// and its empty state finally means what it says.
+	// list is given nothing to rank when no country can be reported for this
+	// link's window, and its empty state finally means what it says.
+	//
+	// **"Cannot resolve" is about the rows, not the setting** (F160). The test
+	// was `GeoAvailable`, which withheld the list from every instance holding
+	// country history without a database configured today — the demo among them.
 	Countries []analytics.DimensionValue
 	// ReturningAvailable is the same honesty for the returning-visitor
 	// condition, which needs Redis.
@@ -1117,12 +1128,33 @@ func fillLinkAnalytics(r *http.Request, data *linkDetailPageData, from, to time.
 	stats := data.Stats
 	data.Series = fillSeries(stats.Series, from, to)
 
-	if !data.GeoAvailable {
-		// Only when it is actually true. The ranked list's empty state used to be
-		// this sentence unconditionally, which meant a link with a GeoIP database
-		// and no country rows yet — a link nobody has clicked — told its owner the
-		// instance had no database. Now the empty state falls back to the ordinary
-		// "No data yet".
+	// **Whether there is a country breakdown to show is a question about the
+	// data, not about the configuration** (F160).
+	//
+	// Both surfaces used to be suppressed on `GeoAvailable` alone, so an
+	// instance holding country history with no database configured *today* was
+	// shown "Geographic data is unavailable" over rows that are present and
+	// correct. That is the demo — `.env.demo` sets no GeoIP path while the
+	// database holds 8,123 country rows and two demoCoverage() rows exist to
+	// guarantee the choropleth is worth looking at — and it is not
+	// demo-specific: any instance that configured GeoIP, accumulated history and
+	// later removed the file saw the same sentence over real data.
+	//
+	// Configuration still counts, because it answers the other half: an instance
+	// with a database and no clicks yet is a link nobody has clicked, and its
+	// empty state is the ordinary "No data yet" rather than a claim about the
+	// instance. So the sentence is reached only when both are false — nothing
+	// resolved, and nothing can resolve.
+	//
+	// **"Nothing resolved" is this link, in the window `stats` was read for**,
+	// which is narrower than F160's fix note and the claims written around it.
+	// On a database-less instance holding country history, a link with no country
+	// inside the selected window meets the sentence while the link beside it
+	// draws a map. Widening the test to the link's whole history costs a query,
+	// and the seam this function is is that it makes none, so the residue is
+	// recorded as F195 rather than closed by adding one here.
+	geoShowable := data.GeoAvailable || hasResolvedCountries(stats.Dimensions["country"])
+	if !geoShowable {
 		data.GeoUnavailable = ui.GeoUnavailable
 	}
 	data.GeoBase = fmt.Sprintf("/links/%s?days=%d", data.Link.ID, data.Days)
@@ -1138,8 +1170,8 @@ func fillLinkAnalytics(r *http.Request, data *linkDetailPageData, from, to time.
 	}
 	data.Map = ui.Choropleth(
 		countryValues(stats.Dimensions["country"], geoMetric),
-		geoMetric, stats.Caveat, data.GeoAvailable)
-	if data.GeoAvailable {
+		geoMetric, stats.Caveat, geoShowable)
+	if geoShowable {
 		data.Countries = stats.Dimensions["country"]
 	}
 
@@ -1175,6 +1207,30 @@ func linkDetailNotice(q url.Values, l *domain.Link) string {
 		return "Link restored."
 	}
 	return ""
+}
+
+// hasResolvedCountries reports whether this breakdown holds a country at all
+// (F160).
+//
+// "unknown" is what the rollup writes for a click whose address did not
+// resolve, and it is not a place — a window made entirely of it is a window in
+// which nothing resolved, which is the state the unavailable sentence describes.
+// The same exclusion countryValues makes, for the same reason, and it is why
+// this is not `len(values) > 0`.
+//
+// Clicks rather than the metric on screen: the toggle chooses which figure to
+// shade, not whether there is anything to shade, and a country with clicks and a
+// visitor estimate of zero is still a country somebody came from.
+func hasResolvedCountries(values []analytics.DimensionValue) bool {
+	for _, v := range values {
+		if v.Value == "" || v.Value == "unknown" {
+			continue
+		}
+		if v.Clicks > 0 || v.UniqueVisitors > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // countryValues turns the country breakdown into the per-code figures the

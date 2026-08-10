@@ -84,6 +84,24 @@ and [phase-3-candidates.md](phase-3-candidates.md). Both say the default *is
 deliberately not decided here*, which was true when written; D149 is the later
 entry that corrects them, and neither is edited.
 
+**M55 has landed, and this heading stays anyway — checked at
+[M58](phase-details/m58.md)'s documentation pass rather than left to be
+noticed.** The rule above says a heading leaves for good once its milestone has
+landed *and the references have moved with it*. The milestone landed; one of the
+two references cannot move. It sits inside an entry in
+[decisions.md](decisions.md), which is append-only — *never edit an entry; a
+later entry corrects an earlier one* — so repointing it is not available, and
+deleting this heading would break a link that
+[`make check-links`](../../scripts/check-links.sh) is there to catch.
+
+That is not a conflict between the two rules; it is this section doing the one
+job it was created for, and the first time it has had to. The heading is a
+pointer and holds no answer, which is the whole of what it is permitted to be.
+It leaves when `decisions.md` no longer points at it, which will be never, so in
+practice it is permanent — said plainly here so that a later reader does not
+find an *awaiting the milestone* heading for a shipped milestone and take it for
+an oversight.
+
 ## Open — nothing forces this
 
 No deadline, no milestone waiting. Read when convenient; an answer here is worth
@@ -103,7 +121,7 @@ than a filter that could be widened.
 
 | Option | Buys | Costs |
 | --- | --- | --- |
-| **Phase 3, beside *Moving links between workspaces*** *(recommended)* | The two cross-workspace capabilities land together, and they share the hard part — every scoped query in `internal/link` and `internal/analytics` assumes one workspace id. Phase 2 has no milestone this belongs inside | Somebody with several workspaces keeps switching to compare, for the whole of Phase 2 |
+| **Phase 4, beside *Moving links between workspaces*** *(recommended)* | The two cross-workspace capabilities land together, and they share the hard part — every scoped query in `internal/link` and `internal/analytics` assumes one workspace id. Neither Phase 2 nor Phase 3 has a milestone this belongs inside | Somebody with several workspaces keeps switching to compare until it lands. *(This option read **Phase 3** until [M58](phase-details/m58.md). Phase 3 is closing without it, and its companion — Plan.md's `Moving links between workspaces` — was deferred to Phase 4 by the owner on 2026-08-07, so the option now names the phase its companion is actually in. The question itself is still open and still the owner's; the two remaining options are Phase 2's and are kept as the record of what was weighed.)* |
 | A Phase 2 milestone of its own | The demo M33.5 is about to make multi-workspace instances the normal thing to look at, which is exactly when the gap gets noticed | It is a new scope row late in a phase whose remaining milestones are already substrate for each other, and it widens a query path M34–M37 are about to build on |
 | Fold into [M37](phase-details/m37.md) | M37 is the dashboard milestone, so the surface is already being touched | M37 is about how a *dimension* is visualized, not which workspaces are in scope. Different question wearing the same page |
 

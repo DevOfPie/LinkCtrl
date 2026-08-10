@@ -784,13 +784,20 @@ paths:
         address becomes available for a new account. When this returns, no
         credential reaches the account.
 
-        **What happens within the hour.** The two tables that deliberately
-        carry no foreign key to the account — the audit log and destination
-        disputes — keep their rows, because they are records of what happened
-        rather than records of a person. An hourly pass replaces the actor
-        snapshot in them with a fixed label and clears the account's remaining
-        fields. Until it runs, the snapshot still holds the address; access is
-        already gone either way. `docs/SECURITY.md` states the bound.
+        **What happens within the hour.** Records *about* you that ending the
+        account does not remove keep their rows, because they are records of
+        what happened rather than records of a person, and an hourly pass takes
+        you out of them: the audit log and the destination-dispute queue, which
+        carry no foreign key to the account at all; the invitations you
+        redeemed and the notification your inviter received when you accepted,
+        which belong to somebody else and so were never yours to delete. It
+        replaces the actor snapshot **and the address held in a record's
+        detail** with a fixed label, blanks the address on the invitations you
+        redeemed — an empty value rather than a label, because redemption
+        compares against that column — and clears the account's remaining
+        fields. Until it runs, those still hold the address; access is already
+        gone either way. `docs/SECURITY.md` states the bound, the enumeration,
+        and the two addresses this deliberately leaves.
 
         **Two refusals**, both `409`, both naming what to do about it: the
         account that administers the instance (move the principal first), and
@@ -3843,9 +3850,16 @@ paths:
         So a workspace-scoped admin grants access in their own workspace and
         nowhere else, and cannot grant themselves into a second one.
 
-        The person must already hold an organization-wide membership. Somebody
-        whose only place here is one workspace was deliberately scoped to it,
-        and somebody with no membership at all is invited rather than granted.
+        The person must already be a member of the organization — by **any**
+        membership, organization-wide or scoped to a single workspace. Somebody
+        with no membership at all is invited rather than granted, because a
+        grant is not a way into an organization.
+
+        This said an organization-wide membership was required, until 0.3.0. It
+        never was: `GetOrganizationMember` admits either and orders
+        `workspace_id NULLS FIRST` only to pick a label, and the service says so
+        in as many words. An integrator reading the old sentence would have
+        built a precondition this product does not have.
 
         The role is capped at your own rank, exactly as an invitation's is.
         Requires `members.write`.
@@ -4209,10 +4223,17 @@ paths:
         Your own memberships, so there is no permission for it — the same
         reasoning as the notification inbox.
 
-        **An API key sees only the organization it was issued for.** A session
-        sees every organization you belong to, because moving between them is
-        what the switcher is for; a key was issued for one and cannot act
-        outside it, so it is not told the names of the others.
+        **An API key sees the organizations it reaches, and no more** (0.3.0).
+        A session sees every organization you belong to, because moving between
+        them is what the switcher is for. A **pinned** key was issued for one
+        and cannot act outside it, so it is not told the names of the others.
+        An **account-wide** key acts in the organizations its owner belongs to,
+        so those are exactly what it is told about — minus any an administrator
+        has cut it out of, which is an organization it no longer works in.
+
+        This description said *only the organization it was issued for* until
+        0.3.0, which was the whole truth while every key was pinned. See
+        `organization_id` on `APIKey` for the reach a key has.
 
         `current` marks the workspace this request is acting in. `default`
         marks the one pinned as where new sessions start; when nothing is
@@ -5615,8 +5636,14 @@ components:
             width — 4% of its area — with the modules under it destroyed and
             `level` forced to `H` so they can be recovered. The fraction is a
             cap derived from what `H` corrects, and the logo is centred because
-            the derivation holds for no other placement. `size` reflects the
-            raised level, so a code can grow when a logo is added.
+            the derivation holds for no other placement. **The drawn size is
+            held where it was**: `H` packs more modules into the symbol, so
+            `margin` and `scale` are re-fitted against the larger one to keep
+            the picture at the size the code was already drawn at — a code near
+            the raster ceiling would otherwise cross it and its PNG would start
+            answering `422`. Module quantisation means the result is the
+            nearest achievable size rather than always the identical integer.
+            This read *a code can grow when a logo is added* until 0.3.0.
 
     QRCodeResponse:
       type: object
@@ -6613,9 +6640,9 @@ components:
       type: object
       additionalProperties: false
       required:
-        [id, name, prefix, scopes, org_wide, organization_id, last_used_at,
-         expires_at, revoked_at, rotated_at, grace_expires_at, successor_id,
-         created_at]
+        [id, name, prefix, scopes, org_wide, organization_id,
+         revoked_organizations, last_used_at, expires_at, revoked_at,
+         rotated_at, grace_expires_at, successor_id, created_at]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
@@ -6670,6 +6697,28 @@ components:
             `false` on `org_wide` implies this is set: a workspace belongs to
             exactly one organization, so a workspace-bound key is pinned by
             construction.
+
+            An account-wide key's reach is not the whole story on its own — see
+            `revoked_organizations` below.
+        revoked_organizations:
+          type: array
+          items: { $ref: '#/components/schemas/APIKeyOrgRevocation' }
+          description: |
+            The organizations an administrator has cut this key out of (0.3.0).
+
+            An account-wide key reaches every organization its owner holds an
+            organization-wide membership in, and an administrator of any of them
+            may revoke its reach into *theirs* without touching the credential
+            elsewhere — `DELETE /api/v1/api-keys/{id}` called by somebody who is
+            not the owner. Afterwards the key authenticates, works everywhere
+            else, and resolves into that organization never again. This array is
+            the only place the owner can see that happened: the audit record is
+            written in the administrator's organization, which the owner may hold
+            no `audit.read` in.
+
+            Always present, and empty for a **pinned** key however it was
+            revoked. An organization is a pinned key's entire reach, so cutting
+            it is an outright revoke and `revoked_at` is where that shows.
         last_used_at:
           type: string
           format: date-time
@@ -6716,9 +6765,9 @@ components:
         because `additionalProperties: false` on the base would reject the very
         field this schema adds.
       required:
-        [id, name, prefix, scopes, org_wide, organization_id, last_used_at,
-         expires_at, revoked_at, rotated_at, grace_expires_at, successor_id,
-         created_at, key]
+        [id, name, prefix, scopes, org_wide, organization_id,
+         revoked_organizations, last_used_at, expires_at, revoked_at,
+         rotated_at, grace_expires_at, successor_id, created_at, key]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
@@ -6732,6 +6781,13 @@ components:
           format: uuid
           nullable: true
           description: The key's reach. See `organization_id` on APIKey.
+        revoked_organizations:
+          type: array
+          items: { $ref: '#/components/schemas/APIKeyOrgRevocation' }
+          description: |
+            Always empty here. Nothing can have barred a key that did not exist
+            when the bar would have been written. Present because the shape of a
+            key is one shape wherever it appears.
         last_used_at: { type: string, format: date-time, nullable: true }
         expires_at: { type: string, format: date-time, nullable: true }
         revoked_at: { type: string, format: date-time, nullable: true }
@@ -6750,9 +6806,10 @@ components:
         The successor, plus the fate of the key it replaced. Spelled out for the
         reason CreatedAPIKey is.
       required:
-        [id, name, prefix, scopes, org_wide, organization_id, last_used_at,
-         expires_at, revoked_at, rotated_at, grace_expires_at, successor_id,
-         created_at, key, predecessor]
+        [id, name, prefix, scopes, org_wide, organization_id,
+         revoked_organizations, last_used_at, expires_at, revoked_at,
+         rotated_at, grace_expires_at, successor_id, created_at, key,
+         predecessor]
       properties:
         id: { type: string, format: uuid }
         name:
@@ -6771,6 +6828,24 @@ components:
             The successor's reach: the predecessor's, or narrower. `null` only
             when the key it replaced was already account-wide — a successor may
             not reach more organizations than its predecessor.
+        revoked_organizations:
+          type: array
+          items: { $ref: '#/components/schemas/APIKeyOrgRevocation' }
+          description: |
+            **The predecessor's bars, carried onto the successor** — not empty,
+            and this is the one key shape where it is not. A reach revocation
+            names a key id and rotation mints a new one, so the rows are copied
+            inside the rotation transaction; without that the bar would be
+            escapable by the credential it was aimed at, using nothing but its
+            own token. The `revoked_at` and the administrator behind each bar are
+            the predecessor's, unchanged, so rotating does not re-date somebody
+            else's decision.
+
+            Empty in the two pinned directions, because neither has rows to
+            carry: nothing bars a key whose one organization *is* its reach —
+            cutting that reach revokes the key outright — and an account-wide key
+            that rotates into a pinned successor is pinned to an organization it
+            was by construction not barred from.
         last_used_at: { type: string, format: date-time, nullable: true }
         expires_at:
           type: string
@@ -6802,6 +6877,27 @@ components:
               type: string
               format: date-time
               description: The far edge of the grace window. After it the predecessor authenticates nothing.
+
+    APIKeyOrgRevocation:
+      type: object
+      additionalProperties: false
+      required: [organization_id, organization_name, revoked_at]
+      description: |
+        One organization cut out of an account-wide key's reach (0.3.0).
+      properties:
+        organization_id: { type: string, format: uuid }
+        organization_name:
+          type: string
+          description: |
+            Carried because the question this answers is asked in words — *why
+            does my key work in Acme and not in Beta* — and a uuid answers it in
+            none of them. It discloses nothing new: a bar can only exist on a key
+            whose owner held an organization-wide membership there.
+        revoked_at: { type: string, format: date-time }
+      # Who did it is deliberately absent. The row records it, and naming an
+      # administrator of another organization to a credential's holder is a
+      # disclosure nothing asked for; the audit record in that organization is
+      # where the actor is, for the people entitled to read it.
 
     CreateAPIKeyRequest:
       type: object

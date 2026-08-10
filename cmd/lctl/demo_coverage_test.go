@@ -95,6 +95,38 @@ func demoCoverage() []demoFeature {
 			Shows: "the link list, which is the first page anybody opens",
 		},
 		{
+			// The dashboard's *Recent links* is `ORDER BY created_at DESC LIMIT 5`
+			// over the workspace a sign-in lands in, and for five milestones it
+			// was five rows reading zero clicks on an instance holding 1.9 million
+			// of them (F165). Exactly five links carried the instant of the seed —
+			// the four gated ones and the one on the custom hostname, all created
+			// by the Phase 2 seeder, which backdated nothing and generated no
+			// traffic — and a limit of five made those five the whole list.
+			//
+			// Shaped as *the newest N must include one that has been clicked*
+			// rather than as a count, because the count was never the problem: the
+			// query is right and the counter is not stale. What was wrong is which
+			// rows reach the top of it, and this is the smallest claim that
+			// notices. It says nothing about which links they are, so a milestone
+			// that adds a link is free to change the answer and not this row.
+			Milestone: "M8", Feature: "A recently-created link that has been clicked",
+			Query: `SELECT count(*) FROM (
+			              SELECT l.click_count
+			                FROM links l
+			               WHERE l.workspace_id = (SELECT id FROM workspaces
+			                                        WHERE organization_id = $1
+			                                          AND deleted_at IS NULL
+			                                        ORDER BY created_at, id LIMIT 1)
+			                 AND l.deleted_at IS NULL
+			               ORDER BY l.created_at DESC, l.id DESC
+			               LIMIT 5) newest
+			         WHERE newest.click_count > 0`,
+			Min: 1,
+			Shows: "a front page worth reading. The five newest links are the whole " +
+				"of what the dashboard lists, and five zeroes is the least " +
+				"convincing page in the demo — on the first screen an evaluator opens",
+		},
+		{
 			Milestone: "M9", Feature: "Click history",
 			Query: `SELECT count(*) FROM click_events WHERE workspace_id IN (` + demoWorkspaces + `)`,
 			Min:   1000,
@@ -144,6 +176,32 @@ func demoCoverage() []demoFeature {
 			           AND EXISTS (SELECT 1 FROM links l WHERE l.workspace_id = w.id)`,
 			Min:   2,
 			Shows: "that scoping is observable: switching changes what the list holds",
+		},
+		{
+			// Which workspace, and not only how many (F169). The row above counts
+			// workspaces that hold links and is satisfied by any two; nothing
+			// asked whether the five links `demoWorkspace2Catalogue` defines are
+			// in the workspace it defines them for. They were not. `actAs` moved
+			// the owner by writing `last_workspace_id`, which is rung 3 of
+			// ResolveWorkspaceForUser, and the demo owner had rung 2 —
+			// `default_workspace_id` — pinned at the catalogue's workspace, so
+			// every one of the five was filed there and Campaigns had never held a
+			// row. The switcher moved between two workspaces, one of them empty,
+			// which reads as a broken feature rather than an unseeded one.
+			//
+			// Bounded on both sides and against the catalogue's own length, so it
+			// fails in both directions: none of them arriving, and all twenty-one
+			// of the *other* workspace's arriving here instead.
+			Milestone: "M25", Feature: "The second workspace's own links, in it",
+			Query: `SELECT count(*) FROM links l
+			          JOIN workspaces w ON w.id = l.workspace_id
+			         WHERE w.organization_id = $1 AND w.slug = '` + demoWorkspace2Slug + `'
+			           AND l.deleted_at IS NULL`,
+			Min: int64(len(demoWorkspace2Catalogue())),
+			Max: int64(len(demoWorkspace2Catalogue())),
+			Shows: "the only thing a second workspace is for: switch, and the list, " +
+				"the tags and the analytics are a different set. An empty one " +
+				"demonstrates the switcher and nothing underneath it",
 		},
 		{
 			Milestone: "M27", Feature: "An outstanding invitation",
@@ -322,6 +380,30 @@ func demoCoverage() []demoFeature {
 			Min: 1, Max: 1,
 			Shows: "the exact counter beside the limit. A limit with nothing " +
 				"against it is indistinguishable from a limit that does not work",
+		},
+		{
+			// A budget spent further than the link was clicked (F166). Not a
+			// feature the demo shows — a state it must not be in. A redirect
+			// consumes a click from the budget *and* records a click event, so
+			// `consumed` can never run ahead of `click_count`; the seeder spent the
+			// budget through internal/gate and recorded nothing, which produced
+			// `first-fifty` reading *12 of 50 spent* in its gate section and *0
+			// clicks* on the dashboard beside it. Two true statements about one
+			// link that cannot both be true, on adjacent pages, is exactly what a
+			// reader uses to decide whether any number here is worth believing.
+			//
+			// The other direction is left alone on purpose: `click_count` counts
+			// bots and every click the link ever took, and a budget added to a link
+			// that already had traffic starts at zero, so a total larger than the
+			// budget is ordinary.
+			Milestone: "M35", Feature: "No budget spent further than its link was clicked",
+			Query: `SELECT count(*) FROM link_click_budget b
+			          JOIN links l ON l.id = b.link_id
+			         WHERE b.workspace_id IN (` + demoWorkspaces + `)
+			           AND b.consumed > l.click_count`,
+			MaxIsZero: true,
+			Shows: "numbers that agree with each other. This is the row that says " +
+				"the gate counter and the click counter describe the same visits",
 		},
 		{
 			Milestone: "M35", Feature: "A link that requires a signed URL",
@@ -1208,6 +1290,76 @@ func TestDemoSeederShowsEveryFeatureItClaimsTo(t *testing.T) {
 				feature.Feature, feature.Milestone, counts[i], moved[i])
 		}
 	}
+}
+
+// TestTheSecondWorkspaceFillsWhenTheOwnerHasPinnedADefault is F169, and the pin
+// is the whole of what it adds.
+//
+// The coverage row it asserts — the second workspace's own links, in it — passes
+// on a database nobody has expressed a preference in, because with no pin,
+// `actAs`'s write to `last_workspace_id` is the highest-ranked answer there is
+// and the owner moves. The demo instance was not that database. Somebody had
+// pinned a default workspace, `ResolveWorkspaceForUser` ranks the pin above
+// last-used, and the identity `actAs` handed back was still in the catalogue's
+// workspace — so `link.Service.Create` read `actor.WorkspaceID` and filed all
+// five of the second workspace's links in the first one. Two consecutive clean
+// seeds, Campaigns holding nothing both times, and the seeder reporting success
+// both times because nothing compared where a link was asked for with where it
+// went.
+//
+// So the state is reached from the outside, the way somebody clicking *make this
+// my default* reaches it, and the pin is set on the catalogue's own workspace —
+// which is both what the demo instance actually had and the one value that does
+// not trip `demoActor`'s refusal on the way in. Everything after that is the
+// seeder's problem, which is the point.
+func TestTheSecondWorkspaceFillsWhenTheOwnerHasPinnedADefault(t *testing.T) {
+	ctx := context.Background()
+	pool := newDemoDB(t)
+	cfg := demoTestConfig()
+	owner := claimDemoInstance(t, pool, cfg)
+
+	runDemoSeed(t, ctx, pool, cfg, owner.Email)
+	orgID, ownerID := demoScope(t, pool, owner.Email)
+
+	const pin = `
+		UPDATE users SET default_workspace_id = (
+		    SELECT w.id FROM workspaces w
+		     WHERE w.organization_id = $2 AND w.deleted_at IS NULL
+		     ORDER BY w.created_at, w.id
+		     LIMIT 1)
+		 WHERE id = $1
+		RETURNING default_workspace_id`
+	var pinned *uuid.UUID
+	if err := pool.QueryRow(ctx, pin, ownerID, orgID).Scan(&pinned); err != nil {
+		t.Fatalf("pin the owner's default workspace: %v", err)
+	}
+	if pinned == nil {
+		t.Fatal("the demo organization has no workspace to pin")
+	}
+
+	runDemoSeed(t, ctx, pool, cfg, owner.Email)
+	orgID, ownerID = demoScope(t, pool, owner.Email)
+
+	var elsewhere int64
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM links l
+		  JOIN workspaces w ON w.id = l.workspace_id
+		 WHERE w.organization_id = $1 AND w.slug = '`+demoWorkspace2Slug+`'
+		   AND l.deleted_at IS NULL`, orgID).Scan(&elsewhere); err != nil {
+		t.Fatal(err)
+	}
+	if want := int64(len(demoWorkspace2Catalogue())); elsewhere != want {
+		t.Errorf("the %s workspace holds %d links after a seed run by an owner with a "+
+			"pinned default workspace, want %d. The pin is rung 2 of "+
+			"ResolveWorkspaceForUser and last-used is rung 3, so a seeder that moves "+
+			"the actor by writing last-used alone does not move it at all — and every "+
+			"link it makes next is filed in whichever workspace the pin names.",
+			demoWorkspace2Slug, elsewhere, want)
+	}
+
+	// And the rest of the demo is still the demo: a seeder that reached the
+	// second workspace by breaking something else would satisfy the count above.
+	checkDemoCoverage(t, pool, orgID, ownerID)
 }
 
 // TestDemoResetClearsTheCatalogueFromAnyWorkspaceInTheOrganization is F68's

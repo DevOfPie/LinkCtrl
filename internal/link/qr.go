@@ -485,7 +485,12 @@ func (s *Service) RenderQRBySlug(
 	if err != nil {
 		return nil, err
 	}
-	svg, err := qr.RenderWithLogo(code.Content, code.Style, logo)
+	// The empty class rather than qr.Render's default, because this is the file
+	// somebody downloads and not a picture inlined into a page (F184). A class
+	// list means nothing outside the dashboard's stylesheet, and this document
+	// leaves the product: what it carries is the size it was asked for and
+	// nothing that only resolves here.
+	svg, err := qr.RenderClassWithLogo(code.Content, code.Style, "", logo)
 	if err != nil {
 		// A stored style is normalized before it is written, and the content is
 		// a short URL, so reaching here means the row was edited outside the
@@ -584,12 +589,25 @@ func (s *Service) SetQRSizeBySlug(
 	if err != nil {
 		return nil, qr.SizeFit{}, err
 	}
-	current, found, err := s.storedQRStyle(ctx, actor.WorkspaceID, linkID, slug)
+	row, found, err := s.storedQRCode(ctx, actor.WorkspaceID, linkID, slug)
 	if err != nil {
 		return nil, qr.SizeFit{}, err
 	}
 	if !found && slug != "" {
 		return nil, qr.SizeFit{}, domain.ErrNotFound
+	}
+	current := decodeQRStyle(row.Style)
+	// **Fitted against the level the picture will be drawn at, not the one the
+	// row happens to hold (F190).** A size is a pixel arithmetic over a module
+	// count, and a logo forces the level to H, which is a different module count
+	// — so fitting against a stored `M` and drawing at `H` snaps to a scale that
+	// comes out at some other number of pixels than the reader typed. This is the
+	// same defence `qrCodeFrom` applies on read, and its existence there is the
+	// evidence the disagreement is reachable: a row written before M50.6, one
+	// written by hand, or a style write that raced an upload. The size control is
+	// the second site that needs it and was the one without it.
+	if found && row.HasLogo {
+		current = current.ForLogo()
 	}
 
 	code, err := qr.Encode(QRContent(l.ShortURL, slug), current.Level)
@@ -809,7 +827,7 @@ func (s *Service) SetQRCodeLogo(
 	// leaves the safe state: a logo stored at a level the row still calls `M`
 	// draws at H anyway, because the renderer forces it too. The other order
 	// would leave a code with no logo restyled for nothing.
-	styled := decodeQRStyle(row.Style).ForLogo()
+	styled := refitForLogo(QRContent(l.ShortURL, slug), decodeQRStyle(row.Style))
 	blob, err := json.Marshal(styled)
 	if err != nil {
 		return nil, fmt.Errorf("encode qr style: %w", err)
@@ -828,6 +846,51 @@ func (s *Service) SetQRCodeLogo(
 	// codes, so nothing cached can disagree with this write.
 	code := qrCodeFrom(linkID, l.ShortURL, slug, row, true)
 	return &code, nil
+}
+
+// refitForLogo is the style a code takes on when an image is put on it: level H,
+// and the margin and scale that keep the picture the size it already was (F171,
+// D174).
+//
+// **Level H is not free, and it is not free in pixels.** A logo forces the
+// error-correction level up, and H spends its correction budget on modules: an
+// 89-byte payload is 37 modules across at L and 53 at H. Carrying the stored
+// margin and scale forward therefore *grows* the drawing — at margin 13 and
+// scale 31 that is 1953px before the upload and 2449px after, past qr.MaxSize,
+// and `GET …/qr.png` begins answering 422 for a code that downloaded a moment
+// earlier. Nothing about that is visible from the surface: somebody uploaded a
+// picture and a download stopped working.
+//
+// So the size is re-fitted against the larger symbol, at the size the code was
+// already drawn at. **Silently, and the silence is the decision** (D174): the
+// recommendation was to re-fit *and* say so, and the owner took the re-fit
+// alone. Refusing the upload was the other option and was rejected — it would
+// say no to a picture the SVG draws correctly. What travels is unchanged, so a
+// code already printed still scans, and the notice the upload already carries
+// says the picture is denser than it was, which is now the whole of what
+// happened to it.
+//
+// The style is returned unchanged but for the level when the fit cannot be made:
+// the target is clamped into the range qr.FitSize accepts, because a style
+// stored before M49 can describe a picture outside it, and a fit that fails must
+// not cost a logo that has already been written.
+func refitForLogo(content string, style qr.Style) qr.Style {
+	out := style.ForLogo()
+	before, err := qr.Encode(content, style.Level)
+	if err != nil {
+		return out
+	}
+	after, err := qr.Encode(content, out.Level)
+	if err != nil {
+		return out
+	}
+	want := min(max(qr.OutputSize(before.Size, style), qr.MinSize), qr.MaxSize)
+	fit, err := qr.FitSize(after.Size, want)
+	if err != nil {
+		return out
+	}
+	out.Margin, out.Scale = fit.Margin, fit.Scale
+	return out
 }
 
 // ClearQRCodeLogo removes the image from one of a link's codes. The empty slug

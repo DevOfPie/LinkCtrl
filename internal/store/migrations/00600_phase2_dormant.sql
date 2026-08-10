@@ -56,7 +56,16 @@ CREATE TABLE qr_codes (
     id           uuid        PRIMARY KEY,
     link_id      uuid        NOT NULL REFERENCES links(id) ON DELETE CASCADE,
     workspace_id uuid        NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    -- colours, logo reference, error-correction level, margin, shape
+    -- What this blob actually holds, as of M50.6 (0.3.0): `qr.Style` has five
+    -- fields — foreground, background, error-correction level, margin, scale.
+    --
+    -- This line read "colours, logo reference, error-correction level, margin,
+    -- shape" from the first migration until M58. Two of those five were never
+    -- built into the blob and one still is not. **The logo is a `bytea` column**
+    -- (`logo`, 03800_qr_code_logo.sql, D134), not a reference in here — bytes
+    -- were chosen over a reference precisely so the row and the picture cannot
+    -- disagree. **Shape is not built and nothing schedules it**: the renderer
+    -- draws square modules only, and area F closed with 0.3.0.
     style        jsonb       NOT NULL DEFAULT '{}'::jsonb,
     -- Nothing increments this in Phase 1. See docs/data-model.md before
     -- writing a feature against it.

@@ -273,8 +273,9 @@ func (s *Service) SetRootRedirect(ctx context.Context, actor *auth.Identity, raw
 // matches substrings including "preview", "monitor" and "checker", it treats an
 // absent user agent as automated, and its false-positive rate has never been
 // measured because until this milestone nothing depended on it. A person it
-// misclassifies gets a 403 and has no way past it — the bypass is Phase 3 — and
-// nobody tells the link's owner it happened.
+// misclassifies gets a 403 and has no way past it — no bypass is built and
+// nothing schedules one, Phase 3 having declined the redirect-path area
+// outright (D108) — and nobody tells the link's owner it happened.
 func (s *Service) SetBotBlocking(ctx context.Context, actor *auth.Identity, block, enforced bool) (*DomainSettings, error) {
 	// The instance default's own permission, not the role one (D100). Both of
 	// these operate on the instance default and nothing else — `SetDomainRootRedirect`

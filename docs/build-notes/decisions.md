@@ -246,23 +246,23 @@ file. Append a row when you append an entry.
 | [M47: the three choices it gave itself, and the 1883 pixels](#2026-08-07--m47-the-three-choices-it-gave-itself-and-the-1883-pixels) | D120–D122: the analytics go below and the tiles go with them; the order, with the row at which measurement stops and an argument starts; a 60-line cap fixed by the shortest partial's body rather than by the page's length; one sentence for two facts that were adjacent and did not compose; 1883px to 327px, three engines; what the fold test cannot check and the sabotage that proved both its limbs |
 | [The demo reset could not clean up after itself](#2026-08-07--the-demo-reset-could-not-clean-up-after-itself) | F168, which stopped a milestone landing: why the reset is scoped to aliases and not to a workspace, why it deletes by *not the default* rather than by a slug, the widening that costs, and the half of the row that did not close |
 | [M48: three facts the last two milestones moved](#2026-08-07--m48-three-facts-the-last-two-milestones-moved) | An amendment, not a decision: two line references and a list of four notification kinds, one of which the demo has never seeded. And the pattern behind three amendments in three milestones |
+| [M48: the panel, the thumbnail that could not go where it was asked, and where a notification leads](#2026-08-07--m48-the-panel-the-thumbnail-that-could-not-go-where-it-was-asked-and-where-a-notification-leads) | D123–D125: a panel is a route first and a popup second, and why that is not D24 reversed or D120 reversed; the QR thumbnail stays below the edit form because M47's fold test refuses a picture above it, and what went in the heading row instead; a map rather than a switch so that *has a mapping* is a question code can ask; the two kinds that lead nowhere and say so; three of seven kinds the demo has never seeded and why no coverage row demands them; and the permission a test fixture had been missing since M47, which hid three sections of the link page from every test that renders it |
 | [M48: the owner overrules D124 — the picture goes up, and the guard narrows](#2026-08-07--m48-the-owner-overrules-d124-the-picture-goes-up-and-the-guard-narrows) | Owner-set. Why a narrowing and not an exemption, what M47's claim now has to be re-measured against, and why M47 is not reopened |
+| [M48: the picture goes up — the rule that let it, and the page re-measured](#2026-08-07--m48-the-picture-goes-up-the-rule-that-let-it-and-the-page-re-measured) | D126: what M47's fold guard became — a height class and a 160px budget rather than a blanket refusal of `<svg>`, and why the `height` attribute could not be what is read; one constant, three consumers, and the fixture that would otherwise measure a page nobody is served; `internal/qr` gaining a validated class; and the re-measurement in three engines — 327→349px, 443→465px — checked by reproducing M47's own figures with the picture removed |
 | [M49: what B left behind it](#2026-08-07--m49-what-b-left-behind-it) | An amendment, not a decision: the QR panel is not a line range in `link_detail.html` any more, and the generator is 395 lines rather than 338. Fourth amendment in four milestones, and the first where the moved thing is a *file* rather than a line |
+| [M49: the size, the second encoder, and D11 spent on purpose](#2026-08-07--m49-the-size-the-second-encoder-and-d11-spent-on-purpose) | D127–D129: what bounds a rasteriser that D11 refused to allow at all, stated as an allocation rather than as a word; why the quiet zone became the second knob and what the search costs in tie-breaks; why `qr.Style` gained no field and what that bought for every row already in the table; why a form that stopped asking about error correction needed a new service operation rather than a default; and the two encoders sharing one arithmetic, with the claim they are held to and the one they are not |
 | [M50: two line numbers, and the references that held](#2026-08-07--m50-two-line-numbers-and-the-references-that-held) | An amendment, not a decision. Also the first milestone in the phase whose *migration* number was still right, and why that is not luck |
+| [M50: the empty slug, the parameter that stayed closed, and the rollup that was not written](#2026-08-07--m50-the-empty-slug-the-parameter-that-stayed-closed-and-the-rollup-that-was-not-written) | D130–D133: why the default code's identity is its *absence* of an identifier and what that bought for every code already printed; why a code identity could not ride inside `src` and how the second parameter is bounded instead; why per-code counts are a filter over the referrer dimension rather than the new rollup campaign analytics was deferred for, and what the Referrers panel therefore still shows; and why the five shipped QR endpoints stayed the default-code shorthand |
 | [M50.5: where an uploaded logo lives](#2026-08-07--m505-where-an-uploaded-logo-lives) | D134, owner-set. The answer to the phase's one pre-filed question, and what it obliges M50.5 to measure before M57 is written |
+| [M50.5: the first file this product accepts](#2026-08-07--m505-the-first-file-this-product-accepts) | D135–D138: the caps as numbers and the worst-case row D134 was owed, including why the upload cap does not bound the database; why only a named code carries a logo and what gap that leaves; what an orphan even is once the bytes are the row; and why an upload does not inherit the API's rate limit |
 | [M50.5: the owner overrules D136 — the default code gets a logo too](#2026-08-07--m505-the-owner-overrules-d136-the-default-code-gets-a-logo-too) | Owner-set. Why the bullet counts capabilities rather than operations, why the shorthand and not a reserved slug, and what D130 is protected from |
+| [M50.5: the shorthand that carries a logo, and the row it has to write](#2026-08-07--m505-the-shorthand-that-carries-a-logo-and-the-row-it-has-to-write) | D139: what the owner's ruling became — two more members of D133's family, the row a `bytea` column obliges a code with no row to acquire, and the style it is written at; the multipart body the dashboard needs because a file cannot travel in a urlencoded form; and the four sabotages |
+| [M50.6: the logo in the picture](#2026-08-07--m506-the-logo-in-the-picture-a-cap-that-is-arithmetic-a-level-that-is-not-a-preference-and-the-ring-a-measurement-bought) | D140–D142: the occlusion cap as arithmetic rather than a plausible fraction — what level H actually recovers, why a contiguous square costs more than its area, and why it may spend only half; why a request naming another level is accepted and overridden rather than refused, and where the forcing has to happen twice; why the logo is embedded as a data URI rather than served, what that does to the rasteriser's allocation figure, and why `img-src` had to be pinned; and the one module of background a hand decode check bought |
 | [M50.6: the logo reference that is still not a reference](#2026-08-07--m506-the-logo-reference-that-is-still-not-a-reference) | An amendment, not a decision. Two files said M50.6 fills a Phase 1 promise; D134 is what made that false, one milestone before this one |
 | [M51: the migration number this run used up](#2026-08-07--m51-the-migration-number-this-run-used-up) | An amendment, not a decision. A milestone file reserved a number two later milestones then took, and the third kind of drift this phase has produced |
 | [M51: the mail-free instance, and the one rule this product breaks on purpose](#2026-08-07--m51-the-mail-free-instance-and-the-one-rule-this-product-breaks-on-purpose) | D143: why recovery refuses instead of degrading when `SMTP_HOST` is unset, the two alternatives that were refused, and why this refusal names its reason where the sign-up form's does not |
 | [M51: what the mailbox is told, and how long the link lives](#2026-08-07--m51-what-the-mailbox-is-told-and-how-long-the-link-lives) | D144: one unavailable template rather than two and what that costs a suspended account's owner; the login limiter as the only bound and the mail it sends to strangers; one hour against signup's day; and the response that carries no timestamp so there is no second value to keep identical |
 | [M51: what a completed reset ends, what it starts, and where the record goes](#2026-08-07--m51-what-a-completed-reset-ends-what-it-starts-and-where-the-record-goes) | D145: every session and every sibling token, no new session, and API keys deliberately untouched; `auth.WritePassword` as one function rather than two call sites that agree; and the first audit action in the product written by somebody holding no credential, which is why its row belongs to no organization |
-| [M50.5: the shorthand that carries a logo, and the row it has to write](#2026-08-07--m505-the-shorthand-that-carries-a-logo-and-the-row-it-has-to-write) | D139: what the owner's ruling became — two more members of D133's family, the row a `bytea` column obliges a code with no row to acquire, and the style it is written at; the multipart body the dashboard needs because a file cannot travel in a urlencoded form; and the four sabotages |
-| [M50.5: the first file this product accepts](#2026-08-07--m505-the-first-file-this-product-accepts) | D135–D138: the caps as numbers and the worst-case row D134 was owed, including why the upload cap does not bound the database; why only a named code carries a logo and what gap that leaves; what an orphan even is once the bytes are the row; and why an upload does not inherit the API's rate limit |
-| [M48: the panel, the thumbnail that could not go where it was asked, and where a notification leads](#2026-08-07--m48-the-panel-the-thumbnail-that-could-not-go-where-it-was-asked-and-where-a-notification-leads) | D123–D125: a panel is a route first and a popup second, and why that is not D24 reversed or D120 reversed; the QR thumbnail stays below the edit form because M47's fold test refuses a picture above it, and what went in the heading row instead; a map rather than a switch so that *has a mapping* is a question code can ask; the two kinds that lead nowhere and say so; three of seven kinds the demo has never seeded and why no coverage row demands them; and the permission a test fixture had been missing since M47, which hid three sections of the link page from every test that renders it |
-| [M48: the picture goes up — the rule that let it, and the page re-measured](#2026-08-07--m48-the-picture-goes-up-the-rule-that-let-it-and-the-page-re-measured) | D126: what M47's fold guard became — a height class and a 160px budget rather than a blanket refusal of `<svg>`, and why the `height` attribute could not be what is read; one constant, three consumers, and the fixture that would otherwise measure a page nobody is served; `internal/qr` gaining a validated class; and the re-measurement in three engines — 327→349px, 443→465px — checked by reproducing M47's own figures with the picture removed |
-| [M50: the empty slug, the parameter that stayed closed, and the rollup that was not written](#2026-08-07--m50-the-empty-slug-the-parameter-that-stayed-closed-and-the-rollup-that-was-not-written) | D130–D133: why the default code's identity is its *absence* of an identifier and what that bought for every code already printed; why a code identity could not ride inside `src` and how the second parameter is bounded instead; why per-code counts are a filter over the referrer dimension rather than the new rollup campaign analytics was deferred for, and what the Referrers panel therefore still shows; and why the five shipped QR endpoints stayed the default-code shorthand |
-| [M50.6: the logo in the picture](#2026-08-07--m506-the-logo-in-the-picture-a-cap-that-is-arithmetic-a-level-that-is-not-a-preference-and-the-ring-a-measurement-bought) | D140–D142: the occlusion cap as arithmetic rather than a plausible fraction — what level H actually recovers, why a contiguous square costs more than its area, and why it may spend only half; why a request naming another level is accepted and overridden rather than refused, and where the forcing has to happen twice; why the logo is embedded as a data URI rather than served, what that does to the rasteriser's allocation figure, and why `img-src` had to be pinned; and the one module of background a hand decode check bought |
-| [M49: the size, the second encoder, and D11 spent on purpose](#2026-08-07--m49-the-size-the-second-encoder-and-d11-spent-on-purpose) | D127–D129: what bounds a rasteriser that D11 refused to allow at all, stated as an allocation rather than as a word; why the quiet zone became the second knob and what the search costs in tie-breaks; why `qr.Style` gained no field and what that bought for every row already in the table; why a form that stopped asking about error correction needed a new service operation rather than a default; and the two encoders sharing one arithmetic, with the claim they are held to and the one they are not |
 | [M51.9: what the mid-phase review checked, found, and could not run](#2026-08-08--m519-the-mid-phase-review-what-it-checked-what-it-found-and-the-one-bullet-it-could-not-run) | D146: the eighteen blind tasks are recorded nowhere, so the bullet asking for them is struck and the cost — D121's ordering and D124/D126's placement go un-rechecked — is stated. D147: the doc-cost judgement, trimming 2930 bytes of a 6409-byte resume-charge growth and defending the rest. F172–F175, and the two candidates that were refuted |
 | [M46 reopened: the overflow bullet narrowed on the milestone's own instruction](#2026-08-08--m46-the-overflow-bullet-narrowed-on-the-milestones-own-instruction) | F172 closed. Why a claim about a guard that does not exist reopens the milestone rather than arriving as a successor, and why writing the narrowing into the test file discharged nothing |
 | [F174: the demo's QR codes were pictures of a link that answers Gone](#2026-08-08--f174-the-demos-qr-codes-were-pictures-of-a-link-that-answers-gone) | Why four demoCoverage() rows counting qr_codes all passed while every code on the demo resolved to 410, and the row that now counts the reachability they imply |
@@ -271,23 +271,34 @@ file. Append a row when you append an entry.
 | [M52: a soft delete fires no cascade, and two comments that said it would](#2026-08-08--m52-a-soft-delete-fires-no-cascade-and-two-comments-that-said-it-would) | Why the deletion path writes out six DELETEs, why two tables joined m52.md's four, and the transaction-scoped audit writer the first operation whose actor it destroys needed |
 | [M52: the cascade the bullet promised, amended at acceptance](#2026-08-08--m52-the-cascade-the-bullet-promised-amended-at-acceptance) | The amendment record for the entry above, made at step 3.4 rather than step 1: the bullet as it stood, as amended to six explicit statements, and the tree fact that `ON DELETE CASCADE` never fires on an `UPDATE`. Why it is a fact and not an assertion, and why that is the difference between an amendment and a rejection |
 | [M53: the two facts the milestone before it moved](#2026-08-08--m53-the-two-facts-the-milestone-before-it-moved) | An amendment, not a decision: M52 moved the session mint out from under M53's bullet and gave `mfa_secret` its first writer, which is the one that clears it. The first time this phase a milestone's validation corrected facts broken by its immediate predecessor |
+| [M53: five choices a second factor forced](#2026-08-08--m53-five-choices-a-second-factor-forced) | D150: `MFA_SECRET_KEY` is its own variable and is **optional**, so an instance without one offers no second factor and an instance that loses one falls back to recovery codes. D151: the second factor lives in `internal/auth` behind two seams rather than in a package of its own, and why the reason `internal/account` gives does not apply. D152: the enrolment offer travels in the form because the milestone forbids the alternative. D153: `RecordSuccessfulLogin` is guarded rather than moved, which is the only way both of the login flow's bullets hold at once. D154: four audit actions and one notification kind, because the two surfaces answer different questions |
 | [M54: the second milestone file to reserve a migration number it did not get](#2026-08-08--m54-the-second-milestone-file-to-reserve-a-migration-number-it-did-not-get) | An amendment, not a decision: `037xx` is not merely stale but occupied, so a worker following the bullet would collide rather than fail. Why a reserved migration number is a prediction about build order |
+| [M54: a key belongs to an account, and the four decisions that had to be re-derived to say so](#2026-08-08--m54-a-key-belongs-to-an-account-and-the-four-decisions-that-had-to-be-re-derived-to-say-so) | D155: reach is a second column rather than a widening of the first, and account-wide is what an unpinned key created from 0.3.0 on *is* — the widening-by-default is deliberate and pinning is the irreversible half. D156: an account-wide key requires an **organization-wide** membership wherever it lands, which is M44's existing bar carried across the tenancy boundary. D157: the organization is resolved one tier above the workspace, by its own query, so M44's parameter survives with a value rather than being deleted. D158: an administrator narrows somebody else's account-wide key instead of destroying it, in a table of subtractions and under an audit action of its own. And the four re-derivations — F103's bound, M44's parameter, D43's cap, D87's rotation rule — each with the limb it matched |
 | [M54: the function the authority bullet named answers one permission](#2026-08-08--m54-the-function-the-authority-bullet-named-answers-one-permission) | An amendment, not a decision: `LoadMembershipAuthority` takes one permission, so a scope set through it is a query per scope on the auth path. Why the assertion is untouched, and why an amendment that widened what is intersected would be this milestone's own failure mode wearing a correction's clothes |
 | [M55: four line references, and the one that pointed at the wrong claim](#2026-08-08--m55-four-line-references-and-the-one-that-pointed-at-the-wrong-claim) | An amendment, not a decision. `SECURITY.md:73` had become the QR-codes row, so the citation still landed on a real claim and read as correct — the failure mode a moved line does not have. And how one stale reference became two the same day |
+| [M55: an update checker, and the five choices a daily GET turned out to need](#2026-08-08--m55-an-update-checker-and-the-five-choices-a-daily-get-turned-out-to-need) | D159: an instance **upgrading** into 0.3.0 gets the default — on — because it has no first run left to be asked at, which is the one case D149's prompt cannot reach. D160: two switches, ANDed, and the environment variable only ever says *no*. D161: a singleton `instance_settings` table and a control on the setup form, rather than a key/value store or the settings page nobody asked for. D162: the comparison reads the leading `vX.Y.Z` and drops everything after it, because `git describe` means *past this tag* and semver would read it as *before* it. D163: the re-notify guard is keyed on the version and lives in the notification itself, not on a clock and not in a column |
 | [M55: D159 corrected — an upgraded instance is asked, not assumed](#2026-08-08--m55-d159-corrected--an-upgraded-instance-is-asked-not-assumed) | D164, owner-set. Why D149 bought knowing consent rather than a default, why that makes *unanswered* a third state the column has to hold, and the bound this inherits from the option it resembles |
+| [M55: where an upgraded instance is asked, and what the third state costs](#2026-08-09--m55-where-an-upgraded-instance-is-asked-and-what-the-third-state-costs) | D165: the question D164 owes an upgraded instance is put on the dashboard, to a holder of `instance.admin`, once — not in an interstitial, not in the shell, and not on the settings page D161 declined to build. Why *omitted* on the API's setup field now means unanswered rather than yes, why the write is conditional rather than guarded by a read, and the audit row that is deliberately not written |
 | [M56: nine references that moved, and one job on the wrong side of a distinction](#2026-08-08--m56-nine-references-that-moved-and-one-job-on-the-wrong-side-of-a-distinction) | An amendment, not a decision. The heaviest drift in the phase, including sixty lines in `deployment.md` — and a bullet that counted three per-replica jobs when the third runs under `withLeadership`, which is the distinction the bullet exists to document |
+| [M56: the failover contract, and the probe that was holding the door open](#2026-08-09--m56-the-failover-contract-and-the-probe-that-was-holding-the-door-open) | D166: the boot-time relay probe moves into a goroutine rather than after the listener, because *after* is not available at the cost it implies and nothing was ever reading its result — F173's ten seconds of dead server bought the order of two log lines. D167: the readiness contract is two status codes rather than three words, because the failure it prevents is an operator wiring `degraded` to *remove* and taking the whole deployment out during a Redis outage. And the two things the Risks section asked to be recorded either way: the kill-a-leader test stayed an assertion rather than becoming M57's measurement, and the per-replica job count is now a test rather than a sentence |
 | [M56: a milestone file that had not heard about D104](#2026-08-08--m56-a-milestone-file-that-had-not-heard-about-d104) | An amendment, not a decision. A milestone file instructed a README edit that D104 forbids, and D104 predates it — so the conflict the worker reported had no live choice in it. Why the substance never conflicted, and what would have made it a prompt |
 | [M57: the proof got a job bigger while the phase was running](#2026-08-08--m57-the-proof-got-a-job-bigger-while-the-phase-was-running) | An amendment, not a decision: seven job families became eight when M55 landed hours earlier, and the count is the size of M57's obligation rather than decoration. The new family is the only one that opens a socket outwards |
-| [M53: five choices a second factor forced](#2026-08-08--m53-five-choices-a-second-factor-forced) | D150: `MFA_SECRET_KEY` is its own variable and is **optional**, so an instance without one offers no second factor and an instance that loses one falls back to recovery codes. D151: the second factor lives in `internal/auth` behind two seams rather than in a package of its own, and why the reason `internal/account` gives does not apply. D152: the enrolment offer travels in the form because the milestone forbids the alternative. D153: `RecordSuccessfulLogin` is guarded rather than moved, which is the only way both of the login flow's bullets hold at once. D154: four audit actions and one notification kind, because the two surfaces answer different questions |
-| [M54: a key belongs to an account, and the four decisions that had to be re-derived to say so](#2026-08-08--m54-a-key-belongs-to-an-account-and-the-four-decisions-that-had-to-be-re-derived-to-say-so) | D155: reach is a second column rather than a widening of the first, and account-wide is what an unpinned key created from 0.3.0 on *is* — the widening-by-default is deliberate and pinning is the irreversible half. D156: an account-wide key requires an **organization-wide** membership wherever it lands, which is M44's existing bar carried across the tenancy boundary. D157: the organization is resolved one tier above the workspace, by its own query, so M44's parameter survives with a value rather than being deleted. D158: an administrator narrows somebody else's account-wide key instead of destroying it, in a table of subtractions and under an audit action of its own. And the four re-derivations — F103's bound, M44's parameter, D43's cap, D87's rotation rule — each with the limb it matched |
-| [M55: an update checker, and the five choices a daily GET turned out to need](#2026-08-08--m55-an-update-checker-and-the-five-choices-a-daily-get-turned-out-to-need) | D159: an instance **upgrading** into 0.3.0 gets the default — on — because it has no first run left to be asked at, which is the one case D149's prompt cannot reach. D160: two switches, ANDed, and the environment variable only ever says *no*. D161: a singleton `instance_settings` table and a control on the setup form, rather than a key/value store or the settings page nobody asked for. D162: the comparison reads the leading `vX.Y.Z` and drops everything after it, because `git describe` means *past this tag* and semver would read it as *before* it. D163: the re-notify guard is keyed on the version and lives in the notification itself, not on a clock and not in a column |
-| [M55: where an upgraded instance is asked, and what the third state costs](#2026-08-09--m55-where-an-upgraded-instance-is-asked-and-what-the-third-state-costs) | D165: the question D164 owes an upgraded instance is put on the dashboard, to a holder of `instance.admin`, once — not in an interstitial, not in the shell, and not on the settings page D161 declined to build. Why *omitted* on the API's setup field now means unanswered rather than yes, why the write is conditional rather than guarded by a read, and the audit row that is deliberately not written |
-| [M56: the failover contract, and the probe that was holding the door open](#2026-08-09--m56-the-failover-contract-and-the-probe-that-was-holding-the-door-open) | D166: the boot-time relay probe moves into a goroutine rather than after the listener, because *after* is not available at the cost it implies and nothing was ever reading its result — F173's ten seconds of dead server bought the order of two log lines. D167: the readiness contract is two status codes rather than three words, because the failure it prevents is an operator wiring `degraded` to *remove* and taking the whole deployment out during a Redis outage. And the two things the Risks section asked to be recorded either way: the kill-a-leader test stayed an assertion rather than becoming M57's measurement, and the per-replica job count is now a test rather than a sentence |
 | [M57: a rolling deploy that cost nothing, and the window that turned out to be closed](#2026-08-09--m57-a-rolling-deploy-that-cost-nothing-and-the-window-that-turned-out-to-be-closed) | D168: the deploy-shaped two-leader window is **closed** — generation 1 shipped whole in 0.2.0 and several replicas became supported in 0.3.0, so no supported upgrade puts a generation-0 binary in a deploy, and a test freezes the released key assignments so a renumber cannot re-open it one family at a time. What is left is the crash-shaped window, which has no bound and keeps its second-layer defences; seven families are safe under two leaders and domain verification is not (F180). D169: the single-instance guarantee is a behavioural run of the release image on a Postgres-only network rather than a list of required dependencies, and it rides `ci-image-smoke` rather than a workflow step. D170: the rolling deploy is measured through a balancer that satisfies M56's own inequality, in two columns — SIGTERM and SIGKILL — because one column is a number with nothing to compare it to, and the difference between them is the drain delay priced. D171: the server histogram is summed per replica rather than deltaed, because a rolling deploy destroys the counters a delta needs, and the size of the resulting undercount is itself the drain |
 | [M57.9: the pre-release review — what it checked, what it found, and what it refuted](#2026-08-09--m579-the-pre-release-review-what-it-checked-what-it-found-and-what-it-refuted) | The by-use record: an upgrade from a 0.2.0-built database, a second factor driven by an independent RFC 6238 implementation, an account deleted and its residue read back, the SLO on the final build, and the conformance test sabotaged into failing. F181–F184, four candidates refuted, and D172: the doc-cost growth is one amendment to one line and is defended rather than trimmed |
 | [M57.9's triage: four rows approved, and the one the owner widened](#2026-08-09--m579s-triage-four-rows-approved-and-the-one-the-owner-widened) | D173: F181 is scrubbed in the erasure pass rather than documented, F182 defaults **both** creation forms to the lowest role rather than the invitation form alone, F183's read half is closed rather than stated as a bound, and F184 is fixed **and** made visible to a test — the one answer that took more than was recommended, on the reasoning that a fix no test can see regresses the way this one arrived |
 | [M58's triage: sixteen rows, and the conflict that decided seven of them](#2026-08-09--m58s-triage-sixteen-rows-and-the-conflict-that-decided-seven-of-them) | D174: every remaining open row is dispositioned, and the count was **sixteen** rather than the twenty the row above and the run's note both claimed. D114 is held to have approved F160–F166 at planning, so seven stale *Reviewed* columns are corrected rather than the rows approved a second time; F167, F169, F170, F171, F177, F178 and F180 are approved as work; F171's design question is answered in the same breath — re-fit at H on upload, silently; F176 and F179's reorder need no decision at all, being documentation under the standing approval; and F179's test half is approved because it is F143 recurring |
+| [M58, amendment: the SSO comment is not where the bullet says](#2026-08-09--m58-amendment-the-sso-comment-is-not-where-the-bullet-says) | A fact and not a choice, corrected at step 1 before the worker was spawned: the comment-truth sweep named `internal/auth/service.go:379`, which mentions no SSO at all. The two sites carrying a `(Phase 3)` marker are `00200_identity.sql:20` and `service.go:690`; a third mention at `:410` carries no phase number and is named so the sweep does not re-find it |
+| [M58: the phase close, and the seven counts that were wrong](#2026-08-09--m58-the-phase-close-and-the-seven-counts-that-were-wrong) | Every enumeration this close checked had drifted — seven of them, each true when written. F176's gap was thirteen where the row said fifteen and the triage said twelve; the comment sweep found eleven `Phase 3` sites where the milestone counted eight; three operator documents had fallen behind and one named a test that does not exist. Also: why a count in a definition of done earns its place where a count in a comment does not, the eight rows filed rather than fixed, the one abuse path the standing rule pulled into scope instead, F162's fix not reaching the running demo, and the doc-cost judgement — the resume floor grew **358 bytes**, all of it one amendment note, half of it paid for by merging the note it supersedes, and the rest defended |
 | [A third actor, for the claim nobody was checking](#2026-08-09--a-third-actor-for-the-claim-nobody-was-checking) | W38: an independent reviewer reads the tree between the worker's report and acceptance, on every milestone. Why the two-actor split cannot see the failure it is aimed at, why the reviewer is given the milestone file and not the worker's report, why it edits nothing at all, and why a reviewer that found nothing has to say so |
+| [M58: the eight rows its own work filed, and the bullet that could not be true](#2026-08-09--m58-the-eight-rows-its-own-work-filed-and-the-bullet-that-could-not-be-true) | The amendment first — *every row has been owner-reviewed* is unsatisfiable at any commit, because fixing findings files findings, and M58's own work filed eight. Owner-answered, so a prompt rather than a correction. Then D175: **all eight are work**, over a recommendation that carried five of them, and **F187 reopens [M52](phase-details/m52.md)** rather than arriving as a successor — the rule applied rather than waived, at the cost of a second commit on an already-built tree |
+| [M58: the second pass, and the three fixes that went wider than their notes](#2026-08-10--m58-the-second-pass-and-the-three-fixes-that-went-wider-than-their-notes) | **D176**: an erasure scrub reaches the sentence a reader sees and not only the key a query reads, so F188 clears the address from the inviter's notification *title* as well as its jsonb detail — the fix note named the detail, and a fix that stopped there would have left the row's own headline claim true. Also: F186 was never intermittent and was never the test's fault — the cause is proved by reproduction and was already fixed before the row was written — and two fixture rows needed more than their fix notes said, because a faithful copy of a fixture the scan cannot reach is still a fixture the scan cannot reach |
+| [M58: the third pass, and the documents a diff falsified on its way past](#2026-08-10--m58-the-third-pass-and-the-documents-a-diff-falsified-on-its-way-past) | [W38](workflow-changes.md#made)'s first run as a third actor, on the milestone whose acceptance asked for it: twelve findings and five minors, eight of them documents this diff wrote or walked past while the same diff made them false. Three amendments and why each is a fact rather than a prompt — m37.md's choropleth bullet, D65's refusal clause, and the *Permissions* rule's *see* limb for the second time. Why F187 is stated with its exception in three documents and deliberately **not** in m52.md. And four defects the diff introduced, including F161 inverted by its own fix and F164's class inside the chart work F164 caused |
+| [M58: the fourth pass, and counting a class instead of patching a list](#2026-08-10--m58-the-fourth-pass-and-counting-a-class-instead-of-patching-a-list) | The second rejection's own diagnosis: a worker handed file:line pairs fixes the pairs and the next review finds the same shape further out, so each class is **enumerated and counted** here instead. Choropleth suppression: 14 sites, 5 changed. Erasure reach: 16, 8 changed — both miscounts were inside comments rewritten this milestone *to fix a miscount*. API-key reach after M54: 14, 2 changed. Bot-bypass "Phase 3": 8, 4 changed, and three different counts of one set were in the tree at once. A fifth class the review filed as one finding — what a logo does to a code's size: 6 sites, 2 changed. Plus why `decisions.md`'s two mentions stay, why `m52.md` is touched for the criterion and not for F187, and four contrast ratios recomputed from `input.css` rather than repeated |
+| [M58, amendment: the four bot-bypass sites were seven](#2026-08-10--m58-amendment-the-four-bot-bypass-sites-were-seven) | The second amendment to the same bullet, and the same defect it already confessed to. It read *four sites*; `git grep` over the tracked tree returns seven — a test's assertion message and both of M32.5's. A count, so a fact and not an assertion, amended rather than prompted |
+| [The 2,691 bytes W38 added to every resume, defended](#2026-08-10--the-2691-bytes-w38-added-to-every-resume-defended) | The judgement nobody had made: M58's doc-cost pass was true against HEAD and therefore silent about the growth **in** HEAD. Defended rather than trimmed — 2463 bytes of phase-loop.md and 228 of workflow.md bought a step that found 30 things across three runs on the milestone that added it, several of them claims that milestone's own diff made false. The read ratios say where the bytes landed, and one of them is an argument against phase-loop.md's shape rather than against W38 |
+| [M58: the fifth pass, a scope, a scan, and two counts that missed a member](#2026-08-10--m58-the-fifth-pass-a-scope-a-scan-and-two-counts-that-missed-a-member) | Four findings, bounded by the owner. F160's fix is per link and per window while twenty-two of the twenty-nine statements written for it said *instance* or *history* — corrected, and the behaviour deferred as F195 rather than widened, because widening it needs a query the page is defined by not making. The column scan that closed F193 assumed a trailing pipe, which is exactly and only the shape it missed; its replacement is a gate in `check-links.sh` and it was proven red on F103 before F103 was touched — 2,100 rows in 40 files, one mismatch. Area G's close-out counted one entitlement anchor and there are two, the missed one in a shipped milestone's file again. The release-notes `awk` run and recorded, clean, with the false comment above it routed as F196. Plus five secondaries, including the demo interval that turns off two jobs and the pinned default D61 said could not be repointed |
+| [M58, amendment: the third move of one number, so the number goes](#2026-08-10--m58-amendment-the-third-move-of-one-number-so-the-number-goes) | Eight, then nine, then twelve — a bullet counting the rows this milestone filed, inside a milestone that kept filing them. The count is deleted rather than corrected a third time, and the property is stated with the command that takes it. F69 chose this remedy once already |
+| [M58: the sixth pass, the response that disagreed with its own transaction, and the demo that would not have resolved](#2026-08-10--m58-the-sixth-pass-the-response-that-disagreed-with-its-own-transaction-and-the-demo-that-would-not-have-resolved) | Two release blockers and four false sentences on surfaces the tag publishes, fixed; seven rows filed. `POST /api/v1/api-keys/rotate` now reads the successor's carried bars back rather than hardcoding an empty array, and `make demo-update` recreates the app **after** the reseed, which is what makes `DOMAIN_VERIFY_INTERVAL=0` safe on the demo rather than merely cheap |
 
 ---
 
@@ -24139,6 +24150,188 @@ The scope gate permits it: *no more than one milestone per commit* forbids
 bundling two, and splitting one across several commits is explicitly fine. So M58
 being large is a question about how much one worker can hold, not about whether
 the tree can represent it.
+## 2026-08-09 — M58, amendment: the SSO comment is not where the bullet says
+
+Found at [step 1](phase-loop.md#1-validate), reading M58's comment-truth bullets
+against the tree before spawning a worker. Seven of the eight sites the sweep
+enumerates are exactly where it says they are. One is not.
+
+**The bullet as it stood**, in `phase-details/m58.md`:
+
+> - `internal/store/migrations/00200_identity.sql:20` and
+>   `internal/auth/service.go:379` — both mention SSO-only accounts. SSO is
+>   **not** built this phase; M53 discharges only the MFA limb of that scope
+>   row. Those comments describe a still-unscheduled thing and must say so.
+
+**The bullet as amended:**
+
+> - `internal/store/migrations/00200_identity.sql:20` and
+>   `internal/auth/service.go:690` — both mention SSO-only accounts **and both
+>   carry a `(Phase 3)` marker**. SSO is **not** built this phase; M53
+>   discharges only the MFA limb of that scope row. Those comments describe a
+>   still-unscheduled thing and must say so. A third mention at
+>   `internal/auth/service.go:410` — *"SSO-only or erased account."* — carries
+>   no phase number and needs nothing; it is named so the sweep does not
+>   re-find it and wonder.
+
+**The tree fact.** `grep -n -i sso internal/auth/service.go` returns exactly two
+hits, at `:410` and `:690`, counted 2026-08-09. Line `:379` sits inside the
+comment above `Login` explaining why the registration oracle is refused before
+any lookup, and mentions neither SSO nor a phase. Of the two real hits, only
+`:690` carries the promise the bullet is about — *"the column is nullable for an
+SSO-only account (Phase 3)"* — and `:410` is a bare classification with no phase
+number, which is why the amendment names it rather than adding it to the work.
+
+**Why this is an amendment and not a prompt.** Which line a comment is on is not
+something anyone could have decided differently, and prompting about it would
+spend the owner's attention on `grep`. What the bullet *asserts* — that comments
+promising SSO in Phase 3 must stop promising it — is untouched, and the site
+count it implies goes from two to two, not from two to three: `:410` is named as
+needing nothing. Had the assertion moved, this would have been a prompt and M58
+would still be waiting.
+
+The bullet was written 2026-08-06, before M51–M54 added roughly nine hundred
+lines to that file. It is the ordinary way a definition of done written ahead of
+the code goes stale, which is the case
+[the amending rule](phase-loop.md#amending-a-bullet) exists for, and it is worth
+noting that the sweep's own list is headed *counted rather than recalled* — it
+was counted, and then the tree moved under it. Counting at planning time buys
+correctness at planning time and nothing after, so step 1 recounting is the part
+that actually holds.
+
+## 2026-08-09 — M58: the phase close, and the seven counts that were wrong
+
+The close itself decided nothing. [D173](../../Plan.md#phase-3-decisions) and
+[D174](../../Plan.md#phase-3-decisions) had already dispositioned every open row,
+and this milestone is the work those two authorised. What is worth recording is
+what carrying it out found, because it is the same thing seven times and the
+milestone's own definition of done had predicted it in four words: *counted
+rather than recalled*.
+
+**Every enumeration this close checked had drifted. Every single one.** Not one
+of the seven was wrong because somebody was careless; each was true when it was
+written and stopped being true when the tree moved underneath it. The pattern is
+worth more than any individual correction, and it is why this entry leads with it
+rather than with the fixes.
+
+| What claimed a number | Said | Is | How it drifted |
+| --- | --- | --- | --- |
+| [F176](deferred-findings.md)'s own row, on Plan.md's decision table | fifteen missing | **thirteen** | D114 and D172 landed in the table between the count and the fix |
+| [M58's triage](#2026-08-09--m58s-triage-sixteen-rows-and-the-conflict-that-decided-seven-of-them), recounting the same gap | twelve | **thirteen** | it missed D168 — a count taken to correct a count, itself one short |
+| [m58.md](phase-details/m58.md)'s comment-truth sweep | eight `Phase 3` sites | **eleven** | three sites the list never held, two of them created by the fix to a third |
+| `docs/deployment.md`'s `_FILE` secret list | two | **five** | [F45](deferred-findings.md)'s exact class, on a list that had already done it once |
+| `README.md`'s audit vocabulary | thirty-two actions | **thirty-nine** | true at 0.2.0; Phase 3 added the account lifecycle's own |
+| `docs/data-model.md`'s migration count | 35 | **43** | already one short when 0.2.0 shipped with 36 |
+| [F177](deferred-findings.md)'s row, on who writes an address into audit metadata | six writers | **seven** | `instance.go` writes two, and the row counted the file once |
+
+Three more had no number to be wrong about and were wrong anyway.
+`docs/data-model.md`'s per-table status table was **missing `api_keys`,
+`api_key_org_revocations` and `instance_settings` entirely** — `api_keys` appears
+in that document's own entity diagram nine lines above the table that omits it —
+and carried `automation_rules` at 11 columns against 12 in the schema. Every one
+of the 43 tables now matches a count read out of the migrated database, which is
+what that file says it was derived from.
+
+`internal/store/migrations/04000_account_erasure.sql` named
+`TestSuspendedStatusHasNoWriter` as the test holding a stated absence in place.
+No such test exists; it is `TestNothingWritesTheSuspendedStatus`, in
+`internal/account/status_test.go`, and `docs/data-model.md` had the name right
+all along. A comment naming a guard that cannot be found reads, to the next
+person, as a guard that was removed.
+
+`cmd/lctl/demo_phase2.go` said **four** places deliberately go around a service
+and *"there is no fifth in this file"*, while the statements themselves each said
+*"one of the three"*. The two had drifted apart from each other, inside one file,
+with no third party needed. Both counts are now gone and the rule is stated as a
+property — *the places that go around a service each say so at the statement* —
+which is [F69](deferred-findings.md)'s remedy applied a second time, and the
+second time is the argument: this project has now twice fixed a drifted count by
+deleting the count.
+
+**What this says about the mechanism.** The inherited rule for `demoCoverage()`
+already refuses to write its own number down, and the reasoning there was that
+*"saying four was a fact nothing kept true; saying its trailing rows is a fact
+that stays true however many there are"*. That reasoning generalises and had not
+been generalised. It is not being turned into a rule here, because a rule saying
+*never write a count* would forbid the counting that found all seven of these —
+the count in a **milestone file** is doing work, since it is what a sweep is
+checked against. The distinction the evidence supports is narrower: **a count in
+a definition of done is an instruction and earns its place; a count in a
+comment or a reference document is a claim, and a claim nothing re-derives is a
+claim that rots.** Whether that becomes a workflow rule is the owner's, and it is
+not proposed here — a phase close is the wrong place to take it, for the reason
+[F90](deferred-findings.md) is not repaired at one.
+
+**Two rows were filed rather than fixed**, which is the trigger working rather
+than scope being dodged. [F185](deferred-findings.md) is
+[F180](deferred-findings.md)'s defect at the second of two sites twelve lines
+away — the manual *Verify* button, where F180's row scopes itself to the job
+family — and fixing it would have been the loop widening its own scope on a
+defect nobody approved. [F186](deferred-findings.md) is a demo coverage row that
+failed once in eight runs and has not been reproduced; a race nobody has shown is
+a report and not a finding. Both are named in the worker's report so the
+orchestrator can overrule, which is the part that keeps *file it* from meaning
+*bury it*.
+
+**[F162](deferred-findings.md)'s fix does not reach the running demo, and cannot
+from here.** `LINKCTRL_DOMAIN_VERIFY_INTERVAL=0` is written into a freshly
+generated `.env.demo` by `scripts/instance.sh`, which is the tracked file and the
+only one a commit can carry. `instance.sh init` refuses to touch an env file that
+already exists, `.env.demo` is untracked, and a worker may not touch the demo
+instance at all — the demo is step 3's and nowhere else's. So the tracked fix is
+complete and the live instance needs one line added by hand before
+`make demo-update`. Saying so here rather than only in a report, because the
+report is gone by the next session and the demo will still be wrong.
+
+**The doc-cost judgement: the contract grew by 358 bytes, and they are defended
+rather than claimed to be zero.** *(Rewritten 2026-08-10 on the reviewer's
+finding. The first version of this paragraph said the growth was zero and quoted
+a report generated before `2f8fe6c`, which had moved both of the files it called
+unchanged. Every figure below is measured against the tree as it stands, and the
+report was regenerated after the last documentation edit in this milestone rather
+than before it — which is the mistake, not the numbers.)*
+
+Measured with `wc -c`, this milestone against `2f8fe6c`:
+
+| | HEAD | now | |
+| --- | ---: | ---: | --- |
+| Any task — CLAUDE.md + [workflow.md](workflow.md) | 21400 | 21400 | unchanged |
+| `/work phase` adds [phase-loop.md](phase-loop.md) | 30899 | 30899 | unchanged |
+| …and [phase-details/README.md](phase-details/README.md) | 12488 | 12846 | **+358** |
+| …and Plan.md's longest ordering row | 194 | 194 | unchanged |
+| **Resume floor** | **64981** | **65339** | **+358** |
+
+**All 358 bytes are one amendment note**, on the inherited *Permissions* rule,
+and the defence is what it buys. That row's *see* limb has now been amended twice
+for the same drift — M54 removed the premise that a key is issued for one
+organization, and F183's fix inside this milestone made *an account-wide key is
+not bounded* false — and each note is the reason the next reader can tell a
+correction from a rewrite. A rule that silently acquires a fourth meaning is a
+rule nobody can be held to.
+
+**Part of it was paid rather than argued.** Written as a fourth separate note the
+amendment cost 806 bytes; M54's note and this one are about one limb and one
+drift, so they are merged into a single note and the growth is 358. That is
+[the trimming half](phase-loop.md#two-milestones-that-do-not-end-like-the-others)
+of the obligation, applied where it belongs — a merge, not a deletion, and it
+keeps both dates and both facts.
+
+What grew and is **not** charged against a resume is reference: since `2f8fe6c`,
+[decisions.md](decisions.md) by 34,254 bytes and
+[deferred-findings.md](deferred-findings.md) by 48,000. The findings file moved
+because
+**twenty-one rows crossed from *Open* to *Closed* and acquired a *Closed by* cell
+written to the standard this file uses, seven more were filed already closed and
+carry one from birth — twenty-eight cells — and nine new rows were filed,
+F185–F193.** Their realized read ratios are **0.00** and **0.04**: both are read
+by anchor and by range, never whole, and the ratio is the evidence rather than the
+intention.
+
+The thing worth watching is not the total. It is that `deferred-findings.md` has
+passed half a megabyte while its *Open* section holds **three** rows — F90, F187
+and F193. Almost all of that file is closed history, and the day somebody wants it
+smaller the answer is a split by state rather than a deletion — recorded here so
+that when it is proposed, it is proposed as a move and not as a tidy-up.
 ## 2026-08-09 — A third actor, for the claim nobody was checking
 
 Owner-set at [M58](phase-details/m58.md)'s acceptance, in these words: *add an
@@ -24210,3 +24403,938 @@ something untrue for a while.
 *accumulation* of several milestones is still nobody's job, and the `X.9`
 adversarial reviews remain the only thing looking at that. This step narrows the
 gap; it does not close it.
+## 2026-08-09 — M58: the eight rows its own work filed, and the bullet that could not be true
+
+Two things, both from the same prompt at [M58](phase-details/m58.md)'s
+acceptance, and the amendment comes first because the disposition depends on it.
+
+### The amendment: a bullet no commit could satisfy
+
+**The bullet as it stood**, in `phase-details/m58.md`:
+
+> - Every row in [deferred-findings.md](deferred-findings.md) has been
+>   owner-reviewed. Each approved row is fixed to the milestone-claim standard
+>   and sabotage-verified where it adds tests. Unapproved rows are explicitly
+>   carried or closed by the owner, and the file reflects that.
+
+**The bullet as amended:**
+
+> - Every row **open in deferred-findings.md when this milestone's findings step
+>   ran** has been owner-reviewed. […] Rows **this milestone's own work files**
+>   are dispositioned on their own and do not re-open the sweep.
+
+**The tree fact.** M58's build filed eight rows — F185 through F192 — every one
+of them by the deferral trigger working exactly as written: something noticed
+out of spec, recorded rather than fixed. So at the moment M58 would land, the
+file held eight unreviewed rows and the bullet was false. It would have been
+false again after any round of fixing them, because fixing findings is how
+findings get found. The bullet described a state the loop cannot reach, and
+the only question was which weaker true thing it should say instead.
+
+**Why this was a prompt and not an amendment made in passing.** The
+[amending rule](phase-loop.md#amending-a-bullet) turns on whether the bullet is
+wrong about a *fact* or about what it *asserts*. A count or a filename is
+arithmetic; this is the scope of a definition of done, and a loop that quietly
+narrowed its own completion criterion would be doing the one thing the rule
+exists to prevent. The owner chose the narrowed reading knowing the alternative:
+hold M58 until the file is quiet, with no bound on how many rounds that takes.
+
+### D175 — all eight are work, and one of them reopens a shipped milestone
+
+**All eight approved**, over a recommendation that took only the erasure cluster
+and carried the other five. F185 is [F180](deferred-findings.md)'s twin twelve
+lines away in the same function; F186 is a coverage row that saw a real
+divergence once and has not since; F188 and F189 are two more address-bearing
+sites the erasure scrub does not reach; F190 is the QR size control fitting
+against a stored level rather than the drawn one; F191 and F192 are fixtures
+unfaithful to production in the way [F167](deferred-findings.md) was, found by
+the fix for F167.
+
+The recommendation to carry five rested on their severity, and severity is not
+what the owner weighed. Three of the five are the *same class of defect as
+something already being fixed in this milestone*, twelve lines or one fixture
+away, and a milestone that fixes one instance of a defect and files its twin is
+how a repository accumulates rows that all read *see the one above*.
+
+**F187 reopens [M52](phase-details/m52.md).** Its row says so in its own
+evidence — *this is a defect of M52, not of the M58 work that found it: the
+two-CTE shape has been there since the erasure pass was written* — and
+[workflow.md](workflow.md) is unambiguous about what follows: a defect that makes
+a shipped milestone's claim false reopens that milestone rather than arriving as
+a successor, because a successor leaves a `done` row asserting something untrue.
+
+The rule is applied rather than waived, and what it costs is real and was stated
+before the choice: M58's work is already built and green in the tree, so M52's
+fix cannot ride in the same commit without bundling two milestones. M58 commits
+first, M52's row goes back to `in progress (reopened)`, and its correction is
+written into `m52.md` under M52's own number. The phase does not close with an
+un-`done` row, so the reopening is ahead of the phase PR rather than after it.
+
+**What M52 owes**, so the reopening is not re-derived: erasing two accounts in
+one batch, where one filed a dispute the other decided, leaves one of
+`destination_disputes`' two label columns unscrubbed. Postgres applies one of two
+data-modifying CTEs writing the same row and silently drops the other.
+`TestErasureScrubsBothDisputeLabels` cannot see it, because it erases its two
+accounts on separate passes and the CTEs never contend. The merge that fixes it
+is the one M58 already applied to the audit pair — one `UPDATE`, two `CASE`s,
+joined against the `batch` CTE.
+
+## 2026-08-10 — M58: the second pass, and the three fixes that went wider than their notes
+
+D175 sent seven rows back into M58 — F185, F186, F188, F189, F190, F191, F192 —
+on the ground that each is the same defect as something the milestone was already
+fixing. Five of them were the one-line repairs the rows described. Three were not,
+and this entry is the three, because in each case the row's *fix note* turned out
+to be narrower than the row's own claim, and taking the note literally would have
+closed a row that was still true.
+
+### D176 — a scrub reaches the sentence, not only the key
+
+[F188](deferred-findings.md#closed) named `notifications.data`'s `"email"` key and
+offered two answers: scrub it, or decide a notification is the reader's record
+rather than the subject's. Neither is the whole question. `invite.go:973` writes
+the departing account's address into the jsonb detail **and** into the title —
+`"<address> accepted your invitation"` — and the title is what `/notifications`
+renders. A scrub reaching the key alone would have left the finding's headline
+sentence, *an erased account's address survives in the notification sent to
+whoever invited them*, exactly as true as it was before.
+
+**So the rule is the sentence, not the column**: where an erasure scrub reaches a
+record, it reaches every field of that record a reader is shown, and the jsonb
+detail is not privileged over the prose beside it merely because it is the field
+with a name that looks like an address. This is the same reasoning F177 already
+carried one table over — an erasure that reaches the label and stops at the
+detail one column over has not erased the person — and this is that argument
+applied to the next column along.
+
+The mechanism keeps the statement out of the business of knowing how the sentence
+is worded: the title is rewritten with `replace(n.title, n.data->>'email', …)`
+rather than against the batch, because the two strings came from one value at one
+call site, and both CASEs read the pre-update row so the address is still there to
+match. A wording change to the notification cannot break it and cannot silently
+stop it working.
+
+The cost is named rather than waived: this edits the title of a record belonging
+to somebody who is still here, which is a stronger act than editing a detail
+nobody reads. It is taken for the reason the metadata scrub was taken — the
+alternative is a product whose erasure claim is specific enough to check and
+wrong when checked — and the **outstanding invitation** stays the other answer,
+untouched, because that one is an offer to an address rather than a record of a
+person.
+
+Verified rather than reasoned: leaving `title` alone while scrubbing `data` fails
+`TestErasureReachesTheAddressInAnArrayAndInSomebodyElsesNotification` with
+*member@example.com accepted your invitation* still on the page.
+
+### F186 was not a flake, and the reproduction says so
+
+The row recorded a coverage assertion that failed on three seeds in one process
+and on a second test beside it, then passed fifteen times, and named two
+candidates it could not distinguish: a visibility problem between the erasure
+write and the assertion's read, or an intermittent failure of the write.
+
+**Neither.** While [F177](deferred-findings.md#closed)'s fix was being built, the
+`audit_logs` scrub was briefly two data-modifying CTEs, and Postgres applies one
+of two CTEs writing the same row and drops the other — which is
+[F187](deferred-findings.md#open)'s hazard, and which F177's own evidence records
+being corrected on `audit_logs` at the time. The one row the M52 coverage query
+counts is the departed account's `invitation.redeemed`, and it satisfies **both**
+predicates at once: the actor is the erased account, and the metadata carries that
+account's address. The metadata write won, the label write was dropped, the label
+stayed an address, and the count was zero — deterministically, for that build,
+while the seeder's `erased (1)` came from a different UPDATE in the same
+statement.
+
+Reproduced 2026-08-10 by splitting the CTEs again: the failure returned on all
+three seeds and on the pin test, which is the observation entire. The merged shape
+was restored byte-for-byte and the generated code diffed to prove it.
+
+**No code changed, and that is the decision.** The cause was repaired before the
+row existed, and the regression is already caught — on the split shape,
+`TestErasureTombstonesTheActorAndKeepsTheEntriesCorrelated` fails at
+`account_test.go:461` and `:466`. Adding a third assertion for the same shape
+would be a test that duplicates one that works. What the row bought instead is a
+note on `scrubbed_audit` saying the single statement is a correctness requirement
+and naming what forgetting it cost, so the next person who finds that UPDATE
+unwieldy meets the reason before the temptation.
+
+The general lesson is worth more than the row: **fifteen green runs did not
+disprove anything.** The tree had changed under the observation, so re-running was
+measuring a different program. A finding raised against an uncommitted tree needs
+the tree's state recorded with it, and this one did not have it.
+
+### Two fixtures needed more than their notes said
+
+[F191](deferred-findings.md#closed)'s note said to give the two QR fixtures the
+attributes `qr.Render` emits. Done literally, that would have written `width="296"`
+— what the fixture's stated style comes to — and the overflow scan compares
+against a 360px viewport, so the assertion the row exists to reach would still not
+have fired. The fixture's style moves to scale 20 and every number in it moves
+together, so the stub states 740 and the scan has something to act on. Proved the
+only way a coverage claim can be: the panel's wrapper was stripped of
+`max-w-full overflow-x-auto` and the scan fired on **both** pages, where before it
+could fire on neither.
+
+[F192](deferred-findings.md#closed)'s geo half surfaced a second borrower.
+Dropping `GeoUnavailable` from a fixture that also sets `GeoAvailable` — a pair
+F160 made unbuildable — broke `TestWithNoGeoIPTheMapSaysSoAndDrawsNothing`, which
+had been *inheriting* the contradiction rather than building the state it is
+about. It now sets both halves itself. A fixture that asserts an impossible state
+is not only untested markup; it is a state other tests quietly borrow, and
+correcting it is how you find out which ones.
+
+Its folder half got an assertion it was not asked for, for the same reason F167
+got one: a fixture change with nothing reading it regresses the way it arrived.
+`TestTheFolderSelectDrawsAndSaysWhereTheLinkIsFiled` renders three states — filed,
+unfiled, and a workspace with no folders at all — and each of the template's three
+branches was sabotaged in turn to confirm it fails.
+
+## 2026-08-10 — M58: the third pass, and the documents a diff falsified on its way past
+
+Twelve findings and five minors, from [W38](workflow-changes.md#made)'s first
+run as a third actor, on the milestone whose acceptance asked for it. Gates were
+green on the rejected tree and gates were never the question: eight of the twelve
+are documents this diff either wrote or walked past, asserting something the same
+diff had made false. That is the half the reviewer exists for, and it found it
+on its first outing.
+
+The individual fixes are in the tree and in the commit. What is worth recording
+is the shape, the three amendments, and one judgement that changed.
+
+### The shape: a fix's blast radius is documents, not callers
+
+Six of the eight documentation findings are one mechanism. A change lands, its
+own record is written carefully, and the *other* places that described the old
+behaviour are never enumerated — because nothing enumerates them. F160 moved the
+choropleth from a configuration test to a data test and left
+[D65](../../Plan.md#phase-3-decisions), [m37.md](phase-details/m37.md) and
+`docs/usage.md` all saying the map is not drawn without a GeoIP database, the
+last of those being a page a user reads. F183 bounded an account-wide key's reads
+and left `docs/SECURITY.md` contradicting itself **inside one table cell** and
+the inherited *Permissions* rule saying the opposite. The scrub widened past *no
+foreign key to `users`* and left `internal/account/account.go` — the doc comment
+that owns the feature — describing two tables, three tombstone sites of seven,
+and a re-entrancy argument that covers three scrubs of five.
+
+The mechanism that would catch this is not a habit, it is a question asked at a
+fixed point: *what did this change make false somewhere else*. That is exactly
+W38, and it is why the row above records it as a loop change rather than as
+advice.
+
+### Three amendments, and why none of them was a prompt
+
+Each is a fact the tree settles, so each is corrected and logged rather than
+asked about — [the amending rule](phase-loop.md#amending-a-bullet)'s first row.
+
+**[m37.md](phase-details/m37.md)'s choropleth bullet.** It stood as *"With no
+GeoIP database configured the map states data is unavailable, exactly as the
+ranked list already does — tested."* It now carries a narrowing note: the
+sentence is reached when there is no country in the history **and** no database.
+The tree fact is `internal/httpx/web_links.go:1148` — `geoShowable :=
+data.GeoAvailable || hasResolvedCountries(...)` — which is F160's approved fix,
+already closed against this milestone. What the bullet asserted about *that*
+state is unchanged and still tested; what moved is which instances are in it.
+
+**[D65](../../Plan.md#phase-3-decisions).** It stood as *"no map at all when
+there is no GeoIP database"* and *"the map is **not rendered**"*. It now reads
+*no map at all when there is nothing to draw*, with the superseded clause named
+in the cell in [D11](../../Plan.md#phase-2-decisions-taken-after-the-plan-was-finalised)'s
+idiom. The refusal is untouched — a world uniformly in the no-data colour is
+still never drawn — and only its test moved. The tree fact is the same line.
+
+**The inherited *Permissions* rule.** It stood as *"an *account-wide* key is not
+bounded, because M54 removed the premise rather than the rule"*, and named
+`Identity.APIKeyOrgID` as how the site tells the two kinds apart. It now reads
+*bounded only by the organizations it has been cut out of*. The tree fact is
+`internal/auth/workspace.go:145`, which calls `Identity.keyReaches`
+(`service.go:105-110`): one predicate, `APIKeyOrgID` inside it rather than at the
+call site, and `APIKeyBarredOrgIDs` excluded for an account-wide key. This is the
+row's second amendment on the same limb, which is why the two notes are merged
+into one rather than stacked — see the doc-cost judgement above for what that
+cost and what it paid for.
+
+### F187 is not documented away, it is documented
+
+`docs/SECURITY.md` gained a sentence in this milestone's documentation pass
+claiming the sweep scrubs both `destination_disputes` label columns, which
+[F187](deferred-findings.md#open) — filed by this milestone, open, and
+[D175](../../Plan.md#phase-3-decisions)'s reopening of M52 — proves it does not.
+A documentation pass that adds a fresh assertion a known-open row disproves is
+worse than the stale text it replaced, because the stale text was at least not
+written by somebody holding the finding.
+
+So the claim is now stated with its exception, in three places and at three
+depths: a named subsection in `docs/SECURITY.md` for the compliance reader, a
+clause in the erasure table cell beside the columns it is about, and a sentence
+on Plan.md's M52 discharge bullet. [m52.md](phase-details/m52.md) is deliberately
+**not** touched — D175 puts that correction under M52's own number when the
+reopening lands, and writing it here would take the trail out of the one place
+the reopening exists to keep it in.
+
+### Four defects, and the one that is a lesson
+
+`internal/link/verification.go` branched on `row.VerifiedAt`, read before the DNS
+lookup, while `failed` — the row the write returned — was already in hand and
+used on the next line. The hourly pass can unverify inside that gap, so F161's
+fix could answer *"Links on it are still served"* above a badge saying otherwise:
+F161, inverted, by its own repair. It is F180's defect at a third site, and the
+file's own comment twelve lines down states the rule it broke. One token, and a
+test that holds the gap open with the fixture built for exactly that.
+
+`internal/httpx/web_invitations.go` echoed a posted role back when it was
+non-empty rather than when the form was drawing it, so a slug the issuer may not
+offer marks no `<option>` and the browser falls to the first — which is F182
+itself, on the arm F182's fix did not reach. The members page had it right
+already, through `pickRole`.
+
+`internal/ui/funcs.go` labelled the middle gridline `fmtInt(top/2)`, integer
+division: `top=1` gave two gridlines reading "0" and `top=5` labelled a 2.5 line
+"2". Same class as [F164](deferred-findings.md#closed), inside the chart work
+F164 caused. The middle line is now drawn only when halving the axis is exact,
+and the test states the property — label × PlotH = top × (PlotH − Y) — rather
+than the two cases, because a third arrives whenever `niceCeil`'s candidates
+change.
+
+`qr.Render` defaults to `qr.FluidClass`, and `POST /api/v1/auth/mfa/enrol`
+returned the result as `qr_svg` — two Tailwind utilities, in a JSON body, to a
+client that has never seen this product's stylesheet. The principle was written
+in this milestone at `internal/link/qr.go:488`, applied to the downloaded file
+and not to the JSON one, because both consumers share one function and a default
+is a claim about every call site that has not overridden it. The class is now the
+caller's, and a source scan pins each call site to the one its consumer needs —
+the same shape as the QR thumbnail's guard, and for the same reason.
+
+### Named so the next sweep does not re-find them
+
+`internal/store/migrations/02500_domain_ownership.sql:10,14` still speak of Phase
+3 as future. They are rationale for a shape the migration chose, not promises of
+unscheduled work, so they are outside the comment-truth bullet and are left
+alone. Written down because the sweep that reads this file next will meet them
+and wonder, which is the same service `internal/auth/service.go:410` was given.
+
+## 2026-08-10 — M58: the fourth pass, and counting a class instead of patching a list
+
+Eleven findings from the reviewer's second run, and the rejection led with the
+thing the eleven were evidence *of* rather than with the eleven: **a worker
+handed file:line pairs fixes those pairs, and the next review finds more of the
+same shape further out.** Three of run 2's findings were second sites of
+enumerations run 1 had already named. Handing over eleven more pairs would have
+produced a third round of the same, and *the same gap surviving two workers* is
+a stop condition, so this pass was told to enumerate each class, state the
+count, and explain any site it found and did not change.
+
+That instruction is what this entry records. The individual edits are in the
+diff; the counts are the thing that cannot be recovered from it, because a
+number nobody wrote down is a number the next pass has to re-derive and will
+re-derive differently.
+
+### How the counting was done
+
+`git grep` over **tracked files of every kind** — Go, SQL, templates, YAML,
+markdown, tests — with the pattern aimed at the *claim* rather than at the
+wording any one site used, then every hit read. Prose and generated surface were
+searched together, which is how `api/openapi.yaml` kept turning up: it is a
+document that reads like configuration, so a sweep filtered to `docs/` misses it
+and a sweep filtered to code misses it too.
+
+Three of the four classes had a site in a **test's failure message**, in a
+**shipped milestone's own file**, or in both. Neither is where a documentation
+pass looks, and both are read by somebody eventually.
+
+### The four classes, counted
+
+**What suppresses the choropleth** (F160 made it data-gated, not
+config-gated) — **fourteen** sites state the rule; **five** changed here,
+**eight** were already correct, **one** is history and stays.
+
+**That verdict was wrong, corrected at the fifth pass on the same day**, and the
+correction is left in place beside it because the shape of the error is the point
+of this whole section. The class was counted, and every member was then checked
+against the *previous sentence about the fix* rather than against the predicate:
+`geoShowable` is evaluated over one link's `LinkStats` for the 7, 30 or 90 days on
+screen, and thirteen of the fourteen — including all five called already correct
+below — described it as a fact about the **instance** or about the **history**.
+Re-derived by reading every statement rather than the files they sit in:
+**twenty-nine** statements of the rule, **twenty-two** changed, **seven** checked
+and left. See
+[the fifth-pass entry](#2026-08-10--m58-the-fifth-pass-a-scope-a-scan-and-two-counts-that-missed-a-member).
+
+Changed: `Plan.md:110`, `docs/deployment.md`'s *Optional: geographic analytics*,
+`docs/configuration.md`'s `LINKCTRL_GEOIP_MMDB_PATH` row,
+`internal/ui/templates/partials/worldmap.html`'s branch comment, and a `Fixed`
+entry in `CHANGELOG.md`'s 0.3.0 — the release had no operator-facing record of
+the change at all, while 0.2.0 carried *"with no GeoIP database configured the
+map is not drawn at all"* with nothing correcting it. Already correct: D65,
+`m37.md`, `docs/usage.md`, `internal/ui/choropleth.go`'s three — the
+`Unavailable` field, the `GeoUnavailable` constant and `Choropleth`'s own
+doc — and `internal/httpx/web_links.go`'s two. **Of those eight only D65 was**:
+it says *a resolved country in the breakdown*, which is the predicate. The other
+seven said *instance* or *history* and were rewritten at the fifth pass. Left: the 0.2.0 entry, which was true of
+0.2.0 — a changelog is not amended, it is superseded, which is why the fix is a
+new entry rather than an edit to the old one.
+
+Verified in the class and deliberately unchanged: `api/openapi.yaml`'s
+`country`, `region` and `city` **rule conditions** and its click-record `country`
+field, which are genuinely gated on the database and are what
+`TestOnlyTheRuleFormAsksWhetherGeoIPIsConfigured` pins; and
+`TestWithNoGeoIPTheMapSaysSoAndDrawsNothing`, whose name describes a state it
+does build, whose body was corrected at the third pass, and which
+[the M58 third-pass entry](#2026-08-10--m58-the-third-pass-and-the-documents-a-diff-falsified-on-its-way-past)
+names — renaming it would falsify an append-only reference to buy nothing.
+
+**What the erasure sweep reaches** — **sixteen** sites; **eight** changed,
+**eight** were already correct, and the `dbgen` layer regenerated from the two
+SQL comments among them.
+
+The two miscounts the review named were both inside comments *rewritten this
+milestone to fix a miscount*, which is the whole argument for counting against
+the statement rather than against the previous sentence:
+`internal/account/account.go` said **three** scrubs keyed on an id and there are
+**four** — `scrubbed_invitations` is keyed on `i.redeemed_by = p.id` and guards
+with `i.email <> ''`, so it fit neither branch of a dichotomy drawn between
+tombstone guards and no guard at all — and `accounts.sql`'s re-entrancy note said
+**two** value-matched scrubs where there are **three**, the notification scrub
+having joined them without being counted in.
+
+Also changed: `cmd/linkctrl/jobs.go`, which still carried verbatim the *two
+tables … deliberately have no foreign key to `users`* wording that
+`account.go` was rewritten to disown — in the file that **calls** the sweep;
+`accounts.sql`'s own file header, which stated the retired criterion in its
+fifth line; `api/openapi.yaml`'s `DELETE /account` description, the surface an
+integrator reads; and `CHANGELOG.md`'s 0.3.0 entry, which contradicted itself
+across 340 lines — *"an address held inside an audit record's detail … is not
+reached by the sweep"* against *"it now also removes the address from the
+**detail** of audit records"*, in one release. The code settles it: it is
+reached. That paragraph also under-counted what is deliberately **left** as one
+address where `docs/SECURITY.md` states two, so the corrected sentence names
+both.
+
+`Plan.md`'s erasure limitation row gains F187's exception, which
+[the third pass](#2026-08-10--m58-the-third-pass-and-the-documents-a-diff-falsified-on-its-way-past)
+put in three places and this row was the fourth site of the same claim.
+
+**One judgement against a recorded one, and it is narrower than it looks.**
+That third-pass entry rules `m52.md` **not** touched, because D175's reopening
+owns the F187 correction and writing it early takes the trail out of the place
+the reopening exists to keep it. This pass adds a note to `m52.md` anyway — for
+the **criterion**, not for F187. *The rows with no foreign key to `users`* is
+still what M52 built and is no longer what the sweep runs on, and the note says
+exactly that, marked M58, pointing at `EraseDeletedAccounts` for the
+enumeration. It leaves F187 untouched and unmentioned there, so the reopening
+finds its file as it expects it.
+
+**An API key's reach after M54** — **fourteen** sites; **two** changed,
+**twelve** already correct.
+
+`api/openapi.yaml:4219` said *"An API key sees only the organization it was
+issued for"* — false for an account-wide key since M54, in the diff that
+rewrote the same claim correctly at `docs/SECURITY.md` and at
+`phase-details/README.md` and that edits `openapi.yaml` for other reasons. The
+second is the `CHANGELOG.md` half of the same thing: 0.2.0 *narrowed*
+`GET /api/v1/workspaces` to one organization and told integrators to *"issue a
+key in each organization you need to reach"*, and 0.3.0 reverses that for an
+account key and said nothing. Reversing a documented instruction silently is
+worse than never having documented it.
+
+Verified and unchanged: `test/integration/workspace_test.go`'s
+`TestAKeyIsToldOnlyAboutItsOwnOrganization`, which reads as a pre-M54 claim and
+is not one — the key it mints is workspace-bound, therefore pinned by
+construction, and the bound it asserts is the one that still holds.
+
+**Bot-bypass "Phase 3" promises** — **eight** sites owe the truth; **four**
+changed, four were already correct. Two further mentions are in this log and
+stay.
+
+**Eight is seven plus one, and the one is a different kind of site**, which is
+what left three counts of this set in the tree at once. **Seven** places promise
+a human blocked as a bot recourse in Phase 3; the eighth is
+`phase-3-candidates.md`'s own *count* of them, which was wrong and is fixed in
+the same breath. So `m58.md` and the candidates file saying **seven** and this
+entry saying **eight** are the same tally counted to different edges, not a
+disagreement — stated here 2026-08-10 rather than left for a fourth count to
+find.
+
+m58.md's own bullet asserts four, D108 falsified five, and
+`phase-3-candidates.md` said *"the three sites"* while listing four — three
+different counts of one set, in the section whose stated method is counting.
+The four already correct are `01800_bot_blocking.sql`,
+`internal/link/domain_settings.go`, Plan.md's *Known limitations* row and
+`docs/SECURITY.md`. The four changed are `test/integration/bots_test.go`'s
+failure message, **both** of `m32.5.md`'s — its *Deliberately not in this
+milestone* bullet and its *Risks* paragraph — and the candidates file's count,
+which now names all seven promise sites rather than a number.
+
+`m32.5.md`'s bullet also pointed at *Plan.md's Not in Phase 2* for the deferral,
+and that list no longer carries the row: the pointer named a place the promise
+had already left, which is the same defect one level of indirection out.
+
+The two left are `decisions.md:60` and `:4033` — *why the bypass is Phase 3, and
+what that costs*. The log is append-only and that heading is a true record of a
+decision taken when it was true. A history that edits itself to stay current is
+not a history.
+
+### A fifth class the review named as one finding, counted the same way
+
+`refitForLogo` holds the drawn size stable, and **six** sites describe what a
+logo does to size; **two** were wrong and are changed. `README.md` was corrected at the third pass and
+`CHANGELOG.md`'s 0.3.0 `Fixed` entry was right from the start; `web_qr.go`'s
+flash and `link_qr.html`'s help text say *denser*, which is what actually
+changed. The two that said the code can **grow** are the two an integrator and a
+user read — `api/openapi.yaml`'s logo description and `docs/usage.md` — and both
+now say the size is held and re-fitted, with the one honest caveat: whole
+modules are the unit, so the result is the nearest achievable size rather than
+always the identical integer.
+
+### The contrast figures, recomputed rather than repeated
+
+`internal/ui/funcs.go` and `partials/series_chart.html` carried 1.82, 3.15, 6.84
+and 12.0. Computed from `input.css`'s own hex values — WCAG 2.x relative
+luminance, `#64748b` and `#94a3b8` on `#4338ca`, `#475569` on `#f1f5f9`,
+`#cbd5e1` on `#0b1220` — they are **1.66, 3.08, 6.92 and 12.61**. Every
+conclusion drawn from them is unchanged: the two on `accent-hover` are still far
+under 4.5:1, which is why the chip exists, and the two on `sunken` still clear
+it comfortably. The numbers were wrong and the argument was not, which is the
+easiest kind of comment to leave uncorrected and the reason to correct it.
+
+### F193, closed by the two-character fix its own row specified
+
+The stray cell is gone from the F28 and F5 rows and the scan that found them
+reports zero mismatches across 192 rows. Nothing checks this automatically, as
+that row's severity cell says; the scan remains something a reader runs.
+## 2026-08-10 — M58, amendment: the four bot-bypass sites were seven
+
+Found by the fourth build pass, sweeping the class rather than the sites a
+review had named — which is what the second rejection asked for and is the only
+reason this surfaced.
+
+**The bullet as it stood**, in `phase-details/m58.md`:
+
+> - **The bot-bypass promises, which D108 falsified by declining area D.** Four
+>   sites say a human blocked as a bot gets recourse in Phase 3 […]
+
+**The bullet as amended:** *Seven sites*, adding the assertion message in
+`test/integration/bots_test.go` and **both** of [M32.5](phase-details/m32.5.md)'s
+— its *deliberately not in this milestone* bullet and its *Risks* paragraph —
+and naming the two mentions in this file that stay, because the log is
+append-only and *why the bypass was Phase 3* is a true statement about a
+decision that was taken.
+
+**The tree fact.** `git grep "Phase 3"` over the whole tracked tree, every hit
+read rather than counted by pattern: seven promise sites and two append-only
+mentions. Verified by the orchestrator before amending, not taken from the
+worker's report.
+
+**Why this is an amendment and not a prompt.** It is a count. What the bullet
+asserts — that a promise about a phase that is now ending must lose its number
+or move — is untouched, and fixing more sites than a bullet lists cannot violate
+it.
+
+### The part worth keeping
+
+That bullet already carried a note admitting the list had been miscounted once:
+*this list was headed "counted rather than recalled" and had not counted these*.
+The correction was itself miscounted, and stayed wrong through a documentation
+pass, two rejections and three builds. The three missed sites say why: one is a
+**test's failure message**, and two are in a **shipped milestone's own file**.
+Neither is anywhere a documentation pass looks — one is read only when a test
+breaks, the others only by somebody reading a milestone that closed months ago —
+and both are read eventually.
+
+A count is not made durable by being written down next to an apology for the
+last one. It is made durable by being taken against the tree, with the command
+that took it recorded so the next reader can run it rather than trust it.
+## 2026-08-10 — The 2,691 bytes W38 added to every resume, defended
+
+Owed and unmade until the third reviewer run pointed at it, which is worth
+recording on its own: [M58](phase-details/m58.md)'s doc-cost judgement declared
+[workflow.md](workflow.md) and [phase-loop.md](phase-loop.md) unchanged, and that
+was **true against HEAD**. It was silent about the growth that had landed *in*
+HEAD one commit earlier. A judgement anchored to HEAD cannot see the commit it is
+standing on, and [D172](#2026-08-09--m579-the-pre-release-review-what-it-checked-what-it-found-and-what-it-refuted)
+had judged only as far as 62297.
+
+Measured, not estimated — `git show 2f8fe6c~1:` against `git show 2f8fe6c:`:
+
+| File | Before | After | Delta | Realized read ratio |
+| --- | ---: | ---: | ---: | ---: |
+| phase-loop.md | 28436 | 30899 | **+2463** | 0.40 |
+| workflow.md | 19434 | 19662 | **+228** | 0.91 |
+
+The `/work phase` resume floor is **65339** bytes, and 2,691 of them are W38's.
+
+**Defended, not trimmed.** What the bytes bought is measurable and was measured
+on the milestone that paid for them: three reviewer runs on M58 returned twelve,
+eleven and seven findings. Several were documents *that same diff wrote* while
+the same diff falsified them — a release entry contradicting itself on erasure
+reach, a security document contradicting itself inside one table cell, a fix
+inverting the finding it repaired. None of it was caught by four build passes,
+by an orchestrator's acceptance read, or by any gate; every gate was green
+throughout. The step's cost is 2,691 bytes a resume and one agent a milestone.
+The alternative was priced by this phase in reopenings.
+
+**The 0.40 is the interesting number, and it is not an argument against W38.**
+phase-loop.md is read end to end at 0.40 where workflow.md is at 0.91, so more
+than half of phase-loop.md is charged to every resume and skipped. That gap is
+about the file's *shape* — it carries the stop tables, the note format and the
+resume bar, which a mid-run resume needs and a fresh one does not — and W38's
+2463 bytes went into [step 3](phase-loop.md#3-land), which is on the path every
+milestone walks. Splitting phase-loop.md by what a resume actually reads is a
+real question and it is **not raised here**, because deciding a file's shape
+during the milestone that closes a phase is how a documentation pass becomes a
+refactor.
+
+**The rule this exposes**, and the only part likely to matter later: a doc-cost
+judgement anchored to HEAD is blind to HEAD's own commit. The pass should measure
+against the last *judged* number — which is written in the previous judgement —
+rather than against whatever the working tree's parent happens to be. That is
+what D172's 62297 was for, and reading it would have caught this.
+
+## 2026-08-10 — M58: the fifth pass, a scope, a scan, and two counts that missed a member
+
+Scope set by the owner and bounded to four findings from the third reviewer run,
+plus the secondaries beneath them. Findings 3, 5 and 7 were already dispositioned
+— F194 with a process question at W39, the doc-cost judgement made above, M52's
+reopening under D175 — and were not touched.
+
+Two standing instructions carried from the two rejections, and both are why the
+work below is stated as counts rather than as fixes.
+
+### F160's fix is per link and per window; the claims written for it were not
+
+`geoShowable` is `data.GeoAvailable || hasResolvedCountries(stats.Dimensions["country"])`,
+and `stats` is **one link over the window on screen** — `loadLinkDetail` reads 7,
+30 or 90 days and defaults to 30. `GeoAvailable` is instance-level. So the
+predicate answers *did a country resolve for this link in this window*, and the
+sentence around it was written as a fact about the instance: `choropleth.go`
+promised that *"an instance with country history and no database gets the
+history, not this sentence"*, and `m37.md`'s own M58 amendment said the sentence
+is reached only when there is no country **in the history**. On a GeoIP-less
+instance holding country history, a link with no country inside the window meets
+the sentence while the link beside it draws a full choropleth.
+
+**Twenty-nine statements of the rule; twenty-two changed, seven checked and
+left.** Counted by reading every hit of
+
+```sh
+git grep -inE "geographic data is unavailable|GeoUnavailable|hasResolvedCountries|geoShowable|no GeoIP database|country history"
+```
+
+rather than by trusting the previous count, which is the fourth pass's own method
+applied to the fourth pass's own result — it called fourteen sites and said eight
+were already correct, and only one of those eight was. That paragraph is
+corrected in place beside its original claim, because the error is the section's
+subject.
+
+Changed: `Plan.md`, `docs/usage.md`, `docs/deployment.md`, `docs/configuration.md`,
+`CHANGELOG.md`'s 0.3.0 entry, `m37.md`'s amendment, four in
+`internal/ui/choropleth.go`, three in `internal/httpx/web_links.go`,
+`worldmap.html`'s branch comment, four in `choropleth_test.go`, one in
+`ui_test.go`, two failure messages in `web_links_test.go`, and F160's own
+*Closed by*. Checked and deliberately unchanged: D65, which says *a resolved
+country in the breakdown* and is the only statement that was already exact;
+`linkDetailPageData.GeoAvailable`'s doc, which is about **routing** and correctly
+says so; `worldmap.html`'s *"No clicks resolved to a country in this window"*
+empty state, which was scoped right all along; `link_rule_form.html`'s branch;
+`api/openapi.yaml`'s geo rule conditions; `CHANGELOG.md`'s 0.2.0 entry and the
+2026-08-03 M37 entry in this log, both history.
+
+**The behaviour is not changed, and that is a decision.** Making the predicate
+match the sentence needs to know whether this link ever resolved a country, which
+is a query, and `fillLinkAnalytics` is defined by performing none — *"every figure
+here is already in `data.Stats`, so this half of the page performs no I/O and
+cannot fail"*. There is also a cheaper shape that needs no query, gating the
+sentence on the window holding clicks at all. Choosing between them changes what
+the product does, which workflow.md's documentation bound makes a prompt, so the
+residue is [F195](deferred-findings.md#open) with both shapes and their costs
+written down.
+
+One thing fell out of rewriting that comment: `GeoUnavailable`'s doc named
+`TestCountryViewsAgreeWhenGeoIPIsAbsent` as the test that pins it, and no test by
+that name exists anywhere in the tree. It is `TestTheMapAndTheRankedListUseOneSentence`.
+
+### The scan that closed F193 could only see the malformation it had already seen
+
+F193 was closed against a count of *192 rows, two mismatches, now zero*. The file
+had three malformed rows and the third is [F103](deferred-findings.md#closed) —
+nine cells against an eight-column header, the surplus holding the **entire M54
+amendment** that says the bound lapses for an account-wide key. So `m58.md`'s
+bullet requiring F103's row to have been *amended rather than deleted* held in the
+source and failed on the page, which is the one place a reader would look.
+
+The mechanism is one line of arithmetic. The old scan took `split(line, "|") - 2`,
+charging an empty field to each end of the row. GFM makes the leading and trailing
+pipes optional **independently**, so that is right for `| a | b |` and one short
+for `| a | b`. F28 and F5 ended with a trailing pipe and a surplus *empty* cell and
+were found; F103 ends with no trailing pipe and was counted as conforming.
+
+**The scan is the fix, not the three rows**, and it is now a gate rather than a
+thing somebody runs. `scripts/check-links.sh` gained a second pass over every
+tracked markdown file, counting cells GFM's way, and `make check-links` fails on a
+mismatch. Proven in that order and deliberately: the gate was written first and run
+red — `deferred-findings.md:157 has 9 cells against the 8-column header at :56` —
+while F103 was still malformed, and only then was F103 folded back into its
+*Closed by* cell. Re-derived against the tree: **2,100 table rows in 40 files, one
+mismatch**, and green after — the tree as it stood at the scan, before this pass
+filed F195 and F196; the gate prints the live figure, which is why it is a gate
+and not a number written down. The script now checks two things, so its header and
+the Makefile line say so.
+
+F193's row is corrected rather than left standing — it is uncommitted, and the
+standing ruling on editing an uncommitted entry in place applies. Its *Finding*
+reads three rather than two, its evidence carries both the wrong count and the
+re-derivation, and its severity cell no longer says nothing checks this, because
+something does.
+
+### Area G counted one anchor and there are two
+
+`phase-3-candidates.md`'s close-out said *"its one anchor in the tree lost its
+date"*. `orgs.create` names itself the call site an entitlement check would hang
+on in **two** places: `CreateOrganization`'s doc in `internal/team/organization.go`,
+which this milestone had already rewritten, and [M28](phase-details/m28.md)'s own
+bullet, which still read *"(Phase 3+, see Plan.md)"*. Two sites, one already
+changed, one changed here, and the close-out now says two.
+
+A third mention — `Plan.md`'s D16 row — carries no phase number and needs nothing.
+It is named in the close-out so the next sweep does not re-find it and wonder,
+which is the treatment `internal/auth/service.go:410` already gets in the
+bot-bypass list for the same reason.
+
+The missed one being in a **shipped milestone's file** is the third time in two
+days: it is where two of the bot-bypass promises were hiding, and it is what the
+amendment recording that predicted. A documentation pass reads documentation; a
+shipped milestone's file is read by somebody looking up a milestone that closed
+months ago, and by nobody else.
+
+### The release-notes extraction, run and recorded
+
+`m58.md` requires the `awk` be checked against the changelog **as it will be at
+0.3.0** before anything is tagged, per the trap M45 documented: the extraction
+only runs after a tag exists, so a fix confirmed by releasing is confirmed once
+the notes are already public. It had not been recorded. Run read-only against
+`.github/workflows/release.yml`'s own program, with `ver="## [0.3.0]"`:
+
+**815 lines, exactly `CHANGELOG.md:33-847`** — the whole 0.3.0 body and nothing
+else. No second version heading, no `[Unreleased]: https://…` reference
+definitions, and the only *0.2.0* strings in the output are prose inside 0.3.0's
+own entries. Clean. It is a check against the file at this commit, so anything
+that edits `CHANGELOG.md` before the tag re-owes it.
+
+Which exit fires is worth stating, because the comment above the program gets it
+backwards. `release.yml:258` says *"the newest version is always the last section
+in CHANGELOG.md"*. It is the **first** — Keep a Changelog orders newest first, and
+0.3.0 sits above 0.2.0 above 0.1.0. The comment was true at 0.1.0, when there was
+one released section and it was both. The consequence is only that the reasoning
+misleads: the F1 link-reference exit it presents as this extraction's protection
+protects the **oldest** section, and 0.3.0 is guarded by the ordinary next-heading
+exit. `.github/workflows/` cannot be committed to, so this is
+[F196](deferred-findings.md#open) rather than an edit, carrying the proposal route.
+
+### The five secondaries
+
+**`LINKCTRL_DOMAIN_VERIFY_INTERVAL=0` turns off two jobs and the justification
+named one.** `jobRunner.runHostReload` returns immediately on a non-positive
+interval, so the per-replica reload of the verified-hostname set stops with the
+verification pass. That reload is F73's backstop and has no leadership by design.
+The demo can afford to lose it — one replica, and `make demo-update`
+force-recreates the container with the set loaded at boot — and a real deployment
+cannot, which is precisely the reason the line is marked as one not to copy. The
+comment now says so.
+
+**A pinned default workspace is cleared, and D61 says it cannot be repointed.**
+Both are true of different halves. `demoActor` refuses when the pin resolves the
+account *elsewhere*, which is the state that makes `demoReset` destructive; a pin
+naming the demo's own oldest workspace passes that check and `demoSeeder.actAs`
+then clears it. Recorded at both ends rather than reworded — D61's row is
+annotated the way D65's is, and `actAs`'s doc names D61 and says which case it
+does not reach. Clearing stays: leaving the pin is F169 exactly.
+
+**`docs/deployment.md` pinned `LINKCTRL_TAG=0.1.0`** in the upgrade section, two
+releases stale, inside the pass whose job is that file. Now 0.3.0.
+
+**F176's *Closed by* froze the decisions table at D108–D174** and D175/D176
+landed in the same milestone. Re-derived: D108–D176, 69 rows, no holes, ascending,
+unique. The cell now asserts the *property* and offers the range as evidence,
+because a cell naming the last row is wrong the moment the table grows — the same
+staleness one iteration smaller.
+
+**Three counts of the bot-bypass set were in the tree**: seven in `m58.md` and the
+candidates file, eight in this log's fourth-pass entry. They are the same tally
+counted to different edges — seven places promise the bypass, and the eighth is
+the candidates file's own *count* of them, which was itself wrong and was fixed in
+the same breath. Stated in the entry rather than left for a fourth count to find.
+## 2026-08-10 — M58, amendment: the third move of one number, so the number goes
+
+**The bullet as it stood** carried a parenthesis reading *"M58's own work filed
+eight — F185–F192 […] and is **nine**, F185–F193"*.
+
+**As amended:** the number is deleted. The bullet now says the rows this
+milestone files run from F185 and are counted by
+`grep -c '^| F' deferred-findings.md` against its own commit.
+
+**The tree fact.** Twelve at the time of writing — F185 through F196 — where the
+sentence said nine and, one amendment earlier, eight. F194 came from the third
+reviewer run, F195 and F196 from the fifth build pass.
+
+### Why the count is deleted rather than corrected
+
+This is the third amendment to one parenthesis and all three moved the same
+number. That is not three mistakes; it is one sentence trying to hold a quantity
+that the milestone it describes is actively changing. The bullet's *argument* —
+fixing findings files findings, so a sweep cannot be scoped to "every row" —
+never needed a count to make it. The count was decoration, and every pass paid
+to update it.
+
+[F69](deferred-findings.md) settled this exact question at
+[phase-details/README.md](phase-details/README.md)'s demo-coverage rule, which
+said *four* rows, was true when written, was wrong within one milestone, and was
+replaced by *its trailing rows*. The remedy there was: **say the property, not
+the quantity, and name the command that counts it.** Applied here a second time,
+at a cost of three amendments to learn the same thing twice.
+
+Worth stating plainly because the milestone this sits inside spent four build
+passes on drifted enumerations and wrote its own comment-truth bullet under the
+heading *counted rather than recalled*. Counting is the right instinct and it is
+not sufficient: a count written into prose is recalled by every subsequent
+reader, whatever the heading above it says. Only a count somebody can re-take
+survives, and the difference is whether the command is in the sentence.
+
+## 2026-08-10 — M58: the sixth pass, the response that disagreed with its own transaction, and the demo that would not have resolved
+
+The sixth reviewer run returned fourteen findings. The owner's disposition was
+standing and short: **fix the ones that would ship something wrong, defer the
+rest, commit.** Six were fixed — two release blockers, and four sentences that
+are false on a surface the 0.3.0 tag publishes. Seven became rows, F197–F203.
+The fourteenth was `doc-cost.md` being stale, regenerated last so that it is true
+of the tree being handed over, without re-judging: the resume floor did not move
+and [the W38 judgement](#2026-08-10--the-2691-bytes-w38-added-to-every-resume-defended)
+stands.
+
+### The rotation response contradicted the statement three lines above it
+
+`POST /api/v1/api-keys/rotate` answered `revoked_organizations: []` for every
+successor, on a comment that read *"nothing can have barred an id that did not
+exist when the bar would have been written"*. That was true when it was written
+and this milestone is what made it false: `CarryAPIKeyReachRevocations` copies
+the predecessor's bars onto the successor **inside the rotation transaction**,
+before the response is built, precisely so an administrator's reach revocation is
+not escapable by the credential it was aimed at. So the caller most likely to be
+told something wrong — the holder of a barred key, rotating — was told its
+successor was unrestricted by the same call that had just recorded otherwise.
+
+Both halves are this milestone's own work, which is the part worth naming. The
+carry landed in this diff; the empty array predates it and was correct until it
+did. A fix that lands beside a comment does not make the comment false by
+accident — it makes it false on purpose, and nothing in the loop reads a comment
+as a claim to re-check.
+
+Three edits, and the shape of them is the argument:
+
+- **`keyInfo` takes the bars as a parameter.** It used to hardcode the empty
+  slice for both its callers, which meant one caller inherited an answer that was
+  right for the other. Creation passes `nil` and says why at the call site — the
+  id was allocated a statement ago. Rotation passes what it read.
+- **The bars are read back rather than assembled** from what was just copied.
+  `CarryAPIKeyReachRevocations`'s own comment argues that the two pinned
+  directions copy nothing *by data rather than by a branch*, so a response
+  assembled in Go would be a second implementation of a rule the statement holds.
+  `ListAPIKeyOrgRevocations` runs on the transactional handle, so what comes back
+  is what committed.
+- **`barsByKey` is shared** by the owner's key list and the rotation response, so
+  the two readers of those rows cannot spell one differently.
+
+`api/openapi.yaml` published the same false reason as contract text and now says
+what actually happens, including the two directions that are empty and why they
+are empty. The integration test asserted the carried bar through the list
+endpoint one query later and asserted nothing about the rotation's own answer;
+it now asserts the response — id and the administrator's own timestamp — and the
+pinned test asserts the empty case, because an empty array that is right by
+accident is exactly what the hardcoded one was.
+
+### The demo would have published a hostname that did not resolve
+
+`.env.demo` carries `LINKCTRL_DOMAIN_VERIFY_INTERVAL=0`, and `scripts/instance.sh`
+justified it with a sentence about ordering that had the ordering backwards:
+*"make demo-update recreates the app container … with the host set loaded at
+boot — so nothing here delays a reseeded domain being served either."*
+
+`Makefile`'s recipe recreated and waited, and *then* ran `lctl demo --reset`. The
+app therefore loaded its verified-hostname set from before the reseed wrote the
+row. Nothing else would have put the new set in front of it: `lctl` runs on the
+host with no Redis, so it publishes no invalidation; `internal/redirect/hosts.go`
+holds the whole set in memory precisely so that an unknown `Host` costs no query,
+so there is no lazy reload; and the zero interval stops `runHostReload` along
+with the verification pass. A fresh demo would have served nothing on
+`go.linkctrl.example`, and a repeat would have served a cached entry naming a
+domain id the reseed had deleted.
+
+**The honest answer is that the setting is fine and the recipe was not.** The
+alternative — drop `DOMAIN_VERIFY_INTERVAL=0` — puts back the defect it was added
+for: an RFC 2606 `.example` hostname the real resolver cannot satisfy, unverified
+24 hours after every reseed, silently. So the fix is one line in the recipe:
+`make demo-update` recreates the app container **again, after the reseed**, with
+`--wait`, so the set it holds is the set the reseed wrote. That ordering is now
+what the justification in `scripts/instance.sh` claims, and
+`docs/dev-notes/instances.md` says the same thing and names the second job the
+zero switches off, which it had not.
+
+`.env.demo` itself is untouched. It is the demo instance's, no worker may write
+it, and the line it still needs is the orchestrator's to add before 3.7.
+
+### Four sentences the tag would have published
+
+Each is one surface, and none of them is a judgement call:
+
+- **`Plan.md`'s D141** recorded as unfixed a consequence this same diff fixed —
+  *"Consequence recorded rather than fixed: H grows the symbol, so a code near
+  the 2000px raster bound loses its PNG download to a `422`"*. `refitForLogo` is
+  wired at `internal/link/qr.go:830` and F171 is closed. The decision table is
+  headed authoritative and `docs/usage.md` and `api/openapi.yaml` were both
+  amended for the change; D141 was the row the diff walked past.
+- **`README.md`** described erasure as scrubbing the identifying fields with no
+  mention of the exception `docs/SECURITY.md` and `Plan.md` both state — a
+  self-filed, self-decided dispute keeping one of its two address labels (F187).
+  D104 makes this pass the only place README changes, so the omission would have
+  shipped for the phase.
+- **`docs/SECURITY.md`'s hardening checklist** said `DOMAIN_VERIFY_INTERVAL=0`
+  *"switches re-verification off entirely"* while `docs/configuration.md:246`
+  says it switches **both** jobs off. The checklist is where an operator looks,
+  and the half it omitted is the one that keeps a replica from serving a
+  hostname whose verification is already gone.
+- **`docs/deployment.md`** told somebody installing 0.3.0 to unpack
+  `linkctrl_0.1.0_linux_amd64.tar.gz`. The `LINKCTRL_TAG` pin thirty-six lines
+  above it had been updated in this diff and the tarball had not.
+
+One stale cross-reference was fixed with them and only one: `docs/operations.md`
+said F180 was *"open and unscheduled"* about a defect this diff closed, which is
+an assertion rather than a link that lands in the wrong section. Its paragraph
+now reads as history — the exception existed until 0.3.0 — and names F185, the
+same defect at the manual button, which closed with it.
+
+### Why the other sixty-four stale links are a row and not an edit
+
+Sixty-four `F<n>` cross-references still point at the `#open` anchor for findings
+that are now closed, and a blanket rewrite is the wrong instinct twice over. Four
+of them are in this file, which is append-only: an entry saying a row was open is
+a true statement about the day it was written, and correcting it would be editing
+the log to match the present. And the remaining sixty would restale themselves
+the next time anything closes. What would hold is a gate that flags an `#open`
+link naming a closed id, or dropping the section anchor from cross-references
+inside `deferred-findings.md` — a choice about that file's conventions, and
+therefore [F203](deferred-findings.md#open) rather than an edit at the end of a
+pass.
+
+### The seven rows
+
+F197 (D65's cell contradicting itself, and this milestone's audit recording it as
+untouched), F198 (the new table-column gate missing the delimiter mismatch, and
+no CI target running it), F199 (a test whose load-bearing half is guarded on a
+condition its fixture cannot satisfy), F200 and F201 (three `internal/ui`
+fixtures unfaithful to production, both classes already filed once), F202
+(`m54.md` unannotated while six sibling milestone files carry M58 notes), F203
+(above). Every one carries `file:line` evidence and is marked unreviewed.
+
+Two of them are recurrences rather than new defects — F200 is F191's class on the
+next attribute, F201 is F167's exact mechanism on the two forms it did not
+reach — and that is the argument for filing rather than fixing at this hour: a
+class that has recurred once is a class somebody should decide about, not one a
+sixth pass should patch a third site of.

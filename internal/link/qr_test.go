@@ -103,3 +103,103 @@ func TestTheShortestContentIsWhatInternalQRAssumes(t *testing.T) {
 			"floor is then the wrong one", len(named), len(got))
 	}
 }
+
+// TestALogoDoesNotBreakThePNGDownload is F171, at the numbers it was measured
+// at.
+//
+// **The defect is invisible from the surface and that is why it is a test rather
+// than a note.** A logo forces the error-correction level to H, H spends its
+// budget on modules, and the margin and scale the reader chose are a *pixel*
+// arithmetic over a module count that just grew. Nothing in the upload path said
+// so before D174: somebody put a picture on a code and `GET …/qr.png` began
+// answering 422 for a file that downloaded a moment earlier.
+//
+// The payload here is the row's own: 89 bytes, 37 modules at L and 53 at H, and
+// a style the size control really produces — margin 13, scale 31, which draws
+// 1953px and is inside the 2000px raster bound with room to spare until the
+// level moves.
+func TestALogoDoesNotBreakThePNGDownload(t *testing.T) {
+	content := QRContent(
+		"https://links.example/"+strings.Repeat("a", 60), "")
+	if len(content) != 89 {
+		t.Fatalf("the payload is %d bytes and the measurement was taken at 89; "+
+			"the module counts below are that payload's", len(content))
+	}
+
+	before, err := qr.Encode(content, qr.LevelL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	style, _ := qr.Style{Level: qr.LevelL, Margin: 13, Scale: 31}.Normalize()
+	if got := qr.OutputSize(before.Size, style); got != 1953 {
+		t.Fatalf("the style draws %dpx, want the measured 1953", got)
+	}
+
+	after := refitForLogo(content, style)
+	if after.Level != qr.LevelH {
+		t.Errorf("the upload left the level at %q, want H; a logo occludes modules "+
+			"and H's budget is what the occlusion cap is measured against", after.Level)
+	}
+
+	symbol, err := qr.Encode(content, after.Level)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if symbol.Size <= before.Size {
+		t.Fatalf("level H encodes this payload in %d modules and L in %d; if H is "+
+			"not the larger symbol this test is measuring nothing",
+			symbol.Size, before.Size)
+	}
+
+	drawn := qr.OutputSize(symbol.Size, after)
+	if drawn > qr.MaxSize {
+		t.Errorf("after the upload the code draws %dpx, past the %dpx raster bound, "+
+			"so GET …/qr.png answers 422 for a code that downloaded a moment "+
+			"earlier. Carrying margin %d and scale %d forward onto a %d-module "+
+			"symbol is what does it", drawn, qr.MaxSize,
+			style.Margin, style.Scale, symbol.Size)
+	}
+
+	// And it is *re-fitted*, not merely shrunk to fit: the size the reader set is
+	// the size they keep. qr.FitSize snaps to a whole number of modules, so the
+	// two need not be equal — one module of this picture is 31px, and anything
+	// inside that is the snap rather than a resize.
+	if diff := drawn - 1953; diff > 31 || diff < -31 {
+		t.Errorf("the code was 1953px and is %dpx after the upload. The re-fit keeps "+
+			"the size somebody chose; a move of more than one module is a resize "+
+			"nobody asked for", drawn)
+	}
+}
+
+// TestTheReFitOnlyMovesTheSizeItHasTo is the other half: D174 bought the re-fit
+// with a restyle of a code that may already be printed, so the restyle has to
+// stay confined to the two fields that carry the size.
+func TestTheReFitOnlyMovesTheSizeItHasTo(t *testing.T) {
+	content := QRContent("https://links.example/summer", "")
+	style, _ := qr.Style{
+		Foreground: "#123456", Background: "#fedcba", Level: qr.LevelM,
+	}.Normalize()
+
+	after := refitForLogo(content, style)
+	if after.Foreground != style.Foreground || after.Background != style.Background {
+		t.Errorf("the upload repainted the code: %+v became %+v. A logo is not a "+
+			"colour change", style, after)
+	}
+
+	// A payload the level cannot grow — same module count at M and H — must come
+	// back byte for byte, or the re-fit is moving pictures it has no reason to.
+	symbol, err := qr.Encode(content, qr.LevelH)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, err := qr.Encode(content, style.Level)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if symbol.Size == base.Size &&
+		(after.Margin != style.Margin || after.Scale != style.Scale) {
+		t.Errorf("the symbol is %d modules at both levels and the style still moved "+
+			"from margin %d scale %d to margin %d scale %d", symbol.Size,
+			style.Margin, style.Scale, after.Margin, after.Scale)
+	}
+}

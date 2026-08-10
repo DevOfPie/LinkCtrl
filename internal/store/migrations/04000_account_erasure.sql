@@ -33,7 +33,8 @@
 -- constraint has admitted it since the first migration and no path in this
 -- product sets it. Suspension is a moderation feature nobody has asked for, it
 -- is not erasure, and it is not being smuggled in beside erasure because the
--- enum already had a slot for it. `TestSuspendedStatusHasNoWriter` is what keeps
+-- enum already had a slot for it. `TestNothingWritesTheSuspendedStatus`
+-- (`internal/account/status_test.go`) is what keeps
 -- that a stated absence rather than a thing a reader has to discover.
 
 -- What the erasure sweep reads, and the only reason this file exists.

@@ -47,9 +47,15 @@ import (
 // workspace, refusal and dispute below is produced by the same service call the
 // dashboard and the REST API make. A dispute created by INSERT has never been
 // through the form that files one, and a demo that diverges from what the
-// product actually produces is worse than a thin demo. The four places that
-// deliberately go around a service each say so at the statement, and there is no
-// fifth in this file — `demoActor` in demo.go takes the same step around
+// product actually produces is worse than a thin demo. **The places that
+// deliberately go around a service each say so at the statement**, and that is
+// the whole of the rule: a statement here either goes through the service layer
+// or carries a comment saying why it cannot. The count is deliberately not
+// written down. It read *four* here and *three* at the statements themselves
+// until M58, which is [F69](../../docs/build-notes/deferred-findings.md)'s
+// lesson exactly — a number beside a rule is a fact nothing keeps true, and
+// these two had already drifted apart from each other. `demoActor` in demo.go
+// takes the same step around
 // SwitchWorkspace, for the same reason refresh below does.
 // The fourth is M36's `attributeSplitClicks`, and it is editing rows that
 // no service produced either: a month of click history is written by COPY,
@@ -614,7 +620,7 @@ func (s *demoSeeder) refresh(ctx context.Context, people *demoPeople) error {
 		// move somebody's browser — so this runs the write that call makes, the
 		// last-used one, and then resolves the identity through
 		// auth.IdentityForEmail like every other CLI subcommand does. It is one of
-		// the three deliberate steps around a service in this file.
+		// the deliberate steps around a service in this file.
 		if _, err := s.q.SetLastWorkspaceForUser(ctx, dbgen.SetLastWorkspaceForUserParams{
 			UserID: (*p.into).UserID, WorkspaceID: s.owner.WorkspaceID,
 		}); err != nil {
@@ -676,17 +682,66 @@ func (s *demoSeeder) seedSecondWorkspace(ctx context.Context, people demoPeople)
 
 // actAs resolves an identity acting in a named workspace. See refresh for why
 // the last-used write is made directly.
+//
+// **The pinned default is cleared first, and the result is checked (F169).**
+// `ResolveWorkspaceForUser` ranks the pin (rung 2) above last-used (rung 3), so
+// against an account that has pinned one, the write below decided nothing: the
+// demo owner had `default_workspace_id` pointing at the catalogue's workspace,
+// every link `seedSecondWorkspace` created landed there, and the Campaigns
+// workspace the demo exists to switch *to* had never held a single row. The
+// seeder reported success both times, because nothing compared where a link was
+// asked for with where it went.
+//
+// Clearing rather than re-pinning, and that is the choice rather than an
+// accident. Re-pinning would work — it is the strongest rung a process without a
+// session can reach — but it would also leave the pin on the *second* workspace
+// for the length of the seeding, and a run that dies in that window leaves an
+// account `demoActor` then refuses to seed as. NULL is not a lost preference so
+// much as the one D22 gives every account until somebody chooses otherwise, and
+// it is the value the demo owner should be on: a demo whose owner has pinned a
+// workspace is showing a preference nobody set.
+//
+// **D61 says a pinned default "cannot be repointed", and that is about
+// demoActor, not about this.** demoActor refuses only when the pin resolves the
+// account into some workspace other than the demo's own — that is the state
+// that would make demoReset destroy data and report success. A pin naming the
+// demo's own oldest workspace passes that check and is then cleared here, so the
+// seeder does remove a pinned preference in the one case D61's sentence does not
+// reach. Deliberate, and the smaller of the two harms: the alternative is
+// leaving the pin in place and having every write below decided by rung 2
+// instead of rung 3, which is F169 exactly. Recorded against D61 rather than
+// left to be re-derived.
+//
+// The check at the end is what turns the next version of this into a failure
+// instead of a wrong demo. It costs one comparison and it is the whole of what
+// was missing.
 func (s *demoSeeder) actAs(ctx context.Context, email string, wsID uuid.UUID) (*auth.Identity, error) {
 	id, err := s.auth.IdentityForEmail(ctx, email)
 	if err != nil {
 		return nil, fmt.Errorf("resolve %s: %w", email, err)
+	}
+	if _, err := s.q.SetDefaultWorkspaceForUser(ctx, dbgen.SetDefaultWorkspaceForUserParams{
+		UserID: id.UserID, WorkspaceID: nil,
+	}); err != nil {
+		return nil, fmt.Errorf("clear %s's pinned default workspace: %w", email, err)
 	}
 	if _, err := s.q.SetLastWorkspaceForUser(ctx, dbgen.SetLastWorkspaceForUserParams{
 		UserID: id.UserID, WorkspaceID: wsID,
 	}); err != nil {
 		return nil, fmt.Errorf("place %s in workspace %s: %w", email, wsID, err)
 	}
-	return s.auth.IdentityForEmail(ctx, email)
+	moved, err := s.auth.IdentityForEmail(ctx, email)
+	if err != nil {
+		return nil, fmt.Errorf("resolve %s: %w", email, err)
+	}
+	if moved.WorkspaceID != wsID {
+		return nil, fmt.Errorf(
+			"%s was placed in workspace %s and resolves into %s instead, so everything "+
+				"seeded next would be written to the wrong workspace; something outranks "+
+				"last-used for this account (ResolveWorkspaceForUser's precedence)",
+			email, wsID, moved.WorkspaceID)
+	}
+	return moved, nil
 }
 
 // seedBotBlocking switches it on for exactly one link.
@@ -944,7 +999,9 @@ const (
 	// budget below is spent partway, so the page shows a limit with a number
 	// against it rather than a limit nothing has ever touched.
 	demoMaxClicks = 50
-	// demoClicksSpent is how much of it the demo has already used.
+	// demoClicksSpent is how much of it the demo has already used. It is also
+	// exactly how many click events the link carries, because a redirect that
+	// spends a click records one — see seedGatedLinks (F166).
 	demoClicksSpent = 12
 )
 
@@ -954,11 +1011,30 @@ const (
 // through the full M30 tier check and each password is hashed with the
 // instance's own argon2 parameters — a demo whose password was written straight
 // into the column would be showing a row shape the product never produces.
+//
+// **Each one is then aged and given traffic (F165, F166).** These four were the
+// only links on the instance that had neither. The catalogue path backdates
+// `created_at` and drives a month of clicks from a weight; this path called
+// `link.Service.Create` and never touched the row again, so all four carried the
+// instant of the seed — and the dashboard's *Recent links* is `ORDER BY
+// created_at DESC LIMIT 5`, which made these four plus the one on the custom
+// hostname the entire list, every one of them reading zero clicks on an instance
+// holding a million and a half of them. Ages that interleave with the
+// catalogue's, so the list is a mix rather than a block, and counts that are
+// exact rather than weighted — see demoCountedClicks for why.
 func (s *demoSeeder) seedGatedLinks(ctx context.Context) error {
 	maxClicks := int64(demoMaxClicks)
 	gated := []struct {
 		in   link.CreateInput
 		what string
+		// age is how many days ago the link was created, and clicks is how many
+		// times it has been through its gate. `access-once` is the one with
+		// none, and that is the state its gate is in: a one-time link that has
+		// been used is a 410, which demonstrates the refusal and nothing else.
+		age, clicks int
+		// oldest bounds the click history in days-ago terms, so a link created
+		// twenty-three days ago has no click from before it existed.
+		oldest int
 	}{
 		{link.CreateInput{
 			Alias: demoPasswordAlias, URL: "https://example.com/investors/board-deck.pdf",
@@ -966,36 +1042,48 @@ func (s *demoSeeder) seedGatedLinks(ctx context.Context) error {
 			Description: "Asks for a password before it redirects. Nothing is stored in the " +
 				"visitor's browser, so coming back means typing it again.",
 			Password: demoLinkPassword,
-		}, "password " + demoLinkPassword},
+		}, "password " + demoLinkPassword, 23, 18, 21},
 		{link.CreateInput{
 			Alias: demoOneTimeAlias, URL: "https://example.com/onboarding/welcome",
 			Title:       "One-time access link",
 			Description: "Works once. The second visit is a 410, counted in Postgres rather than in the cache.",
 			OneTime:     true,
-		}, "one-time"},
+		}, "one-time", 17, 0, 0},
 		{link.CreateInput{
 			Alias: demoMaxClickAlias, URL: "https://example.com/offers/early-bird",
 			Title:       "First fifty only",
 			Description: "Stops at fifty clicks. The count beside it is exact, unlike the click total.",
 			MaxClicks:   &maxClicks,
-		}, fmt.Sprintf("max %d clicks", demoMaxClicks)},
+		}, fmt.Sprintf("max %d clicks", demoMaxClicks), 9, demoClicksSpent, 6},
 		{link.CreateInput{
 			Alias: demoSignedAlias, URL: "https://example.com/press/embargoed",
 			Title: "Signed link only",
 			Description: "The plain short URL is refused with 403. Only a signed, unexpired " +
 				"URL works — make one from this link's page.",
 			RequireSignature: true,
-		}, "signature required"},
+		}, "signature required", 6, 7, 5},
 	}
 
 	ids := make(map[string]uuid.UUID, len(gated))
+	var clicks []demoClickRow
 	for _, g := range gated {
 		created, err := s.link.Create(ctx, s.owner, g.in)
 		if err != nil {
 			return fmt.Errorf("create gated link /%s: %w", g.in.Alias, err)
 		}
 		ids[g.in.Alias] = created.ID
+		// Backdated the way demoCreateLinks backdates the catalogue, and by the
+		// same statement, because there is no service that ages a row.
+		if _, err := s.pool.Exec(ctx,
+			`UPDATE links SET created_at = $2, updated_at = $2 WHERE id = $1`,
+			created.ID, s.now.AddDate(0, 0, -g.age)); err != nil {
+			return fmt.Errorf("backdate /%s: %w", g.in.Alias, err)
+		}
+		clicks = append(clicks, demoCountedClicks(created.ID, g.clicks, g.oldest, s.now)...)
 		fmt.Fprintf(os.Stderr, "gated link: /%s — %s\n", g.in.Alias, g.what)
+	}
+	if _, err := demoCopyClicks(ctx, s.pool, s.owner.WorkspaceID, clicks); err != nil {
+		return fmt.Errorf("click history for the gated links: %w", err)
 	}
 
 	// Part of the click-limited link's budget, spent through the same statement
@@ -1003,11 +1091,19 @@ func (s *demoSeeder) seedGatedLinks(ctx context.Context) error {
 	// that does not work; a partly-spent one is the state the control is
 	// actually for.
 	//
-	// One of the three deliberate steps around a service is not what this is: it
+	// One of the deliberate steps around a service is not what this is: it
 	// goes through internal/gate, which is where the redirect path consumes a
 	// click too. It is a loop rather than one call because the counter is
 	// deliberately incremental — there is no "set it to twelve", and adding one
 	// would be a way to write a number the gate never produced.
+	//
+	// **The other half of what a redirect does is the loop above** (F166). A real
+	// one consumes the budget *and* records a click event, so the two numbers
+	// move together; this spent the budget alone, and the demo then showed
+	// `first-fifty` at *12 of 50 spent* in its gate section and *0 clicks* on the
+	// dashboard beside it — two true statements that cannot both be true of one
+	// link, which is exactly what a reader uses to decide whether to trust the
+	// numbers on the page. demoClicksSpent is therefore the count in both places.
 	for range demoClicksSpent {
 		if _, err := s.gates.Consume(ctx, ids[demoMaxClickAlias], s.owner.WorkspaceID,
 			int64(demoMaxClicks)); err != nil {
@@ -1792,16 +1888,36 @@ func (s *demoSeeder) seedDomains(ctx context.Context) error {
 		// And one link on it, which is what makes the hostname visible anywhere
 		// other than the domains page: the links list shows its short URL built
 		// from this hostname rather than from the instance's own.
-		if _, err := s.link.Create(ctx, actor, link.CreateInput{
+		//
+		// Aged and given traffic like the catalogue's, for the reason
+		// seedGatedLinks gives: this was the fifth of the five links carrying the
+		// instant of the seed, and between them they were the whole of the
+		// dashboard's *Recent links* — five rows reading zero clicks (F165). The
+		// weighted generator rather than an exact count, because nothing compares
+		// this link's total against anything and a curve is what its own detail
+		// page has charts for.
+		spring := []demoLink{{alias: "spring", weight: 9, from: 12, age: 13}}
+		created, err := s.link.Create(ctx, actor, link.CreateInput{
 			URL:      "https://example.com/campaigns/spring",
-			Alias:    "spring",
+			Alias:    spring[0].alias,
 			Title:    "Spring campaign, on this workspace's own hostname",
 			DomainID: &verified.ID,
-		}); err != nil {
+		})
+		if err != nil {
 			return fmt.Errorf("create a link on %s: %w", d.hostname, err)
 		}
-		fmt.Fprintf(os.Stderr, "domain %s: registered to %s, verified, 1 link\n",
-			d.hostname, actor.WorkspaceID)
+		if _, err := s.pool.Exec(ctx,
+			`UPDATE links SET created_at = $2, updated_at = $2 WHERE id = $1`,
+			created.ID, s.now.AddDate(0, 0, -spring[0].age)); err != nil {
+			return fmt.Errorf("backdate /%s: %w", spring[0].alias, err)
+		}
+		springClicks, err := demoClicks(ctx, s.pool, actor.WorkspaceID.String(),
+			spring, map[int]uuid.UUID{0: created.ID}, s.opt, s.now)
+		if err != nil {
+			return fmt.Errorf("click history for /%s: %w", spring[0].alias, err)
+		}
+		fmt.Fprintf(os.Stderr, "domain %s: registered to %s, verified, 1 link, %d clicks\n",
+			d.hostname, actor.WorkspaceID, springClicks)
 	}
 	// Back where the demo opens, exactly as seedSecondWorkspace does.
 	if _, err := s.actAs(ctx, s.owner.Email, s.owner.WorkspaceID); err != nil {
@@ -1888,7 +2004,7 @@ func (s *demoSeeder) seedBlockingAndDisputes(ctx context.Context, people demoPeo
 
 // listDemoHost adds the demo's own host to the runtime low-confidence blocklist.
 //
-// Written directly, and it is the second of the three deliberate steps around a
+// Written directly, and it is one of the deliberate steps around a
 // service. Nothing in the product inserts into this table: boot reconciles
 // LINKCTRL_DESTINATION_BLOCKLIST into it (source 'env'), migration 01500 seeded
 // the shortener hosts once, and M31's review queue only ever *removes* a row.

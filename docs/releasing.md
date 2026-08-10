@@ -11,11 +11,16 @@ Two contracts, deliberately separate:
 | The REST API | The path: `/api/v1` | A new path, `/api/v2`. Never a change to `v1`. |
 | The product | The release version | A new major version. |
 
-The product is pre-1.0 while Phase 2 is outstanding — shared workspaces, folders
-and custom domains will move the dashboard and add tables — so releases stay in the
-`0.x` range until that has settled. `0.x` says "the product surface may still
-move", not "unfinished". Everything documented as built is tested and exercised end
-to end, and the SLO is measured.
+The product is pre-1.0 while account lifecycle and identity are incomplete —
+there is no SSO, OAuth, OIDC or SCIM, and each of those moves the sign-in surface
+and adds tables — so releases stay in the `0.x` range until that has settled.
+`0.x` says "the product surface may still move", not "unfinished". Everything
+documented as built is tested and exercised end to end, and the SLO is measured.
+
+*(This read "pre-1.0 while Phase 2 is outstanding — shared workspaces, folders and
+custom domains will move the dashboard and add tables" until 0.3.0. All three
+shipped in 0.2.0, so the sentence named its own contents as future work for a
+whole release.)*
 
 The database schema only changes additively within a minor version. Migrations run
 at boot, and `LINKCTRL_MIGRATE_ON_START=false` makes them a deliberate step for
@@ -27,19 +32,19 @@ change-controlled deployments.
 # 1. Write the changelog section first. It is the thing an operator reads to
 #    decide whether to take the upgrade, so it is written for them, not from
 #    `git log`.
-$EDITOR CHANGELOG.md          # add "## [0.2.0] - YYYY-MM-DD", update the links
+$EDITOR CHANGELOG.md          # add "## [0.3.0] - YYYY-MM-DD", update the links
 
-git add CHANGELOG.md && git commit -m "Changelog for 0.2.0"
+git add CHANGELOG.md && git commit -m "Changelog for 0.3.0"
 
 # 2. Everything that must hold. Runs the same checks CI does, plus the ones that
 #    only matter when publishing.
-make release-check VERSION=v0.2.0
-#   or: scripts/release-check.sh v0.2.0
+make release-check VERSION=v0.3.0
+#   or: scripts/release-check.sh v0.3.0
 
 # 3. Tag and push. The tag is what the workflow builds, and the version the
 #    binaries report comes from it.
-git tag -a v0.2.0 -m "v0.2.0"
-git push origin v0.2.0
+git tag -a v0.3.0 -m "v0.3.0"
+git push origin v0.3.0
 ```
 
 `release-check` verifies: the working tree is clean, the tag does not exist, the
@@ -83,7 +88,7 @@ Nothing above needs GitHub. The same artifacts come out of:
 ```sh
 make docker-build                 # image, stamped from git describe
 make dist                         # cross-compiled archives + SHA256SUMS in dist/
-make dist VERSION=v0.2.0          # or with an explicit version
+make dist VERSION=v0.3.0          # or with an explicit version
 ```
 
 `make dist` builds the stylesheet first, because it is embedded — a binary built
@@ -96,7 +101,7 @@ The image tag is the whole upgrade mechanism:
 
 ```sh
 # Pin the version rather than tracking latest, so a restart is never a surprise.
-echo LINKCTRL_TAG=0.2.0 >> .env
+echo LINKCTRL_TAG=0.3.0 >> .env
 docker compose pull app
 docker compose up -d --wait
 ```

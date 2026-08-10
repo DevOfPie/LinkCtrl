@@ -82,6 +82,51 @@ type Querier interface {
 	// arranged to make impossible.
 	ArchiveLinkByAutomation(ctx context.Context, arg ArchiveLinkByAutomationParams) (ArchiveLinkByAutomationRow, error)
 	AttachTag(ctx context.Context, arg AttachTagParams) error
+	// The predecessor's bars, carried onto its successor inside the rotation
+	// transaction.
+	//
+	// **Without this a reach revocation is escapable by the credential it was aimed
+	// at.** A bar names an `api_key_id`; rotation mints a new id; nothing copied the
+	// rows. So the holder of a key an administrator had cut out of an organization
+	// sent `POST /api/v1/api-keys/rotate` — authenticated by the key's own token,
+	// with no session and no permission anywhere — and the successor resolved back
+	// into that organization and was told about it again. Driven through the product
+	// 2026-08-09, both halves: it acted there and it read there. That is the case the
+	// whole mechanism exists for, because the credential a reach revocation is aimed
+	// at is the one that is *not* in legitimate hands, and it is exactly the holder
+	// of that credential who has a reason to rotate.
+	//
+	// **Both columns are copied rather than rewritten**, and that is the substance of
+	// the statement rather than a detail of it.
+	//
+	//   * `revoked_at` is the predecessor's. It is when the reach was cut, and
+	//     rotating does not move that moment. `now()` would date an administrator's
+	//     act by the clock of whoever rotated, make an old bar read as this
+	//     morning's, and hand the owner's key list (F178) a date that resets every
+	//     time the credential is replaced — which is precisely the reading somebody
+	//     evading the bar would want it to have.
+	//   * `revoked_by` is the predecessor's. The bar is that administrator's
+	//     statement and they are who answers for it; attributing it to the rotating
+	//     actor would name a credential's holder as the author of a bar against
+	//     itself. NULL is carried unchanged and is already a state the schema means:
+	//     `revoked_by` is `ON DELETE SET NULL` exactly so a bar outlives the
+	//     administrator's account.
+	//
+	// **The two cases that copy nothing do so by data, not by a branch here.** A
+	// **pinned predecessor** has no rows to select — nothing writes a bar for a key
+	// whose organization is its whole reach, because cutting that reach and revoking
+	// the key are the same act (`revokeInOrganization` sends it to
+	// `revokePinnedKey`). And a **pinned successor** is excluded by the join, which
+	// reads the reach off the row `insertSuccessor` has just written rather than off
+	// a parameter that could disagree with it: an account-wide key may rotate into a
+	// pinned one, and copying bars onto that would leave rows no resolution path
+	// reads and put *cut out of Acme* on a key pinned to Beta. It would also break
+	// 04200's stated invariant that a pinned key never carries one.
+	//
+	// Nothing is re-derived. Which organizations are barred is not recomputed from
+	// memberships or from anything else — the rows are the record, and a copy is the
+	// only operation that cannot disagree with them.
+	CarryAPIKeyReachRevocations(ctx context.Context, arg CarryAPIKeyReachRevocationsParams) error
 	//
 	// The compare-and-set that fires a rule. **This is the loop guard.**
 	//
@@ -833,9 +878,17 @@ type Querier interface {
 	EnsureWorkspaceSigningSecret(ctx context.Context, arg EnsureWorkspaceSigningSecretParams) ([]byte, error)
 	// The erasure pass. One batch, one statement, one transaction.
 	//
-	// **What it scrubs is what deletion could not reach**: the two tables that carry
-	// an address snapshot and no foreign key to `users`, because both are records of
-	// the past that must stay readable after their subject is gone.
+	// **What it scrubs is what deletion could not reach**, and there are two ways a
+	// row gets there. Two tables carry an address snapshot and **no** foreign key to
+	// `users` at all, because a record of the past that vanishes with its subject is
+	// not a record: `audit_logs` and `destination_disputes`. Two more do have one and
+	// are still out of reach — `notifications` (`00600:127`) and `invitations`
+	// (`01200:62`) — because the row belongs to a *different* person, so ending this
+	// account was never going to remove it and no retention window expires it.
+	//
+	// *No foreign key* was the criterion when this pass scrubbed two tables. It is
+	// not the criterion now and saying so was wrong for a while: what finds all four
+	// is **a record about this person that ending the account does not remove**.
 	//
 	//   * `audit_logs.actor_label` (`00600:137,150`). An audit trail that vanishes
 	//     with its actor is not an audit trail.
@@ -843,6 +896,80 @@ type Querier interface {
 	//     (`01600:64,68`). Two snapshots, not one: an account is as identifiable as
 	//     the moderator of a dispute as it is as the filer of one, and F44 names this
 	//     as the second table with no deletion path of any kind.
+	//   * `audit_logs.metadata`'s `"email"` key (F177). **Seven** writers, counted
+	//     against the tree on 2026-08-09 rather than recalled: `invite.go:437`
+	//     (`invitation.created`) and `:860` (`invitation.redeemed`),
+	//     `team/member.go:197`, `:258` and `:386` (`member.role_changed`,
+	//     `member.removed`, `member.added`), and `instance/instance.go:642`
+	//     (`instance.principal_moved`) and `:677` (the review grants). The address
+	//     there is usually the *subject* of somebody else's action, so scrubbing it
+	//     edits a record whose actor is still here — weighed and taken, because an
+	//     erasure that reaches the label and stops at the detail one column over has
+	//     not erased the person.
+	//
+	//     Matched on the value, because there is no foreign key to match on: the
+	//     column is jsonb and the address in it is a snapshot. Case-folded on both
+	//     sides, since `invitation.created` stores what the administrator typed and
+	//     that need not be the case the account was registered in. The accepted cost
+	//     is a sequential scan of a partitioned table — the largest thing in this
+	//     schema after analytics — paid once per batch, and only when there is a
+	//     batch: see `HAVING count(*) > 0` on `batch` below, which is what makes an
+	//     idle pass free rather than hourly.
+	//
+	//     Written by the **same** UPDATE as `actor_label` rather than by a second
+	//     one, and that is not a tidiness choice — see the note on `batch`.
+	//   * `audit_logs.metadata`'s `"from"` **array** (F189). One writer:
+	//     `instance/instance.go:642` puts the outgoing principals' addresses in an
+	//     array beside the `"email"` key it also writes, so a prior instance
+	//     principal who later deletes their account kept an address one key over
+	//     from the one that was scrubbed. The scalar predicate above is the only
+	//     shape F177 specified and an array is a different one, which is why this
+	//     was a second finding rather than an oversight in the first.
+	//
+	//     Rewritten element by element rather than dropped: the array says how many
+	//     principals the role moved away from, and losing a member of it loses that
+	//     count. Order is held by `WITH ORDINALITY`, because the addresses are the
+	//     record of a single act and the sequence is part of what it says. A `from`
+	//     that is not an array is left alone rather than erroring, so a record
+	//     written by hand cannot fail the whole batch.
+	//   * `notifications.data`'s `"email"` key **and the title beside it** (F188).
+	//     `invite/invite.go:973` tells the inviter that their invitation was
+	//     accepted, and both the detail and the sentence carry the address of the
+	//     person who accepted. The row belongs to the *inviter*, so deleting the
+	//     erased account's own notifications never reached it and nothing expires
+	//     it — notifications are scoped to a reader, not swept by age.
+	//
+	//     The title is rewritten by `replace` against `data->>'email'` rather than
+	//     against the batch, and that is what keeps this out of the business of
+	//     knowing how the sentence is worded: the two came from one value at one
+	//     call site, so the address in the title is exactly the string the detail
+	//     holds. Both CASEs read the pre-update row, so the title still finds the
+	//     address after the same statement has replaced it in `data`.
+	//
+	//     An **outstanding** invitation is left alone for the reason stated below,
+	//     and this is deliberately the other answer: a notification is a record
+	//     *about* a person delivered to somebody else, which is the same thing
+	//     `audit_logs.metadata` is, and it gets the same treatment.
+	//   * `invitations.email`, on the invitations the erased account **redeemed**
+	//     (F181). `ListInvitations` carries no state predicate, so `/invites`
+	//     renders every invitation an organization ever issued — redeemed ones
+	//     included — and the address each was sent to. Nothing deletes those rows
+	//     and no setting expires them, so an account deleted, erased and tombstoned
+	//     everywhere else was still named in full on an ordinary dashboard page.
+	//
+	//     `redeemed_by` is the join, not the address. What is scrubbed is the row
+	//     this account *joined by*, which is a record about them; an **outstanding**
+	//     invitation addressed to the same text is deliberately left alone, because
+	//     it is an offer to an address rather than a record of a person, the address
+	//     became reusable the moment the account was deleted, and blanking it would
+	//     break the redemption comparison for whoever takes it next.
+	//
+	//     Empty string rather than the tombstone, for the reason `users.email` is
+	//     one: redemption compares a redeeming account's address against this
+	//     column, and a placeholder that reads like a label is a value that
+	//     comparison would then have to rule out. `invitations_outstanding_email_key`
+	//     cannot collide on the blanks — it excludes redeemed rows, which is every
+	//     row this reaches.
 	//
 	// **The label is a constant and the ids survive** — D148, owner-set 2026-08-08.
 	// Nothing is derived from anything, so there is no derivation to reverse.
@@ -854,12 +981,24 @@ type Querier interface {
 	// **Re-entrant, because the two-leader window during a rolling deploy is a
 	// stated property of this scheduler** (`cmd/linkctrl/jobs.go:117-127`).
 	// `FOR UPDATE SKIP LOCKED` means a second leader takes a disjoint batch instead
-	// of waiting for the first, and the `<>` guards on each label make a second pass
-	// over the same row a no-op rather than a rewrite. Running the pass twice and
-	// diffing is what the test asserts.
+	// of waiting for the first, and the guard on each id-matched scrub makes a second
+	// pass over the same row a no-op rather than a rewrite. Three of those four
+	// compare against the tombstone they write; `invitations` blanks its column
+	// instead of labelling it, so its guard is an emptiness test on `i.email` beside
+	// `i.redeemed_at IS NOT NULL` — the same claim in the vocabulary that column
+	// uses. Running the pass twice and diffing is what the test asserts. The
+	// **three** value-matched scrubs are re-entrant for a different reason and it is
+	// worth stating: after the first pass the address they matched on no longer
+	// exists in the column, so the second pass finds nothing to rewrite.
 	//
 	// Ordered by `deleted_at`, oldest first, which is the order
 	// `users_pending_erasure_idx` stores and the order the requests arrived in.
+	//
+	// `pending` carries the address as well as the id, because two of the scrubs
+	// below have nothing else to match on and the final UPDATE blanks it. That is
+	// safe rather than lucky: every CTE in a statement reads one snapshot, so the
+	// value here is the pre-erasure one no matter which order the executor runs them
+	// in.
 	// The account row itself, scrubbed in place. It survives, which is the whole
 	// difference between `anonymized_at` and `deleted_at`: foreign keys and audit
 	// records go on pointing at a row that identifies nobody.
@@ -1317,6 +1456,27 @@ type Querier interface {
 	// (it ignores trashed rows), so this check is the enforcement and the index
 	// remains the guarantee against live-row races only.
 	IsAliasTaken(ctx context.Context, arg IsAliasTakenParams) (bool, error)
+	// Which organizations have been cut out of which of these keys (F178).
+	//
+	// The other half of the reach revocation M54 built. An administrator can bar an
+	// account-wide key from their organization and the key's owner had no way to
+	// learn it: the list above reports one reach — pinned or account-wide — and a
+	// credential that had silently stopped resolving into one tenant read exactly as
+	// it did the day before. The audit record that says why is written in the
+	// administrator's organization, which the owner may hold no `audit.read` in.
+	//
+	// Keyed on the ids already listed rather than on the owner, so it is one round
+	// trip after the list and not one per key, and so it cannot return a bar on a
+	// key the caller was not shown.
+	//
+	// The organization's name is joined because an id answers nobody's support
+	// question, and it discloses nothing new: a bar only ever exists on a key whose
+	// owner held an organization-wide membership there when it was written.
+	//
+	// Soft-deleted organizations are not filtered out. The bar is a fact about the
+	// key, it outlives the tenant, and hiding the row would make a key look
+	// unrestricted when it is not.
+	ListAPIKeyOrgRevocations(ctx context.Context, apiKeyIds []uuid.UUID) ([]ListAPIKeyOrgRevocationsRow, error)
 	// Revoked keys are included. "Which keys existed and when were they revoked"
 	// is the question asked after an incident, so they are listed until the reaper
 	// removes them.
@@ -1865,8 +2025,11 @@ type Querier interface {
 	// Two operations that look like one and are deliberately kept apart. **Deletion**
 	// is interactive, immediate and one transaction: it ends every route into the
 	// account and releases the address. **Erasure** is the hourly sweep that scrubs
-	// what deletion could not reach — the rows with no foreign key to `users`, which
-	// exist precisely so a record outlives its subject.
+	// what deletion could not reach — every record *about* this person that ending
+	// the account does not remove. *No foreign key to `users`* was that criterion
+	// while the sweep touched two tables and is not the criterion now: it reaches
+	// four, two of which do carry one. The enumeration lives on
+	// `EraseDeletedAccounts` below, beside the statement, and nowhere else.
 	//
 	// The statements below are the whole of the database side. `04000` adds the one
 	// index the sweep reads and nothing else; the columns have existed, unwritten,
@@ -2455,7 +2618,20 @@ type Querier interface {
 	// both matter: the coarse one decides whether the credential authenticates at
 	// all, this one decides where it lands, and an administrator who cut their
 	// tenant out must not be reachable by a key that simply had nowhere else to go.
-	ResolveOrganizationForAPIKey(ctx context.Context, arg ResolveOrganizationForAPIKeyParams) (uuid.UUID, error)
+	//
+	// **The bar comes back with the answer** (F183). Cutting an organization out of
+	// an account-wide key's reach stopped it *acting* there and not *reading about*
+	// it: `auth.Service.Workspaces` bounded a key by pinned-or-not, and an
+	// account-wide key is by definition not pinned, so the barred organization's
+	// name, slug and workspace ids went on being listed to the revoked credential.
+	// Closing that needs the whole barred set rather than the one organization this
+	// request landed in, and this statement is the only place an account-wide key's
+	// reach is already being resolved — so the set rides back with it as an array
+	// and the read bound costs no query of its own. `barred` is aggregated in its
+	// own CTE so it is computed once rather than per candidate organization, and the
+	// exclusion below reads it instead of repeating the subquery: one expression of
+	// the fact, which is what a reader of a security predicate should have to check.
+	ResolveOrganizationForAPIKey(ctx context.Context, arg ResolveOrganizationForAPIKeyParams) (ResolveOrganizationForAPIKeyRow, error)
 	// The workspace a request acts in, and the only place that question is
 	// answered. Every identity — session, API key, CLI — comes through here.
 	//

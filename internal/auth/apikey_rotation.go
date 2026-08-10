@@ -287,6 +287,44 @@ func (s *APIKeyService) Rotate(ctx context.Context, actor *Identity, in RotateAP
 		return nil, err
 	}
 
+	// The predecessor's reach revocations, carried onto the successor before
+	// anything commits.
+	//
+	// Rotation is the one operation that produces a credential with the
+	// predecessor's authority under a new id, and a bar names an id — so until
+	// this, an administrator's reach revocation was escapable by the credential it
+	// was aimed at, using nothing but its own token. The copy is here rather than
+	// beside the audit record below because it is part of the successor being
+	// correct: a successor that exists for even one request without its
+	// predecessor's bars is the defect, and a failure has to take the whole
+	// rotation with it rather than be logged.
+	//
+	// A no-op in both pinned directions, and by data rather than by a branch —
+	// see the statement, which reads the successor's reach off the row rather
+	// than off `organizationID` here.
+	if err := q.CarryAPIKeyReachRevocations(ctx, dbgen.CarryAPIKeyReachRevocationsParams{
+		SuccessorID: successorID, PredecessorID: pred.ID,
+	}); err != nil {
+		return nil, fmt.Errorf("carry reach revocations to the successor: %w", err)
+	}
+
+	// Read back, inside the same transaction, because the response says what the
+	// successor is and the bars are part of that.
+	//
+	// The alternative — returning an empty array on the reasoning that a key
+	// minted a moment ago cannot have been barred — was what this did, and the
+	// statement above is precisely what makes it false. A caller that rotates and
+	// reads the answer would have been told its credential is unrestricted while
+	// the row saying otherwise had already been written by the same transaction,
+	// and would have had to call `GET /api/v1/api-keys` to find out. Read rather
+	// than assembled from what was just copied, for the reason the statement
+	// itself gives: the rows are the record, and the two pinned directions copy
+	// nothing by data rather than by a branch here.
+	carried, err := q.ListAPIKeyOrgRevocations(ctx, []uuid.UUID{successorID})
+	if err != nil {
+		return nil, fmt.Errorf("read the successor's carried reach revocations: %w", err)
+	}
+
 	n, err := q.MarkAPIKeyRotated(ctx, dbgen.MarkAPIKeyRotatedParams{
 		ID: pred.ID, GraceExpiresAt: &graceEnds, SuccessorID: &successorID,
 	})
@@ -301,7 +339,10 @@ func (s *APIKeyService) Rotate(ctx context.Context, actor *Identity, in RotateAP
 	}
 
 	out := &RotatedAPIKey{
-		CreatedAPIKey: CreatedAPIKey{APIKeyInfo: keyInfo(row), Key: token},
+		CreatedAPIKey: CreatedAPIKey{
+			APIKeyInfo: keyInfo(row, barsByKey(carried)[successorID]),
+			Key:        token,
+		},
 		Predecessor: RotatedPredecessor{
 			ID: pred.ID, Prefix: pred.Prefix, StopsWorkingAt: graceEnds,
 		},

@@ -127,7 +127,13 @@ func (a *MFAAPI) Enrol(w http.ResponseWriter, r *http.Request) {
 		writeMFAProblem(w, r, err)
 		return
 	}
-	svg, err := mfaEnrolmentQR(out.URI)
+	// The empty class rather than qr.Render's default, for the reason
+	// link.Service.RenderQRBySlug passes one: this document leaves the product.
+	// `qr.FluidClass` is two Tailwind utilities that resolve in the dashboard's
+	// own stylesheet and nowhere else, and a JSON body is read by clients that
+	// have never seen it — a `<svg class="max-w-full h-auto">` in `qr_svg` is
+	// markup naming a rule the reader has no way to satisfy.
+	svg, err := mfaEnrolmentQR(out.URI, "")
 	if err != nil {
 		WriteError(w, r, err)
 		return
@@ -143,16 +149,27 @@ func (a *MFAAPI) Enrol(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// mfaEnrolmentQR draws the otpauth URI.
+// mfaEnrolmentQR draws the otpauth URI, with the class its consumer asks for.
 //
 // The default style, because there is nothing to brand here — this picture is
 // looked at once, by one person, for about four seconds. `qr.MaxContent` is 1024
 // and an otpauth URI for this product is around 130 bytes, so the bound is
-// comfortable rather than close; it is checked by qr.Render regardless, which is
-// why a length check here would be a second enumeration of the same limit.
-func mfaEnrolmentQR(uri string) ([]byte, error) {
+// comfortable rather than close; it is checked by qr.RenderClass regardless,
+// which is why a length check here would be a second enumeration of the same
+// limit.
+//
+// **The class is the caller's because the two callers are not the same kind of
+// thing**, and one function serving both is how the page's class ended up in an
+// API body. The dashboard inlines this into `/account/mfa` and wants
+// `qr.FluidClass`, which is what stops a 456px code taking a 360px viewport
+// sideways (F184). `POST /api/v1/auth/mfa/enrol` returns it as `qr_svg` to a
+// client that has never seen this product's stylesheet, and passes the empty
+// string — the same call link.Service.RenderQRBySlug makes for the downloaded
+// file, for the same stated reason: a document that leaves the product carries
+// nothing that only resolves here.
+func mfaEnrolmentQR(uri, class string) ([]byte, error) {
 	style, _ := qr.Style{}.Normalize()
-	return qr.Render(uri, style)
+	return qr.RenderClass(uri, style, class)
 }
 
 type mfaConfirmRequest struct {

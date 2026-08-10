@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -18,15 +19,44 @@ import (
 // `<pre>` is as wide as its longest line, so at 360px each one either scrolls
 // inside a box of its own or drags the whole document sideways with it.
 //
+// **And since F184, every `<svg>` that states a width past the viewport.** That
+// one is not a tag, it is a tag with an attribute on it: an `<svg>` sized by
+// class reflows and an `<svg>` carrying `width="488"` does not, and the
+// difference is readable from the markup. It is here because it stopped being
+// hypothetical — `/account/mfa` reached 174px past a 360px viewport, measured in
+// Chromium on 2026-08-09, and was the one page in the dashboard that did. The
+// answer this one accepts is a second one: `max-w-full` on the element itself,
+// which shrinks it, as well as an ancestor that scrolls. A QR code inside a
+// scrolling box is a QR code somebody has to drag into view before they can
+// photograph it, so the shrink is the right answer for it and the scan must not
+// insist on the wrong one.
+//
 // **What it does not enforce, stated rather than implied.** M46's bullet says
 // "any element that can exceed the viewport", and that set cannot be enumerated
-// from markup: a flex row of six controls, an unbroken URL in a table cell and a
-// fixed-width SVG all can, and none of them is distinguishable here from markup
-// that is fine. The milestone's own risk section is where this narrowing is
-// licensed — narrow the bullet to what the scan checks and say what is left
-// over, never the other way round. What is left over is the header bar, which
-// has its own assertion in TestTheHeaderCannotPushThePageSideways, and
-// everything that reflows on its own, which is text.
+// from markup: a flex row of six controls and an unbroken URL in a table cell
+// both can, and neither is distinguishable here from markup that is fine. The
+// milestone's own risk section is where this narrowing is licensed — narrow the
+// bullet to what the scan checks and say what is left over, never the other way
+// round. What is left over is the header bar, which has its own assertion in
+// TestTheHeaderCannotPushThePageSideways, and everything that reflows on its
+// own, which is text.
+//
+// *(A fixed-width SVG was in that list, named by the amendment that narrowed
+// M46's bullet at its reopening and two milestones before M53 added one. The
+// owner's answer to F184 was both halves — constrain the element and make the
+// scan able to see it — so it has moved up into what is enforced.)*
+//
+// **The width the scan reads is the one in the markup, and for the QR codes that
+// markup comes out of internal/qr rather than a template.** The fixtures carry
+// what that package emits, class attribute and all, exactly as the thumbnail
+// fixture carries ui.QRThumbClass — and they name `qr.FluidClass` rather than
+// spelling it, so a fixture cannot drift from the emitter and leave this scan
+// claiming something about a page it is no longer rendering. The import is a
+// test file's: internal/ui's shipped code depends on nothing outside the
+// standard library, internal/qr does not import internal/ui, and the
+// stdlib-only rule is about Node, a CDN and the CSP rather than about the Go
+// import graph. internal/qr asserts its own half in
+// TestAnInlinedCodeFitsTheBoxItIsDrawnInto.
 //
 // Over the rendered pages rather than over the template sources, because a table
 // and the container that wraps it need not be in the same file: links_table.html
@@ -48,6 +78,23 @@ var scrollsItself = map[string]bool{
 
 // wideElements are the two tags that cannot reflow.
 var wideElements = map[string]bool{"table": true, "pre": true}
+
+// phoneViewport is the width the whole scan is written against: the 360px M46
+// measured at, and the 360px F184 was measured at three milestones later.
+const phoneViewport = 360
+
+// statedWidth reads a `width="N"` presentation attribute in pixels, or 0 for a
+// tag that states none.
+//
+// Pixels only, deliberately: `width="100%"` is an element that reflows and
+// `width="12em"` is not something this codebase writes. Anything that is not a
+// bare integer is left to the ancestor rules, which is where an element nobody
+// has measured belongs.
+var statedWidth = regexp.MustCompile(`\bwidth="(\d+)"`)
+
+// boundsItself matches the utilities that stop a fixed-width element reaching
+// past the box it is drawn into. Whole class names, on scrollsItself's reasoning.
+var boundsItself = map[string]bool{"max-w-full": true}
 
 // containers are the tags this scan tracks as possible scroll ancestors.
 //
@@ -93,6 +140,25 @@ func TestWideElementsScrollInsideTheirOwnContainer(t *testing.T) {
 			var stack []string // opening tags of the tracked ancestors
 			for _, m := range anyTag.FindAllStringSubmatch(rec.Body.String(), -1) {
 				closing, name, attrs := m[1] == "/", strings.ToLower(m[2]), m[3]
+
+				// F184. Before the container filter, because an <svg> is not one
+				// and never becomes an ancestor this scan tracks — the package's
+				// icons self-close their children in a dozen shapes, which is the
+				// reason `containers` is a whitelist in the first place.
+				if name == "svg" && !closing {
+					if px := widthOf(attrs); px > phoneViewport &&
+						!bounded(attrs) && !scrolls(stack) {
+						t.Errorf("%s renders an <svg> %dpx wide that nothing bounds:\n  %s\n\n"+
+							"At %dpx it reaches past the viewport and takes the whole "+
+							"document sideways with it, which is what /account/mfa did "+
+							`by 174px. Put max-w-full h-auto on the element — a code `+
+							"scales, its width attribute is only an intrinsic size — or, "+
+							`if it must keep that size, wrap it in `+
+							`<div class="overflow-x-auto">.`,
+							page, px, strings.TrimSpace(m[0]), phoneViewport)
+					}
+				}
+
 				if !containers[name] {
 					continue
 				}
@@ -131,20 +197,49 @@ func TestWideElementsScrollInsideTheirOwnContainer(t *testing.T) {
 // own horizontal scroll.
 func scrolls(chain []string) bool {
 	for _, tag := range chain {
-		at := strings.Index(tag, `class="`)
-		if at < 0 {
-			continue
-		}
-		rest := tag[at+len(`class="`):]
-		end := strings.Index(rest, `"`)
-		if end < 0 {
-			continue
-		}
-		for _, c := range strings.Fields(rest[:end]) {
+		for _, c := range classesOf(tag) {
 			if scrollsItself[c] {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// bounded reports whether an element's own classes stop it reaching past its
+// container (F184).
+func bounded(attrs string) bool {
+	for _, c := range classesOf(attrs) {
+		if boundsItself[c] {
+			return true
+		}
+	}
+	return false
+}
+
+// widthOf is the pixel width a tag states on itself, or 0.
+func widthOf(attrs string) int {
+	m := statedWidth.FindStringSubmatch(attrs)
+	if m == nil {
+		return 0
+	}
+	px, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0
+	}
+	return px
+}
+
+// classesOf is the class list written on a tag, or on the attributes of one.
+func classesOf(tag string) []string {
+	at := strings.Index(tag, `class="`)
+	if at < 0 {
+		return nil
+	}
+	rest := tag[at+len(`class="`):]
+	end := strings.Index(rest, `"`)
+	if end < 0 {
+		return nil
+	}
+	return strings.Fields(rest[:end])
 }

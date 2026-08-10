@@ -23,11 +23,24 @@
        expressible, and a control that let somebody believe otherwise would
        surprise in the direction of granting more than they meant. */}}
   <p class="mt-1 text-sm text-muted">This <span class="font-medium text-ink">adds</span> a role in one workspace on top of what they already have. It never takes anything away, and it cannot narrow somebody to a single workspace.</p>
+  {{/* The three selects ask the server what this particular grant would do, on
+       change, and swap the note below (F163). The paragraph above is true of
+       every grant and therefore says nothing about the one being made — which
+       is how "Access granted. It adds to whatever they already had" came to be
+       shown for a grant that added nothing at all.
+
+       hx-get and hx-select, the shape the links filters use: one handler
+       renders the page and htmx takes the fragment out of it. Without script
+       the note is still correct for what the controls show on arrival, because
+       that state is server-rendered too. */}}
   <form method="post" action="/members" class="mt-4 space-y-4">
     <div class="grid gap-4 sm:grid-cols-3">
       <div>
         <label for="user_id" class="block text-sm font-medium text-ink">Member</label>
-        <select id="user_id" name="user_id" class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm">
+        <select id="user_id" name="user_id"
+                hx-get="/members" hx-trigger="change" hx-include="closest form"
+                hx-target="#grant-note" hx-select="#grant-note" hx-swap="outerHTML"
+                class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm">
           {{range .GrantTargets}}
           <option value="{{.UserID}}">{{.Email}} ({{.Role}})</option>
           {{end}}
@@ -36,7 +49,10 @@
       </div>
       <div>
         <label for="workspace_id" class="block text-sm font-medium text-ink">Workspace</label>
-        <select id="workspace_id" name="workspace_id" class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm">
+        <select id="workspace_id" name="workspace_id"
+                hx-get="/members" hx-trigger="change" hx-include="closest form"
+                hx-target="#grant-note" hx-select="#grant-note" hx-swap="outerHTML"
+                class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm">
           {{range .OrgWorkspaces}}
           <option value="{{.ID}}">{{.Name}}</option>
           {{end}}
@@ -45,14 +61,28 @@
       </div>
       <div>
         <label for="grant_role" class="block text-sm font-medium text-ink">Role there</label>
-        <select id="grant_role" name="role" class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm">
+        {{/* The lowest role the actor may assign is what this arrives on
+             (D173, F182). With nothing selected the browser takes the first
+             option of a list ordered most powerful first, so an owner who
+             touched only the address granted owner. */}}
+        <select id="grant_role" name="role"
+                hx-get="/members" hx-trigger="change" hx-include="closest form"
+                hx-target="#grant-note" hx-select="#grant-note" hx-swap="outerHTML"
+                class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm">
           {{range .RoleOptions}}
-          <option value="{{.Slug}}">{{.Name}}</option>
+          <option value="{{.Slug}}"{{if eq $.Form.Role .Slug}} selected{{end}}>{{.Name}}</option>
           {{end}}
         </select>
         {{template "field_error" (index .FieldErrors "role")}}
       </div>
     </div>
+    {{if .GrantNote}}
+    <p id="grant-note" class="text-sm {{if .GrantNoteWarn}}rounded-md border border-warn-line bg-warn-soft px-3 py-2 text-warn-ink{{else}}text-muted{{end}}">{{.GrantNote}}</p>
+    {{else}}
+    {{/* The swap target has to exist even when there is nothing to say, or the
+         first change has nowhere to land. */}}
+    <p id="grant-note" class="hidden"></p>
+    {{end}}
     <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Grant access</button>
   </form>
 </div>

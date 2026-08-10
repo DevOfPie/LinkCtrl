@@ -91,8 +91,23 @@
           <td class="py-3 pr-4 font-mono text-xs text-muted">{{.Prefix}}…</td>
           {{/* Three reaches, two columns' worth of state: pinned to a workspace,
                pinned to an organization, or account-wide. Spelled out rather
-               than left to a blank, because they are different credentials. */}}
-          <td class="py-3 pr-4 text-muted">{{if not .OrgWide}}Workspace{{else if .OrganizationID}}Organization{{else}}Account{{end}}</td>
+               than left to a blank, because they are different credentials.
+
+               The cut-out organizations sit under the reach rather than in a
+               column of their own, because that is what they qualify: "Account"
+               on its own is a claim about where the key works, and it stopped
+               being the whole truth the moment an administrator revoked its
+               reach into one tenant (F178). Nothing is drawn for the keys that
+               have none, which is all of them until somebody does. */}}
+          <td class="py-3 pr-4 text-muted">
+            {{if not .OrgWide}}Workspace{{else if .OrganizationID}}Organization{{else}}Account{{end}}
+            {{if .RevokedOrganizations}}
+            <div class="mt-0.5 text-xs text-subtle">
+              cut out of
+              {{range $i, $r := .RevokedOrganizations}}{{if $i}}, {{end}}{{$r.OrganizationName}}{{end}}
+            </div>
+            {{end}}
+          </td>
           <td class="py-3 pr-4">
             {{range .Scopes}}<span class="mr-1 rounded bg-sunken px-1.5 py-0.5 text-xs text-muted">{{.}}</span>{{end}}
           </td>

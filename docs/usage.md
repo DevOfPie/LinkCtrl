@@ -463,8 +463,14 @@ answered with `H`** rather than refused, because this endpoint replaces the
 style whole and an omitted `level` means its default — refusing would fail a
 request that only changed a colour. The response and every later `GET` report
 what was applied, so nothing is silent. Removing the logo leaves the level at H;
-dropping it back would redraw a code that may already be printed. H packs the
-code tighter, so `size` can grow when you add a logo.
+dropping it back would redraw a code that may already be printed. H packs more
+modules into the symbol, and **the drawn size is held where it was** rather than
+allowed to grow with it: `margin` and `scale` are re-fitted against the larger
+symbol so the picture stays at the size the code was already drawn at, which is
+what stops a code near the raster ceiling from crossing it and refusing to
+download. Whole modules are the unit, so the result is the nearest achievable
+size rather than always the identical integer. This paragraph said `size` can
+grow when you add a logo until 0.3.0.
 
 There is no operation that reads a logo back: `has_logo` on the code says
 whether one is there, and both picture endpoints draw it.
@@ -506,13 +512,20 @@ these visits came from a QR code at all*, which is a different question from
 Whether a QR code is scanned or its URL is typed cannot be distinguished — the
 label travels in the URL, and anybody can type it.
 
-Country breakdowns need a GeoIP database, which cannot be shipped in the image —
-see [deployment.md](deployment.md#optional-geographic-analytics). Without one the page says the data is
-unavailable rather than drawing a blank chart, and the map is not drawn at all: a
-world coloured entirely "unknown" would be a picture of nothing that looks like a
-picture of something. Region and city are not stored even with a database
-configured: nothing shows them, and city plus a timestamp is close to a location
-history.
+Resolving a country needs a GeoIP database, which cannot be shipped in the image
+— see [deployment.md](deployment.md#optional-geographic-analytics). **What is
+drawn follows the data rather than the setting**: a link with countries in the
+window you are looking at gets the ranked list and the map whether or not a
+database is configured now, because the rows are already resolved and a database
+is only how new clicks join them. Where there is neither — no country in *that
+window* and no database — the page says the data is unavailable rather than
+drawing a blank chart, and the map is not drawn at all: a world coloured entirely
+"unknown" would be a picture of nothing that looks like a picture of something.
+The window is part of the test, so a link whose countries are all older than the
+one you have selected meets the sentence until you widen it. With a database and no
+clicks yet, it is the ordinary *no data yet* and not a claim about the instance.
+Region and city are not stored even with a database configured: nothing shows
+them, and city plus a timestamp is close to a location history.
 
 The map shades each country by its share of the link's clicks across five bands,
 and every shape carries its exact figure — hover it, or use the *Exact numbers*
@@ -1466,6 +1479,16 @@ that vanishes with the person is not a record. An hourly job replaces your name
 and address in them with `deleted account`, and clears the address, name and
 password from your account row. Access does not wait for that job; only what is
 left of your name does.
+
+The same job reaches three records that are **about** you but belong to somebody
+else, and it reaches them because a record you cannot see is still a record with
+your address in it: the invitation you joined by, which your organization's
+invitation list would otherwise go on showing in full; the notification that told
+whoever invited you that you had accepted, in the sentence they read as well as in
+the detail behind it; and the list of outgoing administrators on an
+instance-principal handover, if you were one. An invitation still **outstanding**
+to your address is deliberately left alone — it is an offer to an address, and
+your address became available again the moment you deleted the account.
 
 **What is not deleted at all: your links.** They belong to the workspace, and the
 workspace outlives you leaving it — as do the QR codes, folders and campaigns

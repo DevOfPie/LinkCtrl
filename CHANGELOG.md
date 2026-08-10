@@ -27,6 +27,10 @@ migrations run at boot.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.3.0] - 2026-08-10
+
 ### Added
 
 - **A rolling deploy of every replica, under load, costs nothing — and a single
@@ -194,6 +198,13 @@ migrations run at boot.
   reached every key you owned — so a key you could not see, you could still
   delete. Both now answer the same question.
 
+  **`GET /api/v1/workspaces` answers an account key with every organization it
+  reaches**, which reverses what 0.2.0 changed. That release narrowed the
+  endpoint to one organization because a key was issued for one and reading
+  about the others disclosed tenants it could not act in. An account key acts in
+  them, so those are the tenants it is told about — minus any an administrator
+  has cut it out of. A **pinned** key still sees one, for the original reason.
+
   **An administrator can stop an account key in their organization without
   destroying it.** Holding `apikeys.write` organization-wide, deleting somebody
   else's account key cuts your organization out of its reach: the key keeps
@@ -295,17 +306,24 @@ migrations run at boot.
   queue keep their rows — they are records of what happened, and one that
   vanishes with its subject is not a record — and an hourly pass replaces the
   name and address in them with the fixed label `deleted account`, then clears
-  the account row's own fields. Access does not wait for that pass; only the
-  residue does.
+  the account row's own fields. It reaches two more tables for the same reason:
+  the invitations you redeemed and the notification your inviter received when
+  you accepted, both of which belong to somebody else and so were never yours to
+  delete. Access does not wait for that pass; only the residue does.
 
   **Two consequences worth knowing before you rely on it.** The surviving actor
   id is what keeps an erased person's entries correlated with each other, and
   that makes it pseudonymous rather than anonymous data: the residue identifies
   nobody from inside this instance, and anybody holding an external
-  id-to-person mapping can still re-identify the actor. And an address held
-  inside an audit record's detail — the invited address on an invitation
-  record, for instance — is not reached by the sweep. `docs/SECURITY.md` states
-  both.
+  id-to-person mapping can still re-identify the actor. And **two addresses are
+  deliberately left**: an *outstanding* invitation addressed to you, because
+  that is an offer to an address rather than a record of a person and the
+  address became reusable the moment the account was deleted; and a queued mail
+  message not yet purged, which is bounded by the mail retention schedule but
+  can outlive the account on an instance whose relay is down. An address in the
+  **detail** of an audit record *is* reached — this paragraph said it was not
+  while the release note below said it was, and the code is what settles it.
+  `docs/SECURITY.md` states all of it.
 
   **Reusing a deleted address is correct, and will look wrong the first time.**
   A new account can be created at an address that appears in old audit entries
@@ -619,6 +637,24 @@ migrations run at boot.
 
 ### Fixed
 
+- **A link's country map and country list now follow the data instead of the
+  GeoIP setting.** An instance that had accumulated country history and then
+  removed — or had never configured — a GeoIP database was shown *"Geographic
+  data is unavailable: no GeoIP database is configured"* over rows that were
+  present and correct, on both surfaces, because each was suppressed on the
+  setting rather than on whether anything had resolved. 0.2.0's note that the
+  map is not drawn at all without a database was true of 0.2.0 and is not true
+  now.
+
+  The sentence is reached only when nothing resolved **for that link, in the
+  window on screen** and nothing can resolve. The test is per link and per
+  window rather than per instance: a link whose countries all fall outside the
+  selected window meets the sentence until the window is widened. Configuration
+  still counts on its own, so a database with no clicks yet keeps the ordinary
+  *no data yet* rather than a claim about the instance. **A geographic routing rule is deliberately
+  unchanged**: whether one can ever match is a genuine question about the
+  database, and the rule form still says so.
+
 - **An unreachable mail relay no longer keeps the whole server dark at every
   boot.** With `LINKCTRL_SMTP_HOST` set to something that does not answer, the
   reachability probe ran before the HTTP listener bound, so nothing was
@@ -643,6 +679,174 @@ migrations run at boot.
   breakpoint and every table now scrolls inside its own box. Measured in Chromium
   at 360, 640 and 1280px, before and after, and held by a test that renders every
   page and fails any `<table>` or `<pre>` that nothing scrolls.
+
+- **Erasing an account now reaches four places it did not.** The hourly pass
+  already replaced the actor's name everywhere it was snapshotted. It now also
+  removes the address from the **detail** of audit records that name the erased
+  person as the subject of somebody else's action — the invitation lifecycle, the
+  three membership actions and the two instance-level ones — from the **list** of
+  outgoing principals on an instance-principal move, which is the one record that
+  stored addresses as an array rather than a single value; blanks the address on
+  the invitations that account **redeemed**; and clears it from the
+  **notification the inviter received** when the account accepted their
+  invitation, in the sentence as well as in the detail. The invitation one
+  mattered most: `/invites` lists every invitation an organization ever issued,
+  redeemed included, so an account deleted, erased and tombstoned everywhere else
+  was still named in full on an ordinary dashboard page, behind no special
+  permission and expired by no setting. The notification is the same shape one
+  table over — it belongs to the person who sent the invitation, so removing the
+  erased account's own notifications never touched it, and nothing expires it. An
+  **outstanding** invitation to the same address is deliberately left alone — it
+  is an offer to an address, which became reusable the moment the account was
+  deleted.
+
+- **A key cut out of an organization is no longer told about it, and its owner
+  now is.** Revoking an account-wide key's reach into one organization stopped it
+  *acting* there and not *reading* about it: `GET /api/v1/workspaces` went on
+  listing that organization's name, slug and workspace ids to the very credential
+  it had been barred from. It no longer does. And the key's owner, who could
+  previously watch a credential stop working in one tenant with no page saying
+  why — the audit record explaining it is written in an organization they may not
+  be able to read — now sees which organizations a key has been cut out of, on
+  their own key list. **The API responses for a key gained
+  `revoked_organizations`**, which is additive.
+
+- **A key cut out of an organization can no longer rotate its way back in.**
+  Reach revocations were keyed to the key's id and nothing carried them to a
+  successor, so the holder of a barred credential could call the rotation
+  endpoint — which authenticates with the key's own token and needs nobody signed
+  in — and get a replacement that reached the tenant they had been cut out of,
+  acting and reading. Bars now travel with the rotation, inside the same
+  transaction, keeping the date and the administrator who set them rather than
+  being restamped by whoever rotated. The rotation's own response reports them —
+  `revoked_organizations` on `POST /api/v1/api-keys/rotate` is the successor's
+  bars, not an empty array — so a caller learns what its new credential cannot
+  reach from the call that minted it. **This was found while fixing the two rows
+  above and was not one of them**; it is named here because an administrator who
+  cut a key out before upgrading was relying on something that did not hold.
+
+- **The domains page no longer says a hostname is verified and unverified in one
+  response.** Pressing *Check DNS* on a domain inside its grace window answered
+  *"is not verified"* directly above a badge reading *"Verified — links are
+  served here"*. Both were describing something real — the check had failed and
+  the hostname was still being served — and the page now says that instead: the
+  check failed, links are still served, and here is when they stop. A second,
+  narrower case is gone with it: between grace expiry and the next hourly pass
+  the page read *"stop being served at"* a time in the past.
+
+- **A verification recorded once is recorded once.** Two replicas running the
+  domains pass at the same moment could both write a `domain.verified` audit
+  record for one verification. Reproduced five runs of five, now zero. The same
+  was true of the *Verify* button on the Domains page — two administrators
+  pressing it at once, or one double-click — and both paths now decide from what
+  the write returned rather than from a row read a DNS round trip earlier. The
+  hostname was always correctly verified; what was wrong was the count.
+
+- **Every bar chart said its peak was the top of its axis.** The dashboard read
+  *peak 5,000/day* on a series whose true maximum was 2,351 — the axis is rounded
+  up to a readable number, and that rounded number was being presented as an
+  observation. It now reports the reading. The gridlines also carry their values
+  now, which is what the space under every chart in this product has been
+  reserved for since it was written.
+
+- **Granting somebody a role they already outrank says so.** The confirmation
+  read *"Access granted. It adds to whatever they already had"* even when the
+  added role's permissions were a subset of what the person already held, so
+  nothing was added. The grant still happens — an org editor who is also a
+  workspace admin is a real and useful arrangement — but the message now
+  distinguishes the two, and the form warns before you press it rather than
+  after.
+
+- **Neither form that hands out access starts on the most powerful role.** The
+  invitation form and *give somebody access* both rendered their roles strongest
+  first with none marked, so a browser selected the first one: filling in an
+  address and pressing the button, without touching the select, sent an **owner**
+  invitation. Both now start on the lowest role. Nothing about what an actor may
+  offer has changed; the least deliberate path through the form is no longer the
+  most powerful one.
+
+- **The password-reset page no longer promises mail it is about to refuse.** On
+  an instance with no relay it read *"We send a link to your address"* directly
+  above *"This instance cannot send mail"*.
+
+- **A refused QR style leaves you where you were typing.** Opening the QR panel
+  at its own address and entering a size out of range answered with the link page
+  instead of the panel, so the reader had to find their way back to the form they
+  were using. The refusal is unchanged — same message, same status, nothing
+  stored — and it now arrives on the page it was typed on.
+
+- **Uploading a logo no longer breaks a code's PNG download.** A logo forces
+  error correction to level H, which makes the symbol bigger; the stored size was
+  carried over unchanged, so a code already near the 2000px ceiling was pushed
+  past it and its PNG started refusing. The size is now re-fitted to the larger
+  symbol, so the picture stays the size you asked for. The payload does not
+  change, so a code already printed still scans.
+
+- **`/account/mfa` no longer scrolls sideways on a phone.** The enrolment QR was
+  emitted at a fixed pixel width and overflowed a 360px viewport by 174px — the
+  one dashboard page that still did.
+
+### Notes for operators
+
+- **One new secret, and it is optional.** `LINKCTRL_MFA_SECRET_KEY`, at least 32
+  bytes, encrypts each account's TOTP secret at rest. **Unset means this instance
+  has no second factor at all** — nobody can enrol and the account page does not
+  offer it, which is exactly what every instance before this release was, so
+  omitting it is a supported configuration rather than a broken one. It is not
+  the API-key pepper and must not be the same value. Losing it locks every
+  enrolled account out of its authenticator and no further: recovery codes are
+  SHA-256 hashes and this key is not involved in them, so the route back is a
+  recovery code, then turn the second factor off and enrol again.
+- **The update check is on by default, and it does nothing until somebody is
+  asked and says yes.** A fresh instance is asked on the setup form. **An
+  instance upgrading into 0.3.0 has no first run to be asked at, so it is asked
+  on the dashboard at the first sign-in by an account holding `instance.admin`,
+  once.** Until that is answered no request is made. `LINKCTRL_UPDATE_CHECK=false`
+  refuses it outright and wins over the answer; so does never answering. What
+  leaves is a daily `GET` to GitHub's releases API carrying this server's source
+  address and the running version in the `User-Agent` and nothing else. This is
+  the fifth thing that leaves a LinkCtrl instance and `docs/SECURITY.md`
+  enumerates all five.
+- **An API key with no pin is now account-wide, and that is a behaviour change
+  for one request shape.** `api_keys.organization_id` becomes nullable: NULL is
+  account-wide, non-NULL is pinned. **A caller sending `org_wide: true` and
+  nothing else got an organization-scoped key in 0.2.0 and gets an account-wide
+  one in 0.3.0.** No issued key changed reach — dropping NOT NULL writes no rows,
+  and every key that exists today keeps the organization it was issued for. An
+  administrator can now cut *their own* organization out of somebody's
+  account-wide key without destroying a credential that is not theirs; that is a
+  separate action from a revoke, separately audited.
+- **Deleting an account is immediate; erasing it takes up to an hour.** Access
+  ends inside the deleting transaction. The hourly housekeeping pass then scrubs
+  the identifying fields and **keeps the row**, so foreign keys and audit records
+  go on pointing at something and the actor's name becomes a constant tombstone.
+  The surviving `user_id` is pseudonymous rather than absent. Logged as
+  `deleted accounts erased` with a count and no identifier; restarting the app
+  runs the pass immediately rather than waiting.
+- **Account recovery needs `SMTP_HOST` and says so out loud.** With no relay a
+  reset request answers `503 no-mailer` from the API and states the operator's
+  route on the page. It does not queue and there is nothing else to switch on.
+- **`/readyz` is now a contract you can configure a load balancer against.**
+  `503` means take this replica out of rotation, `200` means keep it, and
+  `degraded` is a `200` — the word is diagnostic and the code is the instruction.
+  If you run several replicas, `LINKCTRL_SHUTDOWN_DRAIN_DELAY` (default `5s`)
+  must outlast your balancer's check interval × threshold, and it is the number
+  that decides whether a deploy costs nothing or costs retries.
+- **A single container is still tested on every push.** Nothing in the
+  high-availability work is required to run one, and `make single-instance`
+  drives the whole surface on Postgres alone to keep that true.
+- **Seven additive migrations**, run at boot as usual: several QR codes per link,
+  the QR logo column, password-reset tokens, account erasure, the second factor,
+  the API key's account reach, and the instance's update-check setting. No
+  backfill, no destructive step, and no new permission.
+- **`LINKCTRL_UPLOAD_RATE_PER_MIN`** (default 30) is a new bucket for the one
+  endpoint that now accepts a file. It is *on top of* `API_RATE_PER_MIN` rather
+  than instead of it, and shared through Redis like the others.
+- **One log line changed order.** The SMTP relay probe moved into a goroutine, so
+  `smtp relay reachable` now arrives after `http server listening` rather than
+  before it. Nothing between the two ever read its result; what this buys is that
+  an unreachable relay no longer keeps the whole server dark for the length of
+  `SMTP_TIMEOUT` at every boot.
 
 ## [0.2.0] - 2026-08-06
 
@@ -2614,6 +2818,7 @@ all in [Plan.md](Plan.md#known-limitations) with their consequences:
   and a registration creates a new isolated workspace rather than adding a member
   to yours. Invitations, and a signup form worth having, are Phase 2.
 
-[Unreleased]: https://github.com/DevOfPie/LinkCtrl/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/DevOfPie/LinkCtrl/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/DevOfPie/LinkCtrl/releases/tag/v0.3.0
 [0.2.0]: https://github.com/DevOfPie/LinkCtrl/releases/tag/v0.2.0
 [0.1.0]: https://github.com/DevOfPie/LinkCtrl/releases/tag/v0.1.0

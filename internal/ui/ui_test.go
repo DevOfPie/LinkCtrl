@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DevOfPie/LinkCtrl/internal/qr"
 )
 
 // identityStub satisfies what the layout and pages ask of an identity — Can,
@@ -80,6 +82,41 @@ func twoWorkspaces() []map[string]any {
 			"Current": false, "Default": false,
 		},
 	}
+}
+
+// linkForm mirrors httpx.linkFormData field for field, and the types are the
+// point of it (F167).
+//
+// The link page's edit form was fixtured as a `map[string]string`. A missing key
+// in one yields `""`, which `{{if}}` reads as false — so `ForwardQuery`,
+// `ForwardPath`, `HasPassword` (twice), `ClearPassword`, `OneTime` and
+// `RequireSignature` took their else limb on every run of every test in this
+// package, and the *Remove the password* control they gate was never drawn at
+// all. Counted on 2026-08-07 against the page this fixture renders: `Remove the
+// password` 0 times, `Set — type to replace` 0, and each of the three `checked`
+// attributes 0. Six branches on the product's largest form, on a page whose
+// tests otherwise scan every colour and every wide element it draws.
+//
+// Same class as F20 — a fixture whose type differs from the one production
+// builds, so the template is exercised in a shape nothing ships. A struct here
+// also fails loudly where the map failed silently: a field renamed on one side
+// stops compiling instead of quietly rendering nothing.
+//
+// It cannot be `httpx.linkFormData` itself. `internal/httpx` imports this
+// package, so naming it here would be an import cycle, and `ui` depends on
+// nothing outside the standard library by design.
+type linkForm struct {
+	URL, Alias, Title, Description, ExpiresAt, Tags string
+	ForwardQuery                                    bool
+	ForwardPath                                     bool
+	BotBlocking                                     string
+	FolderID                                        string
+	CampaignID                                      string
+	HasPassword                                     bool
+	ClearPassword                                   bool
+	MaxClicks                                       string
+	OneTime                                         bool
+	RequireSignature                                bool
 }
 
 // pageData returns representative data for every page, so the test renders
@@ -559,16 +596,64 @@ func pageData(t *testing.T) map[string]any {
 			"GeoAvailable":      true,
 			"GeoBase":           "/links/0198c9c5-0000-7000-8000-000000000001?days=30",
 			"GeoList":           "/links/0198c9c5-0000-7000-8000-000000000001?days=30#countries",
-			"GeoUnavailable":    GeoUnavailable,
-			"Form": map[string]string{
-				"URL": "https://example.com/x", "Alias": "demo", "Title": "A demo",
-				"Description": "", "ExpiresAt": "", "Tags": "launch",
-				"CampaignID": "0198c9c5-0000-7000-8000-000000000050",
+			// **Empty, because that is what the handler would have set** (F192).
+			// The fixture carried the sentence *and* GeoAvailable, which since
+			// F160 is a pair production cannot build: the sentence is reached only
+			// when nothing resolved in the window and nothing can resolve, and
+			// Countries above holds four resolved rows with clicks on them. It was harmless only
+			// because a non-empty breakdown never renders its empty state, so the
+			// contradiction sat one branch away from being visible. The sentence
+			// has its own coverage in choropleth_test.go, which builds the state
+			// it belongs to instead of borrowing this one.
+			"GeoUnavailable": "",
+			// A struct, and every boolean on: see linkForm above for what a
+			// map[string]string did to the six branches these fields gate (F167).
+			//
+			// **On rather than off**, because the "on" limb is the one with markup
+			// in it — three `checked` attributes, a different placeholder, and the
+			// *Remove the password* control, which does not exist at all when
+			// HasPassword is false. Every scan in this package reads this fixture,
+			// so drawing the gates set is what puts that markup in front of the
+			// theme check, the overflow check and the fold measurement. The other
+			// limb is not left unexercised: TestEveryGateOnTheEditFormDrawsBothStates
+			// renders it, and the third state ClearPassword needs.
+			"Form": linkForm{
+				URL: "https://example.com/x", Alias: "demo", Title: "A demo",
+				Description: "", ExpiresAt: "", Tags: "launch",
+				FolderID:   "0198c9c5-0000-7000-8000-000000000041",
+				CampaignID: "0198c9c5-0000-7000-8000-000000000050",
 				// The limit the blind task's owner was trying to set, beside the
 				// 416 already spent on Link.ClicksConsumed. Both numbers, because
 				// the sentence M47 replaced two elements with names both and
 				// TestTheClickLimitNamesTheTotalAndWhatIsSpent reads it.
-				"MaxClicks": "466",
+				MaxClicks:    "466",
+				ForwardQuery: true,
+				ForwardPath:  true,
+				// A password that is set, and a request to remove it that has come
+				// back with the form — which is what a validation error on any other
+				// field does. It is the only state in which the checkbox renders
+				// ticked, and it is the innermost of the six branches.
+				HasPassword:      true,
+				ClearPassword:    true,
+				OneTime:          true,
+				RequireSignature: true,
+			},
+			// **The folder select, which no fixture in this package rendered**
+			// (F192). link_edit.html draws it only `{{if .FolderOptions}}`, and the
+			// only FolderOptions in this file is on the `links` page's filter
+			// panel — a different template — so the whole control, the option loop
+			// and the `{{if eq .Form.FolderID ""}}` branch inside it were
+			// unreachable by the theme scan, the overflow scan and the fold
+			// measurement alike. F167's map-yields-empty-string, one key sideways:
+			// an absent slice is an empty range and an empty range is markup that
+			// never renders.
+			//
+			// Filed rather than unfiled, and selected to match, because the
+			// campaign select below is drawn on identical terms and the fixture
+			// that gave one a chosen option and the other none would be asserting
+			// the asymmetry the template does not have.
+			"FolderOptions": []map[string]any{
+				{"ID": "0198c9c5-0000-7000-8000-000000000041", "Label": "‒ Summer", "Selected": true},
 			},
 			// The campaign select and the QR panel (M41). The SVG is a stub
 			// rather than a real code: this test exercises the template, and
@@ -576,7 +661,18 @@ func pageData(t *testing.T) map[string]any {
 			"CampaignOptions": []map[string]any{
 				{"ID": "0198c9c5-0000-7000-8000-000000000050", "Label": "Summer 2026", "Selected": true},
 			},
-			"QRSVG": template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" role="img"></svg>`),
+			// **The attributes qr.Render actually emits, not a bare tag** (F191).
+			// A stub that stated no width was invisible to the overflow scan's
+			// newest assertion — it reads `width="N"` off the element, and there
+			// was nothing to read — so the wrapper below the panel's frame was
+			// checked at one real site and at neither fixture. The numbers are the
+			// stub style's own: a 29-module code with a 4-module quiet zone at 20
+			// pixels a module is 37 spans of 20, which is 740 and past the 360px
+			// viewport the scan measures against. The drawing itself is still
+			// empty; internal/qr is where the encoder is tested.
+			"QRSVG": template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" width="740" ` +
+				`height="740" viewBox="0 0 37 37" shape-rendering="crispEdges" ` +
+				`role="img"></svg>`),
 			// The class is QRThumbClass rather than a copy of it: this stub is what
 			// TestTheEditControlIsReachableWithoutScrolling measures the heading
 			// row's height from, and a fixture free to state a different height
@@ -587,14 +683,15 @@ func pageData(t *testing.T) map[string]any {
 			"QRContent": "http://links.test/demo?src=qr",
 			"QRStyle": map[string]any{
 				"Foreground": "#000000", "Background": "#ffffff",
-				"Level": "M", "Margin": 4, "Scale": 8,
+				"Level": "M", "Margin": 4, "Scale": 20,
 			},
 			// Since M49 the form asks for one number in pixels and no longer
-			// asks for a level, a quiet zone or a module size. 296 is what the
+			// asks for a level, a quiet zone or a module size. 740 is what the
 			// stub style above comes to for a 29-module code, so the fixture is
 			// a state internal/qr could actually produce rather than a number
-			// picked to look plausible.
-			"QRSize":        296,
+			// picked to look plausible — scale 20 is inside qr.MaxScale, and the
+			// size is inside the 64..2000 the form itself declares.
+			"QRSize":        740,
 			"QRMinSize":     64,
 			"QRMaxSize":     2000,
 			"QRStored":      true,
@@ -609,13 +706,13 @@ func pageData(t *testing.T) map[string]any {
 			// is the default code — no slug, and no remove control, because it is
 			// the one every already-printed picture resolves to.
 			"QRCodes": []map[string]any{
-				{"Slug": "", "Label": "", "Name": "The original code", "Size": 296,
+				{"Slug": "", "Label": "", "Name": "The original code", "Size": 740,
 					"Default": true, "Selected": true,
 					"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr",
 					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.svg",
 					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.png",
 					"Clicks":      412, "Counted": true},
-				{"Slug": "k7m2qh4b", "Label": "Autumn poster", "Name": "Autumn poster", "Size": 296,
+				{"Slug": "k7m2qh4b", "Label": "Autumn poster", "Name": "Autumn poster", "Size": 740,
 					"Default": false, "Selected": false,
 					"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=k7m2qh4b",
 					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/k7m2qh4b/image.svg",
@@ -636,8 +733,19 @@ func pageData(t *testing.T) map[string]any {
 		// QRReturn, which is the panel's own route rather than the link page.
 		"link_qr": map[string]any{
 			"Title": "QR code · /demo", "Nav": "links", "Identity": owner(),
-			"Link":  lnk,
-			"QRSVG": template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" role="img"></svg>`),
+			"Link": lnk,
+			// **The attributes qr.Render actually emits, not a bare tag** (F191).
+			// A stub that stated no width was invisible to the overflow scan's
+			// newest assertion — it reads `width="N"` off the element, and there
+			// was nothing to read — so the wrapper below the panel's frame was
+			// checked at one real site and at neither fixture. The numbers are the
+			// stub style's own: a 29-module code with a 4-module quiet zone at 20
+			// pixels a module is 37 spans of 20, which is 740 and past the 360px
+			// viewport the scan measures against. The drawing itself is still
+			// empty; internal/qr is where the encoder is tested.
+			"QRSVG": template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" width="740" ` +
+				`height="740" viewBox="0 0 37 37" shape-rendering="crispEdges" ` +
+				`role="img"></svg>`),
 			// The class is QRThumbClass rather than a copy of it: this stub is what
 			// TestTheEditControlIsReachableWithoutScrolling measures the heading
 			// row's height from, and a fixture free to state a different height
@@ -648,9 +756,9 @@ func pageData(t *testing.T) map[string]any {
 			"QRContent": "http://links.test/demo?src=qr",
 			"QRStyle": map[string]any{
 				"Foreground": "#000000", "Background": "#ffffff",
-				"Level": "M", "Margin": 4, "Scale": 8,
+				"Level": "M", "Margin": 4, "Scale": 20,
 			},
-			"QRSize":        296,
+			"QRSize":        740,
 			"QRMinSize":     64,
 			"QRMaxSize":     2000,
 			"QRStored":      true,
@@ -665,13 +773,13 @@ func pageData(t *testing.T) map[string]any {
 			// is the default code — no slug, and no remove control, because it is
 			// the one every already-printed picture resolves to.
 			"QRCodes": []map[string]any{
-				{"Slug": "", "Label": "", "Name": "The original code", "Size": 296,
+				{"Slug": "", "Label": "", "Name": "The original code", "Size": 740,
 					"Default": true, "Selected": true,
 					"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr",
 					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.svg",
 					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.png",
 					"Clicks":      412, "Counted": false},
-				{"Slug": "k7m2qh4b", "Label": "Autumn poster", "Name": "Autumn poster", "Size": 296,
+				{"Slug": "k7m2qh4b", "Label": "Autumn poster", "Name": "Autumn poster", "Size": 740,
 					"Default": false, "Selected": false,
 					"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=k7m2qh4b",
 					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/k7m2qh4b/image.svg",
@@ -871,8 +979,16 @@ func pageData(t *testing.T) map[string]any {
 			"GrantTargets": []map[string]any{
 				{"UserID": "0198c9c5-0000-7000-8000-00000000001c", "Email": "admin@example.com", "Role": "admin"},
 			},
-			"FieldErrors": map[string]string{},
-			"Notice":      "", "Error": "",
+			// The grant form's own state (M58). Role is the lowest one on offer,
+			// which is what both creation forms arrive on since F182, and the
+			// note is the one the conditioned copy exists for: this fixture's
+			// only target is an organization-wide admin, so granting them editor
+			// in a workspace is the grant that changes nothing.
+			"Form":          map[string]string{"Role": "editor"},
+			"GrantNote":     "admin@example.com already holds admin across every workspace, which reaches everything editor does. This would add a membership to the list and nothing to what they can do.",
+			"GrantNoteWarn": true,
+			"FieldErrors":   map[string]string{},
+			"Notice":        "", "Error": "",
 		},
 		// A workspace the reader may manage and one they may not, plus the
 		// organization form — which only an account holding orgs.create ever
@@ -959,7 +1075,21 @@ func pageData(t *testing.T) map[string]any {
 		"mfa": map[string]any{
 			"Title": "Two-factor authentication", "Nav": "account", "Identity": owner(),
 			"Secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
-			"QR":     template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"></svg>`),
+			// What the MFA handler emits for the URI below, attribute for
+			// attribute: 456px at the default style, and the class that lets a
+			// 360px viewport shrink it (F184). The stub carried width="8" until
+			// then, which is a size no enrolment code is and the reason the
+			// overflow scan could not see the one page in the dashboard that
+			// scrolled sideways.
+			//
+			// **The class is named rather than spelled.** internal/ui's shipped
+			// code depends on nothing outside the standard library and that stays
+			// true — this is a test file, internal/qr does not import internal/ui,
+			// and no cycle is in the way. A fixture that spelled the constant out
+			// would let the emitter change under the scan that reads it.
+			"QR": template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" ` +
+				`class="` + qr.FluidClass + `" width="456" height="456" ` +
+				`viewBox="0 0 57 57" shape-rendering="crispEdges" role="img"></svg>`),
 			"URI": template.URL("otpauth://totp/example.test:owner@example.com" +
 				"?algorithm=SHA1&digits=6&issuer=example.test&period=30&secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"),
 			"RecoveryCodes": []string(nil),
@@ -1230,6 +1360,10 @@ func TestBarChartGeometry(t *testing.T) {
 	if c.Bars[0].H <= c.Bars[2].H {
 		t.Error("10 clicks drew a shorter bar than 7")
 	}
+	// The axis, not the peak. This series maxes at 10 and niceCeil(10) is 10, so
+	// the two figures coincide here and this assertion cannot tell them apart —
+	// which is how F164 lived on the dashboard for as long as it did. The pair is
+	// separated in TestTheChartsPeakIsAReadingAndNotItsAxis.
 	if c.MaxY != 10 {
 		t.Errorf("axis max = %d, want the nice ceiling 10", c.MaxY)
 	}
@@ -1290,5 +1424,120 @@ func TestTruncate(t *testing.T) {
 	}
 	if got := truncate("short", 10); got != "short" {
 		t.Errorf("truncate lengthened a short string: %q", got)
+	}
+}
+
+// --- M58: the identity and authority surfaces --------------------------------
+
+// selectMarkup is one <select> of a rendered page, found by its id.
+//
+// Needed because both forms under test share their option markup with another
+// select on the same page — /members draws a role select per member row, and a
+// row whose member is an editor emits exactly the string the grant form emits
+// when editor is its default. Asserting on the whole body would pass on the
+// wrong control.
+func selectMarkup(t *testing.T, body, id string) string {
+	t.Helper()
+	i := strings.Index(body, `id="`+id+`"`)
+	if i < 0 {
+		t.Fatalf("no control with id %q on the page", id)
+	}
+	j := strings.Index(body[i:], "</select>")
+	if j < 0 {
+		t.Fatalf("the control with id %q is not a closed <select>", id)
+	}
+	return body[i : i+j]
+}
+
+// F182. Neither form that hands out authority may arrive with the most
+// powerful role it offers already chosen.
+//
+// The two are asserted together because the pair is the finding: /members had
+// no `selected` limb at all and /invites had one against a field the GET never
+// set, and both resolve to the same thing — the browser takes the first option
+// of a list ordered most powerful first. The template's half of the fix is that
+// it marks what the handler chose; that the handler chooses the *weakest* is
+// TestWeakestRoleIsTheDefaultOnBothCreationForms, next door in httpx, because
+// the list arrives from a service this package cannot see.
+func TestNeitherAuthorityFormPreselectsTheStrongestRole(t *testing.T) {
+	for _, tc := range []struct{ page, control string }{
+		{"invites", "role"},
+		{"members", "grant_role"},
+	} {
+		t.Run(tc.page, func(t *testing.T) {
+			markup := selectMarkup(t, renderPage(t, tc.page, nil), tc.control)
+			// The fixture offers admin and editor, in that order. Editor is the
+			// lowest, and the page data says so.
+			if !strings.Contains(markup, `<option value="editor" selected>`) {
+				t.Errorf("the lowest role on offer is not selected:\n%s", markup)
+			}
+			if strings.Contains(markup, `<option value="admin" selected>`) {
+				t.Errorf("the most powerful role on offer is selected:\n%s", markup)
+			}
+			if n := strings.Count(markup, " selected"); n != 1 {
+				t.Errorf("%d options are selected, want exactly 1:\n%s", n, markup)
+			}
+		})
+	}
+}
+
+// F163's second half: the sentence beside the grant form is about the grant
+// being made, not about grants in general.
+//
+// Both directions, because only the pair is meaningful — a note that always
+// renders in its warning colours would pass the first assertion alone, and the
+// swap target has to exist even with nothing to say or htmx has nowhere to put
+// the first answer.
+func TestTheGrantFormSaysWhatThisGrantWouldDo(t *testing.T) {
+	warned := renderPage(t, "members", nil)
+	if !strings.Contains(warned, "already holds admin across every workspace") {
+		t.Error("the grant form does not say what granting this role to this person would do")
+	}
+	if !strings.Contains(warned, `id="grant-note" class="text-sm rounded-md border border-warn-line bg-warn-soft`) {
+		t.Errorf("a grant that changes nothing is not drawn as something to stop at")
+	}
+
+	plain := renderPage(t, "members", map[string]any{
+		"GrantNote":     "This makes someone@example.com admin in Marketing, on top of what they already hold.",
+		"GrantNoteWarn": false,
+	})
+	if !strings.Contains(plain, `id="grant-note" class="text-sm text-muted"`) {
+		t.Error("an ordinary widening grant is drawn in the warning's colours")
+	}
+
+	// D31's invariant is not what F163 was about, and it stays: it is true of
+	// every grant, which is exactly why it could not be the whole of the copy.
+	if !strings.Contains(warned, "It never takes anything away") {
+		t.Error("the union rule D31 asked to be written beside this form is gone")
+	}
+
+	empty := renderPage(t, "members", map[string]any{"GrantNote": ""})
+	if !strings.Contains(empty, `id="grant-note"`) {
+		t.Error("with nothing to say the swap target is missing, so the first " +
+			"change of a select has nowhere to land")
+	}
+}
+
+// F175. The mailer-free instance does not promise the mail it is about to
+// refuse.
+//
+// Asserted in both directions: the sentence is right on every instance that can
+// send, and the page it must not appear on is the one an operator reaches
+// precisely when something is not working.
+func TestForgotDoesNotPromiseMailItCannotSend(t *testing.T) {
+	const promise = "We send a link to your address"
+
+	mailer := renderPage(t, "forgot", nil)
+	if !strings.Contains(mailer, promise) {
+		t.Error("an instance with a relay no longer says what the page does")
+	}
+
+	none := renderPage(t, "forgot", map[string]any{"NoMailer": true})
+	if !strings.Contains(none, "This instance cannot send mail") {
+		t.Fatal("the no-mailer branch did not render; this test has lost its subject")
+	}
+	if strings.Contains(none, promise) {
+		t.Error("the page promises a link by mail directly above the card saying " +
+			"it cannot send one")
 	}
 }

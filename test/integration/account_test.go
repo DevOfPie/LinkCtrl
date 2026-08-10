@@ -579,6 +579,320 @@ func TestErasureScrubsBothDisputeLabels(t *testing.T) {
 	}
 }
 
+// F177 and F181 together, because they are one address surviving in two places
+// the sweep did not reach and one pass reaches both.
+//
+// F181 is the one that needs no permission at all: `/invites` lists every
+// invitation an organization ever issued, redeemed ones included, and renders
+// the address each was sent to. So an account deleted, erased, tombstoned in the
+// audit log and emptied in `users` was still named in full on an ordinary
+// dashboard page, with nothing to expire it. F177 is the same address one column
+// over from the label the sweep already scrubbed — inside `audit_logs.metadata`,
+// where seven writers put it and where it usually describes the *subject* of
+// somebody else's action rather than the actor.
+//
+// Two accounts, both admitted the same way, and only one leaves. Every
+// assertion below has its mirror on the account that stayed, because "the
+// address is gone" and "every address is gone" are indistinguishable from one
+// side and the second is the failure nothing else here would catch.
+func TestErasureReachesAuditMetadataAndRedeemedInvitations(t *testing.T) {
+	f := newAccounts(t)
+	ctx := t.Context()
+	const leaving, staying = "member@example.com", "stayer@example.com"
+
+	// Redemption, so each account arrives with the pair of records the finding
+	// was reproduced on: the administrator's `invitation.created`, whose actor is
+	// still here, and their own `invitation.redeemed`.
+	member := f.joined(t, leaving, "admin")
+	stayer := f.joined(t, staying, "admin")
+	_ = stayer
+
+	// The shape `invite.go:437` writes when an administrator types the address in
+	// a case the account did not register in — the reason the match below folds
+	// case on both sides rather than comparing the stored strings. Written
+	// directly, because it cannot be provoked through the product from here: the
+	// address is already a member of this organization, so a second invitation to
+	// it is refused before any record is written.
+	if _, err := f.pool.Exec(ctx, `
+		INSERT INTO audit_logs (id, occurred_at, organization_id, action, metadata)
+		VALUES ($1, now(), $2, 'invitation.created', $3::jsonb)`,
+		uuid.Must(uuid.NewV7()), f.owner.OrgID,
+		`{"email": "MEMBER@Example.COM", "role": "viewer"}`); err != nil {
+		t.Fatalf("write the mixed-case metadata record: %v", err)
+	}
+
+	// Deleted first, then invited again. An **outstanding** invitation to the
+	// same address is deliberately not scrubbed: it is an offer to an address
+	// rather than a record of a person, the address became reusable the moment
+	// the account was deleted, and blanking it would break the redemption
+	// comparison for whoever takes it next. Ordered this way so the pass has both
+	// kinds of row in front of it and has to tell them apart.
+	if err := f.svc.Delete(ctx, member, accountPassword); err != nil {
+		t.Fatalf("delete the member's account: %v", err)
+	}
+	outstanding, err := f.invites.Create(ctx, f.owner, invite.CreateInput{
+		Email: leaving, Role: "viewer",
+	})
+	if err != nil {
+		t.Fatalf("re-invite the freed address: %v", err)
+	}
+
+	carrying := f.count(t,
+		`SELECT count(*) FROM audit_logs WHERE lower(metadata->>'email') = $1`, leaving)
+	if carrying < 3 {
+		t.Fatalf("%d audit records carry the departing address in their metadata; "+
+			"the assertion needs the administrator's invitation.created, the "+
+			"account's own invitation.redeemed and the mixed-case one", carrying)
+	}
+	stayerCarrying := f.count(t,
+		`SELECT count(*) FROM audit_logs WHERE lower(metadata->>'email') = $1`, staying)
+	if stayerCarrying < 2 {
+		t.Fatalf("%d audit records carry the staying account's address; the "+
+			"over-reach assertion needs at least two", stayerCarrying)
+	}
+
+	if n := f.erase(t, ctx); n != 1 {
+		t.Fatalf("the erasure pass took %d accounts, want 1", n)
+	}
+
+	// ── F177: the metadata ────────────────────────────────────────────────────
+
+	if n := f.count(t,
+		`SELECT count(*) FROM audit_logs WHERE lower(metadata->>'email') = $1`,
+		leaving); n != 0 {
+		t.Errorf("%d audit records still carry the erased address inside metadata, "+
+			"where a reader with audit.read finds it beside a tombstoned label", n)
+	}
+	if n := f.count(t,
+		`SELECT count(*) FROM audit_logs WHERE metadata->>'email' = $1`,
+		account.TombstoneLabel); n != carrying {
+		t.Errorf("%d metadata blobs carry the tombstone and %d carried the address; "+
+			"a key that was dropped rather than overwritten loses the fact that "+
+			"there was an address there at all", n, carrying)
+	}
+	if n := f.count(t,
+		`SELECT count(*) FROM audit_logs WHERE lower(metadata->>'email') = $1`,
+		staying); n != stayerCarrying {
+		t.Errorf("the staying account's address is in %d metadata blobs and was in "+
+			"%d. Erasing one person's records must not reach another's", n, stayerCarrying)
+	}
+
+	// The record keeps everything else it said. Scrubbing the address out of an
+	// audit entry is defensible; emptying the entry is not.
+	var role string
+	var accountCreated bool
+	if err := f.pool.QueryRow(ctx, `
+		SELECT metadata->>'role', (metadata->>'account_created')::bool
+		  FROM audit_logs
+		 WHERE action = 'invitation.redeemed' AND metadata->>'email' = $1`,
+		account.TombstoneLabel).Scan(&role, &accountCreated); err != nil {
+		t.Fatalf("the redemption record lost its other keys: %v", err)
+	}
+	if role != "admin" || !accountCreated {
+		t.Errorf("the redemption record reads role=%q account_created=%v after "+
+			"erasure; only the address was the person's", role, accountCreated)
+	}
+
+	// ── F181: the invitation ──────────────────────────────────────────────────
+
+	var redeemedEmail string
+	var redeemedAt *time.Time
+	if err := f.pool.QueryRow(ctx,
+		`SELECT email, redeemed_at FROM invitations WHERE redeemed_by = $1`,
+		member.UserID).Scan(&redeemedEmail, &redeemedAt); err != nil {
+		t.Fatalf("the redeemed invitation is gone; erasure scrubs the row rather "+
+			"than deleting it, because it is the organization's record: %v", err)
+	}
+	if redeemedEmail != "" {
+		t.Errorf("the invitation the erased account joined by still reads %q under "+
+			"Address on /invites", redeemedEmail)
+	}
+	if redeemedAt == nil {
+		t.Error("the invitation lost redeemed_at, so the row no longer says a person " +
+			"joined by it")
+	}
+
+	// The outstanding one keeps the address, and keeps working. This is the half
+	// of the decision that a scrub matched on the address rather than on
+	// redeemed_by would have got wrong, silently, by breaking redemption for
+	// whoever takes the freed address next.
+	var outstandingEmail string
+	if err := f.pool.QueryRow(ctx,
+		`SELECT email FROM invitations WHERE id = $1`, outstanding.ID).
+		Scan(&outstandingEmail); err != nil {
+		t.Fatalf("read the outstanding invitation: %v", err)
+	}
+	if outstandingEmail != leaving {
+		t.Errorf("the outstanding invitation reads %q; it is an offer to an address "+
+			"that no account holds, and blanking it makes it unredeemable", outstandingEmail)
+	}
+	const prefix = "https://links.example.com/invite/"
+	if _, err := f.invites.Redeem(ctx, invite.RedeemInput{
+		Token: strings.TrimPrefix(outstanding.URL, prefix),
+		Email: leaving, Password: accountPassword,
+	}); err != nil {
+		t.Errorf("the freed address could not redeem the invitation waiting for it: %v", err)
+	}
+
+	// And the account that stayed keeps its own.
+	var stayerEmail string
+	if err := f.pool.QueryRow(ctx,
+		`SELECT email FROM invitations WHERE redeemed_by = $1`, stayer.UserID).
+		Scan(&stayerEmail); err != nil {
+		t.Fatalf("read the staying account's invitation: %v", err)
+	}
+	if stayerEmail != staying {
+		t.Errorf("the staying account's invitation reads %q; one erasure blanked "+
+			"somebody else's row", stayerEmail)
+	}
+}
+
+// F188 and F189: the two sites F177's count did not reach, and neither is a
+// scalar `"email"` key in `audit_logs`.
+//
+// **Both are records *about* the erased person held by somebody else**, which is
+// the class F177 established is in scope, at the two shapes its predicate cannot
+// match. F189 is an address inside a jsonb *array*, where a scalar comparison
+// finds nothing. F188 is an address in a different table altogether — the
+// inviter's own notification, which deleting the erased account never touched
+// because the row belongs to the reader rather than to its subject, and which
+// nothing expires because notifications are swept by neither age nor actor.
+//
+// The subject of each is chosen so that only the new scrub can clean it: the
+// principal-move record's scalar `"email"` is the account that *stays*, so a
+// green run here cannot be F177's work doing the job, and the same record is
+// written with no actor at all, so it is not M52's label scrub either.
+func TestErasureReachesTheAddressInAnArrayAndInSomebodyElsesNotification(t *testing.T) {
+	f := newAccounts(t)
+	ctx := t.Context()
+	const leaving, staying = "member@example.com", "stayer@example.com"
+
+	member := f.joined(t, leaving, "admin")
+	stayer := f.joined(t, staying, "admin")
+
+	// Out to the departing account and back again, so the *second* record's
+	// `"from"` array names them while its `"email"` names the owner. One address
+	// in each half of one metadata blob, and only one of them is the erased
+	// account's.
+	if _, err := f.instance.MovePrincipal(ctx, leaving); err != nil {
+		t.Fatalf("move the instance principal to the departing account: %v", err)
+	}
+	if _, err := f.instance.MovePrincipal(ctx, "owner@example.com"); err != nil {
+		t.Fatalf("move the instance principal back: %v", err)
+	}
+
+	const inArray = `
+		SELECT count(*) FROM audit_logs
+		 WHERE action = 'instance.principal_moved' AND metadata->'from' ? $1`
+	if n := f.count(t, inArray, leaving); n != 1 {
+		t.Fatalf("%d principal-move records carry the departing address in their "+
+			"`from` array, want 1; the array assertion below would prove nothing", n)
+	}
+	// The notification the redemption wrote to the *inviter*, which is the owner.
+	const inNotification = `
+		SELECT count(*) FROM notifications WHERE data->>'email' = $1`
+	if n := f.count(t, inNotification, leaving); n != 1 {
+		t.Fatalf("%d notifications carry the departing address, want 1; the invitation "+
+			"the account joined by is meant to have told the person who sent it", n)
+	}
+	var titleBefore string
+	if err := f.pool.QueryRow(ctx,
+		`SELECT title FROM notifications WHERE data->>'email' = $1`, leaving).
+		Scan(&titleBefore); err != nil {
+		t.Fatalf("read the inviter's notification: %v", err)
+	}
+	if !strings.Contains(titleBefore, leaving) {
+		t.Fatalf("the inviter's notification reads %q, and the address is not in it; "+
+			"the title assertion below would prove nothing", titleBefore)
+	}
+
+	if err := f.svc.Delete(ctx, member, accountPassword); err != nil {
+		t.Fatalf("delete the member's account: %v", err)
+	}
+	if n := f.erase(t, ctx); n != 1 {
+		t.Fatalf("the erasure pass took %d accounts, want 1", n)
+	}
+
+	// ── F189: the address in the array ────────────────────────────────────────
+
+	if n := f.count(t, inArray, leaving); n != 0 {
+		t.Errorf("%d principal-move records still name the erased account in their "+
+			"`from` array. The scrub matches `metadata->>'email'`, which is a scalar "+
+			"comparison and reaches nothing inside a list", n)
+	}
+	if n := f.count(t, inArray, account.TombstoneLabel); n != 1 {
+		t.Errorf("%d principal-move records carry the tombstone in `from`, want 1. The "+
+			"array says how many principals the role moved away from, so an element "+
+			"dropped rather than overwritten loses that count", n)
+	}
+	var from []string
+	var movedEmail string
+	if err := f.pool.QueryRow(ctx, `
+		SELECT array(SELECT jsonb_array_elements_text(metadata->'from')), metadata->>'email'
+		  FROM audit_logs
+		 WHERE action = 'instance.principal_moved' AND metadata->'from' ? $1`,
+		account.TombstoneLabel).Scan(&from, &movedEmail); err != nil {
+		t.Fatalf("read the scrubbed principal-move record: %v", err)
+	}
+	if len(from) != 1 {
+		t.Errorf("the `from` array holds %d entries after erasure (%v), want 1", len(from), from)
+	}
+	// The other half of the same blob is somebody who is still here, and it is
+	// what makes this record's scrub a scrub rather than a blanking.
+	if movedEmail != "owner@example.com" {
+		t.Errorf("the record's `email` key reads %q after erasing somebody else; the "+
+			"account the principal moved *to* is still on this instance", movedEmail)
+	}
+
+	// ── F188: the address in somebody else's notification ─────────────────────
+
+	if n := f.count(t, inNotification, leaving); n != 0 {
+		t.Errorf("%d notifications still carry the erased address in their detail. "+
+			"Deleting an account removes that account's own notifications; this row is "+
+			"the inviter's, and nothing else reaches it", n)
+	}
+	var title, body, role, invitation string
+	var kind string
+	if err := f.pool.QueryRow(ctx, `
+		SELECT title, body, kind, data->>'role', data->>'invitation'
+		  FROM notifications WHERE data->>'email' = $1`,
+		account.TombstoneLabel).Scan(&title, &body, &kind, &role, &invitation); err != nil {
+		t.Fatalf("the inviter's notification is gone; erasure scrubs the row rather "+
+			"than deleting somebody else's inbox: %v", err)
+	}
+	if strings.Contains(title, leaving) {
+		t.Errorf("the notification's title still reads %q. The detail is scrubbed and "+
+			"the sentence beside it is what the inviter actually reads on "+
+			"/notifications", title)
+	}
+	if !strings.Contains(title, account.TombstoneLabel) {
+		t.Errorf("the title reads %q; the address was replaced by something other than "+
+			"the tombstone, so the sentence no longer says who accepted", title)
+	}
+	if role != "admin" || invitation == "" || kind == "" || body == "" {
+		t.Errorf("the notification reads kind=%q role=%q invitation=%q body=%q after "+
+			"erasure; only the address was the person's", kind, role, invitation, body)
+	}
+
+	// ── Neither reaches the account that stayed ───────────────────────────────
+
+	if n := f.count(t, inNotification, staying); n != 1 {
+		t.Errorf("the staying account is named in %d notifications, want 1. Erasing "+
+			"one person's records must not reach another's", n)
+	}
+	var stayerTitle string
+	if err := f.pool.QueryRow(ctx,
+		`SELECT title FROM notifications WHERE data->>'email' = $1`, staying).
+		Scan(&stayerTitle); err != nil {
+		t.Fatalf("read the staying account's notification: %v", err)
+	}
+	if !strings.Contains(stayerTitle, staying) {
+		t.Errorf("the staying account's notification reads %q; one erasure rewrote "+
+			"somebody else's sentence", stayerTitle)
+	}
+	_ = stayer
+}
+
 // The two-leader window during a rolling deploy is a stated property of this
 // scheduler, so the sweep has to be safe to run twice. Asserted by running it
 // twice and diffing, which is what m52.md asks for by name.
@@ -613,6 +927,12 @@ func TestTheErasurePassIsIdempotent(t *testing.T) {
 // compared as one string. `updated_at` is in it deliberately: a second pass that
 // rewrote the same values would still move it, and "wrote nothing" is the claim
 // rather than "wrote the same thing".
+//
+// The metadata and invitation lines are here because M58 gave the pass two more
+// things to write. Neither has an `updated_at` to betray a rewrite, so the values
+// are the whole check — which is why both are listed for *every* row rather than
+// only the tombstoned ones: a second pass reaching a row it should not have is
+// the failure, and filtering to the rows it already changed would hide it.
 func (f *accountFixture) snapshot(t *testing.T, ctx context.Context) string {
 	t.Helper()
 	var out string
@@ -624,6 +944,12 @@ func (f *accountFixture) snapshot(t *testing.T, ctx context.Context) string {
 		    UNION ALL
 		    SELECT format('audit %s %s', id, actor_label)
 		      FROM audit_logs WHERE actor_label = $1
+		    UNION ALL
+		    SELECT format('audit-meta %s %s', id, metadata->>'email')
+		      FROM audit_logs WHERE metadata ? 'email'
+		    UNION ALL
+		    SELECT format('invitation %s %s %s', id, email, redeemed_at)
+		      FROM invitations
 		    UNION ALL
 		    SELECT format('dispute %s %s %s', id, created_by_label, decided_by_label)
 		      FROM destination_disputes

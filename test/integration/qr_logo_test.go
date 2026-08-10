@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -471,6 +472,11 @@ func TestTheDefaultCodeCarriesALogoToo(t *testing.T) {
 		t.Errorf("clearing nothing wrote %d rows; it is supposed to write none", n)
 	}
 
+	// What the code is drawn as before anything is uploaded, read off the code
+	// itself rather than off a second link: since F171 the upload re-fits the
+	// size, and the fit is against *this* payload's module count.
+	untouched := f.qrCode(id)
+
 	// A JPEG, and the filename and declared type disagree with it — so this
 	// upload exercises the sniffing and the re-encode on the shorthand rather
 	// than only the routing. It has to be a JPEG: a PNG this test encoded and a
@@ -508,26 +514,45 @@ func TestTheDefaultCodeCarriesALogoToo(t *testing.T) {
 	}
 
 	// The style is the one the code was already being drawn at, **except for the
-	// error-correction level** (M50.6, D141). Materialising the row still changes
-	// no picture — that is D139's claim and it is unchanged — but an upload does
-	// two things now, and the second is raising the code to level H, which it
-	// does for a code that already had a row just as much as for one that did
-	// not. So the comparison is field by field against a genuinely untouched
-	// code, with the one field M50.6 moves named rather than excluded silently.
+	// error-correction level and the two fields that carry the size** (M50.6,
+	// D141; F171, D174). Materialising the row still changes no picture — that is
+	// D139's claim and it is unchanged — but an upload does three things now:
+	// stores the image, raises the code to H, and re-fits the quiet zone and the
+	// scale so that H's larger symbol still draws at the size the code already
+	// had. Without the re-fit a style near the raster ceiling grows past it and
+	// the PNG download starts answering 422, which is F171.
 	//
-	// *(Until M50.6 this compared the whole style and nothing drew a logo, so
-	// there was nothing to raise the level for. The narrowing is M50.6's, and it
-	// is a narrowing rather than a deletion: five fields still have to match.)*
-	fresh := f.createLink("logodefaultb", "https://example.com/y")
-	got, want := f.qrCode(id).Style, f.qrCode(fresh).Style
-	if got.Level != qr.LevelH {
-		t.Errorf("the code carries a logo and is stored at level %q, want H", got.Level)
+	// So what is compared is what the reader can name — the colours, and how big
+	// the picture is — rather than the arithmetic underneath it.
+	//
+	// *(Until M50.6 this compared the whole style against a second, untouched
+	// link and nothing drew a logo, so there was nothing to raise the level for.
+	// M50.6 excepted the level. F171 is why margin and scale left too, and why
+	// the comparison is now against this code's own before-state: the fit is
+	// against this payload's module count, and another link's is another
+	// number.)*
+	after := f.qrCode(id)
+	if after.Style.Level != qr.LevelH {
+		t.Errorf("the code carries a logo and is stored at level %q, want H",
+			after.Style.Level)
 	}
-	want.Level = qr.LevelH
-	if got != want {
-		t.Errorf("the row an upload created carries style %+v; an untouched code is "+
-			"drawn at %+v with the level raised, and creating the row must not "+
-			"change anything else about the picture", got, want)
+	if after.Style.Foreground != untouched.Style.Foreground ||
+		after.Style.Background != untouched.Style.Background {
+		t.Errorf("the upload repainted the code: %+v became %+v; an image is not a "+
+			"colour change", untouched.Style, after.Style)
+	}
+	// Within one module of the size it had. The fit snaps to a whole number of
+	// modules, so the two need not be equal, and anything inside one module is
+	// the snap rather than a resize nobody asked for.
+	if diff := after.Size - untouched.Size; diff > after.Style.Scale ||
+		diff < -after.Style.Scale {
+		t.Errorf("the code was %dpx and is %dpx after the upload (%+v → %+v). Level H "+
+			"is a larger symbol and the re-fit is what keeps the size somebody "+
+			"chose", untouched.Size, after.Size, untouched.Style, after.Style)
+	}
+	if after.Size > qr.MaxSize {
+		t.Errorf("the upload left the code drawing %dpx, past the %dpx raster bound; "+
+			"GET …/qr.png answers 422 from here", after.Size, qr.MaxSize)
 	}
 	// `stored` turning true is the one visible consequence, and it is honest:
 	// there is a row now.
@@ -805,4 +830,84 @@ func (f *ruleFixture) qrPNGBytes(t *testing.T, linkID uuid.UUID) []byte {
 		t.Fatalf("GET qr.png = %d", resp.StatusCode)
 	}
 	return readAll(t, resp)
+}
+
+// TestTheSizeControlFitsAgainstTheLevelALogoIsDrawnAt is F190.
+//
+// **A size is a pixel arithmetic over a module count, and a logo changes the
+// module count.** The size control read the level off the row and fitted a
+// margin and scale against it; the renderer forces H whenever there is a logo.
+// When the two disagree the reader types 800 and gets a picture that is not
+// 800px, silently — which is the class of defect F171 was, one function along.
+//
+// The disagreement is written by hand here because the product's own writes
+// cannot produce it: `SetQRCodeLogo` and `SetQRStyleBySlug` both put H into the
+// row whenever a logo is present. That it cannot be produced *today* is not what
+// makes it a row — `qrCodeFrom` already applies the same defence on read, and it
+// was written for a row from before M50.6, one written by hand, or a style write
+// that raced an upload. The defence existed at one of the two sites that need it.
+func TestTheSizeControlFitsAgainstTheLevelALogoIsDrawnAt(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("poster-sized", "https://example.com/summer-campaign")
+
+	if status, body := f.uploadLogo(
+		t, id, "", "brand.png", "image/png", logoPNG(t, 64, 0x5a),
+	); status != http.StatusOK {
+		t.Fatalf("the upload answered %d: %s", status, body)
+	}
+
+	// Down to L in the column only. The row now says one thing and the renderer
+	// will do another, which is the state the whole finding is about.
+	if _, err := f.pool.Exec(t.Context(),
+		`UPDATE qr_codes SET style = jsonb_set(style, '{level}', '"L"')
+		  WHERE link_id = $1 AND slug = ''`, id); err != nil {
+		t.Fatalf("write the disagreeing row: %v", err)
+	}
+	if got := f.storedQRLevel(t, id, "").Level; got != qr.LevelL {
+		t.Fatalf("the row holds level %q; this test needs one that disagrees with "+
+			"the renderer", got)
+	}
+
+	// Two module counts, so a failure can say how far apart they are rather than
+	// only that the picture is the wrong size.
+	content := f.qrContent(id)
+	atL, err := qr.Encode(content, qr.LevelL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	atH, err := qr.Encode(content, qr.LevelH)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if atH.Size <= atL.Size {
+		t.Fatalf("this payload encodes to %d modules at H and %d at L; if H is not "+
+			"the larger symbol the fit cannot disagree and this test measures nothing",
+			atH.Size, atL.Size)
+	}
+
+	const want = 800
+	f.postQRForm(t, "/links/"+id.String()+"/qr", url.Values{
+		"foreground": {"#000000"}, "background": {"#ffffff"},
+		"size": {strconv.Itoa(want)},
+	})
+
+	// The picture the endpoint actually serves, which is drawn at H whatever the
+	// row says — qr.Render forces it, and that is what makes the row's level the
+	// wrong thing to have fitted against.
+	drawn := attrOf(t, f.qrSVG(id), `width="(\d+)"`)
+	stored := f.storedQRLevel(t, id, "")
+	if diff := drawn - want; diff > stored.Scale || diff < -stored.Scale {
+		t.Errorf("the reader asked for %dpx and the served picture is %dpx, with "+
+			"margin %d and scale %d on a %d-module symbol. qr.FitSize snaps to a whole "+
+			"number of modules, so anything inside one module (%dpx) is the snap; this "+
+			"is the fit having been taken against the %d modules the row's level "+
+			"encodes to instead", want, drawn, stored.Margin, stored.Scale, atH.Size,
+			stored.Scale, atL.Size)
+	}
+	// And the panel's own number is the same number, so the two surfaces do not
+	// disagree about a picture they both describe.
+	if got := f.qrCode(id).Size; got != drawn {
+		t.Errorf("the panel reports %dpx and the endpoint draws %dpx", got, drawn)
+	}
 }
