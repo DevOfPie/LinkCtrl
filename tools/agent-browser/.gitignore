@@ -2,3 +2,7 @@
 # .playwright-cli/, the test runner writes failure output under test-results/.
 .playwright-cli/
 test-results/
+
+# Diagnostic screenshots aimed at the CWD by --filename land beside the specs;
+# session state already goes to .playwright-cli/. Neither is source.
+*.png
