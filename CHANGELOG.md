@@ -60,13 +60,19 @@ migrations run at boot.
   They were two adjacent fragments — a name, then an unlabelled dropdown beside
   it — and nothing said the two were one claim. They now share a single
   bordered container: the current organization and workspace, a hairline
-  divider, and the switcher, whose closed face is a chevron alone. With one
-  membership the box holds the name by itself — no divider, no dead dropdown —
-  and an account with no workspace gets no box at all. Nothing behavioural
-  changed: switching still happens on selection, still returns you to the page
-  you were on, and the list still never offers the workspace you are already
-  in. The switcher's accessible name is unchanged, so a screen reader hears
-  exactly what it did before.
+  divider, and the switcher, whose closed face is a chevron alone. The chevron
+  opens the dashboard's own menu — hanging off the control it belongs to,
+  styled like the rest of the header, listing exactly the workspaces you can
+  move to with no blank row — rather than the browser's native dropdown, which
+  ignored the control's position, opened on an unselectable empty row, and
+  flashed the chosen name into the closed face while the switch was landing.
+  With one membership the box holds the name by itself — no divider, no dead
+  control — and an account with no workspace gets no box at all. Nothing
+  behavioural changed: switching is still one action, still returns you to the
+  page you were on, and the list still never offers the workspace you are
+  already in. The switcher's accessible name is unchanged — a screen reader
+  hears "Switch workspace" on the button, then a menu of workspaces, each a
+  real button.
 
 ### Fixed
 

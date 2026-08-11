@@ -62,13 +62,38 @@ func TestWorkspaceSwitcherAppearsOnlyWhenThereIsSomewhereToGo(t *testing.T) {
 			"header label is where the current workspace is named now, and a " +
 			"switcher lists the places you can move to")
 	}
-	// Something has to be displayed in the closed control, and it must not be
-	// another workspace's name: a select reading "Acme · Marketing" while you are
-	// in Owner · Default is the orientation defect this milestone is fixing.
-	if !strings.Contains(two, `<option value="" selected disabled>`) {
-		t.Error("the switcher has no selected placeholder, so its closed state " +
-			"displays whichever workspace happens to be first and reads as an answer " +
-			"to which one you are in")
+	// Reopened M46.6 (F209): the opened state is the shell's own popover panel,
+	// not the engine's select popup. A select had to display something in its
+	// closed face, so it carried a blank disabled placeholder; a button need
+	// not, and the placeholder assertion that stood here retired with its
+	// premise — owner-approved in approving the reopening. What replaces it:
+	// no select survives in the header, and the panel holds no blank entry —
+	// every option is a submit button carrying a workspace id and naming its
+	// workspace.
+	header, _, ok := strings.Cut(two, "</header>")
+	if !ok {
+		t.Fatal("the page draws no header")
+	}
+	if strings.Contains(header, "<select") {
+		t.Error("the switcher still renders a native select; its opened state is " +
+			"the engine's popup, which cannot be positioned, styled, or purged of " +
+			"its placeholder row (F209)")
+	}
+	options := regexp.MustCompile(
+		`<button type="submit" name="workspace_id" value="([^"]*)"[^>]*>([^<]*)</button>`).
+		FindAllStringSubmatch(header, -1)
+	if len(options) == 0 {
+		t.Fatal("the switcher's panel offers no workspace buttons")
+	}
+	for _, o := range options {
+		if o[1] == "" {
+			t.Error("a workspace button posts an empty workspace_id; the blank row " +
+				"is what the popover panel exists to not draw (F209)")
+		}
+		if strings.TrimSpace(o[2]) == "" {
+			t.Error("a workspace button names nothing; every entry in the panel " +
+				"names its workspace")
+		}
 	}
 
 	one := renderPage(t, "dashboard", map[string]any{
@@ -206,9 +231,9 @@ func TestTheHeaderCannotPushThePageSideways(t *testing.T) {
 		t.Fatal("the workspace label is not in the header, or it no longer carries " +
 			"min-w-0 on its wrapper")
 	}
-	sel := regexp.MustCompile(`(?s)<select name="workspace_id"[^>]*>`).FindString(body)
+	sel := regexp.MustCompile(`<button type="button" popovertarget="linkctrl-workspace-menu"[^>]*>`).FindString(body)
 	if sel == "" {
-		t.Fatal("the workspace switcher is not in the header")
+		t.Fatal("the workspace switcher's invoker is not in the header")
 	}
 	if !strings.Contains(label, "min-w-0") {
 		t.Errorf("the workspace label will not shrink below its text: %s", label)
@@ -217,14 +242,15 @@ func TestTheHeaderCannotPushThePageSideways(t *testing.T) {
 		t.Errorf("the workspace label does not truncate, so shrinking it clips "+
 			"rather than ellipsises and the name reads as cut off: %s", label)
 	}
-	// M46.6: the switcher's closed face is a chevron alone, so the select holds
-	// no unbounded string any more. What protects the page from it is that its
-	// width is fixed — it can neither grow with an option's text nor collapse
-	// out of the shared boundary — rather than that it shrinks below content.
+	// M46.6: the switcher's closed face is a chevron alone — since the
+	// reopening, a button whose face is the chevron glyph, holding no text at
+	// all. What protects the page is that its width is fixed — it can neither
+	// grow with an option's text nor collapse out of the shared boundary —
+	// rather than that it shrinks below content.
 	for _, want := range []string{"w-8", "shrink-0"} {
 		if !hasClass(sel, want) {
 			t.Errorf("the workspace switcher's face is not fixed-width (%s missing), "+
-				"so an option's text can set the width of every page: %s", want, sel)
+				"so its box no longer holds the shared boundary's shape: %s", want, sel)
 		}
 	}
 }
@@ -245,9 +271,11 @@ func TestTheWorkspacePairReadsAsOneControl(t *testing.T) {
 		form    = `action="/workspace/switch"`
 		srOnly  = `<span class="sr-only">Current workspace:</span>`
 	)
-	// The container's opening tag through its closing tag. Nothing inside it
-	// nests a div — a <p>, a hairline <span>, a form holding a select — so the
-	// first </div> is the container's own.
+	// The container's opening tag through the first </div> after it. With a
+	// switcher present that is the popover panel's own close — the panel nests
+	// inside the form, after the label, the divider and every workspace button
+	// — so everything asserted below still sits inside the match. With one
+	// membership nothing nests a div and it is the container's own.
 	container := regexp.MustCompile(
 		`(?s)<div class="flex min-w-0 items-center gap-2 rounded-md border border-line-strong[^"]*">.*?</div>`)
 
@@ -268,13 +296,26 @@ func TestTheWorkspacePairReadsAsOneControl(t *testing.T) {
 				"the boundary", want)
 		}
 	}
-	// The closed face is the chevron alone: the selected, disabled placeholder
-	// carries no text for the face to display. The list it opens still never
-	// offers the workspace you are in.
-	if !strings.Contains(box, `<option value="" selected disabled></option>`) {
-		t.Error("the placeholder option carries visible text, so the closed face " +
-			"shows words where the owner chose the chevron alone (M46.6)")
+	// The closed face is the chevron alone: since the reopening, a button whose
+	// face is the chevron glyph — nothing to paint before, during, or after a
+	// switch. Its opened state is the shell's own popover panel (D24's pattern,
+	// F209's fix), anchored to this container so it hangs off the control
+	// rather than wherever the engine puts it. The classes assert the
+	// properties that make the rendered claims true, in M24.5's idiom; what it
+	// looks like is the kept browser spec's half.
+	if !strings.Contains(box, `popovertarget="linkctrl-workspace-menu"`) {
+		t.Error("the fused control holds no popover invoker, so the switcher's " +
+			"opened state is not the shell's own panel (F209)")
 	}
+	if !strings.Contains(box, `popover="auto"`) {
+		t.Error(`the switcher's panel is not popover="auto", which is the value ` +
+			"carrying Escape, light dismiss and one-open-at-a-time (D24)")
+	}
+	if !hasClass(box, "[anchor-name:--linkctrl-workspace]") {
+		t.Error("the container carries no anchor-name, so the panel right-aligns " +
+			"to the menus' shared edge instead of to the control it opens from")
+	}
+	// The list it opens still never offers the workspace you are in.
 	if strings.Contains(box, `value="0198c9c5-0000-7000-8000-000000000010"`) {
 		t.Error("the fused control offers the workspace you are already in")
 	}

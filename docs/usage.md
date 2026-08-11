@@ -1515,8 +1515,8 @@ header names the current organization and workspace whether or not there is
 anywhere to switch to.
 
 Once there is more than one, the header's workspace box grows a chevron —
-label, a hairline divider, then a select whose closed face is the chevron
-alone. Opened, it lists the workspaces you can move to and **not** the one you
+label, a hairline divider, then a chevron button. It opens a menu hanging off
+the box, listing the workspaces you can move to and **not** the one you
 are already in — that one is named beside it in the same box, as
 *organization · workspace*, which is the label that appears at every
 membership count including one. Switching moves *that browser*,

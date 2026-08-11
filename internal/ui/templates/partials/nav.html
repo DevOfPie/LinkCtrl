@@ -14,10 +14,11 @@
      this define, built across the two below rather than a wrapper div in
      layout.html, so the conditions deciding what renders live in the file that
      explains them. Structurally the pair survives: workspace_label and
-     workspace_switch are still the label <p> and the form-wrapped <select>,
-     side by side, and every answer they encode — the current workspace is
-     never an option, no switcher above one membership, the label whenever a
-     workspace is current — is preserved, not restated.
+     workspace_switch are still the label <p> and a form beside it — since the
+     M46.6 reopening the form holds a chevron-button invoker and a popover
+     panel rather than a <select> — and every answer they encode — the current
+     workspace is never an option, no switcher above one membership, the label
+     whenever a workspace is current — is preserved, not restated.
 
      Three states. Several memberships: label, divider, select. One: the label
      alone — no divider, no dead affordance (M25 holds), the account still
@@ -26,13 +27,18 @@
      rather than a length check because the label's own condition is .Current,
      and the container must not outlive its content.
 
-     focus-within:border-accent puts the select's focus on the shared border:
-     the select is the pair's only focusable element and its own border is
-     gone, so the boundary is what indicates focus now. */}}
+     focus-within:border-accent puts the invoker's focus on the shared border:
+     the chevron button is the pair's only focusable element and it carries no
+     border of its own, so the boundary is what indicates focus.
+
+     anchor-name is what the switcher's panel right-aligns to — the panel must
+     align with this whole control, not with the chevron sliver at its end.
+     The POSITIONING note on workspace_switch says why the menus' shared-edge
+     literals cannot do it. */}}
 {{define "workspace_control"}}
 {{- $current := false}}{{range .Workspaces}}{{if .Current}}{{$current = true}}{{end}}{{end -}}
 {{- if $current}}
-<div class="flex min-w-0 items-center gap-2 rounded-md border border-line-strong bg-raised px-2 py-1 focus-within:border-accent">
+<div class="flex min-w-0 items-center gap-2 rounded-md border border-line-strong bg-raised px-2 py-1 focus-within:border-accent [anchor-name:--linkctrl-workspace]">
   {{- template "workspace_label" .}}
   {{- template "workspace_switch" .}}
 </div>
@@ -74,50 +80,83 @@
 {{/* The workspace switcher.
 
      Drawn only when there is more than one to switch between. Every instance
-     today has exactly one membership per user, and a dropdown with a single
+     today has exactly one membership per user, and a switcher with a single
      entry is a control that can do nothing — so this renders nothing at all
      until a second membership exists, which is the milestone's promise that the
      switcher costs today's users nothing.
 
      M46: the current workspace is no longer an option in it. The owner asked for
-     that on blind task 9 and it could not be done then, because the selected
-     option was the only place in the whole shell the current workspace appeared
-     — removing it would have made the task impossible rather than merely hard.
+     that on blind task 9 and it could not be done then, because the switcher was
+     the only place in the whole shell the current workspace appeared — removing
+     it would have made the task impossible rather than merely hard.
      `workspace_label` above is what makes it available now. What is left is a
      list of the places you can go, which is what a switcher is.
 
-     The first option is a selected, disabled placeholder, and since M46.6 its
-     label is empty: the closed face is the chevron alone, which is the owner's
-     amendment to shape B1. What the face must never display is some *other*
-     workspace's name while you are not in it — the orientation defect this
-     pair exists to fix, wearing a different hat — and an empty selected label
-     is the one mechanism all three engines render as a bare chevron:
-     `color: transparent` erases the native arrow in Chromium AND Firefox,
-     which both draw it in the text colour (probed 2026-08-11, three engines).
-     The name lives in aria-label, so a screen reader still hears "Switch
-     workspace"; `disabled` so a keyboard user cannot arrow back onto it and
-     post an empty workspace_id. The width is fixed at w-8 because a chevron
-     holds no text to size against, and the select's own border and background
-     are gone — the shared container in workspace_control carries the boundary
-     now, with a hairline divider separating the label from the select.
+     This was a <select> until the M46.6 reopening, and its opened state was the
+     engine's popup — unpositionable, unstylable, opening on the blank
+     placeholder row the chevron-only face forced, and painting the chosen
+     option's text into the w-8 face until the redirect landed. Four symptoms
+     the owner named on sight, one cause, and no fix reaches any of them from
+     inside a <select> (F209). So the opened state is the shell's own now: the
+     Popover API pattern both header menus already use (D24) — a chevron-button
+     invoker and a popover="auto" panel — which carries Escape, light dismiss
+     and one-open-at-a-time by construction. Nothing can flash: a button's face
+     is the chevron glyph (the identity menu's own, not a new icon), with no
+     selected text to paint, before, during, or after a switch. And no
+     placeholder row exists to draw — a select must display something, a button
+     need not, which is why the disabled-placeholder assertion retired with its
+     premise (owner-approved in approving the reopening).
 
-     The select switches on change and there is no button (D103, F21). The old
-     comment here claimed a plain form "with no JavaScript" was forced, because
-     an auto-submitting select needs a change handler and the CSP forbids inline
-     script. The premise was wrong: htmx is already served on every page from
-     layout.html under script-src 'self', already does exactly this on the links
-     page, and needs no inline script — so the CSP never forbade this and the
-     two-step control was defending a constraint that did not exist.
+     Each workspace in the panel is a submit button in this form, workspace_id
+     on its value, so selecting is still one POST to /workspace/switch with the
+     hidden `next`, and the handler is untouched. The htmx change-handler went
+     with the select — a real button submits a form scriptless. D103's stance
+     is unchanged; this control simply stopped needing JavaScript at all.
 
-     No <noscript> fallback. The owner settled the stance instead (D103): the
-     dashboard requires JavaScript, and that is written down rather than
-     defended in markup nobody looks at twice. The redirect tree is a different
-     claim and stays scriptless.
+     A screen reader hears a button named "Switch workspace" — aria-label, and
+     aria-expanded mapped from the popovertarget attribute itself — then a list
+     of buttons, each naming its workspace. Button-and-group rather than
+     role-free combobox: the same recorded trade (D24) the two menus made.
 
-     hx-include carries the hidden `next`, and the handler answers through
-     seeOther, which turns an htmx request into HX-Redirect — a full navigation
-     rather than this partial swapped into a fragment. So the switch behaves
-     identically whichever way it was submitted.
+     The invoker keeps the face's shipped geometry: w-8, because a chevron
+     holds no text to size against, and no border or background of its own —
+     the shared container in workspace_control carries the boundary and
+     indicates focus (focus-within), with a hairline divider separating the
+     label from the switcher.
+
+     POSITIONING. The panel is right-aligned with the fused control, which the
+     menus' shared-edge literals cannot express: the control sits mid-bar, and
+     the width to its right — the bell, the identity button, an email of any
+     length — is not a constant. So the container carries
+     anchor-name: --linkctrl-workspace and the panel anchors to it,
+     position-anchor plus right: anchor(right), the @supports gate keeping the
+     literal as the fallback. Probed 2026-08-11 in all three pinned engines
+     (chromium-1234, firefox-1538, webkit-2336): all three support anchor
+     positioning, and the panel's right edge lands exactly on the container's,
+     including with the panel nested inside its own anchor, popover shown. An
+     engine below that floor falls back to the base literal — the same
+     container edge both menus align to — so the panel is still governed
+     there, merely menu-aligned rather than control-aligned; below the popover
+     floor itself it renders as a plain block, the failure mode the menus
+     already accepted. The top literals and the viewport-anchoring trap they
+     answer are the menus' POSITIONING note below.
+
+     The panel's width comes from its two insets, not from a width utility: a
+     control near the bar's middle can sit closer than 16rem to the viewport's
+     left edge at 360px, and a fixed-width panel anchored to it overflows the
+     viewport — the first verify-ui run proved exactly that. So the left inset
+     clamps, max(1rem, anchor(right) - 16rem): 16rem wide everywhere it fits,
+     left edge pinned at 1rem where it does not, right edge on the control
+     either way. w-auto is load-bearing beside it — the UA stylesheet gives
+     [popover] width: fit-content and margin: auto, and with left, right and a
+     non-auto width the box is over-constrained, the auto margins absorb the
+     slack, and the panel drifts off its anchor. Probed with the geometry
+     above, same date, same three engines: right edge on the container at
+     every width, left edge at 16px when clamped.
+
+     The panel matches the control it hangs from — border-line-strong,
+     rounded-md — rather than the menus' border-line/rounded-lg, because it
+     must read as the control opening, not as a third menu.
 
      The path travels on the form so switching leaves you on the page you were
      reading, looking at the other workspace's version of it. */}}
@@ -126,14 +165,17 @@
 <span aria-hidden="true" class="h-4 w-px shrink-0 bg-line-strong"></span>
 <form method="post" action="/workspace/switch" class="flex shrink-0 items-center">
   <input type="hidden" name="next" value="{{.Path}}">
-  <select name="workspace_id" aria-label="Switch workspace"
-          hx-post="/workspace/switch" hx-trigger="change" hx-include="closest form"
-          class="w-8 shrink-0 cursor-pointer bg-transparent text-sm text-ink focus:outline-none">
-    <option value="" selected disabled></option>
+  <button type="button" popovertarget="linkctrl-workspace-menu" aria-label="Switch workspace"
+          class="flex w-8 shrink-0 cursor-pointer items-center justify-center py-0.5 text-ink focus:outline-none">
+    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true"><path d="M12 15.5a1 1 0 0 1-.7-.3l-4-4a1 1 0 1 1 1.4-1.4l3.3 3.3 3.3-3.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-.7.3Z"/></svg>
+  </button>
+  <div id="linkctrl-workspace-menu" popover="auto"
+       class="fixed inset-auto top-[5.25rem] sm:top-[3.75rem] right-[max(1rem,calc(50%_-_35rem))] [position-anchor:--linkctrl-workspace] supports-[anchor-name:--linkctrl-workspace]:right-[anchor(right)] supports-[anchor-name:--linkctrl-workspace]:left-[max(1rem,calc(anchor(right)_-_16rem))] supports-[anchor-name:--linkctrl-workspace]:w-auto z-20 max-w-[calc(100vw_-_2rem)] rounded-md border border-line-strong bg-raised py-1 shadow-lg">
     {{range .Workspaces}}{{if not .Current}}
-    <option value="{{.ID}}">{{.OrganizationName}} · {{.Name}}</option>
+    <button type="submit" name="workspace_id" value="{{.ID}}" title="{{.OrganizationName}} · {{.Name}}"
+            class="block w-full cursor-pointer truncate px-3 py-2 text-left text-sm text-ink hover:bg-sunken">{{.OrganizationName}} · {{.Name}}</button>
     {{end}}{{end}}
-  </select>
+  </div>
 </form>
 {{end}}
 {{end}}

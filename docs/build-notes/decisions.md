@@ -322,6 +322,7 @@ file. Append a row when you append an entry.
 | [M47.5 built: the badges, the glyph size, and the lie a browser caught](#2026-08-11--m475-built-the-badges-the-glyph-size-and-the-lie-a-browser-caught) | The size is 12px because 10px collapses the weighted glyph's outlined share in all three engines — measured on a fixture assembled from the product's own files, and the wireframes' 9/11 did not survive. Two contract readings stated: Signed reads the stored `RequireSignature`, QR counts the codes the panel lists. The icon home is four defines in `partials/icons.html`, baseline arithmetic at 20.5. And the split badge lied for an hour — GetSplit's empty-not-nil answer — caught by the kept spec's badge count against the running product, pinned in a handler-side test |
 | [M47.5, one bullet amended at acceptance](#2026-08-11--m475-one-bullet-amended-at-acceptance) | Same-width-set-or-empty overstated the constant-chip mechanism; two-digit counts widen; quoted before and after with the class-level fact |
 | [M46.6 reopened: the popup the wireframes could not draw](#2026-08-11--m466-reopened-the-popup-the-wireframes-could-not-draw) | F209: four owner-named symptoms, one cause — the native select popup; reopened over deferral; rebuilt on the D24 popover pattern; the placeholder assertion retires with its premise |
+| [M46.6 rebuilt: the panel, the anchor, and the width from two insets](#2026-08-11--m466-rebuilt-the-panel-the-anchor-and-the-width-from-two-insets) | The opened state is the D24 popover pattern, scriptless — htmx left with the select; right alignment is CSS anchor positioning, probed in all three pinned engines, literal fallback behind `@supports`; a fixed-width panel overflowed 360px on the kept spec's first run, so the width comes from a clamped left inset and `w-auto` defeats the UA `[popover]` margin trap; the placeholder and hx-* assertions retired with their premises, every recorded answer re-asserted |
 
 ---
 
@@ -26822,3 +26823,61 @@ retires — the disabled placeholder — retires because its premise (a select
 must display something) dissolves with the select; the owner's approval of
 this reopening is the sign-off F209's row records. A11y moves from combobox
 to button-and-group, the trade D24 already recorded for the other two menus.
+
+## 2026-08-11 — M46.6 rebuilt: the panel, the anchor, and the width from two insets
+
+**Marked M46.6** — the reopening's build, under the milestone's own number.
+
+The opened state is the Popover API pattern both header menus use (D24): the
+chevron is a `button popovertarget` invoker inside the fused control, and the
+panel is `popover="auto"`, each workspace a submit button in the existing
+form with `workspace_id` on its value. One POST to `/workspace/switch`, the
+hidden `next` untouched, the handler untouched. The htmx change-handler left
+with the select — a select needed something to fire on change, a real button
+submits a form scriptless — so the control now needs no JavaScript at all,
+with D103's stance unchanged. No placeholder row exists to draw, and the
+invoker's face is the identity menu's own chevron glyph: nothing to paint
+before, during, or after a switch, which is symptom 3 closed by
+construction rather than by styling.
+
+**Right alignment is CSS anchor positioning**, the fallback the reopened
+Risks section sanctioned when the literals could not express it — and they
+could not: the control sits mid-bar, and the width to its right (the bell,
+the identity button, an email of any length) is not a constant any literal
+can carry. The fused container carries `anchor-name: --linkctrl-workspace`;
+the panel sets `position-anchor` and `right: anchor(right)` behind
+`@supports (anchor-name: …)`, keeping the menus' shared-edge literal as the
+below-floor fallback. Probed 2026-08-11 in all three pinned engines
+(chromium-1234, firefox-1538, webkit-2336), including the exact nesting the
+template uses — the panel a descendant of its own anchor, popover shown:
+all three support it and land the panel's right edge exactly on the
+container's. The pattern's viewport-literal idiom stays for `top`, where
+the header heights are real constants.
+
+**The panel's width comes from its two insets, and that was learned red.**
+The spec's first run against the running product failed exactly where it
+should: a 16rem panel anchored to a control whose right edge sits ~212px
+from the left at 360px overflows the viewport's left edge by 44px. The fix
+is `left: max(1rem, calc(anchor(right) - 16rem))` — 16rem wide everywhere
+it fits, left edge pinned at 1rem where it does not, right edge on the
+control either way. `w-auto` beside it is load-bearing: the UA stylesheet
+gives `[popover]` `width: fit-content` and `margin: auto`, and with left,
+right and a non-auto width the box is over-constrained — the auto margins
+absorb the slack and drift the panel off its anchor, which the second
+three-engine probe showed before the template was written.
+
+**What retired, and what did not.** The disabled-placeholder assertions —
+`workspace_test.go`'s and the integration switcher test's, with that test's
+hx-* mechanics assertions — retired with their premises, per the reopened
+contract and the owner's approval on F209. Their replacements assert the
+absence the design now guarantees: no `<select>` in the header, no blank
+row, no control posting an empty `workspace_id`, exactly one workspace
+button above two memberships. Every recorded answer is still asserted:
+never the current workspace (blind task 9, D117 — the integration check
+modernised from `" selected` to the button's `value=`), only above one
+membership (M25), the label whenever a workspace is current, three
+container states (D36). The kept spec extends to the opened state — panel
+right edge measured against the control's, no blank row, a driven switch
+proving the invoker's face carries no text — and switches back by the home
+workspace's own `title`, so a green run leaves the instance in the
+workspace it found it in and the other signed-in specs keep their data.

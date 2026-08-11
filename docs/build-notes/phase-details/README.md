@@ -27,9 +27,8 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## Phase 3
 
-**One row is open — [M46.6](m46.6.md), reopened on [F209](../deferred-findings.md#open) —
-and [M57.9](m57.9.md)'s reopened run follows it. 0.3.0 is written and not yet
-tagged.** Four work areas, chosen 2026-08-06: identity and account
+**Every build row is done — [M57.9](m57.9.md)'s reopened run is what
+remains. 0.3.0 is written and not yet tagged.** Four work areas, chosen 2026-08-06: identity and account
 lifecycle, dashboard UI and UX, infrastructure and resilience, QR codes and
 campaigns. Twenty-one milestones — **twelve integers of work**, two adversarial
 reviews, one close, and **six insertions** (M50.5, M50.6, M46.5, M46.6, M47.5, M57.5) — against the size target in
@@ -60,7 +59,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | --- | --- | --- | --- |
 | [M46](m46.md) | The shell, the navigation, and the links list | — | done |
 | [M46.5](m46.5.md) | A browser an agent can drive, and a test that outlives it | — | done |
-| [M46.6](m46.6.md) | The workspace pair reads as one control | M46 · M46.5 | in progress (reopened) |
+| [M46.6](m46.6.md) | The workspace pair reads as one control | M46 · M46.5 | done |
 | [M47](m47.md) | The link page, taken apart | M46 · M46.5 | done |
 | [M47.5](m47.5.md) | What every tab says about itself | M47 · M46.5 | done |
 | [M48](m48.md) | On-demand panels, and what stops being buried | M47 | done |

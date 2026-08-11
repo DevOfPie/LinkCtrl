@@ -2,11 +2,22 @@ import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-// M46.6's kept assertions: the two rendered-appearance claims no template test
-// can see. The template suite proves the placeholder option is empty and the
-// classes are present; only a browser proves what that *looks like* — a closed
-// face showing no text at all, and a header that still fits a 360px viewport
-// with the fused control in it.
+// M46.6's kept assertions: the rendered-appearance claims no template test can
+// see. The template suite proves the markup — a chevron-button invoker, a
+// popover panel of workspace buttons, the anchor classes; only a browser
+// proves what that *looks like* — a closed face showing no text at all, a
+// panel that hangs right-aligned off the fused control rather than wherever
+// the engine puts it, and a header that still fits a 360px viewport.
+//
+// The opened state carries most of the weight since the reopening: F209's four
+// symptoms all lived there — a native select popup nothing in the product
+// could position, style, or purge of its blank placeholder row, and a closed
+// face that painted the chosen option's text until the redirect landed. So
+// this spec opens the panel, reads its rows, measures its right edge against
+// the control's, and drives a real switch there and back — the round trip is
+// what proves the invoker's face holds no text after a switch is triggered,
+// and it leaves the instance in the workspace it started in, so the other
+// signed-in specs see the data they expect.
 //
 // Unlike the clean-console spec this one needs a session: the workspace pair
 // renders only in the signed-in shell, and the switcher half only above one
@@ -41,7 +52,7 @@ function credentials() {
 // walkthrough overflowed, and where m46.6.md says the fused control is measured.
 test.use({ viewport: { width: 360, height: 780 } });
 
-test('the workspace pair is one control: a chevron-only face, inside 360px', async ({ page }) => {
+test('the workspace pair is one control: chevron-only face, a panel of its own, inside 360px', async ({ page }) => {
   const { email, password } = credentials();
   await page.goto('/login');
   await page.fill('#email', email);
@@ -57,29 +68,71 @@ test('the workspace pair is one control: a chevron-only face, inside 360px', asy
       );
     });
 
-  const select = page.locator('header select[name="workspace_id"]');
+  const invoker = page.locator('header button[popovertarget="linkctrl-workspace-menu"]');
   await expect(
-    select,
+    invoker,
     'no switcher in the header — the signed-in account needs a second membership, which `make demo` seeds',
   ).toHaveCount(1);
 
-  // The closed face is the chevron alone. A native select displays its
-  // selected option's label, so an empty label is what "no visible text"
-  // means mechanically — and it is the one mechanism all three engines render
-  // as a bare chevron (color:transparent erases the arrow in Chromium and
-  // Firefox, which draw it in the text colour).
+  // The closed face is the chevron alone. Since the reopening that is true by
+  // construction — the invoker is a button whose face is an SVG glyph — so the
+  // assertion is that no text node crept in.
   expect(
-    await select.evaluate((el) => el.selectedOptions[0]?.label ?? null),
+    (await invoker.textContent()).trim(),
     'the closed face shows text; the owner amended B1 to the chevron alone',
   ).toBe('');
 
-  // The list it opens must stay readable: every real option still names an
-  // organization and a workspace. Only the placeholder is allowed to be blank.
-  const options = await select.evaluate((el) => [...el.options].map((o) => o.label));
-  expect(options.length, 'the switcher lists nowhere to go').toBeGreaterThan(1);
-  for (const label of options.slice(1)) {
-    expect(label, 'a destination option lost its label').not.toBe('');
+  // The label's title is "Organization · Workspace", and the panel's rows
+  // carry the same title — it is how a switch is observed and how the way
+  // back is found after switching away.
+  const label = page.locator('header p[title]');
+  const home = await label.getAttribute('title');
+
+  // The opened state, where all four F209 symptoms lived.
+  await invoker.click();
+  const panel = page.locator('#linkctrl-workspace-menu');
+  await expect(panel, 'clicking the chevron does not open the panel').toBeVisible();
+
+  // No blank row, and every row names its workspace and carries an id to post.
+  const rows = panel.locator('button[type="submit"]');
+  expect(await rows.count(), 'the panel lists nowhere to go').toBeGreaterThan(0);
+  for (const row of await rows.all()) {
+    expect((await row.textContent()).trim(), 'a panel row names nothing — the blank placeholder row is back (F209)').not.toBe('');
+    expect(await row.getAttribute('value'), 'a panel row posts an empty workspace_id').not.toBe('');
   }
+
+  // Right-aligned with the fused control — the anchor-positioning claim. The
+  // control is the invoker's enclosing bordered container, and the panel's
+  // right edge must land on its right edge, not on the menus' shared viewport
+  // edge and not wherever the engine likes.
+  const edges = await page.evaluate(() => {
+    const invokerEl = document.querySelector('header button[popovertarget="linkctrl-workspace-menu"]');
+    const control = invokerEl.closest('div').getBoundingClientRect();
+    const menu = document.getElementById('linkctrl-workspace-menu').getBoundingClientRect();
+    return { control: control.right, panel: menu.right, panelLeft: menu.left };
+  });
+  expect(
+    Math.abs(edges.panel - edges.control),
+    `the panel's right edge (${edges.panel}) is not the control's (${edges.control}) — F209's first symptom`,
+  ).toBeLessThanOrEqual(1);
+  expect(edges.panelLeft, 'the open panel overflows the 360px viewport on the left').toBeGreaterThanOrEqual(0);
+  expect(edges.panel, 'the open panel overflows the 360px viewport on the right').toBeLessThanOrEqual(360);
+
+  // Drive a real switch through the panel: one POST, and the invoker's face
+  // must carry no text once a switch is triggered — the native select painted
+  // the chosen option into the w-8 face here (F209's third symptom).
+  await rows.first().click();
+  await expect(label, 'switching did not change the named workspace').not.toHaveAttribute('title', home);
+  expect(
+    (await page.locator('header button[popovertarget="linkctrl-workspace-menu"]').textContent()).trim(),
+    'the invoker paints text after a switch is triggered (F209)',
+  ).toBe('');
+
+  // And back — by the row wearing the home workspace's own title, not by
+  // position — so the run leaves the instance where it found it.
+  await page.locator('header button[popovertarget="linkctrl-workspace-menu"]').click();
+  await page.locator('#linkctrl-workspace-menu').getByTitle(home, { exact: true }).click();
+  await expect(label, 'switching back did not restore the original workspace').toHaveAttribute('title', home);
 
   // The fused control must not push the header past the viewport: no sideways
   // scroll on the document, and the header itself contained in 360px.
