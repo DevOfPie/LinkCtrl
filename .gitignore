@@ -65,3 +65,8 @@ Thumbs.db
 # directory and no way to fill it. They are session scratch and survive nothing,
 # which is the property .queue.md and .current-task.md are ignored for.
 .claude/worktrees/
+
+# playwright-cli session artifacts land in the repo root when the CLI is run
+# from here rather than from tools/agent-browser; they are per-session state
+# and never belong in a commit (learned at M47, which committed four).
+/.playwright-cli/
