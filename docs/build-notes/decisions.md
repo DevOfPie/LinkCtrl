@@ -306,6 +306,9 @@ file. Append a row when you append an entry.
 | [M57.5: six repairs a phase close could not have contained](#2026-08-11--m575-six-repairs-a-phase-close-could-not-have-contained) | Why an eighteenth milestone rather than Phase 4 or a standing-approval sweep, why it is `.5` and not `M59`, which four of the ten open rows are excluded and on what test, and the one bullet written as a constraint rather than an outcome because the obvious fix is the recurrence |
 | [A review that is not final is not a review](#2026-08-11--a-review-that-is-not-final-is-not-a-review) | W43: scope added after an `X.9` has run is numbered **below** it and **reopens** it. Why the three offered options were all worse, and the one cost this creates — a number and a dependency edge pointing opposite ways |
 | [How an agent drives this product's UI, and where that check runs](#2026-08-11--how-an-agent-drives-this-products-ui-and-where-that-check-runs) | Owner-set: `@playwright/cli` for the exploring sub-agent, terminating in kept Playwright specs; gated at the `X.9` reviews rather than in CI. Why not an MCP server, why `X.9` beats every CI option offered, the measured costs, and the CSP defect found in the first ten minutes of running it |
+| [Which review owns a reopening](#2026-08-11--which-review-owns-a-reopening) | W44: the latest review whose range contains it, not every one. Why the earlier review gets a note rather than a second run, and the cost that leaves |
+| [The link page becomes tabs, and what each tab says about itself](#2026-08-11--the-link-page-becomes-tabs-and-what-each-tab-says-about-itself) | The M47 redesign settled with the owner over five rounds: tabs with state on the tabs, `0` for empty counts, a cross for empty and a check for the one true binary, a count of active protections on Edit, and two Split glyphs that are a size comparison rather than a symbol — after four rotation marks failed at badge size |
+| [Seven tabs, and M47 split along the seam the design was drawn on](#2026-08-11--seven-tabs-and-m47-split-along-the-seam-the-design-was-drawn-on) | Activity folds into Analytics and Danger keeps its own tab, so the strip is seven. M47 becomes M47 and M47.5 — the layout and the state feedback, which is how the design was assembled in the first place. Also the nine findings a plan review caught before either was built against |
 
 ---
 
@@ -25879,3 +25882,191 @@ markup, the other reads HTTP.
 
 That is the argument for the whole decision, made by accident. The check was not
 looking for it.
+## 2026-08-11 — Which review owns a reopening
+
+[W44](workflow-changes.md#made), owner-set, and it extends
+[W43](workflow-changes.md#made) rather than qualifying it.
+
+W43 settled that scope **added** after an `X.9` has run is numbered below it and
+reopens it, so the range that review claims stays true. A **reopening** is
+different in one way that matters: it keeps its milestone's existing number, and
+that number can sit inside more than one review's range at once.
+
+[M47](phase-details/m47.md)'s reopening is the first case.
+[M51.9](phase-details/m51.9.md) claims M46–M51 and
+[M57.9](phase-details/m57.9.md) claims M46–M57; new work under M47 is inside
+both.
+
+**Only the later reopens.** M57.9's range wholly contains M51.9's, so re-running
+it covers everything the earlier review claimed. M51.9's status row gains a note
+— *range re-covered by M57.9* — rather than a second run.
+
+Two alternatives were declined. **Reopening both** is strictly correct under the
+rule as written and produces two adversarial reviews at the end of a closing
+phase, the earlier duplicating the later's coverage. **Exempting reopenings from
+review entirely**, on the argument that W38's per-milestone reviewer suffices, is
+the argument that was offered and declined at W43; accepting it here would make
+that rule mean two different things four days apart.
+
+**The cost, stated rather than buried:** a `done` mid-phase review now carries a
+range containing work it never saw, and the note on its row is the only thing
+that says so. That is a real weakening, and it is affordable only because
+containment is checkable — the rule holds exactly while a later review's range is
+a superset. A reopening below a review whose range is *not* contained by a later
+one reopens that review, with no exemption available.
+
+## 2026-08-11 — The link page becomes tabs, and what each tab says about itself
+
+Settled with the owner over five rounds of wireframes, after
+[F205](deferred-findings.md) established that [M47](phase-details/m47.md)'s
+reorder moved the complaint rather than answering it. The definition of done is
+in m47.md; this is why.
+
+### Tabs, and state on the tabs
+
+Four structures were drawn — tabs, a two-column rail, a summary with drill-in,
+and sub-routes. The owner took **tabs** for the layout and the **rail's state
+feedback**, which is one question rather than two: where does state live once the
+tabs are the navigation.
+
+Four answers to that were drawn in turn — badges on the tabs, a state line under
+the strip, an Overview first tab, and a rail beside the panel. **Badges won
+because the state and the way to act on it become the same object**: you read
+`Routing 2` and click `Routing 2`. The others separate them, or — in the Overview
+case — hide five of six the moment you navigate.
+
+It is also the only one that keeps the reason tabs beat the rail in the first
+place. A horizontally scrolling strip behaves identically at 360px and at full
+width; the state line wraps, the rail cannot survive one column and degrades into
+the state line, and Overview adds a screen before the common task.
+
+### The vocabulary, and why `0` rather than nothing
+
+**Every tab holds the same width whether set or empty.** A missing badge and a
+badge reading zero are different claims and a reader cannot tell them apart, so
+empty counts read `0` in a muted badge. The strip then does not reflow as a link
+is configured, and two links compare position by position.
+
+The cross means **the section is empty**, not *no* — written that way because it
+serves both Split and Signed, and a third tab giving it a subtler meaning would
+make it lie. It is deliberately **neutral rather than red**: *off* is a normal
+state for a split test, and red should mean something is wrong. The check is the
+only badge carrying colour, because signed access is a security property worth
+reading at a glance and it is the strip's one true binary.
+
+**Edit carries a count of active protections**, chosen over leaving it unbadged
+and over splitting a Protection tab out of the form. The five booleans live
+inside the edit form and no single badge can name them; a count says *something
+is configured here*, which is what the strip is for, and the tab itself says
+which. The objection is recorded: password and forward-query are not obviously
+comparable things to total.
+
+### Two glyphs, after four failed
+
+The Split tab is not binary — `SplitKinds` (`internal/domain/routing.go:646`) is
+exactly `weighted` and `sequential`, with `Kind == ""` for none — so it needed a
+mark rather than a check. The owner asked for icons over words, over an arm
+count, over letters and over abbreviations.
+
+**Four rotation marks were drawn and all four failed at badge size.** A single
+arc read as *refresh*. Stops in a row read as the `…` more-options icon. A ring
+with four stops and a ring with three were not recognisable. The cause is not the
+drawing: a 9px glyph carries three or four distinguishable features, and *a
+cycle, through discrete stops, in order* needs more than that. The check and the
+cross survive at that size because they are symbols everybody already learned,
+which a new mark cannot borrow.
+
+**So the pair stopped drawing rotation and drew the difference instead.**
+Weighted is two shares of unequal height; sequential is three shares of equal
+height, on the same baseline. That is the actual user-visible distinction — 
+visiting each arm once in turn produces equal shares — and it is legible at 9px
+for the reason the weighted glyph already was: **it is a size comparison, not a
+symbol.** The difference is carried twice, by equality and by count, so losing
+one signal small leaves the other.
+
+The four rejected marks are kept in the record rather than deleted, so the next
+reader does not redraw them.
+
+### What the drawing process itself demonstrated
+
+The outlined share hung 1.4 units below the filled one in **two consecutive
+drafts**, because SVG centres a stroke on its path and the inset was missing. Two
+readers missed it; the owner caught it both times. It is now checked
+arithmetically — both bottoms at 20.5 — rather than by eye.
+
+That is a defect in a glyph whose entire meaning is a size comparison, invisible
+to every test this repository has, found by looking. It is the argument for
+[M46.5](phase-details/m46.5.md) stated more precisely than M46.5 states it: the
+question *do these four glyphs render correctly at 9px in three engines* is
+measurable, and nothing in the tree can currently answer it.
+## 2026-08-11 — Seven tabs, and M47 split along the seam the design was drawn on
+
+Two owner answers, taken after [planning.md §7](planning.md#7-review-it-before-anything-is-built-against-it)'s
+review of the M46.5 and M47 plans.
+
+### Seven tabs
+
+The design settled six *badged* tabs and never said how many tabs there were —
+a definition of done whose central claim is what the strip contains, not saying.
+The review caught it.
+
+**Activity folds into Analytics.** It is the same data one row at a time: the
+rollup and the rows are one subject, so one tab holds both and the badge stays
+the click count. **Danger keeps its own tab**, unbadged, over moving deletion out
+of the strip into a header control — that would have been a structural change
+beyond the redesign as agreed.
+
+Eight section partials become seven tabs. The ninth item in the page's own list
+is the inline identity header, which is the page rather than a section — an error
+that was in F205, in the first draft of this plan, and in the sentence that
+described the page as having nine partials.
+
+### The split
+
+M47 becomes **M47, the layout** and **[M47.5](phase-details/m47.5.md), the state
+feedback**, and that is the seam the design was drawn on rather than an arbitrary
+halving. The owner combined one wireframe option's tabs with another's badges;
+separating them back means the shell is reviewed as navigation and the badges as
+information design, which is what each is.
+
+M47 therefore ships a **bare strip**, and that is stated as a deliberate
+intermediate rather than an oversight: a tab strip with no badges is exactly the
+option that was drawn, considered, and found insufficient alone. It is shippable
+and it is not the finished design.
+
+[W40](workflow-changes.md#made) is what made this cheap — a milestone the build
+turns out to need is added when it is needed, with no phase-boundary
+conversation. Under the older reading this would have been the fifth such
+conversation in one phase.
+
+### What the plan review caught, and it is the reason both plans changed
+
+Nine findings, every one verified against the tree before being acted on. The
+four that would have cost the build:
+
+- **The strip runs into four shipped, enforced gates that neither plan named.**
+  `linkDetailLineCap = 60` against a 57-line page — three lines of headroom, and
+  the test's own message says raising it *"is a decision about the page's
+  structure and belongs in decisions.md, not in this constant"*. The first two
+  form controls must be `url` then `alias`. `<ul>`/`<ol>` is refused before
+  `id="url"`. And a 160px prefix pixel budget with the QR thumbnail already
+  spending 96, which is what forces the glyph size onto `h-2.5` or `h-3` rather
+  than the 9px and 11px the wireframes drew.
+- **An ordering inversion.** F206 was approved into M47, on the owner's ground
+  that the console must be clean before anything asserts against it — and M46.5,
+  which runs first, names a clean console as one of the two things its kept spec
+  may assert. The fix moved to M46.5 to satisfy the reason it was approved for.
+- **`test/integration/web_test.go:540` was cited for the opposite of what it
+  asserts**, in two places. It asserts the `/docs` policy *does* carry
+  `unsafe-inline`; the main-policy assertion is `:593-594`.
+- **M48's panels were cited as an htmx precedent** and `panel.html:26-30` says
+  htmx *"is not used here"* — they are the Popover API. Only the workspace
+  switcher is the precedent.
+
+And the one that is about this project rather than this plan: **M46.5 claimed
+five discarded harnesses and named M53.** The record has three explicit discards
+— M46, M47 and **M48** — plus two ad-hoc runs at M51.9's and M57.9's acceptances
+with no discard note, and the reason is recorded three times rather than twice,
+differing by a word. Counted, corrected, and worth noting that the milestone
+whose subject is *make the check keepable* opened by miscounting how often it had
+not been kept.

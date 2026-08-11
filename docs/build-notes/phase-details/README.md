@@ -27,11 +27,13 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## Phase 3
 
-**Every milestone is `done` except [M57.5](m57.5.md), which was added after the
-close; 0.3.0 is written and not yet tagged.** Four work areas, chosen 2026-08-06: identity and account
+**Four rows are open — [M46.5](m46.5.md), [M47](m47.md) reopened,
+[M47.5](m47.5.md) and [M57.5](m57.5.md) — and [M57.9](m57.9.md) reopens after
+them. 0.3.0 is written
+and not yet tagged.** Four work areas, chosen 2026-08-06: identity and account
 lifecycle, dashboard UI and UX, infrastructure and resilience, QR codes and
-campaigns. Eighteen milestones — fourteen of work, two adversarial reviews, one
-close, and one insertion added after it — against the size target in
+campaigns. Twenty milestones — **twelve integers of work**, two adversarial
+reviews, one close, and **five insertions** (M50.5, M50.6, M46.5, M47.5, M57.5) — against the size target in
 [planning.md](../planning.md#the-size-target-a-phase-stays-under-sixteen-milestones).
 The phase was planned at **fifteen with every slot spent**. On 2026-08-07 it went
 to sixteen when [M50.5](m50.5.md) was added, and to seventeen when a review found
@@ -56,14 +58,16 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | # | Milestone | Depends on | Status |
 | --- | --- | --- | --- |
 | [M46](m46.md) | The shell, the navigation, and the links list | — | done |
-| [M47](m47.md) | The link page, taken apart | M46 | in progress (reopened) |
+| [M46.5](m46.5.md) | A browser an agent can drive, and a test that outlives it | — | not started |
+| [M47](m47.md) | The link page, taken apart | M46 · M46.5 | in progress (reopened) |
+| [M47.5](m47.5.md) | What every tab says about itself | M47 · M46.5 | not started |
 | [M48](m48.md) | On-demand panels, and what stops being buried | M47 | done |
 | [M49](m49.md) | QR codes sized in pixels, and a PNG to download | M48 *(ordering)* | done |
 | [M50](m50.md) | More than one QR code per link, told apart in the analytics | M49 | done |
 | [M50.5](m50.5.md) | The first file this product accepts | M50 | done |
 | [M50.6](m50.6.md) | A logo in the middle of a QR code | M50.5 | done |
 | [M51](m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | done |
-| [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | done |
+| [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | done *(range re-covered by M57.9)* |
 | [M52](m52.md) | Account deletion and subject erasure | M50.5 · M51 *(ordering)* | done |
 | [M53](m53.md) | A second factor: TOTP, enrolment, and recovery codes | M51 | done |
 | [M54](m54.md) | An API key belongs to an account, not to one organization | M52 | done |
@@ -71,7 +75,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M56](m56.md) | High availability: the failover contract | — | done |
 | [M57](m57.md) | High availability: measured, and still one container | M56 | done |
 | [M57.5](m57.5.md) | The six the close left behind | M58 *(see the note below)* | not started |
-| [M57.9](m57.9.md) | **Pre-release adversarial review** | M46–M57 · M57.5 | in progress (reopened) |
+| [M57.9](m57.9.md) | **Pre-release adversarial review** | M46–M57 · M46.5 · M47.5 · M57.5 | in progress (reopened) |
 | [M58](m58.md) | Deferred findings, documentation pass, 0.3.0 | all | done |
 
 Work areas, so a blocked milestone has an independent row to fall back to per
