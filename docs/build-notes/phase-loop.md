@@ -393,6 +393,17 @@ the owner's to schedule. Fix only what makes a shipped milestone's own claim
 false; everything else becomes deferred rows. Then **prompt** with the triage
 before acting on it.
 
+A review also **carries a browser check**: it drives the pages its range
+touched in a real browser and its findings say what was seen — do those pages
+render and behave as their milestones claim, and is the console clean on them?
+The obligation is what must be *answered*, never which commands to type, so it
+survives the tool being replaced; today the cheapest yes is the kept suite
+(`make verify-ui`, [tools/agent-browser/](../../tools/agent-browser/README.md))
+green against a running instance, plus driving what the range changed. A
+review that did not answer it is not finished. Owner-set 2026-08-11, over four
+CI shapes offered and declined —
+[the entry](decisions.md#2026-08-11--reviews-carry-a-browser-check) says why.
+
 A review also **judges what the always-read contract costs**: `make doc-cost`,
 then defend the growth or trim to pay for it. **This is the one place that
 judgement is defined**, and anything else obliged to make it points here rather

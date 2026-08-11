@@ -1,0 +1,4 @@
+# Session artifacts: playwright-cli writes snapshots and traces under
+# .playwright-cli/, the test runner writes failure output under test-results/.
+.playwright-cli/
+test-results/

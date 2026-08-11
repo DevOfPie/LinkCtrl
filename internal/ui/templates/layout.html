@@ -6,6 +6,12 @@
   <title>{{.Title}} · LinkCtrl</title>
   <link rel="stylesheet" href="{{asset "css/app.css"}}">
   <link rel="icon" href="{{asset "favicon.svg"}}" type="image/svg+xml">
+  {{/* htmx 2.0.9 injects a `.htmx-indicator` stylesheet at load unless told not
+       to, and `style-src 'self'` blocks it — a console error on every page, in
+       every browser (F206). Nothing uses hx-indicator; a template that starts to
+       must ship the rules in app.css. A meta tag is CSP-safe where an inline
+       script is not. */}}
+  <meta name="htmx-config" content='{"includeIndicatorStyles":false}'>
   <script src="{{asset "js/htmx.min.js"}}" defer></script>
 </head>
 <body class="min-h-full bg-surface text-ink antialiased">

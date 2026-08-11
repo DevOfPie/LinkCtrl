@@ -234,10 +234,10 @@ check: tidy lint shellcheck check-links test ## Everything CI runs, short of int
 # ran it (W14). It reads the class strings out of the templates and the built
 # stylesheet, so it needs no instance running and never touches :8081 or :8080.
 #
-# Node is required, and this target is the only thing in this repository that
-# requires it. D25 is what permits it: shipped code stays stdlib-only, tooling
-# that only verifies it may use Node. tools/render-verify is not imported by
-# anything, not built into anything, and not in the image.
+# Node is required — here and in tools/agent-browser's targets below, and by
+# nothing the product ships. D25 is what permits it: shipped code stays
+# stdlib-only, tooling that only verifies it may use Node. tools/render-verify
+# is not imported by anything, not built into anything, and not in the image.
 #
 # The npm install is done for you; the three browser engines are not. That is
 # several hundred megabytes, and a target that quietly spends it is a target
@@ -247,12 +247,51 @@ RENDER_VERIFY := tools/render-verify
 .PHONY: verify-render
 verify-render: ## Re-verify M26.5's popover geometry in Blink, Gecko and WebKit (needs Node)
 	@command -v node >/dev/null 2>&1 || { \
-		echo "node is not on PATH, and this is the one target in this file that needs it."; \
+		echo "node is not on PATH, and only this file's browser-tooling targets need it."; \
 		echo "See $(RENDER_VERIFY)/README.md, and Plan.md D25 for why it is allowed to."; \
 		exit 1; \
 	}
 	@test -d $(RENDER_VERIFY)/node_modules || npm install --prefix $(RENDER_VERIFY)
 	@node $(RENDER_VERIFY)/verify.mjs $(RENDER_ARGS)
+
+# M46.5 keeps two more things under the same D25 licence: the browser an agent
+# drives — @playwright/cli, pinned in tools/agent-browser the way render-verify
+# pins its own stack — and the kept spec, which asserts what no template scan
+# can: a clean console on a real page served by the running test instance.
+# The CLI is wrapped because it defaults to branded Chrome, which is not on
+# this machine and not among --browser's values; cli-config.json names the
+# bundled chromium instead, and the session it opens persists, so later
+# playwright-cli commands take no flag. Same refusal as verify-render: the npm
+# install is done for you, browser engines are never downloaded silently — a
+# missing engine fails naming the install command.
+AGENT_BROWSER := tools/agent-browser
+PLAYWRIGHT_CLI := $(AGENT_BROWSER)/node_modules/.bin/playwright-cli
+
+.PHONY: browse
+browse: ## Open the pinned browser CLI on the test instance; ARGS="..." runs any playwright-cli command instead
+	@command -v node >/dev/null 2>&1 || { \
+		echo "node is not on PATH. See $(AGENT_BROWSER)/README.md, and Plan.md D25 for why it is allowed to be needed."; \
+		exit 1; \
+	}
+	@test -d $(AGENT_BROWSER)/node_modules || npm install --prefix $(AGENT_BROWSER)
+	@if [ -n "$(ARGS)" ]; then \
+		$(PLAYWRIGHT_CLI) $(ARGS); \
+	else \
+		$(PLAYWRIGHT_CLI) open --config=$(AGENT_BROWSER)/cli-config.json http://127.0.0.1:8081/login; \
+	fi
+
+.PHONY: verify-ui
+verify-ui: ## Run the kept browser spec against the running test instance (needs Node and make up)
+	@command -v node >/dev/null 2>&1 || { \
+		echo "node is not on PATH. See $(AGENT_BROWSER)/README.md, and Plan.md D25 for why it is allowed to be needed."; \
+		exit 1; \
+	}
+	@test -d $(AGENT_BROWSER)/node_modules || npm install --prefix $(AGENT_BROWSER)
+	@curl -sf -o /dev/null http://127.0.0.1:8081/login || { \
+		echo "the test instance is not answering on :8081 — make up"; \
+		exit 1; \
+	}
+	@cd $(AGENT_BROWSER) && ./node_modules/.bin/playwright test --reporter=json | node report-failures.mjs
 
 ## ---- ci -------------------------------------------------------------------
 

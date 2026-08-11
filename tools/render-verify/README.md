@@ -79,7 +79,7 @@ claims want re-reading — instead of throwing somewhere further down.
 
 ## Setup
 
-Node is required and is the only thing in this repository that requires it.
+Node is required, here and in `tools/agent-browser/` — nowhere the product ships.
 Plan.md **D25** is what permits that: *shipped code stays stdlib-only; tooling
 that only verifies it may use Node.* Nothing here is imported by, built into or
 executed by the product — `go build` never sees `tools/`, and the container image

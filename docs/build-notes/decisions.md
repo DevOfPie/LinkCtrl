@@ -309,6 +309,8 @@ file. Append a row when you append an entry.
 | [Which review owns a reopening](#2026-08-11--which-review-owns-a-reopening) | W44: the latest review whose range contains it, not every one. Why the earlier review gets a note rather than a second run, and the cost that leaves |
 | [The link page becomes tabs, and what each tab says about itself](#2026-08-11--the-link-page-becomes-tabs-and-what-each-tab-says-about-itself) | The M47 redesign settled with the owner over five rounds: tabs with state on the tabs, `0` for empty counts, a cross for empty and a check for the one true binary, a count of active protections on Edit, and two Split glyphs that are a size comparison rather than a symbol — after four rotation marks failed at badge size |
 | [Seven tabs, and M47 split along the seam the design was drawn on](#2026-08-11--seven-tabs-and-m47-split-along-the-seam-the-design-was-drawn-on) | Activity folds into Analytics and Danger keeps its own tab, so the strip is seven. M47 becomes M47 and M47.5 — the layout and the state feedback, which is how the design was assembled in the first place. Also the nine findings a plan review caught before either was built against |
+| [Reviews carry a browser check](#2026-08-11--reviews-carry-a-browser-check) | W45: every `X.9` review answers whether the pages its range touched render and behave as claimed, console included — worded as a question so it survives the tool, chosen over four declined CI shapes |
+| [M46.5: a browser an agent can drive](#2026-08-11--m465-a-browser-an-agent-can-drive) | Two Playwright pins on purpose (no stable 1.63 exists; every CLI version bundles an alpha); the kept spec on `/login`, born red; the JSON-failure filter; the branded-Chrome wrap; F206 fixed and closed |
 
 ---
 
@@ -26070,3 +26072,101 @@ with no discard note, and the reason is recorded three times rather than twice,
 differing by a word. Counted, corrected, and worth noting that the milestone
 whose subject is *make the check keepable* opened by miscounting how often it had
 not been kept.
+
+## 2026-08-11 — Reviews carry a browser check
+
+A contract change, not any milestone's decision, so it carries no number:
+prompted by the owner's direction of 2026-08-11, given while M46.5 was planned
+and written into [phase-loop.md](phase-loop.md#two-milestones-that-do-not-end-like-the-others)
+when it was built. [W45](workflow-changes.md#made) is the row.
+
+**The obligation.** Every `X.9` review drives the pages its range touched in a
+real browser and its findings say what was seen: do those pages render and
+behave as their milestones claim, and is the console clean on them? A review
+that did not answer it is not finished.
+
+**Why it is worded as a question rather than a command.** The five-harness
+record is the argument: three browser harnesses discarded deliberately
+(M46, M47, M48), two more ad-hoc runs without a discard note — every one an
+answer produced and thrown away because the *practice* had no owner. Naming
+commands would tie the obligation to `@playwright/cli` 0.1.18 and die with it;
+naming the question survives the tool being replaced. What the check must
+answer is fixed; `make verify-ui` green against a running instance, plus
+driving what the range changed, is merely today's cheapest yes.
+
+**Why a review, and not CI.** Four shapes were offered and each declined:
+nightly, every push, opt-in per PR, and inside `release-check`. All four fail
+on the same two facts — the runners have no Node and no browser engines
+(several hundred megabytes), and this repository cannot push
+`.github/workflows/` to give them either; a `ci/proposed/` entry would wait on
+the owner applying it by hand. A review is a milestone the orchestrator runs
+itself, so the obligation binds an actor that already exists and needs nothing
+from CI. The cost is stated in the milestone and repeated here because it is
+real: the check runs at most as often as reviews do, a genuine reduction in
+coverage against every-push, chosen knowingly.
+
+**The named risk.** An obligation whose tooling is awkward gets satisfied by
+hand once and then dropped — the five-harness story with an extra step. The
+mitigation is that the suite already exists and is green: a review that runs
+an existing suite has a far lower bar than one that must build a harness
+first, which is exactly the difference M46.5 was bought for.
+
+## 2026-08-11 — M46.5, a browser an agent can drive
+
+Owner-added tooling, admissible under [D25](../../Plan.md#phase-2-decisions):
+Node for verification only, nothing shipped. Four decisions were made building
+it; the contract change it also landed is
+[the entry above](#2026-08-11--reviews-carry-a-browser-check) and carries no
+number.
+
+**Two Playwright versions in one tree, recorded rather than aligned.** Checked
+against the registry on 2026-08-11: stable `playwright` is **1.62.1** — no
+stable 1.63 exists — and **every** published `@playwright/cli` version bundles
+an alpha core (0.1.11 → 1.60.0-alpha, 0.1.18 → 1.63.0-alpha-2026-08-05), so
+there is no CLI pin that aligns with any stable pin. Alignment therefore means
+moving `tools/render-verify` off 1.62.1 — the pin three milestones' geometry
+evidence was measured against — onto an alpha that changes under the same
+name. Declined. The kept spec's runner is pinned to `@playwright/test`
+**1.62.1** instead, so the spec shares render-verify's pin and engines
+(chromium-1234, firefox-1538, webkit-2336) and the tree holds two stacks, not
+three. The cost, stated: the CLI's chromium-1237 duplicates ~700MB (the engine
+cache measured 1.2G → 1.9G when it was installed), and there are two versions
+to reason about. Revisit when a stable 1.63 ships. One consequence is tracked
+deliberately: `package-lock.json` pins the hoisting — the alpha `playwright`
+lands at the top of `node_modules` and the runner resolves its own nested
+1.62.1 — so the layout reproduces.
+
+**The kept spec asserts a clean console on `/login`, and that htmx ran.**
+`/login` because the layout, the stylesheet, the CSP and htmx are all live
+there with no session: a committed spec must not carry credentials, and a
+failed sign-in charges a real lockout counter. The htmx-liveness assertion
+(`window.htmx` present, `includeIndicatorStyles` read back `false`) exists so
+green means *htmx ran, configured not to inject* and never *nothing happened* —
+a page that failed to load htmx at all would also report a clean console. The
+spec was **born red**, which is the sabotage evidence at no extra cost: run
+before the fix was deployed it failed on the config assertion, and — with that
+assertion inverted once as sabotage, restored by counter-edit — on the console
+assertion, printing the exact CSP refusal F206 quotes. Fix deployed, green.
+
+**Green costs one line; nothing-ran is red.** `make verify-ui` reads the
+runner through `--reporter=json` and `report-failures.mjs` prints failures
+only — the reader is an agent whose context window is the budget, and a green
+run's full report is spend with no information in it. A run in which no test
+ran at all exits red, because *nothing failed* and *nothing was checked* must
+not share an exit code. A runner that dies before producing JSON has its raw
+output passed through and fails: its own words are the diagnosis.
+
+**The CLI is wrapped because its default browser is not on this machine.**
+`@playwright/cli` launches branded Chrome at `/opt/google/chrome/chrome` by
+default, and chromium is not among `--browser`'s values — it is reachable only
+through a config file, so `cli-config.json` names the bundled chromium and
+`make browse` passes it to `open`; the session persists and later commands
+take no flag. Engines are never downloaded silently, verified the same way
+render-verify's refusal is: with an empty engine cache the run fails red
+naming `npx playwright install`, downloading nothing.
+
+**F206 is fixed here and its row closed pointing at M46.5** — owner-approved
+work, moved from M47 because this milestone runs first and its spec is what
+needed the console clean. The fix is one meta tag in the layout
+(`includeIndicatorStyles:false`); the CSP is untouched, and the next template
+to use `hx-indicator` ships the rules in `app.css`.

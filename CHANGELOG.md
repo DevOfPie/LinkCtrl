@@ -27,7 +27,17 @@ migrations run at boot.
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **Every dashboard page loaded with a Content-Security-Policy violation in the
+  browser console.** htmx injects a stylesheet for its request-indicator feature
+  at load, and the dashboard's `style-src 'self'` blocked it — on every page, in
+  every browser. Nothing visible was wrong, because no page uses that feature;
+  the costs were a console that could never be clean, and that the first
+  template to adopt `hx-indicator` would have gotten a loading state that
+  silently did nothing. The layout now tells htmx not to inject
+  (`includeIndicatorStyles: false`); a template that starts using indicators
+  ships the rules in the stylesheet instead. The policy itself is unchanged.
 
 ## [0.3.0] - 2026-08-10
 
