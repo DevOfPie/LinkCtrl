@@ -303,6 +303,8 @@ file. Append a row when you append an entry.
 | [A queue row typed `issue` against a design that was deliberate](#2026-08-10--a-queue-row-typed-issue-against-a-design-that-was-deliberate) | The routing judgement `/process-queue` forces and does not name: when the tree says the behaviour is exactly as designed and the owner has typed the row `issue` anyway, the type stands and the as-designed conflict becomes the row's evidence. Why that is not the *typed issue, is neither* dispute, and why F204 carries three fix shapes rather than a prompt |
 | [The target was aimed at the plan, not at the build](#2026-08-11--the-target-was-aimed-at-the-plan-not-at-the-build) | W40: a phase is planned at fifteen milestones and that ceiling is real, but a milestone the build turns out to need is added when it is needed rather than costing a phase-boundary conversation. What the rule was protecting, and where that protection now sits |
 | [A gate nobody runs](#2026-08-11--a-gate-nobody-runs) | W41: `check-links` was enforced by a human typing it and by a script that runs at release time only, so the table gate M58 added was unenforced from the day it landed. Why the row was split rather than taken whole, and why the wiring half needed no milestone |
+| [M57.5: six repairs a phase close could not have contained](#2026-08-11--m575-six-repairs-a-phase-close-could-not-have-contained) | Why an eighteenth milestone rather than Phase 4 or a standing-approval sweep, why it is `.5` and not `M59`, which four of the ten open rows are excluded and on what test, and the one bullet written as a constraint rather than an outcome because the obvious fix is the recurrence |
+| [A review that is not final is not a review](#2026-08-11--a-review-that-is-not-final-is-not-a-review) | W43: scope added after an `X.9` has run is numbered **below** it and **reopens** it. Why the three offered options were all worse, and the one cost this creates — a number and a dependency edge pointing opposite ways |
 
 ---
 
@@ -7142,6 +7144,7 @@ milestone that shipped the pages is the milestone whose tests passed while they
 were broken, which is why the reopening asks for a structural assertion — no
 page struct may redeclare a field the shell already provides — rather than a
 fix to two lines.
+
 ## 2026-08-01 — M28, the page field that shadowed the shell
 
 The reopening, built. [F20](deferred-findings.md) is closed and the entry above
@@ -11539,6 +11542,7 @@ cross-organization case beside it as an assertion of the bound. Correcting the
 setup of a test whose premise the product never had is not the same as editing a
 test to make a change pass, and the difference is that the original claim survives
 in the file rather than being quietly dropped.
+
 ## 2026-08-04 — M44.9, the pre-release review, and what refutation cost the findings
 
 m44.9.md requires that the review's own output be recorded — what was checked,
@@ -24030,6 +24034,7 @@ a measurement of rendered width rather than a check of two tag names.
 them is what makes them work, and M58 is where the work happens. The other twenty
 open rows are untouched by this and still owe the owner the same review, one at a
 time, which is M58's first act rather than this entry's.
+
 ## 2026-08-09 — M58's triage: sixteen rows, and the conflict that decided seven of them
 
 [M58](phase-details/m58.md)'s first bullet is that every row in
@@ -24154,6 +24159,7 @@ The scope gate permits it: *no more than one milestone per commit* forbids
 bundling two, and splitting one across several commits is explicitly fine. So M58
 being large is a question about how much one worker can hold, not about whether
 the tree can represent it.
+
 ## 2026-08-09 — M58, amendment: the SSO comment is not where the bullet says
 
 Found at [step 1](phase-loop.md#1-validate), reading M58's comment-truth bullets
@@ -24336,6 +24342,7 @@ passed half a megabyte while its *Open* section holds **three** rows — F90, F1
 and F193. Almost all of that file is closed history, and the day somebody wants it
 smaller the answer is a split by state rather than a deletion — recorded here so
 that when it is proposed, it is proposed as a move and not as a tidy-up.
+
 ## 2026-08-09 — A third actor, for the claim nobody was checking
 
 Owner-set at [M58](phase-details/m58.md)'s acceptance, in these words: *add an
@@ -24407,6 +24414,7 @@ something untrue for a while.
 *accumulation* of several milestones is still nobody's job, and the `X.9`
 adversarial reviews remain the only thing looking at that. This step narrows the
 gap; it does not close it.
+
 ## 2026-08-09 — M58: the eight rows its own work filed, and the bullet that could not be true
 
 Two things, both from the same prompt at [M58](phase-details/m58.md)'s
@@ -24905,6 +24913,7 @@ easiest kind of comment to leave uncorrected and the reason to correct it.
 The stray cell is gone from the F28 and F5 rows and the scan that found them
 reports zero mismatches across 192 rows. Nothing checks this automatically, as
 that row's severity cell says; the scan remains something a reader runs.
+
 ## 2026-08-10 — M58, amendment: the four bot-bypass sites were seven
 
 Found by the fourth build pass, sweeping the class rather than the sites a
@@ -24947,6 +24956,7 @@ and both are read eventually.
 A count is not made durable by being written down next to an apology for the
 last one. It is made durable by being taken against the tree, with the command
 that took it recorded so the next reader can run it rather than trust it.
+
 ## 2026-08-10 — The 2,691 bytes W38 added to every resume, defended
 
 Owed and unmade until the third reviewer run pointed at it, which is worth
@@ -25166,6 +25176,7 @@ candidates file, eight in this log's fourth-pass entry. They are the same tally
 counted to different edges — seven places promise the bypass, and the eighth is
 the candidates file's own *count* of them, which was itself wrong and was fixed in
 the same breath. Stated in the entry rather than left for a fourth count to find.
+
 ## 2026-08-10 — M58, amendment: the third move of one number, so the number goes
 
 **The bullet as it stood** carried a parenthesis reading *"M58's own work filed
@@ -25470,6 +25481,7 @@ it is the failure the third actor exists to catch. Two links this commit broke
 are not a sweep of a class somebody else has to decide about. The four in
 `decisions.md` stay for the reason F203 gives: it is append-only, and an entry
 saying a row was open is a true statement about the moment it was written.
+
 ## 2026-08-10 — A queue row typed `issue` against a design that was deliberate
 
 Prompted by draining `.queue.md` after Phase 3 closed. One row, typed `issue` by
@@ -25515,6 +25527,7 @@ deferred row **is** the conversation. Prompting now would ask the owner to decid
 the shape of a fix before they have decided whether to schedule it at all, which
 inverts the order the deferral system exists to hold. F204 states three shapes and
 what each costs; whichever is chosen is chosen when the row is approved.
+
 ## 2026-08-11 — The target was aimed at the plan, not at the build
 
 Owner-set while triaging the ten findings Phase 3's close left open, and prompted
@@ -25570,6 +25583,7 @@ cheapest way to satisfy it is fatter milestones — the same scope in fewer file
 each less reviewable. If the target and a milestone's reviewability disagree, the
 target still gives. That paragraph is untouched and it is the reason the target
 survives at all.
+
 ## 2026-08-11 — A gate nobody runs
 
 [W41](workflow-changes.md#made), and the wiring half of
@@ -25621,3 +25635,144 @@ same thing this entry is about.
 false while the omission stood, and is true again. `release-check.sh`'s label
 said *every relative link and anchor resolves*, describing half the script it
 invokes, and now names both halves.
+
+## 2026-08-11 — M57.5: six repairs a phase close could not have contained
+
+Owner-added scope, taken while triaging the ten findings Phase 3's close left
+open. [M57.5](phase-details/m57.5.md) is the five artifacts;
+this is the fourth of them.
+
+### Why a milestone at all, and why now rather than Phase 4
+
+Six of the ten rows are repairs with no choice in them, and two of those — F197
+and F202 — are records that **the 0.3.0 tag publishes**. Plan.md's D65 cell
+states two contradictory scopes three clauses apart, and `m54.md` describes a
+bound the tree replaced. Tagging over both was available and was the option the
+owner declined.
+
+They could not ride the standing documentation approval, which is what made a
+milestone necessary rather than convenient. F197's second half is that
+`decisions.md` claims the D65 cell was *checked and deliberately unchanged*
+while `git diff` shows it rewritten in the same commit — and that file is
+append-only, so the correction is a new entry naming the old line rather than an
+edit. Deciding that is a judgement about the log's own rules, not a typo fix.
+F198 changes a gate's semantics. F199, F200 and F201 add or repair tests.
+None of that is *correcting a document*.
+
+### Why `.5` and not `M59`
+
+[planning.md](planning.md#4-numbering) reserves integers for **the work the phase
+planned**. This was not planned; it is an insertion, and insertions take
+`X.1`–`X.8` with the mid-band preferred so later ones can fall on either side.
+So `M57.5`, sorting after the close it follows from.
+
+It reads oddly — a milestone numbered after the phase close, doing more of what
+the close did — and that is the honest reading rather than a defect in the
+numbering. The close needed a follow-on. Calling it `M59` would have said the
+phase planned it.
+
+### Why this was not a phase-boundary conversation
+
+Under the rule as written until this morning it would have been: any insertion
+past fifteen was one, and Phase 3 was already at seventeen.
+[W40](workflow-changes.md#made) settled that the target binds initial planning
+rather than the build, which is exactly the case this milestone is. The
+count moved to eighteen without a conversation about the count, and that is the
+new rule working rather than being bent.
+
+### The four that are excluded, and the test
+
+Not severity — **whether a decision is owed before the work starts**.
+
+- **F195** (F160's suppression is per link and per window while its sentence
+  reads as an instance fact) — the cheap fix is free of I/O, the correct one is a
+  query, and choosing is a design decision.
+- **F203** (sixty-six `#open` references naming closed rows) — a blanket rewrite
+  falsifies the append-only log and restales itself at the next closure. It needs
+  a convention decision about this file's own anchors.
+- **F204** (the workspace switcher) — three fix shapes, each reversing a recorded
+  answer of the owner's.
+- **F196** (release.yml's extraction comment) — written at
+  [`ci/proposed/release.yml`](../../ci/proposed/README.md) and waiting on the
+  owner, because nothing here can push `.github/workflows/`.
+
+Six repairs and four decisions is a cleaner seam than any severity line, and it
+is the reason this milestone can be built unattended while the other four cannot.
+
+### The bullet written as a constraint rather than an outcome
+
+F200's says the fixture must be **derived from `qr.FluidClass`**, not that it
+must carry the class. That is deliberate and it is the only place this
+milestone specifies a *how*.
+
+[F191](deferred-findings.md) filed these same two fixtures for a different
+missing attribute. They were corrected by hand, the correction was right, and the
+next attribute went missing the same way — which is F200. A third hand-written
+copy is a fourth recurrence waiting, so the row is only repaired if the copy
+stops existing. The justification previously given against importing the emitter
+— that `internal/ui` is stdlib-only — does not hold: that rule is about Node,
+CDNs and CSP, and `internal/qr` does not import `internal/ui`, so no cycle
+exists.
+
+Stating a mechanism inside a definition of done is normally the wrong altitude.
+Here the mechanism **is** the finding.
+
+### What is deliberately not enforced
+
+F197 and F202 have no mechanical guard and their bullets say so. Nothing can test
+that a prose cell states one scope, or that a milestone file describes the
+current tree. The milestone buys the correction and the record of how each was
+missed; it does not buy a guard, and claiming otherwise would be the kind of
+sentence this phase has spent four build passes deleting.
+## 2026-08-11 — A review that is not final is not a review
+
+Owner-set, and it is a fourth option against three that were offered.
+[W43](workflow-changes.md#made).
+
+M57.5 was first numbered **M58.5**, above [M57.9](phase-details/m57.9.md). The
+plan review required by [planning.md §7](planning.md#7-review-it-before-anything-is-built-against-it)
+caught it: a review covers everything numerically below it, planning.md says
+*work numbered after the last `X.9` ships unreviewed, so nothing is placed
+there*, and M58.5 edited `scripts/check-links.sh`, `internal/link/qr_test.go`
+and `internal/ui/ui_test.go` — every one inside what M57.9 claims to have passed.
+
+Three options went to the owner. **Exempt it**, on the argument that
+[W38](workflow-changes.md#made) now puts an independent reviewer on every
+milestone, so *ships unreviewed* is no longer true. **Add an M58.9**, restoring
+the rule literally at the cost of a nineteenth milestone. **Accept it and say
+so**, changing nothing but the honesty of the file.
+
+The owner took none of them: *add it below M57.9 and re-open M57.9. X.9
+milestones should still be final. Leave room between this and 57.9 in case
+another milestone needs to be added.*
+
+### Why that is better than the option that was recommended
+
+The recommendation was the exemption, and its case was that W38 changed the
+premise. That case is true and it is not sufficient. **A W38 reviewer reads one
+diff; an `X.9` reads a phase.** The defects an `X.9` exists to find are the ones
+`M51.9`'s own entry describes — *no single milestone's definition of done can
+catch, because each milestone was internally consistent* — and a per-milestone
+reviewer is by construction unable to see them. Trading the phase-spanning read
+for the per-diff one because the per-diff one is newer would have been swapping
+two different instruments and calling it a saving.
+
+The added milestone is also not incidental to that: it repairs six findings from
+four reviewer runs, which is precisely the accumulation an `X.9` is pointed at.
+
+### The cost, which is real
+
+**A number and a dependency edge now point opposite ways.** M57.5 depends on
+M58, and sits above it in neither table. planning.md says insertions are *placed
+in dependency order*, and this one is not.
+
+That is accepted rather than papered over, and the milestone file says it in its
+own opening. The `Depends on` column carries the real edge, the phase loop reads
+that column before it reads the number, and the number is doing a different job —
+declaring which review owns this work. When those two jobs conflict, the review's
+claim is the one that has to stay true, because it is the claim somebody will
+rely on years later without being able to re-derive it.
+
+**Leaving room is part of the rule.** `.5` rather than `.8`, so a later
+insertion still has 57.6 through 57.8 to land in. A rule that fills the band
+forces the next insertion straight back into the problem this one solved.

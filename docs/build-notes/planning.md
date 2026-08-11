@@ -114,7 +114,9 @@ milestones, and the way this one was caught was a review reading the milestone
 against *reviewability* rather than against the number. The rule's own sentence
 holds: if the target and a milestone's reviewability disagree, the target gives.
 
-Phase 3 therefore runs at **seventeen**, and that is a recorded exception rather
+Phase 3 therefore ran at **seventeen** as planned and built, and **eighteen**
+once [M57.5](phase-details/m57.5.md) was added after the close under the
+clarification above. That is a recorded exception rather
 than a new ceiling: **the rule here stays fifteen**. Moving the target for one
 phase and moving it for every phase after are different decisions, and only the
 first was taken — twice.
@@ -142,7 +144,13 @@ milestone's reviewability disagree, the target is the thing that gives.
   the contract and every file that cites it.
 - **`X.1`–`X.8`** are insertions, placed in dependency order. Prefer the
   mid-band (`X.5`) so later insertions can still fall on either side.
-- **`X.9` is reserved for scheduled reviews.** A review covers everything
+- **`X.9` is reserved for scheduled reviews, and a review is final.** Nothing is
+  numbered above the last `X.9` of a phase except the close, and an insertion
+  added after a review has run is numbered **below** it and **reopens** it, so the
+  range it claims stays true. Leave room: prefer the mid-band so a later
+  insertion still has somewhere to go between yours and the review. Owner-set
+  2026-08-11, when M57.5 was first numbered M58.5 and a plan review found it
+  would ship outside every review's range. A review covers everything
   numerically below it, so keeping reviews at the top of the band guarantees
   any insertion between `X` and `X+1` stays inside the nearest following
   review's range. (Phase 1's M0.5 predates this reservation and stays where

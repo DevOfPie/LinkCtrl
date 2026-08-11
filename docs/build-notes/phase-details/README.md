@@ -27,10 +27,11 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## Phase 3
 
-**Planned, unstarted.** Four work areas, chosen 2026-08-06: identity and account
+**Every milestone is `done` except [M57.5](m57.5.md), which was added after the
+close; 0.3.0 is written and not yet tagged.** Four work areas, chosen 2026-08-06: identity and account
 lifecycle, dashboard UI and UX, infrastructure and resilience, QR codes and
-campaigns. Seventeen milestones — fourteen of work, two adversarial reviews, one
-close — against the size target in
+campaigns. Eighteen milestones — fourteen of work, two adversarial reviews, one
+close, and one insertion added after it — against the size target in
 [planning.md](../planning.md#the-size-target-a-phase-stays-under-sixteen-milestones).
 The phase was planned at **fifteen with every slot spent**. On 2026-08-07 it went
 to sixteen when [M50.5](m50.5.md) was added, and to seventeen when a review found
@@ -38,6 +39,14 @@ that milestone was two and the owner split it into M50.5 and [M50.6](m50.6.md).
 Both were the phase-boundary conversation the target exists to force. The
 standing rule stays at fifteen; this phase is a recorded exception. A milestone that turns out to be
 two is still that conversation rather than an insertion.
+
+**Eighteen on 2026-08-11**, when [M57.5](m57.5.md) was added after the close to
+repair six findings M58's own passes filed. That one was **not** a
+phase-boundary conversation, and the difference is
+[W40](../workflow-changes.md#made): the owner settled that the target binds
+initial planning rather than the build, so a milestone the build turns out to
+need is added when it is needed. The two moves above happened under the older
+reading and are left recorded as they happened.
 
 **M46–M48 are the redesign, written from the owner's walkthrough** — eighteen
 blind tasks over two rounds, 2026-08-06 and 2026-08-07. Round two also produced
@@ -61,7 +70,8 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M55](m55.md) | An update checker, and the fifth thing that leaves this product | — | done |
 | [M56](m56.md) | High availability: the failover contract | — | done |
 | [M57](m57.md) | High availability: measured, and still one container | M56 | done |
-| [M57.9](m57.9.md) | **Pre-release adversarial review** | M46–M57 | done |
+| [M57.5](m57.5.md) | The six the close left behind | M58 *(see the note below)* | not started |
+| [M57.9](m57.9.md) | **Pre-release adversarial review** | M46–M57 · M57.5 | in progress (reopened) |
 | [M58](m58.md) | Deferred findings, documentation pass, 0.3.0 | all | done |
 
 Work areas, so a blocked milestone has an independent row to fall back to per
