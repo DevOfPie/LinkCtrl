@@ -23,9 +23,19 @@
        write returns to is the handlers' to derive, never the request's to
        name — D178.
 
-       The strip ships bare. The badges are M47.5's, and a strip with no
-       badges is the drawn option that was judged insufficient on its own — a
-       deliberate intermediate state, not an oversight. */ -}}
+       Every tab carries its state (M47.5), because the badge is then both
+       the answer and the way in: you read `Routing 2` and click `Routing 2`.
+       Six positions — Danger has no state to carry, deletability being a
+       permission — and every tab holds the same width whether set or empty,
+       so the strip does not reflow as a link is configured and two links
+       compare position by position. Counts read `0` in a muted chip rather
+       than no chip: a missing badge and a badge reading zero are different
+       claims and a reader cannot tell them apart. The cross means *the
+       section is empty*, never *no* — it serves Split and Signed both, and a
+       third meaning would make it lie. The check is the only badge carrying
+       colour, because signed access is a security property worth reading at
+       a glance and it is the strip's one true binary. The glyphs live in
+       partials/icons.html, the icon vocabulary this milestone seeds. */ -}}
 <div id="link-tabs">
   <nav aria-label="Link sections" class="flex overflow-x-auto whitespace-nowrap border-b border-line">
     {{range .Tabs}}
@@ -33,7 +43,7 @@
     <a href="/links/{{$.Link.ID}}?tab={{.ID}}" {{if $active}}aria-current="page"{{end}}
        hx-get="/links/{{$.Link.ID}}?tab={{.ID}}" hx-target="#link-tabs"
        hx-select="#link-tabs" hx-swap="outerHTML" hx-push-url="true"
-       class="shrink-0 border-b-2 px-4 py-2 text-sm font-medium {{if $active}}border-accent text-ink{{else}}border-transparent text-muted hover:text-ink{{end}}">{{.Label}}</a>
+       class="flex shrink-0 items-center border-b-2 px-4 py-2 text-sm font-medium {{if $active}}border-accent text-ink{{else}}border-transparent text-muted hover:text-ink{{end}}">{{.Label}}{{template "link_tab_badge" .}}</a>
     {{end}}
   </nav>
   <div class="mt-6">
@@ -52,4 +62,24 @@
          Hidden until invoked, so it adds nothing to any tab's flow. */ -}}
   {{if and .Identity (.Identity.Can "links.read")}}{{template "link_qr_panel" .}}{{end}}
 </div>
+{{end}}
+
+{{define "link_tab_badge"}}
+{{- /* One tab's badge. Dot is a linkTab; Badge is its vocabulary word and ""
+       is Danger's no-badge. Chips share one box — h-4, min-w-4, px-1 — and a
+       position's two states always draw the same kind, glyph or digit, so
+       every tab holds its width whether set or empty, which is what "the
+       strip does not reflow as a link is configured" rests on. Icon titles:
+       the cross's says *empty* because that is what it means. */ -}}
+{{- if eq .Badge "count" -}}
+<span class="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-sunken px-1 text-xs font-medium tabular-nums {{if .Count}}text-ink{{else}}text-subtle{{end}}">{{.Count}}</span>
+{{- else if eq .Badge "check" -}}
+<span class="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-ok-soft px-1 text-ok-ink">{{template "icon_check" "Signed access required"}}</span>
+{{- else if eq .Badge "cross" -}}
+<span class="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-sunken px-1 text-subtle">{{template "icon_cross" "Empty"}}</span>
+{{- else if eq .Badge "weighted" -}}
+<span class="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-sunken px-1 text-ink">{{template "icon_weighted" "Weighted split"}}</span>
+{{- else if eq .Badge "sequential" -}}
+<span class="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-sunken px-1 text-ink">{{template "icon_sequential" "Sequential split"}}</span>
+{{- end -}}
 {{end}}

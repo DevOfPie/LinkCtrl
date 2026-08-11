@@ -1205,9 +1205,27 @@ func linkDetailTabsFixture() []map[string]any {
 		"edit": "Edit", "qr": "QR", "routing": "Routing", "split": "Split",
 		"signed": "Signed", "analytics": "Analytics", "danger": "Danger",
 	}
+	// The badges as attachTabBadges would build them from this file's own
+	// link_detail fixture (M47.5): five protections on, two QR codes, two
+	// rules, a weighted split, RequireSignature on, and the stats fixture's 40
+	// clicks. Danger carries none. Mirrored rather than imported for the same
+	// reason linkDetailTabs is; the empty and cross states have their own
+	// renders in TestEveryTabCarriesItsState.
+	badges := map[string]map[string]any{
+		"edit":      {"Badge": "count", "Count": int64(5)},
+		"qr":        {"Badge": "count", "Count": int64(2)},
+		"routing":   {"Badge": "count", "Count": int64(2)},
+		"split":     {"Badge": "weighted", "Count": int64(0)},
+		"signed":    {"Badge": "check", "Count": int64(0)},
+		"analytics": {"Badge": "count", "Count": int64(40)},
+		"danger":    {"Badge": "", "Count": int64(0)},
+	}
 	out := make([]map[string]any, 0, len(linkDetailTabs))
 	for _, id := range linkDetailTabs {
-		out = append(out, map[string]any{"ID": id, "Label": labels[id]})
+		out = append(out, map[string]any{
+			"ID": id, "Label": labels[id],
+			"Badge": badges[id]["Badge"], "Count": badges[id]["Count"],
+		})
 	}
 	return out
 }

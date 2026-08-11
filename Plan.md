@@ -514,8 +514,8 @@ per milestone lives in
 else; the plan below is the scope contract rather than a progress report.
 
 **Phase 3: planned on 2026-08-06. Every milestone is `done`; 0.3.0 is written
-and not yet tagged. One milestone is open — M47.5 — and M57.9 reopens after
-it.** Twenty-one milestones, M46–M58,
+and not yet tagged. What remains is M57.9's reopened run.** Twenty-one
+milestones, M46–M58,
 across four work areas; the plan is [below](#phase-3-build-plan). It was planned
 in full before its first milestone was built, on the owner's direction, so that
 the fifteen-milestone target is enforced by arithmetic rather than discovered at

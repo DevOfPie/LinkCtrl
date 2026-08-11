@@ -319,6 +319,8 @@ file. Append a row when you append an entry.
 | [M46.6, one bullet amended at acceptance](#2026-08-11--m466-one-bullet-amended-at-acceptance) | The opened-list-unchanged clause gave way to the chevron-only face on a three-engine probe; empty-labelled placeholder is the only cross-engine mechanism; quoted before and after |
 | [M47, a citation amended at validation](#2026-08-11--m47-a-citation-amended-at-validation) | nav.html:88 became :130 when M46.6 restyled the switcher; the htmx pattern the bullet leans on is unchanged |
 | [M47 built: the stack becomes tabs, and D178](#2026-08-11--m47-built-the-stack-becomes-tabs-and-d178) | D178 — tab state is `?tab=`, validated against a permission-built strip, and every section-owned write re-derives its own tab server-side; `next` stays a two-value choice. The strip is a partial, so the 60-line cap did not move. The QR panel renders at page level because the thumbnail invokes it from every tab, and `id="qr"` travels with it. Archive and restore stay tabless, and why that trade was taken. Two integration tests amended, named; the whole-page scans render once per tab (F167 at page scale). The blind-task re-run is owed and is the owner's |
+| [M47.5 built: the badges, the glyph size, and the lie a browser caught](#2026-08-11--m475-built-the-badges-the-glyph-size-and-the-lie-a-browser-caught) | The size is 12px because 10px collapses the weighted glyph's outlined share in all three engines — measured on a fixture assembled from the product's own files, and the wireframes' 9/11 did not survive. Two contract readings stated: Signed reads the stored `RequireSignature`, QR counts the codes the panel lists. The icon home is four defines in `partials/icons.html`, baseline arithmetic at 20.5. And the split badge lied for an hour — GetSplit's empty-not-nil answer — caught by the kept spec's badge count against the running product, pinned in a handler-side test |
+| [M47.5, one bullet amended at acceptance](#2026-08-11--m475-one-bullet-amended-at-acceptance) | Same-width-set-or-empty overstated the constant-chip mechanism; two-digit counts widen; quoted before and after with the class-level fact |
 
 ---
 
@@ -26663,3 +26665,129 @@ field on the landing tab — *"no hunting, no scrolling needed to find it"* —
 and the one friction named was scrolling past ~10 unrelated fields to reach
 the single Save button at the bottom, which is a different complaint than
 F205's and is filed as its own row rather than lost in this paragraph.
+
+## 2026-08-11 — M47.5 built: the badges, the glyph size, and the lie a browser caught
+
+**Marked M47.5.** The vocabulary — `0` over nothing, the cross as *empty*, the
+check as the one colour, two glyphs that draw the difference — was owner-set
+over five rounds of wireframes and is recorded in
+[the wireframe entry](#2026-08-11--the-link-page-becomes-tabs-and-what-each-tab-says-about-itself);
+this entry records what the build had to decide and what it measured. No new
+`D` number: every choice here either was already the owner's or is a reading
+of the contract, stated below so it can be objected to.
+
+### The size is h-3 — 12px — and 10px failed in all three engines
+
+The prefix pixel budget forces the choice onto `h-2.5` (10px) or `h-3` (12px);
+m47.5.md hands the answer to M46.5's browser check. Method, since the number
+means nothing without it: a fixture page assembled at run time from the
+repository's own files — the icon defines read out of `partials/icons.html`,
+the chip markup as `link_tab_badge` writes it, the stylesheet from `make css`
+— served over `127.0.0.1` and rendered by the three engines render-verify
+pins (playwright 1.62.1: chromium-1234, firefox-1538, webkit-2336) at
+deviceScaleFactor 1. The 1x rasters were magnified nearest-neighbour — the
+same pixels, larger — and judged per glyph, per size, per engine.
+
+What was seen, identically in Blink, Gecko and WebKit: at 10px the weighted
+glyph's **outlined share collapses into a smear** — its 1.2px stroke and
+sub-pixel interior cannot both survive the raster, and the mark that is half
+the pair's meaning stops being a bar at all. At 12px the outline closes into
+a legible hollow bar, sequential's three bars separate cleanly, and the check
+and cross are unambiguous. So the wireframes' lean toward small (9px and
+11px, drawn) did not survive measurement, which is the reason m47.5.md calls
+the size measured rather than chosen. `linkTabBadgeSize` in
+`internal/ui/link_detail_test.go` ties the recorded answer to the class in
+icons.html — proven incidentally when the two disagreed for one commit-less
+minute and the suite went red — and the kept spec asserts the rendered 12px
+against the running product.
+
+### Two readings of the contract, stated rather than absorbed
+
+**The Signed badge reads the stored `RequireSignature`, not the transient
+`SignedURL`.** m47.5.md's bullet cites `link_signed.html:12`'s
+`{{if .SignedURL}}` as its evidence, and that citation is read here as
+evidence of *binariness* — no third state — rather than as the badge's
+source: `SignedURL` is a capability shown once and never stored, so a badge
+on it would be a check for exactly one render after a mint and a cross for
+the rest of the link's life, and every rationale clause the design recorded —
+*"signed access is a security property worth reading at a glance"*, *"the
+strip's one true binary"* — describes the stored boolean. The badge therefore
+reads what the edit form's *Require a signed link* gate stores. If that
+reading is wrong it is one line in `attachTabBadges` and one fixture.
+
+**The QR count is the codes the panel lists, default included.** A link
+nobody has touched reads `QR 1`, because opening the tab shows one code —
+ListQRCodes synthesises the default, and a count of stored rows would read
+`0` over a section visibly holding a code, which is the lying badge the
+milestone's risk section names. `0` is reachable — it is what the failed-soft
+codes read leaves, and the section then shows nothing too.
+
+### The glyphs, and the arithmetic the record demanded
+
+`partials/icons.html` is the icon home: four defines — `icon_cross`,
+`icon_check`, `icon_weighted`, `icon_sequential` — inline SVG on a 24-unit
+canvas, `currentColor`, each define's dot its accessible name carried as
+`aria-label` and `<title>`. Template defines rather than a sprite or Go
+funcs, because a define is this codebase's unit of markup reuse, the CSP
+rules out external assets, and the caller owns colour by wrapping the glyph
+in a text-colour token. The drafting defect the wireframe rounds recorded is
+prevented the way the record demands: the outlined share's stroke is 2.8,
+inset by half of it, and every bottom computes to the one baseline —
+`3.5+17`, `8.5+12`, and `11.1+8+1.4` are all 20.5.
+
+The chips share one box — `h-4 min-w-4 px-1` — and a position's two states
+always draw the same kind, digit or glyph, which is the mechanism behind
+*every tab holds the same width whether set or empty*. Muted is a text token
+(`text-subtle` on `bg-sunken`); the check alone carries the ok pair.
+
+### The badge that lied for an hour, and what caught it
+
+`attachTabBadges` first tested `data.Split != nil` for the split badge, and
+`GetSplit` answers a link with no split with an **empty Split, not a nil
+one** — so every unconfigured link drew five badges where the strip claims
+six. Every template-level test was green, because the ui fixtures hand the
+template already-assembled badges; the kept spec against the running product
+went red within the hour, at exactly its badge-count assertion. That is the
+milestone's own risk — six values assembled wrongly make the strip
+confidently misleading — caught by the instrument M46.5 was bought for. The
+fix tests `Kind != ""`, the case is pinned by name in
+`TestAttachTabBadgesReadsWhatTheSectionsShow` (internal/httpx), and the
+assembly now has a test on the handler's side of the seam as well as the
+template's.
+
+### Verified, not assumed
+
+`make check`, `make test-integration`, `make verify-ui` green. Sabotage, each
+restored by counter-edit: the template refusing the zero chip and the cross
+retitled *No* turned the ui test red at both claims; the split nil-test
+reintroduced turned the assembly test red at exactly the pinned case; the
+kept spec's size assertion inverted went red against the running product
+naming 12 where it demanded 10, after its badge-count half had already been
+born red on the real defect above. Nothing to seed: every badge reads state
+the demo already has, as M47's file stated for both halves of the split.
+
+## 2026-08-11 — M47.5, one bullet amended at acceptance
+
+**Marked M47.5.** The amendment rule's three parts:
+
+**As it stood:** *"Six positions, and every tab holds the same width whether
+set or empty, so the strip does not reflow as a link is configured and two
+links compare position by position."*
+
+**As amended:** *"Six positions, and every position draws its chip in both
+states — the same kind, set or empty — so configuring a value never adds or
+removes a chip, the strip does not reflow as a link is configured, and two
+links compare position by position. Width moves only as a count gains
+digits."*
+
+**The tree fact:** the chip is `min-w-4 px-1` (`partials/link_tabs.html:76`
+in this diff), so a two-digit count — the fixture's own Analytics `40` —
+renders wider than the empty `0`. Literal same-width would need a two-digit
+reserve on every chip, which nobody chose, the wireframes never drew (they
+drew single digits), and which would spend the prefix budget on air. The
+mechanism actually built — a chip always present, the same kind per
+position — is what the sentence was buying: no appear/disappear reflow
+between set and empty. A sentence overstating its own mechanism is a fact
+wrongness; the design is unchanged, so nobody could have decided
+differently, and it is amended rather than prompted. Found by M47.5's
+reviewer measuring the claim against the chip's own classes.

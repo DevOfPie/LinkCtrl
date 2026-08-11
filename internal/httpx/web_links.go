@@ -729,8 +729,22 @@ type qrCodeView struct {
 	Counted bool
 }
 
-// linkTab is one entry in the strip M47's reopening put on the link page.
-type linkTab struct{ ID, Label string }
+// linkTab is one entry in the strip M47's reopening put on the link page,
+// and since M47.5 it carries the tab's own state, because the badge is both
+// the answer and the way in: you read `Routing 2` and click `Routing 2`.
+type linkTab struct {
+	ID, Label string
+	// Badge is the strip's vocabulary word for this tab — "count", "check",
+	// "cross", "weighted" or "sequential" — and "" for a tab with no state to
+	// carry, which is Danger's: deletability is a permission, not state. The
+	// values are filled by attachTabBadges after the sections' own reads, so
+	// a badge shows what its section shows and never a value assembled twice.
+	Badge string
+	// Count is read only when Badge is "count". Zero renders as a muted `0`
+	// rather than no badge at all: a missing badge and a badge reading zero
+	// are different claims and a reader cannot tell them apart.
+	Count int64
+}
 
 // linkTabs is the strip, in the owner-set order of 2026-08-11: seven tabs over
 // eight section partials, recent activity folding into Analytics because it is
@@ -742,20 +756,95 @@ func linkTabs(actor *auth.Identity) []linkTab {
 	can := func(p string) bool { return actor != nil && actor.Can(p) }
 	tabs := make([]linkTab, 0, 7)
 	if can("links.update") {
-		tabs = append(tabs, linkTab{"edit", "Edit"})
+		tabs = append(tabs, linkTab{ID: "edit", Label: "Edit"})
 	}
 	if can("links.read") {
 		tabs = append(tabs,
-			linkTab{"qr", "QR"}, linkTab{"routing", "Routing"}, linkTab{"split", "Split"})
+			linkTab{ID: "qr", Label: "QR"}, linkTab{ID: "routing", Label: "Routing"},
+			linkTab{ID: "split", Label: "Split"})
 	}
 	if can("links.update") {
-		tabs = append(tabs, linkTab{"signed", "Signed"})
+		tabs = append(tabs, linkTab{ID: "signed", Label: "Signed"})
 	}
-	tabs = append(tabs, linkTab{"analytics", "Analytics"})
+	tabs = append(tabs, linkTab{ID: "analytics", Label: "Analytics"})
 	if can("links.delete") {
-		tabs = append(tabs, linkTab{"danger", "Danger"})
+		tabs = append(tabs, linkTab{ID: "danger", Label: "Danger"})
 	}
 	return tabs
+}
+
+// attachTabBadges puts each tab's state on its entry in the strip (M47.5).
+//
+// After the section fills, deliberately, so every badge reads the value its
+// section renders rather than a second copy of it — six values assembled
+// wrongly would make the strip confidently misleading, which the stack never
+// was. Everything here is already computed or one cheap count away; nothing is
+// read again.
+//
+// The sources, position by position:
+//
+//   - **Edit** counts the protections that are on, out of the five booleans on
+//     its form: password, one-time, require-signature, forward-query,
+//     forward-path. Read off the stored link, not the form in flight, so a
+//     rejected save does not flip a badge the link's state did not earn.
+//   - **QR** counts the codes the panel lists — the default is among them, the
+//     way ListQRCodes answers — so the number on the tab is the number of rows
+//     behind it. A failed-soft codes read leaves 0, which is then also what
+//     the section shows.
+//   - **Routing** counts the rules the section's table draws.
+//   - **Split** is not binary: SplitKinds is exactly weighted and sequential,
+//     and a link with no split has neither, so the badge is the kind itself —
+//     the glyph pair — or the cross. The cross means *the section is empty*,
+//     never *no*.
+//   - **Signed** is the strip's one true binary and the one badge carrying
+//     colour: a check when this link requires signed access, the cross when
+//     not. It reads the stored RequireSignature — signed access is a security
+//     property worth reading at a glance, and the freshly minted URL the
+//     section can hold is deliberately not state (it is shown once and never
+//     stored).
+//   - **Analytics** is the click count over the window the page is showing,
+//     the same figure the section's own totals render.
+//   - **Danger** takes no badge; the loop leaves its Badge empty.
+func attachTabBadges(data *linkDetailPageData) {
+	l := data.Link
+	protections := 0
+	for _, on := range []bool{
+		l.HasPassword, l.OneTime, l.RequireSignature, l.ForwardQuery, l.ForwardPath,
+	} {
+		if on {
+			protections++
+		}
+	}
+	for i := range data.Tabs {
+		t := &data.Tabs[i]
+		switch t.ID {
+		case "edit":
+			t.Badge, t.Count = "count", int64(protections)
+		case "qr":
+			t.Badge, t.Count = "count", int64(len(data.QRCodes))
+		case "routing":
+			t.Badge, t.Count = "count", int64(len(data.Rules))
+		case "split":
+			// Kind, not nil-ness: GetSplit answers a link with no split with an
+			// empty Split whose Kind is "", which is exactly the third state the
+			// milestone counts. Caught by the kept spec against the running
+			// product — the nil test rendered five badges where six are claimed.
+			t.Badge = "cross"
+			if data.Split != nil && data.Split.Kind != "" {
+				t.Badge = data.Split.Kind
+			}
+		case "signed":
+			t.Badge = "cross"
+			if l.RequireSignature {
+				t.Badge = "check"
+			}
+		case "analytics":
+			t.Badge = "count"
+			if data.Stats != nil {
+				t.Count = data.Stats.Totals.Clicks
+			}
+		}
+	}
 }
 
 // activeLinkTab picks the panel to draw from ?tab=. The default is the strip's
@@ -854,6 +943,8 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 	h.fillLinkRouting(r.Context(), actor, &data)
 	fillLinkAnalytics(r, &data, from, to)
 	attachQRCounts(&data.linkQRView, data.Stats)
+	// Last, so every badge reads the value its section just filled (M47.5).
+	attachTabBadges(&data)
 	data.Notice = linkDetailNotice(r.URL.Query(), l)
 
 	return data, true

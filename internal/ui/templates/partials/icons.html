@@ -1,0 +1,34 @@
+{{- /* The product's icon vocabulary (M47.5). Four glyphs, and deliberately no
+     fifth: cross, check, and the split pair. This file is where the next
+     milestone wanting an icon looks first, and it stays empty of anything
+     speculative until one does.
+
+     Inline SVG inheriting currentColor — the CSP is `style-src 'self'` and
+     there is no font or sprite to add. Each define's dot is its accessible
+     name, carried twice: aria-label on the svg and a <title> inside it. The
+     caller sets colour by the text colour of whatever wraps the glyph.
+
+     Every svg states its height in a fixed-length utility (h-3, 12px) —
+     the link page's prefix pixel budget reads that class, and the size is
+     M46.5's three-engine browser check's answer, recorded in decisions.md,
+     not the 9px and 11px the wireframes drew: at 10px the outlined share's
+     stroke collapses into a smear in all three engines, at 12px it closes.
+
+     The split pair draws the difference between the modes, not the rotation:
+     four rotation marks failed at badge size (arc read as refresh, stops as
+     the more-options ellipsis, two rings unrecognisable — recorded in
+     decisions.md so they are not redrawn). Weighted is two shares of unequal
+     height, sequential three of equal height, one baseline — the distinction
+     carried twice, by equality and by count, so losing one signal at small
+     size leaves the other.
+
+     Stroke alignment is arithmetic, not eyesight: SVG centres a stroke on
+     its path, and the outlined share hung 1.4 units below the filled one in
+     two consecutive drafts before it was inset by half its 2.8 stroke.
+     Every bottom below computes to the one baseline, 20.5:
+       filled shares  3.5+17 = 8.5+12 = 20.5
+       outlined share 11.1+8 = 19.1, plus half the stroke = 20.5           */ -}}
+{{define "icon_cross"}}<svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" role="img" aria-label="{{.}}"><title>{{.}}</title><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>{{end}}
+{{define "icon_check"}}<svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="{{.}}"><title>{{.}}</title><path d="M4.5 13l5.5 5.5L19.5 7"/></svg>{{end}}
+{{define "icon_weighted"}}<svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" role="img" aria-label="{{.}}"><title>{{.}}</title><rect x="4" y="3.5" width="6" height="17" fill="currentColor"/><rect x="15.4" y="11.1" width="3.2" height="8" fill="none" stroke="currentColor" stroke-width="2.8"/></svg>{{end}}
+{{define "icon_sequential"}}<svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="{{.}}"><title>{{.}}</title><rect x="3.5" y="8.5" width="4" height="12"/><rect x="10" y="8.5" width="4" height="12"/><rect x="16.5" y="8.5" width="4" height="12"/></svg>{{end}}

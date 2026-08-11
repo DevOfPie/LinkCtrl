@@ -432,6 +432,190 @@ func TestTheLinkPageDrawsOneSectionAtATime(t *testing.T) {
 	}
 }
 
+// linkTabBadgeSize is the glyph height the strip's icon badges declare, as a
+// Tailwind fixed-length utility.
+//
+// **The number is measured, not chosen.** The wireframes drew 9px and 11px;
+// the prefix pixel budget above refuses arbitrary utilities, so the real
+// choices were h-2.5 (10px) and h-3 (12px), and which one is M46.5's
+// three-engine browser check's to answer. The answer — h-3, in Blink, Gecko
+// and WebKit, with what was seen — is recorded in decisions.md under M47.5.
+// This constant is what ties that recorded answer to the tree: change the
+// class in icons.html and this fails until the new size is re-measured and
+// re-recorded.
+const linkTabBadgeSize = "h-3"
+
+// tabAnchor is one tab's rendered anchor, strip entry and badge included.
+func tabAnchor(t *testing.T, page, id string) string {
+	t.Helper()
+	i := strings.Index(page, `?tab=`+id+`"`)
+	if i < 0 {
+		t.Fatalf("the strip offers no %s tab", id)
+	}
+	open := strings.LastIndex(page[:i], "<a ")
+	end := strings.Index(page[i:], "</a>")
+	if open < 0 || end < 0 {
+		t.Fatalf("the %s tab's anchor is not a closed element", id)
+	}
+	return page[open : i+end]
+}
+
+// stripTabs builds the fixture strip with one tab's badge overridden, so a
+// state the package fixture does not hold — an empty count, a cross, a
+// sequential split — can be rendered without inventing a second strip.
+func stripTabs(badge map[string]map[string]any) []map[string]any {
+	tabs := linkDetailTabsFixture()
+	for _, tab := range tabs {
+		id, _ := tab["ID"].(string)
+		if over, ok := badge[id]; ok {
+			for k, v := range over {
+				tab[k] = v
+			}
+		}
+	}
+	return tabs
+}
+
+// TestEveryTabCarriesItsState is M47.5's central bullet: state lives on the
+// tab, because the badge is then both the answer and the way in.
+//
+// The assertions follow the vocabulary rather than the pixels:
+//
+//   - **A count of zero is a muted `0`, never a missing badge.** A missing
+//     badge and a badge reading zero are different claims and a reader cannot
+//     tell them apart — so both states must render a chip, in the same box
+//     (`h-4 min-w-4`), which is also the structural half of "every tab holds
+//     the same width whether set or empty". The pixel half is the kept spec's
+//     (tools/agent-browser/specs/link-tabs.spec.mjs).
+//   - **Split has three states, counted from the source**: weighted,
+//     sequential, and the cross for a link with none. Two glyphs and a cross,
+//     never a check — the section is not binary.
+//   - **Signed is the strip's one true binary and its one colour.** The check
+//     renders in the ok tokens exactly when the badge is a check, and no other
+//     badge in the strip carries them.
+//   - **The cross means the section is empty, not no** — asserted as its
+//     accessible name, because the name is where a third meaning would lie.
+//   - **Danger takes no badge.** It has no state; deletability is a
+//     permission.
+//   - **Every icon badge is a titled image at the measured size** — role,
+//     aria-label, <title>, and the linkTabBadgeSize utility the pixel-budget
+//     scan reads.
+func TestEveryTabCarriesItsState(t *testing.T) {
+	// The package fixture: five protections, two codes, two rules, a weighted
+	// split, signature required, forty clicks.
+	set := mainOf(t, renderPage(t, "link_detail", nil))
+
+	// The same link unconfigured: zero counts, no split, no signature.
+	empty := mainOf(t, renderPage(t, "link_detail", map[string]any{
+		"Tabs": stripTabs(map[string]map[string]any{
+			"edit":      {"Badge": "count", "Count": int64(0)},
+			"qr":        {"Badge": "count", "Count": int64(0)},
+			"routing":   {"Badge": "count", "Count": int64(0)},
+			"split":     {"Badge": "cross"},
+			"signed":    {"Badge": "cross"},
+			"analytics": {"Badge": "count", "Count": int64(0)},
+		}),
+	}))
+
+	const chip = `inline-flex h-4 min-w-4 items-center justify-center rounded-full`
+
+	for _, id := range []string{"edit", "qr", "routing", "analytics"} {
+		on, off := tabAnchor(t, set, id), tabAnchor(t, empty, id)
+		if !strings.Contains(on, chip) || !strings.Contains(off, chip) {
+			t.Errorf("the %s tab does not draw its chip in both states — same box "+
+				"set or empty is what keeps the strip from reflowing as a link is "+
+				"configured", id)
+		}
+		if !strings.Contains(off, `text-subtle">0<`) {
+			t.Errorf("the %s tab's empty state is not a muted 0. A missing badge "+
+				"and a badge reading zero are different claims:\n  %s", id, off)
+		}
+		if strings.Contains(on, `>0<`) || !strings.Contains(on, "text-ink") {
+			t.Errorf("the %s tab's set state does not read as a set count:\n  %s", id, on)
+		}
+	}
+
+	// Split: the glyph pair, then the cross — and its accessible name is the
+	// mode, because the two modes are the whole mark.
+	if got := tabAnchor(t, set, "split"); !strings.Contains(got, `aria-label="Weighted split"`) {
+		t.Errorf("a weighted split's tab does not carry the weighted glyph:\n  %s", got)
+	}
+	sequential := mainOf(t, renderPage(t, "link_detail", map[string]any{
+		"Tabs": stripTabs(map[string]map[string]any{"split": {"Badge": "sequential"}}),
+	}))
+	if got := tabAnchor(t, sequential, "split"); !strings.Contains(got, `aria-label="Sequential split"`) {
+		t.Errorf("a sequential split's tab does not carry the sequential glyph:\n  %s", got)
+	}
+	if got := tabAnchor(t, empty, "split"); !strings.Contains(got, `aria-label="Empty"`) {
+		t.Errorf("a link with no split does not carry the cross, whose name is "+
+			"*empty* — the cross means the section is empty, not no:\n  %s", got)
+	}
+
+	// Signed: check with the ok tokens when required, cross when not, and the
+	// check is the only colour in the strip.
+	if got := tabAnchor(t, set, "signed"); !strings.Contains(got, `aria-label="Signed access required"`) ||
+		!strings.Contains(got, "text-ok-ink") {
+		t.Errorf("a link requiring signed access does not carry the coloured check:\n  %s", got)
+	}
+	if got := tabAnchor(t, empty, "signed"); !strings.Contains(got, `aria-label="Empty"`) {
+		t.Errorf("a link not requiring signed access does not carry the cross:\n  %s", got)
+	}
+	for state, page := range map[string]string{"set": set, "empty": empty} {
+		nav := stripOf(t, page)
+		want := 0
+		if state == "set" {
+			want = 1
+		}
+		if n := strings.Count(nav, "text-ok-ink"); n != want {
+			t.Errorf("the %s strip carries colour on %d badges, want %d — the check "+
+				"is the only badge carrying colour, because signed access is worth "+
+				"reading at a glance and colour spent everywhere reads nowhere",
+				state, n, want)
+		}
+	}
+
+	// Danger: no badge, in every state.
+	for state, page := range map[string]string{"set": set, "empty": empty} {
+		if got := tabAnchor(t, page, "danger"); strings.Contains(got, "<span") ||
+			strings.Contains(got, "<svg") {
+			t.Errorf("the danger tab carries a badge in the %s state; it has no "+
+				"state to carry — deletability is a permission:\n  %s", state, got)
+		}
+	}
+
+	// Every glyph in the strip is a titled image at the measured size.
+	for _, page := range []string{set, empty, sequential} {
+		nav := stripOf(t, page)
+		for _, m := range svgTag.FindAllStringSubmatch(nav, -1) {
+			if !strings.Contains(m[1], linkTabBadgeSize) {
+				t.Errorf("a strip glyph does not declare the measured size %s:\n  <svg%s>",
+					linkTabBadgeSize, m[1])
+			}
+			if !strings.Contains(m[1], `role="img"`) || !strings.Contains(m[1], `aria-label="`) {
+				t.Errorf("a strip glyph is not an accessible image:\n  <svg%s>", m[1])
+			}
+		}
+		if strings.Count(nav, "<svg") != strings.Count(nav, "<title>") {
+			t.Error("a strip glyph is missing its <title>")
+		}
+	}
+}
+
+// stripOf is the strip's <nav> element, so claims about badges are read out of
+// the strip rather than out of a page that draws other pictures.
+func stripOf(t *testing.T, page string) string {
+	t.Helper()
+	i := strings.Index(page, `aria-label="Link sections"`)
+	if i < 0 {
+		t.Fatal("the page draws no tab strip")
+	}
+	end := strings.Index(page[i:], "</nav>")
+	if end < 0 {
+		t.Fatal("the strip is not a closed <nav>")
+	}
+	return page[i : i+end]
+}
+
 // checkboxNamed pulls one checkbox out of a rendered page and reports whether it
 // is ticked.
 //

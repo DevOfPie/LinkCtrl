@@ -42,6 +42,20 @@ migrations run at boot.
   permissions or form fields changed; the QR settings panel still opens from
   the thumbnail beside the heading on every tab.
 
+- **Every tab on a link's page now says what its section holds, on the tab
+  itself.** Tabs answered where a section went and not what is configured in
+  it; reading a link's setup meant opening seven panels in turn. Each tab now
+  carries a badge: Edit counts the protections that are on (password, one-time,
+  signature requirement, query and path forwarding), QR counts the link's
+  codes, Routing its rules, and Analytics shows the clicks in the selected
+  window. Split shows which kind of test is running — unequal shares for
+  weighted, equal shares for sequential — and Signed shows a check when the
+  link requires signed access, the one badge with colour. An empty section
+  shows a muted `0` or a small cross rather than nothing, so every tab keeps
+  its width and two links compare position by position; the cross always means
+  the section is empty, never "off". The danger zone has no state and carries
+  no badge.
+
 - **The header's workspace label and workspace switcher read as one control.**
   They were two adjacent fragments — a name, then an unlabelled dropdown beside
   it — and nothing said the two were one claim. They now share a single

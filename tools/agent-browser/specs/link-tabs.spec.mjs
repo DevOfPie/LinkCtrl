@@ -13,6 +13,12 @@ import { fileURLToPath } from 'node:url';
 // container) and no template scan can see whether that swap actually replaces
 // the panel and pushes the URL.
 //
+// Since M47.5 the strip carries badges, and the spec asserts the half of that
+// no template scan can: the glyphs render at the measured size — 12px, the
+// three-engine answer recorded in decisions.md — and every badged tab draws
+// its badge, because a chip that failed to render would put the strip back in
+// the bare intermediate state M47 shipped and nothing else red.
+//
 // Credentials follow workspace-control.spec.mjs exactly: LINKCTRL_UI_EMAIL /
 // LINKCTRL_UI_PASSWORD, else the account table in docs/dev-notes/instances.md.
 // One sign-in attempt (retries are 0), so a stale table costs one charge
@@ -78,6 +84,24 @@ test('the link page tab strip scrolls sideways at 360px instead of wrapping', as
   }
   for (const y of tops) {
     expect(y, `a tab wrapped to a second row (tops: ${tops.join(', ')})`).toBe(tops[0]);
+  }
+
+  // The badges (M47.5). Six of the seven tabs carry one — Danger has no
+  // state to carry — whatever this link's configuration, because an empty
+  // state is a muted 0 or the cross, never a missing badge.
+  const chips = strip.locator('a > span');
+  expect(await chips.count(), 'a badged tab is missing its badge').toBe(6);
+
+  // The glyphs render at the measured size. 12px is the answer M46.5's
+  // three-engine check gave — at 10px the weighted glyph's outlined share
+  // collapses into a smear — so a strip glyph rendering at any other height
+  // means the class and the recorded answer have come apart.
+  const glyphs = strip.locator('svg');
+  const glyphCount = await glyphs.count();
+  expect(glyphCount, 'the strip draws no glyph badges').toBeGreaterThanOrEqual(2);
+  for (let i = 0; i < glyphCount; i++) {
+    const box = await glyphs.nth(i).boundingBox();
+    expect(box?.height, 'a strip glyph does not render at the measured 12px').toBe(12);
   }
 
   // The strip scrolls inside itself: the document must not go sideways.
