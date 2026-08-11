@@ -305,6 +305,7 @@ file. Append a row when you append an entry.
 | [A gate nobody runs](#2026-08-11--a-gate-nobody-runs) | W41: `check-links` was enforced by a human typing it and by a script that runs at release time only, so the table gate M58 added was unenforced from the day it landed. Why the row was split rather than taken whole, and why the wiring half needed no milestone |
 | [M57.5: six repairs a phase close could not have contained](#2026-08-11--m575-six-repairs-a-phase-close-could-not-have-contained) | Why an eighteenth milestone rather than Phase 4 or a standing-approval sweep, why it is `.5` and not `M59`, which four of the ten open rows are excluded and on what test, and the one bullet written as a constraint rather than an outcome because the obvious fix is the recurrence |
 | [A review that is not final is not a review](#2026-08-11--a-review-that-is-not-final-is-not-a-review) | W43: scope added after an `X.9` has run is numbered **below** it and **reopens** it. Why the three offered options were all worse, and the one cost this creates — a number and a dependency edge pointing opposite ways |
+| [How an agent drives this product's UI, and where that check runs](#2026-08-11--how-an-agent-drives-this-products-ui-and-where-that-check-runs) | Owner-set: `@playwright/cli` for the exploring sub-agent, terminating in kept Playwright specs; gated at the `X.9` reviews rather than in CI. Why not an MCP server, why `X.9` beats every CI option offered, the measured costs, and the CSP defect found in the first ten minutes of running it |
 
 ---
 
@@ -25776,3 +25777,105 @@ rely on years later without being able to re-derive it.
 **Leaving room is part of the rule.** `.5` rather than `.8`, so a later
 insertion still has 57.6 through 57.8 to land in. A rule that fills the band
 forces the next insertion straight back into the problem this one solved.
+## 2026-08-11 — How an agent drives this product's UI, and where that check runs
+
+Owner-set, from research commissioned after M47 was reopened. Two questions were
+put and both answers matter more than the tool.
+
+### The tool: `@playwright/cli`, not an MCP server
+
+The constraint was token efficiency. **Microsoft's own Playwright MCP README
+argues against Playwright MCP for it**: coding agents *"increasingly favor
+CLI-based workflows exposed as SKILLs over MCP because CLI invocations are more
+token-efficient: they avoid loading large tool schemas and verbose accessibility
+trees into the model context."* It scopes MCP to workflows where *"maintaining
+continuous browser context outweighs token cost concerns"* — conceding the cost
+rather than denying it.
+
+`playwright-cli` returns a **file path** per step instead of the page. Measured
+here, against this product: a step's payload is ten lines and a few hundred
+bytes; the snapshot it withheld was 850–1101 bytes on disk. Published
+comparison of a full run: **~27K tokens against ~114K** for the MCP equivalent.
+
+**Both MCP options are specifically bad for this product**, which is
+server-rendered Go plus htmx:
+
+- Playwright MCP appends a snapshot to every action with no per-call opt-out,
+  and `microsoft/playwright#39955` (open) confirms it is the **whole DOM, not the
+  viewport**. An htmx app keeps swapped-out fragments and out-of-band targets in
+  the DOM and pays for all of them on every click.
+- Chrome DevTools MCP is silent by default — a fix earned the hard way, one
+  `click` having once cost a reporter **+211K tokens** — but that means every
+  htmx swap needs an explicit snapshot round-trip, which is most interactions
+  here. Its `ignored`-node bloat, 278 of 543 nodes, was closed *not planned*.
+
+Ruled out with evidence: Puppeteer MCP is **archived** (May 2025, screenshot-only,
+carries its own security warning); Stagehand's MCP server is **archived**;
+BuilderIO's `visual-edit` sends the model no page representation at all and
+hides the edit capability from it deliberately — it renders a canvas for a human.
+browser-use defaults `use_vision` to `"auto"`, so it ships images unless told not
+to.
+
+### Where it runs: the `X.9` reviews, which is not one of the options offered
+
+Four CI shapes were put to the owner — nightly workflow, every push, opt-in only,
+release-check — and the answer was none of them: **gate it at the `X.9`
+milestones, so it can happen more often if needed and arrives before the release
+milestone.**
+
+That is better than all four and the reason is structural. A review is a
+**milestone the orchestrator runs**, not a CI step, so it needs nothing from
+`.github/workflows/` — which this repository cannot push, the token lacking
+`Workflows`. It sidesteps the whole `ci/proposed/` round trip. It recurs more
+often than a release and lands before the close. And it fixes the thing that has
+defeated this five times: browser harnesses were written at M46, M47, M53,
+M51.9 and M57.9 and **thrown away every time**, on a reason recorded twice in
+identical words — *"a pixel assertion living there would protect nothing between
+the two occasions somebody ran it."* An `X.9` obligation is scheduled, recurring,
+and its range covers everything numerically below it, so the check has an owner
+and a cadence rather than a directory.
+
+The exploration must **terminate in a kept spec**. That is the half that never
+happened: five explorations, zero retained tests. The CLI is for judging; an
+ordinary Playwright spec read through `--reporter=json` filtered to failures is
+what runs afterwards at near-zero token cost.
+
+### Costs, measured rather than estimated
+
+- `playwright-cli` bundles `playwright-core` **1.63.0-alpha**, which wants
+  engine builds this tree does not have — it asked for `firefox-1539` against
+  the `firefox-1538` that `tools/render-verify`'s pinned Playwright **1.62.1**
+  installed. One build apart.
+- Installing its chromium added a **second** engine pair beside the existing one
+  and took the cache from **1.2G to 1.9G**. That is the price of the skew, and
+  aligning the two pins is the way to avoid paying it twice.
+- It defaults to **branded Google Chrome** at `/opt/google/chrome/chrome`, which
+  is not here and is not what `--browser` offers a plain `chromium` value for.
+  The working incantation is a config file: `{"browser":{"browserName":"chromium"}}`
+  passed to `open --config=`, after which the session persists and later commands
+  take no flag.
+
+### The trap that did not bite, and the one that did
+
+**Origin CSRF did not bite.** `http.NewCrossOriginProtection` refuses a form POST
+without a matching `Origin`, and curl passes only by not being a browser. The
+browser's sign-in POST was **evaluated** — it came back `401`, not `403` — so
+same-origin navigation satisfies it and no exemption is needed.
+
+**Stale refs did bite, exactly as predicted.** After the failed sign-in swapped
+the page, `e11` became `f1e12`; a fill against the old ref silently went nowhere.
+Any spec written here re-snapshots after a swap or targets by role and name
+rather than by ref.
+
+### What ten minutes of it found
+
+[F206](deferred-findings.md): htmx violates the CSP on every page load. htmx
+2.0.9 injects a `.htmx-indicator` stylesheet at load and `style-src 'self'`
+blocks it. Nothing is visibly broken — this product uses no `hx-indicator` — but
+the next template that does gets a loading state that silently does nothing, and
+a permanent console error makes *zero console errors* unusable as an assertion.
+Neither the template scans nor the integration suite can see it: one reads
+markup, the other reads HTTP.
+
+That is the argument for the whole decision, made by accident. The check was not
+looking for it.
