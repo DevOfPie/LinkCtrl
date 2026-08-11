@@ -186,20 +186,46 @@ func TestTheReFitOnlyMovesTheSizeItHasTo(t *testing.T) {
 			"colour change", style, after)
 	}
 
-	// A payload the level cannot grow — same module count at M and H — must come
-	// back byte for byte, or the re-fit is moving pictures it has no reason to.
-	symbol, err := qr.Encode(content, qr.LevelH)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// The symbol grew — 29 modules at M, 37 at H for this content — so the two
+	// size fields move, and only far enough to keep the picture the size the
+	// stored style already drew it at. One module of the new picture is the
+	// snap; anything past that is a resize nobody asked for.
 	base, err := qr.Encode(content, style.Level)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if symbol.Size == base.Size &&
-		(after.Margin != style.Margin || after.Scale != style.Scale) {
-		t.Errorf("the symbol is %d modules at both levels and the style still moved "+
-			"from margin %d scale %d to margin %d scale %d", symbol.Size,
-			style.Margin, style.Scale, after.Margin, after.Scale)
+	symbol, err := qr.Encode(content, after.Level)
+	if err != nil {
+		t.Fatal(err)
 	}
+	if symbol.Size <= base.Size {
+		t.Fatalf("H encodes this payload in %d modules and M in %d; if H is not "+
+			"the larger symbol this fixture is no longer the growing case",
+			symbol.Size, base.Size)
+	}
+	want := qr.OutputSize(base.Size, style)
+	drawn := qr.OutputSize(symbol.Size, after)
+	if diff := drawn - want; diff > after.Scale || diff < -after.Scale {
+		t.Errorf("the code was %dpx and is %dpx after the upload; margin %d scale "+
+			"%d moved to margin %d scale %d, which is more than the whole-module "+
+			"snap can explain", want, drawn, style.Margin, style.Scale,
+			after.Margin, after.Scale)
+	}
+
+	// A code whose symbol did not grow comes back byte for byte: a style already
+	// at level H re-encodes to the same symbol, so the re-fit has nothing to
+	// keep and must move nothing.
+	kept, _ := qr.Style{
+		Foreground: "#123456", Background: "#fedcba", Level: qr.LevelH,
+	}.Normalize()
+	if got := refitForLogo(content, kept); got != kept {
+		t.Errorf("the symbol did not grow and the style still moved: %+v became %+v",
+			kept, got)
+	}
+
+	// No case here holds the level at M over a symbol that cannot grow: equal
+	// module counts at M and H exist only in version 1, and QRContent always
+	// appends ?src=qr, whose lowercase bytes force byte mode past version 1's
+	// 7-byte capacity — so that input is a property of internal/qr this product
+	// never produces, not a missing assertion (F199).
 }

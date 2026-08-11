@@ -27,9 +27,8 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## Phase 3
 
-**Three rows are open — [M47](m47.md) reopened,
-[M47.5](m47.5.md) and [M57.5](m57.5.md) — and [M57.9](m57.9.md) reopens after
-them. 0.3.0 is written
+**Two rows are open — [M47](m47.md) reopened and [M47.5](m47.5.md) — and
+[M57.9](m57.9.md) reopens after them. 0.3.0 is written
 and not yet tagged.** Four work areas, chosen 2026-08-06: identity and account
 lifecycle, dashboard UI and UX, infrastructure and resilience, QR codes and
 campaigns. Twenty milestones — **twelve integers of work**, two adversarial
@@ -74,7 +73,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M55](m55.md) | An update checker, and the fifth thing that leaves this product | — | done |
 | [M56](m56.md) | High availability: the failover contract | — | done |
 | [M57](m57.md) | High availability: measured, and still one container | M56 | done |
-| [M57.5](m57.5.md) | The six the close left behind | M58 *(see the note below)* | not started |
+| [M57.5](m57.5.md) | The six the close left behind | M58 *(see the note below)* | done |
 | [M57.9](m57.9.md) | **Pre-release adversarial review** | M46–M57 · M46.5 · M47.5 · M57.5 | in progress (reopened) |
 | [M58](m58.md) | Deferred findings, documentation pass, 0.3.0 | all | done |
 

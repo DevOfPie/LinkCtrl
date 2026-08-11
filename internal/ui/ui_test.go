@@ -669,9 +669,13 @@ func pageData(t *testing.T) map[string]any {
 			// stub style's own: a 29-module code with a 4-module quiet zone at 20
 			// pixels a module is 37 spans of 20, which is 740 and past the 360px
 			// viewport the scan measures against. The drawing itself is still
-			// empty; internal/qr is where the encoder is tested.
-			"QRSVG": template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" width="740" ` +
-				`height="740" viewBox="0 0 37 37" shape-rendering="crispEdges" ` +
+			// empty; internal/qr is where the encoder is tested. The class is
+			// named rather than spelled, exactly as the mfa fixture's (F200):
+			// qr.Render always emits it, and both hand-typed copies of this stub
+			// have now lost an attribute — F191 the width, F200 the class.
+			"QRSVG": template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" ` +
+				`class="` + qr.FluidClass + `" width="740" height="740" ` +
+				`viewBox="0 0 37 37" shape-rendering="crispEdges" ` +
 				`role="img"></svg>`),
 			// The class is QRThumbClass rather than a copy of it: this stub is what
 			// TestTheEditControlIsReachableWithoutScrolling measures the heading
@@ -742,9 +746,13 @@ func pageData(t *testing.T) map[string]any {
 			// stub style's own: a 29-module code with a 4-module quiet zone at 20
 			// pixels a module is 37 spans of 20, which is 740 and past the 360px
 			// viewport the scan measures against. The drawing itself is still
-			// empty; internal/qr is where the encoder is tested.
-			"QRSVG": template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" width="740" ` +
-				`height="740" viewBox="0 0 37 37" shape-rendering="crispEdges" ` +
+			// empty; internal/qr is where the encoder is tested. The class is
+			// named rather than spelled, exactly as the mfa fixture's (F200):
+			// qr.Render always emits it, and both hand-typed copies of this stub
+			// have now lost an attribute — F191 the width, F200 the class.
+			"QRSVG": template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" ` +
+				`class="` + qr.FluidClass + `" width="740" height="740" ` +
+				`viewBox="0 0 37 37" shape-rendering="crispEdges" ` +
 				`role="img"></svg>`),
 			// The class is QRThumbClass rather than a copy of it: this stub is what
 			// TestTheEditControlIsReachableWithoutScrolling measures the heading
@@ -925,7 +933,15 @@ func pageData(t *testing.T) map[string]any {
 				"Email": "new@example.com", "Role": "editor", "Emailed": false,
 				"URL": "http://links.test/invite/2ZQ3jd0eGkEaBcDeFgHiJkLmNoPqRsTuVwXyZ012",
 			},
-			"Form":        map[string]string{"Email": "", "Role": "editor"},
+			// The shape the handler passes, hand-typed as an anonymous struct
+			// because that is how invitesPageData declares Form and
+			// internal/httpx imports this package, so there is no name to derive
+			// from — F200's rule is "do not copy what can be named", and here
+			// there is none (F201). The struct is F167's guard: a template
+			// reading a Form field the handler does not supply now fails the
+			// render instead of silently rendering empty. One direction only —
+			// it catches a field the handler gains, not one it loses.
+			"Form":        struct{ Email, Role string }{Role: "editor"},
 			"FieldErrors": map[string]string{},
 			"Notice":      "", "Error": "", "MailConfigured": false,
 		},
@@ -984,7 +1000,10 @@ func pageData(t *testing.T) map[string]any {
 			// note is the one the conditioned copy exists for: this fixture's
 			// only target is an organization-wide admin, so granting them editor
 			// in a workspace is the grant that changes nothing.
-			"Form":          map[string]string{"Role": "editor"},
+			// membersPageData's shape, on the invites fixture's reasoning (F201):
+			// anonymous in the handler, so hand-typed here, and one-directional
+			// as a guard.
+			"Form":          struct{ Role string }{Role: "editor"},
 			"GrantNote":     "admin@example.com already holds admin across every workspace, which reaches everything editor does. This would add a membership to the list and nothing to what they can do.",
 			"GrantNoteWarn": true,
 			"FieldErrors":   map[string]string{},

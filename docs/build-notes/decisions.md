@@ -311,6 +311,7 @@ file. Append a row when you append an entry.
 | [Seven tabs, and M47 split along the seam the design was drawn on](#2026-08-11--seven-tabs-and-m47-split-along-the-seam-the-design-was-drawn-on) | Activity folds into Analytics and Danger keeps its own tab, so the strip is seven. M47 becomes M47 and M47.5 — the layout and the state feedback, which is how the design was assembled in the first place. Also the nine findings a plan review caught before either was built against |
 | [Reviews carry a browser check](#2026-08-11--reviews-carry-a-browser-check) | W45: every `X.9` review answers whether the pages its range touched render and behave as claimed, console included — worded as a question so it survives the tool, chosen over four declined CI shapes |
 | [M46.5: a browser an agent can drive](#2026-08-11--m465-a-browser-an-agent-can-drive) | Two Playwright pins on purpose (no stable 1.63 exists; every CLI version bundles an alpha); the kept spec on `/login`, born red; the JSON-failure filter; the branded-Chrome wrap; F206 fixed and closed |
+| [M57.5, built: six repairs, and the audit line one of them answers](#2026-08-11--m575-built-six-repairs-and-the-audit-line-one-of-them-answers) | The false *checked and deliberately unchanged* line answered, not edited; the delimiter half of the table gate, with its permanent fenced fixture; the unreachable QR guard removed on the owner's answer; two fixture classes repaired; m54.md annotated. All six rows closed |
 
 ---
 
@@ -26170,3 +26171,124 @@ work, moved from M47 because this milestone runs first and its spec is what
 needed the console clean. The fix is one meta tag in the layout
 (`includeIndicatorStyles:false`); the CSP is untouched, and the next template
 to use `hx-indicator` ships the rules in `app.css`.
+
+## 2026-08-11 — M57.5, built: six repairs, and the audit line one of them answers
+
+Six rows, all filed at M58 or by the reviewer runs over it, all repairs with no
+choice in them. Nothing here changes what a user or an operator observes — the
+release notes, the schema, the API and every page are untouched, which is what
+made landing this before the tag cheap. The scoping argument is
+[the planning entry](#2026-08-11--m575-six-repairs-a-phase-close-could-not-have-contained);
+this one records what landed and the judgements inside it.
+
+### F197 — the D65 cell, and the false audit line
+
+The M58 geo-suppression entry in this log records: *"Checked and deliberately
+unchanged: D65, which says 'a resolved country in the breakdown' and is the only
+statement that was already exact."* `git diff -U0 -- Plan.md` for that same run
+returns one `-| D65` and one `+| D65`. Both halves of that contradiction are
+individually true-sounding, which is how it survived: the audit was right that
+the original 2026-08-03 sentence was exact, and wrong that nothing edited the
+row — the same pass rewrote the cell's refusal clause and left the sentence it
+replaced standing three clauses from its replacement, so the cell stated both
+scopes. This entry is the answer the append-only rule allows; the original line
+stands untouched.
+
+The cell now states the data-driven scope once. The stale sentence — *"The list
+is now given nothing to rank when the instance cannot resolve a country"*, false
+at `internal/httpx/web_links.go`, whose `fillLinkAnalytics` fills
+`data.Countries` whenever `geoShowable` is true, one resolved country in the
+window being enough with no database configured — is deleted, and in its place a
+pointer at the one statement: the list stands or falls with the map. Verified by
+reading the cell end to end against the predicate, because adjacency is the only
+thing that makes this class visible. **No mechanical enforcement**, stated
+rather than papered over: nothing can test that a prose cell states one scope.
+What this bought is the correction and the record of how it was missed.
+
+### F198 — the delimiter half of the table gate
+
+`scripts/check-links.sh` now compares each table's **delimiter row** against its
+header and fails when the two disagree. That is the malformation GFM answers by
+dropping the whole table — the dropped-cell class one size up — and the check as
+built for F193 could not see it, because `want` was read off the header alone
+and the delimiter's count was validated for shape and discarded. Fenced blocks
+are skipped throughout, so a document demonstrating a malformed row does not
+fail the gate that documents it. This block is that fixture, and it stays here:
+
+```
+| a | b | c |
+| --- | --- |
+| 1 | 2 | 3 |
+```
+
+A three-column header over a two-column delimiter. Unfenced, that exact table
+appended to a tracked file turned the gate red naming the file and both rows —
+`docs/dev-notes/instances.md:387 is a 2-cell delimiter under the 3-column header
+at :386` — and was removed by counter-edit; fenced here, the gate is green over
+it, so one fixture asserts both halves for as long as it stands. The whole
+tracked tree passes the tightened check: 3056 links, 2151 table rows. The fence
+toggle matches what this tree writes — ``` at up to three spaces of indent;
+tilde and four-backtick fences exist nowhere in tracked markdown and would be
+content to it, which the script's own header states. Wiring is
+[W41](workflow-changes.md#made)'s and was not this milestone's work; the point
+of landing the two halves days apart is that a stricter check matters exactly
+because something now runs it.
+
+### F199 — the assertion its own comment called load-bearing
+
+Owner-answered 2026-08-11, turning the bullet from *reach the branch* into
+*remove it*: equal module counts at M and H hold only inside version 1 — 7
+bytes, 10 alphanumeric, 17 numeric — and `QRContent` unconditionally appends
+`?src=qr`, seven lowercase bytes that force byte mode, so no payload this
+product produces can satisfy the guard. Measured, not reasoned: the fixture's
+own content encodes to 29 modules (version 3) at M and 37 (version 5) at H. The
+`symbol.Size == base.Size` guard and the comment calling it load-bearing are
+gone, and the test says in one line why the no-growth-at-M case has no coverage
+— it would assert a property of `internal/qr` on input this product never makes.
+
+What D174 bought the re-fit with is now asserted on payloads the product does
+make: when the symbol grew, margin and scale move only far enough to keep the
+drawn size, within the one-module snap; when it did not — a style already at
+level H — the style comes back byte for byte. Sabotage: `refitForLogo` made to
+move the fit unconditionally turned both halves red (296px drawn as 305px on the
+grown case; margin 4 became 5 on the no-growth case), restored by counter-edit.
+Under the test as it stood, that sabotage was invisible — which was the finding.
+
+### F200 and F201 — two fixtures, one class, two different rules
+
+The two `internal/ui` QR stubs now carry `class="` + `qr.FluidClass` + `"` —
+derived, never retyped, exactly as the `mfa` fixture in the same file already
+did. The two hand-typed copies of this stub have now each lost an attribute,
+F191 the width and F200 the class, which is the whole case for deriving. The
+*stdlib-only* rule is not in the way: it is about Node, CDNs and the CSP, the
+import is a test file's, and `internal/qr` does not import `internal/ui`.
+
+The team and invitation fixtures now pass `Form` as the anonymous struct the
+handlers declare (`internal/httpx/web_team.go`, `internal/httpx/web_invitations.go`)
+rather than as a `map[string]string`. Hand-typed, and that is not F200's mistake
+repeated: `internal/httpx` imports `internal/ui`, so there is no name a test in
+this package can reach — F200's rule is *do not copy what can be named*, and
+here there is none. The struct is F167's guard on the two forms F182 is about,
+and it is one-directional — it catches a field the handler gains, not one it
+loses. Sabotage: `invites.html` pointed at a `Form` field no handler supplies
+failed the render (*can't evaluate field Ghost*) where the map had rendered it
+as empty string, restored by counter-edit.
+
+### F202 — m54.md describes the tree that exists
+
+`m54.md`'s F103-reversal bullet said the bound no longer applies to an
+account-wide key at all. Since M58 such a key's reads are bounded by the
+organizations it has been cut out of, resolved through `Identity.keyReaches`,
+and F178 put those bars on the owner's own key list. The file now carries that
+in the amendment idiom the six other milestone files M58 touched already use —
+what it said, what is true now, and the rows that changed it — so a reopening
+reading m54.md reads the tree rather than the plan it was written from.
+
+### The rows, and what this milestone makes slightly worse
+
+All six rows are closed pointing at M57.5. **F198 closes only its delimiter
+half** — the wiring half was W41's, and both ends say so. And F194 is named
+rather than hidden: F197 and F202 insert lines into `Plan.md` and `m54.md`, so
+this milestone is an instance of the citation-drift row it deliberately
+excludes. Repairing citations by hand is the treadmill
+[W39](workflow-changes.md#proposed) exists to decide about.

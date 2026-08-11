@@ -25,6 +25,15 @@
 # scan that found them missed a third, F103, and the miss is the reason this
 # lives in a gate now. See the note on `cells` for what it got wrong.
 #
+# And one thing per table: the delimiter row's cell count against the header's
+# (F198). A header wider than its delimiter is the malformation GFM answers by
+# dropping the *whole table* — the dropped-cell class one size up, and invisible
+# to a scan that reads only body rows against the header. Fenced blocks are
+# skipped throughout, so a document can demonstrate a malformed row without
+# failing the gate that documents it. The fence toggle matches what this tree
+# writes — ``` at up to three spaces of indent; a tilde or four-backtick fence
+# would be content to it, and none exists in tracked markdown today.
+#
 # Usage: scripts/check-links.sh
 set -uo pipefail
 
@@ -135,8 +144,16 @@ function isdelim(s,   t, n, i, c) {
     if (c !~ /^:?-{2,}:?$/) return 0 }
   return (n > 0)
 }
-FNR == 1 { inbody = 0; prev = "" }
-isdelim($0) && prev != "" { want = cells(prev); hdr = FNR - 1; inbody = 1; prev = $0; next }
+FNR == 1 { inbody = 0; prev = ""; infence = 0 }
+/^ {0,3}```/ { infence = !infence; inbody = 0; prev = ""; next }
+infence { next }
+isdelim($0) && prev != "" {
+  want = cells(prev); hdr = FNR - 1
+  if (cells($0) != want)
+    printf "  FAIL  %s:%d is a %d-cell delimiter under the %d-column header at :%d\n",
+           FILENAME, FNR, cells($0), want, hdr
+  inbody = 1; prev = $0; next
+}
 {
   if (inbody && isrow($0)) {
     rows++
