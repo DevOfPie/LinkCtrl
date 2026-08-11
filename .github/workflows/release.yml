@@ -255,15 +255,25 @@ jobs:
           # From this version's heading to the next one, exclusive — and
           # stopping at the link-reference block, which is the second exit (F1).
           #
-          # The newest version is always the *last* section in CHANGELOG.md, so
-          # "to the next ## [ heading" runs off the end of the file and sweeps
-          # up the trailing `[Unreleased]: https://…` definitions. The published
-          # v0.1.0 body carries them, immediately before its Container image
-          # section — confirmed against the live release rather than inferred.
+          # Keep a Changelog orders newest **first**, so this file runs 0.3.0,
+          # 0.2.0, 0.1.0, and the `[Unreleased]: https://…` definitions sit at
+          # the very bottom. Every release except the oldest is therefore ended
+          # by the `## [` exit; the reference-block exit is what guards the
+          # **oldest** section, which has no heading after it and would otherwise
+          # run off the end of the file and sweep the definitions into its notes.
+          #
+          # That is exactly what happened: the published v0.1.0 body carries them,
+          # immediately before its Container image section — confirmed against the
+          # live release rather than inferred.
           #
           # It survived a release because a reference definition renders as
           # nothing: invisible on the release page, present in the raw body, and
           # so reported by nobody.
+          #
+          # (This comment read "the newest version is always the *last* section"
+          # until F196. The extraction was always correct — what was wrong was
+          # which of its two exits the next reader would think guards the release
+          # they are cutting. Nothing about the awk changes.)
           awk -v ver="## [${v#v}]" '
             index($0, ver) == 1  { inside = 1; next }
             inside && /^## \[/    { exit }
