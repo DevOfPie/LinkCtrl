@@ -16,6 +16,10 @@ not intentions. Each bullet should be falsifiable.
 
 - Prefer "asserted by test" over "is correct".
 - Name the test or file where one already exists.
+- A `file:line` citation claims the tree at this milestone's own commit and
+  nothing later (W39). One written after the milestone landed carries the
+  commit — `gates.go:167` at `abc1234` — and a symbol name beats a line number
+  where one exists, because line numbers rot on every insertion above them.
 - If a number is claimed, say where it was measured.
 - If something is deliberately *not* done, say that here rather than leaving its
   absence to be discovered.

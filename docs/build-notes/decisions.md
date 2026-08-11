@@ -313,6 +313,7 @@ file. Append a row when you append an entry.
 | [M46.5: a browser an agent can drive](#2026-08-11--m465-a-browser-an-agent-can-drive) | Two Playwright pins on purpose (no stable 1.63 exists; every CLI version bundles an alpha); the kept spec on `/login`, born red; the JSON-failure filter; the branded-Chrome wrap; F206 fixed and closed |
 | [M57.5, built: six repairs, and the audit line one of them answers](#2026-08-11--m575-built-six-repairs-and-the-audit-line-one-of-them-answers) | The false *checked and deliberately unchanged* line answered, not edited; the delimiter half of the table gate, with its permanent fenced fixture; the unreachable QR guard removed on the owner's answer; two fixture classes repaired; m54.md annotated. All six rows closed |
 | [M47, the split repaired in the files that recorded it](#2026-08-11--m47-the-split-repaired-in-the-files-that-recorded-it) | bb76018 left m47.md with two contradictory Reopened blocks and m47.5.md with no badge section; owner-approved reconstruction from the existing text, five named deviations, the shipped label excluded |
+| [Citations are true as of their own commit](#2026-08-11--citations-are-true-as-of-their-own-commit) | W39 answered: accept the rot and state it, citations carry a commit identifier when written after their milestone, the enforcing test and the blanket rewrite declined, F194 closed unrepaired |
 
 ---
 
@@ -26347,3 +26348,32 @@ blocks:
 The badge section's `link_edit.html:107,120,146,188,197` and
 `link_signed.html:12` citations were carried as written; they are true at this
 commit, and keeping them current is the rot W39's answer accepts and states.
+
+## 2026-08-11 — Citations are true as of their own commit
+
+No milestone number — this is a process answer, prompted by
+[W39](workflow-changes.md#made), which F194 raised at M58: a `file:line`
+citation stops
+being a pointer the moment anybody inserts a line above it, roughly forty of
+them moved in one commit, and `make check-links` cannot see any of it because
+a `file:line` is not a link.
+
+Three shapes were offered and the owner chose the third, with an addition.
+**A milestone file's citations claim the tree at that milestone's own commit
+and nothing later.** That is what a historical record already meant; now it is
+stated — in `phase-details/_template.md`, where milestone files start — instead
+of being a courtesy the reader must infer. The addition is the owner's:
+**a citation written after its milestone landed carries a commit identifier**
+(`gates.go:167` at `abc1234`), so finding the referenced line is a checkout
+rather than a guess about which tree the writer meant. Symbol names remain the
+better pointer where one exists, and nothing forbids them.
+
+The enforcing test was declined: resolving every citation against HEAD on
+every build makes each future line insertion anywhere in the tree a build
+break somebody repairs by hand — the treadmill F194's own row warned about,
+mechanized. The blanket rewrite to symbol names was declined as a large edit
+to shipped milestone files that restales on the next refactor.
+
+F194 closes on this answer, unrepaired, which is the point: under the
+convention its ~47 citations were never false. They were read against a later
+tree than the one they claim.
