@@ -513,8 +513,8 @@ per milestone lives in
 [phase-details/README.md](docs/build-notes/phase-details/README.md) and nowhere
 else; the plan below is the scope contract rather than a progress report.
 
-**Phase 3: planned on 2026-08-06. Every milestone is `done`; 0.3.0 is written
-and not yet tagged. What remains is M57.9's reopened run.** Twenty-one
+**Phase 3: planned on 2026-08-06. One milestone is open — M46.6, reopened on
+F209 — then M57.9's reopened run. 0.3.0 is written and not yet tagged.** Twenty-one
 milestones, M46–M58,
 across four work areas; the plan is [below](#phase-3-build-plan). It was planned
 in full before its first milestone was built, on the owner's direction, so that

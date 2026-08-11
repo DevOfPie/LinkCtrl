@@ -321,6 +321,7 @@ file. Append a row when you append an entry.
 | [M47 built: the stack becomes tabs, and D178](#2026-08-11--m47-built-the-stack-becomes-tabs-and-d178) | D178 — tab state is `?tab=`, validated against a permission-built strip, and every section-owned write re-derives its own tab server-side; `next` stays a two-value choice. The strip is a partial, so the 60-line cap did not move. The QR panel renders at page level because the thumbnail invokes it from every tab, and `id="qr"` travels with it. Archive and restore stay tabless, and why that trade was taken. Two integration tests amended, named; the whole-page scans render once per tab (F167 at page scale). The blind-task re-run is owed and is the owner's |
 | [M47.5 built: the badges, the glyph size, and the lie a browser caught](#2026-08-11--m475-built-the-badges-the-glyph-size-and-the-lie-a-browser-caught) | The size is 12px because 10px collapses the weighted glyph's outlined share in all three engines — measured on a fixture assembled from the product's own files, and the wireframes' 9/11 did not survive. Two contract readings stated: Signed reads the stored `RequireSignature`, QR counts the codes the panel lists. The icon home is four defines in `partials/icons.html`, baseline arithmetic at 20.5. And the split badge lied for an hour — GetSplit's empty-not-nil answer — caught by the kept spec's badge count against the running product, pinned in a handler-side test |
 | [M47.5, one bullet amended at acceptance](#2026-08-11--m475-one-bullet-amended-at-acceptance) | Same-width-set-or-empty overstated the constant-chip mechanism; two-digit counts widen; quoted before and after with the class-level fact |
+| [M46.6 reopened: the popup the wireframes could not draw](#2026-08-11--m466-reopened-the-popup-the-wireframes-could-not-draw) | F209: four owner-named symptoms, one cause — the native select popup; reopened over deferral; rebuilt on the D24 popover pattern; the placeholder assertion retires with its premise |
 
 ---
 
@@ -26791,3 +26792,33 @@ between set and empty. A sentence overstating its own mechanism is a fact
 wrongness; the design is unchanged, so nobody could have decided
 differently, and it is amended rather than prompted. Found by M47.5's
 reviewer measuring the claim against the chip's own classes.
+
+## 2026-08-11 — M46.6 reopened: the popup the wireframes could not draw
+
+**Marked M46.6** — a reopening keeps its milestone's number.
+
+The owner looked at the shipped switcher and named four things in one
+message: the popup is not aligned with the control, it opens on a blank
+unselectable row, selecting paints text left of the chevron until the
+redirect lands, and the popup matches nothing — *"looks like a bolted on
+after thought."* [F209](deferred-findings.md#open) carries the four with
+their shared cause: every one lives in the native `<select>`'s popup or
+closed-face painting, which no CSS in this product can reach. The blank row
+was the cost the acceptance amendment recorded; the owner has now seen the
+cost and rejected it, which is information the amendment could not have had.
+The wireframes could not have caught any of this — a native popup cannot be
+wireframed, only shipped and looked at.
+
+Symptom 3 transiently falsifies the shipped claim that *the closed face is
+the chevron alone*, and a defect that makes a shipped milestone's claim
+false reopens that milestone. The owner approved the reopening over Phase 4
+deferral, same day.
+
+The reopened contract rebuilds the opened state on the Popover API pattern
+both header menus already use (D24) — the panel becomes the product's to
+style and align, there is no placeholder row to draw, and the invoker is a
+button with no text to flash. The one recorded-answer assertion that
+retires — the disabled placeholder — retires because its premise (a select
+must display something) dissolves with the select; the owner's approval of
+this reopening is the sign-off F209's row records. A11y moves from combobox
+to button-and-group, the trade D24 already recorded for the other two menus.
