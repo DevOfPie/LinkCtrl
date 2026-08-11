@@ -326,6 +326,7 @@ file. Append a row when you append an entry.
 | [Three reopenings from one look at the running product](#2026-08-11--three-reopenings-from-one-look-at-the-running-product) | F210 the antimeridian bands reopen M37, F211 the Edit badge goes from M47.5, F212 the QR popup folds into the tab at M48; the demo base URL fixed in the environment; M37 covered by M57.9 rather than reopening a released phase review |
 | [M37 rebuilt: the antimeridian split, and the ring as the unit of the claim](#2026-08-11--m37-rebuilt-the-antimeridian-split-and-the-ring-as-the-unit-of-the-claim) | Unwrap-then-clip at ±180 in mapgen; a third wrapped ring (Wrangel) beyond F210's two; why the width test asserts per ring and not per country; the recorded look over a kept spec |
 | [M37, one bullet amended at acceptance](#2026-08-11--m37-one-bullet-amended-at-acceptance) | The width test asserts per ring, not per country path — a correctly split Russia touches both frame edges, so the bullet as written failed on the fix it protects |
+| [M47.5 reopened: the Edit badge goes](#2026-08-11--m475-reopened-the-edit-badge-goes) | F211 closed: the edit case leaves `attachTabBadges`, five positions remain, and the bare state is asserted with every protection on so no boolean resurrects the count. Three claims amended where they stand; every six-position record carries its supersession note; the kept spec's count 6 → 5, red against the running strip before the move |
 
 ---
 
@@ -27001,3 +27002,41 @@ chosen otherwise, which is what makes it an amendment rather than a
 prompt. The test bound is half the frame rather than "full width" because
 the reviewer's red-run on the shipped file measured Wrangel Island at
 996.9 — a wrapped ring need not reach 1000 exactly.
+
+## 2026-08-11 — M47.5 reopened: the Edit badge goes
+
+**Marked M47.5**, closing [F211](deferred-findings.md#closed). No new `D`
+number: the choice was the owner's, made in use — *"if the edit badge only
+counts enabled booleans, I think we can go without it"* — and its supersession
+of the wireframe-round answer is recorded in
+[the reopening entry](#2026-08-11--three-reopenings-from-one-look-at-the-running-product).
+This entry is the build record.
+
+**Removed, not hidden.** The edit case and the protections count it read leave
+`attachTabBadges` entirely; `linkTab.Badge`'s `""` now names two deliberately
+bare tabs, Danger for having no state and Edit for the owner's reversal. The
+template's badge vocabulary is untouched — Edit simply stops being handed a
+word from it — so every shipped claim about the five remaining positions
+(muted zeros, the cross as *empty* on both tabs it serves, the constant chip,
+the one colour on Signed) rides on code this diff did not reach.
+
+**The bare state is asserted where a boolean could resurrect it.** Both suites
+keep rendering the configured fixture with all five protections on, and now
+assert Edit carries no chip and no glyph in that state as well as empty — the
+regression this reopening invites is exactly someone rewiring the count from
+the form's booleans. Sabotage on both sides of the seam: the edit case
+restored in `attachTabBadges` turned the assembly test red at the edit tab in
+both states; the ui fixture handed a count turned `TestEveryTabCarriesItsState`
+red at the bare-Edit loop in both states; both restored by counter-edit.
+
+**Every six-position record carries its supersession note.** m47.5.md's three
+claims — the positions bullet (its second amendment; the first was
+acceptance's), the counts list, and the Edit bullet, each quoting itself as it
+stood — plus its risk line, m47.md's "six values" risk, the strip template's
+comment, and the assembly test's own preamble. CHANGELOG's Unreleased entry is
+rewritten rather than annotated, because it describes what 0.4 will ship and
+`F211` means nothing to an operator. The kept spec's badge count moved 6 → 5.
+
+**Verified**: `make check`, `make test-integration`, `make verify-ui` green
+against the rebuilt test instance; the spec's count asserted at 6 first, red
+against the running strip — five chips found — then 5, green.

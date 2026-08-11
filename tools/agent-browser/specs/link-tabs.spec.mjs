@@ -86,11 +86,12 @@ test('the link page tab strip scrolls sideways at 360px instead of wrapping', as
     expect(y, `a tab wrapped to a second row (tops: ${tops.join(', ')})`).toBe(tops[0]);
   }
 
-  // The badges (M47.5). Six of the seven tabs carry one — Danger has no
-  // state to carry — whatever this link's configuration, because an empty
+  // The badges (M47.5). Five of the seven tabs carry one — Danger has no
+  // state to carry, and Edit's protections count went at the F211
+  // reopening — whatever this link's configuration, because an empty
   // state is a muted 0 or the cross, never a missing badge.
   const chips = strip.locator('a > span');
-  expect(await chips.count(), 'a badged tab is missing its badge').toBe(6);
+  expect(await chips.count(), 'a badged tab is missing its badge').toBe(5);
 
   // The glyphs render at the measured size. 12px is the answer M46.5's
   // three-engine check gave — at 10px the weighted glyph's outlined share

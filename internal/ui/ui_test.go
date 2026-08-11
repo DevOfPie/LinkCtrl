@@ -1206,13 +1206,14 @@ func linkDetailTabsFixture() []map[string]any {
 		"signed": "Signed", "analytics": "Analytics", "danger": "Danger",
 	}
 	// The badges as attachTabBadges would build them from this file's own
-	// link_detail fixture (M47.5): five protections on, two QR codes, two
-	// rules, a weighted split, RequireSignature on, and the stats fixture's 40
-	// clicks. Danger carries none. Mirrored rather than imported for the same
-	// reason linkDetailTabs is; the empty and cross states have their own
-	// renders in TestEveryTabCarriesItsState.
+	// link_detail fixture (M47.5): two QR codes, two rules, a weighted split,
+	// RequireSignature on, and the stats fixture's 40 clicks. Danger carries
+	// none, and Edit — its five enabled protections notwithstanding — none
+	// either, since the F211 reopening removed its count. Mirrored rather
+	// than imported for the same reason linkDetailTabs is; the empty and
+	// cross states have their own renders in TestEveryTabCarriesItsState.
 	badges := map[string]map[string]any{
-		"edit":      {"Badge": "count", "Count": int64(5)},
+		"edit":      {"Badge": "", "Count": int64(0)},
 		"qr":        {"Badge": "count", "Count": int64(2)},
 		"routing":   {"Badge": "count", "Count": int64(2)},
 		"split":     {"Badge": "weighted", "Count": int64(0)},

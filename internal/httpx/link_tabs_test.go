@@ -11,12 +11,13 @@ import (
 // the seam where a badge would start to lie.
 //
 // The milestone's own risk section is the reason this exists in this package
-// as well as in internal/ui: the badges "are only as good as the six values
-// behind them", and the ui tests render values a fixture handed them, so a
-// wrong assembly would render beautifully. The first wrong assembly was found
-// by the kept spec within an hour of being written — GetSplit answers a link
-// with no split with an *empty* Split, not a nil one, and a nil test drew five
-// badges where the strip claims six. That case is pinned here by name.
+// as well as in internal/ui: the badges are only as good as the values behind
+// them — five since the F211 reopening removed Edit's count — and the ui tests
+// render values a fixture handed them, so a wrong assembly would render
+// beautifully. The first wrong assembly was found by the kept spec within an
+// hour of being written — GetSplit answers a link with no split with an
+// *empty* Split, not a nil one, and a nil test drew one badge fewer than the
+// strip claims. That case is pinned here by name.
 func TestAttachTabBadgesReadsWhatTheSectionsShow(t *testing.T) {
 	badge := func(data *linkDetailPageData, id string) linkTab {
 		t.Helper()
@@ -43,8 +44,9 @@ func TestAttachTabBadgesReadsWhatTheSectionsShow(t *testing.T) {
 	}
 
 	// A link nobody has configured: every count reads 0 — a claim, not a
-	// blank — and both binaries read the cross. The Split here is the shape
-	// GetSplit actually returns for such a link: empty, and not nil.
+	// blank — both binaries read the cross, and Edit is bare like Danger. The
+	// Split here is the shape GetSplit actually returns for such a link:
+	// empty, and not nil.
 	bare := &linkDetailPageData{
 		Link:  &domain.Link{},
 		Split: &domain.Split{},
@@ -52,7 +54,7 @@ func TestAttachTabBadgesReadsWhatTheSectionsShow(t *testing.T) {
 	}
 	bare.Tabs = tabs()
 	for id, want := range map[string]linkTab{
-		"edit":      {Badge: "count", Count: 0},
+		"edit":      {Badge: ""},
 		"qr":        {Badge: "count", Count: 0},
 		"routing":   {Badge: "count", Count: 0},
 		"split":     {Badge: "cross"},
@@ -70,7 +72,9 @@ func TestAttachTabBadgesReadsWhatTheSectionsShow(t *testing.T) {
 	// The same strip over a configured link: the counts are the sections'
 	// own lengths, the split badge is the kind itself, and signed reads the
 	// stored RequireSignature — not the transient minted URL, which is shown
-	// once and never stored, and not the form in flight.
+	// once and never stored, and not the form in flight. Edit stays bare with
+	// every one of its five protections on: the count went at the F211
+	// reopening, and no boolean may resurrect it.
 	set := &linkDetailPageData{
 		Link: &domain.Link{
 			HasPassword: true, OneTime: true, RequireSignature: true,
@@ -83,7 +87,7 @@ func TestAttachTabBadgesReadsWhatTheSectionsShow(t *testing.T) {
 	set.QRCodes = []qrCodeView{{}, {}}
 	set.Tabs = tabs()
 	for id, want := range map[string]linkTab{
-		"edit":      {Badge: "count", Count: 5},
+		"edit":      {Badge: ""},
 		"qr":        {Badge: "count", Count: 2},
 		"routing":   {Badge: "count", Count: 2},
 		"split":     {Badge: "sequential"},

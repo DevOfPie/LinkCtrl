@@ -495,8 +495,10 @@ func stripTabs(badge map[string]map[string]any) []map[string]any {
 //     badge in the strip carries them.
 //   - **The cross means the section is empty, not no** — asserted as its
 //     accessible name, because the name is where a third meaning would lie.
-//   - **Danger takes no badge.** It has no state; deletability is a
-//     permission.
+//   - **Edit and Danger take no badge.** Danger has no state — deletability
+//     is a permission — and Edit's protections count went at the F211
+//     reopening: the owner judged a count of enabled booleans not worth a
+//     badge.
 //   - **Every icon badge is a titled image at the measured size** — role,
 //     aria-label, <title>, and the linkTabBadgeSize utility the pixel-budget
 //     scan reads.
@@ -508,7 +510,6 @@ func TestEveryTabCarriesItsState(t *testing.T) {
 	// The same link unconfigured: zero counts, no split, no signature.
 	empty := mainOf(t, renderPage(t, "link_detail", map[string]any{
 		"Tabs": stripTabs(map[string]map[string]any{
-			"edit":      {"Badge": "count", "Count": int64(0)},
 			"qr":        {"Badge": "count", "Count": int64(0)},
 			"routing":   {"Badge": "count", "Count": int64(0)},
 			"split":     {"Badge": "cross"},
@@ -519,7 +520,7 @@ func TestEveryTabCarriesItsState(t *testing.T) {
 
 	const chip = `inline-flex h-4 min-w-4 items-center justify-center rounded-full`
 
-	for _, id := range []string{"edit", "qr", "routing", "analytics"} {
+	for _, id := range []string{"qr", "routing", "analytics"} {
 		on, off := tabAnchor(t, set, id), tabAnchor(t, empty, id)
 		if !strings.Contains(on, chip) || !strings.Contains(off, chip) {
 			t.Errorf("the %s tab does not draw its chip in both states — same box "+
@@ -574,12 +575,17 @@ func TestEveryTabCarriesItsState(t *testing.T) {
 		}
 	}
 
-	// Danger: no badge, in every state.
+	// Edit and Danger: no badge, in every state. Danger has none to carry —
+	// deletability is a permission — and Edit is bare since the F211
+	// reopening; the set fixture's five enabled protections must not
+	// resurrect its count.
 	for state, page := range map[string]string{"set": set, "empty": empty} {
-		if got := tabAnchor(t, page, "danger"); strings.Contains(got, "<span") ||
-			strings.Contains(got, "<svg") {
-			t.Errorf("the danger tab carries a badge in the %s state; it has no "+
-				"state to carry — deletability is a permission:\n  %s", state, got)
+		for _, id := range []string{"edit", "danger"} {
+			if got := tabAnchor(t, page, id); strings.Contains(got, "<span") ||
+				strings.Contains(got, "<svg") {
+				t.Errorf("the %s tab carries a badge in the %s state; it is "+
+					"deliberately bare:\n  %s", id, state, got)
+			}
 		}
 	}
 

@@ -735,8 +735,9 @@ type qrCodeView struct {
 type linkTab struct {
 	ID, Label string
 	// Badge is the strip's vocabulary word for this tab — "count", "check",
-	// "cross", "weighted" or "sequential" — and "" for a tab with no state to
-	// carry, which is Danger's: deletability is a permission, not state. The
+	// "cross", "weighted" or "sequential" — and "" for a deliberately bare
+	// tab: Danger, whose deletability is a permission rather than state, and
+	// Edit, whose protections count did not survive the owner's use (F211). The
 	// values are filled by attachTabBadges after the sections' own reads, so
 	// a badge shows what its section shows and never a value assembled twice.
 	Badge string
@@ -776,17 +777,17 @@ func linkTabs(actor *auth.Identity) []linkTab {
 // attachTabBadges puts each tab's state on its entry in the strip (M47.5).
 //
 // After the section fills, deliberately, so every badge reads the value its
-// section renders rather than a second copy of it — six values assembled
+// section renders rather than a second copy of it — five values assembled
 // wrongly would make the strip confidently misleading, which the stack never
 // was. Everything here is already computed or one cheap count away; nothing is
 // read again.
 //
 // The sources, position by position:
 //
-//   - **Edit** counts the protections that are on, out of the five booleans on
-//     its form: password, one-time, require-signature, forward-query,
-//     forward-path. Read off the stored link, not the form in flight, so a
-//     rejected save does not flip a badge the link's state did not earn.
+//   - **Edit** takes no badge, since M47.5's reopening: it counted the
+//     protections that are on, and the owner judged a count of enabled
+//     booleans not worth a badge (F211). It joins Danger as a deliberately
+//     bare tab.
 //   - **QR** counts the codes the panel lists — the default is among them, the
 //     way ListQRCodes answers — so the number on the tab is the number of rows
 //     behind it. A failed-soft codes read leaves 0, which is then also what
@@ -807,19 +808,9 @@ func linkTabs(actor *auth.Identity) []linkTab {
 //   - **Danger** takes no badge; the loop leaves its Badge empty.
 func attachTabBadges(data *linkDetailPageData) {
 	l := data.Link
-	protections := 0
-	for _, on := range []bool{
-		l.HasPassword, l.OneTime, l.RequireSignature, l.ForwardQuery, l.ForwardPath,
-	} {
-		if on {
-			protections++
-		}
-	}
 	for i := range data.Tabs {
 		t := &data.Tabs[i]
 		switch t.ID {
-		case "edit":
-			t.Badge, t.Count = "count", int64(protections)
 		case "qr":
 			t.Badge, t.Count = "count", int64(len(data.QRCodes))
 		case "routing":
