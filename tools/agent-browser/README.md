@@ -5,10 +5,11 @@ Two tools, one pinned manifest, added by
 
 - **`@playwright/cli` 0.1.18** — a browser an agent drives from a terminal:
   open, snapshot, click, fill, eval. Sessions persist between commands.
-- **`@playwright/test` 1.62.1** — the runner for the kept spec in
-  [`specs/`](specs/), which asserts what no template scan can: what the
-  browser *refused*. A CSP violation appears in no markup diff and no HTTP
-  status; it appears in a console.
+- **`@playwright/test` 1.62.1** — the runner for the kept specs in
+  [`specs/`](specs/), which assert what no template scan can: what the
+  browser *refused* — a CSP violation appears in no markup diff and no HTTP
+  status; it appears in a console — and what a page *looks like* rendered,
+  which is what M46.6's workspace spec exists for.
 
 Before this directory, five browser harnesses had been written here and
 discarded — three deliberately, on the argument that a check nobody can re-run
@@ -83,7 +84,7 @@ Each was found by driving the running test instance on 2026-08-11:
 | htmx swaps kill element refs | `e11` became `f1e12` after a swap, and a fill against the old ref went nowhere, silently | Re-snapshot after every swap, or target by role and name |
 | The product classifies the driver as a bot | `internal/analytics/useragent.go` lists `playwright`, `headlesschrome`, `puppeteer`, `selenium` | Only the redirect path's analytics care. A spec touching that path must say how it handles this; the kept spec does not touch it |
 | An unstyled page is the default failure | `app.css` is generated and gitignored | Both targets drive the Docker instance, whose image builds its own stylesheet — the trap cannot bite there. Driving a locally-run server instead needs `make css` first |
-| A failed sign-in charges a real lockout counter | Credentials also do not belong in a committed spec | The kept spec stays on `/login`, where layout, stylesheet, CSP and htmx are all live without a session |
+| A failed sign-in charges a real lockout counter | Credentials also do not belong in a committed spec | The clean-console spec stays on `/login`, where layout, stylesheet, CSP and htmx are all live without a session. The workspace spec (M46.6) asserts the signed-in shell, which no spec can do sessionless: it reads `LINKCTRL_UI_EMAIL` / `LINKCTRL_UI_PASSWORD`, falls back to parsing the account table in [`docs/dev-notes/instances.md`](../../docs/dev-notes/instances.md) — the file a rebuild already updates, so no committed second copy — and makes exactly one attempt (retries are 0) |
 
 ## Opt-in, with a cadence
 
@@ -114,7 +115,8 @@ failed" and "nothing was checked" must not share an exit code.
 | --- | --- |
 | `cli-config.json` | the bundled-chromium session config `make browse` passes to `open` |
 | `playwright.config.mjs` | test dir, base URL (`LINKCTRL_BASE_URL` overrides :8081), chromium only |
-| `specs/clean-console.spec.mjs` | the kept spec: `/login` renders, htmx runs configured, console clean |
+| `specs/clean-console.spec.mjs` | kept spec: `/login` renders, htmx runs configured, console clean |
+| `specs/workspace-control.spec.mjs` | kept spec (M46.6): signed in at 360px, the workspace switcher's closed face shows no text and the header does not overflow |
 | `report-failures.mjs` | JSON-reporter filter: green in one line, red at exactly the assertion |
 | `package.json` | both pins, exact, the way every vendored version here is pinned |
 | `package-lock.json` | tracked, so the two-version layout and bin shims reproduce |

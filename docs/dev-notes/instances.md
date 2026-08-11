@@ -147,18 +147,24 @@ It is served only while `users` is empty, and answers `303 → /login` once an
 account exists — so a redirect there means the instance is already claimed, not
 that the route is missing.
 
-**The test instance's account, as rebuilt 2026-08-08 for [M51.9](../build-notes/phase-details/m51.9.md):**
+**The test instance's account, as rebuilt 2026-08-11 for [M46.6](../build-notes/phase-details/m46.6.md):**
 
 | | |
 | --- | --- |
 | Address | `review@killerofpie.com` |
-| Password | `m51-9-recovered-password-2026` |
+| Password | `m46-6-workspace-pair-2026` |
 
-The password is the one M51.9 set *through the reset flow*, because walking that
-flow end to end is one of the milestone's bullets and the account it walked it on
-is this one. The instance carries `lctl demo`'s data rather than an SLO dataset:
-the 100k-link set M50 measured against was on the volume this rebuild replaced,
-and `docs/slo.md` already holds the measurement it existed for.
+Rebuilt because the credential recorded here from M51.9's rebuild no longer
+signed in — exactly the case the paragraph below prescribes a rebuild for. The
+instance carries `lctl demo`'s data, which is what gives this account the two
+memberships the workspace switcher needs to render at all.
+
+**This table is load-bearing now**: the kept browser spec
+`tools/agent-browser/specs/workspace-control.spec.mjs` asserts a signed-in
+surface and reads its credentials from `LINKCTRL_UI_EMAIL` /
+`LINKCTRL_UI_PASSWORD`, falling back to parsing the Address and Password rows
+above — so a rebuild that does not update this table turns `make verify-ui`
+red, with a message pointing here.
 
 Written down because it is the test instance and it is disposable — this is a
 local development credential for a stack that publishes nothing but HTTP on

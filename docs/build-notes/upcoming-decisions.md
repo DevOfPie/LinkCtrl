@@ -46,8 +46,8 @@ conclusions are what this file exists to stop.
 the direction this file only travels: wireframes were drawn, the owner chose
 B1 and amended it to a chevron-only switch face, and the answer is in
 [decisions.md](decisions.md#2026-08-11--m466-the-workspace-pair-reads-as-one-control),
-with its `D` number assigned when [M46.6](phase-details/m46.6.md) — the
-milestone planned from the answer — lands.*
+with its `D` number — **D177**, assigned when [M46.6](phase-details/m46.6.md),
+the milestone planned from the answer, landed.*
 
 *Both questions this section held were answered by the owner on 2026-08-08, at
 [M52](phase-details/m52.md)'s step 1, and have left it in the direction this

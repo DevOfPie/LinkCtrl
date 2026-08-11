@@ -27,6 +27,20 @@ migrations run at boot.
 
 ## [Unreleased]
 
+### Changed
+
+- **The header's workspace label and workspace switcher read as one control.**
+  They were two adjacent fragments — a name, then an unlabelled dropdown beside
+  it — and nothing said the two were one claim. They now share a single
+  bordered container: the current organization and workspace, a hairline
+  divider, and the switcher, whose closed face is a chevron alone. With one
+  membership the box holds the name by itself — no divider, no dead dropdown —
+  and an account with no workspace gets no box at all. Nothing behavioural
+  changed: switching still happens on selection, still returns you to the page
+  you were on, and the list still never offers the workspace you are already
+  in. The switcher's accessible name is unchanged, so a screen reader hears
+  exactly what it did before.
+
 ### Fixed
 
 - **Every dashboard page loaded with a Content-Security-Policy violation in the

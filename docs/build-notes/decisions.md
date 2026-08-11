@@ -315,6 +315,8 @@ file. Append a row when you append an entry.
 | [M47, the split repaired in the files that recorded it](#2026-08-11--m47-the-split-repaired-in-the-files-that-recorded-it) | bb76018 left m47.md with two contradictory Reopened blocks and m47.5.md with no badge section; owner-approved reconstruction from the existing text, five named deviations, the shipped label excluded |
 | [Citations are true as of their own commit](#2026-08-11--citations-are-true-as-of-their-own-commit) | W39 answered: accept the rot and state it, citations carry a commit identifier when written after their milestone, the enforcing test and the blanket rewrite declined, F194 closed unrepaired |
 | [M46.6, the workspace pair reads as one control](#2026-08-11--m466-the-workspace-pair-reads-as-one-control) | F204 approved into Phase 3, shape B1 chosen from wireframes and owner-amended to a chevron-only switch face; shapes a and c declined with reasons; placement beside M46 |
+| [M46.6 built: the boundary, the chevron, and D177](#2026-08-11--m466-built-the-boundary-the-chevron-and-d177) | The shape answer becomes D177; the shared container is a define in the nav partial; the chevron-only face is an empty-labelled placeholder, chosen by a three-engine probe; the kept browser spec gains a session and instances.md becomes load-bearing |
+| [M46.6, one bullet amended at acceptance](#2026-08-11--m466-one-bullet-amended-at-acceptance) | The opened-list-unchanged clause gave way to the chevron-only face on a three-engine probe; empty-labelled placeholder is the only cross-engine mechanism; quoted before and after |
 
 ---
 
@@ -26432,3 +26434,98 @@ see a hex inside a chevron data URI, so the colour must come from
 a recorded-answer assertion is a prompt*; and F204's own Where citation was
 wrong at the commit it claimed — corrected in place, in the open row, with
 the correction dated.
+
+## 2026-08-11 — M46.6 built: the boundary, the chevron, and D177
+
+**D177 — the workspace pair shares one bordered container, and the switch
+affordance is the chevron alone.** The answer was given 2026-08-11, ahead of
+this milestone, when the owner chose B1 from four drawn shapes and amended it;
+[the planning entry above](#2026-08-11--m466-the-workspace-pair-reads-as-one-control)
+carries the choosing. Per the upcoming-decisions convention the `D` number is
+assigned now, on the date the answer is used.
+
+**The boundary is a define, not a wrapper.** m46.6.md left one structural
+choice open — a wrapper div in `layout.html`, or a boundary built across the
+two defines — and required the milestone to record which. It is a new define,
+`workspace_control` in `partials/nav.html`, invoked from `layout.html` where
+the two siblings stood, wrapping the surviving `workspace_label` and
+`workspace_switch` invocations. The conditions that decide the three membership
+states belong beside the twenty-line comments that explain them, and
+`layout.html` stays what it was: an invocation site. The container's predicate
+is *some workspace is current* rather than a length check, because the label's
+own condition is `.Current` and the container must not outlive its content —
+`organization_new` renders with no `Workspaces` at all, and a length check
+would have drawn an empty bordered box there the day a fixture changed.
+
+**The chevron-only face is an empty-labelled placeholder, and a probe chose
+it.** m46.6.md named two candidate mechanisms — text clipped or transparent,
+or an empty-labelled placeholder — and warned about a third (a data-URI
+chevron on an `appearance-none` select, whose hex the M24.5 scan cannot see).
+Probed 2026-08-11 with render-verify's three pinned engines before any
+template was edited: `color: transparent` on a select **erases the native
+arrow in Chromium and in Firefox**, because both draw the arrow in the text
+colour; only WebKit keeps it. The empty-labelled placeholder renders as a bare
+chevron in all three. So the select keeps its native appearance — the chevron
+is genuinely the select's own affordance, no icon drawn, nothing for the scan
+to be blind to — and the placeholder is `<option value="" selected disabled>`
+with no text. The recorded assertion holding the placeholder
+(`workspace_test.go`, the selected-disabled check) passes unchanged.
+
+**The one place the letter of a bullet gave way, named rather than absorbed:**
+the *Done means* bullet says the opened list is unchanged, and the opened
+list's first row is now blank where it said *Switch workspace…* — an
+empty-labelled placeholder cannot label its own row. The milestone file itself
+names that mechanism as acceptable in its Risks section, and the two clauses
+cannot both hold in any engine; the specific clause won over the general one.
+The accessible name is untouched — `aria-label="Switch workspace"` — so what a
+screen reader hears is what it heard.
+
+**One test amended, called out as m46.6.md requires:** the select's clauses in
+`TestTheHeaderCannotPushThePageSideways` asserted `min-w-0` and `truncate`,
+written when the select held an unbounded string. Its face is fixed-width now
+and holds no text, so the guard became the property that actually protects
+360px: `w-8` and `shrink-0` — it can neither grow with an option's text nor
+collapse out of the boundary. The label's clauses are untouched, and none of
+the four recorded-answer assertions changed.
+
+**The kept browser spec gains a session, and `instances.md` becomes
+load-bearing.** The closed face and the 360px bound are rendered-appearance
+claims on the signed-in shell, so `workspace-control.spec.mjs` cannot stay on
+`/login` the way M46.5's spec deliberately did. Credentials still do not live
+in the spec: it reads `LINKCTRL_UI_EMAIL` / `LINKCTRL_UI_PASSWORD`, falling
+back to parsing the account table in `docs/dev-notes/instances.md` — the one
+place a rebuild is already obliged to record the new credential, so there is
+no second copy to drift. It makes exactly one sign-in attempt (retries are 0);
+a stale table costs one charge against the lockout counter and a red run
+pointing at the file. Both halves were sabotaged against the running product —
+placeholder text restored, then the select forced to `w-96` — and each turned
+the spec red at its own assertion before the counter-edit restored green. The
+test instance itself was rebuilt this milestone: the credential recorded from
+M51.9's rebuild no longer signed in, which is the case instances.md already
+prescribes a rebuild for, and the rebuilt instance carries `lctl demo`'s data
+so the account has the two memberships the switcher needs to render at all.
+
+## 2026-08-11 — M46.6, one bullet amended at acceptance
+
+**Marked M46.6.** The amendment rule requires three things quoted, so:
+
+**As it stood:** *"the opened list is unchanged: disabled placeholder first,
+then every workspace that is not current."*
+
+**As amended:** *"the opened list keeps its order — disabled placeholder
+first, then every workspace that is not current — with the placeholder's
+label empty, because the chevron-only face forbids it text."*
+
+**The tree fact that forced it:** the worker's three-engine probe, 2026-08-11,
+against the pinned engines: `color: transparent` on a `<select>` erases the
+native chevron in Chromium and Firefox, which draw the arrow in the text
+colour; WebKit alone keeps it. Of the two mechanisms the milestone's own
+Risks section named for the chevron-only face, only the empty-labelled
+placeholder shows the chevron alone in all three engines — so "the opened
+list is unchanged" and "the closed face is the chevron alone" cannot both
+hold, in any engine, and the second is the owner's amendment (D177) while
+the first was drafting. The bullet's letter and the file's sanctioned
+mechanism contradicted inside one file; that is a fact-level wrongness, not
+a choice anyone could take differently, which is what makes this an
+amendment rather than a prompt. The opened list's first row is now blank;
+the accessible name is untouched and the options below it are unchanged.

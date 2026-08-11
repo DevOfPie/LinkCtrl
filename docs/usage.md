@@ -39,8 +39,9 @@ instead of reloading, and that is the only thing it is used for.
 ### The header
 
 Two destinations at the top level — **Dashboard** and **Links** — and on the
-right, in order: the workspace you are in, the switcher, a notification bell and
-your email address. Below `sm` the bar is two lines rather than one, so nothing
+right, in order: one bordered control naming the workspace you are in, with the
+switcher as a chevron beside the name when there is anywhere to go, then a
+notification bell and your email address. Below `sm` the bar is two lines rather than one, so nothing
 is dropped on a phone and no page scrolls sideways.
 
 **API keys was a third destination up here** and is now in the identity menu,
@@ -1513,10 +1514,12 @@ and the dashboard shows no switcher at all. It still says where you are: the
 header names the current organization and workspace whether or not there is
 anywhere to switch to.
 
-Once there is more than one, a control appears in the header. It lists the
-workspaces you can move to and **not** the one you are already in — that one is
-named beside it, as *organization · workspace*, which is the label that appears
-at every membership count including one. Switching moves *that browser*,
+Once there is more than one, the header's workspace box grows a chevron —
+label, a hairline divider, then a select whose closed face is the chevron
+alone. Opened, it lists the workspaces you can move to and **not** the one you
+are already in — that one is named beside it in the same box, as
+*organization · workspace*, which is the label that appears at every
+membership count including one. Switching moves *that browser*,
 immediately and for the rest of the session, so two windows can sit in two
 workspaces. It is also remembered: the next time you sign in, you start where
 you last were.

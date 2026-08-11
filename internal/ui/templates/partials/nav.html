@@ -6,6 +6,39 @@
 
 {{define "flash_ok"}}{{if .}}<div class="mb-4 rounded-md border border-ok-line bg-ok-soft px-4 py-3 text-sm text-ok-ink">{{.}}</div>{{end}}{{end}}
 
+{{/* The workspace pair, fused into one control (M46.6, F204).
+
+     One bordered container: the label, a hairline divider, then the switcher —
+     so "this is where you are" and "here is how you leave" read as a single
+     claim instead of two fragments that happen to be adjacent. The boundary is
+     this define, built across the two below rather than a wrapper div in
+     layout.html, so the conditions deciding what renders live in the file that
+     explains them. Structurally the pair survives: workspace_label and
+     workspace_switch are still the label <p> and the form-wrapped <select>,
+     side by side, and every answer they encode — the current workspace is
+     never an option, no switcher above one membership, the label whenever a
+     workspace is current — is preserved, not restated.
+
+     Three states. Several memberships: label, divider, select. One: the label
+     alone — no divider, no dead affordance (M25 holds), the account still
+     named in the same box. No current workspace: nothing at all, never an
+     empty bordered box (D36). The predicate is "some workspace is current"
+     rather than a length check because the label's own condition is .Current,
+     and the container must not outlive its content.
+
+     focus-within:border-accent puts the select's focus on the shared border:
+     the select is the pair's only focusable element and its own border is
+     gone, so the boundary is what indicates focus now. */}}
+{{define "workspace_control"}}
+{{- $current := false}}{{range .Workspaces}}{{if .Current}}{{$current = true}}{{end}}{{end -}}
+{{- if $current}}
+<div class="flex min-w-0 items-center gap-2 rounded-md border border-line-strong bg-raised px-2 py-1 focus-within:border-accent">
+  {{- template "workspace_label" .}}
+  {{- template "workspace_switch" .}}
+</div>
+{{- end}}
+{{end}}
+
 {{/* Where you are: the current organization and workspace, named.
 
      M46. Blind task 9 could not be completed — the owner could not confirm which
@@ -53,12 +86,20 @@
      `workspace_label` above is what makes it available now. What is left is a
      list of the places you can go, which is what a switcher is.
 
-     The first option is a selected, disabled placeholder. A select needs
-     something to display, and with the current workspace gone the alternative is
-     a control that displays some *other* workspace's name while you are not in
-     it — which is the orientation defect this milestone exists to fix, wearing a
-     different hat. `disabled` so a keyboard user cannot arrow back onto it and
-     post an empty workspace_id.
+     The first option is a selected, disabled placeholder, and since M46.6 its
+     label is empty: the closed face is the chevron alone, which is the owner's
+     amendment to shape B1. What the face must never display is some *other*
+     workspace's name while you are not in it — the orientation defect this
+     pair exists to fix, wearing a different hat — and an empty selected label
+     is the one mechanism all three engines render as a bare chevron:
+     `color: transparent` erases the native arrow in Chromium AND Firefox,
+     which both draw it in the text colour (probed 2026-08-11, three engines).
+     The name lives in aria-label, so a screen reader still hears "Switch
+     workspace"; `disabled` so a keyboard user cannot arrow back onto it and
+     post an empty workspace_id. The width is fixed at w-8 because a chevron
+     holds no text to size against, and the select's own border and background
+     are gone — the shared container in workspace_control carries the boundary
+     now, with a hairline divider separating the label from the select.
 
      The select switches on change and there is no button (D103, F21). The old
      comment here claimed a plain form "with no JavaScript" was forced, because
@@ -82,12 +123,13 @@
      reading, looking at the other workspace's version of it. */}}
 {{define "workspace_switch"}}
 {{if gt (len .Workspaces) 1}}
-<form method="post" action="/workspace/switch" class="flex min-w-0 items-center gap-1">
+<span aria-hidden="true" class="h-4 w-px shrink-0 bg-line-strong"></span>
+<form method="post" action="/workspace/switch" class="flex shrink-0 items-center">
   <input type="hidden" name="next" value="{{.Path}}">
   <select name="workspace_id" aria-label="Switch workspace"
           hx-post="/workspace/switch" hx-trigger="change" hx-include="closest form"
-          class="min-w-0 max-w-[10rem] truncate rounded-md border border-line-strong bg-raised px-2 py-1 text-sm text-ink focus:border-accent focus:outline-none">
-    <option value="" selected disabled>Switch workspace…</option>
+          class="w-8 shrink-0 cursor-pointer bg-transparent text-sm text-ink focus:outline-none">
+    <option value="" selected disabled></option>
     {{range .Workspaces}}{{if not .Current}}
     <option value="{{.ID}}">{{.OrganizationName}} · {{.Name}}</option>
     {{end}}{{end}}

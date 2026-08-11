@@ -58,8 +58,9 @@
     {{template "navlink" (dict "Href" "/links" "Label" "Links" "Active" (eq .Nav "links"))}}
     {{end}}
     <div class="ml-auto flex min-w-0 items-center gap-2">
-      {{template "workspace_label" .}}
-      {{template "workspace_switch" .}}
+      {{/* One invocation since M46.6: the pair is fused behind a shared
+           boundary, and partials/nav.html owns the three membership states. */}}
+      {{template "workspace_control" .}}
       {{/* Gated like the identity menu's own entries, and for the same reason
            (F47). The bell's View all goes to /notifications, which sits behind
            RequireOrganization and 303s straight back — so an account belonging

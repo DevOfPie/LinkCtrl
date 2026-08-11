@@ -210,17 +210,97 @@ func TestTheHeaderCannotPushThePageSideways(t *testing.T) {
 	if sel == "" {
 		t.Fatal("the workspace switcher is not in the header")
 	}
-	for _, el := range []struct{ what, tag string }{
-		{"workspace label", label},
-		{"workspace switcher", sel},
-	} {
-		if !strings.Contains(el.tag, "min-w-0") {
-			t.Errorf("the %s will not shrink below its text: %s", el.what, el.tag)
+	if !strings.Contains(label, "min-w-0") {
+		t.Errorf("the workspace label will not shrink below its text: %s", label)
+	}
+	if !strings.Contains(label, "truncate") {
+		t.Errorf("the workspace label does not truncate, so shrinking it clips "+
+			"rather than ellipsises and the name reads as cut off: %s", label)
+	}
+	// M46.6: the switcher's closed face is a chevron alone, so the select holds
+	// no unbounded string any more. What protects the page from it is that its
+	// width is fixed — it can neither grow with an option's text nor collapse
+	// out of the shared boundary — rather than that it shrinks below content.
+	for _, want := range []string{"w-8", "shrink-0"} {
+		if !hasClass(sel, want) {
+			t.Errorf("the workspace switcher's face is not fixed-width (%s missing), "+
+				"so an option's text can set the width of every page: %s", want, sel)
 		}
-		if !strings.Contains(el.tag, "truncate") {
-			t.Errorf("the %s does not truncate, so shrinking it clips rather than "+
-				"ellipsises and the name reads as cut off: %s", el.what, el.tag)
+	}
+}
+
+// TestTheWorkspacePairReadsAsOneControl is M46.6's boundary, at every
+// membership count.
+//
+// F204: the label said where you are and the select said how to leave, and
+// nothing said the two sentences were one claim. The fix is a shared bordered
+// container — label, hairline divider, select — and the three states are the
+// contract. Several memberships draw all three and never offer the current
+// workspace. One membership draws the label alone: no divider, no dead
+// affordance (M25). No current workspace draws no container at all, never an
+// empty bordered box (D36).
+func TestTheWorkspacePairReadsAsOneControl(t *testing.T) {
+	const (
+		divider = `h-4 w-px`
+		form    = `action="/workspace/switch"`
+		srOnly  = `<span class="sr-only">Current workspace:</span>`
+	)
+	// The container's opening tag through its closing tag. Nothing inside it
+	// nests a div — a <p>, a hairline <span>, a form holding a select — so the
+	// first </div> is the container's own.
+	container := regexp.MustCompile(
+		`(?s)<div class="flex min-w-0 items-center gap-2 rounded-md border border-line-strong[^"]*">.*?</div>`)
+
+	two := renderPage(t, "dashboard", nil)
+	box := container.FindString(two)
+	if box == "" {
+		t.Fatal("with two memberships the header draws no shared container, so the " +
+			"label and the switcher read as two unrelated fragments (F204)")
+	}
+	if !hasClass(box, "focus-within:border-accent") {
+		t.Errorf("the shared container does not indicate focus, and the select's own "+
+			"border is gone — a keyboard user tabbing to it sees nothing: %s", box)
+	}
+	for _, want := range []string{srOnly, ">Owner</span>", ">Default</span>", divider, form} {
+		if !strings.Contains(box, want) {
+			t.Errorf("with two memberships the shared container is missing %q; the "+
+				"pair reads as one control only if label, divider and select share "+
+				"the boundary", want)
 		}
+	}
+	// The closed face is the chevron alone: the selected, disabled placeholder
+	// carries no text for the face to display. The list it opens still never
+	// offers the workspace you are in.
+	if !strings.Contains(box, `<option value="" selected disabled></option>`) {
+		t.Error("the placeholder option carries visible text, so the closed face " +
+			"shows words where the owner chose the chevron alone (M46.6)")
+	}
+	if strings.Contains(box, `value="0198c9c5-0000-7000-8000-000000000010"`) {
+		t.Error("the fused control offers the workspace you are already in")
+	}
+
+	one := renderPage(t, "dashboard", map[string]any{"Workspaces": twoWorkspaces()[:1]})
+	box = container.FindString(one)
+	if box == "" {
+		t.Fatal("with one membership the container is gone; the account must stay " +
+			"named in the same box whether or not there is anywhere to go")
+	}
+	for _, want := range []string{srOnly, ">Owner</span>", ">Default</span>"} {
+		if !strings.Contains(box, want) {
+			t.Errorf("with one membership the container is missing %q", want)
+		}
+	}
+	for _, absent := range []string{divider, form} {
+		if strings.Contains(box, absent) {
+			t.Errorf("with one membership the container draws %q — a divider or a "+
+				"switcher with nowhere to go is a dead affordance (M25)", absent)
+		}
+	}
+
+	none := renderPage(t, "dashboard", map[string]any{"Workspaces": []map[string]any{}})
+	if container.MatchString(none) {
+		t.Error("with no memberships the header draws an empty bordered box; an " +
+			"account that belongs to nothing has no workspace to name (D36)")
 	}
 }
 
