@@ -323,6 +323,7 @@ file. Append a row when you append an entry.
 | [M47.5, one bullet amended at acceptance](#2026-08-11--m475-one-bullet-amended-at-acceptance) | Same-width-set-or-empty overstated the constant-chip mechanism; two-digit counts widen; quoted before and after with the class-level fact |
 | [M46.6 reopened: the popup the wireframes could not draw](#2026-08-11--m466-reopened-the-popup-the-wireframes-could-not-draw) | F209: four owner-named symptoms, one cause — the native select popup; reopened over deferral; rebuilt on the D24 popover pattern; the placeholder assertion retires with its premise |
 | [M46.6 rebuilt: the panel, the anchor, and the width from two insets](#2026-08-11--m466-rebuilt-the-panel-the-anchor-and-the-width-from-two-insets) | The opened state is the D24 popover pattern, scriptless — htmx left with the select; right alignment is CSS anchor positioning, probed in all three pinned engines, literal fallback behind `@supports`; a fixed-width panel overflowed 360px on the kept spec's first run, so the width comes from a clamped left inset and `w-auto` defeats the UA `[popover]` margin trap; the placeholder and hx-* assertions retired with their premises, every recorded answer re-asserted |
+| [Three reopenings from one look at the running product](#2026-08-11--three-reopenings-from-one-look-at-the-running-product) | F210 the antimeridian bands reopen M37, F211 the Edit badge goes from M47.5, F212 the QR popup folds into the tab at M48; the demo base URL fixed in the environment; M37 covered by M57.9 rather than reopening a released phase review |
 
 ---
 
@@ -26881,3 +26882,43 @@ right edge measured against the control's, no blank row, a driven switch
 proving the invoker's face carries no text — and switches back by the home
 workspace's own `title`, so a green run leaves the instance in the
 workspace it found it in and the other signed-in specs keep their data.
+
+## 2026-08-11 — Three reopenings from one look at the running product
+
+No milestone was under way; the owner used the demo through the tunnel and
+reported four things, and the fourth — absolute URLs saying `localhost` —
+was an environment fact fixed in place: `.env.demo`'s `LINKCTRL_BASE_URL`
+now carries the tunnel hostname, and `instances.md`'s passage that called
+the old value *a property rather than a defect* was updated the same hour.
+
+The other three were verified before they were filed, and each falsifies or
+reverses something shipped, so each is a reopening, owner-approved the same
+day over deferral past M57.9:
+
+**[F210](deferred-findings.md#open) reopens [M37](phase-details/m37.md).**
+The bands across the map are Fiji and Russia: both cross the antimeridian,
+`mapgen` never splits a ring at ±180, and the wrapped path fills the full
+1000-unit viewBox width — measured on the rendered SVG, exactly two paths
+wider than 900 units. Invisible-ish at 1280px, plain at 1920, which is how
+it shipped and survived.
+
+**[F211](deferred-findings.md#open) reopens [M47.5](phase-details/m47.5.md).**
+The Edit protections badge goes. This reverses the owner's own
+wireframe-round answer — *Edit carries a count of protections, over leaving
+it unbadged* — and the owner may do that; this entry is the supersession
+the recorded answer points to rather than an edit of it.
+
+**[F212](deferred-findings.md#open) reopens [M48](phase-details/m48.md).**
+The link page's QR popup folds into the QR tab and the heading thumbnail
+opens the tab. M48 built that panel because the stack buried the section;
+M47's tabs un-buried it, so the panel's reason ended on that page. M48's
+other panels stand.
+
+**One coverage decision, deliberately outside W44's letter.** The latest
+review whose range contains M37 is Phase 2's M44.9 — `done`, in a released
+phase. Reopening it to read one diff would cross a phase boundary for a
+review whose phase has shipped; instead **M57.9's re-run owes M37's
+reopening diff**, its owed-list says so, and M44.9's row carries the note —
+the same shape M51.9's row already carries for range re-coverage. If W44
+should say this generally, that is the review session's to propose; the
+choice here is recorded, not silent.

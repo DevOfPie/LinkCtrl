@@ -288,15 +288,17 @@ Two consequences worth knowing before debugging:
 - **The test instance is not published and must not be.** The ingress has a
   single hostname and a catch-all `404`; adding `8081` would put a stack that
   gets `make rebuild` and load generators pointed at it on the public internet.
-- **Absolute URLs the application generates still say `localhost`.** `.env.demo`
-  sets `LINKCTRL_BASE_URL=http://localhost:8080` and no `LINKCTRL_APP_BASE_URL`,
-  and `Config.AppOrigin` falls back to `BaseURL` when the second is unset — so
-  an invitation link (`internal/invite/invite.go:904-906`) or a freshly minted
-  signed link arrives pointing at a host the recipient cannot reach. Ordinary
-  navigation is unaffected, because the application's own redirects are
-  relative. This is a property of how the demo is configured rather than a
-  defect to hunt when somebody notices it; setting `LINKCTRL_APP_BASE_URL` to
-  the tunnel hostname is what would change it.
+- **Absolute URLs the demo generates carry the tunnel hostname.** `.env.demo`
+  sets `LINKCTRL_BASE_URL=https://linkctrl-demo.devofpie.com` — owner-asked
+  2026-08-11, replacing `http://localhost:8080`, because the demo is reached
+  through the tunnel and displayed short links, invitation links
+  (`internal/invite/invite.go:904-906` at `a37f2d0`) and freshly minted signed
+  links were all pointing at a host the reader cannot reach. Both origins
+  follow `BaseURL` while `LINKCTRL_APP_BASE_URL` stays unset. The container
+  still binds `:8080` and answers `Host: localhost:8080` too — the base URL
+  names what URLs *say*, not what the listener accepts — and
+  `LINKCTRL_SECURE_COOKIES` stays `false`, since the VM-local paths that drive
+  the demo (`make demo-update`, the seeder) speak plain HTTP.
 
 ## When the test instance stops
 

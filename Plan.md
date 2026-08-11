@@ -513,9 +513,9 @@ per milestone lives in
 [phase-details/README.md](docs/build-notes/phase-details/README.md) and nowhere
 else; the plan below is the scope contract rather than a progress report.
 
-**Phase 3: planned on 2026-08-06. The build is done — M46.6's reopening
-landed F209's fix — and M57.9's reopened run remains. 0.3.0 is written and
-not yet tagged.** Twenty-one
+**Phase 3: planned on 2026-08-06. Three reopenings of 2026-08-11 are open —
+M37 (Phase 2's map), M47.5 and M48 — then M57.9's reopened run. 0.3.0 is
+written and not yet tagged.** Twenty-one
 milestones, M46–M58,
 across four work areas; the plan is [below](#phase-3-build-plan). It was planned
 in full before its first milestone was built, on the owner's direction, so that

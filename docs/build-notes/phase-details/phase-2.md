@@ -41,7 +41,7 @@ forty-eight and growing, which is the shape the doc-cost audit exists to catch.
 | [M34](m34.md) | Routing rules: conditions, first-match evaluation | M23 M30 M33 | done |
 | [M35](m35.md) | Gated links: password, signed, one-time, max-click | M34 (ordering) | done |
 | [M36](m36.md) | Split testing: weighted, sequential, fallback, flags | M34 M35 M30 | done |
-| [M37](m37.md) | Dimension visualizations, rollup cadence first | — | done |
+| [M37](m37.md) | Dimension visualizations, rollup cadence first | — | done *(reopened 2026-08-11 on [F210](../deferred-findings.md#open) — antimeridian bands; its live row sits in [README.md](README.md) while open)* |
 | [M38](m38.md) | Folders: API and tree UI | — | done |
 | [M39](m39.md) | Per-domain ownership | M21 | done |
 | [M40](m40.md) | Custom domains: verification and serving | M39 M23 | done |
@@ -49,7 +49,7 @@ forty-eight and growing, which is the shape the doc-cost audit exists to catch.
 | [M42](m42.md) | Webhooks | M30 | done |
 | [M43](m43.md) | Automation rules | M22 M35 M42 | done |
 | [M44](m44.md) | API keys: rotation and scope choice | M21 | done |
-| [M44.9](m44.9.md) | **Pre-release adversarial review** | M21–M44 | done |
+| [M44.9](m44.9.md) | **Pre-release adversarial review** | M21–M44 | done *(M37's 2026-08-11 reopening is inside this range and is deliberately covered by [M57.9](m57.9.md)'s re-run instead — reopening a released phase's review to read one diff was declined; recorded in decisions.md)* |
 | [M45](m45.md) | Deferred findings, documentation pass, 0.2.0 | all | done |
 
 The inherited rules these milestones were built under are in
