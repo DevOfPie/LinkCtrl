@@ -33,14 +33,20 @@
 
        The code encodes the short URL with `?src=qr` on it, which is what makes a
        scan countable: a camera sends no referrer, so without the parameter every
-       scan would arrive indistinguishable from somebody typing the URL. */ -}}
-<div id="qr" class="rounded-lg border border-line bg-raised p-6">
+       scan would arrive indistinguishable from somebody typing the URL.
+
+       The panel itself is not here: it renders once at page level, from
+       link_qr_panel below, because the thumbnail invokes it from the heading
+       row on every tab (M47, reopened). This section is the QR tab's in-flow
+       half — the prose, the worded trigger, and the refusal when a write
+       comes back 422. */ -}}
+<div class="rounded-lg border border-line bg-raised p-6">
   <div class="flex flex-wrap items-center gap-4">
     <div class="min-w-0 grow">
       <h2 class="text-sm font-medium text-ink">QR code</h2>
       <p class="mt-1 text-sm text-muted">
-        Scans are counted as ordinary clicks and show up under <strong>{{.QRSourceLabel}}</strong> in the referrers breakdown below. Restyling the code never changes what it says.
-        {{if gt (len .QRCodes) 1}}This link has {{len .QRCodes}} codes, and the breakdown below tells them apart.{{end}}
+        Scans are counted as ordinary clicks and show up under <strong>{{.QRSourceLabel}}</strong> in the referrers breakdown on the Analytics tab. Restyling the code never changes what it says.
+        {{if gt (len .QRCodes) 1}}This link has {{len .QRCodes}} codes, and that breakdown tells them apart.{{end}}
       </p>
     </div>
     {{template "panel_trigger" (dict "ID" "link-qr-panel" "Label" "Settings and download")}}
@@ -48,7 +54,22 @@
   {{if .QRError}}
   <div class="mt-4">{{template "flash_error" .QRError}}</div>
   {{end}}
+</div>
+{{end}}
 
+{{define "link_qr_panel"}}
+{{- /* The QR panel, invoked from the thumbnail in the heading row and from the
+       worded trigger in the QR section. `popovertarget` names an id, so the
+       invokers may live anywhere; what they need is the panel *in the
+       document*, and since M47's reopening drew one section at a time, that
+       means the panel renders at page level rather than inside its section —
+       an invoker on the Analytics tab must still open it. It is a popover,
+       hidden until invoked, so it adds nothing to any tab's flow.
+
+       id="qr" travels with the panel: it is the anchor the QR return path
+       names (qrReturn), and the return path lands on the QR tab, where both
+       halves of this pattern are present. */ -}}
+<div id="qr">
   {{template "panel_open" (dict "ID" "link-qr-panel" "Title" "QR code" "Href" (printf "/links/%s/qr" .Link.ID))}}
   {{template "link_qr_body" .}}
   {{template "panel_close" .}}

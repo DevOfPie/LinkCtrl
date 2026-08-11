@@ -483,6 +483,14 @@ type linkDetailPageData struct {
 	Notice       string
 	Error        string
 
+	// The tab strip and the panel it has open (M47, reopened). Tabs is built
+	// from the same permission gates that guarded the sections when they were a
+	// stack, so the strip never names a section this identity would not have
+	// been shown; Tab is one of its IDs. Tab state lives in the URL (?tab=) and
+	// in nothing else — see activeLinkTab and D178.
+	Tabs []linkTab
+	Tab  string
+
 	// BotsEnforced says the domain overrules this link's own setting, which is
 	// what disables the control rather than letting somebody store a value that
 	// does nothing. BotDomainOn is the weaker case: the domain blocks, but the
@@ -721,6 +729,54 @@ type qrCodeView struct {
 	Counted bool
 }
 
+// linkTab is one entry in the strip M47's reopening put on the link page.
+type linkTab struct{ ID, Label string }
+
+// linkTabs is the strip, in the owner-set order of 2026-08-11: seven tabs over
+// eight section partials, recent activity folding into Analytics because it is
+// the same data one row at a time. The gates are exactly the ones the page put
+// on the sections when they were a stack, so a tab exists precisely where its
+// section would have rendered — a strip naming a section somebody cannot open
+// would be a permission gate drawn as furniture.
+func linkTabs(actor *auth.Identity) []linkTab {
+	can := func(p string) bool { return actor != nil && actor.Can(p) }
+	tabs := make([]linkTab, 0, 7)
+	if can("links.update") {
+		tabs = append(tabs, linkTab{"edit", "Edit"})
+	}
+	if can("links.read") {
+		tabs = append(tabs,
+			linkTab{"qr", "QR"}, linkTab{"routing", "Routing"}, linkTab{"split", "Split"})
+	}
+	if can("links.update") {
+		tabs = append(tabs, linkTab{"signed", "Signed"})
+	}
+	tabs = append(tabs, linkTab{"analytics", "Analytics"})
+	if can("links.delete") {
+		tabs = append(tabs, linkTab{"danger", "Danger"})
+	}
+	return tabs
+}
+
+// activeLinkTab picks the panel to draw from ?tab=. The default is the strip's
+// first entry — the edit form for anyone who may edit, which is the landing the
+// design chose because editing is the common task — and an unknown or
+// unpermitted value falls back there rather than 404ing: the tab is
+// presentation state over one resource, not an object with an existence to
+// dispute.
+func activeLinkTab(q url.Values, tabs []linkTab) string {
+	want := q.Get("tab")
+	for _, t := range tabs {
+		if t.ID == want {
+			return want
+		}
+	}
+	if len(tabs) == 0 {
+		return ""
+	}
+	return tabs[0].ID
+}
+
 // loadLinkDetail assembles the link page.
 //
 // One function per section, and the sections are the partials the page renders
@@ -787,6 +843,8 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 		// country list has its own empty state for the same fact.
 		GeoAvailable: h.Config.Analytics.GeoIPPath != "",
 	}
+	data.Tabs = linkTabs(actor)
+	data.Tab = activeLinkTab(r.URL.Query(), data.Tabs)
 
 	h.fillLinkEdit(r.Context(), actor, &data)
 	// The link page always shows the default code. Which code the *panel* is
@@ -1157,7 +1215,11 @@ func fillLinkAnalytics(r *http.Request, data *linkDetailPageData, from, to time.
 	if !geoShowable {
 		data.GeoUnavailable = ui.GeoUnavailable
 	}
-	data.GeoBase = fmt.Sprintf("/links/%s?days=%d", data.Link.ID, data.Days)
+	// tab=analytics because every URL built from this base re-renders the page
+	// for the sake of something the analytics panel draws (M47, reopened): the
+	// map's metric toggle and the ranked-list anchor would otherwise land the
+	// reader back on the strip's landing tab, holding the answer out of sight.
+	data.GeoBase = fmt.Sprintf("/links/%s?tab=analytics&days=%d", data.Link.ID, data.Days)
 	data.GeoList = data.GeoBase + "#countries"
 
 	// The choropleth. Shaded by clicks unless asked for visitors, and the
@@ -1480,6 +1542,12 @@ func (h *Web) LinkSign(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
+		// A POST carries no ?tab=, and both of this handler's renders exist to
+		// show something the signed section draws — the refusal beside its
+		// form, the minted URL in its box. Re-derived here rather than read
+		// from the form, the way every section-owned write on this page does
+		// it (D178).
+		data.Tab = "signed"
 		data.FieldErrors = fields
 		data.Error = general
 		h.render(w, r, http.StatusUnprocessableEntity, "link_detail", data)
@@ -1490,6 +1558,7 @@ func (h *Web) LinkSign(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	data.Tab = "signed"
 	data.SignedURL = signed.URL
 	data.SignedExpires = signed.ExpiresAt.Format("2006-01-02 15:04 UTC")
 	h.render(w, r, http.StatusOK, "link_detail", data)

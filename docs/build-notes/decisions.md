@@ -317,6 +317,8 @@ file. Append a row when you append an entry.
 | [M46.6, the workspace pair reads as one control](#2026-08-11--m466-the-workspace-pair-reads-as-one-control) | F204 approved into Phase 3, shape B1 chosen from wireframes and owner-amended to a chevron-only switch face; shapes a and c declined with reasons; placement beside M46 |
 | [M46.6 built: the boundary, the chevron, and D177](#2026-08-11--m466-built-the-boundary-the-chevron-and-d177) | The shape answer becomes D177; the shared container is a define in the nav partial; the chevron-only face is an empty-labelled placeholder, chosen by a three-engine probe; the kept browser spec gains a session and instances.md becomes load-bearing |
 | [M46.6, one bullet amended at acceptance](#2026-08-11--m466-one-bullet-amended-at-acceptance) | The opened-list-unchanged clause gave way to the chevron-only face on a three-engine probe; empty-labelled placeholder is the only cross-engine mechanism; quoted before and after |
+| [M47, a citation amended at validation](#2026-08-11--m47-a-citation-amended-at-validation) | nav.html:88 became :130 when M46.6 restyled the switcher; the htmx pattern the bullet leans on is unchanged |
+| [M47 built: the stack becomes tabs, and D178](#2026-08-11--m47-built-the-stack-becomes-tabs-and-d178) | D178 — tab state is `?tab=`, validated against a permission-built strip, and every section-owned write re-derives its own tab server-side; `next` stays a two-value choice. The strip is a partial, so the 60-line cap did not move. The QR panel renders at page level because the thumbnail invokes it from every tab, and `id="qr"` travels with it. Archive and restore stay tabless, and why that trade was taken. Two integration tests amended, named; the whole-page scans render once per tab (F167 at page scale). The blind-task re-run is owed and is the owner's |
 
 ---
 
@@ -26529,3 +26531,135 @@ mechanism contradicted inside one file; that is a fact-level wrongness, not
 a choice anyone could take differently, which is what makes this an
 amendment rather than a prompt. The opened list's first row is now blank;
 the accessible name is untouched and the options below it are unchanged.
+
+## 2026-08-11 — M47, a citation amended at validation
+
+**Marked M47.** Step 1's fact amendment, all three parts quoted per the rule.
+
+**As it stood:** *"Switching a tab is an htmx swap, in the pattern the
+workspace switcher uses (`nav.html:88`)."*
+
+**As amended:** the same sentence citing *`nav.html:130` at `55dbbc8`*, with a
+parenthetical naming why it moved.
+
+**The tree fact:** M46.6 restyled the workspace pair after M47's plan was
+written; the select's `hx-post="/workspace/switch" hx-trigger="change"` now
+sits at `nav.html:130`, verified by grep, and its mechanics are unchanged —
+which is the property the bullet actually leans on. A line number is not a
+choice, so this is arithmetic, not a prompt.
+
+## 2026-08-11 — M47 built: the stack becomes tabs, and D178
+
+**Marked M47.** The reopened contract's owner-set answers — seven tabs, their
+names, the fold, the bare strip — are in
+[the wireframe entry](#2026-08-11--the-link-page-becomes-tabs-and-what-each-tab-says-about-itself)
+and [the split entry](#2026-08-11--seven-tabs-and-m47-split-along-the-seam-the-design-was-drawn-on);
+this entry records what the build itself had to decide.
+
+### D178 — tab state is a query parameter, and every write re-derives its own tab
+
+One URL now serves seven views, and two things had to know which one the
+reader is looking at: the page, and every redirect or 422 re-render a section's
+form produces.
+
+**The page:** `?tab=` on `/links/{id}`, validated against a strip built from
+the same permission gates that guarded the sections when they were a stack
+(`linkTabs` / `activeLinkTab`, `internal/httpx/web_links.go`). Unknown or
+unpermitted values fall back to the strip's first entry — the edit form, the
+landing the design chose — rather than 404ing: the tab is presentation state
+over one resource, not an object with an existence to dispute. Each strip
+anchor is a real link carrying that URL; the click is an htmx swap in the
+workspace switcher's pattern, with `hx-select` trimming the full response to
+the `#link-tabs` container, so there is no fragment handler and no second
+render path to keep honest.
+
+**The writes:** re-derivation, not a new field. Every section-owned handler
+knows which section it serves, so it appends that tab itself — rules to
+`tab=routing`, split arms to `tab=split`, the QR panel's writes to `tab=qr`
+(in `qrReturn` and in `finishQRAction`'s 422 branch), and a signed-link mint
+renders `Tab = "signed"` because its product is drawn in that section's box.
+M48's `next` field is untouched: it stays exactly the two-value choice it
+shipped as, matched and never followed, which is why re-derivation was chosen
+over widening it — a `next` that carried a tab would be a third value to
+validate on every form the panel has.
+
+**The exception, taken knowingly:** archive and restore redirect to
+`?archived=1` / `?restored=1` with no tab, landing on the edit tab rather than
+on Danger. Their Locations are pinned byte-for-byte by
+`TestWebLinkLifecycle` (`test/integration/web_test.go:313`), the outcome is
+named by the status badge in the identity header on every tab, and a reader
+who archived a link is done with the danger zone in a way a reader who added a
+routing rule is not done with their list. Consistency was weighed and this
+trade preferred; if the blind-task re-run says otherwise, this is the sentence
+to reopen.
+
+### The strip is a partial, so the cap did not move
+
+The gate bullet offered two branches — strip as partial, or move
+`linkDetailLineCap` with a written decision. The first was taken:
+`pages/link_detail.html` is 37 lines against the cap's 60, because the
+nine-line section stack became one `{{template "link_tabs" .}}` and the strip,
+the dispatch and their reasoning live in `partials/link_tabs.html`. The cap
+constant, its comment and its message are untouched.
+
+### The QR panel outlives its tab
+
+The thumbnail in the heading row is a `popovertarget` invoker on every tab,
+and an invoker whose panel is not in the document opens nothing. So the panel
+moved out of the `link_qr` section into `link_qr_panel`, rendered once at page
+level under the section's own `links.read` guard — a popover is display-none
+until invoked, so it adds nothing to any tab's flow. `id="qr"` travels with
+it, which is what keeps `qrReturn`'s `#qr` anchor and
+`TestTheDashboardShowsTheCodeInline`'s assertions true on every tab.
+
+### What the behaviour-unchanged claim cost, exactly
+
+Two integration tests were amended, both because the page draws one panel at a
+time now, and both named here as m47.md requires:
+
+- `test/integration/routing_test.go` — the created rule is asserted on
+  `?tab=routing`, the URL the rule form's own redirect carries, rather than on
+  the landing tab.
+- `test/integration/web_test.go` (`TestWebLinkLifecycle`) — the archived
+  status stays asserted on the page as it lands; the Restore control is
+  asserted on `?tab=danger`, the tab it lives on. The archive redirect
+  assertion is byte-identical.
+
+Everything else passes unmodified, `?saved=1` and `?created=1` and the QR
+panel-page branch included. One integration test was added
+(`TestAQRWriteReturnsToTheQRTab`), driving a save and a refusal from the panel
+back to the QR tab — the test the reopened contract demands.
+
+**The whole-page scans render once per tab.** `TestEveryPageRenders` and
+`TestWideElementsScrollInsideTheirOwnContainer` read rendered markup, and a
+page that draws one section at a time shows a single render only one section —
+five sections would have silently left every rendered-markup claim, which is
+F167's failure at page scale. `renderingsOf` (`internal/ui/ui_test.go`) is the
+mechanism; `choropleth_test.go` renders the analytics tab it reads.
+
+### Verified, not assumed
+
+`make check` and `make test-integration` green. `make verify-ui` green — three
+kept specs, the new `link-tabs.spec.mjs` among them, against the rebuilt test
+instance. Both new tests were sabotage-verified and restored by counter-edit:
+the dispatch rendering a second section turned the one-panel test red on six
+tabs; `flex-wrap` in place of the strip's overflow turned the kept spec red at
+exactly the wrap assertion (tops 338 vs 376). The htmx swap was driven in a
+real browser by the spec's tab click, which waits on `?tab=qr` reaching the
+URL bar via `hx-push-url`.
+
+**The blind-task re-run, and its number: 19.7 seconds** — link page rendered
+to save confirmed, against the cited ~35. The first attempt shipped its
+discharge without re-taking the measurement and that is the failure the
+reopened contract names; a measurement taken by the actor who built the page
+is not blind, so at acceptance the owner directed it be run by an
+**independent subagent** — a fresh agent given the running instance, the
+credentials and the task, and told nothing about the layout or that anything
+had changed. Method stated with the number, because the two are not the same
+instrument: the original ~35 was the owner's hands, this is an agent driving
+the pinned chromium, and the comparison is indicative rather than exact. What
+the run reported is the sharper evidence: the destination field was the first
+field on the landing tab — *"no hunting, no scrolling needed to find it"* —
+and the one friction named was scrolling past ~10 unrelated fields to reach
+the single Save button at the bottom, which is a different complaint than
+F205's and is filed as its own row rather than lost in this paragraph.

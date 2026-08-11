@@ -29,6 +29,19 @@ migrations run at boot.
 
 ### Changed
 
+- **A link's page shows one section at a time, behind tabs.** It was every
+  section in one column — the edit form, the QR code, routing rules, the split
+  test, signed links, analytics, recent activity and the danger zone, stacked —
+  and finding anything below the fold meant scrolling past everything above it.
+  A tab strip now selects one panel: Edit, QR, Routing, Split, Signed,
+  Analytics and Danger, with recent activity folded into Analytics since it is
+  the same data one row at a time. The strip scrolls sideways on narrow
+  screens rather than wrapping. Each tab is a real URL (`?tab=`), so
+  bookmarks, refresh and the back button keep working, and a save made in any
+  section returns to the tab that section lives on. No section's behaviour,
+  permissions or form fields changed; the QR settings panel still opens from
+  the thumbnail beside the heading on every tab.
+
 - **The header's workspace label and workspace switcher read as one control.**
   They were two adjacent fragments — a name, then an unlabelled dropdown beside
   it — and nothing said the two were one claim. They now share a single

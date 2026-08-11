@@ -114,6 +114,12 @@ func qrReturn(next string, id interface{ String() string }, marker, slug string,
 		}
 		return page + "/qr?" + q.Encode()
 	}
+	// tab=qr since M47's reopening made the page tabs: every write this
+	// function routes is QR work, so the link-page destination is the QR tab,
+	// derived from what the handler is exactly as the destination itself is —
+	// the field stays a choice between two surfaces and still cannot name a
+	// third (D178).
+	q.Set("tab", "qr")
 	return page + "?" + q.Encode() + "#qr"
 }
 
@@ -313,6 +319,9 @@ func (h *Web) finishQRAction(
 	if !ok {
 		return
 	}
+	// The QR tab, because the refusal renders in the QR section and a POST
+	// carries no ?tab= — qrReturn's re-derivation, on the 422 path (D178).
+	data.Tab = "qr"
 	data.QRError = ve[0].Message
 	h.render(w, r, http.StatusUnprocessableEntity, "link_detail", data)
 }

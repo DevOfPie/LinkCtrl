@@ -1,27 +1,15 @@
 {{define "content"}}
-{{/* The order of this page is the milestone (M47), so it is stated once here
-     rather than inferred from eight partials.
+{{/* One section panel at a time, behind a tab strip (M47, reopened).
 
-       1. what the link is — alias, state, short URL, destination
-       2. edit                 the thing people came to do
-       3. QR code              the thing a blind task spent ~26s reaching
-       4. routing rules        the same question the edit form answers, per visitor
-       5. split test           the same question again, per share of the traffic
-       6. signed links         who may follow it
-       7. analytics            what has happened
-       8. recent activity      the same, one row at a time
-       9. danger zone          done once, and undone by nobody
+     The first pass at this milestone re-ordered nine sections and left the
+     page a nine-section vertical stack; the owner's verdict was that it
+     re-ordered the problem rather than solving it (F205). The stack is now
+     seven tabs — Edit, QR, Routing, Split, Signed, Analytics, Danger — and
+     the strip, the panel dispatch and the reasoning live in
+     partials/link_tabs.html. The identity header below is the page rather
+     than a section, and becomes no tab.
 
-     It used to be analytics, a 186-line edit form, signed links, QR, rules,
-     split, danger zone, recent activity — an order nobody chose. Changing where
-     a link points took ~35 seconds in a blind task and the owner's note was
-     "scrolling, which is worse when not looking for the massive QR code". Four
-     of the seven round-one tasks named scrolling as the worst part.
-
-     What the order was derived from, and where the evidence runs out, is in
-     decisions.md. Disagree with it there rather than here.
-
-     Every section below is a partial. That is enforced, not encouraged:
+     Every section is still a partial, and that is enforced, not encouraged:
      TestTheLinkPageStaysDecomposed caps this file's line count, so a section
      added here goes in internal/ui/templates/partials/ or breaks the build. */}}
 <div class="mb-6 flex items-start gap-4">
@@ -37,21 +25,13 @@
   {{/* M48: the small rendered code, beside the heading rather than eight
        screens down. Why it may be drawn in front of the destination box, and
        what keeps it from pushing it below the fold, is in the partial.
-       Guarded like the section, so the invoker never outlives the panel. */}}
+       Its panel renders inside link_tabs on every tab, so this invoker never
+       outlives what it opens. */}}
   {{if and .Identity (.Identity.Can "links.read")}}{{template "link_qr_thumb" .}}{{end}}
 </div>
 
 {{template "flash_ok" .Notice}}
 {{template "flash_error" .Error}}
 
-<div class="space-y-6">
-  {{if and .Identity (.Identity.Can "links.update")}}{{template "link_edit" .}}{{end}}
-  {{if and .Identity (.Identity.Can "links.read")}}{{template "link_qr" .}}{{end}}
-  {{if and .Identity (.Identity.Can "links.read")}}{{template "link_rules" .}}{{end}}
-  {{if and .Identity (.Identity.Can "links.read")}}{{template "link_split" .}}{{end}}
-  {{if and .Identity (.Identity.Can "links.update")}}{{template "link_signed" .}}{{end}}
-  {{template "link_analytics" .}}
-  {{if .RecentClicks}}{{template "link_activity" .}}{{end}}
-  {{if and .Identity (.Identity.Can "links.delete")}}{{template "link_danger" .}}{{end}}
-</div>
+{{template "link_tabs" .}}
 {{end}}

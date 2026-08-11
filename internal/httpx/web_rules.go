@@ -157,7 +157,11 @@ func (h *Web) RuleCreate(w http.ResponseWriter, r *http.Request) {
 		h.webError(w, r, err)
 		return
 	}
-	seeOther(w, r, "/links/"+id.String()+"?rule=added")
+	// tab=routing puts the reader back in front of the list the write changed
+	// (M47, reopened): the page is tabs now, and a redirect without one lands
+	// on the strip's landing tab with the new rule out of sight. Derived here
+	// from what the handler is, never read from the request (D178).
+	seeOther(w, r, "/links/"+id.String()+"?tab=routing&rule=added")
 }
 
 // RuleToggle switches a rule on or off.
@@ -202,7 +206,8 @@ func (h *Web) ruleAction(
 		h.webError(w, r, err)
 		return
 	}
-	seeOther(w, r, "/links/"+id.String()+"?rule="+notice)
+	// tab=routing for RuleCreate's reason, which is D178's.
+	seeOther(w, r, "/links/"+id.String()+"?tab=routing&rule="+notice)
 }
 
 // rerenderWithRuleError puts the page back with the refusal above the rule
@@ -219,6 +224,10 @@ func (h *Web) rerenderWithRuleError(w http.ResponseWriter, r *http.Request, mess
 	if !ok {
 		return
 	}
+	// The refusal is about a rule, so the page comes back open on the tab the
+	// rule form lives in — a POST carries no ?tab=, and the landing tab would
+	// show the error banner above a form it does not describe (D178).
+	data.Tab = "routing"
 	data.Error = message
 	h.render(w, r, http.StatusUnprocessableEntity, "link_detail", data)
 }

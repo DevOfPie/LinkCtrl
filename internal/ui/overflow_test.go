@@ -132,62 +132,68 @@ func TestWideElementsScrollInsideTheirOwnContainer(t *testing.T) {
 			if !ok {
 				t.Fatalf("no test data for page %q", page)
 			}
-			rec := httptest.NewRecorder()
-			if err := r.Render(rec, http.StatusOK, page, d); err != nil {
-				t.Fatalf("render %s: %v", page, err)
-			}
+			// Once per tab for link_detail (renderingsOf), because a page that
+			// draws one section at a time shows a single render only one
+			// section's markup — and this scan's claim is about all of them.
+			for suffix, d := range renderingsOf(page, d) {
+				rec := httptest.NewRecorder()
+				if err := r.Render(rec, http.StatusOK, page, d); err != nil {
+					t.Fatalf("render %s%s: %v", page, suffix, err)
+				}
+				page := page + suffix // the label failures point at
 
-			var stack []string // opening tags of the tracked ancestors
-			for _, m := range anyTag.FindAllStringSubmatch(rec.Body.String(), -1) {
-				closing, name, attrs := m[1] == "/", strings.ToLower(m[2]), m[3]
+				var stack []string // opening tags of the tracked ancestors
+				for _, m := range anyTag.FindAllStringSubmatch(rec.Body.String(), -1) {
+					closing, name, attrs := m[1] == "/", strings.ToLower(m[2]), m[3]
 
-				// F184. Before the container filter, because an <svg> is not one
-				// and never becomes an ancestor this scan tracks — the package's
-				// icons self-close their children in a dozen shapes, which is the
-				// reason `containers` is a whitelist in the first place.
-				if name == "svg" && !closing {
-					if px := widthOf(attrs); px > phoneViewport &&
-						!bounded(attrs) && !scrolls(stack) {
-						t.Errorf("%s renders an <svg> %dpx wide that nothing bounds:\n  %s\n\n"+
-							"At %dpx it reaches past the viewport and takes the whole "+
-							"document sideways with it, which is what /account/mfa did "+
-							`by 174px. Put max-w-full h-auto on the element — a code `+
-							"scales, its width attribute is only an intrinsic size — or, "+
-							`if it must keep that size, wrap it in `+
-							`<div class="overflow-x-auto">.`,
-							page, px, strings.TrimSpace(m[0]), phoneViewport)
+					// F184. Before the container filter, because an <svg> is not one
+					// and never becomes an ancestor this scan tracks — the package's
+					// icons self-close their children in a dozen shapes, which is the
+					// reason `containers` is a whitelist in the first place.
+					if name == "svg" && !closing {
+						if px := widthOf(attrs); px > phoneViewport &&
+							!bounded(attrs) && !scrolls(stack) {
+							t.Errorf("%s renders an <svg> %dpx wide that nothing bounds:\n  %s\n\n"+
+								"At %dpx it reaches past the viewport and takes the whole "+
+								"document sideways with it, which is what /account/mfa did "+
+								`by 174px. Put max-w-full h-auto on the element — a code `+
+								"scales, its width attribute is only an intrinsic size — or, "+
+								`if it must keep that size, wrap it in `+
+								`<div class="overflow-x-auto">.`,
+								page, px, strings.TrimSpace(m[0]), phoneViewport)
+						}
 					}
-				}
 
-				if !containers[name] {
-					continue
-				}
-				if closing {
-					if n := len(stack); n > 0 {
-						stack = stack[:n-1]
+					if !containers[name] {
+						continue
 					}
-					continue
+					if closing {
+						if n := len(stack); n > 0 {
+							stack = stack[:n-1]
+						}
+						continue
+					}
+					if wideElements[name] && !scrolls(append(stack, m[0])) {
+						t.Errorf("%s renders a <%s> that nothing scrolls:\n  %s\n\n"+
+							"At 360px it is wider than the viewport and takes the whole "+
+							"document sideways with it. Wrap it in "+
+							`<div class="overflow-x-auto">, or put the class on the `+
+							"element itself.", page, name, strings.TrimSpace(m[0]))
+					}
+					if strings.HasSuffix(strings.TrimSpace(attrs), "/") {
+						continue // self-closed; never opens a level
+					}
+					stack = append(stack, m[0])
 				}
-				if wideElements[name] && !scrolls(append(stack, m[0])) {
-					t.Errorf("%s renders a <%s> that nothing scrolls:\n  %s\n\n"+
-						"At 360px it is wider than the viewport and takes the whole "+
-						"document sideways with it. Wrap it in "+
-						`<div class="overflow-x-auto">, or put the class on the `+
-						"element itself.", page, name, strings.TrimSpace(m[0]))
-				}
-				if strings.HasSuffix(strings.TrimSpace(attrs), "/") {
-					continue // self-closed; never opens a level
-				}
-				stack = append(stack, m[0])
-			}
 
-			// The scan is only worth its output if it tracked the nesting it
-			// claims to. An unbalanced stack means a tracked tag went unclosed and
-			// every ancestor answer after it was guessed.
-			if len(stack) != 0 {
-				t.Errorf("%s leaves %d tracked element(s) unclosed, so this scan's "+
-					"ancestor answers are unreliable; the innermost is %s",
-					page, len(stack), strings.TrimSpace(stack[len(stack)-1]))
+				// The scan is only worth its output if it tracked the nesting it
+				// claims to. An unbalanced stack means a tracked tag went unclosed and
+				// every ancestor answer after it was guessed.
+				if len(stack) != 0 {
+					t.Errorf("%s leaves %d tracked element(s) unclosed, so this scan's "+
+						"ancestor answers are unreliable; the innermost is %s",
+						page, len(stack), strings.TrimSpace(stack[len(stack)-1]))
+				}
 			}
 		})
 	}

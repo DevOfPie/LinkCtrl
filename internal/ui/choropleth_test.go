@@ -21,6 +21,9 @@ func renderLinkDetail(t *testing.T, mutate func(map[string]any)) string {
 	if !ok {
 		t.Fatal("the link_detail page data is not a map")
 	}
+	// The map lives on the analytics tab, and since M47's reopening the page
+	// draws one tab at a time; the fixture's landing tab is the edit form.
+	data["Tab"] = "analytics"
 	if mutate != nil {
 		mutate(data)
 	}

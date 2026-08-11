@@ -309,10 +309,16 @@ func TestWebLinkLifecycle(t *testing.T) {
 		t.Error("validation failure did not mark the url field")
 	}
 
-	// Archive, then the page offers Restore.
+	// Archive, then the page offers Restore. The status is asserted on the
+	// page as it lands — the header badge names it on every tab — and the
+	// Restore control on the Danger tab it lives in, because since M47's
+	// reopening the page draws one section panel at a time.
 	f.wantRedirect(f.postForm(detail+"/archive", nil, nil), detail+"?archived=1")
 	page = f.body(f.get(detail, nil))
-	if !strings.Contains(page, "archived") || !strings.Contains(page, "Restore") {
+	if !strings.Contains(page, "archived") {
+		t.Error("the page does not say the link is archived")
+	}
+	if page = f.body(f.get(detail+"?tab=danger", nil)); !strings.Contains(page, "Restore") {
 		t.Error("archived link does not offer restore")
 	}
 

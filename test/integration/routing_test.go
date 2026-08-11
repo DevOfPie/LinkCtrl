@@ -1264,8 +1264,11 @@ func TestTheDashboardFormAndTheAPIAgree(t *testing.T) {
 		t.Errorf("Location = %q", loc)
 	}
 
-	// And the rule appears on the page somebody would look at.
-	page := f.getHTML("/links/" + id.String())
+	// And the rule appears on the page somebody would look at — which since
+	// M47's reopening is the Routing tab, the very URL the form's own redirect
+	// carries. Amended with the tab parameter rather than left reading the
+	// landing tab, because the page draws one section panel at a time now.
+	page := f.getHTML("/links/" + id.String() + "?tab=routing")
 	if !strings.Contains(page, "Routing rules") || !strings.Contains(page, "https://example.com/gb") {
 		t.Error("the link detail page does not show the rule that was just created")
 	}

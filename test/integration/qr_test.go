@@ -415,6 +415,57 @@ func TestTheStyleFormOnThePageStoresWhatTheAPIWouldStore(t *testing.T) {
 	}
 }
 
+// TestAQRWriteReturnsToTheQRTab is the reopened M47's panel-return bullet,
+// driven against the running stack.
+//
+// The link page draws one section panel at a time now, so one URL serves seven
+// views and M48's `next` field has nothing to tell them apart with. The chosen
+// mechanism (D178) is re-derivation: every write this panel routes is QR work,
+// so the handlers append tab=qr themselves — to the redirect on success, to the
+// rendered page on a refusal — and `next` stays exactly the two-value choice it
+// shipped as. Both halves are asserted, because a refusal that landed on the
+// strip's landing tab would show an error banner over a form it does not
+// describe, with the section that explains it a click away.
+func TestAQRWriteReturnsToTheQRTab(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("tabbed", "https://example.com/x")
+	detail := "/links/" + id.String()
+
+	// A save from the panel opened over the link page lands on the QR tab.
+	resp := f.postForm(detail+"/qr", url.Values{
+		"foreground": {"#123456"}, "background": {"#fedcba"}, "size": {"400"},
+		"next": {detail},
+	})
+	loc := resp.Header.Get("Location")
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("a panel save = %d, want 303", resp.StatusCode)
+	}
+	if !strings.HasPrefix(loc, detail+"?") || !strings.Contains(loc, "tab=qr") {
+		t.Errorf("a save from the panel over the link page redirected to %q; want "+
+			"that page open on the QR tab", loc)
+	}
+
+	// A refusal comes back as the link page open on the same tab, with the QR
+	// section — the surface that renders the error — actually drawn.
+	bad := f.postForm(detail+"/qr", url.Values{
+		"foreground": {"#000000"}, "background": {"#ffffff"}, "size": {"9"},
+		"next": {detail},
+	})
+	body := string(readAll(t, bad))
+	_ = bad.Body.Close()
+	if bad.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("a 9px code = %d, want 422", bad.StatusCode)
+	}
+	if !strings.Contains(body, `?tab=qr" aria-current="page"`) {
+		t.Error("the refusal did not land on the QR tab")
+	}
+	if !strings.Contains(body, "Scans are counted as ordinary clicks") {
+		t.Error("the refusal's page does not draw the QR section beside the error")
+	}
+}
+
 // --- M49: the size, the PNG, and the styles that were already stored ----------
 
 // TestThePNGAndTheSVGAreTheSameCodeOverTheWire is the milestone's matching claim

@@ -516,6 +516,12 @@ func pageData(t *testing.T) map[string]any {
 		},
 		"link_detail": map[string]any{
 			"Title": "/demo", "Nav": "links", "Identity": owner(),
+			// The strip as the handler builds it for an identity holding every
+			// permission (linkTabs in internal/httpx), and the landing tab. A
+			// scan that must see every section's markup renders once per tab —
+			// see linkDetailTabs and the loops that use it.
+			"Tabs": linkDetailTabsFixture(),
+			"Tab":  "edit",
 			"Link": lnk, "Stats": stats, "Series": series,
 			"RecentClicks": []map[string]any{{
 				"OccurredAt": now, "Device": "mobile", "Browser": "Chrome",
@@ -1185,6 +1191,50 @@ func pageData(t *testing.T) map[string]any {
 	return data
 }
 
+// linkDetailTabs is the strip in the owner-set order, and the list every
+// whole-page scan iterates. It mirrors linkTabs in internal/httpx for an
+// identity holding every permission, the way linkForm mirrors linkFormData —
+// `ui` depends on nothing outside the standard library, so the shape is
+// restated here and a drift between the two fails the tests that render it.
+var linkDetailTabs = []string{
+	"edit", "qr", "routing", "split", "signed", "analytics", "danger",
+}
+
+func linkDetailTabsFixture() []map[string]any {
+	labels := map[string]string{
+		"edit": "Edit", "qr": "QR", "routing": "Routing", "split": "Split",
+		"signed": "Signed", "analytics": "Analytics", "danger": "Danger",
+	}
+	out := make([]map[string]any, 0, len(linkDetailTabs))
+	for _, id := range linkDetailTabs {
+		out = append(out, map[string]any{"ID": id, "Label": labels[id]})
+	}
+	return out
+}
+
+// renderingsOf returns every rendering a scan must read to have seen all of a
+// page's markup. One for every page but link_detail, which since M47's
+// reopening draws one section panel at a time: each tab is its own document,
+// and a scan that read only the landing tab would silently drop six sections
+// from every claim asserted over rendered markup — F167's failure, at page
+// scale instead of branch scale.
+func renderingsOf(page string, d any) map[string]any {
+	if page != "link_detail" {
+		return map[string]any{"": d}
+	}
+	m, _ := d.(map[string]any)
+	out := make(map[string]any, len(linkDetailTabs))
+	for _, tab := range linkDetailTabs {
+		v := make(map[string]any, len(m))
+		for k, val := range m {
+			v[k] = val
+		}
+		v["Tab"] = tab
+		out["?tab="+tab] = v
+	}
+	return out
+}
+
 // reviewerRoster is the instance's dispute reviewers, as both surfaces that
 // render them see them (M45; two surfaces since M48).
 //
@@ -1248,16 +1298,18 @@ func TestEveryPageRenders(t *testing.T) {
 			if !ok {
 				t.Fatalf("no test data for page %q; add an entry to pageData so the template is exercised", page)
 			}
-			rec := httptest.NewRecorder()
-			if err := r.Render(rec, http.StatusOK, page, d); err != nil {
-				t.Fatalf("render %s: %v", page, err)
-			}
-			body := rec.Body.String()
-			if !strings.Contains(body, "<!doctype html>") {
-				t.Error("page did not go through the layout")
-			}
-			if !strings.Contains(body, "</html>") {
-				t.Error("page is truncated")
+			for suffix, d := range renderingsOf(page, d) {
+				rec := httptest.NewRecorder()
+				if err := r.Render(rec, http.StatusOK, page, d); err != nil {
+					t.Fatalf("render %s%s: %v", page, suffix, err)
+				}
+				body := rec.Body.String()
+				if !strings.Contains(body, "<!doctype html>") {
+					t.Errorf("%s%s did not go through the layout", page, suffix)
+				}
+				if !strings.Contains(body, "</html>") {
+					t.Errorf("%s%s is truncated", page, suffix)
+				}
 			}
 		})
 	}

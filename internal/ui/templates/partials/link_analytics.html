@@ -9,10 +9,11 @@
        count as analytics: leaving a summary strip at the top would put the
        reader back behind it.
 
-       Where they went, of the three options m47.md offered — below, behind a
-       tab, on their own route — is *below*, and the reasoning is in
-       decisions.md. The short version is that it is the only one of the three
-       that changes no route, no query parameter and no test. */ -}}
+       M47 first moved them *below* the configuration; its reopening put them
+       behind the Analytics tab, where the recent-activity table joins them —
+       the same data one row at a time. The window links carry tab=analytics
+       for the reason GeoBase does: every one re-renders this page for the
+       sake of something this panel draws. */ -}}
 <div class="grid gap-4 sm:grid-cols-3">
   <div class="rounded-lg border border-line bg-raised p-4">
     <p class="text-sm text-muted">Clicks ({{.Days}}d)</p>
@@ -33,7 +34,7 @@
     <h2 class="text-sm font-medium text-ink">Clicks per day</h2>
     <div class="flex gap-1 text-sm">
       {{range .Windows}}
-      <a href="/links/{{$.Link.ID}}?days={{.}}"
+      <a href="/links/{{$.Link.ID}}?tab=analytics&amp;days={{.}}"
          class="{{if eq . $.Days}}rounded-md bg-accent-soft px-2 py-1 font-medium text-accent-ink{{else}}rounded-md px-2 py-1 text-muted hover:bg-sunken{{end}}">{{.}}d</a>
       {{end}}
     </div>

@@ -1,0 +1,55 @@
+{{define "link_tabs"}}
+{{- /* The tab strip and the one section panel it has open (M47, reopened).
+
+       F205: nine sections in one column meant the reorder only decided *which*
+       section is expensive to reach, never *how many* are. So the stack became
+       seven tabs, owner-set 2026-08-11 — Edit, QR, Routing, Split, Signed,
+       Analytics, Danger — with recent activity folded into Analytics because
+       it is the same data one row at a time. All eight section partials
+       survive; this file replaces only the shell that arranged them.
+
+       The strip scrolls sideways instead of wrapping. That is the property
+       that made tabs beat the drawn alternatives — it behaves identically at
+       360px and at full width — and the kept spec in
+       tools/agent-browser/specs/link-tabs.spec.mjs is what asserts it.
+
+       Anchors, deliberately. The fold test counts named form controls in
+       front of id="url" and refuses <ul>/<ol> there; an <a> is neither, so
+       the destination box and the alias stay the first two controls the page
+       draws. Each tab is a real URL (?tab=), which is what keeps refresh,
+       bookmarks and every section's return path honest; the click itself is
+       an htmx swap in the workspace switcher's pattern (nav.html), with
+       hx-select trimming the full response to this container. Which tab a
+       write returns to is the handlers' to derive, never the request's to
+       name — D178.
+
+       The strip ships bare. The badges are M47.5's, and a strip with no
+       badges is the drawn option that was judged insufficient on its own — a
+       deliberate intermediate state, not an oversight. */ -}}
+<div id="link-tabs">
+  <nav aria-label="Link sections" class="flex overflow-x-auto whitespace-nowrap border-b border-line">
+    {{range .Tabs}}
+    {{$active := eq .ID $.Tab}}
+    <a href="/links/{{$.Link.ID}}?tab={{.ID}}" {{if $active}}aria-current="page"{{end}}
+       hx-get="/links/{{$.Link.ID}}?tab={{.ID}}" hx-target="#link-tabs"
+       hx-select="#link-tabs" hx-swap="outerHTML" hx-push-url="true"
+       class="shrink-0 border-b-2 px-4 py-2 text-sm font-medium {{if $active}}border-accent text-ink{{else}}border-transparent text-muted hover:text-ink{{end}}">{{.Label}}</a>
+    {{end}}
+  </nav>
+  <div class="mt-6">
+    {{if eq .Tab "edit"}}{{if and .Identity (.Identity.Can "links.update")}}{{template "link_edit" .}}{{end}}{{end}}
+    {{if eq .Tab "qr"}}{{if and .Identity (.Identity.Can "links.read")}}{{template "link_qr" .}}{{end}}{{end}}
+    {{if eq .Tab "routing"}}{{if and .Identity (.Identity.Can "links.read")}}{{template "link_rules" .}}{{end}}{{end}}
+    {{if eq .Tab "split"}}{{if and .Identity (.Identity.Can "links.read")}}{{template "link_split" .}}{{end}}{{end}}
+    {{if eq .Tab "signed"}}{{if and .Identity (.Identity.Can "links.update")}}{{template "link_signed" .}}{{end}}{{end}}
+    {{if eq .Tab "analytics"}}<div class="space-y-6">{{template "link_analytics" .}}{{if .RecentClicks}}{{template "link_activity" .}}{{end}}</div>{{end}}
+    {{if eq .Tab "danger"}}{{if and .Identity (.Identity.Can "links.delete")}}{{template "link_danger" .}}{{end}}{{end}}
+  </div>
+  {{- /* The QR panel outlives its tab. The thumbnail in the heading row is a
+         popovertarget invoker on every tab, and an invoker whose panel is not
+         in the document opens nothing — so the panel renders here, once,
+         under the section's own guard, whichever panel the strip has open.
+         Hidden until invoked, so it adds nothing to any tab's flow. */ -}}
+  {{if and .Identity (.Identity.Can "links.read")}}{{template "link_qr_panel" .}}{{end}}
+</div>
+{{end}}

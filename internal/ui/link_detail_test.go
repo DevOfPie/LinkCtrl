@@ -345,6 +345,93 @@ func TestTheClickLimitNamesTheTotalAndWhatIsSpent(t *testing.T) {
 	}
 }
 
+// TestTheLinkPageDrawsOneSectionAtATime is the reopened M47's central bullet.
+//
+// F205: the first pass re-ordered nine sections and left the page a
+// nine-section vertical stack, so ordering decided which section is expensive
+// to reach and never how many are. The claim now is structural — the page
+// renders **one** section panel, selected by a tab strip — and it is asserted
+// in both directions for every tab: the active section's marker is present and
+// every other section's is absent, because a dispatch that quietly rendered two
+// panels would pass any one-sided check and rebuild the stack a tab at a time.
+//
+// The QR tab's marker is the section's own prose, not the panel's, because the
+// panel deliberately renders on every tab: the thumbnail in the heading row
+// invokes it from wherever the reader is standing, and a popover is not in any
+// tab's flow. Recent activity is asserted as the Analytics tab's tail — eight
+// sections behind seven tabs is the owner-set fold, and a strip that grew an
+// eighth tab or an activity table that went unrendered would both surface here.
+func TestTheLinkPageDrawsOneSectionAtATime(t *testing.T) {
+	markers := map[string]string{
+		"edit":      `id="url"`,
+		"qr":        "Scans are counted as ordinary clicks",
+		"routing":   ">Routing rules</h2>",
+		"split":     ">Split test</h2>",
+		"signed":    ">Signed links</h2>",
+		"analytics": ">Clicks per day</h2>",
+		"danger":    ">Danger zone</h2>",
+	}
+
+	for _, tab := range linkDetailTabs {
+		page := mainOf(t, renderPage(t, "link_detail", map[string]any{"Tab": tab}))
+
+		if !strings.Contains(page, markers[tab]) {
+			t.Errorf("the %s tab does not render its own section (missing %q)",
+				tab, markers[tab])
+		}
+		for other, marker := range markers {
+			if other != tab && strings.Contains(page, marker) {
+				t.Errorf("the %s tab also renders the %s section (%q). One panel at "+
+					"a time is the milestone; two is the stack growing back a tab at "+
+					"a time.", tab, other, marker)
+			}
+		}
+
+		// The strip itself survives every selection: all seven tabs, in the
+		// owner-set order, and exactly one of them marked current.
+		last := -1
+		for _, id := range linkDetailTabs {
+			at := strings.Index(page, `?tab=`+id+`"`)
+			if at < 0 {
+				t.Errorf("on the %s tab the strip offers no %s tab", tab, id)
+				continue
+			}
+			if at < last {
+				t.Errorf("on the %s tab the strip draws %s out of the owner-set order", tab, id)
+			}
+			last = at
+		}
+		if !strings.Contains(page, `?tab=`+tab+`" aria-current="page"`) {
+			t.Errorf("the %s tab's own entry in the strip is not marked current", tab)
+		}
+		if n := strings.Count(page, `aria-current="page"`); n != 1 {
+			t.Errorf("the %s tab marks %d strip entries current, want exactly 1", tab, n)
+		}
+
+		// Activity folds into Analytics: present exactly there.
+		if has := strings.Contains(page, ">Recent activity</h2>"); has != (tab == "analytics") {
+			t.Errorf("the %s tab renders recent activity = %v; it is the Analytics "+
+				"tab's tail and nobody else's", tab, has)
+		}
+	}
+
+	// The mechanics the design names: the click is an htmx swap in the
+	// workspace switcher's pattern, each tab is a real URL, and the strip
+	// scrolls sideways instead of wrapping. What that *looks like* at 360px is
+	// the kept spec's to assert (tools/agent-browser/specs/link-tabs.spec.mjs);
+	// what is asserted here is that the mechanism is in the markup at all.
+	page := mainOf(t, renderPage(t, "link_detail", nil))
+	for _, want := range []string{
+		`hx-target="#link-tabs"`, `hx-select="#link-tabs"`,
+		`hx-swap="outerHTML"`, `hx-push-url="true"`,
+		`aria-label="Link sections" class="flex overflow-x-auto whitespace-nowrap`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the strip is missing %s", want)
+		}
+	}
+}
+
 // checkboxNamed pulls one checkbox out of a rendered page and reports whether it
 // is ticked.
 //
