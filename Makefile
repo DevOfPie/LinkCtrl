@@ -221,7 +221,7 @@ check-version-stamp: build ## Fail if a built binary does not report its version
 	@scripts/check-version-stamp.sh $(BIN)/linkctrl $(BIN)/lctl
 
 .PHONY: check
-check: tidy lint shellcheck test ## Everything CI runs, short of integration tests
+check: tidy lint shellcheck check-links test ## Everything CI runs, short of integration tests
 
 # Deliberately NOT a prerequisite of `check` above, of any ci- target, or of
 # release-check — and this comment sits here because directly above is where
@@ -279,7 +279,7 @@ ci-test: ## Unit tests with the race detector, uncached — what CI runs
 	go test -race -count=1 ./...
 
 .PHONY: ci-build
-ci-build: verify-assets css build check-version-stamp vet ci-test openapi check-tidy check-generate ## The CI build job, end to end
+ci-build: verify-assets css build check-version-stamp vet ci-test openapi check-tidy check-generate check-links ## The CI build job, end to end
 	@echo "ci-build: every check passed"
 
 # golangci-lint is not here. It runs from a commit-pinned action in the workflow,

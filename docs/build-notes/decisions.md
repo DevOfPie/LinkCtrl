@@ -302,6 +302,7 @@ file. Append a row when you append an entry.
 | [M52, reopened: both dispute labels in one statement](#2026-08-10--m52-reopened-both-dispute-labels-in-one-statement) | The reopening [D175](../../Plan.md#phase-3-decisions) scheduled, and its whole scope: [F187](deferred-findings.md#closed). `scrubbed_filed` and `scrubbed_decided` were two data-modifying CTEs writing one `destination_disputes` row, so Postgres applied one and dropped the other whenever a batch held both halves of a dispute — which two ordinary situations produce. Merged into the shape `scrubbed_audit` already had, sabotage-verified against the split, and the six sites in three documents that stated it as a live exception at 0.3.0 now state the requirement. Plus why one link this diff staled was fixed while [F203](deferred-findings.md#open)'s sixty-four stay |
 | [A queue row typed `issue` against a design that was deliberate](#2026-08-10--a-queue-row-typed-issue-against-a-design-that-was-deliberate) | The routing judgement `/process-queue` forces and does not name: when the tree says the behaviour is exactly as designed and the owner has typed the row `issue` anyway, the type stands and the as-designed conflict becomes the row's evidence. Why that is not the *typed issue, is neither* dispute, and why F204 carries three fix shapes rather than a prompt |
 | [The target was aimed at the plan, not at the build](#2026-08-11--the-target-was-aimed-at-the-plan-not-at-the-build) | W40: a phase is planned at fifteen milestones and that ceiling is real, but a milestone the build turns out to need is added when it is needed rather than costing a phase-boundary conversation. What the rule was protecting, and where that protection now sits |
+| [A gate nobody runs](#2026-08-11--a-gate-nobody-runs) | W41: `check-links` was enforced by a human typing it and by a script that runs at release time only, so the table gate M58 added was unenforced from the day it landed. Why the row was split rather than taken whole, and why the wiring half needed no milestone |
 
 ---
 
@@ -25569,3 +25570,54 @@ cheapest way to satisfy it is fatter milestones — the same scope in fewer file
 each less reviewable. If the target and a milestone's reviewability disagree, the
 target still gives. That paragraph is untouched and it is the reason the target
 survives at all.
+## 2026-08-11 — A gate nobody runs
+
+[W41](workflow-changes.md#made), and the wiring half of
+[F198](deferred-findings.md#open). Split at the owner's direction while triaging
+the ten rows Phase 3's close left open.
+
+### The finding
+
+`scripts/check-links.sh` was reachable two ways: `make check-links`, typed by a
+person, and `scripts/release-check.sh`, which runs when a release is being cut.
+Neither `make check` nor `make ci-build` called it, and CI calls those.
+
+So the link gate had no automated enforcement, and the **table-column gate M58
+added to the same script** — the one written *because* a malformed row had hidden
+F103's whole M54 amendment from every renderer — was unenforced from the moment
+it landed. It was written as a gate and lived as a habit.
+
+The file already knew. `release-check.sh`'s own comment above the call reads
+*"workflow.md makes this a commit gate. It went unenforced for all of Phase 1,
+which is what happens to a gate that needs someone to remember it."* That
+sentence was written about a previous instance of exactly this, and it sat four
+lines above the only automated caller.
+
+### Why the row was split
+
+F198 has two halves and they are different kinds of thing. **Which gates run** is
+a process question — it is about how this project is built, it touches no
+product behaviour, and workflow.md's own gate table is where the answer lives.
+**What a gate can see** is a defect in a script: the checker compares each body
+row against the header and never against the delimiter, so a three-column header
+over a two-column delimiter passes, and that is precisely the case GFM answers by
+dropping the entire table.
+
+Taking them together would have put a real change to a checker's semantics into a
+commit with no milestone and no review behind it. Taking neither would have left
+the gate unenforced while its own finding waited. So the wiring is made here and
+the delimiter half stays a finding, with both halves naming where the other went
+— which is workflow.md's no-silent-removal rule applied to a row that was split
+rather than closed.
+
+### What was verified rather than assumed
+
+`make check` was sabotaged: a broken relative link appended to a tracked file
+took it to rc=2 naming the file and the target, and it returned green after the
+line was removed by counter-edit. A gate wired in and never seen to fail is the
+same thing this entry is about.
+
+`check`'s description — *everything CI runs, short of integration tests* — was
+false while the omission stood, and is true again. `release-check.sh`'s label
+said *every relative link and anchor resolves*, describing half the script it
+invokes, and now names both halves.
