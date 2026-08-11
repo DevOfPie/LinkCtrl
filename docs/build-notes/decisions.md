@@ -324,6 +324,8 @@ file. Append a row when you append an entry.
 | [M46.6 reopened: the popup the wireframes could not draw](#2026-08-11--m466-reopened-the-popup-the-wireframes-could-not-draw) | F209: four owner-named symptoms, one cause — the native select popup; reopened over deferral; rebuilt on the D24 popover pattern; the placeholder assertion retires with its premise |
 | [M46.6 rebuilt: the panel, the anchor, and the width from two insets](#2026-08-11--m466-rebuilt-the-panel-the-anchor-and-the-width-from-two-insets) | The opened state is the D24 popover pattern, scriptless — htmx left with the select; right alignment is CSS anchor positioning, probed in all three pinned engines, literal fallback behind `@supports`; a fixed-width panel overflowed 360px on the kept spec's first run, so the width comes from a clamped left inset and `w-auto` defeats the UA `[popover]` margin trap; the placeholder and hx-* assertions retired with their premises, every recorded answer re-asserted |
 | [Three reopenings from one look at the running product](#2026-08-11--three-reopenings-from-one-look-at-the-running-product) | F210 the antimeridian bands reopen M37, F211 the Edit badge goes from M47.5, F212 the QR popup folds into the tab at M48; the demo base URL fixed in the environment; M37 covered by M57.9 rather than reopening a released phase review |
+| [M37 rebuilt: the antimeridian split, and the ring as the unit of the claim](#2026-08-11--m37-rebuilt-the-antimeridian-split-and-the-ring-as-the-unit-of-the-claim) | Unwrap-then-clip at ±180 in mapgen; a third wrapped ring (Wrangel) beyond F210's two; why the width test asserts per ring and not per country; the recorded look over a kept spec |
+| [M37, one bullet amended at acceptance](#2026-08-11--m37-one-bullet-amended-at-acceptance) | The width test asserts per ring, not per country path — a correctly split Russia touches both frame edges, so the bullet as written failed on the fix it protects |
 
 ---
 
@@ -26922,3 +26924,80 @@ reopening diff**, its owed-list says so, and M44.9's row carries the note —
 the same shape M51.9's row already carries for range re-coverage. If W44
 should say this generally, that is the review session's to propose; the
 choice here is recorded, not silent.
+
+## 2026-08-11 — M37 rebuilt: the antimeridian split, and the ring as the unit of the claim
+
+Work under [M37](phase-details/m37.md)'s reopening, closing
+[F210](deferred-findings.md#closed).
+
+**The defect was in the generator's own reasoning, not only its output.**
+mapgen's package comment asserted the antimeridian needed no handling because
+"Natural Earth cuts its geometry at ±180 already, so no ring wraps", backed by
+a bounds check on decoded coordinates. Both halves were wrong the same way: a
+crossing ring keeps every coordinate inside [-180, 180] — it *jumps* ~360°
+between consecutive points rather than leaving the range — so the check could
+never fire, and world-atlas 110m does not cut. The comment now states what the
+data does, and the bounds check's comment claims only what it can catch.
+
+**The split is unwrap-then-clip, chosen for having no tunable parts.** A ring
+whose consecutive longitudes jump more than 180° is rewritten into continuous
+longitude (each step takes the short way round), shifted by a whole turn so
+its minimum sits in [-180, 180), and clipped against the 180° meridian —
+Sutherland–Hodgman against a single half-plane, crossing points interpolated
+onto ±180 exactly so both halves end flush on the frame edge. The part beyond
+180 is shifted -360° to the frame's left edge. Rings that do not cross pass
+through untouched, which is what held the regenerated file to a two-line diff:
+FJ and RU, nothing else — the "byte-identical or explained" bullet discharged
+by construction rather than by inspection.
+
+**The fix found a third wrapped ring.** F210 measured two paths wider than
+900 units; the width test, written first and run against the shipped file,
+failed on three rings — Fiji, Russia's mainland, and **Wrangel Island**
+(width 996.9), a second Russian ring whose band hid inside the mainland's.
+Post-split the browser confirms Wrangel as two fragments flush on each frame
+edge. A per-path probe could not have seen it; the ring-level test did, which
+is the next point.
+
+**The test's unit is the subpath, because the country cannot carry the
+assertion.** A *correctly* split Russia still touches both frame edges — the
+mainland ends at x=1000 (180°E) and Chukotka enters at x=0 (180°W) — so
+Russia's and Fiji's per-country boxes legitimately span the full width, and a
+country-level "never spans the frame" test would fail on the fix it exists to
+protect. Verified on the rendered page, not only in theory: the two path
+*elements* still measure width 1000 while the widest rendered *ring* is 424.2
+(Russia's mainland). The bound is half the frame — nothing real sits between
+424.2 and a wrapped ring's ~1000 — and the test went red on the shipped file
+before the fix and green after, which stands in for sabotage.
+
+**The ≥1920px look is a recorded look, not a kept spec.** Driven at 1920×1080
+on the rebuilt test instance: the y≈8 and y≈278 bands are gone, Russia and
+Fiji render as shapes, the console is clean (0 messages), and `make
+verify-ui` stays green at 3. A kept spec was declined because the property is
+per-ring geometry, which the browser can only re-derive by re-implementing
+the Go test's path walk in JS — the Go test owns the property; a browser spec
+would own a copy.
+
+## 2026-08-11 — M37, one bullet amended at acceptance
+
+**Marked M37.** The amendment rule's three parts:
+
+**As it stood:** *"A test asserts no country path's bounding box spans the
+full viewBox width — the property the defect broke, checked over every
+generated path, so the next antimeridian-crossing addition cannot regress
+it silently."*
+
+**As amended:** *"A test asserts no ring — no subpath of any generated
+path — has a bounding box wider than half the frame; the widest real ring
+is Russia's mainland at 424.2 units and a wrapped ring measures ~1000, so
+nothing sits between the bound and the defect."*
+
+**The tree fact that forced it:** a correctly split Russia and Fiji each
+still span x∈[0,1000] — the mainland ends flush at the right frame edge
+and the shifted fragment enters at the left — verified by both the worker
+and the reviewer on the regenerated file. So the bullet as written fails
+on exactly the output it exists to protect, and the only unit that can
+carry the claim is the ring. Geometry decided this, nobody could have
+chosen otherwise, which is what makes it an amendment rather than a
+prompt. The test bound is half the frame rather than "full width" because
+the reviewer's red-run on the shipped file measured Wrangel Island at
+996.9 — a wrapped ring need not reach 1000 exactly.

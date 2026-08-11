@@ -27,10 +27,9 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## Phase 3
 
-**Three rows are open, all reopenings of 2026-08-11 — [M37](m37.md) (Phase
-2's map, bands across it), [M47.5](m47.5.md) (the Edit badge goes) and
-[M48](m48.md) (the QR popup folds into the tab) — then [M57.9](m57.9.md)'s
-reopened run. 0.3.0 is written and not yet tagged.** Four work areas, chosen 2026-08-06: identity and account
+**Two rows are open, both reopenings of 2026-08-11 — [M47.5](m47.5.md) (the
+Edit badge goes) and [M48](m48.md) (the QR popup folds into the tab) — then
+[M57.9](m57.9.md)'s reopened run. 0.3.0 is written and not yet tagged.** Four work areas, chosen 2026-08-06: identity and account
 lifecycle, dashboard UI and UX, infrastructure and resilience, QR codes and
 campaigns. Twenty-one milestones — **twelve integers of work**, two adversarial
 reviews, one close, and **six insertions** (M50.5, M50.6, M46.5, M46.6, M47.5, M57.5) — against the size target in
@@ -59,7 +58,6 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 
 | # | Milestone | Depends on | Status |
 | --- | --- | --- | --- |
-| [M37](m37.md) | Dimension visualizations *(Phase 2 — reopened; this row returns to [phase-2.md](phase-2.md) at `done`)* | — | in progress (reopened) |
 | [M46](m46.md) | The shell, the navigation, and the links list | — | done |
 | [M46.5](m46.5.md) | A browser an agent can drive, and a test that outlives it | — | done |
 | [M46.6](m46.6.md) | The workspace pair reads as one control | M46 · M46.5 | done |

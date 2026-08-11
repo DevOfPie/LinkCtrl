@@ -41,7 +41,7 @@ forty-eight and growing, which is the shape the doc-cost audit exists to catch.
 | [M34](m34.md) | Routing rules: conditions, first-match evaluation | M23 M30 M33 | done |
 | [M35](m35.md) | Gated links: password, signed, one-time, max-click | M34 (ordering) | done |
 | [M36](m36.md) | Split testing: weighted, sequential, fallback, flags | M34 M35 M30 | done |
-| [M37](m37.md) | Dimension visualizations, rollup cadence first | — | done *(reopened 2026-08-11 on [F210](../deferred-findings.md#open) — antimeridian bands; its live row sits in [README.md](README.md) while open)* |
+| [M37](m37.md) | Dimension visualizations, rollup cadence first | — | done *(reopened and closed again 2026-08-11 — [F210](../deferred-findings.md#closed)'s antimeridian bands; mapgen now splits crossing rings, and the reopening is [M57.9](m57.9.md)'s to review, per the note on M44.9's row)* |
 | [M38](m38.md) | Folders: API and tree UI | — | done |
 | [M39](m39.md) | Per-domain ownership | M21 | done |
 | [M40](m40.md) | Custom domains: verification and serving | M39 M23 | done |

@@ -76,6 +76,17 @@ migrations run at boot.
 
 ### Fixed
 
+- **The analytics world map drew two grey bands across its full width** — one
+  along the top, one just below the equator. Fiji and Russia cross the
+  antimeridian, and the map generator emitted each of their outlines as a
+  single ring wrapping from one edge of the frame to the other, so the fill
+  swept the map at that latitude. The generator now splits any
+  antimeridian-crossing ring at ±180° before projecting; Fiji, Russia and
+  Wrangel Island render as their shapes, every other country's geometry is
+  unchanged, and a Russia with clicks shades its own outline rather than a
+  stripe through Scandinavia. The bands were faint at typical laptop widths
+  and obvious on wide screens, which is how they went unnoticed.
+
 - **Every dashboard page loaded with a Content-Security-Policy violation in the
   browser console.** htmx injects a stylesheet for its request-indicator feature
   at load, and the dashboard's `style-src 'self'` blocked it — on every page, in

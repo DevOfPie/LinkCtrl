@@ -200,6 +200,55 @@ func TestTheFillRuleIsEvenOdd(t *testing.T) {
 	t.Error("South Africa is not on the map")
 }
 
+// TestNoRingSpansTheFullFrameWidth is F210's regression test: a ring that
+// crosses the antimeridian unsplit wraps 180→-180 inside one subpath, and its
+// fill sweeps the frame as a horizontal band — Fiji and Russia both did, at
+// widths of 1000 in a 1000-unit frame, and every whole-country check above
+// stayed green because a wrapped ring is inside the viewBox and inside its own
+// bounding box.
+//
+// The unit is the subpath, not the country: a *correctly* split Russia still
+// touches both frame edges — its mainland ends at x=1000 (180°E) and Chukotka
+// enters at x=0 (180°W) — so the country's box legitimately spans the frame,
+// and only the ring can carry the assertion. The bound is half the frame: the
+// widest real ring on the map is Russia's mainland at ~425 units (153° of
+// longitude), while a wrapped ring holds points near both edges and spans
+// nearly all 1000. Nothing real sits between.
+func TestNoRingSpansTheFullFrameWidth(t *testing.T) {
+	w, _ := viewBoxSize(t)
+	for _, c := range Countries() {
+		for _, sub := range subpaths(t, c.Path) {
+			minX, _, maxX, _ := bounds(t, sub)
+			if maxX-minX > w/2 {
+				t.Errorf("%s (%s) has a ring spanning x [%.1f, %.1f], %.1f of the "+
+					"%.0f-unit frame: a ring wider than half the world is one that "+
+					"crossed the antimeridian and was not split",
+					c.Code, c.Name, minX, maxX, maxX-minX, w)
+			}
+		}
+	}
+}
+
+// subpaths cuts a path at each absolute M, one closed ring per piece.
+func subpaths(t *testing.T, path string) []string {
+	t.Helper()
+	var out []string
+	start := -1
+	for i := 0; i < len(path); i++ {
+		if path[i] == 'M' {
+			if start >= 0 {
+				out = append(out, path[start:i])
+			}
+			start = i
+		}
+	}
+	if start < 0 {
+		t.Fatalf("path %q has no subpath", path)
+	}
+	out = append(out, path[start:])
+	return out
+}
+
 // bounds walks a path's coordinates.
 //
 // The generated paths use exactly three commands — an absolute M that opens a
