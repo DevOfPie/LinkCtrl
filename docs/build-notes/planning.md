@@ -78,11 +78,23 @@ inserting. **Owner-set 2026-08-06, and explicitly revisitable.**
 Phase 2 ran **33**: 25 integers, M21 through M45, and 8 insertions. It was the
 phase that produced this target, and it is the number the target is set against.
 
-An insertion that would take a phase past the target is not forbidden by
-arithmetic — it is a **phase-boundary conversation**, the same as the last bullet
-above. Either something moves to the next phase or the target moves knowingly,
-and both are the owner's. What the target removes is the case where a phase grows
-by one insertion at a time and nobody is ever the person who decided it was large.
+**The target binds planning, not production. Owner-set 2026-08-11**, in these
+words: *the initial milestone limit in a phase is in place to restrict initial
+planning, adding a few needed milestones during production is acceptable.*
+
+So a phase is **planned** at fifteen and that number is a real ceiling on the
+plan. A milestone the build turns out to need — a defect that wants its own
+definition of done, a milestone that proves to be two — is added when it is
+needed, and it is not a phase-boundary conversation for having pushed the count
+past fifteen. *Needed* and *a few* are both load-bearing: this is not a licence
+for a phase to grow indefinitely, it is a statement that the ceiling was aimed at
+optimistic planning rather than at honest discovery.
+
+What the target still removes is the case the previous wording was written for —
+a phase that grows by one insertion at a time with nobody ever being the person
+who decided it was large. That protection now sits at planning time, where the
+count is a prediction somebody is making, rather than at build time, where it is
+an observation somebody is reporting.
 
 **It has been tested twice in one day, and it worked as designed both times.**
 Phase 3 was planned at fifteen with every slot spent.
@@ -106,6 +118,13 @@ Phase 3 therefore runs at **seventeen**, and that is a recorded exception rather
 than a new ceiling: **the rule here stays fifteen**. Moving the target for one
 phase and moving it for every phase after are different decisions, and only the
 first was taken — twice.
+
+*(Both of those conversations happened under the old reading, where any insertion
+past the target was a boundary conversation. Under the 2026-08-11 clarification
+neither would have been one — both were milestones the build turned out to need,
+which is exactly the case now allowed. They are left recorded as they happened
+rather than reinterpreted: the point of this section is that somebody decided,
+and somebody did.)*
 
 **The trap, stated because a target invites it.** A count is a number people plan
 *to*, so the cheapest way to satisfy this rule is fatter milestones — the same

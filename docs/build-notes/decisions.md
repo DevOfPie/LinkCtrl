@@ -301,6 +301,7 @@ file. Append a row when you append an entry.
 | [M58: the sixth pass, the response that disagreed with its own transaction, and the demo that would not have resolved](#2026-08-10--m58-the-sixth-pass-the-response-that-disagreed-with-its-own-transaction-and-the-demo-that-would-not-have-resolved) | Two release blockers and four false sentences on surfaces the tag publishes, fixed; seven rows filed. `POST /api/v1/api-keys/rotate` now reads the successor's carried bars back rather than hardcoding an empty array, and `make demo-update` recreates the app **after** the reseed, which is what makes `DOMAIN_VERIFY_INTERVAL=0` safe on the demo rather than merely cheap |
 | [M52, reopened: both dispute labels in one statement](#2026-08-10--m52-reopened-both-dispute-labels-in-one-statement) | The reopening [D175](../../Plan.md#phase-3-decisions) scheduled, and its whole scope: [F187](deferred-findings.md#closed). `scrubbed_filed` and `scrubbed_decided` were two data-modifying CTEs writing one `destination_disputes` row, so Postgres applied one and dropped the other whenever a batch held both halves of a dispute — which two ordinary situations produce. Merged into the shape `scrubbed_audit` already had, sabotage-verified against the split, and the six sites in three documents that stated it as a live exception at 0.3.0 now state the requirement. Plus why one link this diff staled was fixed while [F203](deferred-findings.md#open)'s sixty-four stay |
 | [A queue row typed `issue` against a design that was deliberate](#2026-08-10--a-queue-row-typed-issue-against-a-design-that-was-deliberate) | The routing judgement `/process-queue` forces and does not name: when the tree says the behaviour is exactly as designed and the owner has typed the row `issue` anyway, the type stands and the as-designed conflict becomes the row's evidence. Why that is not the *typed issue, is neither* dispute, and why F204 carries three fix shapes rather than a prompt |
+| [The target was aimed at the plan, not at the build](#2026-08-11--the-target-was-aimed-at-the-plan-not-at-the-build) | W40: a phase is planned at fifteen milestones and that ceiling is real, but a milestone the build turns out to need is added when it is needed rather than costing a phase-boundary conversation. What the rule was protecting, and where that protection now sits |
 
 ---
 
@@ -25513,3 +25514,58 @@ deferred row **is** the conversation. Prompting now would ask the owner to decid
 the shape of a fix before they have decided whether to schedule it at all, which
 inverts the order the deferral system exists to hold. F204 states three shapes and
 what each costs; whichever is chosen is chosen when the row is approved.
+## 2026-08-11 — The target was aimed at the plan, not at the build
+
+Owner-set while triaging the ten findings Phase 3's close left open, and prompted
+by a question about where a fix milestone for six of them could live. The words
+were: *the initial milestone limit in a phase is in place to restrict initial
+planning, adding a few needed milestones during production is acceptable.*
+[W40](workflow-changes.md#made).
+
+### What the rule said, and what it cost
+
+[planning.md](planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)
+made **any** insertion past fifteen a phase-boundary conversation. That is a
+strong rule and it was doing real work at planning time. At build time it was
+doing something else: charging an owner decision for the act of *discovering*
+that a phase needed one more milestone.
+
+The cost showed up immediately at the moment the clarification was asked for.
+Six findings needed a home, M58 had shipped, and the options were an eighteenth
+milestone in a phase whose status table reads complete — presented as a
+boundary conversation because the rule said it was one — or pushing correct
+work into Phase 4 to protect a number. The number was not the thing anybody
+wanted to protect.
+
+### What it says now
+
+A phase is **planned** at fifteen, and that is a real ceiling on the plan. A
+milestone the build turns out to need is added when it is needed.
+
+*Needed* and *a few* are both kept in the rule's own wording rather than smoothed
+out, because they are the whole bound. This is not a licence for a phase to grow
+indefinitely; it is a statement about which failure the ceiling was aimed at.
+Optimistic planning is the failure — a plan that fits because nobody counted.
+Honest discovery is not, and taxing it makes a build under-report what it found,
+which is the more expensive of the two.
+
+### Where the old protection went
+
+The sentence worth keeping was *what the target removes is the case where a phase
+grows by one insertion at a time and nobody is ever the person who decided it was
+large.* That protection now sits at planning time, where the count is a
+**prediction somebody is making** and is therefore theirs to defend. At build
+time the count is an **observation somebody is reporting**, and a rule that makes
+an observation expensive gets fewer observations rather than fewer milestones.
+
+Phase 3's two recorded exceptions — QR logos taking it to sixteen, and the review
+that found one milestone was two, taking it to seventeen — stay recorded exactly
+as they happened. Under this reading neither would have been a boundary
+conversation, and neither is reinterpreted: the point of that section is that
+somebody decided, and somebody did.
+
+**What is unchanged**: the trap. A count is a number people plan to, so the
+cheapest way to satisfy it is fatter milestones — the same scope in fewer files,
+each less reviewable. If the target and a milestone's reviewability disagree, the
+target still gives. That paragraph is untouched and it is the reason the target
+survives at all.
