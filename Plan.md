@@ -514,8 +514,8 @@ per milestone lives in
 else; the plan below is the scope contract rather than a progress report.
 
 **Phase 3: planned on 2026-08-06. Every milestone is `done`; 0.3.0 is written
-and not yet tagged. Two milestones are open — M47 reopened and M47.5 — and
-M57.9 reopens after them.** Twenty milestones, M46–M58,
+and not yet tagged. Three milestones are open — M46.6, M47 reopened and
+M47.5 — and M57.9 reopens after them.** Twenty-one milestones, M46–M58,
 across four work areas; the plan is [below](#phase-3-build-plan). It was planned
 in full before its first milestone was built, on the owner's direction, so that
 the fifteen-milestone target is enforced by arithmetic rather than discovered at
@@ -1046,11 +1046,12 @@ a row there is a pointer back to this list plus an area.
 
 ## Phase 3 build plan
 
-**Twenty milestones, M46–M58, continuing Phase 2's numbering.** **Twelve integers
-of work**, two adversarial reviews (`X.9`, as reserved), one close, and **five
-insertions** — M50.5 and M50.6 during the build on 2026-08-07, and M46.5, M47.5
-and [M57.5](docs/build-notes/phase-details/m57.5.md) on 2026-08-11.
-12 + 2 + 1 + 5 = 20, which is the headline above under the reading [W40](docs/build-notes/workflow-changes.md#made)
+**Twenty-one milestones, M46–M58, continuing Phase 2's numbering.** **Twelve
+integers of work**, two adversarial reviews (`X.9`, as reserved), one close, and
+**six insertions** — M50.5 and M50.6 during the build on 2026-08-07, and M46.5,
+M47.5, [M57.5](docs/build-notes/phase-details/m57.5.md) and
+[M46.6](docs/build-notes/phase-details/m46.6.md) on 2026-08-11.
+12 + 2 + 1 + 6 = 21, which is the headline above under the reading [W40](docs/build-notes/workflow-changes.md#made)
 settled: the target binds the plan, not the build. The size target is
 **fifteen** — *a phase stays under sixteen, insertions counted*, set by the owner
 on 2026-08-06 and recorded in
@@ -1091,6 +1092,7 @@ walkthrough that specifies them is planning's first input (D112).
 | --- | --- | --- | --- |
 | [M46](docs/build-notes/phase-details/m46.md) | The shell, the navigation, and the links list | — | The *workspace selector* candidate row · owner-requested scope, 2026-08-06 |
 | [M46.5](docs/build-notes/phase-details/m46.5.md) | A browser an agent can drive, and a test that outlives it | — | **Owner-added scope, 2026-08-11.** Tooling only, no product code. Numbered below M57.9 per W43 and before M47 because M47 is its first user |
+| [M46.6](docs/build-notes/phase-details/m46.6.md) | The workspace pair reads as one control | M46 · M46.5 | **Owner-added scope, 2026-08-11** — [F204](docs/build-notes/deferred-findings.md#open) approved into Phase 3; the shape chosen from wireframes, B1 amended to a chevron-only switch face. Touches the nav partial and its invocation site; the closed-face and 360px claims are browser claims, which is the M46.5 edge |
 | [M47.5](docs/build-notes/phase-details/m47.5.md) | What every tab says about itself | M47 · M46.5 | **Owner-added scope, 2026-08-11**, split from M47 along the seam the design was drawn on — the layout is M47's, the state feedback is this |
 | [M47](docs/build-notes/phase-details/m47.md) | The link page, taken apart | M46 · M46.5 | The *"massive mess"* complaint |
 | [M48](docs/build-notes/phase-details/m48.md) | On-demand panels, and what stops being buried | M47 | The *"buried deep in the page"* complaint |
@@ -1107,7 +1109,7 @@ walkthrough that specifies them is planning's first input (D112).
 | [M56](docs/build-notes/phase-details/m56.md) | High availability: the failover contract | — | *Other surfaces* (high availability) |
 | [M57](docs/build-notes/phase-details/m57.md) | High availability: measured, and still one container | M56 | *Other surfaces* (complete) · the single-instance constraint |
 | [M57.5](docs/build-notes/phase-details/m57.5.md) | The six the close left behind | M58 *(numbered below M57.9 deliberately — see the milestone file)* | **Owner-added scope, 2026-08-11.** Discharges no scope row and no known limitation; it repairs six findings M58's own passes filed. Records, tests and one gate, and no product behaviour changes |
-| [M57.9](docs/build-notes/phase-details/m57.9.md) | **Pre-release adversarial review** | M46–M57 · M46.5 · M47.5 · M57.5 | **Reopened 2026-08-11** so its range covers M57.5 |
+| [M57.9](docs/build-notes/phase-details/m57.9.md) | **Pre-release adversarial review** | M46–M57 · M46.5 · M46.6 · M47.5 · M57.5 | **Reopened 2026-08-11** so its range covers M57.5 |
 | [M58](docs/build-notes/phase-details/m58.md) | Deferred findings, documentation pass, 0.3.0 | all | Phase close |
 
 **Status per milestone lives in

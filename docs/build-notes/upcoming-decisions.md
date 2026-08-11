@@ -42,35 +42,12 @@ conclusions are what this file exists to stop.
 
 ## Open — a milestone needs this
 
-### Which shape fixes F204, chosen from wireframes
-
-**For the F204 fix milestone, Phase 3, not yet numbered** — the owner approved
-the fix into Phase 3 on 2026-08-11 and asked for **wireframes before the
-changes**, so the shape is chosen from drawn options rather than from prose.
-The milestone is planned per planning.md once this is answered, and cannot be
-before: its definition of done is the shape.
-
-The finding: the shell names the current workspace beside the switcher
-(`workspace_label`) rather than in it, and the switcher's closed state reads
-*Switch workspace…*. [F204](deferred-findings.md#open)'s own row records why
-this is M46's deliberate design and the three shapes that could change it —
-(a) current workspace back as the selected option, label dropped, which
-reverses blind task 9 and leaves a single-membership account unnamed unless
-the switcher also renders at one; (b) keep the label, restyle the pair to read
-as one control, structurally unchanged; (c) render the switcher at one
-membership, which contradicts M25's rule against controls that can do nothing.
-All three touch tests written to hold the opposite
-(`internal/ui/workspace_test.go:60-64,68-71,135,153` at `1fb2b65`).
-
-**Assumes**: the switcher and label are still `nav.html`'s `workspace_label` /
-`workspace_switch` pair invoked side by side from `layout.html` (true at
-`1fb2b65`), and that M47's tab work does not touch the shell's nav (its scope
-is the link page). Validation re-checks both when the milestone is reached.
-
-**Recommendation** (carried from the prompt that scheduled it): shape (b) —
-least reversal, no M25 conflict. Its stated con: the switcher still does not
-name where you are; the two elements only stop reading as two. The wireframes
-are what test whether that con is acceptable on sight.
+*The F204 shape question entered here on 2026-08-11 and left the same day, in
+the direction this file only travels: wireframes were drawn, the owner chose
+B1 and amended it to a chevron-only switch face, and the answer is in
+[decisions.md](decisions.md#2026-08-11--m466-the-workspace-pair-reads-as-one-control),
+with its `D` number assigned when [M46.6](phase-details/m46.6.md) — the
+milestone planned from the answer — lands.*
 
 *Both questions this section held were answered by the owner on 2026-08-08, at
 [M52](phase-details/m52.md)'s step 1, and have left it in the direction this

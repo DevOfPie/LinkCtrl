@@ -314,6 +314,7 @@ file. Append a row when you append an entry.
 | [M57.5, built: six repairs, and the audit line one of them answers](#2026-08-11--m575-built-six-repairs-and-the-audit-line-one-of-them-answers) | The false *checked and deliberately unchanged* line answered, not edited; the delimiter half of the table gate, with its permanent fenced fixture; the unreachable QR guard removed on the owner's answer; two fixture classes repaired; m54.md annotated. All six rows closed |
 | [M47, the split repaired in the files that recorded it](#2026-08-11--m47-the-split-repaired-in-the-files-that-recorded-it) | bb76018 left m47.md with two contradictory Reopened blocks and m47.5.md with no badge section; owner-approved reconstruction from the existing text, five named deviations, the shipped label excluded |
 | [Citations are true as of their own commit](#2026-08-11--citations-are-true-as-of-their-own-commit) | W39 answered: accept the rot and state it, citations carry a commit identifier when written after their milestone, the enforcing test and the blanket rewrite declined, F194 closed unrepaired |
+| [M46.6, the workspace pair reads as one control](#2026-08-11--m466-the-workspace-pair-reads-as-one-control) | F204 approved into Phase 3, shape B1 chosen from wireframes and owner-amended to a chevron-only switch face; shapes a and c declined with reasons; placement beside M46 |
 
 ---
 
@@ -26377,3 +26378,57 @@ to shipped milestone files that restales on the next refactor.
 F194 closes on this answer, unrepaired, which is the point: under the
 convention its ~47 citations were never false. They were read against a later
 tree than the one they claim.
+
+## 2026-08-11 — M46.6, the workspace pair reads as one control
+
+Scope addition, prompted by [F204](deferred-findings.md#open)'s approval — no
+milestone was under way; the phase loop was stopped between M57.5 and M47 when
+the owner answered the four standing prompts.
+
+**The approval and its ground.** F204 — the shell names the current workspace
+beside the switcher rather than in it — was the one open row with no
+disposition. The owner placed it in **Phase 3**: *"Phase 3 has had a lot of
+UI/UX changes so I'd like to keep it here"*, over the recommended Phase 4
+deferral. And with a condition that shaped everything after: **wireframes for
+approval before the changes**.
+
+**The shape was chosen from pictures, not prose.** Four shapes drawn in the
+product's own theme tokens, each in both membership states, because the
+single-membership account — every real instance today — is where shape (a)
+fails: with the label dropped and the switcher not rendering, nothing names
+the workspace, which is the defect M46's label closed. The owner chose **B1**
+— label and select sharing one bordered container, structure unchanged — and
+**amended it: the switch segment is the chevron alone**, no "Switch" text.
+Confirmed against the updated wireframe the same day. Shapes (a) and (c) are
+recorded as declined in the milestone file with their reasons; B2 — the same
+control keeping *Switch workspace…* in full — is the drawn fallback if the
+chevron-only face proves too implicit at M57.9's blind-task re-run.
+
+**Placement.** M46.6: the fix depends on [M46](phase-details/m46.md) alone and
+touches only the nav partial and its tests, so it sits beside its dependency
+and shares no files with M47's link-page work — the loop can build them in
+either order. Below M57.9 per [W43](workflow-changes.md#made); the review's
+range rows gain the number. `.7` and `.8` stay free.
+
+The answer was given 2026-08-11, ahead of the milestone that uses it; per the
+upcoming-decisions convention its `D` number is assigned when M46.6 lands. The
+wireframe artifact is private to the owner's account; this entry and
+`m46.6.md` carry the decisions in words, and the words win.
+
+**Independently reviewed per planning.md §7 before anything builds against
+it** — a different model, given the plan and the standards and none of the
+author's conclusions. Ten findings, every one verified against the tree and
+folded in before this entry was committed. The ones that changed the plan:
+the confinement claim was false — the pair's shared container needs the
+invocation site in `layout.html:60-62`, so "nav.html alone" came out; the
+chevron-only face and the 360px bound are browser claims, so M46.5 became a
+hard edge and a kept browser assertion became a bullet; the zero-membership
+state was unspecified and an unconditional wrapper would have rendered an
+empty bordered box on `organization_new`; two milestone counts and m57.9.md's
+own grew-after-it-ran list were left stale (M47.5 was already missing from it
+— an existing gap the review caught while widening it); the M24.5 scan cannot
+see a hex inside a chevron data URI, so the colour must come from
+`currentColor` or a token; the pass-unmodified escape hatch became *changing
+a recorded-answer assertion is a prompt*; and F204's own Where citation was
+wrong at the commit it claimed — corrected in place, in the open row, with
+the correction dated.

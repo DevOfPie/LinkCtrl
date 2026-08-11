@@ -27,12 +27,12 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## Phase 3
 
-**Two rows are open — [M47](m47.md) reopened and [M47.5](m47.5.md) — and
-[M57.9](m57.9.md) reopens after them. 0.3.0 is written
+**Three rows are open — [M46.6](m46.6.md), [M47](m47.md) reopened and
+[M47.5](m47.5.md) — and [M57.9](m57.9.md) reopens after them. 0.3.0 is written
 and not yet tagged.** Four work areas, chosen 2026-08-06: identity and account
 lifecycle, dashboard UI and UX, infrastructure and resilience, QR codes and
-campaigns. Twenty milestones — **twelve integers of work**, two adversarial
-reviews, one close, and **five insertions** (M50.5, M50.6, M46.5, M47.5, M57.5) — against the size target in
+campaigns. Twenty-one milestones — **twelve integers of work**, two adversarial
+reviews, one close, and **six insertions** (M50.5, M50.6, M46.5, M46.6, M47.5, M57.5) — against the size target in
 [planning.md](../planning.md#the-size-target-a-phase-stays-under-sixteen-milestones).
 The phase was planned at **fifteen with every slot spent**. On 2026-08-07 it went
 to sixteen when [M50.5](m50.5.md) was added, and to seventeen when a review found
@@ -47,7 +47,9 @@ phase-boundary conversation, and the difference is
 [W40](../workflow-changes.md#made): the owner settled that the target binds
 initial planning rather than the build, so a milestone the build turns out to
 need is added when it is needed. The two moves above happened under the older
-reading and are left recorded as they happened.
+reading and are left recorded as they happened. M46.5 and M47.5 the same day
+made it twenty, and [M46.6](m46.6.md) — F204's fix, approved with its shape
+chosen from wireframes — twenty-one, each under W40's reading.
 
 **M46–M48 are the redesign, written from the owner's walkthrough** — eighteen
 blind tasks over two rounds, 2026-08-06 and 2026-08-07. Round two also produced
@@ -58,6 +60,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | --- | --- | --- | --- |
 | [M46](m46.md) | The shell, the navigation, and the links list | — | done |
 | [M46.5](m46.5.md) | A browser an agent can drive, and a test that outlives it | — | done |
+| [M46.6](m46.6.md) | The workspace pair reads as one control | M46 · M46.5 | not started |
 | [M47](m47.md) | The link page, taken apart | M46 · M46.5 | in progress (reopened) |
 | [M47.5](m47.5.md) | What every tab says about itself | M47 · M46.5 | not started |
 | [M48](m48.md) | On-demand panels, and what stops being buried | M47 | done |
@@ -74,7 +77,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M56](m56.md) | High availability: the failover contract | — | done |
 | [M57](m57.md) | High availability: measured, and still one container | M56 | done |
 | [M57.5](m57.5.md) | The six the close left behind | M58 *(see the note below)* | done |
-| [M57.9](m57.9.md) | **Pre-release adversarial review** | M46–M57 · M46.5 · M47.5 · M57.5 | in progress (reopened) |
+| [M57.9](m57.9.md) | **Pre-release adversarial review** | M46–M57 · M46.5 · M46.6 · M47.5 · M57.5 | in progress (reopened) |
 | [M58](m58.md) | Deferred findings, documentation pass, 0.3.0 | all | done |
 
 Work areas, so a blocked milestone has an independent row to fall back to per
