@@ -312,6 +312,7 @@ file. Append a row when you append an entry.
 | [Reviews carry a browser check](#2026-08-11--reviews-carry-a-browser-check) | W45: every `X.9` review answers whether the pages its range touched render and behave as claimed, console included — worded as a question so it survives the tool, chosen over four declined CI shapes |
 | [M46.5: a browser an agent can drive](#2026-08-11--m465-a-browser-an-agent-can-drive) | Two Playwright pins on purpose (no stable 1.63 exists; every CLI version bundles an alpha); the kept spec on `/login`, born red; the JSON-failure filter; the branded-Chrome wrap; F206 fixed and closed |
 | [M57.5, built: six repairs, and the audit line one of them answers](#2026-08-11--m575-built-six-repairs-and-the-audit-line-one-of-them-answers) | The false *checked and deliberately unchanged* line answered, not edited; the delimiter half of the table gate, with its permanent fenced fixture; the unreachable QR guard removed on the owner's answer; two fixture classes repaired; m54.md annotated. All six rows closed |
+| [M47, the split repaired in the files that recorded it](#2026-08-11--m47-the-split-repaired-in-the-files-that-recorded-it) | bb76018 left m47.md with two contradictory Reopened blocks and m47.5.md with no badge section; owner-approved reconstruction from the existing text, five named deviations, the shipped label excluded |
 
 ---
 
@@ -26292,3 +26293,57 @@ rather than hidden: F197 and F202 insert lines into `Plan.md` and `m54.md`, so
 this milestone is an instance of the citation-drift row it deliberately
 excludes. Repairing citations by hand is the treadmill
 [W39](workflow-changes.md#proposed) exists to decide about.
+
+## 2026-08-11 — M47, the split repaired in the files that recorded it
+
+**Marked M47** — a reopened milestone keeps its number, and this is its plan
+being repaired before its build starts.
+
+Commit `bb76018` was meant to record the M47/M47.5 split and mangled it.
+`m47.md` carried **two** `# Reopened — 2026-08-11` blocks: the first was the
+post-split layout contract — strip ships bare, badges are M47.5's — but its
+tail sections (deliberately-not-done, demo, risks) were copied from the
+original shipped milestone, and it lacked the four shipped gates, the
+measured-claim section, and the reopened exclusions and risks. The second was
+the fuller **pre-split** draft, with the badges, the glyphs and the size
+measurement inside M47's scope, contradicting the split the same commit
+recorded in Plan.md and in `m47.5.md`'s own preamble. And `m47.5.md` — titled
+*What every tab says about itself* — had **no badge section at all**: its
+*Done means* held only the glyphs and the size, with a double blank line where
+a section had evidently dropped out.
+
+Found at step 1 validating M47 on 2026-08-11. Which sections constitute each
+file's definition of done is an assertion, not a fact, so amendment was not
+available; the question was parked, put to the owner with three options, and
+**the owner approved the reconstruction the same day**, with the blind-task
+re-run staying in M47.
+
+What was done, all of it from text that already existed in one of the two
+blocks:
+
+- `m47.md` keeps **one** reopened section: the shared intro, the tabs section,
+  block 1's *The badges are M47.5's* section, and block 2's four shipped
+  gates, measured claim, behaviour-unchanged, demo, F206-not-here, reopened
+  exclusions and reopened risks. Block 1's copied tail and the rest of block 2
+  are deleted.
+- `m47.5.md` gains *Every tab carries its state* verbatim from the pre-split
+  draft, in the gap its own layout left for it.
+- Five deviations from verbatim, each a fact the split itself forced. The kept
+  spec's bullet read "the strip does not wrap at 360px, and the badge glyphs
+  render at the chosen size"; the glyph clause moved to M47.5 with the glyphs,
+  and the bullet says so. The reopened exclusion read "All nine survive",
+  which the tabs bullet's own correction had already counted as eight partials
+  plus the header; it now says that. The reopened risks led with "a badge
+  vocabulary, four glyphs, an icon home, a CSP fix" in M47's scope — the first
+  three are M47.5's and the CSP fix landed at M46.5, so the paragraph names
+  the split instead. The *Depends on M46.5* line read "the glyph and viewport
+  claims below"; the glyph claims are no longer below. And block 1's copy of
+  *The one label that changes* was **not** carried into the reopened section,
+  because that label shipped with original M47 — `link_edit.html:176` and the
+  twenty-line comment above it are the tree saying so — and a reopened
+  contract re-asserting shipped work would fail validation's *not already
+  built* check on its first read.
+
+The badge section's `link_edit.html:107,120,146,188,197` and
+`link_signed.html:12` citations were carried as written; they are true at this
+commit, and keeping them current is the rot W39's answer accepts and states.
