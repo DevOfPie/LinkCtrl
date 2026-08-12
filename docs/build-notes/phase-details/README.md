@@ -27,8 +27,10 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## Phase 3
 
-**Every integer row is done — [M57.9](m57.9.md)'s reopened run is what
-remains, in its own session. 0.3.0 is written and not yet tagged.** Four work areas, chosen 2026-08-06: identity and account
+**Three rows are open, reopenings of 2026-08-12 on the owner's QR-tab
+report — [M49](m49.md), [M50.5](m50.5.md) and [M50.6](m50.6.md) — then
+[M57.9](m57.9.md)'s reopened run, in its own session. 0.3.0 is written and
+not yet tagged.** Four work areas, chosen 2026-08-06: identity and account
 lifecycle, dashboard UI and UX, infrastructure and resilience, QR codes and
 campaigns. Twenty-one milestones — **twelve integers of work**, two adversarial
 reviews, one close, and **six insertions** (M50.5, M50.6, M46.5, M46.6, M47.5, M57.5) — against the size target in
@@ -63,10 +65,10 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M47](m47.md) | The link page, taken apart | M46 · M46.5 | done |
 | [M47.5](m47.5.md) | What every tab says about itself | M47 · M46.5 | done |
 | [M48](m48.md) | On-demand panels, and what stops being buried | M47 | done |
-| [M49](m49.md) | QR codes sized in pixels, and a PNG to download | M48 *(ordering)* | done |
+| [M49](m49.md) | QR codes sized in pixels, and a PNG to download | M48 *(ordering)* | in progress (reopened) |
 | [M50](m50.md) | More than one QR code per link, told apart in the analytics | M49 | done |
-| [M50.5](m50.5.md) | The first file this product accepts | M50 | done |
-| [M50.6](m50.6.md) | A logo in the middle of a QR code | M50.5 | done |
+| [M50.5](m50.5.md) | The first file this product accepts | M50 | in progress (reopened) |
+| [M50.6](m50.6.md) | A logo in the middle of a QR code | M50.5 | in progress (reopened) |
 | [M51](m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | done |
 | [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | done *(range re-covered by M57.9)* |
 | [M52](m52.md) | Account deletion and subject erasure | M50.5 · M51 *(ordering)* | done |

@@ -328,6 +328,7 @@ file. Append a row when you append an entry.
 | [M37, one bullet amended at acceptance](#2026-08-11--m37-one-bullet-amended-at-acceptance) | The width test asserts per ring, not per country path — a correctly split Russia touches both frame edges, so the bullet as written failed on the fix it protects |
 | [M47.5 reopened: the Edit badge goes](#2026-08-11--m475-reopened-the-edit-badge-goes) | F211 closed: the edit case leaves `attachTabBadges`, five positions remain, and the bare state is asserted with every protection on so no boolean resurrects the count. Three claims amended where they stand; every six-position record carries its supersession note; the kept spec's count 6 → 5, red against the running strip before the move |
 | [M48 reopened: the QR popup folds into its tab](#2026-08-11--m48-reopened-the-qr-popup-folds-into-its-tab) | F212 closed: the thumbnail opens the QR tab in the strip's own swap, the page-level popup retires with its contents enumerated piece by piece — the body folds into the tab in flow, the chrome retires, the route and the `next` mechanism survive untouched — and two shipped claims are amended where they stand |
+| [Three more reopenings, from the owner's QR-tab report](#2026-08-12--three-more-reopenings-from-the-owners-qr-tab-report) | F213 M49 (preview footprint, quiet zone, Restore defaults), F214 M50.5 (downscale with warning, specific refusals, apply-on-select, click feedback), F215 M50.6 (logo as big as still decodes, gated by simulated distance-scanning) |
 
 ---
 
@@ -27105,3 +27106,40 @@ download.
 M48 claim about it; `LinkQRPage`, `LinkQRStyle`, `LinkQRLogo` and their
 routes; permissions on every surface; the demo, which already seeds styled
 codes the tab renders.
+
+## 2026-08-12 — Three more reopenings, from the owner's QR-tab report
+
+No milestone was under way. The owner worked the QR tab and reported seven
+symptoms; verified against the tree, they group by owning milestone into
+three rows, each approved as a reopening the same day.
+
+**[F213](deferred-findings.md#open) reopens [M49](phase-details/m49.md)**:
+the preview grows 1:1 with the applied size instead of keeping a fixed
+footprint; the quiet zone exceeds what scanning needs and worsens at
+2000px, with `MaxMargin = 16` permitting four times the ISO floor; and the
+reset button's label becomes *Restore defaults*.
+
+**[F214](deferred-findings.md#open) reopens [M50.5](phase-details/m50.5.md)**:
+an oversized logo is downscaled with a warning instead of refused — the
+owner's 813×813 upload failed the total-pixel cap while passing the
+per-side cap, and the message named both numbers without a verdict. The
+decode bound rises to admit it and SECURITY.md's numbered allocation story
+moves with it, in the same commit, still under the 1 MiB body cap. The
+browse control acknowledges its click, and choosing a file applies it —
+the separate upload step goes.
+
+**[F215](deferred-findings.md#open) reopens [M50.6](phase-details/m50.6.md)**:
+the logo box grows from the documented fifth-of-the-symbol toward the
+largest size that still decodes. The half-budget rule was deliberate and
+its supersession is dated in the file that argued it. **The owner set the
+validation**: simulate scanning at a distance — decode the raster scaled
+down to few pixels per module — and gate the fraction on it; if no
+trustworthy decoder exists, produce a printable test sheet and wait on the
+owner's phone. Their calibration is quoted in the contract: resolution is
+not print size; it should look good and scan at a reasonable distance for
+a scaled size.
+
+The trades were named in the scheduling prompt and taken knowingly: the
+decode bound is a security number and its replacement is stated, and a
+bigger logo spends error-correction budget that today buys print-wear
+tolerance — the scan check is what keeps that honest.
