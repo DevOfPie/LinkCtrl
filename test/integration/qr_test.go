@@ -379,10 +379,16 @@ func TestTheStyleFormOnThePageStoresWhatTheAPIWouldStore(t *testing.T) {
 	if code.Style.Foreground != "#123456" || code.Style.Background != "#fedcba" {
 		t.Fatalf("the form stored %+v", code.Style)
 	}
-	if code.Size < 380 || code.Size > 420 {
+	// Half a span, which is the whole of what the snap may move since the M49
+	// reopening pinned the quiet zone at its floor (F213): the sizes qr.FitSize
+	// can produce step by one span — symbol plus both quiet zones — per unit of
+	// scale. The span is read back off the answer, because this test knows the
+	// pixels and deliberately not the module count.
+	span := code.Size / code.Style.Scale
+	if diff := code.Size - 400; 2*diff > span || 2*diff < -span {
 		t.Errorf("the form asked for 400px and stored a style that draws %dpx. The snap "+
-			"moves the size by less than one module of the picture, not by tens of "+
-			"pixels", code.Size)
+			"moves the size by at most half a %d-module span (%dpx), not by tens of "+
+			"pixels", code.Size, span, span/2)
 	}
 	if !strings.Contains(f.qrSVG(id), `fill="#123456"`) {
 		t.Error("the form's colour is not in the served picture")

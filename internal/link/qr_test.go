@@ -115,9 +115,17 @@ func TestTheShortestContentIsWhatInternalQRAssumes(t *testing.T) {
 // answering 422 for a file that downloaded a moment earlier.
 //
 // The payload here is the row's own: 89 bytes, 37 modules at L and 53 at H, and
-// a style the size control really produces — margin 13, scale 31, which draws
-// 1953px and is inside the 2000px raster bound with room to spare until the
-// level moves.
+// margin 13 at scale 31, which draws 1953px and is inside the 2000px raster
+// bound with room to spare until the level moves.
+//
+// **That style is hand-built, and since the M49 reopening it has to be.** When
+// the row was measured the size control produced it — the old qr.FitSize
+// searched the quiet zone as a second knob and answered margin 13 for 2000px on
+// this symbol. D179 pinned the zone at the floor, so the control now answers
+// margin 4 scale 44 and cannot reach a 13-module margin at any request; the
+// shape survives only in a style an API caller sets or a row written before
+// 2026-08-12. The defect is a property of the payload and the level rather than
+// of the fit, so it is still exactly this test.
 func TestALogoDoesNotBreakThePNGDownload(t *testing.T) {
 	content := QRContent(
 		"https://links.example/"+strings.Repeat("a", 60), "")
@@ -161,9 +169,12 @@ func TestALogoDoesNotBreakThePNGDownload(t *testing.T) {
 	}
 
 	// And it is *re-fitted*, not merely shrunk to fit: the size the reader set is
-	// the size they keep. qr.FitSize snaps to a whole number of modules, so the
-	// two need not be equal — one module of this picture is 31px, and anything
-	// inside that is the snap rather than a resize.
+	// the size they keep. qr.FitSize snaps to a whole number of modules with the
+	// quiet zone pinned at its floor (the M49 reopening, F213), so the sizes it
+	// can produce step by one span — symbol plus quiet zones — per scale, and
+	// the nearest can sit up to half a span away. For this symbol that is
+	// (53+8)/2 = 30.5px, so 31 is the bound as a whole number of pixels, and
+	// anything inside it is the snap rather than a resize.
 	if diff := drawn - 1953; diff > 31 || diff < -31 {
 		t.Errorf("the code was 1953px and is %dpx after the upload. The re-fit keeps "+
 			"the size somebody chose; a move of more than one module is a resize "+
@@ -188,8 +199,13 @@ func TestTheReFitOnlyMovesTheSizeItHasTo(t *testing.T) {
 
 	// The symbol grew — 29 modules at M, 37 at H for this content — so the two
 	// size fields move, and only far enough to keep the picture the size the
-	// stored style already drew it at. One module of the new picture is the
-	// snap; anything past that is a resize nobody asked for.
+	// stored style already drew it at. Half a span of the new picture — symbol
+	// plus the two quiet zones, halved — is the snap; anything past that is a
+	// resize nobody asked for. It was one module until the M49 reopening
+	// (F213), which is what a snap could miss by while qr.FitSize was free to
+	// widen the quiet zone; with the zone pinned at its floor the achievable
+	// sizes step by a whole span per scale and the nearest can sit half of one
+	// away. Here that is (37+8)/2 = 22px against a move of 19.
 	base, err := qr.Encode(content, style.Level)
 	if err != nil {
 		t.Fatal(err)
@@ -205,11 +221,13 @@ func TestTheReFitOnlyMovesTheSizeItHasTo(t *testing.T) {
 	}
 	want := qr.OutputSize(base.Size, style)
 	drawn := qr.OutputSize(symbol.Size, after)
-	if diff := drawn - want; diff > after.Scale || diff < -after.Scale {
+	bound := (symbol.Size + 2*after.Margin) / 2
+	if diff := drawn - want; diff > bound || diff < -bound {
 		t.Errorf("the code was %dpx and is %dpx after the upload; margin %d scale "+
 			"%d moved to margin %d scale %d, which is more than the whole-module "+
-			"snap can explain", want, drawn, style.Margin, style.Scale,
-			after.Margin, after.Scale)
+			"snap can explain — half a %d-module span is %dpx", want, drawn,
+			style.Margin, style.Scale, after.Margin, after.Scale,
+			symbol.Size+2*after.Margin, bound)
 	}
 
 	// A code whose symbol did not grow comes back byte for byte: a style already

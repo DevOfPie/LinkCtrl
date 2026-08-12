@@ -329,6 +329,7 @@ file. Append a row when you append an entry.
 | [M47.5 reopened: the Edit badge goes](#2026-08-11--m475-reopened-the-edit-badge-goes) | F211 closed: the edit case leaves `attachTabBadges`, five positions remain, and the bare state is asserted with every protection on so no boolean resurrects the count. Three claims amended where they stand; every six-position record carries its supersession note; the kept spec's count 6 → 5, red against the running strip before the move |
 | [M48 reopened: the QR popup folds into its tab](#2026-08-11--m48-reopened-the-qr-popup-folds-into-its-tab) | F212 closed: the thumbnail opens the QR tab in the strip's own swap, the page-level popup retires with its contents enumerated piece by piece — the body folds into the tab in flow, the chrome retires, the route and the `next` mechanism survive untouched — and two shipped claims are amended where they stand |
 | [Three more reopenings, from the owner's QR-tab report](#2026-08-12--three-more-reopenings-from-the-owners-qr-tab-report) | F213 M49 (preview footprint, quiet zone, Restore defaults), F214 M50.5 (downscale with warning, specific refusals, apply-on-select, click feedback), F215 M50.6 (logo as big as still decodes, gated by simulated distance-scanning) |
+| [M49 rebuilt: the quiet zone stops absorbing the rounding, and D179](#2026-08-12--m49-rebuilt-the-quiet-zone-stops-absorbing-the-rounding-and-d179) | D179 — the quiet zone pins at the ISO floor and the whole remainder lands on the drawn size, where the snap notice already reports it, superseding D128's quiet-zone half and naming it rather than editing it; fractional modules and a wider margin both rejected with reasons. Old-against-new measured across every module count: at 2000px a 21-module code went from 15.7% code by area to 52.4%. `MaxScale` 32 → 68, derived from the raster bound so every fit is a style the API accepts; `MaxMargin = 16` revisited and kept as a stored-row ceiling only. Stored rows render unchanged and a re-save moves and reports, asserted on a margin-14 row. The preview frame becomes 18rem square and the page states the served size beside it, saying whether it is a stored size or the default; the reset button becomes *Restore defaults* |
 
 ---
 
@@ -27143,3 +27144,150 @@ The trades were named in the scheduling prompt and taken knowingly: the
 decode bound is a security number and its replacement is stated, and a
 bigger logo spends error-correction budget that today buys print-wear
 tolerance — the scan check is what keeps that honest.
+
+## 2026-08-12 — M49 rebuilt: the quiet zone stops absorbing the rounding, and D179
+
+[F213](deferred-findings.md#closed) reopened [M49](phase-details/m49.md) on
+three symptoms the owner met in the running product. Two are view-layer and one
+is arithmetic; the arithmetic one is the reason this entry is long.
+
+### D179 — the remainder lives in the drawn size
+
+**The defect, measured rather than described.** The first `qr.FitSize` searched
+two knobs — the quiet zone from `DefaultMargin` to `MaxMargin`, and the scale —
+and kept whichever pair landed nearest the requested pixel count. Nearest is not
+free: a margin one module wider is `2*scale` more pixels of reach, so the search
+bought a few pixels of exactness with dozens of pixels of white whenever it
+could. At the top of the range it could do nothing else. `MaxScale` was 32,
+capped by nothing but the `width` attribute a downloaded file carries, so a
+request for 2000px ran out of scale and the margin filled the rest. Probed
+across every module count this product encodes, old against new — *code by
+area* is `(modules / (modules + 2*margin))²`, the symbol's share of the square
+it is drawn in, written out here because the first draft of this table got six
+of its ten cells wrong and nothing in the repository could contradict them:
+
+| Symbol | Old at 2000px | Code by area | New at 2000px | Code by area |
+| --- | --- | --- | --- | --- |
+| 21 modules | 1696px, margin 16, scale 32 | 15.7% | 1972px, margin 4, scale 68 | 52.4% |
+| 25 | 1824px, margin 16, scale 32 | 19.2% | 1980px, margin 4, scale 60 | 57.4% |
+| 29 | 1952px, margin 16, scale 32 | 22.6% | 1998px, margin 4, scale 54 | 61.4% |
+| 37 | 1953px, margin 13, scale 31 | 34.5% | 1980px, margin 4, scale 44 | 67.6% |
+| 53 | 1992px, margin 15, scale 24 | 40.8% | 1952px, margin 4, scale 32 | 75.5% |
+
+The owner's sentence — *"the majority of the image should be QR code"* — was
+false at every one of those sizes, and worst exactly where they said.
+
+**The answer, and what it costs.** The quiet zone is pinned at `DefaultMargin`,
+the four modules ISO/IEC 18004 requires, and the achievable sizes then step by
+one span — symbol plus both quiet zones — per unit of scale. A requested size
+lands between two of them, so the whole remainder is a rounding of at most half
+a span, and it lives in the **drawn size**, where the form's flash message and
+the size box already report it. That is D179.
+
+**It supersedes [D128](#d128--one-number-in-the-interface-two-knobs-behind-it)'s
+quiet-zone half, and that entry is named here rather than edited** — this file
+is append-only, so a superseded entry is corrected by the one that supersedes
+it. D128 recorded the two-knob search as the decision: *"the quiet zone is
+derived, not fixed at the floor"*, with 300px on a 29-module code landing on
+301px at a seven-module zone, ties going to the smaller quiet zone, and a
+re-save of a stored row being a byte-identical no-op. Every one of those clauses
+is false as of today. `FitSize(29, 300)` returns 296px at the floor — D128's own
+worked example inverted, and the number it named as what the floor alone would
+have given; margin is not searched; `MaxScale` is 68; the quiet-zone tie-break
+is gone with the search that needed it; and a re-save is byte-identical only for
+a row whose stored margin is already 4, which
+`TestARowFromTheOldSearchKeepsRenderingAndReportsAReSave` asserts by requiring
+the other kind to move. What survives of D128 is its other half, untouched:
+`qr.Style` still gains no field, the size is still derived from the margin and
+scale already stored, and `size` is still a read-only number on the API's
+`QRCode`. [Plan.md](../../Plan.md)'s D128 row states what is true rather than
+what was decided, so that row carries the supersession note in place.
+
+Two alternatives, both rejected, both recorded because the reopened file asked
+for the trade to be argued rather than re-hidden:
+
+- **Fractional pixels-per-module**, honouring the request exactly. It puts
+  module boundaries on fractional pixels, where the SVG's rasteriser and the
+  PNG's rounding are free to disagree — which is precisely the claim M49 exists
+  to make true. Rejected by that claim, not by preference.
+- **A wider margin**, which is what shipped and what the owner reported.
+
+**`MaxScale` 32 → 68**, which is `floor(MaxSize / (21 + 2*DefaultMargin))`: the
+smallest symbol this package encodes at the pinned quiet zone is 29 spans, and
+2000 ÷ 29 is 68. The ceiling is now *derived* from the raster bound rather than
+chosen, so every fit is a style `Normalize` accepts — with the old 32, pinning
+the margin would have made `FitSize` emit styles the API refused. `api/openapi.yaml`
+moves with it.
+
+**`MaxMargin = 16` was revisited and kept**, which the reopened bullet required
+either way. Since the fit no longer chooses a margin, 16 bounds one thing only:
+what an API caller may store. Lowering it would stop rows already written under
+the old search from rendering, and those rows are printed. It is documented as
+that and nothing more.
+
+**Stored rows: the two halves, stated separately.** Nothing on the read path
+consults `FitSize`, so a row carrying margin 14 scale 7 is drawn in the pixels
+it always was — asserted directly, on that exact shape, in
+`TestARowFromTheOldSearchKeepsRenderingAndReportsAReSave`. Re-saving such a row
+is a new fit and *does* move it, by at most half a span, and `SizeFit.Snapped`
+is true so the panel says so. Silently widening the margin back is the reported
+defect; silently moving the size would be the same defect wearing the other
+hat, so the assertion is that it moves **and** reports. The demo is the live
+case: `/launch` at the demo host encodes to 37 modules, so its seeded 400px code
+was margin 10 scale 7 at 399px and reseeds to margin 4 scale 9 at 405px — a
+visibly denser picture at a size six pixels different, which is the trade this
+entry is about, shown rather than argued.
+
+**The pin-then-bound order the reopening asked for** was followed literally.
+`TestTheQuietZoneIsTheMinimumThatScans` was written first and run against the
+old `FitSize`, where it failed at 25 modules and 71px on a five-module quiet
+zone; `TestTheSizeSnapsToWholeModules`' new half-span bound failed the old
+arithmetic too, at 25 modules and 1856px. The old `floorSnap` yardstick — *never
+worse than holding the quiet zone at the floor* — retired, because holding the
+quiet zone at the floor is now what the function does and a yardstick sharing
+the implementation measures nothing.
+
+### The preview keeps a footprint of its own
+
+The frame was `inline-block`, so it shrink-wrapped whatever `internal/qr` had
+sized the `<svg>` to and grew with the stored size until it hit the column. Its
+own comment claimed a fixed frame; the markup did not implement one. It is
+`h-72 w-72 max-w-full` now — 18rem square whatever the code is drawn at — and
+`qr.FluidClass` on the `<svg>` shrinks a larger picture into it while leaving a
+smaller one alone, because a preview is not a reason to enlarge a code somebody
+chose to keep small.
+
+That splits two numbers that used to be one, so the page states the split: the
+served size is printed under the picture, named as the size both downloads and
+the API serve. Without it the size control reads as having no effect — type
+2000, save, and the picture is the size it was.
+
+**The caption has two branches, and the first draft of it had one.** `QRSize`
+is the served size on every link, but it is a *stored* size only where
+`QRStored` is true; elsewhere it is `QROutputSize` over the default style. One
+unguarded sentence therefore read *"The stored size is 296 pixels"* on every
+link that had never been styled — which is every link but the one
+`cmd/lctl/demo_phase2.go` seeds, so the false reading was the common one and the
+true one was the exception. Stating a distinction wrongly is not stating it, so
+the unstored branch names the number as the default and says what saving one
+would change. Both branches are asserted, in both directions, by
+`TestTheQRPreviewSaysWhichSizeIsServed`.
+
+Both surfaces are asserted, in `internal/ui/link_qr_test.go`, because
+`linkQRView` is one struct embedded in the link page and in the panel's own page
+and M48 requires them to stay the same markup. The link page draws one tab at a
+time since M47's reopening, so the test renders it at `?tab=qr` — a rendering of
+the landing tab would have passed on a page that had lost the panel entirely.
+
+### Restore defaults
+
+One label, and one label is worth a test because nothing read it. *Back to black
+on white* named the colours, which was all this form carried until M49 put a
+size on it; the button clears the size too. The flash message followed the
+button, for the same reason.
+
+**What this deliberately did not touch**: the two-encoders-agree claim and its
+test, the PNG bound and its 4,000,000-byte allocation story, the level's move to
+the API, the codes list, the logo controls, and `demoCoverage()` — the M41 row
+already requires a styled code and this milestone changes the style it requires,
+not the count.

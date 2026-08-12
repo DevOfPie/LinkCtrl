@@ -541,14 +541,20 @@ func TestTheDefaultCodeCarriesALogoToo(t *testing.T) {
 		t.Errorf("the upload repainted the code: %+v became %+v; an image is not a "+
 			"colour change", untouched.Style, after.Style)
 	}
-	// Within one module of the size it had. The fit snaps to a whole number of
-	// modules, so the two need not be equal, and anything inside one module is
-	// the snap rather than a resize nobody asked for.
-	if diff := after.Size - untouched.Size; diff > after.Style.Scale ||
-		diff < -after.Style.Scale {
+	// Within half a span of the size it had. The fit snaps to a whole number of
+	// modules, so the two need not be equal; with the quiet zone pinned at its
+	// floor since the M49 reopening (F213) the sizes it can produce step by one
+	// span — symbol plus both quiet zones — per unit of scale, so the nearest
+	// can sit half of one away, and anything inside that is the snap rather
+	// than a resize nobody asked for. The span is read back off the answer:
+	// size ÷ scale is the module count including the quiet zone, which is the
+	// one number this test does not otherwise have.
+	span := after.Size / after.Style.Scale
+	if diff := after.Size - untouched.Size; 2*diff > span || 2*diff < -span {
 		t.Errorf("the code was %dpx and is %dpx after the upload (%+v → %+v). Level H "+
 			"is a larger symbol and the re-fit is what keeps the size somebody "+
-			"chose", untouched.Size, after.Size, untouched.Style, after.Style)
+			"chose — half a %d-module span is %dpx", untouched.Size, after.Size,
+			untouched.Style, after.Style, span, span/2)
 	}
 	if after.Size > qr.MaxSize {
 		t.Errorf("the upload left the code drawing %dpx, past the %dpx raster bound; "+
@@ -897,13 +903,19 @@ func TestTheSizeControlFitsAgainstTheLevelALogoIsDrawnAt(t *testing.T) {
 	// wrong thing to have fitted against.
 	drawn := attrOf(t, f.qrSVG(id), `width="(\d+)"`)
 	stored := f.storedQRLevel(t, id, "")
-	if diff := drawn - want; diff > stored.Scale || diff < -stored.Scale {
+	// Half a span, which is the whole of what a snap may move since the M49
+	// reopening pinned the quiet zone at its floor (F213): the achievable sizes
+	// step by one span — the symbol plus both quiet zones — per unit of scale.
+	// A fit taken against L's smaller symbol misses by far more than that,
+	// which is what this test is looking for.
+	span := atH.Size + 2*stored.Margin
+	if diff := drawn - want; 2*diff > span || 2*diff < -span {
 		t.Errorf("the reader asked for %dpx and the served picture is %dpx, with "+
 			"margin %d and scale %d on a %d-module symbol. qr.FitSize snaps to a whole "+
-			"number of modules, so anything inside one module (%dpx) is the snap; this "+
-			"is the fit having been taken against the %d modules the row's level "+
-			"encodes to instead", want, drawn, stored.Margin, stored.Scale, atH.Size,
-			stored.Scale, atL.Size)
+			"number of modules, so anything inside half a %d-module span (%dpx) is the "+
+			"snap; this is the fit having been taken against the %d modules the row's "+
+			"level encodes to instead", want, drawn, stored.Margin, stored.Scale,
+			atH.Size, span, span/2, atL.Size)
 	}
 	// And the panel's own number is the same number, so the two surfaces do not
 	// disagree about a picture they both describe.

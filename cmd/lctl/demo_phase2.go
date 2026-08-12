@@ -1266,7 +1266,7 @@ type demoCampaign struct {
 //
 // One, not all of them. Every link has a code — the endpoint answers for any of
 // them — so seeding a style everywhere would show one state; seeding exactly one
-// shows both, and the link detail page's "back to black on white" button only
+// shows both, and the link detail page's "Restore defaults" button only
 // appears on a link that has a stored style at all.
 //
 // **It must be a link that still resolves, which is F174.** This was

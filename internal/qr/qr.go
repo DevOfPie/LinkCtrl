@@ -71,12 +71,19 @@ const (
 	DefaultMargin = 4
 	DefaultScale  = 8
 
-	// MinScale and MaxScale bound what a stored style may ask for. The ceiling
-	// is not about pixels — SVG has none — but about the `width` attribute a
-	// downloaded file carries into whatever opens it.
+	// MinScale and MaxScale bound what a stored style may carry. The ceiling is
+	// derived from [MaxSize]: the smallest code is 21 modules, the floor quiet
+	// zone adds eight, and floor(2000/29) = 68 is the largest pixels-per-module
+	// [FitSize] can ever emit — so every fit is a style Normalize accepts. It
+	// was 32, capped by nothing but the `width` attribute a downloaded file
+	// carries, and that cap is what made the old FitSize fill large requests
+	// with quiet zone instead of scale (F213).
 	MinScale = 2
-	MaxScale = 32
-	// MaxMargin. Beyond this the quiet zone is most of the picture.
+	MaxScale = 68
+	// MaxMargin bounds what a *stored* style may carry, and since the M49
+	// reopening that is all it bounds: FitSize holds the quiet zone at
+	// [DefaultMargin], and 16 stays only because rows written by the old
+	// search carry up to it and must keep rendering as written.
 	MaxMargin = 16
 
 	// DefaultForeground and DefaultBackground are dark-on-light, and the
@@ -658,8 +665,9 @@ type SizeFit struct {
 // Snapped reports whether the fit had to move off the requested size.
 func (f SizeFit) Snapped() bool { return f.Size != f.Requested }
 
-// FitSize resolves a requested output size in pixels to the quiet zone and the
-// pixels-per-module that come nearest it (M49).
+// FitSize resolves a requested output size in pixels to the pixels-per-module
+// that comes nearest it, with the quiet zone held at the ISO floor (M49;
+// arithmetic replaced at the 2026-08-12 reopening, F213).
 //
 // **A QR grid is a whole number of modules, so an arbitrary pixel size does not
 // divide evenly**: 300px over a 29-module code with the minimum quiet zone is
@@ -668,15 +676,19 @@ func (f SizeFit) Snapped() bool { return f.Size != f.Requested }
 // to disagree — which is precisely what the two-outputs-match claim forbids. So
 // the size snaps, and the caller is told what it snapped to.
 //
-// **Two knobs, not one.** The quiet zone is derived here rather than fixed,
-// because a margin one module wider is another `2*scale` pixels of reach and it
-// costs nothing a scanner cares about: the ISO/IEC 18004 floor is four modules
-// and this only ever goes up from there. 300px on that 29-module code lands on
-// 301 with a 7-module quiet zone where the floor alone would have given 296.
+// **One knob, since the reopening.** The first version searched the quiet zone
+// as a second knob, up to [MaxMargin], and traded white for exactness whenever
+// a wider margin landed nearer the request — at 2000px, where the old scale
+// ceiling capped its reach, the margin filled the rest and a 29-module code was
+// under a quarter of its own picture. The quiet zone is now pinned at
+// [DefaultMargin], the four modules ISO/IEC 18004 requires and the most a
+// scanner needs, so the majority of every picture is code and the whole
+// remainder a module grid forces lives in the drawn size — at most half a
+// span, under [MaxScale]'s new ceiling — where [SizeFit.Snapped] reports it.
+// The decision entry for the reopening records the trade.
 //
-// Ties go to the smaller picture and then to the smaller quiet zone — under
-// rather than over, so a request at the ceiling cannot snap past it, and the
-// largest code that fits rather than the same code with more white around it.
+// A tie goes to the smaller picture, so a request at the ceiling cannot snap
+// past it.
 func FitSize(modules, want int) (SizeFit, error) {
 	if modules <= 0 {
 		return SizeFit{}, fmt.Errorf("qr: a code of %d modules has no size", modules)
@@ -686,44 +698,23 @@ func FitSize(modules, want int) (SizeFit, error) {
 			ErrSizeOutOfRange, MinSize, MaxSize, want)
 	}
 
-	best := SizeFit{Requested: want}
-	found := false
-	for margin := DefaultMargin; margin <= MaxMargin; margin++ {
-		span := modules + 2*margin
-		for scale := MinScale; scale <= MaxScale; scale++ {
-			size := span * scale
-			if size > MaxSize {
-				break
-			}
-			c := SizeFit{Requested: want, Size: size, Margin: margin, Scale: scale}
-			if !found || nearer(c, best) {
-				best, found = c, true
-			}
-		}
-	}
-	if !found {
-		// Unreachable for any code this package can encode — 21 modules at the
-		// floor and MinScale is 58px, and version 40 is 370px — but a bound that
-		// is only true by argument is one a future MaxSize change breaks
-		// silently.
+	span := modules + 2*DefaultMargin
+	if span*MinScale > MaxSize {
+		// Unreachable for any code this package can encode — version 40 at the
+		// floor and MinScale is 370px — but a bound that is only true by
+		// argument is one a future MaxSize change breaks silently.
 		return SizeFit{}, fmt.Errorf("%w: no whole-module size for a %d-module code",
 			ErrSizeOutOfRange, modules)
 	}
-	return best, nil
-}
-
-// nearer is FitSize's comparison, spelled out so the tie-breaks are readable
-// rather than encoded in the loop order.
-func nearer(a, b SizeFit) bool {
-	da, db := abs(a.Size-a.Requested), abs(b.Size-b.Requested)
-	switch {
-	case da != db:
-		return da < db
-	case a.Size != b.Size:
-		return a.Size < b.Size
-	default:
-		return a.Margin < b.Margin
+	scale := want / span
+	if 2*(want-scale*span) > span {
+		scale++
 	}
+	scale = min(max(scale, MinScale), MaxSize/span)
+	return SizeFit{
+		Requested: want, Size: span * scale,
+		Margin: DefaultMargin, Scale: scale,
+	}, nil
 }
 
 func abs(n int) int {

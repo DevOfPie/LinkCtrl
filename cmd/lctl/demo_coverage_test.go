@@ -600,8 +600,8 @@ func demoCoverage() []demoFeature {
 			// Exactly one link carries a stored style; every other link's code
 			// is drawn at the default. A demo where all of them are styled shows
 			// one state, and a reader cannot see that a style is a preference —
-			// nor that "back to black on white" is a button that appears only on
-			// a link that has one.
+			// nor that "Restore defaults" is a button that appears only on a
+			// link that has one.
 			// **The ceiling moved to two under M50**, which added a named code
 			// to the same link. It is still a ceiling and still says the same
 			// thing: exactly one link carries stored codes, and every other

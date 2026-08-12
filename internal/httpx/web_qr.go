@@ -374,7 +374,10 @@ func qrNotice(q url.Values) string {
 			"asked for: a code is a whole number of squares, and %dpx is the nearest size "+
 			"that keeps them whole. %s", got, want, got, unchanged)
 	case "reset":
-		return "QR code back to black on white."
+		// It says defaults rather than colours because the button does: M49 put
+		// a size on this form and reset clears that too, so the old sentence
+		// named a third of what happened (F213).
+		return "QR code restored to the default style — black on white, at the default size."
 	case "added":
 		return "A second code, with a name and an identity of its own. It points at the " +
 			"same destination — what it changes is that a scan of this one is told apart " +

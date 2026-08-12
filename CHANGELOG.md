@@ -623,8 +623,10 @@ migrations run at boot.
 - **The QR form asks how big you want the code, in pixels.** It used to ask for a
   quiet zone in modules and a module size in pixels, which is two numbers nobody
   printing a poster knows. Both are still the arithmetic behind the one control,
-  and the empty margin scanners need is derived from the size and never goes
-  below the four squares the specification requires.
+  and the empty margin scanners need is **held at the four squares the
+  specification requires** — never below it, and never above it either, so the
+  majority of the picture is code at every size the form offers. A style set over
+  the API can still ask for a wider quiet zone and is drawn with it.
 
   **The size snaps to keep the squares whole, and the panel names both numbers.**
   A code is a grid, so an arbitrary pixel size does not divide into it — 300px
@@ -637,10 +639,28 @@ migrations run at boot.
   it from a dashboard; `PUT /api/v1/links/{id}/qr` still sets it, and saving the
   form afterwards keeps whatever it was set to rather than resetting it.
 
+  **The preview keeps its own size.** The frame beside the form is a fixed
+  square, and a code bigger than it is drawn scaled down to fit; the number under
+  the picture is the size that is *served*, which is what both downloads and the
+  API answer with — named as a stored size on a styled code and as the default on
+  one that is not. Setting 2000px changes the file rather than the page.
+
+  **The reset button says *Restore defaults*.** It used to say *Back to black on
+  white*, which named the colours — it clears the size too.
+
   **Codes styled before this release are untouched.** Their stored settings are
   read forward to the size they already produced, so nothing anybody has printed
-  changed shape — and re-saving one at the size the panel shows is a no-op down
-  to the byte.
+  changed shape. Re-saving one is a no-op down to the byte when its quiet zone is
+  the default four squares; a code whose stored quiet zone is wider than that is
+  re-fitted to four when it is saved again, which moves the drawn size by at most
+  half the step between two sizes that keep the squares whole, and the panel's
+  message names the new size the way it does for any snap.
+
+  **`scale` accepts up to 68 over the API**, where it stopped at 32. The new
+  ceiling is the 2000px raster bound divided by the smallest code plus its quiet
+  zone, so every size the form can resolve to is a style `PUT
+  /api/v1/links/{id}/qr` accepts. A large `scale` with a large `margin` still
+  draws past 2000px, and the image endpoints refuse that as they always have.
 
 - **Managing dispute reviewers moves off the review queue.** The queue still says
   who reviews it — that is context for a page whose decisions are instance-wide —

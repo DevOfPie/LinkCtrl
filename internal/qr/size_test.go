@@ -20,11 +20,13 @@ import (
 // and the URL shape, and a list of it written here would be a list that goes
 // stale the first time either moves.
 //
-// What is deliberately not asserted: which particular margin and scale a size
-// resolves to. That is FitSize's answer and re-stating it here would be a copy
-// of the implementation. What is asserted is the properties the answer has to
-// have — whole modules, inside the bounds, never below the quiet-zone floor,
-// never worse than the obvious alternative, and monotone.
+// What is deliberately not asserted: which particular scale a size resolves
+// to. That is FitSize's answer and re-stating it here would be a copy of the
+// implementation. What is asserted is the properties the answer has to have —
+// whole modules, inside the bounds, monotone, within half a span of what was
+// asked, and a quiet zone that is exactly the floor. That last one is the M49
+// reopening's bound (F213): the margin used to be a second search knob and the
+// owner saw the white it bought.
 
 // productModuleCounts is every matrix size a link in this product encodes to.
 //
@@ -125,10 +127,10 @@ func sweep() []int {
 //
 // The four properties are separate on purpose. A snap that produced fractional
 // modules would be the drawing bug; one that left the bounds would be a style
-// the renderer refuses; one worse than the naive alternative would be a search
-// that is not searching; and one that is not monotone would be a tie-break that
-// leans the wrong way at some sizes and not others, which is the failure a
-// three-point test misses.
+// the renderer refuses; one further from the request than half a span would be
+// a snap that is not snapping to the nearest whole-module size; and one that is
+// not monotone would be a rounding that leans the wrong way at some sizes and
+// not others, which is the failure a three-point test misses.
 func TestTheSizeSnapsToWholeModules(t *testing.T) {
 	for _, modules := range productModuleCounts(t) {
 		previous := 0
@@ -171,16 +173,20 @@ func TestTheSizeSnapsToWholeModules(t *testing.T) {
 					"bound", modules, want, fit.Size, MaxSize)
 			}
 
-			// Never worse than the obvious alternative — hold the quiet zone at
-			// the floor and round the scale. That is the version of this the
-			// milestone rejected as too coarse, and it is the independent
-			// yardstick the search has to beat or match.
-			if naive, ok := floorSnap(modules, want); ok {
-				if abs(fit.Size-want) > abs(naive-want) {
-					t.Fatalf("%d modules at %dpx: fit chose %dpx, and holding the quiet "+
-						"zone at %d modules gives %dpx which is nearer. The search over "+
-						"the quiet zone is meant to improve on that, not lose to it",
-						modules, want, fit.Size, DefaultMargin, naive)
+			// Within half a span of the request, unless the range clamps it: the
+			// achievable sizes step by one span per scale, so a nearest snap can
+			// miss by at most half of one — the whole remainder a module grid
+			// forces, now that the quiet zone no longer absorbs any of it
+			// (F213). At the range's ends the nearest multiple can sit outside
+			// what the renderer accepts, and the clamped size is the honest
+			// answer there.
+			span := modules + 2*fit.Margin
+			if clamped := fit.Size == span*MinScale || fit.Size == span*(MaxSize/span); !clamped {
+				if 2*abs(fit.Size-want) > span {
+					t.Fatalf("%d modules at %dpx: fit chose %dpx, which is %dpx off "+
+						"for a %d-module span. The nearest whole-module size is never "+
+						"further than half a span away, so this snap is not snapping "+
+						"to it", modules, want, fit.Size, abs(fit.Size-want), span)
 				}
 			}
 
@@ -193,24 +199,6 @@ func TestTheSizeSnapsToWholeModules(t *testing.T) {
 			previous = fit.Size
 		}
 	}
-}
-
-// floorSnap is the one-knob version: quiet zone at the floor, scale rounded to
-// the nearest whole pixel. Written out rather than called into FitSize, because
-// a yardstick sharing the implementation measures nothing.
-func floorSnap(modules, want int) (int, bool) {
-	span := modules + 2*DefaultMargin
-	scale := (want + span/2) / span
-	if scale < MinScale {
-		scale = MinScale
-	}
-	if scale > MaxScale {
-		scale = MaxScale
-	}
-	if span*scale > MaxSize {
-		return 0, false
-	}
-	return span * scale, true
 }
 
 // TestTheQuietZoneNeverGoesBelowTheFloor is the specification's four modules,
@@ -247,6 +235,60 @@ func TestTheQuietZoneNeverGoesBelowTheFloor(t *testing.T) {
 	}
 }
 
+// TestTheQuietZoneIsTheMinimumThatScans is the M49 reopening's bound (F213).
+//
+// The owner, against the running product: *"Too much quiet zone at almost any
+// size and it gets really bad at 2000px — the majority of the image should be
+// QR code with just enough quiet zone to be usable."* The first FitSize
+// searched the quiet zone as a second knob, so the margin grew whenever growing
+// it landed nearer the requested pixel count — a few pixels of exactness bought
+// with dozens of pixels of white — and at 2000px, where MaxScale capped what
+// the scale could reach, the margin filled the rest of the request: a 29-module
+// code drew a 16-module quiet zone and the code was under a quarter of the
+// picture.
+//
+// The bound, in the reopened bullet's terms: at every acceptable size the
+// majority of the image is code, and the margin does not grow past the floor at
+// all — the whole remainder a module grid forces lives in the drawn size, where
+// the form already reports it. "Majority" is asserted by area, which is the
+// owner's sentence read strictly, and it is the tighter reading: the smallest
+// code this package can encode is 21 modules, and at the four-module floor that
+// is (21/29)² = 52% — the floor is the most quiet zone the majority claim
+// leaves room for.
+func TestTheQuietZoneIsTheMinimumThatScans(t *testing.T) {
+	assertMinimal := func(t *testing.T, modules, want int) {
+		t.Helper()
+		fit, err := FitSize(modules, want)
+		if err != nil {
+			t.Fatalf("%d modules at %dpx: %v", modules, want, err)
+		}
+		if fit.Margin != DefaultMargin {
+			t.Fatalf("%d modules at %dpx resolved to a %d-module quiet zone; the "+
+				"minimum that scans is %d, and every module past it is white the "+
+				"owner asked to have back", modules, want, fit.Margin, DefaultMargin)
+		}
+		span := modules + 2*fit.Margin
+		if 2*modules*modules <= span*span {
+			t.Fatalf("%d modules at %dpx: the code is %d of %d modules a side — "+
+				"%.0f%% of the picture by area — and the majority of the image "+
+				"must be code", modules, want, modules, span,
+				100*float64(modules*modules)/float64(span*span))
+		}
+	}
+	for _, modules := range productModuleCounts(t) {
+		for _, want := range sweep() {
+			assertMinimal(t, modules, want)
+		}
+	}
+	// 2000px by name, where the owner saw it worst. In the sweep above too, but
+	// this failure is the reopening's own case and deserves its own line.
+	t.Run("at 2000px", func(t *testing.T) {
+		for _, modules := range productModuleCounts(t) {
+			assertMinimal(t, modules, MaxSize)
+		}
+	})
+}
+
 // TestASizeOutOfRangeIsRefusedRatherThanClamped. Clamping reports success for a
 // setting nobody asked for — the same rule margin and scale have had since M41,
 // applied to the control that replaced them.
@@ -270,8 +312,12 @@ func TestASizeOutOfRangeIsRefusedRatherThanClamped(t *testing.T) {
 // it — which is why the expected value is read off the SVG the same style
 // produces rather than recomputed here.
 func TestAStoredStyleReadsForwardToTheSizeItAlreadyDrew(t *testing.T) {
-	// The style cmd/lctl seeds on the demo, which is the actual pre-M49 row this
-	// product has.
+	// A margin and a scale and no size, which is the shape every row written
+	// before M49 carries. It is not the demo's row and no longer claims to be:
+	// cmd/lctl seeds through SetQRSize (`demo_phase2.go:1348`) at 400px, which
+	// since the M49 reopening resolves to margin 4 scale 9 on that link's
+	// 37-module code. What this asserts is the read path, which consults no fit
+	// at all, so the numbers only have to be a style Normalize accepts.
 	stored := Style{Foreground: "#123a6b", Background: "#f5f7fa", Level: LevelQ, Margin: 4, Scale: 10}
 	norm, errs := stored.Normalize()
 	if len(errs) > 0 {
@@ -305,5 +351,75 @@ func TestAStoredStyleReadsForwardToTheSizeItAlreadyDrew(t *testing.T) {
 		t.Errorf("saving the size a stored style already draws (%dpx) moved it to %dpx; "+
 			"opening the panel and pressing save must not resize anybody's code",
 			got, fit.Size)
+	}
+}
+
+// TestARowFromTheOldSearchKeepsRenderingAndReportsAReSave is the stored-row
+// half of the M49 reopening's second bullet (F213).
+//
+// **Two claims, and only the first is unconditional.** A style already in
+// `qr_codes.style` is drawn from the margin and scale it carries — nothing on
+// the read path consults [FitSize] — so a row written by the old margin search
+// renders in the pixels it always did, whatever the arithmetic now prefers.
+// That is the one that had to hold, because those rows are printed.
+//
+// The second is where the honesty is owed. Re-saving such a row goes through
+// [FitSize] again, which now pins the quiet zone at [DefaultMargin] and cannot
+// reproduce a 14-module one — so the drawn size moves, by at most half a span,
+// and [SizeFit.Snapped] is true, which is what the form's flash message reads.
+// Silently keeping the size by widening the margin back is the behaviour the
+// owner reported; silently moving it without saying so would be the same defect
+// wearing the other hat. So the assertion is that it moves *and* reports.
+func TestARowFromTheOldSearchKeepsRenderingAndReportsAReSave(t *testing.T) {
+	// Margin 14 at scale 7 is a real answer the old search gave: a 29-module
+	// code asked for 400px resolved to exactly this, 399px with more than three
+	// times the ISO quiet zone. It is the shape of row this milestone stopped
+	// producing and did not stop honouring.
+	old := Style{Foreground: "#123a6b", Background: "#f5f7fa", Level: LevelQ, Margin: 14, Scale: 7}
+	norm, errs := old.Normalize()
+	if len(errs) > 0 {
+		t.Fatalf("a row the old search wrote is no longer a style Normalize accepts: %v", errs)
+	}
+	if norm.Margin != old.Margin || norm.Scale != old.Scale {
+		t.Fatalf("Normalize rewrote a stored row: margin %d scale %d became margin %d "+
+			"scale %d. A row already in the database is drawn as written, or every "+
+			"printed code drawn from one changed appearance", old.Margin, old.Scale,
+			norm.Margin, norm.Scale)
+	}
+
+	code, err := Encode(sample, norm.Level)
+	if err != nil {
+		t.Fatal(err)
+	}
+	drawn := attrInt(t, string(code.SVG(norm)), `width="(\d+)"`)
+	if want := OutputSize(code.Size, norm); drawn != want {
+		t.Fatalf("the row draws %dpx and OutputSize says %dpx", drawn, want)
+	}
+	if drawn != (code.Size+2*14)*7 {
+		t.Errorf("a %d-module code at margin 14 scale 7 drew %dpx, which is not the "+
+			"geometry the row carries. The read path must not consult FitSize",
+			code.Size, drawn)
+	}
+
+	// The re-save. It moves, because the margin it was written with is not one
+	// the fit will choose any more.
+	fit, err := FitSize(code.Size, drawn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fit.Margin != DefaultMargin {
+		t.Errorf("re-saving the row kept a %d-module quiet zone; a save is a new fit "+
+			"and a new fit pins the zone at %d", fit.Margin, DefaultMargin)
+	}
+	span := code.Size + 2*fit.Margin
+	if 2*abs(fit.Size-drawn) > span {
+		t.Errorf("re-saving %dpx produced %dpx, %dpx away for a %d-module span. A "+
+			"re-fit is a snap, not a resize: half a span is the whole of what it "+
+			"may move", drawn, fit.Size, abs(fit.Size-drawn), span)
+	}
+	if !fit.Snapped() {
+		t.Errorf("re-saving the row landed on %dpx and reported no snap. The size "+
+			"moved from %dpx and the form's message is the only place a reader "+
+			"learns it did", fit.Size, drawn)
 	}
 }

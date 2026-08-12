@@ -174,12 +174,48 @@
 
 <div class="flex flex-wrap items-start gap-6">
   <div>
-    {{/* A fixed frame, so a scale change resizes the drawing inside a box
-         that does not jump. The border is a theme token; everything inside
-         the <svg> is the code's own colours. */}}
-    <div class="inline-block max-w-full overflow-x-auto rounded-md border border-line-strong p-2">
+    {{/* A frame with a footprint of its own, and since the M49 reopening
+         (F213) that footprint is a number rather than an intention.
+
+         The comment here used to say "a fixed frame, so a scale change resizes
+         the drawing inside a box that does not jump", and the box jumped: the
+         frame was `inline-block`, so it shrink-wrapped whatever
+         `internal/qr` had sized the <svg> to and grew with the stored size
+         until it hit the column. The owner set 2000px and the page grew.
+
+         `h-72 w-72` is 18rem square whatever the code is drawn at, and
+         `max-w-full` keeps it inside a narrow column. The drawing shrinks into
+         it rather than the frame growing around the drawing: `qr.FluidClass`
+         is `max-w-full h-auto` on the <svg> itself, so a picture wider than
+         this box scales down and one narrower than it is left alone — a
+         preview is not a reason to enlarge a code somebody chose to keep
+         small. Centred, because a small code in a fixed box has slack on both
+         sides. */}}
+    <div class="flex h-72 w-72 max-w-full items-center justify-center rounded-md border border-line-strong p-2">
       {{if .QRSVG}}{{.QRSVG}}{{end}}
     </div>
+    {{/* Served, not drawn. The picture above is whatever fits the frame; the
+         number below is what both downloads serve and what the API answers
+         with. Saying it here is the reopening's own requirement — a preview
+         that silently stopped tracking the size would otherwise read as the
+         size setting having no effect.
+
+         **Two branches, because most links have no stored style.** The
+         unguarded sentence said "the stored size" on every code, and
+         `.QRSize` is `QROutputSize` over the *default* style whenever
+         `.QRStored` is false — which is every link but the one
+         `demo_phase2.go` seeds. Calling a default a stored size is the
+         opposite of the distinction this paragraph exists to draw, so the
+         branch names which of the two the number is. Both sentences carry the
+         served-vs-drawn split and the words "size is", which is what the test
+         reads. */}}
+    <p class="mt-2 text-xs text-subtle">
+      {{if .QRStored}}
+      Shown to fit this frame. The stored size is <strong class="font-medium text-ink">{{.QRSize}} pixels</strong> &mdash; what both downloads and the API serve.
+      {{else}}
+      Shown to fit this frame. No size is stored for this code, so its size is <strong class="font-medium text-ink">{{.QRSize}} pixels</strong> by default &mdash; what both downloads and the API serve until one is saved.
+      {{end}}
+    </p>
     <p class="mt-2 break-all text-xs text-subtle">{{.QRContent}}</p>
     {{/* Two downloads since M49, and the PNG leads because it is the one the
          milestone exists for: before it, getting a file anything else could
@@ -275,7 +311,12 @@
     <div class="flex items-end gap-2 sm:col-span-2">
       <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Save the style</button>
       {{if .QRStored}}
-      <button type="submit" name="reset" value="1" class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-sunken">Back to black on white</button>
+      {{/* "Restore defaults", not "Back to black on white" (F213). The old
+           label named the colours because colours were once all this form
+           carried; M49 added a size, so the button that clears the stored row
+           clears more than the two swatches and the label said otherwise. The
+           owner asked for this wording. */}}
+      <button type="submit" name="reset" value="1" class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-sunken">Restore defaults</button>
       {{end}}
     </div>
     <p class="text-xs text-subtle sm:col-span-2">

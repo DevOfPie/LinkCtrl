@@ -348,7 +348,17 @@ printed.
 
 **Restyling changes the drawing and never the content.** The form takes a
 foreground colour, a background colour and a **size in pixels** — 64 to 2000.
-**Back to black on white** appears once a style is stored.
+**Restore defaults** appears once a style is stored, and clears the size along
+with the colours.
+
+**The preview keeps its own size.** The frame beside the form is 18rem square
+whatever you set, and a code larger than that is drawn scaled down to fit it —
+the number under it is the size that is *served*, which is what both downloads
+and the API answer with. On a code you have styled that is the size you stored;
+on one you have not, the caption says so and gives you the default it is served
+at instead. Before this the frame grew with the setting until it hit the
+edge of the column, which made 2000px a page you had to scroll rather than a
+file you could print.
 
 **The size snaps, and the form says so.** A code is a grid of squares, so an
 arbitrary pixel size does not divide evenly into it: 300px over a 29-square code
@@ -356,8 +366,16 @@ is 10.34 pixels a square. Asking for 300 therefore gets you the nearest size tha
 keeps the squares whole, the flash message names both numbers, and the box then
 shows the size you actually have. Squares that landed on fractional boundaries
 would make the SVG and the PNG round differently, which is the one thing worth
-snapping to avoid. The empty margin scanners need is derived from the size and
-never goes below the four squares the specification requires.
+snapping to avoid. The empty margin scanners need is **fixed at the four squares
+the specification requires** and never grows past them — so the majority of the
+picture is always code, and the whole of the rounding lands on the size, where
+the flash message names it. A style written over the API can ask for a wider
+quiet zone and is drawn with it; the form does not offer one, because a wider
+margin is white nobody printing a poster asked to pay for. **Setting a size on
+that code from the form re-fits the margin back to four**, which moves the drawn
+size by at most half a step and is named in the flash message like any other
+snap — so a wider quiet zone set over the API survives until somebody uses the
+size control on the same code.
 
 **The error-correction level is set over the API and not on the form.** It is a
 tradeoff between how much damage a printed code survives and how tightly it is
