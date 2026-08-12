@@ -335,6 +335,10 @@ file. Append a row when you append an entry.
 | [M50.5, D178's refusal status is now conditional on the caller](#2026-08-12--m505-d178s-refusal-status-is-now-conditional-on-the-caller) | A second orchestrator amendment, also fact-level: D178 said the QR write re-derives its tab "including the 422 refusal", and the logo form's htmx post now gets a 200 because htmx swaps no 4xx. What D178 asserts — re-derivation from the write rather than from the request — is unchanged on both branches. The wider class is [F218](deferred-findings.md) |
 | [M50.6 rebuilt: the logo grows to a measured size, and D181](#2026-08-12--m506-rebuilt-the-logo-grows-to-a-measured-size-and-d181) | D181 — three tenths of the symbol's width, chosen by decoding a corpus at simulated distance through two pinned decoders; the check is kept as `make verify-scan`. The no-logo control was a three-version sample while every document called it the whole range, which is the corpus the first attempt's 444 counted; widened to all thirty-four it is 816 pictures, the control reads clean and the exculpation the fraction rests on holds |
 | [M50.6, two amendments to the milestone file, and a worker that made five](#2026-08-12--m506-two-amendments-to-the-milestone-file-and-a-worker-that-made-five) | A worker edited m50.6.md in five places; only the orchestrator amends. The file was restored by counter-edit and two fact-level amendments re-applied — the cap bullet's superseded fraction, and a codeword count nothing computed that had survived five days in three documents. Three edits did not return, one of them because it retired a bullet that is still true. The owner kept three tenths with the zbarimg dissent put to them, explicitly revisitable |
+| [M49, the size stops snapping, and D182 reverses D179 the same day](#2026-08-12--m49-the-size-stops-snapping-and-d182-reverses-d179-the-same-day) | D182 — the requested size is exact at every value, because only the *symbol* needs whole modules and the quiet zone can be any pixel count; the band is the ISO floor ±25%, so 3 to 5 modules, with the low end measured through `make verify-scan` because three is below the specification. Where the band cannot be held at the bottom of the range it is stated rather than hidden. `MaxSize` 2000 → 2048; the control becomes a slider with stops and an editable number. **Reverses D179 four hours after it landed** — not a correction, the owner used the shipped behaviour and preferred the other side of the trade |
+| [M50, the default code becomes a property rather than an absence, and D183](#2026-08-12--m50-the-default-code-becomes-a-property-rather-than-an-absence-and-d183) | D183 — the default stops being the row with the empty slug and becomes a flag any code may hold; the flag is what an untagged scan resolves through. Every code carries a `qrc` tag, the parameter already being named that, so nothing is renamed and nothing already printed changes meaning. Today's default gains a generated slug; removing the flag-holder promotes another code and says so. `ResetQRStyle` is scoped to the selected code in the same reopening — it clears the default's style whichever code is selected |
+| [M50.6, the level is the highest that costs nothing, and D184](#2026-08-12--m506-the-level-is-the-highest-that-costs-nothing-and-d184) | D184 — error correction becomes the strongest level whose version equals the weakest level's, so correction is taken wherever it is free and never at the cost of density; H while a logo is drawn, recomputed by the rule when it leaves rather than restored. Measured: H is ~30% more modules a side than the shipped default M, which is ~30% less scanning distance at a given printed size |
+| [M50.7 added: the QR tab stops costing more attention than it is worth](#2026-08-12--m507-added-the-qr-tab-stops-costing-more-attention-than-it-is-worth) | Placement after M50's reopening and M49's second, because it re-lays-out the controls those reshape. A milestone rather than four reopenings because every surface it touches does what its milestone claims — the report is about the tab's total cost in attention, not about any promise being false. Owner-chosen over folding it into the reopenings and over planning.md's new-scope route |
 
 ---
 
@@ -27885,3 +27889,153 @@ clause's two ends are what it turns on and they are covered. Both fact-level.
 put to them — two pinned modern decoders read all 444 rendered codes down to two
 pixels per module, while zbarimg's failures went from 6 to 35, concentrated at
 the smallest size a style can store. Owner-set, and explicitly revisitable.
+
+## 2026-08-12 — M49, the size stops snapping, and D182 reverses D179 the same day
+
+**This reverses [D179](#2026-08-12--m49-rebuilt-the-quiet-zone-stops-absorbing-the-rounding-and-d179), which landed at `ad28c5f` about four hours earlier.**
+Said plainly, because the alternative readings are both wrong: D179 was not a
+mistake, and this is not a correction. D179 answered the question it was asked —
+*where does the rounding remainder go* — and the owner approved the answer. They
+then used it, and reported the consequence as a defect ([F221](deferred-findings.md#open)):
+*"Setting the resolution of the QR code jumps to a different number after it is
+set. The number set is where it should stay, the quiet zone should be reduced to
+fit."*
+
+**D182 — the requested size is exact, and the quiet zone carries the remainder
+in pixels.** D179 considered two knobs, margin and scale, both in whole modules,
+and chose to pin the margin and put the remainder in the drawn size. It did not
+consider the third option, which is the one that makes the request exact:
+**only the symbol needs whole modules.** The quiet zone is white space and can be
+any pixel count at all. So
+
+    size = modules·scale + 2·margin_px
+
+is satisfiable at every requested size, with `scale` chosen to put `margin_px`
+nearest four modules. Measured: a 29-module code at 500px takes scale 14, a 406px
+symbol and a 47px margin — 3.36 modules, and the total is exactly 500.
+
+**The band is four modules ±25%, so 3 to 5** — owner-set, and three is *below*
+ISO/IEC 18004's floor of four. That is a scannability trade and it is measured
+rather than argued: `make verify-scan` exists from M50.6's reopening, gates a
+corpus through two pinned decoders at five simulated distances, and the band's
+low end goes through it across the version range.
+
+**Where the band cannot be held is stated, not hidden.** At the bottom of the
+range it fails: a 29-module code at `MinSize` 64px gives a 1.5-module zone, and a
+3-module zone on that code needs 70px. Either `MinSize` rises or the low end is
+documented as out of band; the milestone argues which, and whichever it is a test
+asserts it.
+
+**`MaxSize` rises 2000 → 2048**, owner-instructed, so the top slider stop is a
+round power of two. Everything derived from it moves and is restated where it is
+written: `MaxScale`, the raster bound, D142's allocation figures and the openapi
+bounds.
+
+**The size control becomes a slider with stops and an editable number** — 128,
+256, 300, 512, 600, 1024, 1200, 2048, owner-chosen as powers of two plus the
+three figures that matter at 300dpi. No new script; `script-src 'self'` and
+`style-src 'self'` are unchanged.
+
+What goes with D179: the `SizeFit.Snapped` notice has nothing left to report, and
+the paragraph on the tab explaining that the size snaps stops describing the
+product.
+
+## 2026-08-12 — M50, the default code becomes a property rather than an absence, and D183
+
+**D183 — any code can be the default, and the default is what an untagged scan
+resolves through.** The owner, on being told that the first code cannot be
+removed because the default *is* the row with the empty slug
+([F222](deferred-findings.md#open)): *"Allow setting any code as the default to
+resolve untagged links, every code should have a qrc tag on its link. When a
+default is removed promote another code."*
+
+M50 built the default as the absence of a slug, and that identity is exactly what
+made it unremovable — its payload carries no `qrc`, which is what makes every
+already-printed picture resolve to it. The identity moves onto a flag.
+
+**Nothing already printed changes meaning, and that is why this is cheap.** The
+parameter is already named `qrc` — `domain.ClickCodeParam`, since M50 — so
+nothing is renamed. A picture printed before this milestone carries no `qrc` and
+attributes to whichever code holds the flag, which starts as the code it always
+was. A picture carrying `?qrc=<slug>` attributes to that slug exactly as before.
+Both are asserted.
+
+**Today's default code gains a slug generated the same way every other code's
+is** — owner-answered, over a reserved `default` slug and one derived from the
+link's name. The reserved word was rejected for needing enforcement wherever
+codes are named; the derived slug for drifting the moment a link is renamed.
+
+**Removing the flag-holder promotes another code**, and the promotion is stated
+to the reader rather than silent, because it changes where untagged scans land.
+Which code is promoted is the milestone's to argue — oldest, first-in-list and
+the one the reader is looking at are all defensible, and it is a decision rather
+than an implementation detail.
+
+The same reopening fixes a defect found alongside it: **Restore defaults takes no
+slug**, so pressing it while a named code is selected clears the *default* code's
+style and drops the reader onto the default code.
+
+## 2026-08-12 — M50.6, the level is the highest that costs nothing, and D184
+
+**D184 — error correction is the highest level that does not grow the symbol,
+and H while a logo is drawn.** The owner asked what the detriment of forcing H
+everywhere would be. Measured against this repository's own encoder, on the URL
+shapes this product produces:
+
+| Payload | L | M | Q | H |
+| --- | --- | --- | --- | --- |
+| `https://lnk.io/ab3x9?src=qr` (27 bytes) | v2, 25 mod | v3, 29 | v3, 29 | v4, 33 |
+| with `&qrc=autumn` (38 bytes) | v3, 29 | v3, 29 | v4, 33 | v5, 37 |
+| `https://links.example.com/spring-sale?src=qr` (44 bytes) | v3, 29 | v4, 33 | v4, 33 | v5, 37 |
+| with `&qrc=autumn-poster` (62 bytes) | v4, 33 | v4, 33 | v6, 41 | v7, 45 |
+
+H is roughly **30% more modules a side and 70% more by area** than the shipped
+default of M. At a given printed size each module is ~30% smaller, so the code
+scans from proportionally less distance — and `make verify-scan` already shows
+dense codes are what fail first.
+
+So the rule takes correction wherever it is *free*: the strongest level whose
+version equals the weakest level's version. On the table above that is Q for the
+two ordinary shapes, where M was chosen by nothing, and M for the longest, where
+Q would cost two versions. Never denser than today. Often better corrected.
+
+**H stays while a logo is drawn** — that is what the logo costs and it is why
+M50.6 forced it. **When the logo goes the level is recomputed by the rule**
+rather than restored to a remembered value, and the owner's reasoning is on the
+record: *"the old QR should still resolve as long as the link stays the same, so
+a change in the new code shouldn't be an issue."* The payload is unchanged; only
+the picture differs.
+
+The defect this fixes is that removing a logo left the code at H **forever** —
+a setting the reader never chose, cannot see, and cannot unset from the tab
+([F223](deferred-findings.md#open)).
+
+## 2026-08-12 — M50.7 added: the QR tab stops costing more attention than it is worth
+
+**Placement.** After [M50](phase-details/m50.md)'s reopening and
+[M49](phase-details/m49.md)'s second, because it re-lays-out the two controls
+those reopenings reshape — the size control becomes a slider and the codes list
+becomes fully removable, and laying either out first would lay out a control
+about to change. Inside [M57.9](phase-details/m57.9.md)'s range, which is what
+the `X.1`–`X.8` reservation is for.
+
+**Why a milestone rather than four reopenings.** Every item is on a surface some
+shipped milestone claims — the tab strip is M47.5's, the panel content M48's, the
+codes list M50's, the size and download controls M49's — and **none of them is
+defective**. Each does what its milestone claims. What the owner reported is that
+the tab asks for more attention than it returns, which is a claim about the whole
+surface rather than about any milestone's promise, and reopening four milestones
+that are not wrong would be the wrong shape. Owner-chosen 2026-08-12, over
+folding it into the reopenings and over routing it through
+[planning.md](planning.md) as new scope.
+
+**Why not planning.md's route.** It discharges [F224](deferred-findings.md#open),
+an approved finding, and a finding becoming a milestone is the normal path rather
+than a scope addition needing absence established. The five artifacts are written
+regardless, because each keeps a different document true.
+
+**What deliberately stays out**: the logo controls, which show the same shapes
+and belong to [M50.5](phase-details/m50.5.md) — touching them here would put two
+milestones' work in one commit; any new capability, so the download menu that
+will hold PDF later holds PNG and SVG today; and a demo seeder row, because M50's
+and M50.5's already seed what this milestone re-lays-out.
