@@ -52,20 +52,87 @@ import (
 //     corrupt the ring of modules just outside it, which is damage the box's own
 //     module count does not include.
 //
-// So the rule is **half the budget, and no more**: 2·W(k) ≤ B(v).
+// So a share of the budget is reserved rather than spent, and the rest is the
+// box's: W(k)·D ≤ B(v)·N, for [logoDamageNumerator] over
+// [logoDamageDenominator].
+//
+// # The share, superseded — 2026-08-12
+//
+// **The rule was half the budget and is now three quarters**, and this section
+// is the supersession rather than an edit over the top of it, because the
+// reasoning that chose a half is still the reasoning that reserves a quarter.
+//
+// The owner read the shipped logo and asked for it "as big as possible without
+// making the barcode unreadable" (F215), which reopened M50.6. A half was a
+// *derivation* with nothing measured behind it: the three claims above are all
+// real and none of them says how much. What the reopening added is the
+// measurement — `make verify-scan`, two independent decoders over every size and
+// logo shape this product draws, at five simulated viewing distances — so the
+// reserve no longer has to carry the whole argument on its own. A quarter still
+// pays for the three claims; the difference is that the box below is now the
+// largest one a decoder was shown to read rather than the largest one an
+// argument allowed.
 //
 // # The cap, as a number
 //
-// **A centred square one fifth of the symbol's width — 4% of its area** — rounded
-// down to an odd number of modules so it centres on the module grid rather than
-// straddling half a module. [LogoBoxModules] applies the budget check on top of
-// that and takes whichever is smaller, so the claim is true by construction for
-// every version rather than only for the ones this product happens to produce.
+// **A centred square three tenths of the symbol's width — 9% of its area** —
+// rounded down to an odd number of modules so it centres on the module grid
+// rather than straddling half a module. [LogoBoxModules] applies the budget
+// check on top of that and takes whichever is smaller, so the claim is true by
+// construction for every version rather than only for the ones this product
+// happens to produce.
 //
-// For every version the product's content lengths reach, the fifth is what
-// binds and the budget check has headroom — version 4 is the tightest, spending
-// 24 of a 30-codeword budget's half, and TestTheOcclusionCapFitsHsCorrectionBudget
-// asserts it for all of them.
+// For every version the product's content lengths reach, three tenths is what
+// binds and the budget check still has headroom — version 5 is the tightest,
+// destroying 24 codewords of a 40-codeword budget where three quarters is 30,
+// and TestTheOcclusionCapFitsHsCorrectionBudget asserts it for all of them.
+// *(The figure this paragraph carried before the reopening — "version 4 is the
+// tightest, spending 24 of a 30-codeword budget's half" — was wrong in the way
+// only arithmetic can be: 24 is twice version 5's destroyed count and 30 is
+// version 4's budget, so it named neither version's numbers. Version 4 destroys
+// 6 of a 30-codeword budget. Corrected here, in Plan.md's D140 and in m50.6.md.)*
+//
+// # Where three tenths came from
+//
+// **Measured, and the measurement is kept.** tools/qr-scan decodes the corpus
+// internal/qr's TestWriteScanCorpus renders — every symbol version this
+// product's content lengths reach, four logo shapes, the smallest, default and
+// largest stored size for each, and the whole version range again with no logo
+// at all at every level as a control, 816 pictures in two equal halves — through
+// zxing-cpp-as-WebAssembly and jsQR, each picture shrunk to
+// 8, 6, 4, 3 and 2 pixels per module first. The sweep that chose the fraction
+// ran 1/5, 2/9, 1/4, 3/10, 5/16, 8/25, 33/100 and 1/3. Everything up to 33/100
+// was read by both decoders; **1/3 was not** — at version 13 jsQR loses the code
+// for every logo shape and at every distance, which is a detector failure rather
+// than a correction-budget one. Three tenths is two module-steps below that
+// cliff at the version it appears at: version 13 gets a 19-module box where 1/3
+// asks for 23, and the 21 in between reads clean as well.
+//
+// **What disagrees, recorded rather than hidden.** `zbarimg` 0.23.93 — the third
+// engine, a system package this file cannot pin and `--zbar` reports without
+// gating — is markedly stricter, and gets stricter as the box grows. Over the
+// corpus above, at the five distances, decoding each logo'd picture once:
+//
+//	one fifth      1484 of 1496      control 1496 of 1496
+//	three tenths   1386 of 1496      control 1496 of 1496
+//
+// against 5984 of 5984 for the two gating decoders at both fractions.
+// `make verify-scan SCAN_ARGS=--zbar` is what reproduces it.
+//
+// **The control is what makes those numbers mean anything**, and it covers the
+// whole version range at every level for that reason: 1496 of 1496 says the
+// misses above are the logo's doing and not ZBar's own limit, and a control at
+// three versions could not have said it — the versions it missed are mostly
+// outside them. The misses concentrate at the aggressive end of the distance
+// simulation rather than at any one stored size: 84 of the 110 are read at two
+// pixels per module, as are all twelve of the old fifth's.
+//
+// The trade is therefore real and is the owner's, taken knowingly: two modern
+// engines read the larger box at two pixels per module, one older one loses
+// some of the densest codes when the picture is shrunk that far. The twelve at
+// the old fifth are worth their own sentence — the shipped product was already
+// not clean under this engine, at a distance the original hand check never
+// simulated.
 //
 // # What is deliberately not offered
 //
@@ -80,12 +147,26 @@ import (
 // version 7 at (22,22) of 45 — and a centred box covers it. A decoder that
 // cannot find it falls back to a perspective transform from the three finders,
 // which is fine for a flat image and worse for a photographed curve. That is
-// stated rather than engineered away, and it is part of why the cap is half a
-// budget rather than all of one.
+// stated rather than engineered away, and it is part of why a quarter of the
+// budget is reserved rather than none of it.
 
-// LogoBoxDivisor is the cap: the logo's box spans at most one part in this of
-// the symbol's width, so one twenty-fifth — 4% — of its area.
-const LogoBoxDivisor = 5
+// LogoBoxNumerator and LogoBoxDenominator are the cap: the logo's box spans at
+// most this fraction of the symbol's width, so nine hundredths — 9% — of its
+// area. The package comment above is where the fraction came from and what it
+// was measured against.
+const (
+	LogoBoxNumerator   = 3
+	LogoBoxDenominator = 10
+)
+
+// logoDamageNumerator and logoDamageDenominator are the share of level H's
+// correction budget a box may spend: three quarters, with the remaining quarter
+// reserved for the three claims the package comment names. It superseded a half
+// at the 2026-08-12 reopening, and that section says why.
+const (
+	logoDamageNumerator   = 3
+	logoDamageDenominator = 4
+)
 
 // MinProductContent is the shortest payload, in bytes, that this product asks
 // for a QR code of.
@@ -98,8 +179,9 @@ const LogoBoxDivisor = 5
 //
 // Versions 1 and 2 hold 7 and 14 bytes at level H, so nothing this product
 // encodes reaches them — which matters, because neither can carry a logo inside
-// half of H's correction budget and [LogoBoxModules] shrinks the box to almost
-// nothing for both. TestTheShortestContentIsWhatInternalQRAssumes, in
+// the share of H's correction budget a box may spend, and [LogoBoxModules]
+// shrinks the box to almost nothing for both.
+// TestTheShortestContentIsWhatInternalQRAssumes, in
 // internal/link, is what holds this number to the two bounds it came from.
 const MinProductContent = 22
 
@@ -115,8 +197,15 @@ const MinProductContent = 22
 // Reusing that arithmetic is the point: a second bound would be a second place
 // to keep the same number.
 //
-// It binds only on the SVG path. A rasterised code stops at [MaxSize] pixels, so
-// its box stops at MaxSize/[LogoBoxDivisor] = 400 and never reaches this.
+// **It binds on both paths since the 2026-08-12 reopening**, and it did not
+// before. A rasterised code stops at [MaxSize] pixels, so its box stops at
+// MaxSize·[LogoBoxNumerator]/[LogoBoxDenominator]; at the old one fifth that was
+// 400 and never reached this, and at three tenths it is 600 and does. What
+// happens then is already written: [logoDrawing.drawPNG] resamples the clamped
+// raster up to the rectangle the box needs, on the same arithmetic the SVG path
+// has always used, so the two outputs still draw the same rectangle and the
+// only cost is that a logo filling a 2000px code is drawn from 512 pixels of
+// detail rather than 600.
 const MaxLogoRasterSide = 512
 
 // ForLogo is the style a code carrying a logo is drawn at: this one, at level H.
@@ -145,12 +234,12 @@ func LogoBoxModules(modules int) int {
 	}
 	// Odd, so that (modules − side) is even and the box centres on the grid. A
 	// QR symbol is always an odd number of modules across.
-	side := modules / LogoBoxDivisor
+	side := modules * LogoBoxNumerator / LogoBoxDenominator
 	if side%2 == 0 {
 		side--
 	}
 	budget := logoBudget(symbolVersion(modules))
-	for side >= 1 && 2*logoWorstCase(side) > budget {
+	for side >= 1 && logoWorstCase(side)*logoDamageDenominator > budget*logoDamageNumerator {
 		side -= 2
 	}
 	if side < 1 {
@@ -528,8 +617,13 @@ func (d *logoDrawing) drawPNG(dst *image.NRGBA, st Style, scale int) {
 		draw.Draw(dst, at, d.img, image.Point{}, draw.Over)
 		return
 	}
-	// The raster was clamped below the box, which only happens on the SVG's
-	// geometry; resample it up to what this picture needs so the two outputs
-	// still draw the same rectangle.
+	// The raster was clamped below the box; resample it up to what this picture
+	// needs so the two outputs still draw the same rectangle.
+	//
+	// Two ways to get here, and since the 2026-08-12 reopening both are reached.
+	// The SVG's geometry has always been able to ask for a box larger than the
+	// stored logo. The raster path now can too: at three tenths a code drawn at
+	// [MaxSize] has a 600-pixel box against [MaxLogoRasterSide]'s 512, where at
+	// the old one fifth the box stopped at 400 and this branch was SVG-only.
 	draw.Draw(dst, at, resampleNRGBA(d.img, at.Dx(), at.Dy()), image.Point{}, draw.Over)
 }

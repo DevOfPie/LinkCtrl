@@ -464,16 +464,18 @@ migrations run at boot.
   somebody uploads one to it, and what the code *says* is untouched either way.
 
   **Two things change about a code the moment it carries one, and both are
-  visible.** The image covers a centred square **one fifth of the code's
-  width** — 4% of its area — and error correction goes to **level H**, the
+  visible.** The image covers a centred square **three tenths of the code's
+  width** — 9% of its area — and error correction goes to **level H**, the
   level that lets a reader recover a code with part of it covered. H packs the
   code tighter, so the picture is a little denser than it was and can come out
-  larger at the same setting. The fraction is not a taste: it is derived from
-  how much level H can actually recover, spends at most half of that budget, and
-  leaves the rest for print, paper, lighting and camera angle. There is no
-  control for the size or the position of the logo, because the derivation only
-  holds for a centred square and a control this product cannot bound is one it
-  will not offer.
+  larger at the same setting. The fraction is not a taste and not a guess: the
+  arithmetic bounds it — at most three quarters of what level H can recover, the
+  rest left for print, paper, lighting and camera angle — and the size inside
+  that bound was chosen by decoding every combination this product can draw, at
+  simulated distance, through two independent decoders. There is no control for
+  the size or the position of the logo, because the derivation only holds for a
+  centred square and a control this product cannot bound is one it will not
+  offer.
 
   **`level` is therefore not yours to set while a code has a logo.** A request
   naming another one is accepted and answered with `H` rather than refused —
@@ -482,14 +484,25 @@ migrations run at boot.
   applied. Removing the logo leaves the level at H: dropping it would redraw a
   code that may already be on a poster.
 
-  **Whether a logo'd code scans is measured, not tested.** There is no QR
-  decoder in this product and adding one for a test would be a dependency; what
-  exists instead is a hand-run check against a real reader, recorded with what
-  was tried. As of this release: 816 images from the shipping code path — every
-  symbol size this product produces, six logo shapes, four styles — all read
-  back the exact URL under ZBar 0.23.93. **That is a measurement and not a
-  guarantee**, and no test in this product will tell you if a logo'd code stops
-  scanning on some reader.
+  **Whether a logo'd code scans is measured, and the measurement is kept.**
+  There is no QR decoder in this product and adding one would be a dependency,
+  so the decoding lives in the repository's verification tooling instead:
+  `make verify-scan` renders every symbol size this product produces, four logo
+  shapes, and the smallest, default and largest stored size of each — and then
+  the same range again with **no logo at all**, as a control, so that a picture
+  that will not read can be told from a decoder that will not read it — then
+  shrinks every picture to 8, 6, 4, 3 and 2 pixels per module, standing in for
+  reading it from further away, and decodes all of it through two independent
+  engines.
+  That is what the three tenths above was chosen against, and it fails if the
+  fraction grows past what still reads. **It is still a measurement and not a
+  guarantee**: it is not part of the build, and no test that ships with this
+  product will tell you if a logo'd code stops scanning on some particular
+  reader. One older engine, ZBar, is stricter than both and loses some of the
+  densest codes once the picture is shrunk to the furthest distance the check
+  simulates — recorded rather than hidden, because the larger logo is what
+  bought it. It reads every one of the codes with no logo, which is what says
+  the losses are the logo's doing and not the engine's age.
 
   **PNG and JPEG, decided by what is in the file** rather than by what it is
   called or what your client says it is — so a `.png` holding a JPEG works and a

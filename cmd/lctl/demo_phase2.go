@@ -1404,7 +1404,7 @@ func (s *demoSeeder) seedCampaigns(ctx context.Context, cat []demoLink, ids map[
 // demoLogoSide is how big the seeded logo is, in pixels.
 //
 // Small on purpose. It stands for a brand mark rather than for a photograph,
-// and it is drawn at a fifth of the code's width, so a large one would only make
+// and it is drawn at three tenths of the code's width, so a large one would only make
 // the demo's database bigger for a picture nobody sees at that resolution.
 const demoLogoSide = 96
 

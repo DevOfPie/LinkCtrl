@@ -1,0 +1,16 @@
+{
+  "name": "linkctrl-qr-scan",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Decodes the QR codes internal/qr draws, at several simulated viewing distances, so the logo's occlusion fraction is measured rather than argued. Verification only — never a build or runtime dependency of LinkCtrl (Plan.md D25).",
+  "type": "module",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "scripts": {
+    "scan": "node scan.mjs"
+  },
+  "dependencies": {
+    "jsqr": "1.4.0",
+    "pngjs": "7.0.0",
+    "zxing-wasm": "3.1.2"
+  }
+}

@@ -81,13 +81,16 @@ the templates and embedded into the binary, so a build without it runs fine but
 serves unstyled pages (the server warns at boot). The vendored htmx is
 committed; the target just verifies it against its pinned checksum.
 
-`make verify-render` is the one target here that needs Node, and it is reachable
-from nothing else — not `check`, not any `ci-` target, not `release-check`. It
-re-checks [M26.5](phase-details/m26.5.md)'s popover geometry in Blink, Gecko and
-WebKit, and it is opt-in because the engines are a several-hundred-megabyte
-download that no other target wants. Setup and what it asserts are in
-[tools/render-verify/README.md](../../tools/render-verify/README.md); D25 is why
-Node is allowed to appear at all.
+**Three targets need Node**, and none of them is reachable from anything else —
+not `check`, not any `ci-` target, not `release-check`. D25 is why Node is
+allowed to appear at all; each one is opt-in because what it needs is a download
+no other target wants.
+
+| | Re-checks | Needs |
+| --- | --- | --- |
+| `make verify-render` | [M26.5](phase-details/m26.5.md)'s popover geometry, in Blink, Gecko and WebKit — [tools/render-verify/](../../tools/render-verify/README.md) | Three browser engines, several hundred megabytes |
+| `make verify-ui` | The kept browser spec, against a running test instance — [tools/agent-browser/](../../tools/agent-browser/README.md) | One engine, and `make up` |
+| `make verify-scan` | [M50.6](phase-details/m50.6.md)'s logo cap: every code the product can draw, decoded at simulated distance — [tools/qr-scan/](../../tools/qr-scan/README.md) | Two decoders, and a few minutes |
 
 `Taskfile.yml` mirrors the Makefile for contributors without `make`.
 

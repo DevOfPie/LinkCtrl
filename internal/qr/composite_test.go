@@ -120,9 +120,14 @@ func TestTheOcclusionCapFitsHsCorrectionBudget(t *testing.T) {
 	if lowest < 3 {
 		t.Fatalf("the shortest content this product can encode reaches version %d. "+
 			"Versions 1 and 2 hold 7 and 14 bytes at level H and cannot carry a "+
-			"logo inside half of H's budget; if one is now reachable, the cap needs "+
-			"deciding again rather than asserting", lowest)
+			"logo inside the share of H's budget a box may spend; if one is now "+
+			"reachable, the cap needs deciding again rather than asserting", lowest)
 	}
+
+	// The tightest version, and what it spends. composite.go names it in prose
+	// and Plan.md's D140 repeats it, and the last figure in that sentence was
+	// wrong for five days because nothing computed it — so this computes it.
+	tightest, tightestDestroyed, tightestBudget := 0, 0, 0
 
 	for version := lowest; version <= highest; version++ {
 		modules := 4*version + 17
@@ -134,11 +139,11 @@ func TestTheOcclusionCapFitsHsCorrectionBudget(t *testing.T) {
 			t.Errorf("version %d gets no logo box at all", version)
 			continue
 		}
-		// The cap, as m50.6.md states it: a centred square at most one fifth of
-		// the symbol's width.
-		if side*LogoBoxDivisor > modules {
-			t.Errorf("version %d: the box is %d modules of %d, past the one-fifth cap",
-				version, side, modules)
+		// The cap, as m50.6.md states it: a centred square at most three tenths
+		// of the symbol's width.
+		if side*LogoBoxDenominator > modules*LogoBoxNumerator {
+			t.Errorf("version %d: the box is %d modules of %d, past the %d/%d cap",
+				version, side, modules, LogoBoxNumerator, LogoBoxDenominator)
 		}
 		// Whole modules, centred: an even side in an odd symbol would put the box
 		// half a module off and make "the same modules in both outputs" undefined.
@@ -146,30 +151,45 @@ func TestTheOcclusionCapFitsHsCorrectionBudget(t *testing.T) {
 			t.Errorf("version %d: a %d-module box does not centre on a %d-module grid",
 				version, side, modules)
 		}
-		// And the derivation itself: half of H's budget, no more.
-		if 2*destroyed > budget {
+		// And the derivation itself: three quarters of H's budget, no more. It
+		// was a half until the 2026-08-12 reopening, which superseded it against
+		// the scan check rather than editing it — composite.go carries both.
+		if destroyed*logoDamageDenominator > budget*logoDamageNumerator {
 			t.Errorf("version %d: a %d-module box destroys at most %d codewords and "+
-				"level H recovers %d. The rule is half the budget — the other half "+
+				"level H recovers %d. The rule is %d/%d of the budget — the rest "+
 				"pays for uneven distribution across Reed-Solomon blocks, for print "+
 				"and optics, and for the logo's own edge",
-				version, side, destroyed, budget)
+				version, side, destroyed, budget,
+				logoDamageNumerator, logoDamageDenominator)
+		}
+		if tightestBudget == 0 || destroyed*tightestBudget > tightestDestroyed*budget {
+			tightest, tightestDestroyed, tightestBudget = version, destroyed, budget
 		}
 	}
 
-	// The fifth is what binds, everywhere the product actually goes. If the
+	// Three tenths is what binds, everywhere the product actually goes. If the
 	// budget check ever starts reducing the box, the cap has stopped being the
 	// number the milestone and the dashboard both state.
 	for version := lowest; version <= highest; version++ {
 		modules := 4*version + 17
-		fifth := modules / LogoBoxDivisor
-		if fifth%2 == 0 {
-			fifth--
+		want := modules * LogoBoxNumerator / LogoBoxDenominator
+		if want%2 == 0 {
+			want--
 		}
-		if got := LogoBoxModules(modules); got != fifth {
-			t.Errorf("version %d: the box is %d modules where one fifth is %d — the "+
+		if got := LogoBoxModules(modules); got != want {
+			t.Errorf("version %d: the box is %d modules where %d/%d is %d — the "+
 				"budget check is what is binding, and the stated cap is no longer "+
-				"the operative one", version, got, fifth)
+				"the operative one",
+				version, got, LogoBoxNumerator, LogoBoxDenominator, want)
 		}
+	}
+
+	// The sentence composite.go, Plan.md's D140 and m50.6.md all carry.
+	if tightest != 5 || tightestDestroyed != 24 || tightestBudget != 40 {
+		t.Errorf("the tightest version is %d, destroying %d codewords of a %d-codeword "+
+			"budget; three documents say version 5, 24 and 40. Correct them together "+
+			"or the number goes stale in two places at once",
+			tightest, tightestDestroyed, tightestBudget)
 	}
 }
 
@@ -419,6 +439,150 @@ func TestTheLogoOccupiesTheSameModulesInBothOutputs(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestTheClampedLogoRasterIsUpscaledToFillItsBox is [logoDrawing.drawPNG]'s
+// second arm, and this milestone is what made it live from the raster path.
+//
+// **It was unreachable by construction until three tenths.** A code rasterised
+// at [MaxSize] had a 400-pixel box at the old one fifth, comfortably under
+// [MaxLogoRasterSide]'s 512, so the clamp only ever bound on the SVG path and
+// the arm only ever ran for a logo whose stored image was itself smaller than
+// its box. At three tenths the box reaches 600, the raster is clamped below
+// what the picture needs, and the resample up is what keeps "the SVG and the
+// PNG draw the same rectangle" true. `make verify-scan` walks it; nothing in
+// `make check` did.
+//
+// **The case is searched for rather than written down.** What makes it exist is
+// the fraction, so a later change that put every box back under the clamp would
+// leave this passing vacuously over an arm that had quietly gone dead again —
+// finding none is a failure instead. The search is arithmetic and costs no
+// encodes: the box, the fitted top scale and the inset are all functions of the
+// version.
+func TestTheClampedLogoRasterIsUpscaledToFillItsBox(t *testing.T) {
+	// Exactly [MaxLogoRasterSide] a side, which is also exactly [MaxLogoPixels]:
+	// the largest raster prepareLogo will ever hand the drawing. So what outgrows
+	// it below is the box, not a logo that was small to begin with.
+	logo := solidLogo(t, MaxLogoRasterSide, logoColour)
+
+	lowest, highest := productVersions(t)
+	var clamped []int
+	for version := lowest; version <= highest; version++ {
+		if _, _, ok := clampedBoxAt(version); ok {
+			clamped = append(clamped, version)
+		}
+	}
+	if len(clamped) == 0 {
+		t.Fatalf("no version in %d..%d draws a logo box wider than "+
+			"MaxLogoRasterSide (%d) at its largest stored size, so drawPNG's upscale "+
+			"arm is unreachable from the raster path again. Either the fraction "+
+			"shrank or MaxLogoRasterSide grew; the arm and its comment both say "+
+			"otherwise", lowest, highest, MaxLogoRasterSide)
+	}
+	t.Logf("versions whose box outgrows the raster at their largest stored size: %v",
+		clamped)
+
+	// One of them is rendered. The arithmetic above is what says the arm is
+	// reachable at all; this is what says it draws the right rectangle when it
+	// runs, and a second 2000-pixel picture would only pay for it twice.
+	version := clamped[0]
+	scale, innerPx, _ := clampedBoxAt(version)
+	payload := payloadForVersion(t, version)
+
+	st := Style{Margin: DefaultMargin, Scale: scale}
+	raw, err := RenderPNGWithLogo(payload, st, logo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	img := decodeNRGBA(t, raw)
+
+	// Where the logo's own colour landed. Opaque and single-coloured, and area
+	// averaging over identical samples returns that same colour exactly, so the
+	// bounding box of it is the rectangle the arm drew.
+	minX, minY, maxX, maxY := img.Bounds().Dx(), img.Bounds().Dy(), -1, -1
+	for y := range img.Bounds().Dy() {
+		for x := range img.Bounds().Dx() {
+			if img.NRGBAAt(x, y) != logoColour {
+				continue
+			}
+			minX, minY = min(minX, x), min(minY, y)
+			maxX, maxY = max(maxX, x), max(maxY, y)
+		}
+	}
+	if maxX < 0 {
+		t.Fatal("the rasterised code holds no pixel of the logo's colour; nothing " +
+			"was composited into it")
+	}
+
+	modules := 4*version + 17
+	side := LogoBoxModules(modules)
+	drawX := (DefaultMargin + (modules-side)/2 + logoInsetModules) * scale
+	for _, c := range []struct {
+		name      string
+		got, want int
+	}{
+		{"left", minX, drawX},
+		{"top", minY, drawX},
+		{"right", maxX + 1, drawX + innerPx},
+		{"bottom", maxY + 1, drawX + innerPx},
+	} {
+		if c.got != c.want {
+			t.Errorf("version %d at %d pixels a module: the logo's %s edge is at %dpx "+
+				"and its box puts it at %dpx. The box is %dpx across and the stored "+
+				"raster is %dpx, so the difference is exactly the resample the arm "+
+				"exists to do — drawing the clamped raster straight in would clip the "+
+				"far edge and leave the box short",
+				version, scale, c.name, c.got, c.want, innerPx, MaxLogoRasterSide)
+		}
+	}
+}
+
+// clampedBoxAt is the largest stored size for a version-v symbol, the pixels the
+// logo is drawn across inside its box there, and whether that outgrows
+// [MaxLogoRasterSide].
+//
+// The scale is [MaxSize]'s own fit, which is what the corpus calls the largest
+// stored size and what the milestone's *largest* end means.
+func clampedBoxAt(version int) (scale, innerPx int, clamped bool) {
+	modules := 4*version + 17
+	scale = min(MaxScale, MaxSize/(modules+2*DefaultMargin))
+	side := LogoBoxModules(modules)
+	if side <= 2*logoInsetModules+1 {
+		return scale, side * scale, false
+	}
+	innerPx = (side - 2*logoInsetModules) * scale
+	return scale, innerPx, innerPx > MaxLogoRasterSide
+}
+
+// payloadForVersion is the shortest content this product can build that encodes
+// to version v at level H.
+//
+// **Bisected rather than swept.** [productVersions] holds the encoder to the
+// monotonicity this relies on — a longer payload never gets a smaller symbol —
+// which turns a thousand-encode sweep into ten.
+func payloadForVersion(t *testing.T, version int) string {
+	t.Helper()
+	versionOf := func(n int) int {
+		code, err := Encode(padTo(n), LevelH)
+		if err != nil {
+			t.Fatalf("%d bytes did not encode at level H: %v", n, err)
+		}
+		return symbolVersion(code.Size)
+	}
+	lo, hi := MinProductContent, MaxContent
+	for lo < hi {
+		mid := (lo + hi) / 2
+		if versionOf(mid) < version {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
+	if got := versionOf(lo); got != version {
+		t.Fatalf("no payload this product can build encodes to version %d at level H; "+
+			"%d bytes is the first that reaches version %d", version, lo, got)
+	}
+	return padTo(lo)
 }
 
 // TestTheEmbeddedLogoCannotCarryMarkup is

@@ -333,6 +333,8 @@ file. Append a row when you append an entry.
 | [M50.5 rebuilt: an oversized logo is resized, not refused, and D180](#2026-08-12--m505-rebuilt-an-oversized-logo-is-resized-not-refused-and-d180) | D180 — two header caps collapse to one, because an 813×813 upload passed the side and failed the area and the sentence could name no verdict; the area figure becomes the size a stored logo is resized *to*, both sizes reported. The trade is memory and it is stated: the decode allocation quadruples to 8,388,608 bytes and the image buffers an upload holds come to 14,680,064, with the encoder's own working state bounded beside them at under 4 MiB rather than folded in, in `docs/SECURITY.md` and in the constant block — eight bytes a pixel, because a bit-depth-16 PNG decodes to `image.NRGBA64` and four was what the shipped figures wrongly assumed, so the correction reaches D135 too. Refusing bit depth 16 to keep four true was the alternative and is recorded as rejected; the figures are now measured against a real decode rather than re-derived by the test meant to hold them. The header-first ordering is untouched. M50.6's scaler reused rather than copied, so no module joins the require block; the drawing path grows the area check the upload path gave up, so D142's raster figure stays true. The upload form applies the file on selection over an htmx `change` trigger, which makes it the first form in the panel to meet htmx's refusal to swap a 4xx — the refusal renders at 200 for an htmx request and at 422 for a native post. The browse control gains a pressed state in `app.css`, keyed on `:focus:not(:focus-visible)` so a reader who merely tabbed to it is not left looking at a permanent one, and drawn with a new `--t-press-shadow` token rather than a raw black. A kept browser spec drives the whole flow, because the 200 rests on a claim about htmx nothing here exercised; both halves were born red. The two SQL sources still naming the superseded decode bound are corrected, and the JavaScript-off sentences in README.md and `docs/usage.md` stop contradicting the paragraphs above them |
 | [M50.5, the enforcement-order bullet names a cap that stopped refusing](#2026-08-12--m505-the-enforcement-order-bullet-names-a-cap-that-stopped-refusing) | An orchestrator amendment at step 3.4, fact-level and therefore not a prompt: m50.5.md's enforcement order said the dimension **and pixel-count** caps are enforced at `image.DecodeConfig`, and since D180 the pixel-count figure refuses nothing — it is the size a stored logo is fitted to. The order the bullet asserts is unchanged and the bomb test still measures it |
 | [M50.5, D178's refusal status is now conditional on the caller](#2026-08-12--m505-d178s-refusal-status-is-now-conditional-on-the-caller) | A second orchestrator amendment, also fact-level: D178 said the QR write re-derives its tab "including the 422 refusal", and the logo form's htmx post now gets a 200 because htmx swaps no 4xx. What D178 asserts — re-derivation from the write rather than from the request — is unchanged on both branches. The wider class is [F218](deferred-findings.md) |
+| [M50.6 rebuilt: the logo grows to a measured size, and D181](#2026-08-12--m506-rebuilt-the-logo-grows-to-a-measured-size-and-d181) | D181 — three tenths of the symbol's width, chosen by decoding a corpus at simulated distance through two pinned decoders; the check is kept as `make verify-scan`. The no-logo control was a three-version sample while every document called it the whole range, which is the corpus the first attempt's 444 counted; widened to all thirty-four it is 816 pictures, the control reads clean and the exculpation the fraction rests on holds |
+| [M50.6, two amendments to the milestone file, and a worker that made five](#2026-08-12--m506-two-amendments-to-the-milestone-file-and-a-worker-that-made-five) | A worker edited m50.6.md in five places; only the orchestrator amends. The file was restored by counter-edit and two fact-level amendments re-applied — the cap bullet's superseded fraction, and a codeword count nothing computed that had survived five days in three documents. Three edits did not return, one of them because it retired a bullet that is still true. The owner kept three tenths with the zbarimg dissent put to them, explicitly revisitable |
 
 ---
 
@@ -27609,3 +27611,277 @@ and that is unchanged on both branches. The status code was a detail inside the
 parenthesis, and it moved. The wider class — every `hx-post` control whose
 handler answers 4xx and therefore swaps nothing — is [F218](deferred-findings.md),
 filed open and deliberately out of this milestone's spec.
+
+
+## 2026-08-12 — M50.6 rebuilt: the logo grows to a measured size, and D181
+
+**M50.6.** The owner read the shipped logo and said it *"should be as big as
+possible without making the barcode unreadable"* ([F215](deferred-findings.md)).
+That reopened M50.6 with a directive rather than a target: grow the box to the
+largest size the code still reliably decodes at, and **measure it** — *"the
+rendered code, logo at the new size, is decoded programmatically after
+simulating distance"*, with the decoder in tooling and the check **kept, not run
+once**.
+
+### Why a derivation could not answer it
+
+D140 chose a fifth of the symbol's width by reserving **half** of level H's
+correction budget for three named claims: Reed-Solomon corrects per block where
+the 30% is a total, print and optics take their share, and the logo's own edge
+takes another. Every one of those is real. None of them says *how much*. Half
+was the honest thing to write when nothing had been decoded, and it stayed the
+honest thing right up until something was.
+
+So the half is superseded by **three quarters**, and the box by **three tenths
+of the symbol's width — 9% of its area, up from 4%**. The supersession is
+written into `composite.go` as its own dated section rather than edited over the
+top of the reasoning it replaces, because the reasoning still holds; what
+changed is that a measurement now stands beside it.
+
+### What was built to measure it
+
+`make verify-scan`, in two halves, because Go has no QR decoder and adding one
+to `go.mod` would break M49's assertion that the QR path adds no dependency.
+D25 permits Node for verification tooling, which is where `tools/render-verify`
+and `tools/agent-browser` already live.
+
+- `internal/qr`'s `TestWriteScanCorpus` renders the corpus **off the shipping
+  path** — `qr.RenderPNGWithLogo`, the call the download endpoint makes. Every
+  symbol version the product's content lengths reach (3 to 36), four logo
+  shapes, and the smallest, default and largest *stored* size of each; then the
+  whole version range again with no logo at all, at every level, as the control
+  that tells a decoder's limit from the logo's damage. **816 pictures, two equal
+  halves of 408**, and a manifest saying what each should decode to.
+- `tools/qr-scan/scan.mjs` shrinks each picture until 8, 6, 4, 3 and then 2
+  pixels per module are left — averaging over the source area each destination
+  pixel covers, which is what a sensor does — and decodes all of it. That is the
+  owner's own calibration made mechanical: *"as long as it looks good and scans
+  at a reasonable distance for a scaled size it should be okay."*
+
+### The decoder question, answered by trying four
+
+The milestone anticipated that no trustworthy decoder might be available and
+made that a prompt. It did not come to that, but three of the four candidates
+had to be disqualified or demoted first, and the disqualifications are the
+useful part of the record.
+
+| | Verdict |
+| --- | --- |
+| **zxing-wasm** (`zxing-cpp` as WebAssembly) | **Gates.** Reads the whole no-logo control and every fraction in the sweep at every distance |
+| **jsQR** | **Gates.** Reads the whole control, and is the one that fails at a third of the symbol's width — the failure that put the cap where it is |
+| **`@zxing/library`** (the JS port) | **Rejected.** Fails *plain, unoccluded* codes at versions 14, 16, 20 and 34. A decoder that cannot read a code with no logo in it cannot be evidence about one that has |
+| **`zbarimg`** | **Reports, never gates.** A system package: unpinnable, absent from CI, version varies per machine. `--zbar` runs it when it is there |
+
+Both gating decoders must read every picture. A fraction only one of them reads
+is a fraction that depends on a decoder, which is what measuring was for.
+
+### The sweep, and the cliff
+
+1/5, 2/9, 1/4, 3/10, 5/16, 8/25, 33/100, 1/3. Everything to **33/100 read
+clean**; **1/3 did not** — jsQR loses version 13 for every logo shape and at
+every distance, including the closest. Not marginal, and not the correction
+budget: a failure that does not improve as the camera gets closer is the
+detector losing the sampling grid. That is the same class of failure
+`logoInsetModules` was measured against at the original M50.6, and the inset was
+re-measured here at two and three modules — **no help at all**, so the box's
+size is what is binding rather than its edge.
+
+**Three tenths, not 33/100.** Both pass. 33/100 sits one hundredth from a known
+hard failure, and at version 13 it asks for the last box size below the one that
+breaks; three tenths is two module-steps below it, and the 21-module box in
+between reads clean as well. *Reliably* is the word the reopening used, and a
+value one step from a cliff nobody has explained does not earn it.
+
+### The dissent, recorded rather than resolved
+
+`zbarimg` 0.23.93 is markedly stricter than both gating decoders and gets
+stricter as the box grows. Over the same 816 pictures at the same five
+distances, one decode each:
+
+| | Logo'd | Control |
+| --- | --- | --- |
+| One fifth, as shipped before | 1484 of 1496 | 1496 of 1496 |
+| **Three tenths, as shipped now** | **1386 of 1496** | **1496 of 1496** |
+
+against **5984 of 5984** for the two gating decoders at either fraction.
+
+**The control is clean at both, and that is the whole reason those numbers can
+be read as being about the logo.** It covers the entire version range at every
+level, so 1496 of 1496 is a statement about all of it rather than about a
+sample — which matters, because ZBar's misses on logo'd codes are spread across
+versions a three-version control would not have touched. The misses concentrate
+at the aggressive end of the distance simulation and not at any one stored
+size: 84 of the 110 are read at two pixels per module, as are all twelve of the
+old fifth's.
+
+The twelve at the old fifth mean the shipped product was already not clean under
+this engine, at a distance the original hand check never simulated. Two modern
+engines read the larger box down to two pixels per module and one older one
+loses some of the densest codes when the picture is shrunk that far. **That is
+the trade the growth bought**, and it is written into `composite.go`,
+`tools/qr-scan/README.md` and the changelog rather than left in a session.
+
+### The control was a sample, and a sample could not carry the claim
+
+Worth its own heading because the defect was invisible from the sentence. Every
+document said the control was *"the whole version range again with no logo"*;
+the corpus test iterated `[]int{lowest, (lowest+highest)/2, highest}`, so it was
+**three versions of thirty-four** — v03, v19 and v36 — which is where the 444 the
+first attempt reported came from: 408 logo'd plus 36. The prose was written for
+what the control had to be and the code for what was quick, and nothing compared
+them.
+
+That is not a wording defect, because the sentence the fraction rests on is *"it
+reads every picture of the no-logo control, so this is the logo's doing rather
+than its own limit"* — and ZBar's misses fall largely outside the three versions
+the control covered, so the exculpation was resting on pictures it had not
+examined. Widened to the full range, the control is **1496 of 1496** and the
+exculpation holds; the corpus doubled to 816 and every figure above is the
+widened one. Had it not held, the fraction would have been the owner's question
+again rather than a number to restate.
+
+**The figures put to the owner were the narrow corpus's** — 444 pictures, ZBar
+missing 6 at the old fifth and 35 at three tenths — and the entry below records
+them as they were put, because rewriting what somebody was told is not a
+correction. Re-measured over the widened corpus at the same five distances they
+are 12 and 110 of 1496 logo'd decodes. The ratio, the direction and the
+conclusion are unchanged, and the control is clean at both fractions, which is
+why this is a restatement and not a second question. The owner's answer stands
+and was already recorded as revisitable.
+
+### A figure that was wrong, corrected in three places
+
+D140, `composite.go` and m50.6.md all carried *"the tightest version the product
+reaches is 4, spending 24 of a 30-codeword budget's half."* It named neither
+version's numbers: 24 is twice version **5**'s destroyed count and 30 is version
+**4**'s budget. Version 4 destroys 6 of a 30-codeword budget; the tightest under
+the half rule was version 5, at 12 of 40.
+
+Nothing computed it, which is why it survived five days in three documents. It
+is computed now — `TestTheOcclusionCapFitsHsCorrectionBudget` finds the tightest
+version itself and fails if the sentence and the arithmetic disagree — and the
+correction is in all three places rather than only where it was noticed.
+
+### One behaviour changed as a consequence, and is stated
+
+`MaxLogoRasterSide` is 512 and used to bind only on the SVG path, because a
+2000-pixel code's box was 400 pixels at a fifth. At three tenths it is 600, so
+the raster path now clamps too and `drawPNG` resamples the logo up to the
+rectangle the box needs — arithmetic that was already written for the SVG path
+and is now reached from both. The cost is that a logo filling a 2000px code is
+drawn from 512 pixels of detail rather than 600. The two outputs still draw the
+same rectangle, which is what M49's claim requires.
+
+**That branch had no unit coverage, and this milestone is what made it live.**
+`drawPNG`'s upscale arm ran only from the SVG path before, and the raster path
+reaching it is a behaviour change, not a comment change — `make verify-scan`
+walks it and nothing in `make check` did, so the sabotage rule had no purchase
+on it. `TestTheClampedLogoRasterIsUpscaledToFillItsBox` covers it now, and it
+searches the product's version range for a picture whose box is wider than
+`MaxLogoRasterSide` rather than pinning one: seven versions of thirty-four
+produce one at their largest stored size — 20, 25, 27, 29, 32, 34 and 35, the
+band where the box has grown past 512 pixels but the code is not yet dense
+enough to force the scale down again. Finding none fails the test, so a later
+fraction that put every box back under the clamp would say so instead of
+leaving a dead branch behind quietly.
+
+### The sweep for statements this change makes false, and what it returned
+
+M50.5 spent D180 on exactly this class two commits earlier, so the second
+attempt swept rather than fixing the sites somebody had already named. The
+method: enumerate every *fact* the diff changes, then grep each one across every
+tracked `.md`, `.go`, `.html`, `.yaml` and `.sql`, reading each hit rather than
+counting it. Six facts — the box fraction, the budget share, `MaxLogoRasterSide`
+binding on the raster path, the new `make verify-scan` target and its tooling
+tree, the tightest-version arithmetic, and the corpus's own composition.
+
+Four returns, and only the first was already named:
+
+- `docs/SECURITY.md`'s *Uploaded content* row stated the resampled logo bound as
+  a single 1,048,576-byte buffer. At three tenths a second one joins it — the
+  clamped 512 raster scaled **up** to a 600-pixel box — bounded by the box at
+  1,440,000. Stated, with the three buffers' total; the *QR codes* row above it
+  said *"that bound and the one on the logo itself"* and now says *the two*.
+- `Plan.md`'s **D142** carried the same single-buffer sentence and gained a
+  supersession note in its header cell, the shape D140 already uses.
+- `docs/build-notes/development.md` said *"`make verify-render` is the one
+  target here that needs Node"*. There are three; it is a table now.
+- `Taskfile.yml` carries `verify-render` and neither `verify-ui` nor
+  `verify-scan`, against development.md's claim that it mirrors the Makefile.
+  **`verify-ui` predates this milestone**, so the divergence is not this
+  change's to close — [F220](deferred-findings.md), with the reasoning that the
+  durable fix is a rule rather than two copied blocks.
+
+What the sweep did *not* return is worth recording too: the fraction itself
+reads correctly in `README.md`, `docs/usage.md`, `CHANGELOG.md`,
+`api/openapi.yaml`, `link_qr.html` and `demo_phase2.go`, and `go.mod` is
+untouched, so M49's no-new-dependency assertion is unaffected.
+
+## 2026-08-12 — M50.6, two amendments to the milestone file, and a worker that made five
+
+Two things at once: an amendment the rules require, and a process failure in who
+made it.
+
+**The process failure.** The worker edited
+[m50.6.md](phase-details/m50.6.md) in five places — 109 insertions — of which one
+recorded what was built and four altered what shipped text asserts. Only the
+orchestrator amends: *"A worker never amends: it meets the bullet as written, or
+it reports and stops."* The file was restored to its committed text by
+counter-edit (the worker's version kept aside first, never `git checkout`), and
+the two amendments below re-applied by the orchestrator. Three of the five did
+not return, and the reasons are worth keeping:
+
+- A `## Built, as reopened` section, 86 lines. No sibling reopening has one —
+  M48 touched its milestone file 13 lines, M50.5 four, M49 none — and what was
+  built belongs in this file and in the commit message rather than in the
+  definition of done.
+- A supersession block over *The decoder question, decided rather than assumed*,
+  declaring that the section's two supporting bullets were "overtaken". One of
+  them — *"if a decoder module is wanted as a permanent gate, that is a decision
+  to take, not a side effect of this milestone"* — **is still true**: `go.mod`
+  and `go.sum` are untouched and the decoders live in `tools/qr-scan` under D25.
+  Retiring an assertion that was not overtaken is assertion-level, which makes
+  it a prompt rather than an amendment, and it was neither.
+- A parenthetical spliced into the shipped `## Risks` paragraph.
+
+**Amendment one — the cap bullet's fraction.** Fact-level.
+
+As it stood: *"the rule is that it may spend **half** the budget … D140."*
+As amended: the same, plus *"**Superseded at the 2026-08-12 reopening** — three
+tenths of the width, 9% of the area, spending at most three quarters of the
+budget. D181."*
+Tree fact: `LogoBoxNumerator`/`LogoBoxDenominator` are 3 and 10, and
+`logoDamageNumerator`/`logoDamageDenominator` are 3 and 4, in
+`internal/qr/composite.go`.
+
+**Amendment two — a codeword count nothing computed.** Fact-level, and it had
+survived five days in three documents.
+
+As it stood: *"The tightest version is 4, spending 24 codewords of a
+30-codeword budget's half."*
+As amended: the sentence is marked amended and states that it named neither
+version's numbers — 24 is twice version 5's destroyed count, 30 is version 4's
+budget — with the corrected figures for both rules.
+Tree fact: version 4 under the old fifth is a 5-module box destroying 6 of a
+30-codeword budget. Version 5 is the tightest under both rules — under the old
+fifth its box is ⌊37/5⌋ = 7 modules destroying 12 of 40, and under three tenths
+it is ⌊37·3/10⌋ = 11 modules destroying 24 of 40. *(Corrected before this entry
+was committed: the first draft attached the three-tenths geometry — 11 modules,
+24 codewords — to the old fifth, which is the same class of error the amendment
+itself is about. A reviewer caught it.)* The corpus test now derives the tightest version rather than quoting
+it.
+
+**Two further amendments, 2026-08-12, same milestone, same actor.** The
+subsection *The decode check, as run — 2026-08-07* read as current while every
+figure in it was measured at the one-fifth cap, and this file now carries two
+unrelated corpora of 816 pictures; it is dated and scoped as a record rather than
+restated, because a record of a check is not a claim about the tree. And the
+bullet *"every size and level combination this product can draw passes the scan
+check"* is three scales per version — `MinScale`, `DefaultScale`, the fitted top
+— against a continuous 2-to-68 range no corpus can enumerate; the `including`
+clause's two ends are what it turns on and they are covered. Both fact-level.
+
+**The owner kept three tenths**, asked on 2026-08-12 with the zbarimg dissent
+put to them — two pinned modern decoders read all 444 rendered codes down to two
+pixels per module, while zbarimg's failures went from 6 to 35, concentrated at
+the smallest size a style can store. Owner-set, and explicitly revisitable.

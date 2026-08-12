@@ -293,6 +293,30 @@ verify-ui: ## Run the kept browser spec against the running test instance (needs
 	}
 	@cd $(AGENT_BROWSER) && ./node_modules/.bin/playwright test --reporter=json | node report-failures.mjs
 
+# M50.6's reopening grows the logo box until a code stops decoding, and says the
+# size is "measured by simulated scanning ... the check is kept, not run once —
+# it gates the fraction". This is the gate. Two halves: internal/qr renders the
+# corpus off the shipping path, and tools/qr-scan decodes it at several
+# pixels-per-module, because Go has no QR decoder and D25 puts one in tooling
+# rather than in the require block — which is also what keeps M49's
+# no-new-dependency assertion true.
+#
+# Not a prerequisite of `check` or of any ci- target, for verify-render's reason:
+# it needs Node, and the shipped build does not.
+QR_SCAN := tools/qr-scan
+
+.PHONY: verify-scan
+verify-scan: ## Decode every logo'd code the product can draw, at simulated distance (needs Node)
+	@command -v node >/dev/null 2>&1 || { \
+		echo "node is not on PATH. See $(QR_SCAN)/README.md, and Plan.md D25 for why it is allowed to be needed."; \
+		exit 1; \
+	}
+	@test -d $(QR_SCAN)/node_modules || npm install --prefix $(QR_SCAN)
+	@dir=$$(mktemp -d -t linkctrl-qr-scan-XXXXXX); \
+	trap 'rm -rf "$$dir"' EXIT; \
+	QR_SCAN_CORPUS_DIR="$$dir" go test ./internal/qr -run TestWriteScanCorpus -count=1 >/dev/null && \
+	node $(QR_SCAN)/scan.mjs --corpus "$$dir" $(SCAN_ARGS)
+
 ## ---- ci -------------------------------------------------------------------
 
 # One target per CI job, and every step of every job is a target rather than a

@@ -1064,7 +1064,7 @@ const qrThumbScale = 3
 // The logo travels with it (M50.6): the thumbnail is a picture of the code, and
 // one that left the logo out would be a picture of a different code. It costs
 // almost nothing — internal/qr resamples the image to the box it is drawn in,
-// and this box is a fifth of a 96-pixel drawing.
+// and this box is three tenths of a 96-pixel drawing.
 func qrThumb(content string, style qr.Style, logo []byte) template.HTML {
 	style.Scale = qrThumbScale
 	svg, err := qr.RenderClassWithLogo(content, style, ui.QRThumbClass, logo)

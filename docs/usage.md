@@ -503,7 +503,7 @@ default) on top of the API's, so a `429` here can arrive while everything else
 is still answering.
 
 **A logo changes the picture in two ways, and one of them is `level`.** The
-image covers a centred square one fifth of the code's width — 4% of its area —
+image covers a centred square three tenths of the code's width — 9% of its area —
 and the code is drawn at **error-correction level H**, which is what lets a
 reader recover a code with part of it covered. So `level` stops being yours to
 choose while a logo is there: a `PUT` naming another one is **accepted and

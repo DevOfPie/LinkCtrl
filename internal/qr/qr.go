@@ -605,7 +605,13 @@ func (c *Code) PNG(st Style) ([]byte, error) {
 // **16,000,000 bytes**, four times the 4,000,000 the two-colour path allocates
 // and the number that replaces it whenever a code carries a logo. The resampled
 // logo is bounded separately, at [MaxLogoRasterSide]² × 4 = 1,048,576 — which is
-// [MaxLogoPixels] × 4, the figure M50.5 already derived.
+// [MaxLogoPixels] × 4, the figure M50.5 already derived. **Since M50.6's
+// 2026-08-12 reopening a second resampled buffer can join it**: the box is now
+// three tenths of the symbol's width, so at [MaxSize] it is 600 pixels and
+// exceeds MaxLogoRasterSide, and [logoDrawing.drawPNG] scales the clamped raster
+// up to what the box needs. That one is bounded by the box itself —
+// MaxSize·[LogoBoxNumerator]/[LogoBoxDenominator] squared × 4 = 1,440,000 — and
+// neither is the largest buffer here, which is still the picture.
 //
 // **This path is reachable only from [RenderPNGWithLogo]**, which checks the
 // size bound before anything is allocated, exactly as [Code.PNG] does.
