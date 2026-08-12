@@ -8,13 +8,14 @@
      route directly and you get a page; open it from the surface it belongs to
      and you get a panel over that surface without leaving it.
 
-     Two callers in this milestone, which is what makes it a pattern rather than
-     a component with extra steps: the QR area on a link's page
-     (`partials/link_qr.html` → /links/{id}/qr) and the dispute reviewer roster
-     (`partials/dispute_reviewers.html` → /disputes/reviewers). Both draw the
-     same chrome from here, and TestBothPanelsUseTheOnePanelMechanism reads the
-     rendered HTML rather than the templates, so a third surface that invents its
-     own popup fails the build.
+     M48 shipped two callers; **one remains** — the dispute reviewer roster
+     (`partials/dispute_reviewers.html` → /disputes/reviewers). The QR area's
+     popup retired at the F212 reopening (2026-08-11): the tabs un-buried its
+     section, so its contents render in flow on the QR tab, and the page form
+     at /links/{id}/qr outlived the popup. The mechanism is still defined
+     once — TestThePanelMechanismIsDefinedOnce reads the rendered HTML rather
+     than the templates, so a second surface that invents its own popup fails
+     the build.
 
      THE ELEMENT IS THE POPOVER API, not <details> and not a framework. D24 chose
      it for the header menus and the reason is one word — Escape — and it applies
@@ -62,13 +63,7 @@
 
 {{/* The invoker, and a word rather than an icon: an unlabelled glyph is a guess
      for anybody who does not already know what the panel holds, which is the
-     same reason m48.md gives for the download control keeping its text.
-
-     A caller may of course invoke a panel with something else — the QR
-     thumbnail is a picture, and it is its own button (`link_qr_thumb`). What
-     that one has to satisfy and this one does not is
-     TestTheEditControlIsReachableWithoutScrolling, which the link page's
-     heading row sits inside. */}}
+     same reason m48.md gives for the download control keeping its text. */}}
 {{define "panel_trigger"}}
 <button type="button" popovertarget="{{.ID}}"
         class="inline-flex shrink-0 cursor-pointer items-center rounded-md border border-line-strong px-3 py-1.5 text-sm font-medium text-ink hover:bg-sunken">{{.Label}}</button>

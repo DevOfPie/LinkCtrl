@@ -327,6 +327,7 @@ file. Append a row when you append an entry.
 | [M37 rebuilt: the antimeridian split, and the ring as the unit of the claim](#2026-08-11--m37-rebuilt-the-antimeridian-split-and-the-ring-as-the-unit-of-the-claim) | Unwrap-then-clip at ±180 in mapgen; a third wrapped ring (Wrangel) beyond F210's two; why the width test asserts per ring and not per country; the recorded look over a kept spec |
 | [M37, one bullet amended at acceptance](#2026-08-11--m37-one-bullet-amended-at-acceptance) | The width test asserts per ring, not per country path — a correctly split Russia touches both frame edges, so the bullet as written failed on the fix it protects |
 | [M47.5 reopened: the Edit badge goes](#2026-08-11--m475-reopened-the-edit-badge-goes) | F211 closed: the edit case leaves `attachTabBadges`, five positions remain, and the bare state is asserted with every protection on so no boolean resurrects the count. Three claims amended where they stand; every six-position record carries its supersession note; the kept spec's count 6 → 5, red against the running strip before the move |
+| [M48 reopened: the QR popup folds into its tab](#2026-08-11--m48-reopened-the-qr-popup-folds-into-its-tab) | F212 closed: the thumbnail opens the QR tab in the strip's own swap, the page-level popup retires with its contents enumerated piece by piece — the body folds into the tab in flow, the chrome retires, the route and the `next` mechanism survive untouched — and two shipped claims are amended where they stand |
 
 ---
 
@@ -27040,3 +27041,67 @@ rewritten rather than annotated, because it describes what 0.4 will ship and
 **Verified**: `make check`, `make test-integration`, `make verify-ui` green
 against the rebuilt test instance; the spec's count asserted at 6 first, red
 against the running strip — five chips found — then 5, green.
+
+## 2026-08-11 — M48 reopened: the QR popup folds into its tab
+
+Work under [M48](phase-details/m48.md)'s reopening, closing
+[F212](deferred-findings.md#closed). The owner's sentence is the whole
+specification: *"everything from it can just go on the QR tab, clicking the QR
+code should open the tab."* M48 built the popup because the stack buried the
+section; M47's tabs un-buried it, and a popup duplicating a tab one click away
+is redundancy, not reach.
+
+**The thumbnail opens the QR tab in the strip's own mechanism.** The heading
+anchor carries the same htmx quartet as a strip entry — `hx-get` of
+`?tab=qr`, `hx-target`/`hx-select` on `#link-tabs`, `outerHTML`, URL pushed —
+because the heading row renders outside `#link-tabs` and survives every swap,
+so one invoker works from whichever tab is open. It stopped being a
+`popovertarget` button and became an `<a>`, which the fold test's control scan
+does not count; the budget guard re-ran green with it in place.
+
+**The popup's contents, enumerated against the tab's, and where each piece
+went** — the reopening's own bullet, so the diff proves nothing fell out:
+
+| The popup held | Disposition |
+| --- | --- |
+| Chrome title, "QR code" | Retired with the chrome — the tab's section heading already says it |
+| **Open as a page** link → `/links/{id}/qr` | The link retired with the chrome; the duty moved to the tab's own URL, which *is* an ordinary page (`?tab=qr`). The route keeps answering — the codes list selects a code through it (`?code=`) and it is what a bookmark reaches — and `TestEveryPanelIsAlsoACompletePage` still holds it to rendering complete |
+| Close button | Retired with the popup; a tab needs no dismissal |
+| `link_qr_body` — refusal flash, codes list with per-row downloads and remove, add-code form, the full drawing and its content string, the PNG/SVG downloads, the style form, the logo section | Folds into `link_qr` in flow, below the section prose, byte for byte the same block — one `{{template}}` invocation moved surfaces |
+| The section's worded trigger, **Settings and download** | Retired; what it opened renders directly beneath where it stood |
+| The section's own duplicate `QRError` flash | Dropped — the body's copy renders in flow now, and one refusal must not draw twice |
+| `id="qr"`, the anchor `qrReturn`'s `#qr` names | Moved from the popup wrapper to the section container, so every existing return URL still lands on the section |
+| The `next` return path | **Untouched, because the popup never owned one** — the field belongs to the surface: the link page passes `/links/{id}` and the panel page passes its own path, `qrReturn` re-derives `?tab=qr#qr` on the link-page side (D178), and `finishQRAction`'s 422 re-derivation is unchanged. The reopened bullet asked for this disposition to be stated if the popup owned one; it did not |
+
+**Two shipped claims amended where they stand** (m48.md's shipped half, each
+quoted in place with the supersession dated):
+
+- *"One mechanism, used by **at least two** surfaces in this milestone"* — the
+  mechanism keeps one popup caller, the reviewer list. The floor was shipped
+  M48's evidence it was building a pattern rather than a component;
+  what survives is *defined once*, and `panel_test.go` now asserts that over
+  however many callers exist (`TestThePanelMechanismIsDefinedOnce`, renamed
+  from `TestBothPanelsUseTheOnePanelMechanism`, whose name became false with
+  one panel). The page-form half keeps both subjects: the QR contents' route
+  outlived their popup.
+- *"opening it gives the settings and the download"* — opening it now opens
+  the QR tab, where both render in flow.
+
+**Tests followed the bullets.** The thumbnail-invokes-popup assertion —
+`panelSurfaces`' `link_detail` entry, which checked `popovertarget` chrome on
+the link page — retired with the popup; `TestTheThumbnailOpensTheQRTab`
+replaced it, asserting the anchor's htmx quartet on every tab plus that no
+popover renders inside the link page's `<main>`, and both halves were
+sabotaged red first (the `hx-target` dropped; a popover reintroduced). The
+kept link-tabs spec gained the click a template scan cannot see: from the
+Analytics tab, clicking the thumbnail swaps the QR panel in and pushes
+`?tab=qr`. Strip-order and badge assertions re-anchored on the strip's own
+`<nav>` slice, because the thumbnail now carries a `?tab=qr` URL ahead of the
+strip in document order. `TestTheDashboardShowsTheCodeInline` split its
+fetch: the landing tab pins the thumbnail, `?tab=qr` pins the body and the
+download.
+
+**What this deliberately did not touch**: the reviewer panel and every other
+M48 claim about it; `LinkQRPage`, `LinkQRStyle`, `LinkQRLogo` and their
+routes; permissions on every surface; the demo, which already seeds styled
+codes the tab renders.

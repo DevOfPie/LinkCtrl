@@ -322,30 +322,38 @@ func TestACodeIsScopedToItsWorkspace(t *testing.T) {
 	}
 }
 
-// TestTheDashboardShowsTheCodeInline. The panel renders the SVG in the page
-// rather than fetching it, so a page with no network round trip still shows a
-// code — and the download link points at the API path, which is also the answer
-// to "how do I get this from a script".
+// TestTheDashboardShowsTheCodeInline. The page renders the SVG rather than
+// fetching it, so a page with no network round trip still shows a code — and
+// the download link points at the API path, which is also the answer to "how
+// do I get this from a script".
+//
+// Two fetches since the F212 reopening: the landing tab carries the heading
+// thumbnail, and the QR tab carries the full drawing and the downloads, in
+// flow where the page-level popup used to hold them.
 func TestTheDashboardShowsTheCodeInline(t *testing.T) {
 	f := newRules(t)
 	f.claim()
 	id := f.createLink("shown", "https://example.com/x")
 
 	page := f.getHTML("/links/" + id.String())
-	if !strings.Contains(page, `id="qr"`) {
-		t.Fatal("the link page has no QR panel")
-	}
 	if !strings.Contains(page, "<svg xmlns=") {
-		t.Error("the QR panel does not hold a drawing")
+		t.Error("the landing tab draws no thumbnail in the heading row")
 	}
-	if !strings.Contains(page, "/api/v1/links/"+id.String()+"/qr.svg") {
-		t.Error("the QR panel offers no download")
+
+	qrTab := f.getHTML("/links/" + id.String() + "?tab=qr")
+	if !strings.Contains(qrTab, `id="qr"`) {
+		t.Fatal("the QR tab has no QR section")
+	}
+	if !strings.Contains(qrTab, "/api/v1/links/"+id.String()+"/qr.svg") {
+		t.Error("the QR tab offers no download")
 	}
 	// The picture must not be escaped into text. `&lt;svg` is what a page that
 	// forgot template.HTML looks like, and it renders as a wall of angle
 	// brackets rather than as a code.
-	if strings.Contains(page, "&lt;svg") {
-		t.Error("the drawing was escaped into the page as text")
+	for name, p := range map[string]string{"landing tab": page, "QR tab": qrTab} {
+		if strings.Contains(p, "&lt;svg") {
+			t.Errorf("the drawing was escaped into the %s as text", name)
+		}
 	}
 }
 

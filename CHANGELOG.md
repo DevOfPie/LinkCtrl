@@ -39,8 +39,18 @@ migrations run at boot.
   screens rather than wrapping. Each tab is a real URL (`?tab=`), so
   bookmarks, refresh and the back button keep working, and a save made in any
   section returns to the tab that section lives on. No section's behaviour,
-  permissions or form fields changed; the QR settings panel still opens from
-  the thumbnail beside the heading on every tab.
+  permissions or form fields changed.
+
+- **A link's QR settings live on the QR tab, and the small code beside the
+  heading opens it.** The popup that used to hold the style form and the
+  downloads is gone: with the page behind tabs, everything it held is one
+  click away on the QR tab, so the codes list, the full drawing, both
+  downloads, the style form and the logo controls now render there directly.
+  Clicking the thumbnail — from any tab — switches to the QR tab. Nothing
+  else moved: `/links/{id}/qr` still serves the same contents as their own
+  page for bookmarks and second tabs, every saved link and permission is
+  unchanged, and the reviewer panel on the dispute queue keeps working as it
+  did.
 
 - **Every tab on a link's page now says what its section holds, on the tab
   itself.** Tabs answered where a section went and not what is configured in

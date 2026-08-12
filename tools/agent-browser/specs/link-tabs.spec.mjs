@@ -122,4 +122,20 @@ test('the link page tab strip scrolls sideways at 360px instead of wrapping', as
     page.locator('main', { hasText: 'Scans are counted as ordinary clicks' }),
     'the QR tab did not swap its section in',
   ).toHaveCount(1);
+
+  // The heading thumbnail opens the QR tab (the F212 reopening's retarget).
+  // The template suite proves the anchor carries the strip's own htmx
+  // attributes; only a browser proves that clicking it from another tab swaps
+  // the QR panel in. From Analytics, because the heading renders outside
+  // #link-tabs and must invoke the swap from wherever the reader is standing.
+  await strip.locator('a', { hasText: 'Analytics' }).first().click();
+  await page.waitForURL('**tab=analytics**', { timeout: 10000 });
+  const thumb = page.locator('a[aria-label="QR code: open the QR tab"]');
+  await expect(thumb, 'the heading row draws no QR thumbnail anchor').toHaveCount(1);
+  await thumb.click();
+  await page.waitForURL('**tab=qr**', { timeout: 10000 });
+  await expect(
+    page.locator('main', { hasText: 'Scans are counted as ordinary clicks' }),
+    'clicking the thumbnail did not swap the QR tab in',
+  ).toHaveCount(1);
 });

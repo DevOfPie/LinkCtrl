@@ -50,13 +50,13 @@ type linkQRPageData struct {
 	Notice string
 }
 
-// LinkQRPage serves the QR panel's contents at their own URL.
+// LinkQRPage serves the QR contents at their own URL.
 //
-// **This route is the panel**, and the popover on the link page is what a
-// browser does with the same block when it can. m48.md states the property as a
-// requirement — *"the panel is a route that renders as an ordinary page when
-// opened directly"* — and this handler is one half of it;
-// TestEveryPanelIsAlsoACompletePage is the other.
+// **The popup this route backed retired at the F212 reopening** (2026-08-11):
+// the QR tab renders the same block in flow now. The route outlived it — the
+// codes list selects a code through it (`?code=`), and it is what a bookmark
+// and a shared URL reach. TestEveryPanelIsAlsoACompletePage still holds it to
+// rendering as a complete page.
 //
 // Gated by loading the link, which is `links.read`: the same permission the
 // section on the link page is drawn under. Nothing here widens who may see a

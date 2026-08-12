@@ -57,12 +57,6 @@
     {{if eq .Tab "analytics"}}<div class="space-y-6">{{template "link_analytics" .}}{{if .RecentClicks}}{{template "link_activity" .}}{{end}}</div>{{end}}
     {{if eq .Tab "danger"}}{{if and .Identity (.Identity.Can "links.delete")}}{{template "link_danger" .}}{{end}}{{end}}
   </div>
-  {{- /* The QR panel outlives its tab. The thumbnail in the heading row is a
-         popovertarget invoker on every tab, and an invoker whose panel is not
-         in the document opens nothing — so the panel renders here, once,
-         under the section's own guard, whichever panel the strip has open.
-         Hidden until invoked, so it adds nothing to any tab's flow. */ -}}
-  {{if and .Identity (.Identity.Can "links.read")}}{{template "link_qr_panel" .}}{{end}}
 </div>
 {{end}}
 

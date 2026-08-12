@@ -355,10 +355,10 @@ func TestTheClickLimitNamesTheTotalAndWhatIsSpent(t *testing.T) {
 // every other section's is absent, because a dispatch that quietly rendered two
 // panels would pass any one-sided check and rebuild the stack a tab at a time.
 //
-// The QR tab's marker is the section's own prose, not the panel's, because the
-// panel deliberately renders on every tab: the thumbnail in the heading row
-// invokes it from wherever the reader is standing, and a popover is not in any
-// tab's flow. Recent activity is asserted as the Analytics tab's tail — eight
+// The QR tab's marker is the section's own prose. Its settings and downloads
+// render in flow below that prose since the F212 reopening retired the
+// page-level popup, so they are inside the one-panel-at-a-time claim like any
+// other section's body. Recent activity is asserted as the Analytics tab's tail — eight
 // sections behind seven tabs is the owner-set fold, and a strip that grew an
 // eighth tab or an activity table that went unrendered would both surface here.
 func TestTheLinkPageDrawsOneSectionAtATime(t *testing.T) {
@@ -388,10 +388,13 @@ func TestTheLinkPageDrawsOneSectionAtATime(t *testing.T) {
 		}
 
 		// The strip itself survives every selection: all seven tabs, in the
-		// owner-set order, and exactly one of them marked current.
+		// owner-set order, and exactly one of them marked current. Read off the
+		// strip's own <nav>, not the whole page — the heading thumbnail carries
+		// the QR tab's URL too since the F212 reopening retargeted it.
+		strip := stripOf(t, page)
 		last := -1
 		for _, id := range linkDetailTabs {
-			at := strings.Index(page, `?tab=`+id+`"`)
+			at := strings.Index(strip, `?tab=`+id+`"`)
 			if at < 0 {
 				t.Errorf("on the %s tab the strip offers no %s tab", tab, id)
 				continue
@@ -401,10 +404,10 @@ func TestTheLinkPageDrawsOneSectionAtATime(t *testing.T) {
 			}
 			last = at
 		}
-		if !strings.Contains(page, `?tab=`+tab+`" aria-current="page"`) {
+		if !strings.Contains(strip, `?tab=`+tab+`" aria-current="page"`) {
 			t.Errorf("the %s tab's own entry in the strip is not marked current", tab)
 		}
-		if n := strings.Count(page, `aria-current="page"`); n != 1 {
+		if n := strings.Count(strip, `aria-current="page"`); n != 1 {
 			t.Errorf("the %s tab marks %d strip entries current, want exactly 1", tab, n)
 		}
 
@@ -432,6 +435,56 @@ func TestTheLinkPageDrawsOneSectionAtATime(t *testing.T) {
 	}
 }
 
+// TestTheThumbnailOpensTheQRTab is the F212 reopening's retargeting bullet:
+// clicking the heading thumbnail opens the QR tab, in the same mechanism as
+// clicking the tab itself — an htmx swap of #link-tabs carrying ?tab=qr — from
+// every tab the heading is visible on.
+//
+// It replaced a popovertarget invoker; the popup it invoked retired with it,
+// and the second assertion is that nothing on the page brought one back — the
+// QR settings render in the tab's flow now, and a popover inside <main> would
+// be the retired mechanism returning under another name.
+//
+// Asserted on every tab, because the heading row renders outside #link-tabs
+// and must survive every swap unchanged. What a template scan cannot see —
+// whether the swap actually replaces the panel — is the kept spec's
+// (tools/agent-browser/specs/link-tabs.spec.mjs), which drives the click.
+func TestTheThumbnailOpensTheQRTab(t *testing.T) {
+	const linkID = "0198c9c5-0000-7000-8000-000000000001"
+	for _, tab := range linkDetailTabs {
+		page := mainOf(t, renderPage(t, "link_detail", map[string]any{"Tab": tab}))
+
+		at := strings.Index(page, `aria-label="QR code: open the QR tab"`)
+		if at < 0 {
+			t.Errorf("the %s tab draws no labelled QR thumbnail in the heading row", tab)
+			continue
+		}
+		open := strings.LastIndex(page[:at], "<a ")
+		end := strings.Index(page[at:], ">")
+		if open < 0 || end < 0 {
+			t.Fatalf("the thumbnail on the %s tab is not an anchor", tab)
+		}
+		anchor := page[open : at+end]
+		for _, want := range []string{
+			`href="/links/` + linkID + `?tab=qr"`,
+			`hx-get="/links/` + linkID + `?tab=qr"`,
+			`hx-target="#link-tabs"`, `hx-select="#link-tabs"`,
+			`hx-swap="outerHTML"`, `hx-push-url="true"`,
+		} {
+			if !strings.Contains(anchor, want) {
+				t.Errorf("on the %s tab the thumbnail anchor is missing %s:\n  %s",
+					tab, want, anchor)
+			}
+		}
+
+		if panelOpen.MatchString(page) {
+			t.Errorf("the %s tab renders a popover inside <main>; the QR popup "+
+				"retired at the F212 reopening and its contents live in the QR "+
+				"tab's flow", tab)
+		}
+	}
+}
+
 // linkTabBadgeSize is the glyph height the strip's icon badges declare, as a
 // Tailwind fixed-length utility.
 //
@@ -446,18 +499,21 @@ func TestTheLinkPageDrawsOneSectionAtATime(t *testing.T) {
 const linkTabBadgeSize = "h-3"
 
 // tabAnchor is one tab's rendered anchor, strip entry and badge included.
+// Out of stripOf's slice, not the whole page: the heading thumbnail has
+// carried the QR tab's URL since the F212 reopening retargeted it.
 func tabAnchor(t *testing.T, page, id string) string {
 	t.Helper()
-	i := strings.Index(page, `?tab=`+id+`"`)
+	strip := stripOf(t, page)
+	i := strings.Index(strip, `?tab=`+id+`"`)
 	if i < 0 {
 		t.Fatalf("the strip offers no %s tab", id)
 	}
-	open := strings.LastIndex(page[:i], "<a ")
-	end := strings.Index(page[i:], "</a>")
+	open := strings.LastIndex(strip[:i], "<a ")
+	end := strings.Index(strip[i:], "</a>")
 	if open < 0 || end < 0 {
 		t.Fatalf("the %s tab's anchor is not a closed element", id)
 	}
-	return page[open : i+end]
+	return strip[open : i+end]
 }
 
 // stripTabs builds the fixture strip with one tab's badge overridden, so a

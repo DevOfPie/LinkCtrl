@@ -1,17 +1,15 @@
 {{define "content"}}
-{{/* The QR panel, as an ordinary page (M48).
+{{/* The QR contents, as an ordinary page (M48; the popup it backed retired at
+     the F212 reopening, 2026-08-11).
 
-     This is the half of the panel pattern that makes it a pattern rather than a
-     popup: the contents are served at /links/{id}/qr and render here with the
-     nav, the heading and a way back, exactly as any other page does. The popover
-     on the link page is the same block, drawn over the surface it belongs to.
+     The contents are served at /links/{id}/qr and render here with the nav,
+     the heading and a way back, exactly as any other page does. The QR tab on
+     the link page renders the same block in flow; this route outlived the
+     popup because the codes list selects a code through it (`?code=`), and it
+     is what a bookmark, a second tab and a shared URL reach.
 
-     There is no <noscript> and none is wanted. The dashboard requires JavaScript
-     (D103) and this page does not argue with that — what it answers is a
-     narrower and older question, which is whether the *contents* of an
-     on-demand surface can be reached at all when the popup is not available.
-     Below the Popover API's floor the panel renders as a block in the link page,
-     and this route is what a bookmark, a second tab and a shared URL reach. */}}
+     There is no <noscript> and none is wanted. The dashboard requires
+     JavaScript (D103) and this page does not argue with that. */}}
 <div class="mb-6">
   <a href="/links/{{.Link.ID}}" class="text-sm text-muted hover:text-ink">← /{{.Link.Alias}}</a>
   <h1 class="mt-2 text-xl font-semibold tracking-tight">QR code</h1>

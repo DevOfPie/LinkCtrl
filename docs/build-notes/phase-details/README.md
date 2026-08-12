@@ -27,9 +27,8 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## Phase 3
 
-**One row is open — [M48](m48.md), reopened 2026-08-11 (the QR popup folds
-into the tab) — then [M57.9](m57.9.md)'s reopened run. 0.3.0 is written and
-not yet tagged.** Four work areas, chosen 2026-08-06: identity and account
+**Every integer row is done — [M57.9](m57.9.md)'s reopened run is what
+remains, in its own session. 0.3.0 is written and not yet tagged.** Four work areas, chosen 2026-08-06: identity and account
 lifecycle, dashboard UI and UX, infrastructure and resilience, QR codes and
 campaigns. Twenty-one milestones — **twelve integers of work**, two adversarial
 reviews, one close, and **six insertions** (M50.5, M50.6, M46.5, M46.6, M47.5, M57.5) — against the size target in
@@ -63,7 +62,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M46.6](m46.6.md) | The workspace pair reads as one control | M46 · M46.5 | done |
 | [M47](m47.md) | The link page, taken apart | M46 · M46.5 | done |
 | [M47.5](m47.5.md) | What every tab says about itself | M47 · M46.5 | done |
-| [M48](m48.md) | On-demand panels, and what stops being buried | M47 | in progress (reopened) |
+| [M48](m48.md) | On-demand panels, and what stops being buried | M47 | done |
 | [M49](m49.md) | QR codes sized in pixels, and a PNG to download | M48 *(ordering)* | done |
 | [M50](m50.md) | More than one QR code per link, told apart in the analytics | M49 | done |
 | [M50.5](m50.5.md) | The first file this product accepts | M50 | done |

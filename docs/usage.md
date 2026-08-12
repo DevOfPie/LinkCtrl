@@ -15,7 +15,7 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 | `/links` | Search the list; filter by status, folder, campaign or hostname; sort; create a link; page through with a cursor. The search box is the first control on the page, filters as you type and updates the address bar, so a reload or a shared URL shows the same view. Everything except search is behind **Filters**, and creating a link is behind **Create a link** — see [The links list](#the-links-list). |
 | `/links/{id}` | Everything about one link: edit destination, alias, title, description, expiry and tags; per-window analytics (7/30/90 days) with device, browser, OS, referrer, language and country breakdowns, each with a share ring, plus a world choropleth over the country figures; recent activity; archive, restore and delete. |
 | `/keys` | Mint, list and revoke API keys, and choose whether a new one reaches one workspace, one organization, or your whole account. The list is your account's, so it shows keys from every organization you belong to. Rotation is not here: it replaces the credential that made the request, and a browser session is not one. |
-| `/links/{id}/qr` | The link's QR code, its style form and the downloads, on their own page. The same thing the **QR code** panel on the link's page opens — see [On-demand panels](#on-demand-panels). |
+| `/links/{id}/qr` | The link's QR code, its style form and the downloads, on their own page. The same thing the **QR** tab on the link's page shows, on a page a bookmark can reach. |
 | `/forgot`, `/reset/{token}` | Recovering a forgotten password. Public, because whoever needs them has no session. `/forgot` mails a single-use link and answers the same way whatever address you type; `/reset/{token}` is where that link lands. **Both need a mailer** — see [Recovering a forgotten password](#recovering-a-forgotten-password). |
 | `/notifications` | Things the instance wanted you to know about. Opening one goes to what it is about and marks it read; a read one can be marked unread again. |
 | `/disputes` | The review queue: destinations somebody was refused and has asked you to look at. Needs `destinations.review`, which is held instance-wide rather than by a role. The account that claimed the instance also appoints other reviewers here. |
@@ -273,18 +273,20 @@ list and filtering by it is `links.read`; creating is `links.create`, editing is
 
 ### On-demand panels
 
-Two things you reach occasionally are behind a panel rather than in the page
-body: a link's **QR code** settings and downloads, and **Change who reviews** on
-the dispute queue. A panel opens over the page you are on and closes on Escape
-or a click outside.
+One thing you reach occasionally is behind a panel rather than in the page
+body: **Change who reviews** on the dispute queue. The panel opens over the
+page you are on and closes on Escape or a click outside. A link's QR settings
+used to be the second panel; with the link page behind tabs they live on the
+**QR** tab instead, one click away.
 
-**Each one is a page as well as a panel.** `/links/{id}/qr` and
-`/disputes/reviewers` serve exactly what the panel holds, with the header and a
-way back, so you can bookmark one, open it in a second tab, or share the URL —
-and a browser too old for the popup renders the panel inline instead of hiding
-it. The panel's own **Open as a page** link is where that URL comes from.
+**The panel is a page as well.** `/disputes/reviewers` serves exactly what it
+holds, with the header and a way back, so you can bookmark it, open it in a
+second tab, or share the URL — and a browser too old for the popup renders the
+panel inline instead of hiding it. The panel's own **Open as a page** link is
+where that URL comes from. `/links/{id}/qr` serves the QR settings the same
+way, and the codes list on the QR tab links through it.
 
-Neither panel changes who may do anything. The QR settings are still
+Neither surface changes who may do anything. The QR settings are still
 `links.update` and the reviewer roster is still `instance.admin`; the queue shows
 who reviews it either way.
 
@@ -292,9 +294,8 @@ who reviews it either way.
 
 Every link has one. There is nothing to create and no row to make: open a link's
 page and a small version of the code is drawn beside the link's name, at the top.
-Clicking it — or **Settings and download** in the **QR code** section further
-down — opens the panel with the full code, the style form and **Download the
-PNG** and **Download the SVG** buttons.
+Clicking it opens the **QR** tab, which holds the full code, the style form and
+**Download the PNG** and **Download the SVG** buttons.
 
 **Two formats, one picture.** The PNG is the file most programs open; the SVG is
 vector text and is the one to use for anything that will be resized again. They
@@ -310,7 +311,7 @@ One thing follows: somebody who types `?src=qr` by hand is counted as a scan.
 ### More than one code for a link
 
 A print run and a shop-window card pointing at the same link used to be the same
-picture, so their scans were the same number. **Add another code** in the panel,
+picture, so their scans were the same number. **Add another code** on the QR tab,
 give it a name, and it becomes a code of its own — the same destination, its own
 row in the breakdown.
 
@@ -324,8 +325,8 @@ nothing added to the payload — which is exactly why every copy of it already
 printed, mounted or published goes on being counted as the same code it always
 was. There is nothing to reprint.
 
-A link carries at most **twenty** codes. That is the number that keeps the panel
-a list and the breakdown a chart.
+A link carries at most **twenty** codes. That is the number that keeps the codes
+list a list and the breakdown a chart.
 
 A code has no destination, no expiry and no gate of its own. Those belong to the
 link, which is what makes changing the link's destination change every printed
@@ -349,7 +350,7 @@ printed.
 foreground colour, a background colour and a **size in pixels** — 64 to 2000.
 **Back to black on white** appears once a style is stored.
 
-**The size snaps, and the panel says so.** A code is a grid of squares, so an
+**The size snaps, and the form says so.** A code is a grid of squares, so an
 arbitrary pixel size does not divide evenly into it: 300px over a 29-square code
 is 10.34 pixels a square. Asking for 300 therefore gets you the nearest size that
 keeps the squares whole, the flash message names both numbers, and the box then
@@ -407,7 +408,7 @@ code.
 
 **The one thing in this product that accepts a file**, and it is `PUT` with a
 `multipart/form-data` body. It takes `links.update`, like every other change to
-how a code is drawn, and an API key that holds it may use it. The QR panel on a
+how a code is drawn, and an API key that holds it may use it. The QR tab on a
 link's page does the same thing from a browser.
 
 Two addresses, one operation — the same relationship `qr.png` and

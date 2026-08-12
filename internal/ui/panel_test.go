@@ -11,8 +11,17 @@ import (
 //
 // The milestone's stated risk is that the panel "is the most reusable decision
 // in the phase and the one most likely to be got wrong once and then copied", so
-// what these tests defend is not either surface but the fact that there is one
-// of it.
+// what these tests defend is not any surface but the fact that there is one
+// mechanism.
+//
+// **Shipped M48 had two popup callers and required them** — "One mechanism,
+// used by **at least two** surfaces" — and this file held a fatal on fewer.
+// The F212 reopening (2026-08-11) retired the QR popup: the tabs un-buried its
+// section, so its contents render in flow on the QR tab and the reviewer
+// roster is the mechanism's one remaining caller. The claim is amended in
+// m48.md where it stands; what survives here is "defined once", asserted over
+// however many callers exist, plus the page-form half, which the QR contents
+// still satisfy at their route.
 
 // panelOpen matches a panel container: the element panel_open emits.
 //
@@ -22,12 +31,12 @@ import (
 // it with a different class string, and both are failures.
 var panelOpen = regexp.MustCompile(`(?s)<div id="([a-z0-9-]+)" popover="auto"\s+class="([^"]*)">`)
 
-// panelSurface is one page that renders a panel, and the route the panel's
-// contents are served at.
+// panelSurfaces is one page that renders a popup panel, and the route the
+// panel's contents are served at.
 //
-// A list rather than a scan, and this is the one place a third surface has to be
-// added. That is deliberate: m48.md asks for "at least two" callers, and a test
-// that discovered its own subjects would pass on a milestone that shipped one.
+// A list rather than a scan, and this is the one place a new surface has to be
+// added. That is deliberate: a test that discovered its own subjects could not
+// hold a new popup to the shared chrome.
 var panelSurfaces = []struct {
 	page string
 	// body is the page the panel's Href leads to, rendered on its own.
@@ -39,29 +48,36 @@ var panelSurfaces = []struct {
 	marker string
 }{
 	{
-		page: "link_detail", body: "link_qr",
-		href:   "/links/0198c9c5-0000-7000-8000-000000000001/qr",
-		marker: `id="qr_foreground"`,
-	},
-	{
 		page: "disputes", body: "dispute_reviewers",
 		href:   "/disputes/reviewers",
 		marker: `id="reviewer-email"`,
 	},
 }
 
-// TestBothPanelsUseTheOnePanelMechanism is the "defined once" half.
+// panelPages are the routes that serve on-demand contents as an ordinary page.
+//
+// A superset of panelSurfaces' body pages: the QR contents keep their route
+// after their popup retired — the codes list selects a code through it and it
+// is what a bookmark reaches — so the page-form obligation outlives the popup
+// that first carried it.
+var panelPages = []struct {
+	body   string
+	href   string
+	marker string
+}{
+	{body: "link_qr", href: "/links/0198c9c5-0000-7000-8000-000000000001/qr",
+		marker: `id="qr_foreground"`},
+	{body: "dispute_reviewers", href: "/disputes/reviewers",
+		marker: `id="reviewer-email"`},
+}
+
+// TestThePanelMechanismIsDefinedOnce is the "defined once" half.
 //
 // It reads the rendered HTML rather than the templates, because what must be
 // identical is what a browser receives: two partials that happen to import the
 // same words but emit different geometry would pass a template-level check and
 // fail a reader.
-func TestBothPanelsUseTheOnePanelMechanism(t *testing.T) {
-	if len(panelSurfaces) < 2 {
-		t.Fatal("m48.md requires at least two callers of the panel; a pattern with " +
-			"one caller is a component with extra steps")
-	}
-
+func TestThePanelMechanismIsDefinedOnce(t *testing.T) {
 	var class string
 	var from string
 	for _, s := range panelSurfaces {
@@ -122,7 +138,7 @@ func TestBothPanelsUseTheOnePanelMechanism(t *testing.T) {
 // router. TestEveryPanelRouteIsMounted in internal/httpx is that half, and the
 // `href` above is the value both ends compare against.
 func TestEveryPanelIsAlsoACompletePage(t *testing.T) {
-	for _, s := range panelSurfaces {
+	for _, s := range panelPages {
 		t.Run(s.body, func(t *testing.T) {
 			body := renderPage(t, s.body, nil)
 
@@ -130,31 +146,32 @@ func TestEveryPanelIsAlsoACompletePage(t *testing.T) {
 			// went through the layout and it was not truncated.
 			for _, want := range []string{"<!doctype html>", "</html>", "<main "} {
 				if !strings.Contains(body, want) {
-					t.Errorf("the panel's route does not render %s, so opening it "+
+					t.Errorf("the route's page does not render %s, so opening it "+
 						"directly gives a fragment rather than a page", want)
 				}
 			}
 			// And the chrome, so somebody who arrived here has somewhere to go.
-			// A page reachable only from the popup it replaces is not a fallback.
+			// A page reachable only from the surface it backs is not a fallback.
 			if !strings.Contains(body, bellMark) {
-				t.Error("the panel's page renders without the header; it is a route " +
+				t.Error("the route's page renders without the header; it is a route " +
 					"somebody can bookmark, and a bookmark that lands outside the " +
 					"dashboard is not the page form of anything")
 			}
 
-			// The same contents the popup holds, checked against the same marker.
+			// The same contents the in-app surface holds, checked against the
+			// same marker.
 			if !strings.Contains(body, s.marker) {
-				t.Errorf("the page at %s does not render %s, which the popup on %s "+
-					"does. The two are supposed to be one block: a divergence between "+
-					"a panel and the page it is a panel *of* is the first thing this "+
-					"pattern would get wrong.", s.href, s.marker, s.page)
+				t.Errorf("the page at %s does not render %s. The two surfaces are "+
+					"supposed to be one block: a divergence between them is the "+
+					"first thing this pattern would get wrong.", s.href, s.marker)
 			}
 
-			// It must not draw its own popup. The page *is* the panel here, and a
-			// popover on it would be the panel inside itself.
+			// It must not draw its own popup. The page *is* the contents here,
+			// and a popover on it would be the mechanism nested in itself.
 			if panelOpen.MatchString(mainOf(t, body)) {
-				t.Errorf("%s renders a panel of its own; this page is what the panel "+
-					"opens onto, so a popover here nests the mechanism in itself", s.body)
+				t.Errorf("%s renders a panel of its own; this page is the plain "+
+					"form of an on-demand surface, so a popover here nests the "+
+					"mechanism in itself", s.body)
 			}
 		})
 	}

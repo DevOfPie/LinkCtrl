@@ -58,8 +58,8 @@ func TestTheQRThumbnailStatesItsOwnHeight(t *testing.T) {
 // that cannot be drawn is not an error the reader can act on.
 func TestTheQRThumbnailFailsSoft(t *testing.T) {
 	if got := qrThumb(strings.Repeat("x", qr.MaxContent+1), qr.Style{}, nil); got != "" {
-		t.Errorf("a thumbnail that could not be drawn rendered %q; the QR section "+
-			"still draws its worded trigger, so the panel is reachable and there is "+
+		t.Errorf("a thumbnail that could not be drawn rendered %q; the QR tab is "+
+			"still in the strip, so the settings are reachable and there is "+
 			"nothing to tell anybody", got)
 	}
 }

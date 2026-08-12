@@ -523,7 +523,7 @@ saves. See *Per instance, unless the limit is shared* below.
 | `LINKCTRL_API_RATE_PER_MIN` | `600` | Everything under `/api/v1`. Dashboard pages, static assets and the health endpoints are not counted. |
 | `LINKCTRL_REDIRECT_404_RATE_LIMIT` | `60` | Misses on the redirect path, and misses only. |
 | `LINKCTRL_LINK_PASSWORD_RATE_LIMIT` | `20` | Submissions to a password-protected link, charged per address **and** per alias. |
-| `LINKCTRL_UPLOAD_RATE_PER_MIN` | `30` | Uploading a QR code's logo — the only thing this product accepts a file for, at three addresses: the API's two logo `PUT`s and the dashboard panel's form. **On top of the API limit, not instead of it** — an API upload spends a token from both buckets — and **one bucket across all three**, so alternating between the dashboard and the API does not double the budget. |
+| `LINKCTRL_UPLOAD_RATE_PER_MIN` | `30` | Uploading a QR code's logo — the only thing this product accepts a file for, at three addresses: the API's two logo `PUT`s and the dashboard's upload form on the QR tab. **On top of the API limit, not instead of it** — an API upload spends a token from both buckets — and **one bucket across all three**, so alternating between the dashboard and the API does not double the budget. |
 
 Five properties are worth knowing before you tune them.
 

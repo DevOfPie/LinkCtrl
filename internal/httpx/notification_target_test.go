@@ -287,11 +287,12 @@ func TestAnUnknownNotificationKindLandsOnTheList(t *testing.T) {
 
 // TestEveryPanelRouteIsMounted is the half internal/ui cannot check.
 //
-// TestEveryPanelIsAlsoACompletePage renders the panels' pages and asserts each
+// TestEveryPanelIsAlsoACompletePage renders the routes' pages and asserts each
 // is a complete page; it has no router, so it cannot know the route exists. The
-// literals below are the same ones the panels' `Open as a page` links carry, so
-// between the two tests the claim is closed: the href points at a route, and the
-// route renders a page.
+// literals below are the hrefs that ui test compares against — the reviewer
+// panel's `Open as a page` link, and the QR route the codes list selects a
+// code through — so between the two tests the claim is closed: the href
+// points at a route, and the route renders a page.
 func TestEveryPanelRouteIsMounted(t *testing.T) {
 	app := newAppMux()
 	registerAppRoutes(maximalDeps(), app)
