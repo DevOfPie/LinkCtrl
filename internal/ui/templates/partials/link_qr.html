@@ -353,24 +353,42 @@
 
        `accept` and `required` are conveniences for the browser and not checks:
        the decoder is chosen by the file's own bytes, and the server refuses an
-       empty or unreadable upload whatever the markup allowed. */ -}}
+       empty or unreadable upload whatever the markup allowed.
+
+       **Choosing the file is the whole interaction** (F214c, 2026-08-12). There
+       was a *Upload a logo* / *Replace the logo* button beside this input and
+       it was a second step for a decision already made: nobody picks a file
+       and then declines to apply it. `hx-trigger="change"` on the form is what
+       replaces it &mdash; htmx's own attribute, no script of this product's,
+       and therefore nothing new for `script-src 'self'` to allow. On success
+       `seeOther` answers an htmx request with `HX-Redirect`, which is a full
+       page load; on a refusal the handler renders the page and this swaps
+       `#qr` out of it, which is why both surfaces carry that id.
+
+       **`file-pick` is the pressed state** (F214b). The OS file dialog takes
+       around a second to open and the control said nothing in the meantime,
+       which reads as a dead button and earns a second click. The rules are in
+       input.css against `:active` and `:focus:not(:focus-visible)` &mdash;
+       focus is the one that lasts, because the input keeps it for as long as
+       the dialog is up, and the `:not()` is what keeps a reader who merely
+       tabbed here out of a pressed state that would never end. */ -}}
 <div class="mt-6 border-t border-line pt-4">
   <h3 class="text-sm font-medium text-ink">Logo</h3>
   <p class="mt-1 text-xs text-subtle">
-    PNG or JPEG, at most {{.QRMaxLogoBytes}} bytes and {{.QRMaxLogoDimension}} pixels a side. What is stored is a PNG this server encodes from your image, so metadata does not survive &mdash; this is not somewhere to keep an original. It is drawn in the middle of the code, at <strong>a fifth of the code's width</strong>, and a code carrying one is drawn at <strong>error-correction level H</strong> &mdash; the level that lets a reader recover a code with part of it covered. That makes the picture a little denser; what it says is unchanged.
+    PNG or JPEG, at most {{.QRMaxLogoBytes}} bytes and {{.QRMaxLogoDimension}} pixels a side; it is applied as soon as you choose it. Anything bigger than {{.QRMaxLogoPixels}} pixels in total is <strong>resized down to fit rather than refused</strong>, and you are told what it became. What is stored is a PNG this server encodes from your image, so metadata does not survive &mdash; this is not somewhere to keep an original. It is drawn in the middle of the code, at <strong>a fifth of the code's width</strong>, and a code carrying one is drawn at <strong>error-correction level H</strong> &mdash; the level that lets a reader recover a code with part of it covered. That makes the picture a little denser; what it says is unchanged.
   </p>
   <div class="mt-2 flex flex-wrap items-end gap-2">
     <form method="post" action="/links/{{.Link.ID}}/qr/logo" enctype="multipart/form-data"
+          hx-post="/links/{{.Link.ID}}/qr/logo" hx-encoding="multipart/form-data"
+          hx-trigger="change" hx-target="#qr" hx-select="#qr" hx-swap="outerHTML"
           class="flex flex-wrap items-end gap-2">
       <input type="hidden" name="next" value="{{.QRReturn}}">
       <input type="hidden" name="code" value="{{.QRSlug}}">
       <div>
-        <label for="qr_logo" class="block text-sm font-medium text-ink">Image</label>
+        <label for="qr_logo" class="block text-sm font-medium text-ink">{{if .QRHasLogo}}Replace the logo{{else}}Upload a logo{{end}}</label>
         <input id="qr_logo" name="logo" type="file" accept="image/png,image/jpeg" required
-               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-sunken file:px-2 file:py-1 file:text-sm file:text-ink focus:border-accent focus:outline-none">
+               class="file-pick mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-sunken file:px-2 file:py-1 file:text-sm file:text-ink focus:border-accent focus:outline-none">
       </div>
-      <button type="submit"
-              class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-sunken">{{if .QRHasLogo}}Replace the logo{{else}}Upload a logo{{end}}</button>
     </form>
     {{if .QRHasLogo}}
     <form method="post" action="/links/{{.Link.ID}}/qr">

@@ -14,6 +14,62 @@
 @source "../../choropleth.go";
 
 /* ---------------------------------------------------------------------------
+ * The one control that opens an OS dialog (M50.5, F214b).
+ *
+ * `<input type="file">` hands the click to the operating system, and the file
+ * dialog takes around a second to appear. For that second the control looked
+ * exactly as it did before the click, which reads as a dead button and earns a
+ * second click on it. `:active` is the acknowledgement of the press and
+ * `:focus` is what carries the state through the wait — a file input keeps
+ * focus for as long as its dialog is up, which is the whole duration in
+ * question.
+ *
+ * **`:not(:focus-visible)` is why the keyboard path does not get this**, and it
+ * is a decision rather than an oversight. Focus outlives the dialog: a reader
+ * who merely tabs onto the control would otherwise sit in the pressed
+ * background indefinitely, having pressed nothing — a busy state that is
+ * permanent and false. `:focus-visible` is exactly the distinction the platform
+ * already draws, matching keyboard-driven focus and not a pointer click, so
+ * narrowing to `:focus:not(:focus-visible)` leaves the pointer path untouched
+ * and takes the false state off the keyboard one. What the keyboard path loses
+ * is the acknowledgement during its own dialog wait, and that is the cheaper
+ * loss: the dead-button reading comes from a click that appeared to do nothing,
+ * while a reader who pressed Enter on a control wearing a visible focus ring
+ * already knows which control they addressed. `:active` still fires on that
+ * press, so the keystroke is not silent either. The browser spec tabs to the
+ * input and asserts the pressed background is absent, because this rests on a
+ * `:focus-visible` behaviour no template scan can see.
+ *
+ * `.htmx-request` is the upload itself: the form carries the class while the
+ * request is in flight, so the browse control goes inert rather than accepting
+ * a second file while the first one is being stored.
+ *
+ * **Written here rather than as utilities on the element.** A pseudo-element
+ * with two pseudo-class states is three stacked Tailwind variants whose
+ * generated selector has to be trusted rather than read, and F206 already
+ * settled that a state style for this product ships in this file — the htmx
+ * indicator stylesheet is off precisely because `style-src 'self'` refuses an
+ * injected one. Theme tokens, not palette values, on the same terms every
+ * template is held to.
+ * ------------------------------------------------------------------------- */
+.file-pick::file-selector-button {
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+.file-pick:active::file-selector-button,
+.file-pick:focus:not(:focus-visible)::file-selector-button {
+  background-color: var(--t-line-strong);
+  box-shadow: inset 0 1px 2px var(--t-press-shadow);
+}
+form.htmx-request .file-pick {
+  opacity: 0.6;
+  pointer-events: none;
+}
+form.htmx-request .file-pick::file-selector-button {
+  background-color: var(--t-line-strong);
+  cursor: progress;
+}
+
+/* ---------------------------------------------------------------------------
  * Theme tokens.
  *
  * Templates name meaning — surface, muted, danger — never a palette shade. One
@@ -134,6 +190,14 @@
   --t-line: #e2e8f0;
   --t-line-strong: #cbd5e1;
 
+  /* The inset a pressed control wears. Not a surface and not a line — it is a
+   * shadow, so it carries alpha and tints whatever it is drawn over rather than
+   * naming a colour of its own. It is a token because the depth a shadow has to
+   * be to read differs by theme: 0.25 black over `line-strong` at #cbd5e1 is a
+   * clear notch, and the same value over #475569 is nothing at all. Contrast
+   * figures do not apply — nothing is read on top of it. */
+  --t-press-shadow: rgb(0 0 0 / 0.25);
+
   --t-accent: #4f46e5;
   --t-accent-hover: #4338ca;
   --t-accent-ink: #4f46e5;
@@ -224,6 +288,7 @@
 
     --t-line: #334155;
     --t-line-strong: #475569;
+    --t-press-shadow: rgb(0 0 0 / 0.45);
 
     --t-accent: #4f46e5;
     --t-accent-hover: #4338ca;
@@ -278,6 +343,7 @@
 
   --t-line: #334155;
   --t-line-strong: #475569;
+  --t-press-shadow: rgb(0 0 0 / 0.45);
 
   --t-accent: #4f46e5;
   --t-accent-hover: #4338ca;

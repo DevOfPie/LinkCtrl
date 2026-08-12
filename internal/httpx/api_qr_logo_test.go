@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -262,4 +263,48 @@ func smallPNG(t *testing.T) []byte {
 		t.Fatal(err)
 	}
 	return out
+}
+
+// --- the warning, at the F214 reopening ---------------------------------------
+
+// The dashboard's half. An image past the storage target is stored at a smaller
+// size than it arrived at, and the page it lands on is a fresh request that
+// never saw the file — so the pair travels in the redirect and qrNotice is the
+// one place it is spent, exactly as the size snap's pair is.
+
+// TestTheResizeWarningNamesBothSizes is the sentence the owner is owed: what was
+// uploaded, and what is stored. A "logo stored" with no qualification for an
+// image this product silently shrank is the reopening's own complaint.
+func TestTheResizeWarningNamesBothSizes(t *testing.T) {
+	got := qrNotice(url.Values{"qr": {"logo"}, "from": {"813x813"}, "to": {"512x512"}})
+	for _, want := range []string{"813×813", "512×512", "resized"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the notice %q does not carry %q", got, want)
+		}
+	}
+	// And the ordinary sentence survives underneath it: the two things M50.6
+	// changed about the picture are still what a reader has to be told.
+	if !strings.Contains(got, "level H") {
+		t.Errorf("the resize warning replaced the stored-logo sentence rather than "+
+			"adding to it: %q", got)
+	}
+}
+
+// TestAnUnresizedUploadSaysNothingExtra is the other side. A sentence printed
+// after every upload is a sentence nobody reads by the third one, which is why
+// the size control reports a snap only when it snapped.
+func TestAnUnresizedUploadSaysNothingExtra(t *testing.T) {
+	for name, q := range map[string]url.Values{
+		"no pair at all":  {"qr": {"logo"}},
+		"same both ways":  {"qr": {"logo"}, "from": {"300x200"}, "to": {"300x200"}},
+		"half a pair":     {"qr": {"logo"}, "from": {"813x813"}},
+		"not two numbers": {"qr": {"logo"}, "from": {"lots"}, "to": {"a few"}},
+		// Hand-edited out of range, which is what re-deriving is for: a sentence
+		// assembled from a query string is a sentence somebody else can write.
+		"past the bound": {"qr": {"logo"}, "from": {"99999x99999"}, "to": {"1x1"}},
+	} {
+		if got := qrNotice(q); strings.Contains(got, "resized") {
+			t.Errorf("%s produced a resize warning: %q", name, got)
+		}
+	}
 }

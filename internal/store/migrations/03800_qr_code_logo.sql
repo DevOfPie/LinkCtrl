@@ -18,11 +18,12 @@
 --
 -- **The bytes are bounded before they are written, not by a CHECK here.** The
 -- request body stops at qr.MaxLogoUploadBytes, the decoded pixels at
--- qr.MaxLogoPixels, and the *stored* artefact is re-encoded by this product and
--- refused above qr.MaxLogoStoredBytes — so the worst case a row can carry is
--- 1,049,600 bytes, and the arithmetic behind that number is in internal/qr's
--- logo.go. A constraint here would be a fourth place to keep that number, and
--- the one furthest from the code that computes it.
+-- qr.MaxDecodedLogoPixels, and the *stored* artefact is re-encoded by this
+-- product, fitted to qr.MaxLogoPixels — which since D180 resamples rather than
+-- refuses — and refused above qr.MaxLogoStoredBytes. So the worst case a row
+-- can carry is 1,049,600 bytes, and the arithmetic behind that number is in
+-- internal/qr's logo.go. A constraint here would be a fourth place to keep that
+-- number, and the one furthest from the code that computes it.
 --
 -- **What deletion this buys, and what it does not.** `qr_codes.link_id` and
 -- `qr_codes.workspace_id` are both ON DELETE CASCADE (00600), so removing a

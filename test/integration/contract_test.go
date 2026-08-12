@@ -309,6 +309,24 @@ func contractLogo(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
+// contractOversizedLogo is inside the side bound and past the storage target, so
+// the server stores a smaller copy of it and says so.
+func contractOversizedLogo(t *testing.T) []byte {
+	t.Helper()
+	const side = 800
+	img := image.NewNRGBA(image.Rect(0, 0, side, side))
+	for y := range side {
+		for x := range side {
+			img.SetNRGBA(x, y, color.NRGBA{R: uint8(x), G: 0x30, B: uint8(y), A: 0xff})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
 func field(t *testing.T, raw []byte, name string) string {
 	t.Helper()
 	var m map[string]any
@@ -771,6 +789,27 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	}, http.StatusCreated)
 	c.uploadAsKey(field(t, uploader, "key"), "PUT", logoPath, "logo",
 		"logo.png", "image/png", contractLogo(t), http.StatusOK)
+
+	// **An image past the storage target, which the document says is resized
+	// rather than refused** (F214, 2026-08-12). Replayed because the response
+	// grows a key for it: `resampled` is absent on every upload above and
+	// present on this one, and a schema that forbade it would fail here rather
+	// than in a client's parser.
+	oversized := c.upload("PUT", logoPath, "logo", "logo.png", "image/png",
+		contractOversizedLogo(t), http.StatusOK, true)
+	var resized struct {
+		Resampled *struct {
+			FromWidth int `json:"from_width"`
+			Width     int `json:"width"`
+		} `json:"resampled"`
+	}
+	if err := json.Unmarshal(oversized, &resized); err != nil {
+		t.Fatalf("decode a resized logo upload: %v", err)
+	}
+	if resized.Resampled == nil || resized.Resampled.FromWidth <= resized.Resampled.Width {
+		t.Errorf("an oversized upload answered %s; the document promises both sizes "+
+			"when it had to shrink one", oversized)
+	}
 
 	c.do("DELETE", logoPath, nil, http.StatusNoContent)
 	// Idempotent: a code with no logo answers the same 204, because "this code

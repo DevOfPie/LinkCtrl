@@ -501,11 +501,22 @@ migrations run at boot.
   you sent.** That is deliberate and has a consequence worth knowing: metadata
   does not survive, so this is not somewhere to keep an original.
 
-  Three limits, each a number, each answering `422` and naming which: the request
-  body stops at 1,048,576 bytes, the image at 1024 pixels a side and 262,144
-  pixels in total, and the stored result at 1,060,000 bytes. **Uploads have a
-  rate limit of their own**, `LINKCTRL_UPLOAD_RATE_PER_MIN`, thirty a minute by
-  default and applied on top of the API limit rather than instead of it.
+  Three limits, each a number, each answering `422` and naming which one and what
+  your image measured: the request body stops at 1,048,576 bytes, the image at
+  1024 pixels a side, and the stored result at 1,060,000 bytes. **An image bigger
+  than a stored logo holds is resized, not refused.** A stored logo is at most
+  262,144 pixels in total; anything over that is scaled down to fit with its
+  shape kept, and you are told what you uploaded and what was stored — in the
+  panel, and in the API response as a `resampled` object that is there only when
+  it happened. **Uploads have a rate limit of their own**,
+  `LINKCTRL_UPLOAD_RATE_PER_MIN`, thirty a minute by default and applied on top
+  of the API limit rather than instead of it.
+
+  **Choosing a file uploads it.** There is no second button: the image applies
+  the moment you pick it, and clicking the browse control leaves it looking
+  pressed while the file dialog opens rather than looking like nothing happened.
+  Reaching it by keyboard shows the ordinary focus ring instead, because a
+  pressed look keyed on focus would stay on for anybody merely tabbing past.
 
   **For operators: the image lives in the database, in `qr_codes.logo`.** No
   volume to mount, no object store to run, nothing new in a backup procedure —

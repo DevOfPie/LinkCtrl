@@ -46,9 +46,17 @@ import (
 // calls with different marks produce two images a test can tell apart.
 func logoPNG(t *testing.T, side int, mark uint8) []byte {
 	t.Helper()
-	img := image.NewNRGBA(image.Rect(0, 0, side, side))
-	for y := range side {
-		for x := range side {
+	return logoPNGSize(t, side, side, mark)
+}
+
+// logoPNGSize is logoPNG for a rectangle, which a square cannot stand in for:
+// the refusal sentence says *wide* or *tall*, and a square makes the two
+// indistinguishable.
+func logoPNGSize(t *testing.T, w, h int, mark uint8) []byte {
+	t.Helper()
+	img := image.NewNRGBA(image.Rect(0, 0, w, h))
+	for y := range h {
+		for x := range w {
 			img.SetNRGBA(x, y, color.NRGBA{
 				R: mark, G: uint8(x), B: uint8(y), A: 0xff,
 			})
@@ -651,6 +659,273 @@ func TestTheDashboardReachesTheLogoOnTheDefaultCode(t *testing.T) {
 	})
 	if got := f.storedLogo(t, id, ""); got != nil {
 		t.Errorf("the panel's removal left %d bytes in the column", len(got))
+	}
+}
+
+// --- resizing rather than refusing (M50.5, reopened 2026-08-12) --------------
+
+// postLogo posts a multipart upload at the dashboard's route and hands back the
+// response, so a test can read a redirect or a rendered refusal.
+//
+// `headers` is what carries `HX-Request`, which is the whole difference between
+// the two paths this file asserts: the form submits itself over htmx now, and
+// htmx never swaps a 4xx.
+func (f *ruleFixture) postLogo(
+	t *testing.T, path string, fields map[string]string, body []byte,
+	filename, declared string, headers map[string]string,
+) *http.Response {
+	t.Helper()
+	contentType, payload := logoBody(t, filename, declared, body, fields)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+		f.server.URL+path, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", contentType)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := f.client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp
+}
+
+// TestAnOversizedLogoIsStoredSmallerAndSaysSo is F214(a), end to end and on the
+// surface the owner met it on.
+//
+// **813×813 is the reported measurement, not a derived one.** It sits inside the
+// side bound and four times past what a row holds, which is the shape that used
+// to produce a refusal naming two caps and no verdict. What it must produce now
+// is a stored image, a redirect carrying both sizes, and a sentence on the page
+// that names them — the column is read directly, because a redirect saying
+// 512×512 over a row holding 813×813 is exactly the drift worth catching.
+func TestAnOversizedLogoIsStoredSmallerAndSaysSo(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("logofit", "https://example.com/fit")
+	panelPath := "/links/" + id.String() + "/qr"
+
+	resp := f.postLogo(t, panelPath+"/logo",
+		map[string]string{"next": panelPath, "code": ""},
+		logoPNG(t, 813, 0x5a), "big.png", "image/png", nil)
+	where := resp.Header.Get("Location")
+	status := resp.StatusCode
+	_ = resp.Body.Close()
+
+	if status != http.StatusSeeOther {
+		t.Fatalf("an 813x813 upload answered %d, want 303. Since F214 an image inside "+
+			"the side bound is resized to fit rather than refused", status)
+	}
+	for _, want := range []string{"from=813x813", "to=512x512"} {
+		if !strings.Contains(where, want) {
+			t.Errorf("the redirect %q does not carry %q; the page it lands on is a "+
+				"fresh request that never saw the file, so this is the only way the "+
+				"warning gets there", where, want)
+		}
+	}
+
+	stored := f.storedLogo(t, id, "")
+	cfg, err := qr.DecodeLogoConfig(stored)
+	if err != nil {
+		t.Fatalf("the column does not hold a decodable image: %v", err)
+	}
+	if cfg.Width != 512 || cfg.Height != 512 {
+		t.Errorf("the column holds %dx%d and the redirect promised 512x512",
+			cfg.Width, cfg.Height)
+	}
+	if cfg.Width*cfg.Height > qr.MaxLogoPixels {
+		t.Errorf("the stored image is %d pixels and a row holds %d",
+			cfg.Width*cfg.Height, qr.MaxLogoPixels)
+	}
+
+	// And the sentence is on the page, with both numbers in it.
+	page := f.getHTML(where)
+	for _, want := range []string{"813×813", "512×512"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the panel does not say %q after resizing the upload; a product "+
+				"that silently shrinks artwork and reports success has told nobody", want)
+		}
+	}
+}
+
+// TestARefusalReachesAnHTMXUpload is F214(c)'s cost, paid.
+//
+// The form applies the file the moment it is chosen, which makes it the first
+// form in this panel to post over htmx — and htmx's default response handling
+// swaps nothing at all for a 4xx. A refusal answered 422 would therefore leave
+// the page exactly as it was, which is worse than the two-step it replaced. The
+// native post is asserted alongside it, because that status must not move.
+func TestARefusalReachesAnHTMXUpload(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("logohx", "https://example.com/hx")
+	panelPath := "/links/" + id.String() + "/qr"
+	svg := []byte(`<svg xmlns="http://www.w3.org/2000/svg"><rect width="4" height="4"/></svg>`)
+	fields := map[string]string{"next": panelPath, "code": ""}
+
+	resp := f.postLogo(t, panelPath+"/logo", fields, svg, "brand.png", "image/png",
+		map[string]string{"HX-Request": "true"})
+	body, err := io.ReadAll(resp.Body)
+	status := resp.StatusCode
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != http.StatusOK {
+		t.Fatalf("an htmx upload refused with %d; htmx swaps no 4xx, so the reason "+
+			"would never reach the page", status)
+	}
+	if !strings.Contains(string(body), "SVG") {
+		t.Error("the htmx refusal carries no reason; the swap would replace the panel " +
+			"with a panel saying nothing went wrong")
+	}
+	if !strings.Contains(string(body), `id="qr"`) {
+		t.Error("the htmx refusal renders no id=\"qr\"; that is what the form selects " +
+			"out of the response, so the swap would find nothing to put in")
+	}
+
+	// A browser posting the same form without htmx is unchanged.
+	resp = f.postLogo(t, panelPath+"/logo", fields, svg, "brand.png", "image/png", nil)
+	status = resp.StatusCode
+	_ = resp.Body.Close()
+	if status != http.StatusUnprocessableEntity {
+		t.Errorf("a native post was refused with %d, want 422; only the htmx path "+
+			"trades the status for a swap that happens", status)
+	}
+}
+
+// TestARefusalNamesTheMeasurementWhereSomebodyReadsIt is F214(a)'s other half,
+// asserted on the two surfaces a person meets it on rather than on the string
+// internal/qr produces.
+//
+// **`qr.LogoBoundError.Error()` reaches nobody.** `qrLogoError` in internal/link
+// discards it and writes its own `domain.ValidationErrors` message, which is what
+// the API renders into a `422` body and what the panel renders into the page. A
+// test on the first sentence and none on the second covers the unreachable one of
+// the two — which is how the shipped refusal came to name two caps and no
+// measurement without anything noticing.
+//
+// 1600×400 is the fixture because it crosses one bound and only one, and because
+// it is a rectangle: the sentence has to say *wide* rather than pick a word a
+// square would make true either way.
+func TestARefusalNamesTheMeasurementWhereSomebodyReadsIt(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("logobig", "https://example.com/big")
+	big := logoPNGSize(t, 1600, 400, 0x3c)
+	if len(big) > qr.MaxLogoUploadBytes {
+		t.Fatalf("the fixture is %d bytes and the body cap is %d; it has to be refused "+
+			"for its dimensions, not for its size", len(big), qr.MaxLogoUploadBytes)
+	}
+
+	// The API surface.
+	status, body := f.uploadLogo(t, id, "", "wide.png", "image/png", big)
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf("a 1600x400 upload answered %d, want 422; 1600 is past the 1024 a side "+
+			"this product decodes", status)
+	}
+	var refusal struct {
+		Errors []struct {
+			Field, Code, Message string
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(body, &refusal); err != nil {
+		t.Fatalf("the 422 body is not the validation shape: %v — %s", err, body)
+	}
+	if len(refusal.Errors) != 1 || refusal.Errors[0].Field != "logo" ||
+		refusal.Errors[0].Code != "too_large" {
+		t.Fatalf("the 422 carries %+v, want one too_large on the logo field", refusal.Errors)
+	}
+	sentence := refusal.Errors[0].Message
+	for _, want := range []string{"1600×400", "1600", "wide", "1024"} {
+		if !strings.Contains(sentence, want) {
+			t.Errorf("the 422 message does not carry %q; a refusal names what the file "+
+				"measured and the one bound it crossed: %s", want, sentence)
+		}
+	}
+	// And it does not stand a second cap beside that with no verdict attached,
+	// which is the shape F214 was raised about. The page below carries 262,144 in
+	// its help text, where it is a description of the resize and not a refusal —
+	// so this half is asserted on the sentence rather than on the document.
+	for _, unwanted := range []string{"262144", "262,144"} {
+		if strings.Contains(sentence, unwanted) {
+			t.Errorf("the 422 message names %q, which refuses nothing since F214: %s",
+				unwanted, sentence)
+		}
+	}
+
+	// The dashboard surface, and it has to be the *same* sentence. htmx swaps no
+	// 4xx, so the panel's refusal arrives at 200 with the reason in it —
+	// TestARefusalReachesAnHTMXUpload holds that status; this holds what the page
+	// then says. Comparing against the API's own string is what makes a divergence
+	// between the two surfaces a failure rather than two tests drifting apart.
+	panelPath := "/links/" + id.String() + "/qr"
+	resp := f.postLogo(t, panelPath+"/logo",
+		map[string]string{"next": panelPath, "code": ""}, big, "wide.png", "image/png",
+		map[string]string{"HX-Request": "true"})
+	page, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(page), sentence) {
+		t.Errorf("the panel does not carry the refusal the API gives — %q. A dimension "+
+			"refusal that reaches a person through the dashboard has to name the same "+
+			"measurement and the same one bound", sentence)
+	}
+}
+
+// TestTheAPIReportsAResize is the same fact on the other surface.
+//
+// An API client that sent artwork and got a bare `200` would have no way to know
+// the bytes it sent are not the bytes now stored, so the upload response carries
+// `resampled` — and carries it only when it happened, which is what makes its
+// presence mean anything.
+func TestTheAPIReportsAResize(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("logoapi", "https://example.com/api")
+
+	var big struct {
+		Resampled *struct {
+			FromWidth  int `json:"from_width"`
+			FromHeight int `json:"from_height"`
+			Width      int `json:"width"`
+			Height     int `json:"height"`
+		} `json:"resampled"`
+	}
+	status, body := f.uploadLogo(t, id, "", "big.png", "image/png", logoPNG(t, 813, 0x11))
+	if status != http.StatusOK {
+		t.Fatalf("an 813x813 upload answered %d, want 200", status)
+	}
+	if err := json.Unmarshal(body, &big); err != nil {
+		t.Fatal(err)
+	}
+	if big.Resampled == nil {
+		t.Fatal("the response carries no resampled block for an image that was shrunk")
+	}
+	if big.Resampled.FromWidth != 813 || big.Resampled.FromHeight != 813 ||
+		big.Resampled.Width != 512 || big.Resampled.Height != 512 {
+		t.Errorf("resampled says %dx%d became %dx%d; 813x813 became 512x512",
+			big.Resampled.FromWidth, big.Resampled.FromHeight,
+			big.Resampled.Width, big.Resampled.Height)
+	}
+
+	var small struct {
+		Resampled *json.RawMessage `json:"resampled"`
+	}
+	status, body = f.uploadLogo(t, id, "", "small.png", "image/png", logoPNG(t, 48, 0x22))
+	if status != http.StatusOK {
+		t.Fatalf("a 48x48 upload answered %d, want 200", status)
+	}
+	if err := json.Unmarshal(body, &small); err != nil {
+		t.Fatal(err)
+	}
+	if small.Resampled != nil {
+		t.Error("a 48x48 upload reported a resample; the key's presence is the signal, " +
+			"so one that is always there says nothing")
 	}
 }
 

@@ -1383,7 +1383,7 @@ func (s *demoSeeder) seedCampaigns(ctx context.Context, cat []demoLink, ids map[
 	// of it, at error-correction level H, which is the feature rather than the
 	// proof that an upload succeeded. The seeding is unchanged — M50.5 put it
 	// here so that M50.6 would arrive to find something to composite.
-	if _, err := s.link.SetQRCodeLogo(
+	if _, _, err := s.link.SetQRCodeLogo(
 		ctx, s.owner, styled, second.Slug, demoLogoPNG(),
 	); err != nil {
 		return fmt.Errorf("upload a logo to the second QR code on /%s: %w", demoQRStyled, err)

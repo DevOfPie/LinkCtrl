@@ -1943,8 +1943,9 @@ paths:
         Everything `PUT /links/{id}/qr/codes/{slug}/logo` says applies here
         unchanged: one `multipart/form-data` part named `logo`, `links.update`,
         PNG and JPEG decided by the bytes, an SVG refused by name, the stored
-        image re-encoded by this server, the same three bounds, and the same
-        separate upload rate limit.
+        image re-encoded by this server, the same three bounds, the same
+        resize-to-fit and its `resampled` report, and the same separate upload
+        rate limit.
 
         The response is keyed `qr` rather than `code`, as every other
         `/links/{id}/qr` operation's is.
@@ -2168,10 +2169,19 @@ paths:
 
         Three bounds, in this order, and each is a number rather than a promise:
         the request body stops at **1,048,576 bytes**; the image's declared
-        dimensions must be at most **1024 pixels a side** and **262,144 pixels
-        in total**, checked from the header before anything is decoded; and the
-        re-encoded result must fit **1,060,000 bytes**. Exceeding any of them is
-        a `422` naming which.
+        dimensions must be at most **1024 pixels a side**, checked from the
+        header before anything is decoded; and the re-encoded result must fit
+        **1,060,000 bytes**. Exceeding any of them is a `422` naming which one,
+        and what the image measured.
+
+        **A large image is resized rather than refused.** A stored logo holds at
+        most **262,144 pixels in total**, and that is a target, not a bound:
+        anything over it is resampled down to fit with its aspect ratio kept,
+        and the response then carries `resampled` with both sizes. It is absent
+        when the image was stored at the size you sent. *(That figure was a
+        second header bound until now, and an image over it was a `422`. No
+        released version ever answered that `422` — this endpoint is itself new
+        in 0.3.0, which is unreleased.)*
 
         Uploading again replaces what is there. Uploads are rate-limited
         separately from the rest of this API — see `UPLOAD_RATE_PER_MIN` — so a
@@ -4575,7 +4585,10 @@ components:
               logo:
                 type: string
                 format: binary
-                description: The image, as PNG or JPEG.
+                description: >
+                  The image, as PNG or JPEG. At most 1024 pixels a side; one
+                  larger than the stored bound is resized to fit rather than
+                  refused.
     Credentials:
       required: true
       content:
@@ -5667,6 +5680,31 @@ components:
             nearest achievable size rather than always the identical integer.
             This read *a code can grow when a logo is added* until 0.3.0.
 
+    LogoResample:
+      type: object
+      additionalProperties: false
+      required: [from_width, from_height, width, height]
+      description: >
+        What an uploaded logo was, and what it became. **Present only on a logo
+        upload that had to be shrunk** — an image inside the stored bound is
+        stored as it arrived and this key is absent, so its presence is the
+        whole signal. Both pairs are given because a client that sent artwork
+        and got a `200` would otherwise have no way to know the bytes it sent
+        are not the bytes now stored.
+      properties:
+        from_width:
+          type: integer
+          description: The width, in pixels, of the image that was uploaded.
+        from_height:
+          type: integer
+          description: The height, in pixels, of the image that was uploaded.
+        width:
+          type: integer
+          description: The width, in pixels, of the image that is stored.
+        height:
+          type: integer
+          description: The height, in pixels, of the image that is stored.
+
     QRCodeResponse:
       type: object
       additionalProperties: false
@@ -5677,6 +5715,11 @@ components:
           type: array
           description: The error-correction levels a style may name.
           items: { type: string, enum: [L, M, Q, H] }
+        resampled:
+          allOf: [{ $ref: "#/components/schemas/LogoResample" }]
+          description: >
+            Only `PUT /links/{id}/qr/logo` ever sets this, and only when the
+            image it stored is smaller than the one it was sent.
 
     QRCodeList:
       type: object
@@ -5706,6 +5749,11 @@ components:
           type: array
           description: The error-correction levels a style may name.
           items: { type: string, enum: [L, M, Q, H] }
+        resampled:
+          allOf: [{ $ref: "#/components/schemas/LogoResample" }]
+          description: >
+            Only `PUT /links/{id}/qr/codes/{slug}/logo` ever sets this, and only
+            when the image it stored is smaller than the one it was sent.
 
     QRCodeRequest:
       type: object

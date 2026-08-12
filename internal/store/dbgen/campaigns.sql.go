@@ -517,8 +517,10 @@ type SetQRCodeLogoParams struct {
 // code of its own.
 //
 // The bytes are already bounded — the request body by http.MaxBytesReader, the
-// decode by qr.MaxLogoPixels, and this value by qr.MaxLogoStoredBytes, which
-// internal/qr enforces rather than assumes.
+// decode by qr.MaxDecodedLogoPixels, and this value by qr.MaxLogoStoredBytes,
+// which internal/qr enforces rather than assumes. Since D180, qr.MaxLogoPixels
+// bounds the *stored* artefact alone and refuses nothing: an image above it is
+// resampled down to it before it reaches this statement.
 func (q *Queries) SetQRCodeLogo(ctx context.Context, arg SetQRCodeLogoParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setQRCodeLogo, arg.ID, arg.WorkspaceID, arg.Logo)
 	if err != nil {

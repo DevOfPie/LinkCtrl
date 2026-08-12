@@ -106,11 +106,14 @@ const MinProductContent = 22
 // MaxLogoRasterSide bounds the composited raster, in pixels a side.
 //
 // **512 is not a new number.** It is ⌊√[MaxLogoPixels]⌋, so the largest raster
-// this file can produce is exactly the largest image M50.5 will decode, and the
-// worst case its PNG encodes to is the 1,050,132-byte figure logo.go already
-// derives — bounded by [MaxLogoStoredBytes] and enforced there. Reusing that
-// arithmetic is the point: a second bound would be a second place to keep the
-// same number.
+// this file can produce is exactly the largest image M50.5 *stores*. Since D180
+// that figure bounds neither the decode nor what is accepted — a header is
+// refused only past [MaxLogoDimension], and everything inside it is decoded and
+// resampled down to fit — so what this raster matches is the stored artefact it
+// is drawn from. The worst case its PNG encodes to is the 1,050,132-byte figure
+// logo.go already derives, bounded by [MaxLogoStoredBytes] and enforced there.
+// Reusing that arithmetic is the point: a second bound would be a second place
+// to keep the same number.
 //
 // It binds only on the SVG path. A rasterised code stops at [MaxSize] pixels, so
 // its box stops at MaxSize/[LogoBoxDivisor] = 400 and never reaches this.
@@ -275,8 +278,9 @@ type logoDrawing struct {
 //
 // The input is bytes this product wrote — [NormalizeLogo] re-encoded them — so
 // the decoder here is not the untrusted one M50.5 was written around. It is
-// still bounded by the same caps: what came out of NormalizeLogo passed them,
-// and this refuses anything that does not.
+// still bounded, and by both numbers rather than by the one an upload is
+// refused for: what NormalizeLogo writes is inside [MaxLogoDimension] *and*
+// [MaxLogoPixels], and this refuses anything that is not.
 func (c *Code) prepareLogo(st Style, logo []byte) (*logoDrawing, error) {
 	box, ok := c.logoBoxFor(st)
 	if !ok {
@@ -286,6 +290,21 @@ func (c *Code) prepareLogo(st Style, logo []byte) (*logoDrawing, error) {
 	cfg, err := DecodeLogoConfig(logo)
 	if err != nil {
 		return nil, err
+	}
+	// The area bound, checked here rather than in DecodeLogoConfig since the F214
+	// reopening. That function guards the *upload* path, where MaxLogoPixels
+	// stopped being a refusal and became the size an image is fitted to; this is
+	// the *stored* path, where it is still a bound, because everything
+	// NormalizeLogo writes is inside it. A row past it is one somebody wrote by
+	// hand, and decoding it would put a buffer past D142's stated figure behind
+	// D127's rasteriser without D127 saying so. The area is what is bounded and
+	// not the bytes: what this product encodes is eight-bit, so a stored row
+	// decodes at four bytes a pixel, and only a hand-written bit-depth-16 row
+	// reaches MaxDecodedLogoBytesPerPixel here.
+	if cfg.Width*cfg.Height > MaxLogoPixels {
+		return nil, &LogoBoundError{
+			Width: cfg.Width, Height: cfg.Height, Bound: "pixels", Limit: MaxLogoPixels,
+		}
 	}
 	src, err := png.Decode(bytes.NewReader(logo))
 	if err != nil {
@@ -307,8 +326,8 @@ func (c *Code) prepareLogo(st Style, logo []byte) (*logoDrawing, error) {
 	innerPx := boxPx - 2*inset
 
 	// The raster, clamped to what MaxLogoPixels already bounds — never larger
-	// than the drawing needs, and never larger than M50.5 would have accepted in
-	// the first place.
+	// than the drawing needs, and never larger than the stored image it is drawn
+	// from, which NormalizeLogo fitted to that figure on the way in.
 	limit := innerPx
 	if limit > MaxLogoRasterSide {
 		limit = MaxLogoRasterSide

@@ -394,12 +394,26 @@ func (a *LinkAPI) setQRLogo(w http.ResponseWriter, r *http.Request, slug, key st
 		WriteError(w, r, err)
 		return
 	}
-	code, err := a.Links.SetQRCodeLogo(r.Context(), IdentityFrom(r.Context()), id, slug, upload.File)
+	code, fit, err := a.Links.SetQRCodeLogo(
+		r.Context(), IdentityFrom(r.Context()), id, slug, upload.File)
 	if err != nil {
 		WriteError(w, r, err)
 		return
 	}
-	WriteJSON(w, http.StatusOK, map[string]any{key: code, "levels": qr.Levels})
+	body := map[string]any{key: code, "levels": qr.Levels}
+	// **Present only when it happened** (F214). An image past the storage target
+	// is shrunk to fit rather than refused, and a `200` with no other difference
+	// would tell an API client that the bytes it sent are the bytes now stored.
+	// Absent means the upload was stored at the size it arrived at, which is the
+	// case for every logo small enough — so a client that never sees this key is
+	// a client this never applied to.
+	if fit.Resampled() {
+		body["resampled"] = map[string]any{
+			"from_width": fit.SourceWidth, "from_height": fit.SourceHeight,
+			"width": fit.Width, "height": fit.Height,
+		}
+	}
+	WriteJSON(w, http.StatusOK, body)
 }
 
 // DeleteQRLogo removes the image from a link's default code, leaving the code.

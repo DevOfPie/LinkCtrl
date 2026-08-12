@@ -18,7 +18,12 @@
 
 {{template "flash_ok" .Notice}}
 
-<div class="rounded-lg border border-line bg-raised p-6">
+{{/* id="qr" on both surfaces. The QR tab's wrapper has carried it since the
+     F212 reopening — it is the anchor qrReturn names — and the logo form's
+     htmx swap targets it, so a refusal rendered from *this* page has to have
+     one too or the swap has nothing to replace. Same id, same contents, two
+     routes. */}}
+<div id="qr" class="rounded-lg border border-line bg-raised p-6">
   {{template "link_qr_body" .}}
 </div>
 {{end}}

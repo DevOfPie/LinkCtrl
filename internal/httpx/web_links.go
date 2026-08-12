@@ -685,13 +685,19 @@ type linkQRView struct {
 	// logo back, so there is nothing to show. What the panel can honestly say is
 	// that there is one, and offer to take it away.
 	QRHasLogo bool
-	// QRMaxLogoBytes and QRMaxLogoDimension are the upload's bounds, passed in
-	// like QRMinSize and QRMaxSize so the numbers the panel states and the ones
-	// internal/qr enforces cannot drift. Stated in bytes rather than rounded to
-	// a megabyte, because a rounded figure is one that stops being true the
-	// first time the constant moves and nothing fails.
+	// QRMaxLogoBytes, QRMaxLogoDimension and QRMaxLogoPixels are the upload's
+	// bounds, passed in like QRMinSize and QRMaxSize so the numbers the panel
+	// states and the ones internal/qr enforces cannot drift. Stated in bytes
+	// rather than rounded to a megabyte, because a rounded figure is one that
+	// stops being true the first time the constant moves and nothing fails.
+	//
+	// **Two of these are refusals and one is not** (F214). The bytes and the side
+	// turn an upload away; the pixel count is the size an image is resized *to*,
+	// and the panel's prose has to say which is which or it repeats the refusal
+	// that could not be acted on.
 	QRMaxLogoBytes     int
 	QRMaxLogoDimension int
+	QRMaxLogoPixels    int
 }
 
 // qrCodeView is one row of the panel's list of codes (M50).
@@ -1090,6 +1096,7 @@ func (h *Web) linkQR(
 		QRMaxLabel:         domain.MaxQRCodeLabelLength,
 		QRMaxLogoBytes:     qr.MaxLogoUploadBytes,
 		QRMaxLogoDimension: qr.MaxLogoDimension,
+		QRMaxLogoPixels:    qr.MaxLogoPixels,
 		QRReturn:           back,
 		QRSlug:             slug,
 		QRDownload:         qrDownloadPath(l.ID, slug, "svg"),

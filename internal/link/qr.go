@@ -774,47 +774,77 @@ func (s *Service) ResetQRStyle(ctx context.Context, actor *auth.Identity, linkID
 // column cannot hold bytes for a row that is not there. So an upload against it
 // writes the row first, at the style it was already being drawn at.
 
+// LogoFit is what an upload became, and what it was.
+//
+// **The pair, not a boolean**, for the reason the size control reports both
+// numbers rather than "snapped": somebody who uploaded artwork and got a stored
+// image at a different size is owed the two figures, and a flag would leave the
+// page saying that *something* happened. [qr.FitStoredLogo] is where the second
+// pair comes from; this type is only how it reaches a handler without the bytes
+// coming with it.
+type LogoFit struct {
+	// SourceWidth and SourceHeight are what was uploaded, in pixels.
+	SourceWidth, SourceHeight int
+	// Width and Height are what is stored.
+	Width, Height int
+}
+
+// Resampled reports whether the upload had to be shrunk to be stored.
+func (f LogoFit) Resampled() bool {
+	return f.SourceWidth != f.Width || f.SourceHeight != f.Height
+}
+
 // SetQRCodeLogo stores an uploaded image against one of a link's codes. The
 // empty slug is the link's default code.
 //
 // Replacing is the same call: the write is a single UPDATE, so the image being
 // replaced is overwritten rather than deleted by a second statement, and there
 // is no state in which a code has two logos or none.
+//
+// **The second return is what the F214 reopening added.** An image past the
+// storage target is now shrunk to fit instead of refused, and a caller that was
+// not told would report an unqualified success for a picture this product
+// changed. It is a [LogoFit] rather than an error because nothing went wrong —
+// the upload was accepted, and the sentence beside it is a warning.
 func (s *Service) SetQRCodeLogo(
 	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, slug string, upload []byte,
-) (*QRCode, error) {
+) (*QRCode, LogoFit, error) {
 	if !actor.Can(PermUpdate) {
-		return nil, fmt.Errorf(
+		return nil, LogoFit{}, fmt.Errorf(
 			"%w: uploading a QR code logo requires %s", domain.ErrForbidden, PermUpdate)
 	}
 	l, err := s.Get(ctx, actor, linkID)
 	if err != nil {
-		return nil, err
+		return nil, LogoFit{}, err
 	}
 	row, found, err := s.storedQRCode(ctx, actor.WorkspaceID, linkID, slug)
 	if err != nil {
-		return nil, err
+		return nil, LogoFit{}, err
 	}
 	if !found {
 		// A named code must already exist — CreateQRCode is what brings one into
 		// being, and a slug the link never issued must not be creatable by
 		// uploading to it. The default code is the exception it has always been.
 		if slug != "" {
-			return nil, domain.ErrNotFound
+			return nil, LogoFit{}, domain.ErrNotFound
 		}
 		if row, err = s.materializeDefaultQRCode(ctx, actor.WorkspaceID, linkID); err != nil {
-			return nil, err
+			return nil, LogoFit{}, err
 		}
 	}
 
 	logo, err := qr.NormalizeLogo(upload)
 	if err != nil {
-		return nil, qrLogoError(err)
+		return nil, LogoFit{}, qrLogoError(err)
+	}
+	fit := LogoFit{
+		SourceWidth: logo.SourceWidth, SourceHeight: logo.SourceHeight,
+		Width: logo.Width, Height: logo.Height,
 	}
 	if _, err := s.q.SetQRCodeLogo(ctx, dbgen.SetQRCodeLogoParams{
 		ID: row.ID, WorkspaceID: actor.WorkspaceID, Logo: logo.PNG,
 	}); err != nil {
-		return nil, fmt.Errorf("store qr code logo %s: %w", row.ID, err)
+		return nil, fit, fmt.Errorf("store qr code logo %s: %w", row.ID, err)
 	}
 	row.HasLogo = true
 
@@ -830,14 +860,14 @@ func (s *Service) SetQRCodeLogo(
 	styled := refitForLogo(QRContent(l.ShortURL, slug), decodeQRStyle(row.Style))
 	blob, err := json.Marshal(styled)
 	if err != nil {
-		return nil, fmt.Errorf("encode qr style: %w", err)
+		return nil, fit, fmt.Errorf("encode qr style: %w", err)
 	}
 	stored, err := s.q.UpsertQRCode(ctx, dbgen.UpsertQRCodeParams{
 		ID: uuid.Must(uuid.NewV7()), LinkID: linkID, WorkspaceID: actor.WorkspaceID,
 		Slug: slug, Label: row.Label, Style: blob,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("raise qr code %s to level H: %w", row.ID, err)
+		return nil, fit, fmt.Errorf("raise qr code %s to level H: %w", row.ID, err)
 	}
 	row = qrRowFromUpsert(stored)
 	row.HasLogo = true
@@ -845,7 +875,7 @@ func (s *Service) SetQRCodeLogo(
 	// the redirect snapshot carries a link's slugs and nothing else about its
 	// codes, so nothing cached can disagree with this write.
 	code := qrCodeFrom(linkID, l.ShortURL, slug, row, true)
-	return &code, nil
+	return &code, fit, nil
 }
 
 // refitForLogo is the style a code takes on when an image is put on it: level H,
@@ -1044,6 +1074,14 @@ func (s *Service) materializeDefaultQRCode(
 // field is `logo` in each case, because that is the multipart part the caller
 // named, and the messages say what to do rather than what went wrong: an
 // upload refused with "invalid image" is an upload somebody retries unchanged.
+//
+// **The size refusal names one bound and the measurement that crossed it**
+// (F214). It used to name both caps and neither measurement, which for an
+// 813×813 upload — inside the side cap, outside the area cap — said nothing the
+// reader could act on. The area cap no longer refuses anything at all, so the
+// only thing left to say is how wide or tall the file is and what the limit on
+// that is; [qr.LogoBoundError] carries both, and the sentence adds that
+// everything under it is resized rather than turned away.
 func qrLogoError(err error) error {
 	field := func(code, message string) error {
 		return domain.ValidationErrors{{Field: "logo", Code: code, Message: message}}
@@ -1061,10 +1099,27 @@ func qrLogoError(err error) error {
 			"a logo is a PNG or a JPEG, decided by what is in the file rather than by "+
 				"what it is called")
 	case errors.Is(err, qr.ErrLogoTooLarge):
+		// One shape reaches here, and it is the side bound NormalizeLogo raises
+		// from the header. The other bound qr.LogoBoundError can carry — the area
+		// one Code.prepareLogo raises over an already-stored row — never passes
+		// through this function, which is called from SetQRCodeLogo and from
+		// nowhere else. So a bound that is not "side" is exactly as unreachable as
+		// no LogoBoundError at all, and both fall to the sentence below rather
+		// than to a branch nothing can enter.
+		var bound *qr.LogoBoundError
+		if errors.As(err, &bound) && bound.Bound == "side" {
+			side, which := bound.Width, "wide"
+			if bound.Height > bound.Width {
+				side, which = bound.Height, "tall"
+			}
+			return field("too_large", fmt.Sprintf(
+				"this image is %d×%d and is %d pixels %s; a logo is at most %d pixels on "+
+					"a side. Anything within that is accepted and resized down to fit if "+
+					"it needs to be, so the size to aim for is only the limit itself",
+				bound.Width, bound.Height, side, which, qr.MaxLogoDimension))
+		}
 		return field("too_large", fmt.Sprintf(
-			"a logo is at most %d pixels on a side and %d pixels in total; this one is "+
-				"larger, and a QR code draws it at a fraction of its own size anyway",
-			qr.MaxLogoDimension, qr.MaxLogoPixels))
+			"a logo is at most %d pixels on a side", qr.MaxLogoDimension))
 	case errors.Is(err, qr.ErrLogoStoreTooLarge):
 		return field("too_large", fmt.Sprintf(
 			"this image re-encodes to more than the %d bytes a stored logo may occupy",

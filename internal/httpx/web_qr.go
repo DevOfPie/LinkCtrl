@@ -243,6 +243,14 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 // The default code is reachable here exactly as a named one is: its `code` value
 // is the empty string, which is its identity (D130) and what the owner's ruling
 // of 2026-08-07 made addressable for a logo.
+//
+// **The form submits itself the moment a file is chosen** (F214c), through an
+// htmx `change` trigger on the form and no script of this product's own. Nothing
+// about this handler changes for it: htmx sends the same multipart body, and
+// `seeOther` already answers an htmx request with `HX-Redirect`, which is a full
+// page load rather than a swap. What *did* change is the refusal — see
+// finishQRAction, which cannot render a 422 into an htmx swap because htmx does
+// not swap one.
 func (h *Web) LinkQRLogo(w http.ResponseWriter, r *http.Request) {
 	id, err := pathUUID(r, "id")
 	if err != nil {
@@ -260,13 +268,48 @@ func (h *Web) LinkQRLogo(w http.ResponseWriter, r *http.Request) {
 		h.finishQRAction(w, r, id, next, slug, err)
 		return
 	}
-	if _, serr := h.Links.SetQRCodeLogo(
-		r.Context(), IdentityFrom(r.Context()), id, slug, upload.File,
-	); serr != nil {
+	_, fit, serr := h.Links.SetQRCodeLogo(
+		r.Context(), IdentityFrom(r.Context()), id, slug, upload.File)
+	if serr != nil {
 		h.finishQRAction(w, r, id, next, slug, serr)
 		return
 	}
-	seeOther(w, r, qrReturn(next, id, "logo", slug, nil))
+
+	// Only when the image was shrunk, on the same terms the size control reports
+	// a snap: a sentence on every upload saying it stored what you sent is a
+	// sentence nobody reads by the third time. Both sizes travel, because the
+	// page it lands on is a fresh request that never saw the file.
+	var extra url.Values
+	if fit.Resampled() {
+		extra = url.Values{
+			"from": {dims(fit.SourceWidth, fit.SourceHeight)},
+			"to":   {dims(fit.Width, fit.Height)},
+		}
+	}
+	seeOther(w, r, qrReturn(next, id, "logo", slug, extra))
+}
+
+// dims writes a WxH pair for the query string, and dimsParam reads one back.
+//
+// Re-derived rather than echoed, exactly as sizeParam is and for the same
+// reason: these arrive in a URL anybody can edit, and a sentence assembled from
+// a query string is a sentence somebody else can write. Anything that is not two
+// integers inside the bounds a stored logo actually has says nothing, which
+// leaves the ordinary "logo stored" message.
+func dims(w, h int) string { return strconv.Itoa(w) + "x" + strconv.Itoa(h) }
+
+func dimsParam(raw string) (int, int, bool) {
+	wRaw, hRaw, ok := strings.Cut(raw, "x")
+	if !ok {
+		return 0, 0, false
+	}
+	w, werr := strconv.Atoi(wRaw)
+	h, herr := strconv.Atoi(hRaw)
+	if werr != nil || herr != nil || w < 1 || h < 1 ||
+		w > qr.MaxLogoDimension || h > qr.MaxLogoDimension {
+		return 0, 0, false
+	}
+	return w, h, true
 }
 
 // finishQRAction puts a refusal back on the page it was made from, with the
@@ -285,6 +328,17 @@ func (h *Web) LinkQRLogo(w http.ResponseWriter, r *http.Request) {
 // `next` is **matched, never followed**, on exactly qrReturn's terms: it is
 // compared against a path this function builds from the id it was given, so the
 // field chooses between two surfaces rather than naming one.
+//
+// **The status is 200 for an htmx request, and that is not a fudge** (F214c).
+// htmx's default `responseHandling` does not swap a 4xx at all — the response is
+// read, an error event fires, and the page is left exactly as it was. Every
+// other form in this panel posts natively and never meets that rule; the logo
+// form submits itself the moment a file is chosen, which makes it the first one
+// that does, and a refusal nobody can see is worse than the two-step it
+// replaced. This is the shape renderAutomation and renderDomains already use
+// for the same reason — an htmx request gets what it can render, and the code
+// that says "this was refused" is the message in the page rather than the
+// status line the swap discarded.
 func (h *Web) finishQRAction(
 	w http.ResponseWriter, r *http.Request, id uuid.UUID, next, slug string, err error,
 ) {
@@ -292,6 +346,10 @@ func (h *Web) finishQRAction(
 	if !errors.As(err, &ve) {
 		h.webError(w, r, err)
 		return
+	}
+	status := http.StatusUnprocessableEntity
+	if isHTMX(r) {
+		status = http.StatusOK
 	}
 
 	if self := "/links/" + id.String() + "/qr"; next == self {
@@ -307,7 +365,7 @@ func (h *Web) finishQRAction(
 		// are what a *redirect* carries, and nothing here redirects.
 		view := h.linkQR(r.Context(), actor, l, self, slug)
 		view.QRError = ve[0].Message
-		h.render(w, r, http.StatusUnprocessableEntity, "link_qr", linkQRPageData{
+		h.render(w, r, status, "link_qr", linkQRPageData{
 			shell:      h.shell(r, "QR code · /"+l.Alias, "links"),
 			Link:       l,
 			linkQRView: view,
@@ -323,7 +381,7 @@ func (h *Web) finishQRAction(
 	// carries no ?tab= — qrReturn's re-derivation, on the 422 path (D178).
 	data.Tab = "qr"
 	data.QRError = ve[0].Message
-	h.render(w, r, http.StatusUnprocessableEntity, "link_detail", data)
+	h.render(w, r, status, "link_detail", data)
 }
 
 // formInt reads a number box, falling back to a default for an empty or
@@ -394,10 +452,22 @@ func qrNotice(q url.Values) string {
 		// M50.6's to replace — and what it replaces it with is the two things that
 		// changed about the picture, because both are visible and neither was
 		// asked for directly.
-		return "Logo stored, re-encoded as a PNG by this server, and drawn in the middle " +
-			"of the code. Error correction is now at level H, which is what makes a " +
-			"code readable with part of it covered — so the picture is a little denser " +
-			"than it was. What the code says is unchanged."
+		const stored = "Logo stored, re-encoded as a PNG by this server, and drawn in " +
+			"the middle of the code. Error correction is now at level H, which is what " +
+			"makes a code readable with part of it covered — so the picture is a little " +
+			"denser than it was. What the code says is unchanged."
+		// The third thing that can have changed, and only when it did (F214a).
+		// Silently shrinking somebody's artwork and reporting an unqualified
+		// success is the shape this reopening was called for.
+		fw, fh, fok := dimsParam(q.Get("from"))
+		tw, th, tok := dimsParam(q.Get("to"))
+		if !fok || !tok || (fw == tw && fh == th) {
+			return stored
+		}
+		return fmt.Sprintf("%s It was resized on the way in: you uploaded %d×%d and what "+
+			"is stored is %d×%d, because a stored logo holds at most %d pixels in total. "+
+			"The shape is unchanged and the code draws it at a fraction of its own size, "+
+			"so this is not detail you will see.", stored, fw, fh, tw, th, qr.MaxLogoPixels)
 	case "logo_removed":
 		return "Logo removed. The image is gone from the row rather than merely " +
 			"unreferenced, so nothing is left behind. The code stays at error " +

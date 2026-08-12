@@ -33,8 +33,27 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 
 This table listed eight of these pages until 0.2.0 and omitted the rest, including three that share the identity menu with pages it did list ([F45](build-notes/deferred-findings.md)).
 
-It works without JavaScript. htmx makes search and filtering swap a fragment
-instead of reloading, and that is the only thing it is used for.
+**The dashboard needs JavaScript**, and there is no `<noscript>` fallback — the
+stance is recorded rather than defended in markup nobody reads. htmx makes
+search and filtering swap a fragment instead of reloading, and it carries some
+of the writes too: the QR logo upload applies the file as soon as you choose
+one, which is a post over htmx and is why a refused upload answers `200` with
+the reason in the panel rather than a status the swap would throw away.
+
+Some pages are plain forms and links throughout and do keep working with
+scripting off — the folder tree and the link filters are both said to below.
+Read those as *these controls need no script*, which is what they are, rather
+than as a fallback: nothing tests the scriptless path and no page is held to it,
+so a page that works today may stop the next time htmx carries one of its
+writes.
+
+*(This paragraph said the dashboard worked without JavaScript, and that it was
+used for search and filtering only. The first was already stale — the
+requirement was settled deliberately, and well before 0.3.0 shipped — and the
+logo upload is what made the second false too.)*
+
+**Short links need none of it.** The redirect path is scriptless, which is the
+part a visitor touches.
 
 ### The header
 
@@ -145,8 +164,9 @@ wrong — the button that asks for a review.
 *Campaigns* and *Folders* are a second bar under the header, on every page of the
 links area rather than only on this one.
 
-With JavaScript off, the **Filter** button beside the search box applies every
-control at once, including the ones inside the panel.
+The **Filter** button beside the search box applies every control at once,
+including the ones inside the panel — one plain form submission, so the filters
+need no script even though the page around them does.
 
 ### Creating a link
 
@@ -195,9 +215,10 @@ asks where it goes; every destination that would actually be accepted grows a
 **Move here** button, and **Move to the top level** sits in the banner. Cancel
 leaves it alone. A folder can never be moved into itself or into any folder
 inside it, and a branch cannot be moved somewhere that would push part of it past
-eight levels — those destinations simply offer no button. The whole thing works
-with JavaScript switched off and is operable from a keyboard; there is no
-drag-and-drop.
+eight levels — those destinations simply offer no button. Every control on this
+page is a plain form or link: operable from a keyboard, working with scripting
+off, and never a drag. That is what these controls are rather than a fallback
+the dashboard maintains — the note above says why the distinction matters.
 
 **Deleting a folder never deletes a link.** It removes the folder and the folders
 inside it, and every link filed anywhere in that branch stays exactly where it
@@ -454,7 +475,7 @@ curl -sS -X DELETE "$BASE/api/v1/links/$LINK_ID/qr/logo" \
 The shorthand answers under `qr` and the collection under `code`, like every
 other operation in their respective families.
 
-Five things are worth knowing before you script it.
+Six things are worth knowing before you script it.
 
 **PNG and JPEG only, decided by the bytes.** Neither the filename nor the
 `Content-Type` you send is read, so a `.png` holding a JPEG works and a `.jpg`
@@ -465,10 +486,17 @@ serve one it did not write.
 **What is stored is a PNG this server encoded**, never your file. That strips
 metadata as a side effect, so do not use this to keep an original.
 
-**Three bounds, and exceeding any of them is a `422` naming which**: the request
-body stops at 1,048,576 bytes, the image at 1024 pixels a side and 262,144
-pixels in total, and the re-encoded result at 1,060,000 bytes. The middle pair
+**Three bounds, and exceeding any of them is a `422` naming which one and what
+your image measured**: the request body stops at 1,048,576 bytes, the image at
+1024 pixels a side, and the re-encoded result at 1,060,000 bytes. The middle one
 is checked from the file's header before anything is decoded.
+
+**A large image is resized rather than refused.** A stored logo holds at most
+262,144 pixels in total, and that is a target rather than a bound: anything over
+it is scaled down to fit with its aspect ratio kept, and the response carries a
+`resampled` object naming what you sent and what was stored. It is absent when
+nothing was resized, so its presence is the signal. *(That figure was a second
+header bound until now, and an image over it was a `422`.)*
 
 **Uploads have their own rate limit** (`UPLOAD_RATE_PER_MIN`, thirty a minute by
 default) on top of the API's, so a `429` here can arrive while everything else

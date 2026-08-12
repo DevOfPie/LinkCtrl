@@ -330,6 +330,9 @@ file. Append a row when you append an entry.
 | [M48 reopened: the QR popup folds into its tab](#2026-08-11--m48-reopened-the-qr-popup-folds-into-its-tab) | F212 closed: the thumbnail opens the QR tab in the strip's own swap, the page-level popup retires with its contents enumerated piece by piece — the body folds into the tab in flow, the chrome retires, the route and the `next` mechanism survive untouched — and two shipped claims are amended where they stand |
 | [Three more reopenings, from the owner's QR-tab report](#2026-08-12--three-more-reopenings-from-the-owners-qr-tab-report) | F213 M49 (preview footprint, quiet zone, Restore defaults), F214 M50.5 (downscale with warning, specific refusals, apply-on-select, click feedback), F215 M50.6 (logo as big as still decodes, gated by simulated distance-scanning) |
 | [M49 rebuilt: the quiet zone stops absorbing the rounding, and D179](#2026-08-12--m49-rebuilt-the-quiet-zone-stops-absorbing-the-rounding-and-d179) | D179 — the quiet zone pins at the ISO floor and the whole remainder lands on the drawn size, where the snap notice already reports it, superseding D128's quiet-zone half and naming it rather than editing it; fractional modules and a wider margin both rejected with reasons. Old-against-new measured across every module count: at 2000px a 21-module code went from 15.7% code by area to 52.4%. `MaxScale` 32 → 68, derived from the raster bound so every fit is a style the API accepts; `MaxMargin = 16` revisited and kept as a stored-row ceiling only. Stored rows render unchanged and a re-save moves and reports, asserted on a margin-14 row. The preview frame becomes 18rem square and the page states the served size beside it, saying whether it is a stored size or the default; the reset button becomes *Restore defaults* |
+| [M50.5 rebuilt: an oversized logo is resized, not refused, and D180](#2026-08-12--m505-rebuilt-an-oversized-logo-is-resized-not-refused-and-d180) | D180 — two header caps collapse to one, because an 813×813 upload passed the side and failed the area and the sentence could name no verdict; the area figure becomes the size a stored logo is resized *to*, both sizes reported. The trade is memory and it is stated: the decode allocation quadruples to 8,388,608 bytes and the image buffers an upload holds come to 14,680,064, with the encoder's own working state bounded beside them at under 4 MiB rather than folded in, in `docs/SECURITY.md` and in the constant block — eight bytes a pixel, because a bit-depth-16 PNG decodes to `image.NRGBA64` and four was what the shipped figures wrongly assumed, so the correction reaches D135 too. Refusing bit depth 16 to keep four true was the alternative and is recorded as rejected; the figures are now measured against a real decode rather than re-derived by the test meant to hold them. The header-first ordering is untouched. M50.6's scaler reused rather than copied, so no module joins the require block; the drawing path grows the area check the upload path gave up, so D142's raster figure stays true. The upload form applies the file on selection over an htmx `change` trigger, which makes it the first form in the panel to meet htmx's refusal to swap a 4xx — the refusal renders at 200 for an htmx request and at 422 for a native post. The browse control gains a pressed state in `app.css`, keyed on `:focus:not(:focus-visible)` so a reader who merely tabbed to it is not left looking at a permanent one, and drawn with a new `--t-press-shadow` token rather than a raw black. A kept browser spec drives the whole flow, because the 200 rests on a claim about htmx nothing here exercised; both halves were born red. The two SQL sources still naming the superseded decode bound are corrected, and the JavaScript-off sentences in README.md and `docs/usage.md` stop contradicting the paragraphs above them |
+| [M50.5, the enforcement-order bullet names a cap that stopped refusing](#2026-08-12--m505-the-enforcement-order-bullet-names-a-cap-that-stopped-refusing) | An orchestrator amendment at step 3.4, fact-level and therefore not a prompt: m50.5.md's enforcement order said the dimension **and pixel-count** caps are enforced at `image.DecodeConfig`, and since D180 the pixel-count figure refuses nothing — it is the size a stored logo is fitted to. The order the bullet asserts is unchanged and the bomb test still measures it |
+| [M50.5, D178's refusal status is now conditional on the caller](#2026-08-12--m505-d178s-refusal-status-is-now-conditional-on-the-caller) | A second orchestrator amendment, also fact-level: D178 said the QR write re-derives its tab "including the 422 refusal", and the logo form's htmx post now gets a 200 because htmx swaps no 4xx. What D178 asserts — re-derivation from the write rather than from the request — is unchanged on both branches. The wider class is [F218](deferred-findings.md) |
 
 ---
 
@@ -27291,3 +27294,318 @@ test, the PNG bound and its 4,000,000-byte allocation story, the level's move to
 the API, the codes list, the logo controls, and `demoCoverage()` — the M41 row
 already requires a styled code and this milestone changes the style it requires,
 not the count.
+## 2026-08-12 — M50.5 rebuilt: an oversized logo is resized, not refused, and D180
+
+M50.5 reopened on the owner's QR-tab report ([F214](deferred-findings.md#closed)),
+which is three symptoms on one control. They are not three defects: one is a
+bound that could not explain itself, and two are a form that made the reader do
+work the form already had the answer to.
+
+### D180 — the two caps that could not both be named
+
+The shipped bound was *"a logo is at most 1024 pixels on a side and 262,144
+pixels in total"*, and the owner's upload was **813×813**. That is inside the
+first and four times past the second. Every part of the refusal is true and
+none of it is usable: the reader is given two numbers, no statement of which one
+bit, and no measurement of their own file to compare either against. There is no
+edit to that sentence that fixes it while two caps refuse, because *which one*
+is a fact the caller has to be told and the sentence would then be naming a cap
+that did not apply.
+
+So the second cap stopped refusing. **262,144 pixels is now the size a stored
+logo is fitted to**, and an image over it is resampled down keeping its aspect
+ratio. That leaves exactly one header refusal — 1024 pixels a side — and the
+side bound already implies an area of 1024², so nothing can pass one bound and
+fail another. `MaxDecodedLogoPixels` is written down as that implication rather
+than declared beside it, which is what stops a second cap growing back.
+
+**The refusal became a struct.** `qr.LogoBoundError` carries the measured width
+and height, which bound was crossed and its limit; `internal/link` writes the
+sentence from those fields. A sentinel plus a fixed string could not have said
+*this image is 2000×300 and 2000 pixels wide is past the 1024 a side*, and that
+is the whole of what was missing. It answers `errors.Is` for `ErrLogoTooLarge`,
+so every caller that switched on the sentinel goes on doing so.
+
+**The trade is memory, and D135's decode figure was load-bearing.** Accepting
+larger headers means decoding them: 1,048,576 pixels, and **eight bytes each
+rather than four**. Four is `image.NRGBA`, which is what this package
+*normalizes to*; it is not what a decoder hands it. `image/png` returns
+`image.NRGBA64` or `image.RGBA64` for any bit-depth-16 file, and such a file is
+ordinary — a 1024×1024 16-bit RGBA PNG of one flat colour is about ten
+kilobytes on the wire, so it clears the 1 MiB body cap by two orders of
+magnitude and the side cap exactly. So the decode bound is **8,388,608 bytes**,
+four times what D135's area cap admitted; the **image buffers** one upload holds
+are four terms — the upload itself, live across the decode and inside the
+1,048,576-byte body cap, plus the decoded source, the resampler's own NRGBA copy
+of it and the resampled destination — and come to **14,680,064 bytes**, 14 MiB
+exactly against 4 MiB before.
+
+**The encoder is bounded beside that figure rather than inside it**, because a
+number labelled *the peak* that omits a term is the defect this entry is
+correcting, and folding in a term nothing in this repository controls would be
+the other way of getting it wrong. The `bytes.Buffer` the PNG is written into
+grows by doubling, so at its last growth two arrays are live — under 3,145,728
+bytes; flate's window and hash tables and the per-scanline buffers are a fixed
+cost of one `png.Encode`, measured at about 850,000 bytes and unchanged by the
+image's size. Under 4 MiB together, so **under 18 MiB in flight per upload**.
+Both terms are properties of a Go release, which is why they are stated and
+measured rather than pinned by a test: the same reasoning `MaxLogoStoredBytes`
+already carries slack for. The handler's read buffer doubles the same way and
+raises nothing, since it reaches its largest size before a decode exists and
+what it hands on is the first term of the four.
+
+**Four bytes a pixel was wrong before this milestone as well as in it**, which
+is why the correction reaches D135 and `docs/SECURITY.md`'s shipped sentence and
+not only the new numbers: under the old caps the worst decode was 262,144 × 8 =
+2,097,152 and every record said 1,048,576. The gap was 1 MB and became 4 MB when
+the header bound moved, which is the only reason it surfaced now.
+
+**The choice this forced, and it was the build's to make.** Two shapes fix the
+arithmetic and they buy different things. *Refuse bit depth 16 in
+`DecodeLogoConfig`* keeps four bytes a pixel true and takes about 4 MiB off the
+peak, at the cost of a refusal — in the one milestone whose entire purpose is to
+stop refusing what it can adapt, for a property of a file no viewer shows the
+person who made it, and one no bullet asks for. *State the arithmetic at eight*
+keeps every file this product accepts today working and asks an operator to
+budget about 18 MiB for an upload in flight rather than about 14. **The second**: the
+reopened bullet asks for the allocation story restated, not for the accepted
+formats narrowed, and the honest restatement of what the tree already does is
+the smaller change as well as the truer one. If the peak is later judged too
+high, refusing bit depth 16 is still available and is a decision with a product
+cost attached, which is where it belongs.
+
+**And the figures are measured now, not multiplied.**
+`TestTheCapsAgreeWithEachOther` did not catch the four-byte error because it
+re-derived `MaxDecodedLogoPixels * 4` — the same expression as the code, so the
+two agreed with each other and with nothing else. A test that reproduces the
+code's arithmetic is not a check on the code's arithmetic.
+`TestTheDecodeBoundIsMeasuredNotAssumed` builds the widest file the caps admit,
+puts it through the body cap, `DecodeLogoConfig` and `png.Decode` in that order,
+and reads the buffer off the concrete type that came back;
+`TestNoDecoderOutputIsWiderThanTheStatedPixel` measures every concrete type
+either decoder can return, so eight is the widest rather than merely the widest
+the fixture reaches; and the peak table is now summed from buffers
+`image.NewNRGBA` allocated and a size `FitStoredLogo` chose. `MaxDecodedLogoBytes`
+and `MaxDecodedLogoBytesPerPixel` exist as constants for the same reason: an
+inlined `4` is how the wrong figure got written three times in three files.
+
+D135 is left in place in Plan.md with a supersession clause naming D180, rather
+than edited: the header half is superseded, the stored bound and the 20 MiB row
+figure are not.
+
+**What did not move.** The ordering. The side bound is still read by
+`image.DecodeConfig` from the header before any pixel buffer exists, and
+`TestABombIsRefusedBeforeAnythingIsDecoded` still measures that an 8000×8000
+declaration costs a few hundred bytes rather than 256 MB. A resize that happened
+before the bound would be the same defect the milestone was written to avoid,
+one step later.
+
+**The scaler is M50.6's, reused.** `resampleNRGBA` already existed in the
+package — area-averaging, written by hand at D142 precisely so
+`golang.org/x/image/draw` would not join the require block one milestone after
+M49 asserted the QR path adds none. Writing a second one for the upload path
+would have been the same code twice with two places for the aspect ratio to go
+wrong.
+
+**And the drawing path grew the check the upload path gave up.**
+`Code.prepareLogo` decodes a *stored* image, and D142 bounds its raster at
+`MaxLogoPixels × 4`. With `DecodeLogoConfig` no longer enforcing the area, a
+`qr_codes` row written by hand could have carried a 1024×1024 logo into that
+path and quadrupled a figure D142 states. It refuses one now. That is one line,
+and it is the reason it is here: the change was in `internal/qr`'s upload half
+and the claim it would have falsified belongs to a different milestone.
+
+### Choosing the file is the whole interaction
+
+*Upload a logo* / *Replace the logo* was a button beside a file input, and
+nobody picks a file and then declines to apply it. `hx-trigger="change"` on the
+form replaces it — htmx's own attribute, no script of this product's, so
+`script-src 'self'` is untouched — and the button is gone rather than kept
+beside the trigger, because a control implying the file has not been applied is
+the interference that was reported.
+
+**That made this the first form in the panel to post over htmx, and htmx does
+not swap a 4xx.** Its default `responseHandling` reads the response, fires an
+error event, and leaves the page exactly as it was; every other form here posts
+natively and never meets the rule. A refusal answered 422 would therefore have
+been a refusal nobody sees, which is worse than the two-step it replaced. So
+`finishQRAction` renders at **200 for an htmx request and 422 for a native
+post** — the shape `renderAutomation` and `renderDomains` have used since they
+were written, arrived at here for the same reason. The message in the page is
+what says the upload was refused; the status line was discarded by the swap
+either way.
+
+The swap needs something to select, and the panel is rendered from two routes.
+The QR tab's wrapper has carried `id="qr"` since the F212 reopening; the
+standalone page at `/links/{id}/qr` had none, so it has one now. A target the
+response does not contain swaps nothing, which is indistinguishable from the
+control being dead — the exact failure this reopening is about.
+
+Success is unchanged and needed no work: `seeOther` has answered an htmx request
+with `HX-Redirect` since it was written, which is a full page load.
+
+### The warning, and where it is spent
+
+An upload that was resized redirects with both sizes in the query and `qrNotice`
+turns them into a sentence, exactly as M49's size snap does — the page it lands
+on is a fresh request that never saw the file. Both numbers are **re-derived**
+rather than echoed, bounded by what a stored logo can actually be, because a
+sentence assembled from a query string is a sentence somebody else can write.
+And it is printed only when it happened: a line after every upload saying it
+stored what you sent is a line nobody reads by the third time.
+
+The API surface gets the same fact, as an optional `resampled` object on the
+upload response, present only when the image was shrunk. A client that sent
+artwork and got a bare `200` would have no way to know the bytes it sent are not
+the bytes now stored, and `has_logo` cannot say so. The contract test replays an
+oversized upload, so the schema is exercised rather than merely written.
+
+### The pressed state
+
+The OS file dialog takes about a second to open and the control said nothing in
+the meantime, which reads as a dead button and earns a second click. `:active`
+acknowledges the press and **`:focus` is the one that spans the wait** — a file
+input holds focus for as long as its dialog is up, which is the whole duration
+in question. `form.htmx-request` makes the control inert while the upload is in
+flight.
+
+**But focus outlives the dialog, so the selector is
+`:focus:not(:focus-visible)`.** A busy state keyed on focus alone paints a
+pressed background on anybody who merely tabs onto the control, and it never
+comes off — a permanent claim that something is happening, made to the readers
+least able to check. `:focus-visible` is the distinction the platform already
+draws between focus that arrived from a keyboard and focus that arrived from a
+pointer, so excluding it takes the false state off the keyboard path and leaves
+the pointer path exactly as designed. The keyboard path loses the
+acknowledgement during its own dialog wait, and that is the cheaper loss: the
+dead-button reading comes from a *click* that appeared to do nothing, while
+somebody who pressed Enter on a control wearing a visible focus ring already
+knows which control they addressed — and `:active` still fires on that press, so
+the keystroke is not silent either. The alternative, accepting the permanent
+state and documenting it, was rejected because there is no reading under which
+the reader is better off: they are told a dialog is opening and no dialog is.
+
+The rules are in `input.css` and therefore in the built `app.css`. F206 already
+settled where a state style ships: htmx's own indicator stylesheet is switched
+off because `style-src 'self'` refuses an injected one, and that comment says a
+template that starts to need one must bring rules with it. This is the template
+that started to.
+
+The inset it draws is `var(--t-press-shadow)`, a token added to all three theme
+blocks rather than the `rgb(0 0 0 / 0.25)` this file first carried — the same
+block's own comment promises tokens and not palette values, and nothing enforces
+that in CSS the way `TestTemplatesUseThemeTokensOnly` enforces it in templates.
+It earns the token twice over: 0.25 black over `line-strong` at `#cbd5e1` is a
+clear notch and the same value over `#475569` is nothing at all, so the depth is
+a per-theme fact and not a constant.
+
+### Driven in a browser, because that is where the claim lives
+
+The 200-for-htmx answer above rests entirely on a statement about htmx's default
+`responseHandling`, and until this reopening nothing in this repository
+exercised it: the Go tests set `HX-Request: true` by hand and assert a status,
+which is a test of the handler and not of htmx. Nor could any template test see
+htmx *binding* a `change` on a `<form>` to a multipart post — the whole
+mechanism the two-step button was traded for. So
+`tools/agent-browser/specs/qr-logo.spec.mjs` joins the kept specs and drives
+both: a file chosen in a real file chooser posts itself and the page says the
+logo was stored, and a file that is not an image comes back as a sentence inside
+the `#qr` swap with the URL unchanged.
+
+Both halves were born red rather than asserted. With `finishQRAction` returning
+422 to an htmx request the refusal never reached the page at all, which is the
+htmx rule measured rather than quoted; with `hx-trigger` changed to `submit` the
+upload never happened. Both restored by counter-edit. The spec also settles the
+`:focus-visible` question the same way — it clicks the input and asserts the
+element matches `:focus` and not `:focus-visible`, then tabs to it and asserts
+the opposite — and one thing that surfaced only there is worth keeping: Chromium
+arms the heuristic when focus *arrives*, so clicking a control that already
+holds keyboard focus leaves the flag as the keyboard set it. The spec therefore
+drives the pointer path on a page nothing has been focused on yet.
+
+### Two records the reopening had to reach, and one it deliberately did not
+
+The decode bound is stated in more places than the code that enforces it.
+`internal/store/query/campaigns.sql` and `internal/store/migrations/03800_qr_code_logo.sql`
+both said the decode is bounded by `qr.MaxLogoPixels`, which D180 made false —
+that figure now bounds the stored artefact alone and refuses nothing. Both are
+corrected, and the sqlc-generated copies in `dbgen/` regenerate from the first
+of them. Changing a comment inside an applied migration is safe here because
+goose versions files rather than checksumming them.
+
+**What was left alone is the same migration's worst-case row size**, which says
+1,049,600 bytes where `MaxLogoStoredBytes` is 1,060,000 — the first line of
+`logo.go`'s derivation table quoted as its total. That one shipped with the
+migration and predates this reopening, so it is out of spec and is
+[F219](deferred-findings.md#open) rather than an edit smuggled into a commit
+about something else.
+
+### The dashboard needs JavaScript, and two pages happen not to
+
+Not this milestone's defect, but this milestone's sentence made it visible:
+README.md's Dashboard row now says JavaScript is required, and the Folders row
+four rows above still said folders *"work with JavaScript off"*. Both were true
+— `folders.html` really does carry native fallbacks on every htmx attribute —
+and a reader takes away the contradiction rather than either fact. `docs/usage.md`
+had the same pair. Reworded so the requirement is the product's stance and the
+scriptless pages are a property of *those controls*, said in those words, with
+the note that nothing tests the scriptless path and no page is held to it. The
+distinction matters because the next htmx-carried write on one of those pages
+would silently make the weaker claim false, exactly as the logo upload did to
+the paragraph in `usage.md`.
+
+## 2026-08-12 — M50.5, the enforcement-order bullet names a cap that stopped refusing
+
+An amendment, made by the orchestrator at step 3.4 rather than by a worker, on a
+fact the tree contradicts.
+
+**As it stood** — [m50.5.md](phase-details/m50.5.md), step 2 of the enforcement
+order:
+
+> **`image.DecodeConfig`** reads the header only and yields dimensions without
+> decoding pixels. The dimension and pixel-count caps are enforced **here**.
+
+**As amended**:
+
+> **`image.DecodeConfig`** reads the header only and yields dimensions without
+> decoding pixels. The dimension cap is enforced **here** *(the pixel-count cap
+> was too, until this milestone's 2026-08-12 reopening made it the size a
+> stored logo is fitted to rather than a refusal — D180)*.
+
+**The tree fact.** `internal/qr/logo.go`'s `DecodeLogoConfig` raises
+`LogoBoundError{Bound: "side"}` and nothing else; the 262,144-pixel figure now
+reaches only `FitStoredLogo`, which resamples. An 813×813 upload passes the
+header stage and is stored at 512×512, which is the reopening's own fixture.
+
+The amendment is fact-level and therefore not a prompt: the enforcement *order*
+the bullet asserts — body, then header, then decode — is unchanged and is still
+what the bomb test measures. Only the count of caps at step 2 moved, and it
+moved because the reopening was built.
+
+## 2026-08-12 — M50.5, D178's refusal status is now conditional on the caller
+
+A second orchestrator amendment at step 3.4, fact-level, on the same milestone.
+
+**As it stood** — [Plan.md](../../Plan.md)'s D178 row:
+
+> QR onto `tab=qr` (including the 422 refusal), sign renders the signed tab.
+
+**As amended**:
+
+> QR onto `tab=qr` (including the refusal path — a 422 when the post is native,
+> and a 200 since M50.5's reopening when it is an htmx request, because htmx
+> swaps no 4xx and a refusal nobody sees is not a refusal; the re-derivation is
+> the same on both), sign renders the signed tab.
+
+**The tree fact.** `internal/httpx/web_qr.go`'s `finishQRAction` branches on
+`isHTMX` and answers 200 there, 422 otherwise; both are asserted by
+`TestARefusalReachesAnHTMXUpload`. The logo form became the panel's first htmx
+poster at this reopening, and htmx's default `responseHandling` swaps no 4xx —
+read out of the vendored `htmx.min.js`.
+
+Fact-level, so not a prompt: what D178 asserts is that a section-owned write
+**re-derives its tab from what it is** rather than reading one off the request,
+and that is unchanged on both branches. The status code was a detail inside the
+parenthesis, and it moved. The wider class — every `hx-post` control whose
+handler answers 4xx and therefore swaps nothing — is [F218](deferred-findings.md),
+filed open and deliberately out of this milestone's spec.

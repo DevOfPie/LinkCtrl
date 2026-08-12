@@ -84,7 +84,7 @@ Each was found by driving the running test instance on 2026-08-11:
 | htmx swaps kill element refs | `e11` became `f1e12` after a swap, and a fill against the old ref went nowhere, silently | Re-snapshot after every swap, or target by role and name |
 | The product classifies the driver as a bot | `internal/analytics/useragent.go` lists `playwright`, `headlesschrome`, `puppeteer`, `selenium` | Only the redirect path's analytics care. A spec touching that path must say how it handles this; the kept spec does not touch it |
 | An unstyled page is the default failure | `app.css` is generated and gitignored | Both targets drive the Docker instance, whose image builds its own stylesheet — the trap cannot bite there. Driving a locally-run server instead needs `make css` first |
-| A failed sign-in charges a real lockout counter | Credentials also do not belong in a committed spec | The clean-console spec stays on `/login`, where layout, stylesheet, CSP and htmx are all live without a session. The signed-in specs — the workspace spec (M46.6) and the link-tabs spec (M47) — assert the signed-in shell, which no spec can do sessionless: each reads `LINKCTRL_UI_EMAIL` / `LINKCTRL_UI_PASSWORD`, falls back to parsing the account table in [`docs/dev-notes/instances.md`](../../docs/dev-notes/instances.md) — the file a rebuild already updates, so no committed second copy — and makes exactly one attempt (retries are 0) |
+| A failed sign-in charges a real lockout counter | Credentials also do not belong in a committed spec | The clean-console spec stays on `/login`, where layout, stylesheet, CSP and htmx are all live without a session. The signed-in specs — the workspace spec (M46.6), the link-tabs spec (M47) and the QR-logo spec (M50.5) — assert the signed-in shell, which no spec can do sessionless: each reads `LINKCTRL_UI_EMAIL` / `LINKCTRL_UI_PASSWORD`, falls back to parsing the account table in [`docs/dev-notes/instances.md`](../../docs/dev-notes/instances.md) — the file a rebuild already updates, so no committed second copy — and makes exactly one attempt (retries are 0) |
 
 ## Opt-in, with a cadence
 
@@ -118,6 +118,7 @@ failed" and "nothing was checked" must not share an exit code.
 | `specs/clean-console.spec.mjs` | kept spec: `/login` renders, htmx runs configured, console clean |
 | `specs/workspace-control.spec.mjs` | kept spec (M46.6): signed in at 360px, the workspace switcher's closed face shows no text and the header does not overflow |
 | `specs/link-tabs.spec.mjs` | kept spec (M47, reopened): signed in at 360px, the link page's tab strip stays on one row instead of wrapping, the document does not scroll sideways, and a tab click swaps its panel in and pushes `?tab=` |
+| `specs/qr-logo.spec.mjs` | kept spec (M50.5, reopened): signed in, choosing a file in the QR panel posts it over htmx with no submit button, a refused file comes back through the `#qr` swap instead of a 4xx nothing renders, and the pressed state is on the pointer path only |
 | `report-failures.mjs` | JSON-reporter filter: green in one line, red at exactly the assertion |
 | `package.json` | both pins, exact, the way every vendored version here is pinned |
 | `package-lock.json` | tracked, so the two-version layout and bin shims reproduce |

@@ -185,8 +185,10 @@ DELETE FROM qr_codes WHERE id = $1 AND workspace_id = $2 AND slug <> '';
 -- code of its own.
 --
 -- The bytes are already bounded — the request body by http.MaxBytesReader, the
--- decode by qr.MaxLogoPixels, and this value by qr.MaxLogoStoredBytes, which
--- internal/qr enforces rather than assumes.
+-- decode by qr.MaxDecodedLogoPixels, and this value by qr.MaxLogoStoredBytes,
+-- which internal/qr enforces rather than assumes. Since D180, qr.MaxLogoPixels
+-- bounds the *stored* artefact alone and refuses nothing: an image above it is
+-- resampled down to it before it reaches this statement.
 UPDATE qr_codes SET logo = $3, updated_at = now()
  WHERE id = $1 AND workspace_id = $2;
 

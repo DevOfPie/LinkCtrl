@@ -197,3 +197,109 @@ func TestTheQRResetButtonSaysRestoreDefaults(t *testing.T) {
 		}
 	}
 }
+
+// --- the upload control, at the F214 reopening -------------------------------
+
+// logoForm cuts the logo upload form out of a rendered panel.
+//
+// Anchored on the action rather than on a class, because the class list is
+// exactly the thing these tests must be free to change: what is asserted below
+// is the behaviour the attributes declare, not how the control is painted.
+func logoForm(t *testing.T, body string) string {
+	t.Helper()
+	i := strings.Index(body, `/qr/logo" enctype="multipart/form-data"`)
+	if i < 0 {
+		t.Fatal("the panel renders no logo upload form")
+	}
+	start := strings.LastIndex(body[:i], "<form")
+	end := strings.Index(body[i:], "</form>")
+	if start < 0 || end < 0 {
+		t.Fatal("the logo upload form is not a complete element")
+	}
+	return body[start : i+end]
+}
+
+// TestChoosingALogoAppliesIt is F214(c): the two-step went away.
+//
+// **The button is asserted absent, not just the trigger present.** A form that
+// grew an htmx trigger and kept its submit control would pass a test for the
+// trigger alone and would still be the interference the owner reported —
+// choosing a file would apply it *and* leave a button implying it had not.
+//
+// The swap target is asserted on the page as well as on the form. htmx does not
+// swap a 4xx, so the refusal path renders the page at 200 and this selects the
+// panel out of it; a target the page does not contain would silently swap
+// nothing, which is the failure mode this control was reopened for in the first
+// place.
+func TestChoosingALogoAppliesIt(t *testing.T) {
+	for _, page := range qrPanelPages {
+		body := renderQRPanel(t, page)
+		form := logoForm(t, body)
+
+		for _, want := range []string{
+			`hx-trigger="change"`, `hx-post="/links/`, `hx-encoding="multipart/form-data"`,
+			`hx-target="#qr"`, `hx-select="#qr"`,
+		} {
+			if !strings.Contains(form, want) {
+				t.Errorf("%s: the logo form is missing %s, so choosing a file does not "+
+					"apply it (F214c)", page, want)
+			}
+		}
+		if strings.Contains(form, "<button") || strings.Contains(form, `type="submit"`) {
+			t.Errorf("%s: the logo form still carries a submit control. The file applies "+
+				"on selection, so the button is the second step F214 asked to remove:\n%s",
+				page, form)
+		}
+		if !strings.Contains(body, `id="qr"`) {
+			t.Errorf("%s renders no id=\"qr\", which is what the logo form's refusal "+
+				"swaps; without it htmx replaces nothing and the refusal is invisible",
+				page)
+		}
+	}
+}
+
+// TestTheBrowseControlAcknowledgesTheClick is F214(b).
+//
+// The OS file dialog takes about a second to open and the control said nothing
+// in the meantime. What can be asserted from here is that the class the state
+// hangs off is on the input and that the stylesheet actually carries rules for
+// it — a class with no rules is the same dead control with a longer attribute.
+//
+// `:focus` is checked by name because it is the one that spans the wait: the
+// press is over in a moment and the input holds focus for as long as the dialog
+// is up. **And the `:not(:focus-visible)` is checked with it**, because focus
+// outlives the dialog: keyed on focus alone the rule paints a permanent pressed
+// background on anybody who merely tabs onto the control. That the exclusion
+// does what it is written for — pointer focus in, keyboard focus out — is a
+// browser fact and is driven in `tools/agent-browser/specs/qr-logo.spec.mjs`;
+// what belongs here is that the selector shipped.
+func TestTheBrowseControlAcknowledgesTheClick(t *testing.T) {
+	css := builtStylesheet(t)
+	for _, want := range []string{
+		".file-pick:active::file-selector-button",
+		".file-pick:focus:not(:focus-visible)::file-selector-button",
+		"form.htmx-request .file-pick",
+	} {
+		if !strings.Contains(css, want) {
+			t.Errorf("the built stylesheet has no rule for %s. The state has to ship in "+
+				"app.css: `style-src 'self'` refuses an injected stylesheet, which is why "+
+				"htmx's own indicator styles are off (F206)", want)
+		}
+	}
+	// The inset is a theme token, on the same terms the templates are held to by
+	// TestTemplatesUseThemeTokensOnly — which scans templates and therefore
+	// cannot see a palette value written in the stylesheet itself. This rule is
+	// the only place that gap has bitten, so it is closed here rather than by a
+	// second scanner: 0.25 black reads as a notch over the light theme's
+	// line-strong and as nothing at all over the dark theme's.
+	if !strings.Contains(css, "var(--t-press-shadow)") {
+		t.Error("the pressed state's shadow is not drawn from --t-press-shadow, so it " +
+			"is a palette value in a block whose own comment promises theme tokens")
+	}
+	for _, page := range qrPanelPages {
+		if form := logoForm(t, renderQRPanel(t, page)); !strings.Contains(form, "file-pick") {
+			t.Errorf("%s: the file input does not carry file-pick, so none of those "+
+				"rules reaches it", page)
+		}
+	}
+}
