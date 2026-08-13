@@ -114,10 +114,20 @@ func TestTheShortestContentIsWhatInternalQRAssumes(t *testing.T) {
 // so before D174: somebody put a picture on a code and `GET …/qr.png` began
 // answering 422 for a file that downloaded a moment earlier.
 //
-// The payload here is the row's own: 89 bytes, 37 modules at L and 53 at H, and
-// margin 13 at scale 31, which draws 1953px and is inside the raster bound —
-// 2000px when this was measured, 2048 since D182 — with room to spare until the
-// level moves.
+// The picture here is the row's own: 37 modules before the upload, margin 13 at
+// scale 31, which draws 1953px and is inside the raster bound — 2000px when this
+// was measured, 2048 since D182 — with room to spare until the level moves.
+//
+// **The payload is not the row's own, and since D187 it cannot be.** F171 was
+// measured on an 89-byte payload at level `L`, which was 37 modules; the level
+// is a floor now, so `L` is a string this product accepts and never draws, and
+// that payload's 89 bytes come out at 41 modules and 2077px — already past the
+// bound, which would make the test's premise false rather than its assertion.
+// So the fixture is re-measured onto the payload that draws the same 37-module
+// symbol at the level a code actually carries: **69 bytes, at no named level at
+// all**, 37 modules free and 49 at H. Every number the comment above quotes is
+// the number this test measures; the payload behind them moved because the level
+// under it became unreachable.
 //
 // **That style is hand-built, and since the M49 reopenings it has to be.** When
 // the row was measured the size control produced it — the old qr.FitSize
@@ -131,17 +141,21 @@ func TestTheShortestContentIsWhatInternalQRAssumes(t *testing.T) {
 // test.
 func TestALogoDoesNotBreakThePNGDownload(t *testing.T) {
 	content := QRContent(
-		"https://links.example/"+strings.Repeat("a", 60), "")
-	if len(content) != 89 {
-		t.Fatalf("the payload is %d bytes and the measurement was taken at 89; "+
+		"https://links.example/"+strings.Repeat("a", 40), "")
+	if len(content) != 69 {
+		t.Fatalf("the payload is %d bytes and the measurement was re-taken at 69; "+
 			"the module counts below are that payload's", len(content))
 	}
 
-	before, err := qr.Encode(content, qr.LevelL)
+	before, err := qr.Encode(content, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	style, _ := qr.Style{Level: qr.LevelL, Margin: 13, Scale: 31}.Normalize()
+	if before.Size != 37 {
+		t.Fatalf("this payload draws %d modules and the measurement is 37's; the "+
+			"pixel numbers below are that symbol's", before.Size)
+	}
+	style, _ := qr.Style{Margin: 13, Scale: 31}.Normalize()
 	if got := qr.OutputSize(before.Size, style); got != 1953 {
 		t.Fatalf("the style draws %dpx, want the measured 1953", got)
 	}
@@ -353,4 +367,87 @@ func TestASizeSurvivesThePayloadGrowingUnderIt(t *testing.T) {
 		t.Errorf("a pre-M49 style %+v became %+v (%+v). Read-forward is M49's own "+
 			"claim: such a row renders as it always did", old, got, r)
 	}
+}
+
+// TestTheLevelComesBackWhenTheLogoLeaves is F223 at the arithmetic, and it is
+// the inverse of TestALogoDoesNotBreakThePNGDownload above.
+//
+// The upload's re-fit holds the picture at the size it already was while the
+// symbol grows; this one holds it at the size the reader chose while the symbol
+// shrinks back. What it owes is that the number does not move — a level change
+// moves the module count, and a module count is what a stored size is fitted
+// against, which is the whole of what M49's third reopening was about.
+func TestTheLevelComesBackWhenTheLogoLeaves(t *testing.T) {
+	const shortURL = "https://links.example/summer"
+	content := QRContent(shortURL, "")
+
+	// A code the size control produced: no level of its own, so it draws at the
+	// rule's, and a size fitted against that symbol.
+	fitted, err := qr.FitSize(mustEncodeSize(t, content, ""), 512)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, _ := qr.Style{
+		Foreground: "#123456", Background: "#fedcba",
+		Margin: qr.DefaultMargin, Scale: fitted.Scale, Size: fitted.Size,
+	}.Normalize()
+
+	// The upload, exactly as SetQRCodeLogo performs it.
+	withLogo := refitForLogo(content, stored)
+	if withLogo.Level != qr.LevelH {
+		t.Fatalf("the upload left the level at %q, want H", withLogo.Level)
+	}
+	if got := qr.OutputSize(mustEncodeSize(t, content, withLogo.Level), withLogo); got != 512 {
+		t.Fatalf("the logo'd code draws %dpx against a stored 512, so this fixture is "+
+			"in the re-fit's escape and what follows measures nothing", got)
+	}
+
+	// And the removal.
+	cleared := refitFromLogo(content, withLogo)
+	if cleared.Level != "" {
+		t.Errorf("the removal left the level at %q. An unset level is what asks for "+
+			"the rule, and a level nobody chose is the finding this closes",
+			cleared.Level)
+	}
+	if cleared.Size != 512 {
+		t.Errorf("the code was 512px under the logo and is %dpx without it. The size "+
+			"is the reader's number and the level is not, so only one of them moves",
+			cleared.Size)
+	}
+	if got := qr.OutputSize(mustEncodeSize(t, content, cleared.Level), cleared); got != 512 {
+		t.Errorf("the row says 512px and the drawing measures %dpx", got)
+	}
+	if cleared.Foreground != stored.Foreground || cleared.Background != stored.Background {
+		t.Errorf("removing the logo repainted the code: %+v became %+v", stored, cleared)
+	}
+	// The scale is what absorbs the smaller symbol, and it has to have moved:
+	// holding H's scale over the rule's symbol would leave the same 512 pixels
+	// with a quiet zone nobody fitted.
+	if cleared.Scale == withLogo.Scale {
+		t.Errorf("the scale stayed at %d across a symbol that went from %d modules to "+
+			"%d", cleared.Scale, mustEncodeSize(t, content, withLogo.Level),
+			mustEncodeSize(t, content, cleared.Level))
+	}
+
+	// A style with no size is the pre-M49 form and keeps its shape here for the
+	// reason refitForPayload keeps it: there is no number to hold, and the level
+	// still comes back.
+	old, _ := qr.Style{Level: qr.LevelH, Margin: 6, Scale: 9}.Normalize()
+	got := refitFromLogo(content, old)
+	old.Level = ""
+	if got != old {
+		t.Errorf("a pre-M49 style became %+v, want %+v — the level and nothing else",
+			got, old)
+	}
+}
+
+// mustEncodeSize is the module count of a payload at a level, which is the
+// number every size in the tests above is fitted against.
+func mustEncodeSize(t *testing.T, content string, level qr.Level) int {
+	t.Helper()
+	code, err := qr.Encode(content, level)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return code.Size
 }

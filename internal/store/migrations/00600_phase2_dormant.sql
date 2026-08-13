@@ -56,8 +56,16 @@ CREATE TABLE qr_codes (
     id           uuid        PRIMARY KEY,
     link_id      uuid        NOT NULL REFERENCES links(id) ON DELETE CASCADE,
     workspace_id uuid        NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    -- What this blob actually holds, as of M50.6 (0.3.0): `qr.Style` has five
-    -- fields — foreground, background, error-correction level, margin, scale.
+    -- What this blob actually holds, as of M50.6 (0.3.0): `qr.Style` has six
+    -- fields — foreground, background, error-correction level, margin, scale,
+    -- and the output size in pixels that M49 added (D182).
+    --
+    -- **The level is a floor and a row usually carries none** (D184, D187). It
+    -- was written into every style until 0.3.0 because Normalize filled it in;
+    -- it no longer is, and what a code draws at is the stronger of this field
+    -- and the strongest level its own payload gets for free. A row that still
+    -- names `M` is a row an older release wrote, and it draws the same picture
+    -- as one naming nothing.
     --
     -- This line read "colours, logo reference, error-correction level, margin,
     -- shape" from the first migration until M58. Two of those five were never

@@ -59,14 +59,28 @@ const (
 )
 
 // Levels is every level a style may name, in the order a form should offer them.
+// A style may name [LevelL] and no picture is ever drawn at it: D187 makes the
+// level a floor and the strongest free level is never below [DefaultLevel], so
+// naming L asks for less correction than costs nothing and gets the free level.
 var Levels = []Level{LevelL, LevelM, LevelQ, LevelH}
 
-// Defaults. M is the level nearly every printed QR code in the world uses, and
-// four modules of quiet zone is the minimum ISO/IEC 18004 specifies — below it
-// scanners start failing against busy backgrounds. Eight pixels per module puts
-// a short URL at roughly 300px, which is a size a phone camera reads from a
-// screen without zooming.
+// Defaults. Four modules of quiet zone is the minimum ISO/IEC 18004 specifies —
+// below it scanners start failing against busy backgrounds. Eight pixels per
+// module puts a short URL at roughly 300px, which is a size a phone camera reads
+// from a screen without zooming.
 const (
+	// DefaultLevel is where the level *starts*, and since D184 it is no longer
+	// what a code draws at. M is the level nearly every printed QR code in the
+	// world uses, so it is the baseline the free-level rule is measured against:
+	// [Encode] draws at the strongest level whose symbol is no bigger than this
+	// one's, which for the URL shapes this product produces is usually Q. See
+	// [LevelFor].
+	//
+	// **It is a floor under every code and not a default for codes that named
+	// nothing** (D187). Nothing this product draws is ever below the strongest
+	// free level, whatever a row says, so `L` is a value the API accepts and can
+	// never draw — a level weaker than one that costs nothing is a request for
+	// less correction at no saving, which is the thing the owner refused.
 	DefaultLevel  = LevelM
 	DefaultMargin = 4
 	DefaultScale  = 8
@@ -161,7 +175,26 @@ var ErrTooLarge = errors.New("too large to rasterise")
 type Style struct {
 	Foreground string `json:"foreground,omitempty"`
 	Background string `json:"background,omitempty"`
-	Level      Level  `json:"level,omitempty"`
+	// Level is the error-correction level, and since D184 it is a **floor rather
+	// than an instruction**: the level drawn is whatever [LevelFor] answers,
+	// which is the stronger of this field and the strongest level that does not
+	// make the symbol any bigger than [DefaultLevel] does.
+	//
+	// **Honoured upward, ignored downward** (D187). Naming `H` gets `H`, at
+	// whatever version that costs — that is how a logo forces one. Naming `L`
+	// gets the free level, because nobody may ask for less correction than costs
+	// nothing. The row keeps what was written and the picture carries what was
+	// drawn, so the two disagree for a caller who named a weak level; that
+	// disagreement is the cost the owner accepted rather than rewrite a field
+	// behind a caller's back.
+	//
+	// This is why [Style.Normalize] leaves it empty rather than filling in
+	// [DefaultLevel] the way it fills in every other field: the other defaults
+	// are numbers, and a floor written in by a constant is a floor nobody asked
+	// for. It is inert — [DefaultLevel] is never above the free level, by
+	// construction — but a row is a record of what a caller said, and every row
+	// this product ever wrote said `M` because Normalize said it.
+	Level Level `json:"level,omitempty"`
 	// Margin is the quiet zone, in modules. It is what the picture is built
 	// from only when Size is unset — see Size.
 	Margin int `json:"margin,omitempty"`
@@ -192,6 +225,10 @@ type Style struct {
 // Normalize fills in the defaults and returns the field errors for anything it
 // cannot. It is the only way a Style reaches the renderer, so every colour in an
 // SVG this package emits has been through the parser below.
+//
+// **[Style.Level] is the one field it does not fill in**, since D184: the level
+// is a rule rather than a constant, and the rule needs the payload this function
+// has never seen. [Encode] resolves it.
 func (s Style) Normalize() (Style, []FieldError) {
 	var errs []FieldError
 	out := Style{
@@ -222,7 +259,10 @@ func (s Style) Normalize() (Style, []FieldError) {
 
 	switch out.Level {
 	case "":
-		out.Level = DefaultLevel
+		// Left empty, which is *no floor* and not an omission (D184, D187) — see
+		// [Style.Level]. Filling in [DefaultLevel] here would be inert, because
+		// it is never above the free level; what it would still be is the reason
+		// every style this product ever stored says `M`, which nobody chose.
 	case LevelL, LevelM, LevelQ, LevelH:
 	default:
 		errs = append(errs, FieldError{"level", "invalid",
@@ -285,12 +325,127 @@ func (c *Code) Dark(x, y int) bool {
 // ErrTooLong is returned for content past MaxContent.
 var ErrTooLong = errors.New("too long to encode as a QR code")
 
-// Encode turns content into a matrix at the style's error-correction level.
+// Encode turns content into a matrix at the level **the rule** picks, which is
+// the stronger of the level asked for and the strongest one that is free (D184,
+// D187).
+//
+// **Correction is taken wherever it costs nothing.** A QR symbol steps between
+// versions, and correction below the next step is free:
+// `https://lnk.io/ab3x9?src=qr` is 29 modules across at M and 29 at Q, so a code
+// drawn at the old default of M was giving up a level of damage tolerance that
+// cost it nothing. The free level is the strongest one whose symbol is no bigger
+// than [DefaultLevel]'s — *never at the cost of a version.*
+//
+// **The level asked for is a floor, not an instruction** (D187). The rule binds
+// everything below it and never lowers: `L` on a payload where `Q` is free draws
+// `Q`, because nobody may ask for less correction than costs nothing; `H` draws
+// `H` at whatever version it costs, which is how [Style.ForLogo] forces the
+// level a logo needs (D141). The build recommended honouring a named level
+// exactly, on D185's ground that a `PUT` which reads back changed is a surprise;
+// the owner took the other side, and the cost accepted with it is that a row
+// naming a weak level disagrees with the picture drawn from it.
+//
+// **At or below the free level the module count is [DefaultLevel]'s, always.**
+// That is not a nice property, it is the load-bearing one: a stored [Style.Size]
+// is fitted against a module count, so a rule that moved one would falsify M49's
+// *the requested size is the size stored and drawn, exactly*. A floor *above*
+// the free level does move it — that is what H under a logo has always cost —
+// and every site in internal/link that fits a size encodes through this
+// function, so the fit is made against the symbol that will be drawn rather than
+// against the one the row names. TestTheRuleNeverChangesTheModuleCount and
+// TestTheRuleBindsALevelSomebodyNamed are where both halves are asserted.
+//
+// [LevelFor] is this same arithmetic when the caller wants the level rather than
+// the matrix.
 //
 // The style's colours and sizes do not reach here: they change the drawing, not
 // the encoding, which is why a workspace re-styling its code cannot change what
 // the code says.
 func Encode(content string, level Level) (*Code, error) {
+	code, _, err := encode(content, level)
+	return code, err
+}
+
+// LevelFor is the level content is drawn at for a style whose level is `named`:
+// the stronger of that floor and the strongest free level. It is the level a
+// `GET` has to report and a panel would have to print, because it is the level
+// the picture actually carries (D184, D187).
+//
+// It answers the floor for content that cannot be encoded at all, because the
+// callers are reporting a level beside a picture whose failure they are already
+// reporting by other means — the same reasoning link.QROutputSize's zero rests
+// on.
+func LevelFor(content string, named Level) Level {
+	_, level, _ := encode(content, named)
+	return level
+}
+
+// encode is [Encode] and [LevelFor] in one piece of arithmetic, because two
+// copies of the rule would be two answers to *what level is this code*.
+//
+// The floor is the stronger of what was named and [DefaultLevel]; the candidates
+// at or above it are walked strongest-first, and the first whose symbol matches
+// [DefaultLevel]'s wins, so the answer is the strongest free level rather than
+// merely a free one. Where nothing above the floor is free, the floor itself is
+// drawn — larger symbol and all, which is the logo's case. The matrix returned
+// is the chosen level's, already built; nothing re-encodes after the choice.
+//
+// An unrecognised level ranks below every real one and so names no floor at all.
+// Normalize refuses one long before a style reaches the encoder, so what this
+// actually handles is the empty string.
+func encode(content string, named Level) (*Code, Level, error) {
+	floor := DefaultLevel
+	if levelRank(named) > levelRank(DefaultLevel) {
+		floor = named
+	}
+	// The strongest level there is cannot be raised by anything, so its freeness
+	// is not a question worth an encode — and it is the level every logo'd code
+	// in the product draws at, which makes this the hot path rather than a
+	// flourish.
+	if floor == Levels[len(Levels)-1] {
+		code, err := encodeAt(content, floor)
+		return code, floor, err
+	}
+	base, err := encodeAt(content, DefaultLevel)
+	if err != nil {
+		return nil, floor, err
+	}
+	var (
+		atFloor    *Code
+		atFloorErr error
+	)
+	for i := len(Levels) - 1; i >= 0 && levelRank(Levels[i]) >= levelRank(floor); i-- {
+		if Levels[i] == DefaultLevel {
+			// The baseline itself, already encoded and free by definition. Only
+			// reachable when the floor is [DefaultLevel], since the loop stops at it.
+			return base, DefaultLevel, nil
+		}
+		up, err := encodeAt(content, Levels[i])
+		if Levels[i] == floor {
+			atFloor, atFloorErr = up, err
+		}
+		if err != nil || up.Size != base.Size {
+			continue
+		}
+		return up, Levels[i], nil
+	}
+	return atFloor, floor, atFloorErr
+}
+
+// levelRank orders the levels by correction strength, which is the order
+// [Levels] is written in. Anything that is not a level ranks below all of them,
+// so an empty [Style.Level] is a floor nothing has to climb over.
+func levelRank(level Level) int {
+	for i, candidate := range Levels {
+		if candidate == level {
+			return i
+		}
+	}
+	return -1
+}
+
+// encodeAt is the encoder itself, at exactly the level it is given.
+func encodeAt(content string, level Level) (*Code, error) {
 	if content == "" {
 		return nil, errors.New("nothing to encode")
 	}
@@ -726,6 +881,27 @@ func (c *Code) pngWithLogo(st Style, logo *logoDrawing) ([]byte, error) {
 // one written before carries a margin and a scale and the size it means is
 // whatever those two already produce.
 func OutputSize(modules int, st Style) int { return fitGeometry(modules, st).px }
+
+// Drawn is the style a code is actually drawn at and the size in pixels it comes
+// out at, in one pass over the encoder (D184).
+//
+// **The style differs from the stored one in exactly one field**, and only since
+// D184: [Style.Level] comes back as the level the picture is drawn at, which is
+// the rule's answer rather than the floor the row holds. That is the level a
+// `GET` has to report. Everything else is the caller's own.
+//
+// One call rather than [LevelFor] and [OutputSize] beside each other, because
+// the two answers come off the same matrix and asking twice encodes the content
+// twice. A size of 0 is content that cannot be encoded, on link.QROutputSize's
+// reasoning.
+func Drawn(content string, st Style) (Style, int) {
+	code, level, err := encode(content, st.Level)
+	if err != nil {
+		return st, 0
+	}
+	st.Level = level
+	return st, OutputSize(code.Size, st)
+}
 
 // SizeFit is a requested output size resolved onto a style that draws it.
 type SizeFit struct {

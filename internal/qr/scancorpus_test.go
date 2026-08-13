@@ -89,6 +89,23 @@ func TestWriteScanCorpus(t *testing.T) {
 	// other three levels it encodes to a smaller symbol — the filename carries
 	// the version it was chosen for and the manifest carries the version it
 	// actually became.
+	//
+	// **The level names a floor and the picture is drawn at whatever the rule
+	// answers for it** (D184, D187), which is why the manifest records
+	// `LevelFor` rather than the loop variable. Two consequences, both stated
+	// because neither is visible from the filenames:
+	//
+	// The `L` slot no longer draws an `L` symbol — the free level is never below
+	// [DefaultLevel], so `L` is unreachable everywhere, here included. It draws
+	// what the `M` slot draws, and the corpus keeps its 1360 pictures with one
+	// duplicate a version rather than shrinking. That is deliberate: the count is
+	// quoted in three shipped documents, and a control half that stopped covering
+	// a version to save a decode would be paying for tidiness with evidence.
+	//
+	// An **unset** level has no slot of its own and needs none. Every code this
+	// product stores resolves to one of these four levels, and a picture drawn at
+	// a resolved `Q` is byte for byte the picture drawn at this loop's `Q` with
+	// the same style.
 	for version := lowest; version <= highest; version++ {
 		payload := payloads[version]
 		for _, level := range Levels {
@@ -110,7 +127,7 @@ func TestWriteScanCorpus(t *testing.T) {
 				}
 				fmt.Fprintf(&manifest, "%s\t%s\t%d\t%d\t%d\t%d\t%s\t%s\n",
 					name, payload, symbolVersion(code.Size), code.Size,
-					st.Scale, zone, "none", level)
+					st.Scale, zone, "none", LevelFor(payload, level))
 				written++
 			}
 		}

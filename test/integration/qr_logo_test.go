@@ -5,6 +5,7 @@ package integration
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -962,7 +963,12 @@ func TestALogoRaisesTheCodeToLevelHAndSaysSo(t *testing.T) {
 	f.claim()
 	id := f.createLink("poster-level", "https://example.com/summer")
 
-	// Deliberately at L to begin with, so H is never the level it already had.
+	// Deliberately naming L to begin with, so H is never the level it already
+	// had. **It does not read back as L and cannot, since D187**: the level a
+	// request names is a floor, the free level is never below `M`, so `L` is a
+	// value this API accepts and nothing draws. What the fixture needs is only
+	// that the code is not already at H, and that the level reported is the one
+	// the rule gives this floor.
 	if resp := f.putJSON("/api/v1/links/"+id.String()+"/qr",
 		`{"style":{"level":"L"}}`); resp.StatusCode != http.StatusOK {
 		_ = resp.Body.Close()
@@ -970,8 +976,14 @@ func TestALogoRaisesTheCodeToLevelHAndSaysSo(t *testing.T) {
 	} else {
 		_ = resp.Body.Close()
 	}
-	if got := f.apiQRLevel(t, id); got != qr.LevelL {
-		t.Fatalf("the code is at level %q before the upload, want L", got)
+	before := f.apiQRLevel(t, id)
+	if before == qr.LevelH {
+		t.Fatalf("the code is at H before the upload, so nothing below can tell the " +
+			"upload's forcing from the level it already had")
+	}
+	if want := qr.LevelFor(f.qrCode(id).Content, qr.LevelL); before != want {
+		t.Fatalf("the code reports level %q before the upload; a floor of L on this "+
+			"payload is drawn at %q", before, want)
 	}
 
 	if status, body := f.uploadLogo(
@@ -1021,6 +1033,183 @@ func TestALogoRaisesTheCodeToLevelHAndSaysSo(t *testing.T) {
 	// refusal wearing a 200.
 	if got := f.storedQRStyle(id).Foreground; got != "#112233" {
 		t.Errorf("the foreground is %q, want #112233; the override ate the request", got)
+	}
+}
+
+// TestRemovingALogoRecomputesTheLevelRatherThanKeepingH is F223, and it is the
+// sentence this milestone's reopening takes back.
+//
+// M50.6 left the level at H when the image went, and said why: lowering it
+// redraws a picture that may already be printed, and H is the safer of the two
+// to be left at. The owner overruled it with the cost measured — H is ~30% more
+// modules a side than the code needs, so it scans from proportionally less
+// distance — and with the reason it is safe: *"the old QR should still resolve
+// as long as the link stays the same, so a change in the new code shouldn't be
+// an issue."* The payload is untouched by any of this.
+//
+// **Recomputed rather than restored**, which is not a distinction without a
+// difference: the upload wrote H over whatever the row held, so there is no
+// remembered level to put back. What the code gets is the rule's answer for its
+// own payload, which is what a code that never carried a logo has.
+//
+// The size is asserted at every step because it is the other claim in the
+// building: M49's *the requested size is the size stored and drawn, exactly*
+// runs straight through a level change, the level being what decides the module
+// count a size is fitted against.
+func TestRemovingALogoRecomputesTheLevelRatherThanKeepingH(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("logolevel", "https://example.com/summer")
+
+	// What this code is drawn at with nothing on it — the level the removal has
+	// to come back to. Read off the product rather than written down, because it
+	// is a property of the payload, and refused if it is H: on a payload where
+	// the rule already answers H there is nothing for the removal to change and
+	// this test would pass without asserting anything.
+	untouched := f.qrCode(id)
+	want := qr.LevelFor(untouched.Content, "")
+	if want == qr.LevelH {
+		t.Fatalf("the rule already answers H for %q, so a logo changes no level and "+
+			"this test measures nothing", untouched.Content)
+	}
+	if untouched.Style.Level != want {
+		t.Fatalf("a code nobody has touched reports level %q and the rule says %q",
+			untouched.Style.Level, want)
+	}
+
+	const size = 600
+	if resp := f.putJSON("/api/v1/links/"+id.String()+"/qr",
+		fmt.Sprintf(`{"style":{"size":%d}}`, size)); resp.StatusCode != http.StatusOK {
+		body := readAll(t, resp)
+		_ = resp.Body.Close()
+		t.Fatalf("setting the size = %d: %s", resp.StatusCode, body)
+	} else {
+		_ = resp.Body.Close()
+	}
+	if got := f.qrCode(id).Size; got != size {
+		t.Fatalf("the code is %dpx after asking for %d", got, size)
+	}
+
+	if status, body := f.uploadLogo(
+		t, id, "", "brand.png", "image/png", logoPNG(t, 64, 0x5a),
+	); status != http.StatusOK {
+		t.Fatalf("the upload answered %d: %s", status, body)
+	}
+	if got := f.qrCode(id).Style.Level; got != qr.LevelH {
+		t.Fatalf("the code carries a logo and reports level %q, want H", got)
+	}
+	if got := f.storedQRLevel(t, id, "").Level; got != qr.LevelH {
+		t.Fatalf("the row holds level %q under a logo, want H", got)
+	}
+
+	if got := f.deleteAPI(logoPath(id, "")); got != http.StatusNoContent {
+		t.Fatalf("clearing the logo = %d, want 204", got)
+	}
+	after := f.qrCode(id)
+	if after.Style.Level != want {
+		t.Errorf("the logo is gone and the code still reports level %q, want the "+
+			"rule's %q. H is ~30%% more modules a side than this code needs, on a "+
+			"code with nothing left covering it", after.Style.Level, want)
+	}
+	// **The row, not only the view.** A row that still said H with the view
+	// resolving something else is the drift the level's contract test refuses in
+	// the other direction, and it is what a later style write would carry
+	// forward.
+	stored := f.storedQRLevel(t, id, "")
+	if stored.Level != "" {
+		t.Errorf("the row still names level %q after the logo left; an unset level "+
+			"is what asks for the rule, and a level nobody chose is the finding",
+			stored.Level)
+	}
+	if after.Size != size || stored.Size != size {
+		t.Errorf("the code was %dpx before the logo and is %dpx after it left, with "+
+			"%dpx in the row. Recomputing the level changes the symbol and must not "+
+			"change the number somebody typed", size, after.Size, stored.Size)
+	}
+	// Idempotent, and it stays that way: a second clear must not rewrite a style
+	// on a code whose logo left long ago, which is what the has_logo guard buys.
+	if got := f.deleteAPI(logoPath(id, "")); got != http.StatusNoContent {
+		t.Errorf("clearing a second time answered %d, want 204", got)
+	}
+	if again := f.storedQRLevel(t, id, ""); again != stored {
+		t.Errorf("a second clear rewrote the style: %+v became %+v", stored, again)
+	}
+}
+
+// TestAddingACodeDoesNotInheritTheLogosLevel is F223 through the door it was
+// rebuilt in, one milestone after being closed.
+//
+// A code carrying a logo holds `H` in its row by construction: `refitForLogo`
+// writes it on upload and `storeQRStyle` writes it again on every style write,
+// so that a `GET` reports what will be drawn (D141). `CreateQRCode` copies the
+// default code's style onto the code it creates — that is what makes a second
+// code look like the first — and the upsert's insert branch leaves the new row's
+// `logo` NULL, because a code that has just come into being has no image. So the
+// copy used to arrive at `H` with nothing covering it, **permanently**: the only
+// path that recomputes a level is `ClearQRCodeLogo`, and it fires for a code that
+// *had* a logo, which this one never did.
+//
+// Two clicks from the dashboard — upload a logo to a link's default code, then
+// *Add another code* — and the cost is F223's own: ~30% more modules a side than
+// the code needs, so it scans from proportionally less distance, for nothing.
+//
+// The size is asserted with it because the two travel together: `H` is a larger
+// symbol, so a copy that inherited the level would also have been fitted against
+// a symbol it does not draw.
+func TestAddingACodeDoesNotInheritTheLogosLevel(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("logocopy", "https://example.com/autumn")
+
+	if status, body := f.uploadLogo(
+		t, id, "", "brand.png", "image/png", logoPNG(t, 64, 0x5a),
+	); status != http.StatusOK {
+		t.Fatalf("the upload answered %d: %s", status, body)
+	}
+	if got := f.storedQRLevel(t, id, "").Level; got != qr.LevelH {
+		t.Fatalf("the row holds level %q under a logo, want H — this test needs the "+
+			"H it is about to check is not copied", got)
+	}
+
+	added := f.createQRCode(t, id, "Autumn poster")
+	// The level the created code's **own** payload gets for free. Its content is
+	// not the default's: creating a second code gives both of them a `qrc` tag,
+	// so the free level has to be asked of the picture this code actually draws.
+	// Refused if it is already H — there would then be nothing for the
+	// inheritance to get wrong.
+	want := qr.LevelFor(added.Content, "")
+	if want == qr.LevelH {
+		t.Fatalf("the rule already answers H for %q, so a copied logo level changes "+
+			"nothing and this test measures nothing", added.Content)
+	}
+	if added.Style.Level != want {
+		t.Errorf("the created code reports level %q and draws no logo; want the "+
+			"rule's %q. H on an uncovered code is ~30%% more modules a side than it "+
+			"needs, and nothing recomputes a level for a code that never had an image",
+			added.Style.Level, want)
+	}
+	if stored := f.storedQRLevel(t, id, added.Slug); stored.Level == qr.LevelH {
+		t.Errorf("the created code's row names level H, copied off a code whose logo " +
+			"forced it. The row is what a later style write carries forward")
+	}
+	// The picture, not only the report: a code drawn at H is a wider symbol, and
+	// a size fitted against the copied one would be fitted against a symbol this
+	// code does not draw.
+	drawn, err := qr.Encode(added.Content, added.Style.Level)
+	if err != nil {
+		t.Fatal(err)
+	}
+	free, err := qr.Encode(added.Content, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if drawn.Size != free.Size {
+		t.Errorf("the created code draws %d modules where its own payload gets %d "+
+			"for free", drawn.Size, free.Size)
+	}
+	if added.Size != qr.OutputSize(free.Size, added.Style) {
+		t.Errorf("the created code reports %dpx and its style over its own symbol "+
+			"draws %dpx", added.Size, qr.OutputSize(free.Size, added.Style))
 	}
 }
 

@@ -447,10 +447,16 @@ a thin margin costs a scan. A style written over the API can ask for a wider
 quiet zone in squares and is drawn with it; setting a size on that code from the
 form replaces it with the margin the size implies.
 
-**The error-correction level is set over the API and not on the form.** It is a
-tradeoff between how much damage a printed code survives and how tightly it is
-packed, and there is no way to judge it from a dashboard; the `PUT` below sets
-it, and saving the form afterwards keeps whatever it was set to.
+**The error-correction level is chosen for you, and the API can only raise it.**
+It is a tradeoff between how much damage a printed code survives and how tightly
+it is packed, and there is no way to judge it from a dashboard. Since 0.3.0
+every code is drawn at **the strongest level that does not make the symbol any
+bigger** — a QR symbol steps between versions, and correction below the next
+step costs nothing, so an ordinary short URL comes out at `Q` in exactly the
+picture `M` would have produced. The `PUT` below sets a **floor**: asking for a
+stronger level than the free one gets it, at whatever size that costs; asking
+for a weaker one changes nothing, because there is no saving in less correction
+at the same density. Saving the form afterwards keeps whatever was set.
 
 **The code does not follow your theme.** It paints its own background across its
 quiet zone and defaults to black on white in both light and dark mode, because a
@@ -557,10 +563,13 @@ and the code is drawn at **error-correction level H**, which is what lets a
 reader recover a code with part of it covered. So `level` stops being yours to
 choose while a logo is there: a `PUT` naming another one is **accepted and
 answered with `H`** rather than refused, because this endpoint replaces the
-style whole and an omitted `level` means its default — refusing would fail a
-request that only changed a colour. The response and every later `GET` report
-what was applied, so nothing is silent. Removing the logo leaves the level at H;
-dropping it back would redraw a code that may already be printed. H packs more
+style whole and an omitted `level` sets no floor at all — refusing would fail
+a request that only changed a colour. The response and every later `GET` report
+what was applied, so nothing is silent. **Removing the logo returns the code to
+the rule** rather than to a remembered level — the payload is unchanged, so a
+picture already printed still resolves, and level H on a code with nothing
+covering it is about 30% more modules a side than it needs, which is 30% less
+distance a phone reads it from. *(It stayed at H until 0.3.0.)* H packs more
 modules into the symbol, and **the drawn size is held where it was** rather than
 allowed to grow with it: the style is re-fitted against the larger symbol so the
 picture stays at the size the code was already drawn at, which is what stops a

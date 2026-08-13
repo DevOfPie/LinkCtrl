@@ -44,15 +44,25 @@ are; nothing here is imported by the product, built into it, or in the image.
      **band's low end**, a three-module quiet zone at both ends of the scale
      range. Three modules is one below what ISO/IEC 18004 specifies and is what
      `qr.FitSize` may now produce, so it is measured here rather than argued;
-   - the **whole** version range again with no logo at all, at every level, as
-     the control. The whole range and not a sample of it, because what the
-     control is for is to say that a decoder's misses are the logo's doing and
-     not its own limit — and it cannot say that about a version it does not
-     cover. It was three versions until M50.6's reopening was reviewed, where
-     the versions the third engine missed turned out to be mostly outside them.
-     A control payload is sized for its version at level H, so at the other
-     three levels it encodes to a smaller symbol and the control's range runs
-     from 2 rather than 3.
+   - the **whole** version range again with no logo at all, at every level the
+     corpus asks for, as the control. The whole range and not a sample of it,
+     because what the control is for is to say that a decoder's misses are the
+     logo's doing and not its own limit — and it cannot say that about a version
+     it does not cover. It was three versions until M50.6's reopening was
+     reviewed, where the versions the third engine missed turned out to be
+     mostly outside them. A control payload is sized for its version at level H,
+     so at the weaker levels it encodes to a smaller symbol and the control's
+     range runs from 2 rather than 3.
+
+     **Asked for and drawn are two things since M50.6's second reopening**
+     (D187). The level a style names is a floor and the picture is drawn at the
+     stronger of it and the strongest level the payload gets for free, so the
+     `L` slot draws no `L` symbol — it repeats what the `M` slot draws, at every
+     version, because the free level is never below `M`. The slot is kept rather
+     than dropped: `L` is a level this product can no longer draw at all, so
+     nothing is lost, and the picture count is quoted in three shipped
+     documents. `manifest.tsv` records the level **drawn**, which is what keeps
+     the duplication legible.
 
    It writes a `manifest.tsv` saying what each picture should decode to.
 2. **`scan.mjs`** shrinks each picture so that 8, 6, 4, 3 and then 2 pixels per

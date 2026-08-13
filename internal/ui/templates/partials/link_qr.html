@@ -415,6 +415,14 @@
        M50.5 wrote said nothing drew the logo yet; this milestone is what made
        that false, so this milestone replaces it.
 
+       **And what the removal does, in one clause** (D184, D186). The level is
+       chosen by a rule now &mdash; the strongest one that does not push the
+       symbol into a larger version &mdash; so H is the one thing on this tab
+       that a reader's own action sets and unsets. The tab does not print the
+       level anywhere else and deliberately: it is not settable here (D129), and
+       a number nobody can act on is what M50.7 exists to take off this
+       surface. Naming it where it changes is the whole of what is owed.
+
        `accept` and `required` are conveniences for the browser and not checks:
        the decoder is chosen by the file's own bytes, and the server refuses an
        empty or unreadable upload whatever the markup allowed.
@@ -439,7 +447,7 @@
 <div class="mt-6 border-t border-line pt-4">
   <h3 class="text-sm font-medium text-ink">Logo</h3>
   <p class="mt-1 text-xs text-subtle">
-    PNG or JPEG, at most {{.QRMaxLogoBytes}} bytes and {{.QRMaxLogoDimension}} pixels a side; it is applied as soon as you choose it. Anything bigger than {{.QRMaxLogoPixels}} pixels in total is <strong>resized down to fit rather than refused</strong>, and you are told what it became. What is stored is a PNG this server encodes from your image, so metadata does not survive &mdash; this is not somewhere to keep an original. It is drawn in the middle of the code, at <strong>three tenths of the code's width</strong>, and a code carrying one is drawn at <strong>error-correction level H</strong> &mdash; the level that lets a reader recover a code with part of it covered. That makes the picture a little denser; what it says is unchanged.
+    PNG or JPEG, at most {{.QRMaxLogoBytes}} bytes and {{.QRMaxLogoDimension}} pixels a side; it is applied as soon as you choose it. Anything bigger than {{.QRMaxLogoPixels}} pixels in total is <strong>resized down to fit rather than refused</strong>, and you are told what it became. What is stored is a PNG this server encodes from your image, so metadata does not survive &mdash; this is not somewhere to keep an original. It is drawn in the middle of the code, at <strong>three tenths of the code's width</strong>, and a code carrying one is drawn at <strong>error-correction level H</strong> &mdash; the level that lets a reader recover a code with part of it covered. That makes the picture a little denser; what it says is unchanged. Remove the logo and the level goes back to the strongest one this code can carry without growing.
   </p>
   <div class="mt-2 flex flex-wrap items-end gap-2">
     <form method="post" action="/links/{{.Link.ID}}/qr/logo" enctype="multipart/form-data"

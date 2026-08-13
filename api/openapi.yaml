@@ -5608,7 +5608,9 @@ components:
       additionalProperties: false
       description: >
         How a code is drawn. Every field is optional and an omitted one is its
-        default, so `{}` is plain black on white.
+        default, so `{}` is plain black on white — except `level`, which is a
+        floor resolved against the payload rather than a constant. See the
+        field.
       properties:
         foreground:
           type: string
@@ -5625,9 +5627,33 @@ components:
           type: string
           enum: [L, M, Q, H]
           description: >
-            Error correction, as ISO/IEC 18004 names the levels. Default `M`. A
-            higher level survives more damage and packs the code tighter at the
-            same printed size.
+            Error correction, as ISO/IEC 18004 names the levels. A higher level
+            survives more damage and packs the code tighter at the same printed
+            size.
+
+            **Every code is drawn at the strongest level that does not make the
+            symbol any bigger.** A QR symbol steps between versions and
+            correction below the next step is free, so a code is drawn at the
+            best level its own payload admits for nothing — usually `Q` for a
+            short URL, where the old default of `M` bought a level of damage
+            tolerance less at exactly the same density. The module count is the
+            one `M` would have produced, so the picture is the same size to the
+            pixel. Since 0.3.0, and nothing stored was rewritten: a style
+            naming `M` and a style naming nothing resolve alike.
+
+            **This field is a floor, not an instruction: it is honoured upward
+            and ignored downward.** Naming `H` gets `H`, at whatever version
+            that costs — a logo forces exactly that. Naming `L`, or `M` on a
+            payload where `Q` is free, gets the free level, because no caller
+            may ask for less correction than costs nothing. **`L` is accepted
+            and is a level nothing draws**, since the free level is never below
+            `M`. What this API loses with it is the ability to request a weaker
+            code than the payload gets for free.
+
+            `GET` reports the level the picture actually carries. For a style
+            naming a weaker level that is not the string the style holds, and
+            the style is left as it was written rather than rewritten behind
+            the caller.
 
             **This field is API-only.** The dashboard stopped offering it at
             M49: it is a scannability tradeoff a dashboard user has no basis to
@@ -5638,12 +5664,14 @@ components:
             anything else is accepted and overridden rather than refused.** A
             logo covers modules and `H` is the level that makes covering them
             survivable, so it is not a preference while there is one. This
-            request replaces the style whole, and an omitted `level` means its
-            default — so refusing would answer `422` to a caller changing a
+            request replaces the style whole, and an omitted `level` means the
+            floor above — so refusing would answer `422` to a caller changing a
             colour on a code whose logo it never mentioned. Nothing is silent
             about it: the response to this request, and every later `GET`,
-            report `H`. Removing the logo leaves the level where it is, because
-            lowering it would redraw a picture that may already be printed.
+            report `H`. **Removing the logo returns the code to the rule**
+            rather than to a remembered level: the payload is unchanged, so
+            every picture already printed still resolves, and holding `H` on an
+            uncovered code packs in modules it does not need.
         margin:
           type: integer
           minimum: 0
@@ -5883,7 +5911,11 @@ components:
         qr: { $ref: "#/components/schemas/QRCode" }
         levels:
           type: array
-          description: The error-correction levels a style may name.
+          description: >
+            The error-correction levels a style may name. `L` is accepted and
+            never drawn: since D187 the level is a floor and the strongest free
+            level is never below `M`, so a style naming `L` is drawn at that
+            free level. A picker built from this list should say so.
           items: { type: string, enum: [L, M, Q, H] }
         resampled:
           allOf: [{ $ref: "#/components/schemas/LogoResample" }]
@@ -5920,7 +5952,11 @@ components:
         code: { $ref: "#/components/schemas/QRCode" }
         levels:
           type: array
-          description: The error-correction levels a style may name.
+          description: >
+            The error-correction levels a style may name. `L` is accepted and
+            never drawn: since D187 the level is a floor and the strongest free
+            level is never below `M`, so a style naming `L` is drawn at that
+            free level. A picker built from this list should say so.
           items: { type: string, enum: [L, M, Q, H] }
         resampled:
           allOf: [{ $ref: "#/components/schemas/LogoResample" }]

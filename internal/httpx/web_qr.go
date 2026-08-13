@@ -592,10 +592,24 @@ func qrNotice(q url.Values) string {
 			"The shape is unchanged and the code draws it at a fraction of its own size, "+
 			"so this is not detail you will see.", stored, fw, fh, tw, th, qr.MaxLogoPixels)
 	case "logo_removed":
+		// **This said the code stays at level H, and that sentence is what F223
+		// is.** It was M50.6's own reasoning — a picture may already be printed,
+		// and H is the safer of the two to be left at — and the owner overruled it
+		// on the ground that nothing printed stops working: the payload is
+		// identical, so an old picture resolves whatever the new one is drawn at.
+		// What H costs is about 30% more modules a side than the code needs, which
+		// is 30% less distance a phone reads it from, on a code with nothing left
+		// covering it.
+		//
+		// It is also the one place the level is named to a reader who did not
+		// upload anything, and that is deliberate: the tab does not print the
+		// level, so the moment it changes is the moment worth a sentence (D186).
 		return "Logo removed. The image is gone from the row rather than merely " +
-			"unreferenced, so nothing is left behind. The code stays at error " +
-			"correction level H: dropping it back would redraw a picture that may " +
-			"already be printed, and H is the safer of the two to be left at."
+			"unreferenced, so nothing is left behind. Error correction goes back to " +
+			"the strongest level this code can carry without growing — level H is " +
+			"what a covered code needs, and holding it on an uncovered one would " +
+			"pack in modules for nothing. The code says what it always said, so " +
+			"anything already printed still resolves."
 	default:
 		return ""
 	}

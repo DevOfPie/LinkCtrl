@@ -347,6 +347,8 @@ file. Append a row when you append an entry.
 | [M50 rebuilt: the default is a flag, and the untagged bucket is what makes that free](#2026-08-13--m50-rebuilt-the-default-is-a-flag-and-the-untagged-bucket-is-what-makes-that-free) | The build of D183, and the two things it left open. Promotion goes to the **oldest** code left, the only candidate that is a property of the data rather than of a surface. Today's default gains a slug **on its row**, and the redirect path is untouched: an untagged scan still records the bare `qr` and the breakdown folds that bucket onto the flag-holder, so no recorded scan is rewritten and no link's history splits. A code gains a slug when it **stops being alone**, because handing one out on a style write would falsify M41's *restyling never changes what a code says*. The statement that takes the empty slug off a row writes the flag in the same clause — for a row the previous release left behind the two are spellings of one fact — and the removal refusal counts the codes a link **has** rather than the rows it stores, because those differ by one on exactly that link |
 | [Five owner answers, taken between milestones, before anything is built against them](#2026-08-13--five-owner-answers-taken-between-milestones-before-anything-is-built-against-them) | Carries no milestone number because none was under way. A stored size re-fits whenever the payload grows, silently unless the size itself must rise; the `N/20` counter and the tab badge are different quantities so both stand; M50.7 stays one milestone with the popover priced honestly; **QR generation stays on the server** — it is already not stored, and a client encoder would cost three shipped claims; and the preview paragraph **reopens M49 a third time** rather than being reversed from M50.7, the owner taking the strict route over the cheap one |
 | [M49, a size is fitted against a payload and a payload can change (D185)](#2026-08-13--m49-a-size-is-fitted-against-a-payload-and-a-payload-can-change-d185) | The third reopening, built. `CreateQRCode` is the one operation that changes what an *existing* code encodes, so it re-fits both rows: the size the reader set is kept wherever the larger symbol admits a scale — 512px keeps 512 and moves the scale — and rises to that code's own floor where none does, reported then and silent otherwise. `fitStyleTo` is the arithmetic shared with `refitForLogo`; the arm where nothing fits is **not** shared, because D174's number is one nobody chose. The preview paragraph and `TestTheQRPreviewSaysWhichSizeIsServed` are gone, with F213(a) re-pointed at the fixed frame. A link's alias and the read-only viewer's lost number are filed as F228 and F229 rather than taken |
+| [M50.6, the level is a rule and the tab does not print it (D186)](#2026-08-13--m506-the-level-is-a-rule-and-the-tab-does-not-print-it-d186) | D186 — the tab does not print the level and names it where it changes. D184's *weakest level* is read as the product default `M` rather than as `L`; the build's unset-only reading was offered and overruled by D187, so nothing is migrated and a stored `M` is inert. Where the floor cannot raise the symbol the module count is `M`'s, which is what carries M49's exact size through it — and where it can, every site that fits a size encodes through the rule |
+| [M50.6, the rule binds a level somebody named, and D187](#2026-08-13--m506-the-rule-binds-a-level-somebody-named-and-d187) | D187 — the free-level rule is a floor under every code, not a default for codes that named nothing. Owner-answered against the build's recommendation: the drawn level is the stronger of what the row names and what the rule gives, so a named `L` where `Q` is free is drawn at `Q`. The rule never lowers, which is what keeps `H` under a logo; the API's `level` is honoured upward and ignored downward |
 
 ---
 
@@ -28737,3 +28739,260 @@ rests on, which is the fixed frame and its own test.
   sees it nowhere. The owner's argument for deleting was *the slider prints it two
   lines below*, which is true for an editor and not for a viewer — a case the
   answer did not consider. [F229](deferred-findings.md#open).
+
+## 2026-08-13 — M50.6, the level is a rule and the tab does not print it (D186)
+
+The build of [D184](#2026-08-12--m506-the-level-is-the-highest-that-costs-nothing-and-d184),
+which settled *what* — the highest level that does not grow the symbol, H while
+a logo is drawn, recomputed when it leaves — and left three things to the build.
+Two of them the owner has since answered
+([D187](#2026-08-13--m506-the-rule-binds-a-level-somebody-named-and-d187)); this
+entry is what the build found, what it offered, and what shipped after that
+answer landed on top of it.
+
+**One — the weakest level is `M`, not `L`.** D184 states the rule twice. Its
+prose says *the strongest level whose version equals the weakest level's
+version*; its table then reports the answers, and the two do not agree. Measured
+against this repository's encoder, on `https://lnk.io/ab3x9?src=qr`: L is version
+2, M and Q are version 3, H is version 4. Read with `L` as the baseline the rule
+answers **L** — it would hand back correction to shrink a symbol — and D184's own
+sentence *"that is Q for the two ordinary shapes"* would be false of the first row
+of its own table, as would *"never denser than today, often better corrected."*
+Read with the product default `M` as the baseline it answers **Q**, which is what
+every other sentence in D184, in [F223](deferred-findings.md#closed) and in
+[m50.6.md](phase-details/m50.6.md) says. So the baseline is `M`. Recorded here
+rather than fixed in place because decisions.md is append-only and because a
+reader who finds the loose phrase should find this beside it.
+
+**Two — the build offered an unset-only rule and the owner overruled it.** This
+is the part D184 does not touch at all, and it is the one with a contract on the
+other side of it.
+
+`qr.Style.Normalize` filled an empty level in with `DefaultLevel` the way it
+fills in a margin and a scale, and the style was stored normalized — so **every
+row this product has ever written carries `"level":"M"`**, put there by a
+constant rather than by anybody. The build's recommendation was that an *unset*
+level asks for the rule and a named one is drawn exactly, on the ground
+[D185](#2026-08-13--m49-a-size-is-fitted-against-a-payload-and-a-payload-can-change-d185)
+gives for `scale` on this same endpoint: *a `PUT` that replaces the style whole
+and then silently rewrites one of its fields is the class of surprise D141's
+accept-and-override was allowed only because the level is forced by a logo
+rather than chosen.* [D129](../../Plan.md#phase-3-decisions) took the level off
+the dashboard and left it on the API precisely so a script could choose one.
+
+D187 took the other side, and the con the prompt named is why it is worth
+re-reading: the unset-only reading makes D184's owner-set sentence — *correction
+is taken wherever it is free* — narrower than its words, with an exception for
+people that nothing in it mentions. **What ships is the floor.** The drawn level
+is the stronger of what the row names and what the rule gives; the rule never
+lowers, which is what keeps `H` under a logo. One consequence follows that
+neither document names: since the free level is never below `M`, **`L` is a value
+the API accepts and nothing draws**. It is stated in `api/openapi.yaml`,
+`docs/usage.md` and `qr.DefaultLevel`'s comment rather than left for a caller to
+discover, because *the field is honoured upward and ignored downward* is not
+something an enum can say.
+
+`Normalize` still leaves the level empty, and the argument for it changed with
+the answer. Under the floor a stored `M` is **inert** — the free level is never
+below it, so a row naming `M` and a row naming nothing resolve to the same
+picture — so this is no longer about reaching those rows. It is about what a row
+*is*: a record of what a caller asked for. Every style this product ever stored
+says `M` because a constant said it, and writing one more is writing a floor
+nobody set.
+
+**Three — the migration was written and is not shipped, which is a decision
+rather than an omission.** `04500_qr_level_rule.sql` emptied the defaulted `M`
+from every stored style, and under the unset-only reading it was load-bearing:
+without it the rule would have reached no code anybody had ever styled. Under
+the floor it changes nothing observable at all — a stored `M` cannot bind,
+because `M` is where the rule starts — so what it would ship is an `UPDATE` that
+touches every styled row on an upgrading instance, bumps every `updated_at`, and
+alters no picture. It is deleted. The release's migration count is unchanged and
+`CHANGELOG.md`'s *eight additive migrations, one of them writes data* stays true
+as written.
+
+**D186 — the tab does not print the level, and names it where it changes.**
+m50.6.md's reopened risk section leaves the milestone one thing to decide: *a
+rule that picks the level makes the level invisible… stating it is cheap and the
+milestone should decide whether to.* It is not stated, and three things decide
+it. The level is not settable from the tab (D129), so a number printed there is
+one nobody can act on — which is the complaint [F224](deferred-findings.md#open)
+and [M50.7](phase-details/m50.7.md) exist to answer about this exact surface.
+The owner has taken words *off* this tab twice this week, most recently the
+preview paragraph at M49's third reopening, having commissioned it themselves.
+And the level is not silent where it moves: the logo paragraph says an upload
+raises it to H, the removal notice now says it goes back and that nothing already
+printed stops working, and `GET /api/v1/links/{id}/qr` reports the drawn level on
+every read. A reader whose own action changes the level is told; a reader who
+does nothing is not asked to carry a fact they cannot use.
+
+**What the floor costs M49's exact size, established rather than assumed.** M49's
+third reopening claims *the requested size is the size stored and drawn,
+exactly*, and a size is pixel arithmetic over a module count, so a rule that
+moves a module count is that claim's problem wherever it fires. Two halves:
+
+- **At or below the free level the module count does not move.** The level the
+  rule returns encodes to a symbol exactly as wide as `DefaultLevel`'s — that is
+  what *does not grow the symbol* means — so a floor of none, of `L` or of `M`
+  all draw the `M` symbol every stored size was fitted against.
+  `TestTheRuleNeverChangesTheModuleCount` sweeps the product's whole version
+  range at the floor the product's own rows carry, and
+  `TestTheRuleBindsALevelSomebodyNamed` asserts the same for `L` and `M` at the
+  range's ends and on D184's four measured shapes.
+- **Above it the symbol grows, and that is the case that had to be checked
+  rather than argued.** A floor of `Q` where `Q` costs a version, and every floor
+  of `H`, draw a larger symbol than `M`'s — which `H` under a logo has always
+  done. The reason M49 survives it is that **the floor lives inside
+  `qr.Encode`**, so every site in `internal/link` that fits a size already
+  measures against the symbol that will be drawn: `SetQRSizeBySlug` fits against
+  `qr.Encode(content, current.Level)` (`internal/link/qr.go`), `storeQRStyle`
+  refuses a size below `qr.MinSizeForStyle` of the same encode, and
+  `refitForPayload`, `refitForLogo` and `refitFromLogo` share `fitStyleTo` over
+  it. Checked by reading each of those four call sites against the new `encode`
+  rather than by inferring it from the tests: there is no path that fits a size
+  against a level string without encoding at it.
+
+What that leaves is a **row written before this release naming `L`** — the one
+shape whose stored size was fitted against a symbol the floor now widens, and
+which no write of ours passes through. It is filed as
+[F232](deferred-findings.md#open) rather than fixed, with the arithmetic, because
+the repair needs the encoder and so cannot be a migration.
+
+**Two defects this work made and closed inside it**, named because both were
+caught by review rather than by a test:
+
+- **`CreateQRCode` copied a logo-forced `H` onto a code with no logo.** A code
+  carrying a logo holds `H` in its row by construction — `refitForLogo` writes it
+  on upload, `storeQRStyle` writes it again on every style write — and the
+  upsert's insert branch leaves the new row's `logo` NULL, because a code that
+  has just come into being has no image. So *Add another code* on a link whose
+  default carries a logo produced a code drawn at `H` with nothing covering it,
+  permanently: `refitFromLogo` is the only door back and it fires only for a code
+  that *had* a logo. That is F223's own defect rebuilt inside the milestone that
+  closes it, two clicks from the dashboard. The copy now clears the level when
+  the source carries a logo, and the re-fit that follows measures against the
+  symbol the rule produces rather than against `H`'s.
+- **The removal wrote twice.** Clearing the bytes and re-fitting the style were
+  two statements, and the second was an upsert — so a `DeleteQRCode` landing
+  between them found nothing to conflict with and would have **inserted a fresh
+  row**, the deleted code back with its slug because a removal wrote to it. The
+  two are now one `UPDATE` on the code's id, which a row that is gone cannot
+  satisfy. It is also why `ClearQRCodeLogo` takes a style at all, and why the
+  paragraph about which order the two writes went in is gone rather than
+  reworded.
+
+**The removal path itself is the finding.** `ClearQRCodeLogo` clears the level
+with the bytes and re-fits the size against the smaller symbol the rule then
+produces — `refitFromLogo`, the mirror of `refitForLogo` and sharing `fitStyleTo`
+with it and with `refitForPayload`, which is D185's *one defect, one arithmetic*
+holding for a third door. It writes a style only for a code that **had** a logo,
+so a second clear rewrites nothing.
+
+**The one shipped sentence this reaches, named rather than left to be found.**
+[m49.md](phase-details/m49.md)'s *Stored styles read forward* says *"an existing
+style resolves to the output size its margin and scale already produce, so no
+stored code changes appearance."* Its premise is untouched for every row but the
+`L` one above — the size arithmetic is not what moved, and the module count is
+the one `M` produced — but such a row draws a **different arrangement** of the
+same number of modules, because that is what more error correction is. Nobody
+would call it a change of appearance at a glance: same pixels across, same quiet
+zone, same colours. Byte for byte it is not the same picture. It is the class of
+change the owner ruled on in the sentence that reopened this milestone — *"the
+old QR should still resolve as long as the link stays the same, so a change in
+the new code shouldn't be an issue"* — and the payload is identical, so every
+printed copy scans exactly as it did. The bullet is m49.md's and a worker does
+not amend a milestone file, so this entry is where the falsification is recorded
+and the amendment is owed at step 3.4.
+
+**What the level costs to compute, since it is now computed on every read.** A
+floor at or below `M` encodes up to three times instead of once — the baseline,
+then H, then Q, stopping at the first that matches — and `qr.Drawn` is what keeps
+`qrCodeFrom` from paying for it twice by answering the level and the size off one
+pass. A floor of `H` short-circuits to a single encode, which is the logo path
+and the one drawn most often. Measured on this VM at 1.15ms for a single encode
+of an ordinary short URL against 3.9ms for the resolved one. Nothing on the
+redirect path encodes at all; what pays is a dashboard render and a download.
+
+The **test** cost is the larger number and is worth writing down because it lands
+on `make check`: `internal/qr` under the race detector went from **25.7s to
+around a minute**, and the whole of the difference is the version sweep — four
+encodes at each of thirty-four versions, where a version-36 encode under `-race`
+is most of a second. Two things hold it down rather than three: the sweep's
+subtests run in parallel, and the version searches in `composite_test.go` are
+memoised now that four tests want the same payloads. The floor added no sweep of
+its own — asserting it over the whole range at four floors would have quadrupled
+the one test that costs anything, and the property it would re-assert is settled
+by the arithmetic and by the range's ends. What was *not* done is sampling the
+range, because the rule's answer changes exactly at the capacity-table boundaries
+the versions are, so a sweep that skipped versions would skip the only places it
+could be wrong.
+
+**`make verify-scan` needs no new pictures, and that is an argument rather than
+an omission.** Its control half draws every version at each of the four named
+levels, and the rule's answer is always one of those four. What changed is that
+the four are no longer four *distinct* pictures: the `L` slot draws the free
+level, so it repeats the `M` slot's picture at every version. The slot is kept
+rather than dropped — the corpus is 1360 pictures and 9256 decodes in three
+shipped documents, and a control half that stopped covering a version to save a
+redundant decode would be paying for tidiness with evidence. The manifest records
+the level **drawn** rather than the level asked for, which is what makes the
+duplication legible instead of a lie. The one sentence that has gone loose with
+it is filed as [F233](deferred-findings.md#open).
+
+**What this deliberately did not do**, filed rather than taken:
+
+- **A link's alias is still the other payload change**, and a rename can move
+  the rule's answer as well as the size — [F228](deferred-findings.md#open)
+  already covers the row it would have to re-fit, and this adds a second reason
+  to the same fix rather than a second row.
+- **The demo seeder still names `Level: qr.LevelQ`** on the code it styles.
+  Under the floor that is a floor of `Q` on a payload whose free level is `Q`, so
+  it changes no picture and rewrites a decision that is not this milestone's.
+  [F231](deferred-findings.md#open).
+- **`ResetQRStyleBySlug` writes a style with no `ForLogo`**, so *Restore
+  defaults* on a logo'd code leaves a row that names no floor while the picture
+  is drawn at `H`. It wrote `M` there before this release and is the same
+  distance from `H` either way, so the diff neither made it nor worsened it.
+  [F234](deferred-findings.md#open).
+
+## 2026-08-13 — M50.6, the rule binds a level somebody named, and D187
+
+**D187 — the free-level rule is a floor under every code, not a default for
+codes that named nothing.** Owner-answered 2026-08-13, at M50.6's second
+reopening, over the build's own recommendation.
+
+The build shipped the rule for an **unset** level only and honoured a named one
+exactly, argued in the entry above on D185's ground: a `PUT` that sets a field
+and reads it back changed is the surprise this product refused for `scale`.
+Put to the owner as two options with that recommendation and its own con — that
+it makes [D184](../../Plan.md#phase-3-decisions)'s owner-set sentence narrower
+than its words, and that the actor recommending it was the one that would
+otherwise redo the work — the owner took the other side: **the rule binds
+everything below it.**
+
+So the drawn level is the **stronger** of what the row names and what the rule
+gives. Three consequences, and each is a thing to build rather than a gloss:
+
+- A named `L` on a payload where `Q` is free is drawn at `Q`. Nobody can choose
+  less correction than costs nothing, which is what *correction is taken
+  wherever it is free* says when it is read without an exception for people.
+- **The rule never lowers.** A level stronger than the free one is left where it
+  is — which is what keeps `H` while a logo is drawn, the bullet this reopening
+  did not touch, and it is why *floor* is the right word for it and *rule*
+  alone is not.
+- The row and the response no longer agree for a caller who named a weak level,
+  and that is the cost the owner accepted. The response reports the **drawn**
+  level, which is what `qrCodeFrom` already does; the row keeps what was
+  written, so nothing rewrites a caller's field behind them. What the API loses
+  is the ability to *ask* for less correction than is free — the field is
+  honoured upward and ignored downward, and that has to be said where the field
+  is documented rather than left for a caller to discover.
+
+**`TestALevelSomebodyNamedIsDrawnExactly` is wrong rather than narrow**, and it
+goes with the reading it asserts.
+
+This is the second time this week an answer has come back against the cheaper
+side of a trade the build recommended — [D182](../../Plan.md#phase-3-decisions)
+was the first — and both times the recommendation was the one that would have
+cost the actor making it less work. That is worth recording as a pattern rather
+than as two coincidences.

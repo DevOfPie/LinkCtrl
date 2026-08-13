@@ -481,8 +481,10 @@ migrations run at boot.
   naming another one is accepted and answered with `H` rather than refused —
   `{}` means "the defaults" in this API, and refusing would fail a request that
   only changed a colour. The response and every later `GET` report what was
-  applied. Removing the logo leaves the level at H: dropping it would redraw a
-  code that may already be on a poster.
+  applied. **Removing the logo returns the code to the rule below** rather than
+  to a remembered level: the payload is unchanged, so a picture already on a
+  poster still resolves, and holding `H` on a code with nothing covering it packs
+  in modules it does not need. *(It stayed at `H` until this release.)*
 
   **Whether a logo'd code scans is measured, and the measurement is kept.**
   There is no QR decoder in this product and adding one would be a dependency,
@@ -697,6 +699,29 @@ migrations run at boot.
   a printed code survives and how tightly it packs, and there is no way to judge
   it from a dashboard; `PUT /api/v1/links/{id}/qr` still sets it, and saving the
   form afterwards keeps whatever it was set to rather than resetting it.
+
+  **And every code now takes the strongest level it can get for free.** A QR
+  symbol steps between sizes of grid, and correction below the next step costs
+  nothing — so a code is drawn at the strongest level that does not make the grid
+  any bigger, which for an ordinary short URL is `Q` where the default of `M`
+  bought a level of damage tolerance less at **exactly the same density**. The
+  picture is the same size to the pixel and scans from the same distance; what
+  changes is how much of it can be smudged, torn or covered and still read.
+  `GET /api/v1/links/{id}/qr` reports the level a code is drawn at, as it always
+  did. No picture changes size, with one bounded exception: a style that named
+  `L` was fitted against `L`'s smaller symbol, and `L` is now a floor rather
+  than a choice, so such a code draws about a tenth larger than the size stored
+  on it. Storing a size is itself new in this release, so no instance upgrading
+  from `v0.2.0` can hold that pair.
+
+  **The `level` you set is a floor rather than an instruction**: it is honoured
+  upward and ignored downward. Asking for `H` still gets `H`, at whatever grid
+  size that costs — that is how a logo works. Asking for `L`, or for `M` on a
+  code where `Q` is free, gets the free level instead, because there is no
+  saving to be had from less correction at the same density. `L` is accepted and
+  is now a level nothing draws. Nothing was migrated and no stored style was
+  rewritten: the rule reaches a row that names `M` exactly as it reaches one that
+  names nothing.
 
   **The preview keeps its own size.** The frame beside the form is a fixed
   square, and a code bigger than it is drawn scaled down to fit, so setting

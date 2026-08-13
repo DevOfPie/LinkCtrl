@@ -69,7 +69,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M49](m49.md) | QR codes sized in pixels, and a PNG to download | M48 *(ordering)* | done |
 | [M50](m50.md) | More than one QR code per link, told apart in the analytics | M49 | done |
 | [M50.5](m50.5.md) | The first file this product accepts | M50 | done |
-| [M50.6](m50.6.md) | A logo in the middle of a QR code | M50.5 | in progress (reopened) |
+| [M50.6](m50.6.md) | A logo in the middle of a QR code | M50.5 | done |
 | [M50.7](m50.7.md) | The QR tab stops costing more attention than it is worth | M49 · M50 | todo |
 | [M51](m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | done |
 | [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | done *(range re-covered by M57.9)* |

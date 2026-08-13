@@ -8,7 +8,20 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
+)
+
+// The version searches below are memoised, because four tests in this package
+// now sweep the same range and the search does not depend on which one is
+// asking. It is the one thing in this package whose cost is measured in seconds:
+// an encode at version 36 is milliseconds, and the bisection is ten of them per
+// version. Only successful searches are remembered — a failure fatals the test
+// that asked, and there is no second one.
+var (
+	versionSearchMu sync.Mutex
+	versionPayloads = map[int]string{}
+	versionSpan     [2]int
 )
 
 // A logo in the middle of a code (M50.6).
@@ -202,6 +215,11 @@ func TestTheOcclusionCapFitsHsCorrectionBudget(t *testing.T) {
 // [MaxContent]. The step below is what says the encoder agrees.
 func productVersions(t *testing.T) (int, int) {
 	t.Helper()
+	versionSearchMu.Lock()
+	defer versionSearchMu.Unlock()
+	if versionSpan[0] != 0 {
+		return versionSpan[0], versionSpan[1]
+	}
 	versionOf := func(content string) int {
 		code, err := Encode(content, LevelH)
 		if err != nil {
@@ -221,7 +239,8 @@ func productVersions(t *testing.T) (int, int) {
 		}
 		previous = got
 	}
-	return lowest, versionOf(padTo(MaxContent))
+	versionSpan = [2]int{lowest, versionOf(padTo(MaxContent))}
+	return versionSpan[0], versionSpan[1]
 }
 
 // padTo builds a short URL of exactly n bytes. Byte mode, like every URL this
@@ -580,6 +599,11 @@ func clampedBoxAt(version int) (scale, innerPx int, clamped bool) {
 // which turns a thousand-encode sweep into ten.
 func payloadForVersion(t *testing.T, version int) string {
 	t.Helper()
+	versionSearchMu.Lock()
+	defer versionSearchMu.Unlock()
+	if content, ok := versionPayloads[version]; ok {
+		return content
+	}
 	versionOf := func(n int) int {
 		code, err := Encode(padTo(n), LevelH)
 		if err != nil {
@@ -600,7 +624,8 @@ func payloadForVersion(t *testing.T, version int) string {
 		t.Fatalf("no payload this product can build encodes to version %d at level H; "+
 			"%d bytes is the first that reaches version %d", version, lo, got)
 	}
-	return padTo(lo)
+	versionPayloads[version] = padTo(lo)
+	return versionPayloads[version]
 }
 
 // TestTheEmbeddedLogoCannotCarryMarkup is

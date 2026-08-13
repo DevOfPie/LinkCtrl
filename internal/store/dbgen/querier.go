@@ -269,6 +269,14 @@ type Querier interface {
 	//
 	// NULL rather than an empty bytea, because the schema has one spelling for "no
 	// logo" and two would disagree the first time somebody wrote a zero-length one.
+	//
+	// **The style goes with it, in this statement rather than a second one**
+	// (M50.6's second reopening). The upload forces error correction to H and the
+	// removal puts it back, which is a style write — and a style write of its own
+	// would be an upsert, so a `DELETE` landing between the two would find no row to
+	// conflict with and **insert a fresh code**, slug and all. One statement keyed on
+	// the id cannot do that: a row that is gone updates nothing. The caller passes
+	// the style it read, unchanged, for a code that had no logo to begin with.
 	ClearQRCodeLogo(ctx context.Context, arg ClearQRCodeLogoParams) (int64, error)
 	// Spend one click of a one-time or max-click link's durable budget.
 	//

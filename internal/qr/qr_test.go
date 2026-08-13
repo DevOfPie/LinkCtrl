@@ -365,6 +365,13 @@ func TestTheSameColourTwiceIsRefused(t *testing.T) {
 
 // TestDefaultsAreDarkOnLight. The zero Style is the default style, and the
 // default is the one a scanner expects.
+//
+// **The level is the one field Normalize leaves empty**, since D184, and it is
+// asserted here rather than left to read as an oversight: the level is a floor
+// resolved against a payload a style has never carried, and an empty one is no
+// floor at all. Filling in DefaultLevel here would be inert — it is never above
+// the free level — and it is still what wrote `M` into every style this product
+// ever stored, which is a floor nobody set.
 func TestDefaultsAreDarkOnLight(t *testing.T) {
 	got, errs := Style{}.Normalize()
 	if len(errs) > 0 {
@@ -372,10 +379,14 @@ func TestDefaultsAreDarkOnLight(t *testing.T) {
 	}
 	want := Style{
 		Foreground: DefaultForeground, Background: DefaultBackground,
-		Level: DefaultLevel, Margin: DefaultMargin, Scale: DefaultScale,
+		Margin: DefaultMargin, Scale: DefaultScale,
 	}
 	if got != want {
 		t.Errorf("defaults = %+v, want %+v", got, want)
+	}
+	if got.Level != "" {
+		t.Errorf("the default style names level %q; an unset level is the rule, and "+
+			"a level written here is one nobody chose stored on every code", got.Level)
 	}
 }
 

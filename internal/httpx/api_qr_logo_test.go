@@ -292,6 +292,30 @@ func TestTheResizeWarningNamesBothSizes(t *testing.T) {
 	}
 }
 
+// TestTheRemovalNoticeNoLongerPromisesH is F223 on the surface that promised it.
+//
+// The sentence said the code *stays* at level H and gave M50.6's reason. The
+// owner overruled the reason, so the sentence is a claim the product stopped
+// making — and a notice that describes the previous behaviour is worse than no
+// notice, because a reader who checks it is checking against the wrong thing.
+// This is also the only place the level is stated to somebody who did not
+// upload anything, which is D186's answer to whether the tab says it at all.
+func TestTheRemovalNoticeNoLongerPromisesH(t *testing.T) {
+	got := qrNotice(url.Values{"qr": {"logo_removed"}})
+	if got == "" {
+		t.Fatal("removing a logo says nothing at all")
+	}
+	if strings.Contains(got, "stays at error correction level H") {
+		t.Errorf("the notice still promises the code stays at H: %q", got)
+	}
+	for _, want := range []string{"Error correction goes back", "already printed"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the notice %q does not carry %q — a reader is owed what "+
+				"changed and that nothing printed stops working", got, want)
+		}
+	}
+}
+
 // TestAnUnresizedUploadSaysNothingExtra is the other side. A sentence printed
 // after every upload is a sentence nobody reads by the third one — the reasoning
 // that deleted the size control's snap sentence outright at D182, once the size

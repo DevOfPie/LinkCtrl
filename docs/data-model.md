@@ -6,10 +6,10 @@ pointed at since Phase 1. It existed as a reference in two files and nowhere
 else until 0.2.0.
 
 **Derived from the migrated schema, not from the migrations.** Every table,
-column count and foreign key below was read out of a database with **all 43**
+column count and foreign key below was read out of a database with **all 44**
 migrations applied — the count as of 0.3.0, counted from
 `internal/store/migrations/` rather than recalled. It said *35* until then, and
-was already one short when 0.2.0 shipped with 36; Phase 3 added the other seven.
+was already one short when 0.2.0 shipped with 36; Phase 3 added the other eight.
 It describes what a running instance has rather than
 what the files appear to say. The distinction matters here: partitions are
 created by application code and never appear in sqlc-visible SQL, so a reader
@@ -176,7 +176,7 @@ because a reader finding the column otherwise concludes the feature is there.
   is**: every table that file created has a writer now, and the blob comments
   inside it were trued up at 0.3.0 against the structs that actually fill them.
   What is left dormant is a *shape inside a blob* rather than a table —
-  `qr_codes.style` has five fields and its comment named two more, one of which
+  `qr_codes.style` has six fields and its comment named two more, one of which
   (a module shape) is still unbuilt and is now recorded as unscheduled in
   [phase-3-candidates.md](build-notes/phase-3-candidates.md). *(This row pointed
   at that header for the list until 0.3.0, and the header had never carried

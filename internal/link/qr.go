@@ -421,7 +421,39 @@ func (s *Service) CreateQRCode(
 	// this normally repeats the answer above; it is the direct answer to F225,
 	// which is written about the copy rather than about the row copied from.
 	slug := domain.NewQRCodeSlug()
-	style, copied := refitForPayload(QRContent(l.ShortURL, slug), decodeQRStyle(def.Style))
+	inherited := decodeQRStyle(def.Style)
+	// **The `H` a logo forced is not copied onto a code that has no logo**
+	// (M50.6's second reopening). Every row carrying a logo holds level H —
+	// `refitForLogo` writes it on upload and `storeQRStyle` writes it again on
+	// every style write, so that a `GET` reports what is drawn (D141) — and the
+	// upsert below leaves the new row's `logo` NULL, because a code that has just
+	// come into being has no image. Copying the level whole would therefore draw
+	// the new code at H with nothing covering it, permanently and with no door
+	// back: `refitFromLogo` fires only for a code that *had* a logo. That is
+	// F223's own defect rebuilt inside the milestone that closes it, and it is
+	// reachable in two clicks — upload a logo, then *Add another code*.
+	//
+	// **Cleared rather than recomputed here**, because an unset level is a floor
+	// of none and the rule answers the rest at the moment the picture is drawn.
+	// The re-fit below then measures against the symbol the rule produces rather
+	// than against H's larger one, so the copy comes out at the size the code it
+	// was copied from is drawn at.
+	//
+	// **Only when the source carries a logo.** On any instance an operator can
+	// have, a level on a logo-less row came from an API caller naming one (D129),
+	// which is a choice, and D187 makes it a floor the new code inherits like any
+	// other field.
+	//
+	// The bound is the release rather than the code: a row whose logo was removed
+	// by a build older than this one kept the `H` the upload wrote, and would
+	// propagate here. QR logos have never shipped — the migration that stores
+	// them landed after `v0.2.0` and 0.3.0 is untagged — so no upgrade path
+	// produces such a row, and neither instance holds one (checked 2026-08-13,
+	// both `qr_codes` tables, zero rows at `H` with a null logo).
+	if def.HasLogo {
+		inherited.Level = ""
+	}
+	style, copied := refitForPayload(QRContent(l.ShortURL, slug), inherited)
 	if copied.Rose() && !rise.Rose() {
 		rise = copied
 	}
@@ -772,9 +804,17 @@ func qrCodeFrom(
 		style = style.ForLogo()
 	}
 	content := QRContent(shortURL, slug)
+	// **And the level the rule resolves, for every other code** (D184, D187). A
+	// row holds a floor — usually none at all — and the picture carries the
+	// stronger of that floor and the strongest free level, so the two are no
+	// longer the same string. Reporting the row's would tell a caller `M` about a
+	// picture drawn at `Q`, which is the drift the level's contract test already
+	// refuses for logos, one field along. qr.Drawn answers this and the size off
+	// one encode.
+	style, size := qr.Drawn(content, style)
 	out := QRCode{
 		LinkID: linkID, Slug: slug, Default: isDefault, Content: content,
-		Style: style, Stored: found, Size: QROutputSize(content, style),
+		Style: style, Stored: found, Size: size,
 	}
 	if found {
 		out.ID = row.ID
@@ -795,12 +835,15 @@ func qrCodeFrom(
 //
 // Exported for the same reason QRContent is — two surfaces ask, and a second
 // copy of the arithmetic is a second answer.
+//
+// Through qr.Drawn since D184, so the size is measured against the symbol the
+// resolved level produces rather than against the floor the row names. The two
+// come apart wherever the floor is above the free level — every logo'd code —
+// and asking through the one function is what keeps that a property of the
+// encoder rather than of each caller remembering it.
 func QROutputSize(content string, style qr.Style) int {
-	code, err := qr.Encode(content, style.Level)
-	if err != nil {
-		return 0
-	}
-	return qr.OutputSize(code.Size, style)
+	_, px := qr.Drawn(content, style)
+	return px
 }
 
 // RenderQR draws a link's default code as SVG.
@@ -892,6 +935,11 @@ func (s *Service) RenderQRPNGBySlug(
 // with defaults. A save from a form that no longer asks about error correction
 // must not silently answer the question; the level a link already has is carried
 // forward, and a caller that wants to choose one uses the API.
+//
+// Since D184 what is carried forward is the **floor** — usually none at all, and
+// then the level is the rule's. A form that wrote a level here would be pinning
+// one for a reader who was never asked, which is the shape of the defect that
+// reopened this milestone.
 type QRSizeInput struct {
 	Foreground string
 	Background string
@@ -1102,11 +1150,11 @@ func (s *Service) storeQRStyle(
 	}
 	// **A code carrying a logo is stored at level H, whatever was asked for**
 	// (M50.6, D141). Accept-and-override rather than refuse: this endpoint is a
-	// PUT that replaces the style whole, so an omitted level means `M`, and
-	// refusing would make every colour change on a logo'd code a 422 for a field
-	// the caller never mentioned. What the milestone forbids is silence, and
-	// there is none — the row holds H, the response below returns H, and a `GET`
-	// after this `PUT` reports what was applied.
+	// PUT that replaces the style whole, so an omitted level names no floor at
+	// all (D184), and refusing would make every colour change on a logo'd
+	// code a 422 for a field the caller never mentioned. What the milestone
+	// forbids is silence, and there is none — the row holds H, the response below
+	// returns H, and a `GET` after this `PUT` reports what was applied.
 	if existing.HasLogo {
 		normalized = normalized.ForLogo()
 		if blob, err = json.Marshal(normalized); err != nil {
@@ -1162,8 +1210,13 @@ func (s *Service) storeQRStyle(
 	if err != nil {
 		return nil, fmt.Errorf("upsert qr code: %w", err)
 	}
+	// **The view comes off the row and nothing overwrites it** (D184). It used to
+	// end `out.Style = normalized`, which was the same struct by another route —
+	// the upsert returns the blob it just wrote and qrCodeFrom decodes it — until
+	// the level stopped being the string a row holds. What the row holds is the
+	// floor; what the caller is owed is the level the picture carries, and
+	// qrCodeFrom is the one place that resolves it.
 	out := qrCodeFrom(linkID, l.ShortURL, slug, qrRowFromUpsert(row), true)
-	out.Style = normalized
 	return &out, nil
 }
 
@@ -1604,6 +1657,21 @@ func refitForLogo(content string, style qr.Style) qr.Style {
 // so the clear has already happened. A named code with no row does not exist,
 // and that is still a 404 — which is what stops this operation being a way to
 // ask whether a slug was ever issued.
+//
+// **And the level H the upload forced goes with the image** (F223, D184). It was
+// left where it was, on the reasoning that a picture may already be printed and H
+// is the safer of the two to be left at — which the owner overruled in as many
+// words: *"the old QR should still resolve as long as the link stays the same, so
+// a change in the new code shouldn't be an issue."* The payload is untouched, so
+// every printed picture goes on resolving; what H costs is ~30% more modules a
+// side than the code needs, on a code with nothing left covering it.
+//
+// **The bytes and the style leave in one statement**, which is the whole of why
+// the clear takes a style at all. A style write here would be an upsert, and an
+// upsert racing a `DeleteQRCode` finds nothing to conflict with and **inserts a
+// fresh row** — the code the reader deleted, back with its slug, because a
+// removal wrote to it. One `UPDATE` on the id cannot: a row that is gone updates
+// nothing.
 func (s *Service) ClearQRCodeLogo(
 	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, slug string,
 ) error {
@@ -1611,7 +1679,8 @@ func (s *Service) ClearQRCodeLogo(
 		return fmt.Errorf(
 			"%w: removing a QR code logo requires %s", domain.ErrForbidden, PermUpdate)
 	}
-	if _, err := s.Get(ctx, actor, linkID); err != nil {
+	l, err := s.Get(ctx, actor, linkID)
+	if err != nil {
 		return err
 	}
 	row, found, err := s.storedQRCode(ctx, actor.WorkspaceID, linkID, slug)
@@ -1624,12 +1693,61 @@ func (s *Service) ClearQRCodeLogo(
 		}
 		return nil
 	}
+	// **The style moves only for a code that had a logo**, so a second clear
+	// writes back the bytes it read: this is an idempotent operation, and
+	// re-fitting a style on a code whose logo left weeks ago would move a size
+	// the reader has set since.
+	blob := row.Style
+	if row.HasLogo {
+		styled := refitFromLogo(QRContent(l.ShortURL, row.Slug), decodeQRStyle(row.Style))
+		if blob, err = json.Marshal(styled); err != nil {
+			return fmt.Errorf("encode qr style: %w", err)
+		}
+	}
 	if _, err := s.q.ClearQRCodeLogo(ctx, dbgen.ClearQRCodeLogoParams{
-		ID: row.ID, WorkspaceID: actor.WorkspaceID,
+		ID: row.ID, WorkspaceID: actor.WorkspaceID, Style: blob,
 	}); err != nil {
 		return fmt.Errorf("clear qr code logo %s: %w", row.ID, err)
 	}
 	return nil
+}
+
+// refitFromLogo is the style a code takes on when its image is removed: the
+// level back to the rule, and the size the reader chose held against the smaller
+// symbol that produces (F223, D184).
+//
+// **The level is recomputed rather than restored**, and there is nothing to
+// restore in any case — the upload wrote H over whatever the row held, so the
+// pre-logo level is not recoverable from the row. That is the same answer the
+// owner gave for the reason they gave it: the level a code carries is a property
+// of what it encodes, and the payload has not changed.
+//
+// **The size is the one M49 defends and it survives this.** The rule's symbol is
+// never larger than H's — H is one of the levels the rule may return, and it
+// returns it only when it costs no version — so a picture that held the level-H
+// symbol holds this one, and re-fitting can only find a scale where the fit that
+// stored the number already did. What moves is the scale, which nobody set; the
+// stored size comes back out of qr.FitSize as itself.
+//
+// The three ways out are refitForPayload's, for its reasons: a style with no size
+// is the pre-M49 form and has no number to hold, content that cannot be encoded
+// is a picture whose failure is already reported elsewhere, and a fit that cannot
+// be made leaves the style alone rather than costing the removal.
+func refitFromLogo(content string, style qr.Style) qr.Style {
+	out := style
+	out.Level = ""
+	if out.Size == 0 {
+		return out
+	}
+	code, err := qr.Encode(content, out.Level)
+	if err != nil {
+		return out
+	}
+	fitted, ok := fitStyleTo(code.Size, out, out.Size)
+	if !ok {
+		return out
+	}
+	return fitted
 }
 
 // Drawing the logo (M50.6).
