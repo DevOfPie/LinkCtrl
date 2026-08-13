@@ -198,6 +198,123 @@ func TestTheQRResetButtonSaysRestoreDefaults(t *testing.T) {
 	}
 }
 
+// --- the size control, at the second M49 reopening ---------------------------
+
+// TestTheSizeControlIsASliderAndANumber is the reopening's fourth bullet (D182,
+// F221).
+//
+// **Four claims, and each one is a way the control could ship broken.** That the
+// slider exists at all and spans this code's whole range, so both ends are
+// reachable rather than only the marks. That the marks are the owner's eight,
+// declared through a `<datalist>` — HTML's own way of saying them, which is what
+// keeps `script-src 'self'` untouched. That the number beside it is still an
+// editable input and not a label, because typing a value is half of what was
+// asked for. And that the witness the server resolves the two against is on the
+// form, because without it the rule in `httpx.requestedQRSize` has nothing to
+// compare and the number would silently win every drag.
+//
+// The bounds are read off the fixture rather than typed here: they are passed
+// into the template precisely so the form and internal/qr cannot drift, and a
+// test that hardcoded them would be a third copy to drift from.
+func TestTheSizeControlIsASliderAndANumber(t *testing.T) {
+	for _, page := range qrPanelPages {
+		data, ok := pageData(t)[page].(map[string]any)
+		if !ok {
+			t.Fatalf("the %s fixture is not a map", page)
+		}
+		body := renderQRPanel(t, page)
+
+		lo, ok := data["QRMinSize"].(int)
+		if !ok {
+			t.Fatalf("the %s fixture carries no QRMinSize", page)
+		}
+		hi, ok := data["QRMaxSize"].(int)
+		if !ok {
+			t.Fatalf("the %s fixture carries no QRMaxSize", page)
+		}
+		slider := elementWithID(t, body, "qr_size_slider")
+		for _, want := range []string{
+			`type="range"`, `name="size_slider"`, `list="qr_size_stops"`,
+			`min="` + strconv.Itoa(lo) + `"`, `max="` + strconv.Itoa(hi) + `"`,
+		} {
+			if !strings.Contains(slider, want) {
+				t.Errorf("%s: the size slider is missing %s. Without the range and both "+
+					"bounds it is not a slider over the sizes this code can be drawn "+
+					"at:\n%s", page, want, slider)
+			}
+		}
+
+		// The marks, every one the fixture was handed. A datalist that dropped
+		// one is a stop the owner asked for and the control does not offer.
+		stops, ok := data["QRSizeStops"].([]int)
+		if !ok || len(stops) == 0 {
+			t.Fatalf("the %s fixture carries no QRSizeStops", page)
+		}
+		if !strings.Contains(body, `<datalist id="qr_size_stops">`) {
+			t.Errorf("%s draws no datalist for the size stops. The marks are declared "+
+				"in HTML because a script to place them is a script this page's CSP "+
+				"refuses", page)
+		}
+		for _, s := range stops {
+			if !strings.Contains(body, `<option value="`+strconv.Itoa(s)+`">`) {
+				t.Errorf("%s: the slider offers no stop at %d", page, s)
+			}
+		}
+
+		// And the number, still typed into rather than shown.
+		number := elementWithID(t, body, "qr_size")
+		for _, want := range []string{`type="number"`, `name="size"`,
+			`min="` + strconv.Itoa(lo) + `"`, `max="` + strconv.Itoa(hi) + `"`} {
+			if !strings.Contains(number, want) {
+				t.Errorf("%s: the size number box is missing %s; a value you cannot type "+
+					"is half the control the owner asked for:\n%s", page, want, number)
+			}
+		}
+
+		// The witness. Nothing in the browser syncs the two inputs, so this is
+		// what lets the server say which of them moved.
+		if !strings.Contains(body, `name="size_shown"`) {
+			t.Errorf("%s carries no size_shown. Without it the slider and the number "+
+				"are two sources of truth for one setting, which is the risk the "+
+				"milestone named", page)
+		}
+	}
+}
+
+// TestTheSizePanelNoLongerPromisesASnap is the other half of the first bullet:
+// the sentence that explained the snap has to go with the snap.
+//
+// A page that still said the size moves to the nearest whole-module one would be
+// describing the behaviour the owner rejected, on the tab where they rejected
+// it — and a reader would believe the page over the product.
+func TestTheSizePanelNoLongerPromisesASnap(t *testing.T) {
+	for _, page := range qrPanelPages {
+		body := renderQRPanel(t, page)
+		for _, gone := range []string{"snaps to the nearest", "keeps them whole"} {
+			if strings.Contains(body, gone) {
+				t.Errorf("%s still says %q. The size set is the size stored since D182, "+
+					"so the sentence explaining why it was not is describing a product "+
+					"that no longer exists", page, gone)
+			}
+		}
+	}
+}
+
+// elementWithID cuts one element out of rendered markup by its id.
+func elementWithID(t *testing.T, body, id string) string {
+	t.Helper()
+	at := strings.Index(body, `id="`+id+`"`)
+	if at < 0 {
+		t.Fatalf("no element with id %q in the rendered panel", id)
+	}
+	start := strings.LastIndex(body[:at], "<")
+	end := strings.Index(body[at:], ">")
+	if start < 0 || end < 0 {
+		t.Fatalf("the element with id %q is not a complete tag", id)
+	}
+	return body[start : at+end+1]
+}
+
 // --- the upload control, at the F214 reopening -------------------------------
 
 // logoForm cuts the logo upload form out of a rendered panel.

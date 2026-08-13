@@ -42,7 +42,7 @@ func decodePNG(t *testing.T, raw []byte) *image.Paletted {
 	p, ok := img.(*image.Paletted)
 	if !ok {
 		t.Fatalf("the image decoded as %T, not a paletted one. MaxSize's allocation "+
-			"figure — one byte per pixel, 4,000,000 at 2000px — is calculated from the "+
+			"figure — one byte per pixel, 4,194,304 at 2048px — is calculated from the "+
 			"paletted form, and an RGBA buffer is four times it", img)
 	}
 	return p
@@ -50,42 +50,67 @@ func decodePNG(t *testing.T, raw []byte) *image.Paletted {
 
 // TestTheSVGAndThePNGAreTheSamePicture is the milestone's matching claim.
 func TestTheSVGAndThePNGAreTheSamePicture(t *testing.T) {
-	// Three styles, chosen for the three ways the two encoders could disagree:
-	// a quiet zone at the floor and one well above it, so the origin offset is
-	// exercised at more than one value; an odd scale, so a centre pixel is not
-	// on a boundary by luck; and colours that are neither black nor white, so a
-	// palette written in the wrong order is visible.
+	// Five styles, chosen for the ways the two encoders could disagree: a quiet
+	// zone at the floor and one well above it, so the origin offset is exercised
+	// at more than one value; an odd scale, so a centre pixel is not on a
+	// boundary by luck; colours that are neither black nor white, so a palette
+	// written in the wrong order is visible — and, since D182, **two sizes that
+	// the module grid cannot divide**, which is where the quiet zone is a pixel
+	// remainder rather than a module count and where an odd remainder puts the
+	// symbol one pixel off centre. That last case is the one the whole reopening
+	// turns on: it is a *requested* size, and the claim is that both encoders
+	// draw it.
+	code, err := Encode(sample, DefaultLevel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	odd, err := FitSize(code.Size, 501)
+	if err != nil {
+		t.Fatal(err)
+	}
+	even, err := FitSize(code.Size, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, st := range []Style{
 		{Margin: 4, Scale: 8},
 		{Margin: 11, Scale: 3, Foreground: "#123a6b", Background: "#f5f7fa"},
 		{Margin: 6, Scale: 7, Foreground: "#036", Background: "#fff"},
+		{Margin: DefaultMargin, Scale: even.Scale, Size: 500},
+		{Margin: DefaultMargin, Scale: odd.Scale, Size: 501,
+			Foreground: "#036", Background: "#fff"},
 	} {
-		t.Run(strconv.Itoa(st.Margin)+"x"+strconv.Itoa(st.Scale), func(t *testing.T) {
+		name := strconv.Itoa(st.Margin) + "x" + strconv.Itoa(st.Scale)
+		if st.Size != 0 {
+			name = "at" + strconv.Itoa(st.Size)
+		}
+		t.Run(name, func(t *testing.T) {
 			norm, errs := st.Normalize()
 			if len(errs) > 0 {
 				t.Fatalf("style refused: %v", errs)
 			}
-			code, err := Encode(sample, norm.Level)
-			if err != nil {
-				t.Fatal(err)
-			}
 
 			svg := code.SVG(norm)
-			grid := rendered(t, svg)
-			span := len(grid)
+			grid, g := rendered(t, svg, code.Size, norm)
+			px := g.px
+
+			// A requested size is the size drawn, exactly — the reopening's first
+			// bullet, asserted where both encoders can be held to it at once.
+			if st.Size != 0 && px != st.Size {
+				t.Fatalf("a style asking for %dpx drew %dpx", st.Size, px)
+			}
 
 			// The SVG states its pixel size rather than leaving it to a viewBox,
 			// which is the bullet that makes "rendered at the set pixel size"
 			// something a browser does rather than something a stylesheet
 			// arranges. Both attributes, and both the same, because the picture
 			// is square.
-			px := span * norm.Scale
 			for _, attr := range []string{"width", "height"} {
 				if got := attrInt(t, string(svg), attr+`="(\d+)"`); got != px {
 					t.Fatalf("the SVG's %s is %d, want %d", attr, got, px)
 				}
 			}
-			if !strings.Contains(string(svg), `viewBox="0 0 `+strconv.Itoa(span)) {
+			if !strings.Contains(string(svg), `viewBox="0 0 `+strconv.Itoa(px)) {
 				t.Error("the SVG has no viewBox; the pixel size is explicit and the " +
 					"viewBox is what makes it scale cleanly anyway")
 			}
@@ -104,12 +129,12 @@ func TestTheSVGAndThePNGAreTheSamePicture(t *testing.T) {
 
 			fg, bg := parseHex(norm.Foreground), parseHex(norm.Background)
 			dark, light := 0, 0
-			for y := range span {
-				for x := range span {
+			for y := range code.Size {
+				for x := range code.Size {
 					// The centre of the module, in pixels. Not a corner: a corner
 					// is shared by four modules and would agree with the wrong
 					// one under an off-by-one that this is meant to catch.
-					at := image.Pt(x*norm.Scale+norm.Scale/2, y*norm.Scale+norm.Scale/2)
+					at := image.Pt(g.origin+x*g.scale+g.scale/2, g.origin+y*g.scale+g.scale/2)
 					want := bg
 					if grid[y][x] {
 						want = fg
@@ -123,7 +148,28 @@ func TestTheSVGAndThePNGAreTheSamePicture(t *testing.T) {
 							"pixel at (%d,%d) is %v, want %v.\n\nThe two encoders are "+
 							"drawing different pictures, which is the one thing the shared "+
 							"geometry exists to prevent.",
-							x, y, span, drawnAs(grid[y][x]), at.X, at.Y, got, want)
+							x, y, code.Size, drawnAs(grid[y][x]), at.X, at.Y, got, want)
+					}
+				}
+			}
+
+			// **And the quiet zone, every pixel of it.** It was covered by the
+			// loop above while the picture was a module grid the parser could
+			// walk whole; the parser walks the symbol now, so the band around it
+			// is asserted here or nowhere — and it is exactly where a pixel
+			// remainder can go wrong.
+			symbol := code.Size * g.scale
+			for y := range px {
+				for x := range px {
+					if x >= g.origin && x < g.origin+symbol &&
+						y >= g.origin && y < g.origin+symbol {
+						continue
+					}
+					if got, _ := color.NRGBAModel.Convert(img.At(x, y)).(color.NRGBA); got != bg {
+						t.Fatalf("the pixel at (%d,%d) is %v and it is in the quiet zone "+
+							"of a %dpx picture whose symbol starts at %d and is %dpx "+
+							"across; the zone is background or it is not a quiet zone",
+							x, y, got, px, g.origin, symbol)
 					}
 				}
 			}

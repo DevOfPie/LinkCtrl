@@ -308,6 +308,85 @@ func TestAnImpossibleStyleIsRefusedRatherThanDrawn(t *testing.T) {
 	}
 }
 
+// TestTheAPIRefusesASizeTheSymbolHasOutgrown is the other door onto the claim
+// D182 rests on: *the requested size is the size stored and drawn, exactly.*
+//
+// **The openapi contract promises this and the schema cannot keep it.** `size`
+// is bounded there at 64 to 2048, which is the size *control's* range, and the
+// floor that actually binds is `scale × (module count + 6)` — a property of the
+// content and of the style together, so no schema and no `Style.Normalize` can
+// see it. Without a check at the service the endpoint would accept a size the
+// symbol has outgrown, `qr.Code.geometry` would fall back to the older
+// margin-and-scale arithmetic, and `GET …/qr.png` would serve a picture
+// measuring something else entirely. The dashboard's size control has refused
+// this since the reopening; the API is the second surface that stores a size and
+// it was the one without it.
+//
+// Both floors are read off the link's own content rather than written down, so
+// an alias length or a `QRContent` change moves the fixture instead of stranding
+// it on a stale number.
+func TestTheAPIRefusesASizeTheSymbolHasOutgrown(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink(strings.Repeat("a", 48), "https://example.com/x")
+
+	// The level and scale a `size`-only style normalizes to, which is what the
+	// requests below are judged against.
+	defaults, _ := qr.Style{}.Normalize()
+	symbol, err := qr.Encode(f.qrContent(id), defaults.Level)
+	if err != nil {
+		t.Fatal(err)
+	}
+	floor := qr.MinSizeForStyle(symbol.Size, defaults)
+	if floor <= qr.MinSize {
+		t.Fatalf("this link's code is %d modules and its floor at scale %d is %dpx, "+
+			"at or under the %dpx range floor — there is no size between the two "+
+			"for the endpoint to refuse, so the fixture is measuring nothing",
+			symbol.Size, defaults.Scale, floor, qr.MinSize)
+	}
+
+	// Inside the schema's range and below this style's floor: the one band only
+	// the endpoint can judge.
+	body := `{"style":{"size":` + strconv.Itoa(qr.MinSize) + `}}`
+	resp := f.putJSON("/api/v1/links/"+id.String()+"/qr", body)
+	payload, _ := io.ReadAll(resp.Body)
+	status := resp.StatusCode
+	_ = resp.Body.Close()
+	if status != http.StatusUnprocessableEntity {
+		t.Errorf("PUT %s on a %d-module code = %d, want 422: the openapi contract "+
+			"says a size below %dpx is refused rather than squeezed, and a stored "+
+			"size the symbol has outgrown draws at some other number of pixels",
+			body, symbol.Size, status, floor)
+	}
+	// The refusal names the floor that bound, the way the dashboard's does. A 422
+	// saying only "out of range" would point at 64, which this request satisfies.
+	// It names the narrowest-module floor beside it, because lowering `scale` is
+	// the other way to be accepted.
+	for _, want := range []string{strconv.Itoa(floor), strconv.Itoa(qr.MinSizeFor(symbol.Size))} {
+		if !strings.Contains(string(payload), want) {
+			t.Errorf("the refusal does not name %spx, so nothing in it says what "+
+				"would be accepted:\n%.400s", want, payload)
+		}
+	}
+	if n := f.qrRowCount(id); n != 0 {
+		t.Errorf("a refused size wrote %d rows", n)
+	}
+
+	// And the floor itself is accepted, so the refusal is a floor rather than a
+	// band the endpoint simply will not serve.
+	ok := f.putJSON("/api/v1/links/"+id.String()+"/qr",
+		`{"style":{"size":`+strconv.Itoa(floor)+`}}`)
+	status = ok.StatusCode
+	_ = ok.Body.Close()
+	if status != http.StatusOK {
+		t.Fatalf("PUT at the floor of %dpx = %d, want 200", floor, status)
+	}
+	if got := f.qrCode(id).Size; got != floor {
+		t.Errorf("the code stores %dpx after a request for %dpx; when size is set it "+
+			"is exactly what the picture measures", got, floor)
+	}
+}
+
 // TestACodeIsScopedToItsWorkspace. A link somebody cannot see is a code they
 // cannot draw, and the refusal must not confirm the link exists.
 func TestACodeIsScopedToItsWorkspace(t *testing.T) {
@@ -379,16 +458,15 @@ func TestTheStyleFormOnThePageStoresWhatTheAPIWouldStore(t *testing.T) {
 	if code.Style.Foreground != "#123456" || code.Style.Background != "#fedcba" {
 		t.Fatalf("the form stored %+v", code.Style)
 	}
-	// Half a span, which is the whole of what the snap may move since the M49
-	// reopening pinned the quiet zone at its floor (F213): the sizes qr.FitSize
-	// can produce step by one span — symbol plus both quiet zones — per unit of
-	// scale. The span is read back off the answer, because this test knows the
-	// pixels and deliberately not the module count.
-	span := code.Size / code.Style.Scale
-	if diff := code.Size - 400; 2*diff > span || 2*diff < -span {
-		t.Errorf("the form asked for 400px and stored a style that draws %dpx. The snap "+
-			"moves the size by at most half a %d-module span (%dpx), not by tens of "+
-			"pixels", code.Size, span, span/2)
+	// **Exactly 400, and the allowance is gone** (D182, F221). This asserted a
+	// half-span tolerance while the fit could only land on sizes the module grid
+	// admitted; the quiet zone is carried in pixels now, so the number the form
+	// posted is the number the row draws — end to end, through the handler and
+	// the service and back out of the database.
+	if code.Size != 400 {
+		t.Errorf("the form asked for 400px and stored a style that draws %dpx. The "+
+			"size set is where it stays — the owner's sentence, and the whole of "+
+			"why this milestone was reopened", code.Size)
 	}
 	if !strings.Contains(f.qrSVG(id), `fill="#123456"`) {
 		t.Error("the form's colour is not in the served picture")
@@ -426,6 +504,56 @@ func TestTheStyleFormOnThePageStoresWhatTheAPIWouldStore(t *testing.T) {
 	f.postQRForm(t, "/links/"+id.String()+"/qr", url.Values{"reset": {"1"}})
 	if n := f.qrRowCount(id); n != 0 {
 		t.Errorf("%d rows after the reset button, want 0", n)
+	}
+}
+
+// TestTheSliderAndTheNumberResolveToOneSize is the size control's second input,
+// driven through the handler rather than asserted of the function that decides
+// (D182, F221).
+//
+// **Nothing in the browser keeps the two in step**, because this dashboard runs
+// htmx and no script of its own, so the rule lives on the server: `size_shown`
+// is what the form was rendered with, the slider wins when it has moved off
+// that, and the number wins otherwise. Both directions are driven, because a
+// rule that only ever took one of them would pass a test for either alone — and
+// so is the form with no slider at all, which is what an API-shaped post and a
+// page cached from before this reopening look like.
+func TestTheSliderAndTheNumberResolveToOneSize(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("sliding", "https://example.com/x")
+	path := "/links/" + id.String() + "/qr"
+	colours := func(v url.Values) url.Values {
+		v.Set("foreground", "#123456")
+		v.Set("background", "#fedcba")
+		return v
+	}
+
+	// The slider moved and the number did not: the slider is what the reader
+	// touched, so the number they never looked at must not overrule it.
+	f.postQRForm(t, path, colours(url.Values{
+		"size_shown": {"300"}, "size_slider": {"512"}, "size": {"300"},
+	}))
+	if got := f.qrCode(id).Size; got != 512 {
+		t.Errorf("the slider was dragged to 512 and the code is %dpx. The number box "+
+			"still held the value the page was rendered with, and a rule that lets "+
+			"that win is a slider nobody can use", got)
+	}
+
+	// The number was typed into and the slider was not: the mirror case.
+	f.postQRForm(t, path, colours(url.Values{
+		"size_shown": {"512"}, "size_slider": {"512"}, "size": {"640"},
+	}))
+	if got := f.qrCode(id).Size; got != 640 {
+		t.Errorf("640 was typed into the number box and the code is %dpx. The slider "+
+			"had not moved, so it had nothing to say", got)
+	}
+
+	// No slider on the form at all — the shape M49 shipped, and the shape a
+	// cached page still posts.
+	f.postQRForm(t, path, colours(url.Values{"size": {"256"}}))
+	if got := f.qrCode(id).Size; got != 256 {
+		t.Errorf("a form carrying only the number stored %dpx, want 256", got)
 	}
 }
 

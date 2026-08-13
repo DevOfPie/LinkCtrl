@@ -270,7 +270,9 @@ func smallPNG(t *testing.T) []byte {
 // The dashboard's half. An image past the storage target is stored at a smaller
 // size than it arrived at, and the page it lands on is a fresh request that
 // never saw the file — so the pair travels in the redirect and qrNotice is the
-// one place it is spent, exactly as the size snap's pair is.
+// one place it is spent. **The only such pair now**: the size control had a
+// `want`/`got` one on the same terms until D182 made the two numbers equal at
+// every value, and it went with the snap it reported.
 
 // TestTheResizeWarningNamesBothSizes is the sentence the owner is owed: what was
 // uploaded, and what is stored. A "logo stored" with no qualification for an
@@ -291,8 +293,10 @@ func TestTheResizeWarningNamesBothSizes(t *testing.T) {
 }
 
 // TestAnUnresizedUploadSaysNothingExtra is the other side. A sentence printed
-// after every upload is a sentence nobody reads by the third one, which is why
-// the size control reports a snap only when it snapped.
+// after every upload is a sentence nobody reads by the third one — the reasoning
+// that deleted the size control's snap sentence outright at D182, once the size
+// asked for and the size drawn stopped being able to differ. This warning
+// survives that argument because the two dimensions still can.
 func TestAnUnresizedUploadSaysNothingExtra(t *testing.T) {
 	for name, q := range map[string]url.Values{
 		"no pair at all":  {"qr": {"logo"}},

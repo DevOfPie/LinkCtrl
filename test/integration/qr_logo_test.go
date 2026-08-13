@@ -549,20 +549,33 @@ func TestTheDefaultCodeCarriesALogoToo(t *testing.T) {
 		t.Errorf("the upload repainted the code: %+v became %+v; an image is not a "+
 			"colour change", untouched.Style, after.Style)
 	}
-	// Within half a span of the size it had. The fit snaps to a whole number of
-	// modules, so the two need not be equal; with the quiet zone pinned at its
-	// floor since the M49 reopening (F213) the sizes it can produce step by one
-	// span — symbol plus both quiet zones — per unit of scale, so the nearest
-	// can sit half of one away, and anything inside that is the snap rather
-	// than a resize nobody asked for. The span is read back off the answer:
-	// size ÷ scale is the module count including the quiet zone, which is the
-	// one number this test does not otherwise have.
-	span := after.Size / after.Style.Scale
-	if diff := after.Size - untouched.Size; 2*diff > span || 2*diff < -span {
+	// **Exactly the size it had, since D182.** This allowed half a span of drift
+	// while qr.FitSize could only land on sizes a whole module grid admitted; the
+	// quiet zone carries the remainder in pixels now, so the fit lands on the
+	// number and the assertion is equality — the same one its siblings in
+	// internal/link make of the very same re-fit.
+	//
+	// **One case legitimately moves and it is not this one.** Where the level-H
+	// symbol needs more pixels than the code is already drawn at, qr.FitSize
+	// refuses on qr.MinSizeFor's floor and refitForLogo leaves the style alone
+	// rather than costing a logo that has already been written — which draws a
+	// *larger* picture. That escape is checked rather than assumed, because a
+	// fixture that drifted into it would leave the equality below measuring
+	// nothing.
+	atH, err := qr.Encode(f.qrContent(id), qr.LevelH)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if floor := qr.MinSizeFor(atH.Size); untouched.Size < floor {
+		t.Fatalf("this code is drawn at %dpx and its %d-module level-H symbol needs "+
+			"%dpx, so the re-fit takes its escape and the picture is supposed to grow; "+
+			"what follows measures the ordinary path", untouched.Size, atH.Size, floor)
+	}
+	if after.Size != untouched.Size {
 		t.Errorf("the code was %dpx and is %dpx after the upload (%+v → %+v). Level H "+
 			"is a larger symbol and the re-fit is what keeps the size somebody "+
-			"chose — half a %d-module span is %dpx", untouched.Size, after.Size,
-			untouched.Style, after.Style, span, span/2)
+			"chose — to the pixel, since D182", untouched.Size, after.Size,
+			untouched.Style, after.Style)
 	}
 	if after.Size > qr.MaxSize {
 		t.Errorf("the upload left the code drawing %dpx, past the %dpx raster bound; "+
@@ -1178,19 +1191,21 @@ func TestTheSizeControlFitsAgainstTheLevelALogoIsDrawnAt(t *testing.T) {
 	// wrong thing to have fitted against.
 	drawn := attrOf(t, f.qrSVG(id), `width="(\d+)"`)
 	stored := f.storedQRLevel(t, id, "")
-	// Half a span, which is the whole of what a snap may move since the M49
-	// reopening pinned the quiet zone at its floor (F213): the achievable sizes
-	// step by one span — the symbol plus both quiet zones — per unit of scale.
-	// A fit taken against L's smaller symbol misses by far more than that,
-	// which is what this test is looking for.
-	span := atH.Size + 2*stored.Margin
-	if diff := drawn - want; 2*diff > span || 2*diff < -span {
+	// **The number that was asked for, exactly** (D182). This allowed half a span
+	// while qr.FitSize could only land on sizes a whole module grid admitted; the
+	// quiet zone carries the remainder in pixels now, so every value in the range
+	// is reachable and equality is what the product promises. Nothing here has the
+	// logo re-fit's escape either: the size control *refuses* a request below
+	// qr.MinSizeFor rather than drifting past it, and 800px clears that floor at
+	// every version this product encodes to. A fit taken against L's smaller
+	// symbol lands somewhere else entirely, which is what this test is looking
+	// for.
+	if drawn != want {
 		t.Errorf("the reader asked for %dpx and the served picture is %dpx, with "+
-			"margin %d and scale %d on a %d-module symbol. qr.FitSize snaps to a whole "+
-			"number of modules, so anything inside half a %d-module span (%dpx) is the "+
-			"snap; this is the fit having been taken against the %d modules the row's "+
-			"level encodes to instead", want, drawn, stored.Margin, stored.Scale,
-			atH.Size, span, span/2, atL.Size)
+			"margin %d and scale %d on a %d-module symbol. The size set is the size "+
+			"drawn; the cause this test was built to catch is a fit taken against the "+
+			"%d modules the row's level encodes to instead", want, drawn,
+			stored.Margin, stored.Scale, atH.Size, atL.Size)
 	}
 	// And the panel's own number is the same number, so the two surfaces do not
 	// disagree about a picture they both describe.

@@ -626,8 +626,8 @@ migrations run at boot.
   that a browser's rendering of the SVG is byte-identical to the PNG. No two
   rasterisers agree to the byte, and the claim is about the squares.
 
-  **Output stops at 2000 pixels.** The image is two colours at one byte a pixel,
-  so the largest buffer a request can cause is 4,000,000 bytes; a size above the
+  **Output stops at 2048 pixels.** The image is two colours at one byte a pixel,
+  so the largest buffer a request can cause is 4,194,304 bytes; a size above the
   cap is refused rather than quietly shrunk. Nothing joined this program's
   dependency list for it — the encoder is Go's own `image/png`.
 
@@ -644,19 +644,31 @@ migrations run at boot.
   download button being text instead of an icon"; an unlabelled icon is a guess
   for anybody who does not already know what it does, so it is both.
 
-- **The QR form asks how big you want the code, in pixels.** It used to ask for a
-  quiet zone in modules and a module size in pixels, which is two numbers nobody
-  printing a poster knows. Both are still the arithmetic behind the one control,
-  and the empty margin scanners need is **held at the four squares the
-  specification requires** — never below it, and never above it either, so the
-  majority of the picture is code at every size the form offers. A style set over
-  the API can still ask for a wider quiet zone and is drawn with it.
+- **The QR control is a slider with a number beside it, and asks how big you
+  want the code in pixels.** It used to ask for a quiet zone in modules and a
+  module size in pixels, which is two numbers nobody printing a poster knows.
+  Both are still the arithmetic behind the one control. The slider stops at 128,
+  256, 300, 512, 600, 1024, 1200 and 2048 — powers of two plus the three that
+  matter at 300dpi — and slides freely between the ends; the box beside it takes
+  a typed number for anything the marks do not cover.
 
-  **The size snaps to keep the squares whole, and the panel names both numbers.**
-  A code is a grid, so an arbitrary pixel size does not divide into it — 300px
-  over a 29-square code is 10.34 pixels a square. Ask for 300 and you are told
-  what you got and why. Squares landing on fractional boundaries are what would
-  make the SVG and the PNG round differently.
+  **The size you set is the size you get, exactly.** Ask for 500 pixels and the
+  file is 500 pixels. A code is a grid of squares and an arbitrary pixel size
+  does not divide into it, so something has to absorb the remainder: it is the
+  empty margin around the code, which is white space and can be any number of
+  pixels. The squares themselves stay whole, which is what keeps the SVG and the
+  PNG the same picture.
+
+  **The margin aims at four squares and never goes under three.** Four is what
+  the specification asks for; three is the low end of a quarter either side of
+  it, and it is measured rather than assumed — every size and version this
+  product draws is decoded at five simulated viewing distances through two
+  independent decoders before the number is allowed to stand. On a large code in
+  a small picture there may be no scale that lands in that band at all, and the
+  margin then comes out *wider* than five rather than narrower than three: extra
+  white costs nothing to read, and a thin margin costs a scan. A size too small
+  for the code to have any margin at all is refused, with the smallest size that
+  code can be drawn at in the message.
 
   **Error correction moved to the API.** It is a tradeoff between how much damage
   a printed code survives and how tightly it packs, and there is no way to judge
@@ -667,24 +679,29 @@ migrations run at boot.
   square, and a code bigger than it is drawn scaled down to fit; the number under
   the picture is the size that is *served*, which is what both downloads and the
   API answer with — named as a stored size on a styled code and as the default on
-  one that is not. Setting 2000px changes the file rather than the page.
+  one that is not. Setting 2048px changes the file rather than the page.
 
   **The reset button says *Restore defaults*.** It used to say *Back to black on
   white*, which named the colours — it clears the size too.
 
   **Codes styled before this release are untouched.** Their stored settings are
   read forward to the size they already produced, so nothing anybody has printed
-  changed shape. Re-saving one is a no-op down to the byte when its quiet zone is
-  the default four squares; a code whose stored quiet zone is wider than that is
-  re-fitted to four when it is saved again, which moves the drawn size by at most
-  half the step between two sizes that keep the squares whole, and the panel's
-  message names the new size the way it does for any snap.
+  changed shape. Re-saving one stores the size it was already drawing, to the
+  pixel, whatever margin it was written with.
 
-  **`scale` accepts up to 68 over the API**, where it stopped at 32. The new
-  ceiling is the 2000px raster bound divided by the smallest code plus its quiet
-  zone, so every size the form can resolve to is a style `PUT
-  /api/v1/links/{id}/qr` accepts. A large `scale` with a large `margin` still
-  draws past 2000px, and the image endpoints refuse that as they always have.
+  **`PUT /api/v1/links/{id}/qr` gains `style.size`**, a size in pixels, and it is
+  what the form writes. Give it and the picture is exactly that across, with the
+  code centred and the margin taking the remainder; leave it out and `margin` and
+  `scale` decide the size the way they always did. A `size` the code will not fit
+  inside — smaller than the symbol at your `scale` plus a margin anything can
+  read — is **refused**, the way the form refuses it, rather than quietly served
+  at some other size; the message names the smallest size that works at that
+  `scale` and the smallest that works at any. `scale` accepts up to 75,
+  where it stopped at 32 and then 68 — the ceiling is the 2048px raster bound
+  divided by the smallest code plus the narrowest margin, so every size the form
+  can resolve to is a style the API accepts. A large `scale` with a large
+  `margin` still draws past 2048px, and the image endpoints refuse that as they
+  always have.
 
 - **Managing dispute reviewers moves off the review queue.** The queue still says
   who reviews it — that is context for a page whose decisions are instance-wide —
@@ -898,10 +915,12 @@ migrations run at boot.
 
 - **Uploading a logo no longer breaks a code's PNG download.** A logo forces
   error correction to level H, which makes the symbol bigger; the stored size was
-  carried over unchanged, so a code already near the 2000px ceiling was pushed
+  carried over unchanged, so a code already near the raster ceiling was pushed
   past it and its PNG started refusing. The size is now re-fitted to the larger
-  symbol, so the picture stays the size you asked for. The payload does not
-  change, so a code already printed still scans.
+  symbol, so the picture stays exactly the size you asked for — unless the bigger
+  symbol will not fit inside that size at all, and then the code grows rather
+  than being drawn with a margin nothing can read. The payload does not change,
+  so a code already printed still scans.
 
 - **`/account/mfa` no longer scrolls sideways on a phone.** The enrolment QR was
   emitted at a fixed pixel width and overflowed a 360px viewport by 174px — the

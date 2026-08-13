@@ -258,11 +258,13 @@ func TestALogoIsDrawnAtLevelH(t *testing.T) {
 		t.Fatal(err)
 	}
 	norm, _ := Style{Level: LevelL}.Normalize()
-	if got, want := viewBox(t, svg), atH.Size+2*norm.Margin; got != want {
-		t.Errorf("a code asked for at level L with a logo drew %d modules across; "+
-			"level H is %d and level L is %d. A logo that did not force H would be "+
+	// In pixels since D182, so the module counts are multiplied out here; the
+	// claim is unchanged, which is that a logo drew the level-H symbol.
+	if got, want := viewBox(t, svg), (atH.Size+2*norm.Margin)*norm.Scale; got != want {
+		t.Errorf("a code asked for at level L with a logo drew %dpx across; "+
+			"level H is %dpx and level L is %dpx. A logo that did not force H would be "+
 			"occluding modules against a budget a quarter of the size",
-			got, want, atL.Size+2*norm.Margin)
+			got, want, (atL.Size+2*norm.Margin)*norm.Scale)
 	}
 
 	// And without a logo the level asked for is the level drawn, unchanged.
@@ -270,8 +272,8 @@ func TestALogoIsDrawnAtLevelH(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := viewBox(t, plain), atL.Size+2*norm.Margin; got != want {
-		t.Errorf("a code with no logo drew %d modules across at level L, want %d; "+
+	if got, want := viewBox(t, plain), (atL.Size+2*norm.Margin)*norm.Scale; got != want {
+		t.Errorf("a code with no logo drew %dpx across at level L, want %dpx; "+
 			"the forcing has escaped the case it is for", got, want)
 	}
 }
@@ -281,12 +283,17 @@ func viewBox(t *testing.T, svg []byte) int {
 	return attrInt(t, string(svg), `viewBox="0 0 (\d+) (\d+)"`)
 }
 
-// svgLogoBox reads back the module rectangle the drawing says is occluded.
+// svgLogoBox reads back the module rectangle the drawing says is occluded, in
+// the **code's** own module coordinates.
 //
 // The background rect after `</g>`, not the `<image>`: the box is what is
 // painted over, whatever shape the logo inside it is, and the box is what the
 // cap is a cap on.
-func svgLogoBox(t *testing.T, svg []byte) (int, int, int) {
+//
+// The drawing states it in pixels since D182, so the geometry is what converts —
+// and the conversion is asserted exact, which is how a box that drifted off the
+// module grid would show up rather than being rounded away.
+func svgLogoBox(t *testing.T, svg []byte, g geometry) (int, int, int) {
 	t.Helper()
 	s := string(svg)
 	after := s[strings.Index(s, "</g>"):]
@@ -300,7 +307,11 @@ func svgLogoBox(t *testing.T, svg []byte) (int, int, int) {
 	if w != h {
 		t.Fatalf("the logo box is %dx%d and the cap is derived for a square", w, h)
 	}
-	return x, y, w
+	if (x-g.origin)%g.scale != 0 || (y-g.origin)%g.scale != 0 || w%g.scale != 0 {
+		t.Fatalf("the logo box is at (%d,%d) %dpx square and does not land on a %dpx "+
+			"module grid from a %dpx origin", x, y, w, g.scale, g.origin)
+	}
+	return (x - g.origin) / g.scale, (y - g.origin) / g.scale, w / g.scale
 }
 
 // TestTheLogoOccupiesTheSameModulesInBothOutputs is m50.6.md's parity bullet,
@@ -335,7 +346,12 @@ func TestTheLogoOccupiesTheSameModulesInBothOutputs(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			boxX, boxY, boxSide := svgLogoBox(t, svg)
+			code, err := Encode(sample, norm.Level)
+			if err != nil {
+				t.Fatal(err)
+			}
+			grid, g := rendered(t, svg, code.Size, norm)
+			boxX, boxY, boxSide := svgLogoBox(t, svg, g)
 			img := decodeNRGBA(t, raw)
 
 			// Where the logo's colour actually landed in the raster. The box is
@@ -362,10 +378,10 @@ func TestTheLogoOccupiesTheSameModulesInBothOutputs(t *testing.T) {
 				name      string
 				got, want int
 			}{
-				{"left", minX, drawX * norm.Scale},
-				{"top", minY, drawX * norm.Scale},
-				{"right", maxX + 1, (drawX + drawSide) * norm.Scale},
-				{"bottom", maxY + 1, (drawX + drawSide) * norm.Scale},
+				{"left", minX, g.origin + drawX*g.scale},
+				{"top", minY, g.origin + drawX*g.scale},
+				{"right", maxX + 1, g.origin + (drawX+drawSide)*g.scale},
+				{"bottom", maxY + 1, g.origin + (drawX+drawSide)*g.scale},
 			} {
 				if c.got != c.want {
 					t.Errorf("the logo's %s edge is at %dpx in the PNG and the SVG's box "+
@@ -381,12 +397,13 @@ func TestTheLogoOccupiesTheSameModulesInBothOutputs(t *testing.T) {
 				`<image x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)"`,
 			).FindStringSubmatch(string(svg))
 			if im == nil {
-				t.Fatalf("no whole-module image element in the drawing:\n%.300s", svg)
+				t.Fatalf("no whole-pixel image element in the drawing:\n%.300s", svg)
 			}
-			if atoi(t, im[1]) != drawX || atoi(t, im[2]) != drawX ||
-				atoi(t, im[3]) != drawSide || atoi(t, im[4]) != drawSide {
+			wantX, wantSide := g.origin+drawX*g.scale, drawSide*g.scale
+			if atoi(t, im[1]) != wantX || atoi(t, im[2]) != wantX ||
+				atoi(t, im[3]) != wantSide || atoi(t, im[4]) != wantSide {
 				t.Errorf("the SVG draws the image at (%s,%s) %sx%s and its box implies "+
-					"(%d,%d) %dx%d", im[1], im[2], im[3], im[4], drawX, drawX, drawSide, drawSide)
+					"(%d,%d) %dx%d", im[1], im[2], im[3], im[4], wantX, wantX, wantSide, wantSide)
 			}
 
 			// **And the whole box is occluded, ring included.** The cap is measured
@@ -395,7 +412,7 @@ func TestTheLogoOccupiesTheSameModulesInBothOutputs(t *testing.T) {
 			fg := parseHex(norm.Foreground)
 			for y := boxY; y < boxY+boxSide; y++ {
 				for x := boxX; x < boxX+boxSide; x++ {
-					at := image.Pt(x*norm.Scale+norm.Scale/2, y*norm.Scale+norm.Scale/2)
+					at := image.Pt(g.origin+x*g.scale+g.scale/2, g.origin+y*g.scale+g.scale/2)
 					if got := img.NRGBAAt(at.X, at.Y); got == fg {
 						t.Fatalf("module (%d,%d) inside the box still draws the code. The "+
 							"occluded area the cap is derived for is the whole box, and a "+
@@ -404,25 +421,26 @@ func TestTheLogoOccupiesTheSameModulesInBothOutputs(t *testing.T) {
 				}
 			}
 
-			// The box is centred and inside the cap, read off the drawing rather
-			// than off the function that produced it.
-			span := viewBox(t, svg)
-			if boxX != boxY || boxX+boxSide != span-boxX {
-				t.Errorf("the box is at (%d,%d) with side %d in a %d-module picture, "+
+			// The box is centred **on the symbol** and inside the cap, read off
+			// the drawing rather than off the function that produced it. On the
+			// symbol rather than on the picture since D182: the quiet zone is a
+			// pixel remainder now and can be a pixel wider on one side than the
+			// other, and the box's derivation is about the modules it destroys.
+			if boxX != boxY || boxX+boxSide != code.Size-boxX {
+				t.Errorf("the box is at (%d,%d) with side %d in a %d-module code, "+
 					"which is not centred; the cap's derivation is for a centred region "+
-					"and holds for no other placement", boxX, boxY, boxSide, span)
+					"and holds for no other placement", boxX, boxY, boxSide, code.Size)
 			}
 
 			// And the grid outside it is untouched — the M49 claim, unchanged.
-			grid := rendered(t, svg)
 			checked := 0
-			for y := range span {
-				for x := range span {
+			for y := range code.Size {
+				for x := range code.Size {
 					inBox := x >= boxX && x < boxX+boxSide && y >= boxY && y < boxY+boxSide
 					if inBox {
 						continue
 					}
-					at := image.Pt(x*norm.Scale+norm.Scale/2, y*norm.Scale+norm.Scale/2)
+					at := image.Pt(g.origin+x*g.scale+g.scale/2, g.origin+y*g.scale+g.scale/2)
 					want := parseHex(norm.Background)
 					if grid[y][x] {
 						want = parseHex(norm.Foreground)
@@ -693,9 +711,17 @@ func TestALogoKeepsItsAspectRatio(t *testing.T) {
 			"was uploaded as, and a box that squashed it would be drawing a "+
 			"different picture", w, h, ratio)
 	}
-	_, _, side := svgLogoBox(t, svg)
-	if w > float64(side)+0.001 || h > float64(side)+0.001 {
-		t.Errorf("the logo is drawn %gx%g modules and its box is %d; it is outside "+
-			"the area the cap was derived for", w, h, side)
+	// The box, in the code's own modules, which needs the geometry the drawing
+	// was made at — pixels are what the document states since D182.
+	code, err := Encode(sample, LevelH)
+	if err != nil {
+		t.Fatal(err)
+	}
+	norm, _ := Style{Scale: 12}.Normalize()
+	g := fitGeometry(code.Size, norm.ForLogo())
+	_, _, side := svgLogoBox(t, svg, g)
+	if w > float64(side*g.scale)+0.001 || h > float64(side*g.scale)+0.001 {
+		t.Errorf("the logo is drawn %gx%g pixels and its box is %dpx; it is outside "+
+			"the area the cap was derived for", w, h, side*g.scale)
 	}
 }

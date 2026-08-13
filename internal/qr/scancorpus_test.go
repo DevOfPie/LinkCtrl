@@ -54,9 +54,10 @@ func TestWriteScanCorpus(t *testing.T) {
 		}
 
 		for _, st := range scanStyles(code.Size) {
+			zone := st.zone(t, code.Size)
 			for _, lg := range logos {
 				name := fmt.Sprintf("v%02d-s%02d-m%02d-%s-%s.png",
-					version, st.Scale, st.Margin, lg.name, st.tag)
+					version, st.Scale, zone, lg.name, st.tag)
 				raw, err := RenderPNGWithLogo(payload, st.Style, lg.png)
 				if err != nil {
 					t.Fatalf("%s: %v", name, err)
@@ -65,7 +66,7 @@ func TestWriteScanCorpus(t *testing.T) {
 					t.Fatal(err)
 				}
 				fmt.Fprintf(&manifest, "%s\t%s\t%d\t%d\t%d\t%d\t%s\t%s\n",
-					name, payload, version, code.Size, st.Scale, st.Margin, lg.name, LevelH)
+					name, payload, version, code.Size, st.Scale, zone, lg.name, LevelH)
 				written++
 			}
 		}
@@ -97,8 +98,9 @@ func TestWriteScanCorpus(t *testing.T) {
 			}
 			for _, st := range scanStyles(code.Size) {
 				st.Level = level
+				zone := st.zone(t, code.Size)
 				name := fmt.Sprintf("v%02d-s%02d-m%02d-none-%s-%s.png",
-					version, st.Scale, st.Margin, strings.ToLower(string(level)), st.tag)
+					version, st.Scale, zone, strings.ToLower(string(level)), st.tag)
 				raw, err := RenderPNG(payload, st.Style)
 				if err != nil {
 					t.Fatalf("%s: %v", name, err)
@@ -108,7 +110,7 @@ func TestWriteScanCorpus(t *testing.T) {
 				}
 				fmt.Fprintf(&manifest, "%s\t%s\t%d\t%d\t%d\t%d\t%s\t%s\n",
 					name, payload, symbolVersion(code.Size), code.Size,
-					st.Scale, st.Margin, "none", level)
+					st.Scale, zone, "none", level)
 				written++
 			}
 		}
@@ -127,8 +129,27 @@ type scanStyle struct {
 	tag string
 }
 
+// zone is the quiet zone this style actually draws, in modules — which since
+// D182 is not [Style.Margin]: a style carrying a size derives the zone from the
+// remainder, and Margin is only what the drawing falls back to. The filename and
+// the manifest carry what was drawn, because that is what the decoder saw.
+func (s scanStyle) zone(t *testing.T, modules int) int {
+	t.Helper()
+	norm, errs := s.Normalize()
+	if len(errs) > 0 {
+		t.Fatalf("a corpus style is refused: %v", errs)
+	}
+	g := fitGeometry(modules, norm)
+	if g.origin%g.scale != 0 {
+		t.Fatalf("a corpus style draws a %dpx quiet zone at %dpx a module, which is "+
+			"not a whole number of them; the corpus names the zone in modules",
+			g.origin, g.scale)
+	}
+	return g.origin / g.scale
+}
+
 // scanStyles is every size a code of `modules` modules can be *stored* at,
-// reduced to the three that decide the answer.
+// reduced to the five that decide the answer.
 //
 // **The smallest and the largest, because those are the ends m50.6.md's
 // reopening names**, and the default in between because it is what the product
@@ -136,12 +157,21 @@ type scanStyle struct {
 // which is the smallest picture this product will produce at all; the top is
 // whatever [MaxSize] leaves room for at this version.
 //
+// **Two of the five carry the band's low end**, and they are the second M49
+// reopening's own requirement (D182). [MinMarginModules] is three modules of
+// quiet zone, one below what ISO/IEC 18004 specifies, and the milestone is
+// explicit that a margin under the floor is *measured* rather than assumed —
+// this is the instrument. They are drawn at both ends of the scale range,
+// because a narrow quiet zone at two pixels a module and one at sixty are
+// different pictures to a detector. The style is built the way the size control
+// stores one, so what is decoded is what the product serves.
+//
 // **Neither bound on `top` binds over the range this corpus walks**, and the
 // numbers are worth writing down because a `top` that collided with
 // [DefaultScale] used to be branched on here. The symbols the corpus reaches
 // run from 25 modules — version 2, which only the control gets to, by encoding
 // version 3's payload at level L — to 161 at version 36, so `top` runs from
-// 2000/(25+8) = 60 down to 2000/(161+8) = 11. [MaxScale]'s 68 is above the
+// 2048/(25+8) = 62 down to 2048/(161+8) = 12. [MaxScale]'s 75 is above the
 // first and [DefaultScale]'s 8 is below the second.
 //
 // **The branch is gone rather than made reachable, because neither thing it
@@ -159,6 +189,19 @@ type scanStyle struct {
 func scanStyles(modules int) []scanStyle {
 	span := modules + 2*DefaultMargin
 	top := min(MaxScale, MaxSize/span)
+	// The band's low end, expressed as the size control expresses it: a size in
+	// pixels that leaves exactly MinMarginModules of quiet zone at that scale.
+	//
+	// The scale ends are the *narrow* picture's, not the four-module one's, and
+	// they are not the same numbers: a 25-module symbol with a three-module zone
+	// at [MinScale] is 62 pixels, which is under [MinSize] and therefore a
+	// picture the control cannot ask for. Measuring one would be measuring
+	// something this product does not serve, so the floor is raised until the
+	// size is one it does.
+	narrowSpan := modules + 2*MinMarginModules
+	narrow := func(scale int) Style {
+		return Style{Margin: DefaultMargin, Scale: scale, Size: narrowSpan * scale}
+	}
 	return []scanStyle{
 		{Style{Margin: DefaultMargin, Scale: MinScale}, "smallest"},
 		{Style{Margin: DefaultMargin, Scale: DefaultScale}, "default"},
@@ -166,6 +209,8 @@ func scanStyles(modules int) []scanStyle {
 			Margin: DefaultMargin, Scale: top,
 			Foreground: "#102a54", Background: "#fdf6e3",
 		}, "largest"},
+		{narrow(max(MinScale, ceilDiv(MinSize, narrowSpan))), "narrowsmall"},
+		{narrow(min(MaxScale, MaxSize/narrowSpan)), "narrowlarge"},
 	}
 }
 

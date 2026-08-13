@@ -72,19 +72,32 @@ const (
 	DefaultScale  = 8
 
 	// MinScale and MaxScale bound what a stored style may carry. The ceiling is
-	// derived from [MaxSize]: the smallest code is 21 modules, the floor quiet
-	// zone adds eight, and floor(2000/29) = 68 is the largest pixels-per-module
-	// [FitSize] can ever emit — so every fit is a style Normalize accepts. It
-	// was 32, capped by nothing but the `width` attribute a downloaded file
-	// carries, and that cap is what made the old FitSize fill large requests
-	// with quiet zone instead of scale (F213).
+	// derived from [MaxSize]: the smallest code is 21 modules, the narrowest
+	// quiet zone adds 2×[MinMarginModules], and floor(2048/27) = 75 is the
+	// largest pixels-per-module [FitSize] can ever emit — so every fit is a
+	// style Normalize accepts. It was 32, capped by nothing but the `width`
+	// attribute a downloaded file carries, and that cap is what made the old
+	// FitSize fill large requests with quiet zone instead of scale (F213); it
+	// was 68 while the quiet zone was pinned at four modules and [MaxSize] was
+	// 2000, and both of those moved at the second M49 reopening (F221).
 	MinScale = 2
-	MaxScale = 68
-	// MaxMargin bounds what a *stored* style may carry, and since the M49
-	// reopening that is all it bounds: FitSize holds the quiet zone at
-	// [DefaultMargin], and 16 stays only because rows written by the old
-	// search carry up to it and must keep rendering as written.
+	MaxScale = 75
+	// MaxMargin bounds the quiet zone a *stored* style may carry in modules,
+	// and since the M49 reopening that is all it bounds: [FitSize] writes the
+	// quiet zone in pixels now, and 16 stays only because rows written by the
+	// old search carry up to it and must keep rendering as written.
 	MaxMargin = 16
+	// MinMarginModules is the narrowest quiet zone [FitSize] will produce, and
+	// it is **below** the four modules ISO/IEC 18004 specifies (D182).
+	//
+	// Four ±25% is the owner's band, and three is its low end. Being under the
+	// specification, it is measured rather than argued: `make verify-scan`
+	// renders the corpus at this quiet zone across the whole version range and
+	// decodes it through two pinned decoders at five simulated distances, the
+	// same instrument M50.6's logo fraction rests on. The result is in
+	// decisions.md; a change to this number is a change that has to be
+	// re-measured, not re-reasoned.
+	MinMarginModules = 3
 
 	// DefaultForeground and DefaultBackground are dark-on-light, and the
 	// background is always painted rather than left transparent. A QR code
@@ -108,23 +121,28 @@ const MaxContent = 1024
 // **The ceiling is what D11 was protecting.** D11 refused an image encoder
 // partly so that nothing would allocate a bitmap on a request; M49 makes that
 // happen, so the allocation gets a number rather than a hope. The PNG is
-// [image.Paletted] over a two-colour palette — one byte per pixel — so 2000×2000
-// is **4,000,000 bytes**, about 3.8 MiB, and that is the largest buffer a
+// [image.Paletted] over a two-colour palette — one byte per pixel — so 2048×2048
+// is **4,194,304 bytes**, 4 MiB exactly, and that is the largest buffer a
 // request can cause here. The SVG path allocates nothing of the sort and is
 // bounded by the module count instead.
 //
-// 2000px is a QR code 6.7 inches across at 300 DPI, which covers the poster the
-// milestone is written for. The floor is the smallest picture the existing
-// bounds can produce: the shortest code is 21 modules, the quiet zone is at
-// least [DefaultMargin] on each side, and [MinScale] pixels per module makes
-// 58 — so 64 is a request that always has something to snap to.
+// **2048 rather than 2000 is owner-instructed** (D182), so the top of the size
+// control is a round power of two; it is a QR code 6.8 inches across at 300 DPI,
+// which covers the poster the milestone is written for.
+//
+// The floor is the smallest picture the bounds can produce at all: the shortest
+// code is 21 modules, the narrowest quiet zone is [MinMarginModules] a side, and
+// [MinScale] pixels per module makes 54 — so 64 is a request the shortest code
+// can always draw. **It is not a floor every code can draw**, because the number
+// of pixels a symbol needs is a property of the symbol: see [MinSizeFor], which
+// is what a request below a particular code's own floor is refused against.
 //
 // A request outside the range is **refused rather than clamped**, on the rule
 // TestOutOfRangeSizesAreRefusedRatherThanClamped already states for margin and
 // scale: clamping reports success for a setting nobody asked for.
 const (
 	MinSize = 64
-	MaxSize = 2000
+	MaxSize = 2048
 )
 
 // ErrSizeOutOfRange is a requested output size outside [MinSize, MaxSize].
@@ -144,12 +162,31 @@ type Style struct {
 	Foreground string `json:"foreground,omitempty"`
 	Background string `json:"background,omitempty"`
 	Level      Level  `json:"level,omitempty"`
-	// Margin is the quiet zone, in modules.
+	// Margin is the quiet zone, in modules. It is what the picture is built
+	// from only when Size is unset — see Size.
 	Margin int `json:"margin,omitempty"`
-	// Scale is pixels per module, and decides only the `width` and `height`
-	// attributes. The drawing itself is in module units inside a viewBox, so a
-	// consumer that sizes the element with CSS gets the same code at any size.
+	// Scale is pixels per module. It is the one number both forms of this
+	// struct share, because a module is a whole number of pixels in either.
 	Scale int `json:"scale,omitempty"`
+	// Size is the output size in pixels, and when it is set it is what the
+	// picture measures — exactly, at every value (D182).
+	//
+	// **Two forms of the same geometry, and this one is the newer.** Before the
+	// second M49 reopening a style carried Margin and Scale and the picture was
+	// whatever those multiplied out to, which is why a requested size could only
+	// be honoured by snapping it to the nearest one the module grid admitted.
+	// The way out is that **only the symbol needs whole modules**: the quiet
+	// zone is white space and can be any pixel count at all. So the picture is
+	// Size pixels across, the symbol is `modules × Scale` of them centred inside
+	// it, and the remainder is the quiet zone — carried in pixels, which is what
+	// makes every requested size reachable.
+	//
+	// Zero is unset and means the older form, which is what every row written
+	// before this milestone carries and what [Code.geometry] falls back to. It
+	// is also the fallback for a stored Size the symbol has since outgrown — a
+	// link whose alias grew encodes to a larger matrix, and a picture that can
+	// no longer hold its own symbol is not a picture.
+	Size int `json:"size,omitempty"`
 }
 
 // Normalize fills in the defaults and returns the field errors for anything it
@@ -163,6 +200,7 @@ func (s Style) Normalize() (Style, []FieldError) {
 		Level:      Level(strings.ToUpper(strings.TrimSpace(string(s.Level)))),
 		Margin:     s.Margin,
 		Scale:      s.Scale,
+		Size:       s.Size,
 	}
 
 	if out.Foreground == "" {
@@ -205,6 +243,16 @@ func (s Style) Normalize() (Style, []FieldError) {
 	if out.Scale < MinScale || out.Scale > MaxScale {
 		errs = append(errs, FieldError{"scale", "out_of_range",
 			fmt.Sprintf("a module is %d to %d pixels wide", MinScale, MaxScale)})
+	}
+	// Zero is unset — the older Margin-and-Scale form — and anything else is a
+	// picture size, bounded by the same two numbers the size control is. There
+	// is no check here that the symbol fits inside it, because that needs a
+	// module count this function does not have and must not refuse a row over:
+	// [Code.geometry] falls back for a size a symbol has outgrown.
+	if out.Size != 0 && (out.Size < MinSize || out.Size > MaxSize) {
+		errs = append(errs, FieldError{"size", "out_of_range",
+			fmt.Sprintf("an output size is %d to %d pixels; %d is not",
+				MinSize, MaxSize, out.Size)})
 	}
 	return out, errs
 }
@@ -290,10 +338,10 @@ func Encode(content string, level Level) (*Code, error) {
 // FluidClass is the class an inlined code carries so that the box it is drawn
 // into can shrink it (F184).
 //
-// **`width` and `height` are pixels and the page is not.** The drawing is in
-// module units inside a viewBox, so the two attributes decide an intrinsic size
-// and nothing else — a consumer that sizes the element with CSS gets the same
-// code at any size. What they *also* decide, for a consumer that sizes nothing,
+// **`width` and `height` are pixels and the page is not.** The drawing sits
+// inside a viewBox of the same extent, so the two attributes decide an intrinsic
+// size and nothing else — a consumer that sizes the element with CSS gets the
+// same code at any size. What they *also* decide, for a consumer that sizes nothing,
 // is how far the element reaches: a 488px enrolment code inside a 160px frame
 // took `/account/mfa` 174px past a 360px viewport and made it the one page in
 // the dashboard that scrolled sideways. `max-w-full` is the constraint and
@@ -397,7 +445,7 @@ func (c *Code) SVGClass(st Style, class string) []byte { return c.svg(st, class,
 // picture M49 shipped, byte for byte.
 func (c *Code) svg(st Style, class string, logo *logoDrawing) []byte {
 	g := c.geometry(st)
-	span, px := g.span, g.px
+	px := g.px
 
 	var b bytes.Buffer
 	b.Grow(1024 + c.Size*c.Size/2)
@@ -411,10 +459,18 @@ func (c *Code) svg(st Style, class string, logo *logoDrawing) []byte {
 	b.WriteString(strconv.Itoa(px))
 	b.WriteString(`" height="`)
 	b.WriteString(strconv.Itoa(px))
+	// **The viewBox is in pixels, and it was in modules until D182.** A quiet
+	// zone measured in modules is expressible in a module viewBox and one
+	// measured in pixels is not — a picture whose remainder is 47 pixels of a
+	// 14-pixel module has no whole-module coordinate for the symbol's corner. So
+	// the drawing moved into the unit both encoders already share, which is also
+	// the unit `width` and `height` are in. Nothing a consumer can see changes:
+	// the viewBox still maps onto those attributes exactly, so an element sized
+	// with CSS still draws the same code at any size.
 	b.WriteString(`" viewBox="0 0 `)
-	b.WriteString(strconv.Itoa(span))
+	b.WriteString(strconv.Itoa(px))
 	b.WriteString(` `)
-	b.WriteString(strconv.Itoa(span))
+	b.WriteString(strconv.Itoa(px))
 	// crispEdges, because the modules are axis-aligned squares and antialiasing
 	// their edges is what makes a code scan badly when it is drawn small.
 	// role="img" with no label: the page names the picture, not the picture.
@@ -425,9 +481,9 @@ func (c *Code) svg(st Style, class string, logo *logoDrawing) []byte {
 	// and on a dark page that is a code with no quiet zone at all.
 
 	b.WriteString(`<rect width="`)
-	b.WriteString(strconv.Itoa(span))
+	b.WriteString(strconv.Itoa(px))
 	b.WriteString(`" height="`)
-	b.WriteString(strconv.Itoa(span))
+	b.WriteString(strconv.Itoa(px))
 	b.WriteString(`" fill="`)
 	b.WriteString(st.Background)
 	b.WriteString(`"/>`)
@@ -437,19 +493,21 @@ func (c *Code) svg(st Style, class string, logo *logoDrawing) []byte {
 	b.WriteString(`">`)
 	c.runs(func(x, y, width int) {
 		b.WriteString(`<rect x="`)
-		b.WriteString(strconv.Itoa(x + st.Margin))
+		b.WriteString(strconv.Itoa(g.origin + x*g.scale))
 		b.WriteString(`" y="`)
-		b.WriteString(strconv.Itoa(y + st.Margin))
+		b.WriteString(strconv.Itoa(g.origin + y*g.scale))
 		b.WriteString(`" width="`)
-		b.WriteString(strconv.Itoa(width))
-		b.WriteString(`" height="1"/>`)
+		b.WriteString(strconv.Itoa(width * g.scale))
+		b.WriteString(`" height="`)
+		b.WriteString(strconv.Itoa(g.scale))
+		b.WriteString(`"/>`)
 	})
 	b.WriteString(`</g>`)
 	// After the modules rather than instead of them: the box is painted over
 	// whatever it covers, so what is occluded is the whole box regardless of the
 	// logo's own shape — which is the area composite.go's cap is a cap on.
 	if logo != nil {
-		logo.writeSVG(&b, st, g.scale)
+		logo.writeSVG(&b, st, g)
 	}
 	b.WriteString(`</svg>`)
 	return b.Bytes()
@@ -465,8 +523,6 @@ func (c *Code) svg(st Style, class string, logo *logoDrawing) []byte {
 //
 // The style must already be normalized.
 type geometry struct {
-	// span is the picture's width in modules, quiet zone included.
-	span int
 	// scale is pixels per module.
 	scale int
 	// px is the output size — the picture is square, so one number.
@@ -476,14 +532,30 @@ type geometry struct {
 	origin int
 }
 
-func (c *Code) geometry(st Style) geometry {
-	span := c.Size + 2*st.Margin
-	return geometry{
-		span:   span,
-		scale:  st.Scale,
-		px:     span * st.Scale,
-		origin: st.Margin * st.Scale,
+func (c *Code) geometry(st Style) geometry { return fitGeometry(c.Size, st) }
+
+// fitGeometry is [Code.geometry] for a module count on its own, which is what
+// [OutputSize] needs and what keeps the two answers one piece of arithmetic.
+//
+// **Two forms, and the newer one is a single subtraction** (D182). A style
+// carrying [Style.Size] draws a picture that many pixels across with the symbol
+// centred in it, so the quiet zone is the remainder and lands wherever the
+// division leaves it — including on a half pixel, which is why `origin` is the
+// floor and the far side of the picture carries the odd pixel. A style without
+// one is the pre-reopening arithmetic, byte for byte: the picture is the symbol
+// plus [Style.Margin] modules of quiet zone on each side.
+//
+// The fallback also catches a stored size the symbol has outgrown. It is
+// deliberately not a refusal: the row is a preference somebody expressed about a
+// picture, and a link renamed into a longer alias should draw a larger code
+// rather than none.
+func fitGeometry(modules int, st Style) geometry {
+	symbol := modules * st.Scale
+	if st.Size >= symbol+2*MinMarginModules*st.Scale {
+		return geometry{scale: st.Scale, px: st.Size, origin: (st.Size - symbol) / 2}
 	}
+	origin := st.Margin * st.Scale
+	return geometry{scale: st.Scale, px: symbol + 2*origin, origin: origin}
 }
 
 // runs walks the dark modules as horizontal runs, in module coordinates with the
@@ -601,16 +673,16 @@ func (c *Code) PNG(st Style) ([]byte, error) {
 //
 // **A logo costs the paletted form, and the allocation figure with it.** A QR
 // code has two colours and a logo has whatever it has, so this buffer is
-// [image.NRGBA] at four bytes a pixel: at [MaxSize] that is 2000 × 2000 × 4 =
-// **16,000,000 bytes**, four times the 4,000,000 the two-colour path allocates
+// [image.NRGBA] at four bytes a pixel: at [MaxSize] that is 2048 × 2048 × 4 =
+// **16,777,216 bytes**, four times the 4,194,304 the two-colour path allocates
 // and the number that replaces it whenever a code carries a logo. The resampled
 // logo is bounded separately, at [MaxLogoRasterSide]² × 4 = 1,048,576 — which is
 // [MaxLogoPixels] × 4, the figure M50.5 already derived. **Since M50.6's
 // 2026-08-12 reopening a second resampled buffer can join it**: the box is now
-// three tenths of the symbol's width, so at [MaxSize] it is 600 pixels and
+// three tenths of the symbol's width, so at [MaxSize] it is 614 pixels and
 // exceeds MaxLogoRasterSide, and [logoDrawing.drawPNG] scales the clamped raster
 // up to what the box needs. That one is bounded by the box itself —
-// MaxSize·[LogoBoxNumerator]/[LogoBoxDenominator] squared × 4 = 1,440,000 — and
+// MaxSize·[LogoBoxNumerator]/[LogoBoxDenominator] squared × 4 = 1,507,984 — and
 // neither is the largest buffer here, which is still the picture.
 //
 // **This path is reachable only from [RenderPNGWithLogo]**, which checks the
@@ -636,7 +708,7 @@ func (c *Code) pngWithLogo(st Style, logo *logoDrawing) ([]byte, error) {
 		draw.Draw(img, image.Rect(left, top, left+width*g.scale, top+g.scale),
 			fg, image.Point{}, draw.Src)
 	})
-	logo.drawPNG(img, st, g.scale)
+	logo.drawPNG(img, st, g)
 
 	var b bytes.Buffer
 	b.Grow(1024 + g.px*g.px/64)
@@ -649,52 +721,93 @@ func (c *Code) pngWithLogo(st Style, logo *logoDrawing) ([]byte, error) {
 // OutputSize is the width in pixels a normalized style draws a code of `modules`
 // modules at. The picture is square, so one number (M49).
 //
-// This is the read direction of the size control: a style stored before M49
-// carries a margin and a scale and no size, and the size it means is whatever
-// those two already produce.
-func OutputSize(modules int, st Style) int {
-	return (modules + 2*st.Margin) * st.Scale
-}
+// This is the read direction of the size control, and it answers for both forms
+// of a style: one written since D182 carries the size and this returns it, and
+// one written before carries a margin and a scale and the size it means is
+// whatever those two already produce.
+func OutputSize(modules int, st Style) int { return fitGeometry(modules, st).px }
 
-// SizeFit is a requested output size resolved onto a whole number of modules.
+// SizeFit is a requested output size resolved onto a style that draws it.
 type SizeFit struct {
-	// Requested is the size in pixels that was asked for.
-	Requested int
-	// Size is the size in pixels the geometry below actually produces.
+	// Size is the size in pixels, and since D182 it is the size that was asked
+	// for — this field exists because a caller needs the number, not because it
+	// can differ from the request.
 	Size int
-	// Margin is the quiet zone in modules, and Scale the pixels per module,
-	// that a Style should carry to draw at Size.
+	// Scale is the pixels per module, and Margin the quiet zone **in pixels on
+	// the near side** — the left and the top.
+	//
+	// Near side, because the far side carries the odd pixel when the remainder
+	// is odd: 71 pixels over a 25-module symbol at 2 pixels a module leaves 21,
+	// which is 10 on the left and 11 on the right. Centring it perfectly would
+	// mean giving up a pixel of the requested size, and the requested size is
+	// the thing this whole arithmetic exists to keep. One pixel of asymmetry in
+	// a quiet zone is invisible and costs a scanner nothing; a size that came
+	// back one short of what was typed is the defect being fixed.
 	Margin int
 	Scale  int
 }
 
-// Snapped reports whether the fit had to move off the requested size.
-func (f SizeFit) Snapped() bool { return f.Size != f.Requested }
+// MinSizeFor is the smallest picture a code of `modules` modules can be drawn
+// at: the symbol at [MinScale], plus [MinMarginModules] of quiet zone a side.
+//
+// **A floor per code rather than one constant, because the pixels a symbol needs
+// are a property of the symbol.** [MinSize] is 64 and a 29-module code cannot be
+// drawn at 64 with a quiet zone that scans — it needs 70. The alternative was
+// raising MinSize until it covered every code, which at version 40 is 366 and
+// would refuse five sixths of the range the product accepts today for the sake
+// of payloads no link in it produces. So the global floor stays the control's
+// and this is the code's, and a request between the two is refused with this
+// number in the sentence.
+func MinSizeFor(modules int) int {
+	return MinSizeForStyle(modules, Style{Scale: MinScale})
+}
 
-// FitSize resolves a requested output size in pixels to the pixels-per-module
-// that comes nearest it, with the quiet zone held at the ISO floor (M49;
-// arithmetic replaced at the 2026-08-12 reopening, F213).
+// MinSizeForStyle is [MinSizeFor] for a style that has already fixed the module
+// width: the smallest picture a code of `modules` modules can be drawn at with
+// this style's [Style.Scale], and so the floor [Style.Size] must clear for the
+// drawn size to be the requested one.
 //
-// **A QR grid is a whole number of modules, so an arbitrary pixel size does not
-// divide evenly**: 300px over a 29-module code with the minimum quiet zone is
-// 10.34 pixels per module. Drawing it anyway would put module boundaries on
-// fractional pixels, where the SVG's rasteriser and the PNG's rounding are free
-// to disagree — which is precisely what the two-outputs-match claim forbids. So
-// the size snaps, and the caller is told what it snapped to.
+// **Two floors, both real, and which one binds depends on who is asking.**
+// MinSizeFor is the floor over every scale, and it is the size control's,
+// because the control chooses the scale itself and will take the smallest one
+// before it gives up. This is the floor for a caller who set the scale as well,
+// which is what the API accepts: a style is `size` *and* `scale`, and
+// [fitGeometry] draws the requested size only while the symbol and its quiet
+// zone fit inside it — below that it falls back to margin-and-scale and the
+// picture measures something else. MinSizeFor is this function at [MinScale].
+func MinSizeForStyle(modules int, st Style) int {
+	return st.Scale * (modules + 2*MinMarginModules)
+}
+
+// FitSize resolves a requested output size in pixels to a style that draws
+// exactly it (M49; arithmetic replaced twice, at the 2026-08-12 reopenings
+// F213 and F221).
 //
-// **One knob, since the reopening.** The first version searched the quiet zone
-// as a second knob, up to [MaxMargin], and traded white for exactness whenever
-// a wider margin landed nearer the request — at 2000px, where the old scale
-// ceiling capped its reach, the margin filled the rest and a 29-module code was
-// under a quarter of its own picture. The quiet zone is now pinned at
-// [DefaultMargin], the four modules ISO/IEC 18004 requires and the most a
-// scanner needs, so the majority of every picture is code and the whole
-// remainder a module grid forces lives in the drawn size — at most half a
-// span, under [MaxScale]'s new ceiling — where [SizeFit.Snapped] reports it.
-// The decision entry for the reopening records the trade.
+// **The requested size is the size drawn, at every value in the range**, and
+// this is the second answer to the question — D179 pinned the quiet zone at four
+// modules and put the rounding remainder into the drawn size, which is the
+// behaviour the owner used and rejected: *"the number set is where it should
+// stay, the quiet zone should be reduced to fit"*. D182 is what makes that
+// possible, and it is one observation: **only the symbol needs whole modules.**
+// The quiet zone is white space, so it can be any pixel count at all —
 //
-// A tie goes to the smaller picture, so a request at the ceiling cannot snap
-// past it.
+//	size = modules·scale + 2·margin_px
+//
+// is satisfiable at every size, with `scale` the only integer to choose.
+//
+// **The scale chosen is the one whose remainder puts the quiet zone nearest
+// [DefaultMargin] modules**, subject to never leaving less than
+// [MinMarginModules]. That floor is the binding constraint and the objective is
+// not: at a coarse scale — a large symbol in a small picture — the two
+// candidates either side of four modules can be three tenths of a module and
+// twenty-six of them, and this takes the wide one. The consequence is stated
+// rather than hidden: the quiet zone lands inside the owner's 3-to-5 band
+// wherever the grid admits one, and where it does not it errs **wide**, which
+// costs white space and never scannability. TestTheQuietZoneLandsInTheBand is
+// where the condition is written down and measured.
+//
+// A tie goes to the larger scale, so a picture is never looser than it needs to
+// be.
 func FitSize(modules, want int) (SizeFit, error) {
 	if modules <= 0 {
 		return SizeFit{}, fmt.Errorf("qr: a code of %d modules has no size", modules)
@@ -703,24 +816,27 @@ func FitSize(modules, want int) (SizeFit, error) {
 		return SizeFit{}, fmt.Errorf("%w: an output size is %d to %d pixels; %d is not",
 			ErrSizeOutOfRange, MinSize, MaxSize, want)
 	}
+	if floor := MinSizeFor(modules); want < floor {
+		return SizeFit{}, fmt.Errorf(
+			"%w: a %d-module code is %d pixels of symbol at the smallest module size and "+
+				"still needs a quiet zone, so it starts at %d pixels; %d is below that",
+			ErrSizeOutOfRange, modules, modules*MinScale, floor, want)
+	}
 
-	span := modules + 2*DefaultMargin
-	if span*MinScale > MaxSize {
-		// Unreachable for any code this package can encode — version 40 at the
-		// floor and MinScale is 370px — but a bound that is only true by
-		// argument is one a future MaxSize change breaks silently.
-		return SizeFit{}, fmt.Errorf("%w: no whole-module size for a %d-module code",
-			ErrSizeOutOfRange, modules)
+	// The ceiling: any larger and the quiet zone falls below the floor. The
+	// refusal above is exactly the case where this is under MinScale.
+	top := min(MaxScale, want/(modules+2*MinMarginModules))
+	best, bestErr := MinScale, -1
+	for scale := MinScale; scale <= top; scale++ {
+		margin := (want - modules*scale) / 2
+		// The distance from four modules, in thousandths of a module, so the
+		// comparison is integer arithmetic over a fractional quantity.
+		off := abs(margin*1000/scale - DefaultMargin*1000)
+		if bestErr < 0 || off <= bestErr {
+			bestErr, best = off, scale
+		}
 	}
-	scale := want / span
-	if 2*(want-scale*span) > span {
-		scale++
-	}
-	scale = min(max(scale, MinScale), MaxSize/span)
-	return SizeFit{
-		Requested: want, Size: span * scale,
-		Margin: DefaultMargin, Scale: scale,
-	}, nil
+	return SizeFit{Size: want, Scale: best, Margin: (want - modules*best) / 2}, nil
 }
 
 func abs(n int) int {

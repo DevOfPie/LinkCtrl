@@ -23,17 +23,36 @@ import (
 
 const sample = "https://links.example/summer?src=qr"
 
-// rendered parses an SVG back into the module grid it draws, quiet zone
-// included. It is deliberately strict: anything it does not recognise is a
-// failure rather than a skipped rect.
-func rendered(t *testing.T, svg []byte) [][]bool {
+// rendered parses an SVG back into the module grid it draws, in the **code's**
+// own module coordinates — (0,0) is the code's top-left module, not the
+// picture's — together with the geometry the picture was drawn at.
+//
+// **It reads pixels and divides, and it did neither before D182.** The drawing
+// was in module units and the parser could index the rects straight into a grid;
+// the quiet zone is measured in pixels now, so the viewBox is too, and the
+// parser has to undo the same arithmetic both encoders did. That is deliberately
+// not a weakening: every division below is asserted exact, so a rect landing off
+// the module grid — the one thing the pixel viewBox could have cost — is a
+// failure here rather than a picture nobody checked.
+//
+// It stays strict in the way it was: anything it does not recognise is a failure
+// rather than a skipped rect.
+func rendered(t *testing.T, svg []byte, modules int, st Style) ([][]bool, geometry) {
 	t.Helper()
 	s := string(svg)
 
-	span := attrInt(t, s, `viewBox="0 0 (\d+) (\d+)"`)
-	grid := make([][]bool, span)
+	norm, errs := st.Normalize()
+	if len(errs) > 0 {
+		t.Fatalf("style rejected: %v", errs)
+	}
+	g := fitGeometry(modules, norm)
+	if px := attrInt(t, s, `viewBox="0 0 (\d+) (\d+)"`); px != g.px {
+		t.Fatalf("the viewBox is %dpx across and the geometry says %dpx", px, g.px)
+	}
+
+	grid := make([][]bool, modules)
 	for i := range grid {
-		grid[i] = make([]bool, span)
+		grid[i] = make([]bool, modules)
 	}
 
 	// The module group and nothing after it. Since M50.6 a drawing may carry a
@@ -41,7 +60,7 @@ func rendered(t *testing.T, svg []byte) [][]bool {
 	// parser that read them would count the box as a rect it could not recognise
 	// and fail every logo'd drawing.
 	body := s[strings.Index(s, "<g ") : strings.Index(s, "</g>")+len("</g>")]
-	rect := regexp.MustCompile(`<rect x="(\d+)" y="(\d+)" width="(\d+)" height="1"/>`)
+	rect := regexp.MustCompile(`<rect x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)"/>`)
 	matches := rect.FindAllStringSubmatch(body, -1)
 	if len(matches) == 0 {
 		t.Fatal("no module rects in the drawing")
@@ -53,10 +72,24 @@ func rendered(t *testing.T, svg []byte) [][]bool {
 		t.Fatalf("drawing holds %d rects, %d of them parseable", n, len(matches))
 	}
 	for _, m := range matches {
-		x, y, w := atoi(t, m[1]), atoi(t, m[2]), atoi(t, m[3])
+		px, py := atoi(t, m[1]), atoi(t, m[2])
+		pw, ph := atoi(t, m[3]), atoi(t, m[4])
+		if ph != g.scale {
+			t.Fatalf("a module run at (%d,%d) is %dpx tall and a module is %dpx",
+				px, py, ph, g.scale)
+		}
+		// Exact, or the run is not on the module grid at all — which is the
+		// failure a pixel-space drawing has to be held to and a module-space one
+		// could not express.
+		if (px-g.origin)%g.scale != 0 || (py-g.origin)%g.scale != 0 || pw%g.scale != 0 {
+			t.Fatalf("a module run at (%d,%d) %dpx wide does not divide by a %dpx "+
+				"module from a %dpx origin", px, py, pw, g.scale, g.origin)
+		}
+		x, y, w := (px-g.origin)/g.scale, (py-g.origin)/g.scale, pw/g.scale
 		for i := range w {
-			if y >= span || x+i >= span {
-				t.Fatalf("rect at (%d,%d) width %d runs outside the %d-module picture", x, y, w, span)
+			if y < 0 || y >= modules || x+i < 0 || x+i >= modules {
+				t.Fatalf("run at module (%d,%d) width %d runs outside the %d-module code",
+					x, y, w, modules)
 			}
 			if grid[y][x+i] {
 				t.Fatalf("module (%d,%d) is drawn twice", x+i, y)
@@ -64,7 +97,7 @@ func rendered(t *testing.T, svg []byte) [][]bool {
 			grid[y][x+i] = true
 		}
 	}
-	return grid
+	return grid, g
 }
 
 func attrInt(t *testing.T, s, pattern string) int {
@@ -104,22 +137,26 @@ func mustRender(t *testing.T, content string, st Style) ([]byte, Style) {
 func TestTheDrawingIsTheEncodersMatrix(t *testing.T) {
 	for _, level := range Levels {
 		t.Run(string(level), func(t *testing.T) {
-			st := Style{Level: level, Margin: 3, Scale: 6}
-			svg, norm := mustRender(t, sample, st)
-			grid := rendered(t, svg)
+			// Both forms of the geometry, because D182 added one and the older
+			// one is what every row written before it carries: a margin in
+			// modules, and a size in pixels the margin is derived from.
+			for _, st := range []Style{
+				{Level: level, Margin: 3, Scale: 6},
+				{Level: level, Margin: DefaultMargin, Scale: 6, Size: 400},
+			} {
+				code, err := Encode(sample, level)
+				if err != nil {
+					t.Fatal(err)
+				}
+				svg, _ := mustRender(t, sample, st)
+				grid, _ := rendered(t, svg, code.Size, st)
 
-			code, err := Encode(sample, level)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got, want := len(grid), code.Size+2*norm.Margin; got != want {
-				t.Fatalf("picture is %d modules across, want %d", got, want)
-			}
-			for y := range len(grid) {
-				for x := range len(grid) {
-					want := code.Dark(x-norm.Margin, y-norm.Margin)
-					if grid[y][x] != want {
-						t.Fatalf("module (%d,%d) drawn=%v, encoder says %v", x, y, grid[y][x], want)
+				for y := range code.Size {
+					for x := range code.Size {
+						if want := code.Dark(x, y); grid[y][x] != want {
+							t.Fatalf("%+v: module (%d,%d) drawn=%v, encoder says %v",
+								st, x, y, grid[y][x], want)
+						}
 					}
 				}
 			}
@@ -136,16 +173,19 @@ func TestTheDrawingIsTheEncodersMatrix(t *testing.T) {
 // and bottom-left of the *picture* — 7x7, a dark ring, a light ring, a 3x3 dark
 // centre — and a scanner will not read one that is anywhere else.
 func TestTheFinderPatternsAreWhereAScannerLooks(t *testing.T) {
-	margin := 4
-	svg, _ := mustRender(t, sample, Style{Margin: margin})
-	grid := rendered(t, svg)
-	span := len(grid)
-	inner := span - 2*margin
+	st := Style{Margin: 4}
+	code, err := Encode(sample, DefaultLevel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svg, _ := mustRender(t, sample, st)
+	grid, _ := rendered(t, svg, code.Size, st)
+	inner := code.Size
 
 	corners := map[string][2]int{
-		"top-left":    {margin, margin},
-		"top-right":   {margin + inner - 7, margin},
-		"bottom-left": {margin, margin + inner - 7},
+		"top-left":    {0, 0},
+		"top-right":   {inner - 7, 0},
+		"bottom-left": {0, inner - 7},
 	}
 	for name, at := range corners {
 		ox, oy := at[0], at[1]
@@ -167,13 +207,12 @@ func TestTheFinderPatternsAreWhereAScannerLooks(t *testing.T) {
 	// The fourth corner carries no finder pattern, which is how a scanner works
 	// out the code's rotation. Asserting it is what stops a renderer that drew
 	// four from passing the loop above.
-	fourth := grid[margin+inner-4][margin+inner-4]
 	corner := true
 	for dy := range 7 {
 		for dx := range 7 {
 			edge := dx == 0 || dx == 6 || dy == 0 || dy == 6
 			centre := dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4
-			if grid[margin+inner-7+dy][margin+inner-7+dx] != (edge || centre) {
+			if grid[inner-7+dy][inner-7+dx] != (edge || centre) {
 				corner = false
 			}
 		}
@@ -182,7 +221,6 @@ func TestTheFinderPatternsAreWhereAScannerLooks(t *testing.T) {
 		t.Error("the bottom-right corner holds a finder pattern; a scanner cannot " +
 			"tell which way up this code is")
 	}
-	_ = fourth
 }
 
 // TestTheQuietZoneIsEmptyAndPainted covers the two halves of the same claim: no
@@ -191,25 +229,46 @@ func TestTheFinderPatternsAreWhereAScannerLooks(t *testing.T) {
 // The second half is decision D74. A transparent quiet zone takes the colour of
 // whatever the code is placed on, so a code that scans on a white page becomes a
 // code on a dark field the moment somebody switches theme.
+// **Both forms of the geometry**, because the quiet zone is where the two
+// differ: the older one measures it in modules and the newer one is whatever
+// pixels the requested size leaves over (D182). The emptiness half is enforced
+// by `rendered` itself, which refuses a run that lands outside the code's own
+// grid, so what is left to assert here is the *width* of the zone and the paint
+// across it.
 func TestTheQuietZoneIsEmptyAndPainted(t *testing.T) {
-	const margin = 5
-	svg, _ := mustRender(t, sample, Style{Margin: margin})
-	grid := rendered(t, svg)
-	span := len(grid)
-
-	for y := range span {
-		for x := range span {
-			inMargin := x < margin || y < margin || x >= span-margin || y >= span-margin
-			if inMargin && grid[y][x] {
-				t.Fatalf("module drawn at (%d,%d), inside the quiet zone", x, y)
-			}
-		}
+	code, err := Encode(sample, DefaultLevel)
+	if err != nil {
+		t.Fatal(err)
 	}
+	fit, err := FitSize(code.Size, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name   string
+		style  Style
+		origin int
+		px     int
+	}{
+		{"margin in modules", Style{Margin: 5, Scale: DefaultScale},
+			5 * DefaultScale, (code.Size + 10) * DefaultScale},
+		{"size in pixels", Style{Margin: DefaultMargin, Scale: fit.Scale, Size: 500},
+			(500 - code.Size*fit.Scale) / 2, 500},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svg, _ := mustRender(t, sample, tc.style)
+			_, g := rendered(t, svg, code.Size, tc.style)
 
-	want := `<rect width="` + strconv.Itoa(span) + `" height="` + strconv.Itoa(span) +
-		`" fill="` + DefaultBackground + `"/>`
-	if !strings.Contains(string(svg), want) {
-		t.Errorf("the background does not cover the whole picture; want %s", want)
+			if g.origin != tc.origin || g.px != tc.px {
+				t.Fatalf("the picture is %dpx with a %dpx quiet zone; want %dpx and %dpx",
+					g.px, g.origin, tc.px, tc.origin)
+			}
+			want := `<rect width="` + strconv.Itoa(g.px) + `" height="` + strconv.Itoa(g.px) +
+				`" fill="` + DefaultBackground + `"/>`
+			if !strings.Contains(string(svg), want) {
+				t.Errorf("the background does not cover the whole picture; want %s", want)
+			}
+		})
 	}
 }
 
@@ -217,25 +276,30 @@ func TestTheQuietZoneIsEmptyAndPainted(t *testing.T) {
 // may do. A style is a preference about drawing, so changing it must never
 // change what the code says.
 func TestScaleDecidesThePixelSizeAndNothingElse(t *testing.T) {
-	small, _ := mustRender(t, sample, Style{Scale: 4, Margin: 4})
-	large, _ := mustRender(t, sample, Style{Scale: 20, Margin: 4})
-
-	a, b := rendered(t, small), rendered(t, large)
-	if len(a) != len(b) {
-		t.Fatalf("scale changed the module count: %d vs %d", len(a), len(b))
+	code, err := Encode(sample, DefaultLevel)
+	if err != nil {
+		t.Fatal(err)
 	}
-	for y := range len(a) {
-		for x := range len(a) {
+	smallStyle := Style{Scale: 4, Margin: 4}
+	largeStyle := Style{Scale: 20, Margin: 4}
+	small, _ := mustRender(t, sample, smallStyle)
+	large, _ := mustRender(t, sample, largeStyle)
+
+	a, _ := rendered(t, small, code.Size, smallStyle)
+	b, _ := rendered(t, large, code.Size, largeStyle)
+	for y := range code.Size {
+		for x := range code.Size {
 			if a[y][x] != b[y][x] {
 				t.Fatalf("scale changed module (%d,%d)", x, y)
 			}
 		}
 	}
-	if got := attrInt(t, string(small), `width="(\d+)"`); got != len(a)*4 {
-		t.Errorf("small width = %d, want %d", got, len(a)*4)
+	span := code.Size + 8
+	if got := attrInt(t, string(small), `width="(\d+)"`); got != span*4 {
+		t.Errorf("small width = %d, want %d", got, span*4)
 	}
-	if got := attrInt(t, string(large), `width="(\d+)"`); got != len(b)*20 {
-		t.Errorf("large width = %d, want %d", got, len(b)*20)
+	if got := attrInt(t, string(large), `width="(\d+)"`); got != span*20 {
+		t.Errorf("large width = %d, want %d", got, span*20)
 	}
 }
 

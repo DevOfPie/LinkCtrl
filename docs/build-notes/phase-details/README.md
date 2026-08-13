@@ -66,7 +66,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M47](m47.md) | The link page, taken apart | M46 · M46.5 | done |
 | [M47.5](m47.5.md) | What every tab says about itself | M47 · M46.5 | done |
 | [M48](m48.md) | On-demand panels, and what stops being buried | M47 | done |
-| [M49](m49.md) | QR codes sized in pixels, and a PNG to download | M48 *(ordering)* | in progress (reopened) |
+| [M49](m49.md) | QR codes sized in pixels, and a PNG to download | M48 *(ordering)* | done |
 | [M50](m50.md) | More than one QR code per link, told apart in the analytics | M49 | in progress (reopened) |
 | [M50.5](m50.5.md) | The first file this product accepts | M50 | done |
 | [M50.6](m50.6.md) | A logo in the middle of a QR code | M50.5 | in progress (reopened) |

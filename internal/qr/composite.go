@@ -7,8 +7,6 @@ import (
 	"image"
 	"image/draw"
 	"image/png"
-	"strconv"
-	"strings"
 )
 
 // A logo in the middle of a code (M50.6).
@@ -96,11 +94,20 @@ import (
 //
 // **Measured, and the measurement is kept.** tools/qr-scan decodes the corpus
 // internal/qr's TestWriteScanCorpus renders — every symbol version this
-// product's content lengths reach, four logo shapes, the smallest, default and
-// largest stored size for each, and the whole version range again with no logo
-// at all at every level as a control, 816 pictures in two equal halves — through
+// product's content lengths reach, four logo shapes, five *stored* sizes for
+// each, and the whole version range again with no logo at all at every level as
+// a control, 1360 pictures in two equal halves — through
 // zxing-cpp-as-WebAssembly and jsQR, each picture shrunk to
-// 8, 6, 4, 3 and 2 pixels per module first. The sweep that chose the fraction
+// 8, 6, 4, 3 and 2 pixels per module first.
+//
+// **Three of those five sizes are what chose the fraction; the other two arrived
+// later.** The corpus drew the smallest, the default and the largest — 816
+// pictures — when this derivation was made, and M49's second reopening (D182)
+// added two more carrying a three-module quiet zone at either end of the scale
+// range, because a margin below the ISO floor is measured rather than assumed.
+// They test the *quiet zone* and not the cap, so every figure below is the
+// 816-picture corpus it was taken on and is not restated here; D182's entry
+// carries the re-run over all 1360. The sweep that chose the fraction
 // ran 1/5, 2/9, 1/4, 3/10, 5/16, 8/25, 33/100 and 1/3. Everything up to 33/100
 // was read by both decoders; **1/3 was not** — at version 13 jsQR loses the code
 // for every logo shape and at every distance, which is a detector failure rather
@@ -111,7 +118,7 @@ import (
 // **What disagrees, recorded rather than hidden.** `zbarimg` 0.23.93 — the third
 // engine, a system package this file cannot pin and `--zbar` reports without
 // gating — is markedly stricter, and gets stricter as the box grows. Over the
-// corpus above, at the five distances, decoding each logo'd picture once:
+// 816 pictures above, at the five distances, decoding each logo'd picture once:
 //
 //	one fifth      1484 of 1496      control 1496 of 1496
 //	three tenths   1386 of 1496      control 1496 of 1496
@@ -199,13 +206,13 @@ const MinProductContent = 22
 //
 // **It binds on both paths since the 2026-08-12 reopening**, and it did not
 // before. A rasterised code stops at [MaxSize] pixels, so its box stops at
-// MaxSize·[LogoBoxNumerator]/[LogoBoxDenominator]; at the old one fifth that was
-// 400 and never reached this, and at three tenths it is 600 and does. What
+// MaxSize·[LogoBoxNumerator]/[LogoBoxDenominator]; at the old one fifth that is
+// 409 and never reached this, and at three tenths it is 614 and does. What
 // happens then is already written: [logoDrawing.drawPNG] resamples the clamped
 // raster up to the rectangle the box needs, on the same arithmetic the SVG path
 // has always used, so the two outputs still draw the same rectangle and the
-// only cost is that a logo filling a 2000px code is drawn from 512 pixels of
-// detail rather than 600.
+// only cost is that a logo filling a 2048px code is drawn from 512 pixels of
+// detail rather than 614.
 const MaxLogoRasterSide = 512
 
 // ForLogo is the style a code carrying a logo is drawn at: this one, at level H.
@@ -304,20 +311,25 @@ func logoWorstCase(side int) int {
 
 func ceilDiv(a, b int) int { return (a + b - 1) / b }
 
-// logoBox is where the logo goes, in the picture's own module coordinates —
-// quiet zone included, so (0,0) is the corner of the picture rather than of the
-// code.
+// logoBox is where the logo goes, in the **code's** own module coordinates —
+// (0,0) is the code's top-left module, not the picture's, which is the same
+// origin [Code.runs] walks in.
+//
+// It was the picture's until D182. The quiet zone is measured in pixels now and
+// a picture's corner is no longer a whole number of modules from the symbol's,
+// so the offset both encoders add is [geometry.origin] rather than a module
+// count — one number, computed once, exactly as the modules themselves are.
 type logoBox struct {
 	x, y, side int
 }
 
 // logoBoxFor places the box, or reports that there is none.
-func (c *Code) logoBoxFor(st Style) (logoBox, bool) {
+func (c *Code) logoBoxFor() (logoBox, bool) {
 	side := LogoBoxModules(c.Size)
 	if side <= 0 {
 		return logoBox{}, false
 	}
-	off := st.Margin + (c.Size-side)/2
+	off := (c.Size - side) / 2
 	return logoBox{x: off, y: off, side: side}, true
 }
 
@@ -371,7 +383,7 @@ type logoDrawing struct {
 // refused for: what NormalizeLogo writes is inside [MaxLogoDimension] *and*
 // [MaxLogoPixels], and this refuses anything that is not.
 func (c *Code) prepareLogo(st Style, logo []byte) (*logoDrawing, error) {
-	box, ok := c.logoBoxFor(st)
+	box, ok := c.logoBoxFor()
 	if !ok {
 		return nil, fmt.Errorf("qr logo: a %d-module code has no room for one", c.Size)
 	}
@@ -562,41 +574,22 @@ func logoDataURI(raw []byte) string {
 // whatever module happened to be under it. That is also what makes the occluded
 // area exactly the box, whatever the logo's shape — which is the number the cap
 // above is a cap on.
-func (d *logoDrawing) writeSVG(b *bytes.Buffer, st Style, scale int) {
+// **Every coordinate here is a whole pixel, and that is D182's doing.** The
+// drawing used to be in module units, so a logo whose aspect ratio is not 1:1
+// landed on a fractional module and the SVG carried it as a decimal rounded to
+// three places — a rounding the PNG did not share. The viewBox is in pixels now,
+// which is the unit the rasteriser was always working in, so the two encoders
+// write the same integers and the last place they could round differently is
+// gone.
+func (d *logoDrawing) writeSVG(b *bytes.Buffer, st Style, g geometry) {
+	x := g.origin + d.box.x*g.scale
+	y := g.origin + d.box.y*g.scale
+	side := d.box.side * g.scale
 	fmt.Fprintf(b, `<rect x="%d" y="%d" width="%d" height="%d" fill="%s"/>`,
-		d.box.x, d.box.y, d.box.side, d.box.side, st.Background)
-
-	// In module units, because the drawing is: the viewBox is the picture in
-	// modules and the pixel size is an attribute on the root element. A
-	// fractional module is what a logo whose aspect ratio is not 1:1 produces,
-	// and the SVG carries it as a decimal rather than the box being distorted to
-	// hide it.
+		x, y, side, side, st.Background)
 	fmt.Fprintf(b,
-		`<image x="%s" y="%s" width="%s" height="%s" href="%s" preserveAspectRatio="none"/>`,
-		modules(d.box.x*scale+d.offX, scale),
-		modules(d.box.y*scale+d.offY, scale),
-		modules(d.drawW, scale),
-		modules(d.drawH, scale),
-		logoDataURI(d.png))
-}
-
-// modules renders a pixel offset in module units, to three decimal places and
-// with no trailing noise. Integers come out as integers, which keeps the common
-// case — a square logo filling its box — readable.
-//
-// The output is a number and cannot be anything else: the inputs are integers
-// this package computed, and `%d` and `%.3f` write digits, a minus sign and a
-// dot. That is what lets it go into an attribute of a document this package
-// promises holds no character it did not write.
-func modules(px, scale int) string {
-	if scale <= 0 {
-		return "0"
-	}
-	if px%scale == 0 {
-		return strconv.Itoa(px / scale)
-	}
-	s := strings.TrimRight(fmt.Sprintf("%.3f", float64(px)/float64(scale)), "0")
-	return strings.TrimSuffix(s, ".")
+		`<image x="%d" y="%d" width="%d" height="%d" href="%s" preserveAspectRatio="none"/>`,
+		x+d.offX, y+d.offY, d.drawW, d.drawH, logoDataURI(d.png))
 }
 
 // drawPNG paints the box and composites the logo into a rasterised code.
@@ -604,10 +597,11 @@ func modules(px, scale int) string {
 // `draw.Over` rather than `draw.Src`, so the alpha channel means what it means:
 // the background painted underneath shows through a transparent logo, exactly as
 // it does in the SVG.
-func (d *logoDrawing) drawPNG(dst *image.NRGBA, st Style, scale int) {
-	boxPx := d.box.side * scale
-	rect := image.Rect(d.box.x*scale, d.box.y*scale,
-		d.box.x*scale+boxPx, d.box.y*scale+boxPx)
+func (d *logoDrawing) drawPNG(dst *image.NRGBA, st Style, g geometry) {
+	x := g.origin + d.box.x*g.scale
+	y := g.origin + d.box.y*g.scale
+	boxPx := d.box.side * g.scale
+	rect := image.Rect(x, y, x+boxPx, y+boxPx)
 	draw.Draw(dst, rect, &image.Uniform{C: parseHex(st.Background)}, image.Point{}, draw.Src)
 
 	at := image.Rect(
@@ -623,7 +617,7 @@ func (d *logoDrawing) drawPNG(dst *image.NRGBA, st Style, scale int) {
 	// Two ways to get here, and since the 2026-08-12 reopening both are reached.
 	// The SVG's geometry has always been able to ask for a box larger than the
 	// stored logo. The raster path now can too: at three tenths a code drawn at
-	// [MaxSize] has a 600-pixel box against [MaxLogoRasterSide]'s 512, where at
-	// the old one fifth the box stopped at 400 and this branch was SVG-only.
+	// [MaxSize] has a 614-pixel box against [MaxLogoRasterSide]'s 512, where at
+	// the old one fifth the box stopped at 409 and this branch was SVG-only.
 	draw.Draw(dst, at, resampleNRGBA(d.img, at.Dx(), at.Dy()), image.Point{}, draw.Over)
 }

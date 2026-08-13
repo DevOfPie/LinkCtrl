@@ -368,9 +368,16 @@ the picture is fixed when the code is made and is never rewritten, because it is
 printed.
 
 **Restyling changes the drawing and never the content.** The form takes a
-foreground colour, a background colour and a **size in pixels** — 64 to 2000.
-**Restore defaults** appears once a style is stored, and clears the size along
-with the colours.
+foreground colour, a background colour and a **size in pixels** — 64 to 2048,
+set with a slider that stops at 128, 256, 300, 512, 600, 1024, 1200 and 2048 or
+with the box beside it, which takes any number in range. **Restore defaults**
+appears once a style is stored, and clears the size along with the colours.
+
+The bottom of that range is not reachable for every code: a longer URL is a
+bigger grid of squares, and a grid with no room left for a margin is refused with
+the smallest size that code can be drawn at in the message — 70 pixels for a
+short link, more for a long one. The slider starts at that number rather than at
+64, and drops any stop below it.
 
 **The preview keeps its own size.** The frame beside the form is 18rem square
 whatever you set, and a code larger than that is drawn scaled down to fit it —
@@ -378,25 +385,28 @@ the number under it is the size that is *served*, which is what both downloads
 and the API answer with. On a code you have styled that is the size you stored;
 on one you have not, the caption says so and gives you the default it is served
 at instead. Before this the frame grew with the setting until it hit the
-edge of the column, which made 2000px a page you had to scroll rather than a
-file you could print.
+edge of the column, which made the largest size a page you had to scroll rather
+than a file you could print.
 
-**The size snaps, and the form says so.** A code is a grid of squares, so an
-arbitrary pixel size does not divide evenly into it: 300px over a 29-square code
-is 10.34 pixels a square. Asking for 300 therefore gets you the nearest size that
-keeps the squares whole, the flash message names both numbers, and the box then
-shows the size you actually have. Squares that landed on fractional boundaries
-would make the SVG and the PNG round differently, which is the one thing worth
-snapping to avoid. The empty margin scanners need is **fixed at the four squares
-the specification requires** and never grows past them — so the majority of the
-picture is always code, and the whole of the rounding lands on the size, where
-the flash message names it. A style written over the API can ask for a wider
-quiet zone and is drawn with it; the form does not offer one, because a wider
-margin is white nobody printing a poster asked to pay for. **Setting a size on
-that code from the form re-fits the margin back to four**, which moves the drawn
-size by at most half a step and is named in the flash message like any other
-snap — so a wider quiet zone set over the API survives until somebody uses the
-size control on the same code.
+**The size you set is the size you get, exactly.** Ask for 500 pixels and the
+file is 500 pixels across. A code is a grid of squares and an arbitrary pixel
+size does not divide evenly into it — 300px over a 29-square code is 10.34 pixels
+a square — so something has to absorb the remainder. It is the empty margin
+around the code: the squares themselves stay whole, which is what keeps the SVG
+and the PNG the same picture, and the margin is white space that can be any
+number of pixels wide. *(This used to say the size snapped to the nearest one
+that kept the squares whole, and it did until 2026-08-12.)*
+
+**The margin aims at four squares and never goes below three.** Four is what the
+specification asks for; three is a quarter under it, and it is measured rather
+than assumed — every size and version this product draws is decoded at five
+simulated viewing distances through two independent decoders before that number
+is allowed to stand. On a large code in a small picture there may be no setting
+that lands between three and five at all, and the margin then comes out *wider*
+than five rather than narrower than three: extra white costs nothing to read, and
+a thin margin costs a scan. A style written over the API can ask for a wider
+quiet zone in squares and is drawn with it; setting a size on that code from the
+form replaces it with the margin the size implies.
 
 **The error-correction level is set over the API and not on the form.** It is a
 tradeoff between how much damage a printed code survives and how tightly it is
@@ -419,24 +429,23 @@ Over the API:
 curl -sS "$BASE/api/v1/links/$LINK_ID/qr.svg" \
   -H "Authorization: Bearer $LINKCTRL_API_KEY" -o code.svg
 
-# The same picture, rasterised. Capped at 2000px; a stored style that draws
+# The same picture, rasterised. Capped at 2048px; a stored style that draws
 # larger than that is refused rather than rasterised.
 curl -sS "$BASE/api/v1/links/$LINK_ID/qr.png" \
   -H "Authorization: Bearer $LINKCTRL_API_KEY" -o code.png
 
-# What it encodes, and how it is drawn. `size` is the output size in pixels the
-# stored margin and scale come to — read-only, because it depends on how many
-# squares this particular URL encodes to.
+# What it encodes, and how it is drawn. The top-level `size` is the output size
+# in pixels — read-only, and equal to `style.size` when one is stored.
 curl -sS "$BASE/api/v1/links/$LINK_ID/qr" \
   -H "Authorization: Bearer $LINKCTRL_API_KEY"
 
 # Restyle it. An omitted field is its default, so {} is plain black on white.
-# The API sets `margin` and `scale` directly; the dashboard's size box is those
-# two resolved against the link's own square count.
+# `style.size` is the picture in pixels and is what the dashboard writes; give
+# `margin` and `scale` instead to state the geometry in squares directly.
 curl -sS -X PUT "$BASE/api/v1/links/$LINK_ID/qr" \
   -H "Authorization: Bearer $LINKCTRL_API_KEY" \
   -H 'Content-Type: application/json' \
-  -d '{"style": {"foreground": "#123a6b", "level": "Q", "margin": 4, "scale": 12}}'
+  -d '{"style": {"foreground": "#123a6b", "level": "Q", "size": 512, "scale": 16}}'
 ```
 
 Seeing a code is `links.read` and styling one is `links.update`: a QR code is a
@@ -513,12 +522,20 @@ request that only changed a colour. The response and every later `GET` report
 what was applied, so nothing is silent. Removing the logo leaves the level at H;
 dropping it back would redraw a code that may already be printed. H packs more
 modules into the symbol, and **the drawn size is held where it was** rather than
-allowed to grow with it: `margin` and `scale` are re-fitted against the larger
-symbol so the picture stays at the size the code was already drawn at, which is
-what stops a code near the raster ceiling from crossing it and refusing to
-download. Whole modules are the unit, so the result is the nearest achievable
-size rather than always the identical integer. This paragraph said `size` can
-grow when you add a logo until 0.3.0.
+allowed to grow with it: the style is re-fitted against the larger symbol so the
+picture stays at the size the code was already drawn at, which is what stops a
+code near the raster ceiling from crossing it and refusing to download. Since
+2026-08-12 that is the identical number rather than the nearest achievable one,
+because the margin carries the remainder. This paragraph said `size` can grow
+when you add a logo until 0.3.0.
+
+**One case still grows**, and it is the one where holding the size cannot be
+done: a code drawn below the floor its level-H symbol needs — `2 × (module
+count + 6)` pixels, and H's module count is the larger one — has no size to be
+re-fitted into, so the style is left as it stands and the picture is drawn from
+its `margin` and `scale`, which is bigger. Refusing the upload instead would say
+no to a picture the SVG draws correctly, and squeezing it would serve a quiet
+zone nothing can read. It takes a code already close to its own floor to reach.
 
 There is no operation that reads a logo back: `has_logo` on the code says
 whether one is there, and both picture endpoints draw it.

@@ -115,17 +115,20 @@ func TestTheShortestContentIsWhatInternalQRAssumes(t *testing.T) {
 // answering 422 for a file that downloaded a moment earlier.
 //
 // The payload here is the row's own: 89 bytes, 37 modules at L and 53 at H, and
-// margin 13 at scale 31, which draws 1953px and is inside the 2000px raster
-// bound with room to spare until the level moves.
+// margin 13 at scale 31, which draws 1953px and is inside the raster bound —
+// 2000px when this was measured, 2048 since D182 — with room to spare until the
+// level moves.
 //
-// **That style is hand-built, and since the M49 reopening it has to be.** When
+// **That style is hand-built, and since the M49 reopenings it has to be.** When
 // the row was measured the size control produced it — the old qr.FitSize
 // searched the quiet zone as a second knob and answered margin 13 for 2000px on
-// this symbol. D179 pinned the zone at the floor, so the control now answers
-// margin 4 scale 44 and cannot reach a 13-module margin at any request; the
-// shape survives only in a style an API caller sets or a row written before
-// 2026-08-12. The defect is a property of the payload and the level rather than
-// of the fit, so it is still exactly this test.
+// this symbol. It does not store a quiet zone in modules at all now: since D182
+// the control writes a pixel size, and the fit answers scale 44 with a
+// 186-pixel zone for 2000px on this symbol. So a 13-module margin is
+// unreachable from the form and the shape survives only in a style an API
+// caller sets or a row written before 2026-08-12. The defect is a property of
+// the payload and the level rather than of the fit, so it is still exactly this
+// test.
 func TestALogoDoesNotBreakThePNGDownload(t *testing.T) {
 	content := QRContent(
 		"https://links.example/"+strings.Repeat("a", 60), "")
@@ -169,16 +172,17 @@ func TestALogoDoesNotBreakThePNGDownload(t *testing.T) {
 	}
 
 	// And it is *re-fitted*, not merely shrunk to fit: the size the reader set is
-	// the size they keep. qr.FitSize snaps to a whole number of modules with the
-	// quiet zone pinned at its floor (the M49 reopening, F213), so the sizes it
-	// can produce step by one span — symbol plus quiet zones — per scale, and
-	// the nearest can sit up to half a span away. For this symbol that is
-	// (53+8)/2 = 30.5px, so 31 is the bound as a whole number of pixels, and
-	// anything inside it is the snap rather than a resize.
-	if diff := drawn - 1953; diff > 31 || diff < -31 {
+	// the size they keep — **exactly, since D182**. The allowance this assertion
+	// used to carry was the fit's own: qr.FitSize could only land on sizes a
+	// module grid admitted, so the nearest sat up to half a span away and 31px
+	// was the bound for this symbol. Only the symbol needs whole modules now and
+	// the quiet zone carries the remainder in pixels, so `FitSize(53, 1953)`
+	// answers 1953 — scale 32 and a 128-pixel zone — and the assertion is
+	// equality, matching its sibling below.
+	if drawn != 1953 {
 		t.Errorf("the code was 1953px and is %dpx after the upload. The re-fit keeps "+
-			"the size somebody chose; a move of more than one module is a resize "+
-			"nobody asked for", drawn)
+			"the size somebody chose, and since D182 it can keep it to the pixel",
+			drawn)
 	}
 }
 
@@ -197,15 +201,12 @@ func TestTheReFitOnlyMovesTheSizeItHasTo(t *testing.T) {
 			"colour change", style, after)
 	}
 
-	// The symbol grew — 29 modules at M, 37 at H for this content — so the two
-	// size fields move, and only far enough to keep the picture the size the
-	// stored style already drew it at. Half a span of the new picture — symbol
-	// plus the two quiet zones, halved — is the snap; anything past that is a
-	// resize nobody asked for. It was one module until the M49 reopening
-	// (F213), which is what a snap could miss by while qr.FitSize was free to
-	// widen the quiet zone; with the zone pinned at its floor the achievable
-	// sizes step by a whole span per scale and the nearest can sit half of one
-	// away. Here that is (37+8)/2 = 22px against a move of 19.
+	// The symbol grew — 29 modules at M, 37 at H for this content — so the style
+	// moves, and only far enough to keep the picture the size the stored style
+	// already drew it at. **Exactly that size, since D182**: the allowance was
+	// one module at M50.6, then half a span at the first M49 reopening, because
+	// a fit could only land on sizes the module grid admitted. It lands on the
+	// number now, so the assertion is equality and the allowance is gone.
 	base, err := qr.Encode(content, style.Level)
 	if err != nil {
 		t.Fatal(err)
@@ -220,14 +221,11 @@ func TestTheReFitOnlyMovesTheSizeItHasTo(t *testing.T) {
 			symbol.Size, base.Size)
 	}
 	want := qr.OutputSize(base.Size, style)
-	drawn := qr.OutputSize(symbol.Size, after)
-	bound := (symbol.Size + 2*after.Margin) / 2
-	if diff := drawn - want; diff > bound || diff < -bound {
-		t.Errorf("the code was %dpx and is %dpx after the upload; margin %d scale "+
-			"%d moved to margin %d scale %d, which is more than the whole-module "+
-			"snap can explain — half a %d-module span is %dpx", want, drawn,
-			style.Margin, style.Scale, after.Margin, after.Scale,
-			symbol.Size+2*after.Margin, bound)
+	if drawn := qr.OutputSize(symbol.Size, after); drawn != want {
+		t.Errorf("the code was %dpx and is %dpx after the upload; margin %d scale %d "+
+			"became margin %d scale %d size %d. The re-fit exists to keep the picture "+
+			"the size it was, and since D182 it can hit that number exactly",
+			want, drawn, style.Margin, style.Scale, after.Margin, after.Scale, after.Size)
 	}
 
 	// A code whose symbol did not grow comes back byte for byte: a style already

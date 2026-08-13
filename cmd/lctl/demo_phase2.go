@@ -1342,10 +1342,10 @@ func (s *demoSeeder) seedCampaigns(ctx context.Context, cat []demoLink, ids map[
 		return fmt.Errorf("style the QR code on /%s: %w", demoQRStyled, err)
 	}
 	// 400px: a size somebody printing a poster would type, and one that does not
-	// divide evenly into this link's module count — so the demo shows the snap
-	// and the reported size doing their job rather than a number chosen to make
-	// them invisible.
-	sized, fit, err := s.link.SetQRSize(ctx, s.owner, styled, link.QRSizeInput{
+	// divide evenly into this link's module count — so the demo shows a size the
+	// module grid has to work around being served back exactly, which is what
+	// the second M49 reopening is for.
+	sized, _, err := s.link.SetQRSize(ctx, s.owner, styled, link.QRSizeInput{
 		Foreground: demoQRForeground, Background: demoQRBackground, Size: demoQRSize,
 	})
 	if err != nil {
@@ -1394,10 +1394,9 @@ func (s *demoSeeder) seedCampaigns(ctx context.Context, cat []demoLink, ids map[
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "campaigns: %d, holding %d links; 1 QR code styled at %dpx "+
-		"(asked for %dpx); 2 codes on /%s, 1 drawn with a logo at level H, "+
-		"%d scans between them\n",
-		len(demoCampaigns()), labelled, sized.Size, fit.Requested, demoQRStyled, scans)
+	fmt.Fprintf(os.Stderr, "campaigns: %d, holding %d links; 1 QR code styled at %dpx; "+
+		"2 codes on /%s, 1 drawn with a logo at level H, %d scans between them\n",
+		len(demoCampaigns()), labelled, sized.Size, demoQRStyled, scans)
 	return nil
 }
 

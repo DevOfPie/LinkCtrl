@@ -1901,8 +1901,8 @@ paths:
         and nothing should rasterise on a request. The encoder is now
         `image/png` from the Go standard library, so the dependency set has not
         moved; and the rasteriser runs only when somebody asks for a file, under
-        a stated bound. Output stops at **2000 pixels** — a two-colour paletted
-        bitmap, so the largest buffer a request can cause is 4,000,000 bytes —
+        a stated bound. Output stops at **2048 pixels** — a two-colour paletted
+        bitmap, so the largest buffer a request can cause is 4,194,304 bytes —
         and a code whose stored style draws larger than that is refused with a
         `422` rather than drawn.
 
@@ -2269,7 +2269,7 @@ paths:
       summary: A named code, as an image file
       description: |
         Everything `GET /links/{id}/qr.png` says, for one named code — including
-        the 2000-pixel bound and the `422` for a stored style that draws larger.
+        the 2048-pixel bound and the `422` for a stored style that draws larger.
       responses:
         "200":
           description: The code as a PNG image
@@ -5569,41 +5569,78 @@ components:
           minimum: 0
           maximum: 16
           description: >
-            The quiet zone, in modules. Default 4, which is the minimum
-            ISO/IEC 18004 specifies. Together with `scale` this decides `size`;
-            the dashboard asks for `size` and resolves it to these two, and
-            since 2026-08-12 it always resolves this one to 4 — a wider quiet
-            zone is white a poster does not need, so the dashboard spends the
-            rounding on `scale` instead. A caller that wants more asks for it
-            here; up to 16 is stored and drawn as given, on every read and every
-            image, with no fit consulted.
+            The quiet zone, in modules, and **the fallback rather than the
+            usual answer since 2026-08-12**. It decides the picture only when
+            `size` is absent: the picture is then the symbol plus this many
+            modules on each side, which is what every style written before that
+            date carries and what a caller setting `margin` and `scale` alone
+            still gets, stored and drawn as given with no fit consulted.
 
-            **A later save from the dashboard's size control re-fits it to 4.**
-            That control is one number and it resolves through the same
-            arithmetic every time, so a code whose stored quiet zone is wider
-            keeps it only until somebody sets a size on that code from the
-            dashboard — at which point the drawn size moves too, by at most half
-            the step between two sizes that keep the modules whole, and the
-            dashboard reports the new size the way it reports any snap. Nothing
-            on this API does that: `PUT /links/{id}/qr` writes what it is given.
+            When `size` is set, the quiet zone is the pixels that size leaves
+            over and this field is only what the drawing falls back to if the
+            content ever outgrows the stored size — a link renamed into a longer
+            alias encodes to a larger symbol, and a picture that cannot hold its
+            own symbol is not a picture.
+
+            Default 4, which is the minimum ISO/IEC 18004 specifies. The
+            dashboard's size control writes 4 here and puts its answer in
+            `size`.
         scale:
           type: integer
           minimum: 2
-          maximum: 68
+          maximum: 75
           description: >
-            Pixels per module. Default 8. `(module count + 2 × margin) × scale`
-            is the output size in pixels, which the SVG carries as explicit
-            `width` and `height` and the PNG is rasterised at. The SVG's drawing
-            is also in module units inside a `viewBox`, so a consumer sizing the
-            element with CSS still gets the same code at any size.
+            Pixels per module. Default 8, and the one number both forms of this
+            geometry share, because a module is a whole number of pixels in
+            either. With `size` it decides how much of the picture is symbol and
+            how much is quiet zone; without it, `(module count + 2 × margin) ×
+            scale` is the output size. The SVG carries the result as explicit
+            `width` and `height`, drawn inside a `viewBox` of the same extent,
+            so a consumer sizing the element with CSS still gets the same code
+            at any size; the PNG is rasterised at it.
 
-            The ceiling was 32 until 2026-08-12 and is now derived from the
-            2000px raster bound: the smallest symbol is 21 modules, the default
-            quiet zone adds eight, and 2000 ÷ 29 is 68. That is the largest
-            pixels-per-module the dashboard's size control can resolve to, so
-            every size it offers is a style this endpoint accepts. A large
-            `scale` with a large `margin` still draws past 2000px, and the
-            image endpoints answer `422` for that as they always have.
+            The ceiling was 32 until 2026-08-12, then 68, and is derived from
+            the raster bound: the smallest symbol is 21 modules, the narrowest
+            quiet zone the size control produces adds six, and 2048 ÷ 27 is 75.
+            That is the largest pixels-per-module the dashboard's size control
+            can resolve to, so every size it offers is a style this endpoint
+            accepts. A large `scale` with a large `margin` still draws past
+            2048px, and the image endpoints answer `422` for that as they
+            always have.
+        size:
+          type: integer
+          minimum: 64
+          maximum: 2048
+          description: >
+            The output size in pixels, and when it is set it is **exactly** what
+            the picture measures. Omit it for the older `margin`-and-`scale`
+            geometry above.
+
+            **Only the symbol needs whole modules.** The quiet zone is white
+            space and can be any pixel count, so the picture is `size` across,
+            the symbol is `module count × scale` of that centred inside it, and
+            the remainder is the quiet zone — which is what makes every
+            requested size reachable rather than snapping to the nearest one a
+            module grid admits. An odd remainder puts one more pixel on the
+            right and the bottom than on the left and the top; centring it
+            perfectly would cost the exact size, which is the point.
+
+            **This is the field the dashboard's size control writes**, and it is
+            what makes a size set there the size served back. That control also
+            picks `scale` so the quiet zone lands near four modules — inside
+            three to five wherever the grid admits one, and wide of it rather
+            than narrow where it does not.
+
+            A `size` too small for the symbol is **refused rather than
+            squeezed**, and the floor is `scale × (module count + 6)` pixels —
+            the symbol at the module width you asked for, plus three modules of
+            quiet zone a side. At the smallest module width that is `2 × (module
+            count + 6)`: 70 for a 29-module code and 366 for the largest symbol
+            this encoder produces, and no size below it is drawable at any
+            scale. The refusal names both numbers, because lowering `scale` is
+            the other way to be accepted. Neither is a property of this schema —
+            they come from the content and from the style together — so the
+            schema states the range and the endpoint states the rest.
 
     QRCode:
       type: object
@@ -5649,12 +5686,10 @@ components:
           description: >
             The output size in pixels this style draws this content at — the
             width and the height, since a code is square. **Read-only and
-            derived**: the stored style holds a quiet zone in modules and a
-            scale in pixels per module, and how many pixels those come to
-            depends on how many modules the content encodes to. Set it by
-            setting `margin` and `scale`; the dashboard asks for this number
-            instead and resolves it to those two against the link's own module
-            count.
+            derived**, and what it is derived from depends on the style: a style
+            carrying `style.size` reports that number back, and one carrying
+            only `margin` and `scale` reports what those come to against the
+            module count this content encodes to.
         has_logo:
           type: boolean
           description: >
@@ -5674,13 +5709,24 @@ components:
             bound by decoding every combination this product draws, at
             simulated distance, through two independent decoders; the logo is
             centred because the derivation holds for no other placement. **The drawn size is
-            held where it was**: `H` packs more modules into the symbol, so
-            `margin` and `scale` are re-fitted against the larger one to keep
-            the picture at the size the code was already drawn at — a code near
-            the raster ceiling would otherwise cross it and its PNG would start
-            answering `422`. Module quantisation means the result is the
-            nearest achievable size rather than always the identical integer.
-            This read *a code can grow when a logo is added* until 0.3.0.
+            held where it was**: `H` packs more modules into the symbol, so the
+            style is re-fitted against the larger one to keep the picture at the
+            size the code was already drawn at — a code near the raster ceiling
+            would otherwise cross it and its PNG would start answering `422`.
+            Since 2026-08-12 that is the identical integer rather than the
+            nearest achievable one, because the quiet zone carries the
+            remainder. This read *a code can grow when a logo is added* until
+            0.3.0.
+
+            **One case still grows, and it is the case where holding the size is
+            impossible.** The floor a symbol can be drawn at is `2 × (module
+            count + 6)` pixels and `H`'s module count is the larger one, so a
+            code drawn below the `H` symbol's floor cannot be re-fitted into the
+            size it had. The style is then left as it stands and the picture is
+            drawn from its `margin` and `scale` instead, which is larger — the
+            alternative would be refusing an upload the SVG draws correctly, or
+            serving a quiet zone nothing can read. It is reachable only from a
+            code already close to its own floor.
 
     LogoResample:
       type: object

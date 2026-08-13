@@ -700,10 +700,15 @@ func pageData(t *testing.T) map[string]any {
 			// stub style above comes to for a 29-module code, so the fixture is
 			// a state internal/qr could actually produce rather than a number
 			// picked to look plausible — scale 20 is inside qr.MaxScale, and the
-			// size is inside the 64..2000 the form itself declares.
-			"QRSize":        740,
-			"QRMinSize":     64,
-			"QRMaxSize":     2000,
+			// size is inside the range the form itself declares. QRMinSize is
+			// this code's floor rather than the package's since D182:
+			// qr.MinSizeFor(29) is 2 × (29 + 6) = 70.
+			"QRSize":    740,
+			"QRMinSize": 70,
+			"QRMaxSize": 2048,
+			// The slider's marks, as httpx.qrSizeStops hands them over: the
+			// owner's eight, less any below this code's own floor (D182).
+			"QRSizeStops":   []int{128, 256, 300, 512, 600, 1024, 1200, 2048},
 			"QRStored":      true,
 			"QRDownload":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.svg",
 			"QRDownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.png",
@@ -772,9 +777,12 @@ func pageData(t *testing.T) map[string]any {
 				"Foreground": "#000000", "Background": "#ffffff",
 				"Level": "M", "Margin": 4, "Scale": 20,
 			},
-			"QRSize":        740,
-			"QRMinSize":     64,
-			"QRMaxSize":     2000,
+			"QRSize":    740,
+			"QRMinSize": 70,
+			"QRMaxSize": 2048,
+			// The slider's marks, as httpx.qrSizeStops hands them over: the
+			// owner's eight, less any below this code's own floor (D182).
+			"QRSizeStops":   []int{128, 256, 300, 512, 600, 1024, 1200, 2048},
 			"QRStored":      true,
 			"QRDownload":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.svg",
 			"QRDownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.png",

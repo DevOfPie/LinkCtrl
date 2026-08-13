@@ -339,6 +339,10 @@ file. Append a row when you append an entry.
 | [M50, the default code becomes a property rather than an absence, and D183](#2026-08-12--m50-the-default-code-becomes-a-property-rather-than-an-absence-and-d183) | D183 — the default stops being the row with the empty slug and becomes a flag any code may hold; the flag is what an untagged scan resolves through. Every code carries a `qrc` tag, the parameter already being named that, so nothing is renamed and nothing already printed changes meaning. Today's default gains a generated slug; removing the flag-holder promotes another code and says so. `ResetQRStyle` is scoped to the selected code in the same reopening — it clears the default's style whichever code is selected |
 | [M50.6, the level is the highest that costs nothing, and D184](#2026-08-12--m506-the-level-is-the-highest-that-costs-nothing-and-d184) | D184 — error correction becomes the strongest level whose version equals the weakest level's, so correction is taken wherever it is free and never at the cost of density; H while a logo is drawn, recomputed by the rule when it leaves rather than restored. Measured: H is ~30% more modules a side than the shipped default M, which is ~30% less scanning distance at a given printed size |
 | [M50.7 added: the QR tab stops costing more attention than it is worth](#2026-08-12--m507-added-the-qr-tab-stops-costing-more-attention-than-it-is-worth) | Placement after M50's reopening and M49's second, because it re-lays-out the controls those reshape. A milestone rather than four reopenings because every surface it touches does what its milestone claims — the report is about the tab's total cost in attention, not about any promise being false. Owner-chosen over folding it into the reopenings and over planning.md's new-scope route |
+| [M49 built: the size is exact, the floor moves per code, and three modules is measured](#2026-08-12--m49-built-the-size-is-exact-the-floor-moves-per-code-and-three-modules-is-measured) | The build of D182, and the three things D182 left to it. The geometry is carried as a new `qr.Style.size` in pixels rather than a margin in pixels, because a symmetric pixel margin can only reach sizes of one parity — an 89-module code at 2048px gets 6.7 modules of quiet zone that way against 4.24 this way — with `margin` kept as the fallback for a symbol that outgrows a stored size. The floor moves per code (`qr.MinSizeFor`, 70 at 29 modules and 366 at version 40) rather than `MinSize` rising, because the pixels a symbol needs are a property of the symbol. The band's *upper* half is what gives way: inside 3 to 5 modules above `(modules+10)(modules+6)/4` pixels, wide of it below and only where forced — 3789 in band against 1083 forced, none under three. **The first reopening's *majority of the picture is code* is given up**, named rather than dropped: it is not simultaneously satisfiable with an exact size. Three modules measured through a corpus grown to 1360 pictures, 9256 of 9256 exact. `SizeFit.Snapped` and its flash message go; the SVG's viewBox moves into pixel space, which the logo's three-decimal rounding goes with; the slider is two inputs and a server-side witness because no script may exist to sync them |
+| [M49, four amendments the second reopening forced](#2026-08-13--m49-four-amendments-the-second-reopening-forced) | Fact-level orchestrator amendments on milestone files. The quiet-zone floor is three modules, not the specification's four. **The first reopening's majority-code claim is given up** — an exact size and a majority-code guarantee are not simultaneously satisfiable, measured at 48% for an 89-module code at 256px — which is the second thing the owner's first report bought that their second one spends. The band bullet's either/or was an incomplete enumeration and the build took a third answer, a floor that moves per code. And `MaxScale` 68 → 75 corrected where M50.6 had written it |
+| [M49, the exact-size claim gets an enforcement on the API](#2026-08-13--m49-the-exact-size-claim-gets-an-enforcement-on-the-api) | `PUT /links/{id}/qr` accepted a `size` the symbol had outgrown and served a picture that was not it, falsifying the reopening's first bullet on the door the dashboard's control does not guard. It refuses now, at `qr.MinSizeForStyle` — the floor at the caller's own `scale`, because an API caller sets both fields and `MinSizeFor` binds only when the scale is chosen too. Rejected: re-fitting `scale` server-side, which would silently rewrite a field the caller set. The logo re-fit's escape from *the drawn size is held* stays, and is now written down outside the code comment |
+| [M49, what the exact size falsified where nothing was looking](#2026-08-13--m49-what-the-exact-size-falsified-where-nothing-was-looking) | Four survivals of the snap, in files the change reached but did not rewrite: two comments on `QRSizeInput`/`SetQRSize` still describing a snap and a size derived on read, D181's corpus description in `composite.go` left at three stored sizes and 816 pictures, two integration assertions still allowing half a span, and two comments citing the deleted `want`/`got` pair as live. The assertions are the substance — sabotage measured both passing a 20px drift they are meant to catch. `composite.go` keeps its 816-picture figures rather than restating them, because the two styles that grew the corpus test the quiet zone and not the cap |
 
 ---
 
@@ -28039,3 +28043,306 @@ and belong to [M50.5](phase-details/m50.5.md) — touching them here would put t
 milestones' work in one commit; any new capability, so the download menu that
 will hold PDF later holds PNG and SVG today; and a demo seeder row, because M50's
 and M50.5's already seed what this milestone re-lays-out.
+
+## 2026-08-12 — M49 built: the size is exact, the floor moves per code, and three modules is measured
+
+The build of [D182](#2026-08-12--m49-the-size-stops-snapping-and-d182-reverses-d179-the-same-day).
+D182 settled *what* — the requested size is exact, the quiet zone carries the
+remainder in pixels, the band is four modules ±25% — and left three things to
+the build, saying so in as many words. This is those three, with the numbers
+they rest on.
+
+**The geometry is carried as a new `qr.Style.size` in pixels, not as a margin in
+pixels.** D182's sentence is *"the quiet zone carried in pixels rather than in
+modules"*, and both readings satisfy it; they are not equally good and the
+difference is measurable. A stored pixel *margin* makes the picture
+`modules·scale + 2·margin`, which is symmetric — so it can only reach sizes with
+the same parity as `modules·scale`, and since a QR symbol is always an odd number
+of modules that is the parity of `scale`. Hitting an arbitrary size then costs a
+scale of the wrong parity, and the quiet zone lands where that scale leaves it:
+an 89-module code at 2048px comes out at **6.7 modules** of quiet zone against
+the **4.24** the parity-free answer reaches. Storing the *size* instead makes the
+quiet zone the remainder halved, with the odd pixel going to the far side, and
+the symbol is then one pixel off centre in half of all cases — invisible, and it
+buys the exactness the whole reopening is for.
+
+The cost is one edge D182 did not raise and this build had to answer: a size is
+stored against the module count the content had when it was saved, and renaming a
+link into a longer alias re-encodes to a larger symbol. A picture that can no
+longer hold its own symbol is not a picture, so `Style.margin` survives as the
+**fallback**, which is exactly the pre-reopening geometry: the code is drawn
+larger rather than clipped, which is what a pre-M49 row already does on the same
+day. `TestAStoredSizeTheSymbolOutgrowsFallsBackRatherThanBreaking` is the arm.
+
+**The size floor moves per code rather than `MinSize` rising.** D182 named the
+choice — *"either `MinSize` rises or the low end is documented as out of band"* —
+and neither is quite what shipped, because the number of pixels a symbol needs is
+a property of the symbol and no single constant can express it. `qr.MinSizeFor`
+is `MinScale × (modules + 2·MinMarginModules)`: **70** for a 29-module code,
+**190** for the 89-module one this product's longest content reaches, **366** for
+version 40. A request inside the control's range but below its own code's floor
+is refused with that number in the sentence, which is the rule margin and scale
+have had since M41 — clamping reports success for a setting nobody asked for.
+`MinSize` stays 64, because a 25-module code draws there.
+
+Raising `MinSize` to 366 was the alternative and is rejected on its cost: it
+refuses five sixths of the range the product accepts today for the sake of
+payloads no link in it produces. Raising it to 190 — enough for the product's own
+content — still refuses 64 to 189 and still fails for an API caller with a longer
+payload, so it buys a constant and not a guarantee.
+
+**What gives way is the band's upper half, and that is the half worth losing.**
+The scale is a whole number of pixels, so the quiet zones one symbol can reach
+step by `(modules+8)/2` pixels at a time; where that step is wider than the band
+there is no scale inside it. The condition is arithmetic: an admissible scale
+lands inside 3 to 5 modules whenever the request is at least
+`(modules+10)(modules+6)/4` pixels, which is 342 for a 29-module code and beyond
+`MaxSize` for an 89-module one. Below that line the fit errs **wide** — never
+narrow — and only where the next scale up would break the floor, which
+`TestTheQuietZoneLandsInTheBand` asserts case by case rather than trusting. Over
+every module count the product encodes and the whole size range: **3789 fits
+inside the band, 1083 forced wide of it, none under three modules.**
+
+Erring wide is not free and the thing it costs is named: **M49's first reopening
+required the majority of the picture to be code at every size, and that claim is
+given up here.** An 89-module code at exactly 256px has one admissible scale —
+two pixels a module — so the quiet zone is 19.5 modules and the code is 48% of
+the picture by area. The two are not simultaneously satisfiable: honouring 256px
+exactly and leaving a majority-code picture would need a scale between 2 and 3.
+D182 is the owner choosing the exact size over the tight picture, having used
+both, and this is where that shows up. Refusing the interior sizes where the
+conflict bites was considered and rejected — for an 89-module code that is a dead
+band from 252 to 284 pixels, a hole in the middle of a slider, which is worse
+than a wide margin.
+
+**Three modules of quiet zone is measured.** It is one below what ISO/IEC 18004
+specifies, so `make verify-scan` is the instrument rather than the argument: the
+corpus grew from 816 pictures to **1360**, adding the band's low end at both ends
+of the scale range across the whole version span, and every one of them is
+rendered off the shipping path. **9256 of 9256 decodes exact**, through
+zxing-wasm and jsQR at 8, 6, 4, 3 and 2 pixels per module. The narrow styles
+are built the way the size control builds one — a size in pixels that leaves
+exactly three modules — so what was decoded is what the product serves.
+
+`zbarimg` 0.23.93 ran beside it, reporting only and not gating, on the terms
+M50.6's reopening set: **4449 of 4628 exact, and the no-logo control is 2316 of
+2316.** The control is where the narrow quiet zone is unoccluded, so a
+three-module zone costs the strictest engine to hand nothing at all; the 179
+misses are all on logo'd pictures and sit at 92.3% against the 92.6% the same
+engine gave the 816-picture corpus at M50.6, which is the fraction's number
+rather than the margin's.
+
+**One test was renamed rather than edited**, because its name was a claim.
+`TestARowFromTheOldSearchKeepsRenderingAndReportsAReSave` is
+`TestARowFromTheOldSearchKeepsRenderingAndReSavesExactly`: D179's entry names the
+old one twice and this file is append-only, so a reader tracing that string finds
+it here. What it asserts is the same row — margin 14, scale 7, the shape the
+first search produced — and the half that changed is the second: it moved by up
+to half a span and reported the move, and it lands on the number now.
+
+**Two things went with the snap and are worth naming as removals.**
+`SizeFit.Snapped` and the `want`/`got` pair that travelled in the redirect query:
+there is nothing left for them to report, and a flash message saying 300px came
+out as 300px is how a message that matters stops being read. And the paragraph on
+the QR tab explaining that the size snaps to the nearest whole-module one, which
+described the behaviour the owner rejected, on the tab where they rejected it.
+
+**The drawing moved into pixel space, and that is forced rather than chosen.** A
+quiet zone measured in modules is expressible in a module-unit `viewBox` and one
+measured in pixels is not — a picture whose remainder is 47 pixels of a 14-pixel
+module has no whole-module coordinate for the symbol's corner. So the SVG's
+`viewBox` is the pixel size now and every rect is a pixel rectangle. Nothing a
+consumer can see changes: the viewBox still maps onto `width` and `height`
+exactly, so an element sized with CSS draws the same code at any size. What
+improved is the logo: it was written in module units to three decimal places,
+a rounding the PNG did not share, and both encoders now write the same integers.
+
+**The slider is two inputs and a witness, because there is no script to make it
+one.** `script-src 'self'` and no application JavaScript means nothing in the
+browser can copy a dragged slider into the box beside it, and the milestone's own
+risk names what that invites — the number becoming a second source of truth. The
+rule is on the server and testable there: `size_shown` witnesses the value the
+form was rendered with, the slider wins when it has moved off that, the number
+wins otherwise. A form with no slider at all is the number alone, which is what
+M49 shipped and what a cached page still posts. The marks are a `<datalist>`,
+HTML's own way of saying them; they are suggestions and the control is continuous
+between the ends, which is what *the range ends reachable* means. The slider's
+own appearance ships in `input.css` beside `.file-pick` and for the same reason:
+a range input is the one native control no two engines draw alike, and its
+vendor-prefixed track and thumb are not Tailwind utilities. `qr-slider`'s webkit
+and moz rules are stated separately — a selector list mixing the two prefixes is
+dropped whole by both engines.
+
+**`MinSize` is now the control's floor and `QRMinSize` is the code's**, which is
+the one place the two numbers diverge on a page. The template is handed
+`qr.MinSizeFor` over the module count the code is *drawn* at — level H when a
+logo forces it, the same defence `qrCodeFrom` and `SetQRSizeBySlug` already
+make — so the browser enforces what the server will. The slider's marks below
+that floor are dropped rather than drawn, because a mark the save would refuse is
+a mark that lies.
+
+**Everything `MaxSize` carries moved with it.** `MaxScale` 68 → **75**, which is
+`floor(2048 / (21 + 2·3))` and is pinned to that derivation by a test, because
+the ceiling has now been wrong twice and each time the symptom was a fit the API
+then refused. The raster figures in `docs/SECURITY.md` and in D127 and D142:
+4,000,000 → **4,194,304** for the paletted path, 16,000,000 → **16,777,216** for
+the logo'd one, and the logo box's own buffer 1,440,000 → **1,507,984**. The
+openapi bounds on `scale` and the new `style.size`, and the prose that named 2000
+in three places.
+
+## 2026-08-13 — M49, four amendments the second reopening forced
+
+Orchestrator amendments at step 3.4, all fact-level, all on milestone files a
+worker may not touch. Three are M49's own earlier sections describing a tree
+D182 changed; the fourth is a number M49 moved out from under M50.6.
+
+**One — the quiet-zone floor.** As it stood, in the original *Done means*:
+*"The quiet zone stays at or above the 4 modules the specification requires."*
+As amended: the same, plus a note that the floor is **three** modules since
+D182, below what the specification requires, and measured through
+`make verify-scan` rather than assumed. Tree fact: `MinMarginModules = 3` in
+`internal/qr/qr.go`, asserted across the range by `TestTheQuietZoneLandsInTheBand`.
+
+**Two — the majority-code claim, given up.** As it stood, in the *first*
+reopening: *"at every acceptable size the majority of the image is code and the
+margin does not grow past the floor by more than the remainder a module grid
+forces."* As amended: both halves given up, with the reason. Tree fact: an
+89-module code at 256px admits exactly one scale and comes out **48% code** — an
+exact size and a majority-code guarantee are not simultaneously satisfiable, and
+the only way to keep both would be refusing the interior sizes where it bites,
+which is a dead band from 252 to 284px. The margin is no longer pinned at the
+floor either.
+
+**This is the second thing the owner's first QR-tab report bought that their
+second one spends.** D179 pinned the margin so the picture would be mostly code;
+D182 makes the size exact and that guarantee is what it costs. Both were
+owner-set, four hours apart, each with the trade in front of them. The record
+says give-up rather than correction because that is what it is.
+
+**Three — the band's either/or was an incomplete enumeration.** As it stood, in
+the second reopening: *"either `MinSize` rises or the low end is documented as
+out of band."* As amended: the build took a third answer, a floor that moves per
+code — `qr.MinSizeFor` = `2×(modules+6)`, 70px at 29 modules, 366px at version
+40. Tree fact: `MinSize` is unchanged at 64 and no size is documented out of
+band, because none is admitted out of band. Judged **fact-level rather than
+assertion-level**, and the reasoning is worth keeping: what the bullet asserts is
+that the low end is handled and stated rather than silently broken, and that is
+what shipped. The either/or was the bullet listing the two answers its author
+could see, not a constraint on which answer was allowed.
+
+**Five and six, added at the second acceptance pass.** A reviewer found that
+`m49.md`'s original *The size is snapped, and the interface says so* subsection
+was still asserting the snap in six places, unmarked — and that its second
+paragraph files D182's shipped answer under *rejected*. The subsection now
+carries one supersession note at its head rather than six inline, because it is a
+record of what shipped and was then rejected, and rewriting it would destroy that.
+A second note answers the rejected-alternative paragraph directly, and it is
+worth keeping: **that paragraph was right about its own alternative and wrong
+about the space.** Fractional module boundaries would make the two encoders
+disagree — D182 does not do that; the symbol still lands on whole modules. What
+D182 changes is the **quiet zone**, which is white space and needs no grid at
+all. Neither that paragraph nor D179 considered it, which is how an option this
+simple stayed unfound through two decisions. And `m50.6.md`'s corpus figures
+moved again: 816 in two halves of 408 when written, **1360** in two halves of 680
+since this milestone added the band's low end at both ends of the scale range.
+
+**Four — a range M49 moved out from under M50.6.** `m50.6.md`'s own amendment of
+2026-08-12 said *"the continuous 2-to-68 range"*. `MaxScale` is 75 since D182
+raised `MaxSize` to 2048. Corrected in place; it is a number, not a claim.
+
+## 2026-08-13 — M49, the exact-size claim gets an enforcement on the API
+
+The second reopening's first bullet is *the requested size is the size stored and
+drawn, exactly, at every value in the range*. It shipped enforced on one of the
+two doors. This is the other one, built on the orchestrator's rejection of the
+first attempt.
+
+**What was wrong.** `qr.Style.Normalize` range-checks `size` against `MinSize`
+and `MaxSize` and can do no more — a style carries no module count, so it cannot
+know what its own symbol needs — and `SetQRStyleBySlug` called only Normalize.
+`PUT /links/{id}/qr` with `{"style":{"size":100}}` on a 45-module code was
+therefore **accepted**, `fitGeometry` fell back to the margin-and-scale
+arithmetic, and the code served a picture that was not 100px. `api/openapi.yaml`
+promised the opposite in two places, and the dashboard's size control had
+enforced it since the reopening. A stored style that draws at some other size
+falsifies the bullet whichever door it came through, so this was behaviour rather
+than a sentence to soften.
+
+**The floor that binds on the API is not the floor that binds on the form**, and
+finding that out is what the fix cost. The form's floor is `qr.MinSizeFor` =
+`2×(modules+6)`, the smallest picture over *every* module width, and it is right
+for the form because the form chooses the width itself. An API caller sets `size`
+**and** `scale`, and `fitGeometry` draws the requested size only while
+`size ≥ scale×(modules+6)`. Refusing at `MinSizeFor` would have left
+`{"style":{"size":86}}` on a 37-module code accepted at the default scale and
+drawn at 360px — measured, on the first cut of the contract test, which is how it
+was caught. So `qr.MinSizeForStyle` is the check, `MinSizeFor` is it at
+`MinScale`, and the refusal names both numbers because lowering `scale` is the
+other way to be accepted.
+
+**Rejected: re-fitting `scale` server-side** the way `SetQRSizeBySlug` does. It
+would accept every size in the range, which reads like the friendlier answer, but
+`scale` is a field this endpoint documents and a caller sets — a `PUT` that
+replaces the style whole and then silently rewrites one of its fields is the
+class of surprise D141's accept-and-override was allowed only because the level
+is *forced* by a logo rather than chosen. Nothing forces a scale.
+
+**The upload path is deliberately not covered by this.** `refitForLogo` still
+returns the style unchanged when the level-H symbol cannot be fitted into the
+picture's existing size, so that code grows — the escape M58 always had, now
+stated in `api/openapi.yaml` and `docs/usage.md` rather than only in the code
+comment. Refusing there would refuse an upload the SVG draws correctly, which is
+what D174 already declined.
+
+## 2026-08-13 — M49, what the exact size falsified where nothing was looking
+
+The third attempt at the second reopening, and every item is a sentence or an
+assertion the exact-size change reached without rewriting. Nothing here changes
+behaviour; what it changes is whether the tree says true things about the
+behaviour that shipped.
+
+**Two comments on the function the change was made in.** `QRSizeInput.Size` said
+*"the output size in pixels, before snapping"* and `SetQRSize` explained that a
+size is *"derived on read rather than written into the row"*. D182 removed the
+snap and started writing `qr.Style.Size` into the row, in `SetQRSizeBySlug`
+directly below it. The size is now kept exactly until the symbol outgrows it, and the
+margin-and-scale fallback is what takes over past that point, which is what the
+comment says instead.
+
+**The assertions are the substance, and they were measured rather than
+argued.** `test/integration/qr_logo_test.go` allowed half a span of drift in two
+places and explained it as *"qr.FitSize snaps to a whole number of modules"*,
+while every sibling in the same diff had been tightened to equality and both
+`api/openapi.yaml` and `docs/usage.md` had begun promising *the identical
+integer*. Sabotage says how much that cost: a 20px error injected into
+`refitForLogo`'s target size, and a second into what `SetQRSizeBySlug` stores,
+each passes the old assertion — the spans are 46 and 45 pixels — and fails the
+new one. A test that admits the defect its own file exists to catch is not a
+weaker test, it is not a test.
+
+**One escape is real and is checked rather than assumed.** `refitForLogo` returns
+the style unchanged when the level-H symbol will not fit into the picture's
+current size, which draws a *larger* code — the escape the entry above named.
+The equality assertion is therefore preceded by a check that the fixture clears
+`qr.MinSizeFor` at H, so a fixture that ever drifts into the escape fails loudly
+instead of quietly measuring nothing. The size control has no such escape: below
+the floor it *refuses*, so the second assertion is equality unqualified.
+
+**D181's corpus description keeps its own numbers rather than the new ones.**
+`internal/qr/composite.go`'s *Where three tenths came from* is the only place
+inside `internal/qr` that says what the occlusion cap rests on, and it described
+the corpus as three stored sizes and 816 pictures. `scanStyles` returns five
+since this milestone added the band's low end. The corpus sentence is corrected
+to 1360; **the figures below it are not**, and that is deliberate — the sweep
+that chose three tenths and the zbarimg dissent were taken on the 816, and the
+two styles that grew the corpus test the *quiet zone*, not the cap. Restating
+them against 1360 would claim a measurement nobody made. The re-run over all
+1360 is in this milestone's own entry above, which is where the comment now
+points.
+
+**Two comments in `internal/httpx/api_qr_logo_test.go` cited a deleted
+mechanism** as though it were the live comparator — the `want`/`got` redirect
+pair and `qrNotice`'s snap branch, both gone with D182. The logo resize warning
+is the only such pair now, and the reasoning it was compared to is still good:
+it is the argument that deleted the snap sentence outright, and the warning
+survives it because two dimensions can still differ where two sizes cannot.

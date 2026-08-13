@@ -292,21 +292,50 @@
     {{/* One number, and it replaced two nobody knows (M49). The form asked for
          a quiet zone in modules and a module size in pixels; somebody printing
          a poster knows neither and knows how big they want it. Both are still
-         the arithmetic behind this box, derived by qr.FitSize, and the error
-         correction level moved to the API rather than staying here as a
+         the arithmetic behind this control, derived by qr.FitSize, and the
+         error correction level moved to the API rather than staying here as a
          tradeoff a dashboard user has no basis to make.
+
+         **A slider and a number since the second M49 reopening** (D182,
+         F221). A number box alone gives no sense of the range, and the sizes
+         people actually want are a short list — so the slider carries marks at
+         those sizes through a <datalist>, which is HTML's own way of saying
+         them and needs no script. It is continuous between the two ends rather
+         than stepping between the marks, which is what makes the ends
+         reachable.
+
+         **Two inputs, one setting, and the server decides which spoke.**
+         Nothing in this browser can copy a dragged slider into the box beside
+         it: this dashboard runs htmx and no script of its own, and a
+         `script-src 'self'` page is not the place to introduce one for a form
+         control. So `size_shown` witnesses the value the page was rendered
+         with and httpx.requestedQRSize applies one stated rule — the slider
+         wins when it has moved off that, the box wins otherwise. The
+         alternative was two fields that silently disagree, which is the risk
+         the milestone named.
 
          The bounds are passed in rather than typed, so the numbers the browser
          enforces and the ones internal/qr enforces cannot drift; the server
          refuses out-of-range anyway, because a `min` attribute is a
-         convenience and not a check. */}}
+         convenience and not a check. `.QRMinSize` is *this code's* floor —
+         qr.MinSizeFor over its own module count — because a bigger symbol
+         needs more pixels before it has a quiet zone anything can read. */}}
     <div class="sm:col-span-2">
       <label for="qr_size" class="block text-sm font-medium text-ink">Size</label>
-      <div class="mt-1 flex items-center gap-2">
+      <div class="mt-1 flex items-center gap-3">
+        <input id="qr_size_slider" name="size_slider" type="range" list="qr_size_stops"
+               min="{{.QRMinSize}}" max="{{.QRMaxSize}}" value="{{.QRSize}}"
+               aria-label="Size in pixels, slider"
+               class="qr-slider min-w-0 grow">
+        <datalist id="qr_size_stops">
+          {{range .QRSizeStops}}<option value="{{.}}"></option>{{end}}
+        </datalist>
         <input id="qr_size" name="size" type="number" min="{{.QRMinSize}}" max="{{.QRMaxSize}}" value="{{.QRSize}}"
-               class="block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+               aria-label="Size in pixels"
+               class="w-24 shrink-0 rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
         <span class="shrink-0 text-sm text-muted">pixels</span>
       </div>
+      <input type="hidden" name="size_shown" value="{{.QRSize}}">
     </div>
     <div class="flex items-end gap-2 sm:col-span-2">
       <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Save the style</button>
@@ -319,8 +348,14 @@
       <button type="submit" name="reset" value="1" class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-sunken">Restore defaults</button>
       {{end}}
     </div>
+    {{/* The snap sentence stood here and it is gone (D182). It said the size
+         moved to the nearest one that kept the modules whole, which is what
+         the owner set a size and watched happen: *"the number set is where it
+         should stay, the quiet zone should be reduced to fit"*. It does stay
+         now, so the paragraph says what the size is instead of apologising for
+         what it was. */}}
     <p class="text-xs text-subtle sm:col-span-2">
-      A code is a grid of squares, so the size snaps to the nearest one that keeps them whole &mdash; the picture and both downloads are then the same image at the same size. Keep the two colours far apart &mdash; a light code on a dark field is refused by many readers, which is why the picture paints its own background rather than following the page.
+      The size you set is the size that is stored and served &mdash; the picture and both downloads are the same image at that size, and the quiet zone around the code takes up whatever the grid of squares leaves over. Keep the two colours far apart &mdash; a light code on a dark field is refused by many readers, which is why the picture paints its own background rather than following the page.
     </p>
   </form>
   {{end}}

@@ -35,11 +35,15 @@ are; nothing here is imported by the product, built into it, or in the image.
 
 1. **`internal/qr`'s `TestWriteScanCorpus`** renders the corpus, off the
    shipping path — `qr.RenderPNGWithLogo`, the same call the download endpoint
-   makes — into a directory `make verify-scan` creates and removes. **816
-   pictures**, in two halves of 408:
+   makes — into a directory `make verify-scan` creates and removes. **1360
+   pictures**, in two halves of 680:
 
    - every symbol version the product's content lengths reach (3 to 36), four
-     logo shapes, at the smallest, default and largest *stored* size of each;
+     logo shapes, at five *stored* sizes each: the smallest, the default and the
+     largest, and — since M49's second reopening — two more carrying the
+     **band's low end**, a three-module quiet zone at both ends of the scale
+     range. Three modules is one below what ISO/IEC 18004 specifies and is what
+     `qr.FitSize` may now produce, so it is measured here rather than argued;
    - the **whole** version range again with no logo at all, at every level, as
      the control. The whole range and not a sample of it, because what the
      control is for is to say that a decoder's misses are the logo's doing and
@@ -75,8 +79,10 @@ Two more were considered and are not gates:
 - **`zbarimg`** is a system package, so it cannot be pinned in `package.json`
   and CI has no such binary. `--zbar` runs it when it is on `PATH` and
   **reports without gating**. It is the strictest engine to hand and its dissent
-  is recorded rather than hidden — 0.23.93, over the same 816 pictures at the
-  same five distances, one decode each:
+  is recorded rather than hidden — 0.23.93, at the same five distances, one
+  decode each. The figures below are the 816-picture corpus as it stood at
+  M50.6's reopening; the corpus is 1360 pictures since M49's second one, and the
+  re-run is in that milestone's decision entry:
 
   | | Logo'd | Control |
   | --- | --- | --- |

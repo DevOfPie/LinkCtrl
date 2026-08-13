@@ -554,17 +554,21 @@ func (s *Service) RenderQRPNGBySlug(
 type QRSizeInput struct {
 	Foreground string
 	Background string
-	// Size is the output size in pixels, before snapping.
+	// Size is the output size in pixels, and it is the size drawn: since D182
+	// nothing snaps, because the fit puts the rounding remainder into the quiet
+	// zone rather than into this number.
 	Size int
 }
 
 // SetQRSize stores a style described by its output size.
 //
 // The size is resolved against *this link's* module count, because that is what
-// decides how many pixels a scale comes to. A link whose alias grows later keeps
-// the margin and scale stored here and therefore draws slightly larger — which
-// is the same behaviour every pre-M49 style has and is why the size is derived
-// on read rather than written into the row.
+// decides how many pixels a scale comes to. The number is then written into the
+// row — `qr.Style.Size`, which SetQRSizeBySlug sets below (D182) — so a link
+// whose alias grows later goes on drawing at exactly it, until the larger symbol
+// and its minimum quiet zone no longer fit inside that many pixels. Past that
+// point the margin and scale stored alongside it take over and the picture draws
+// slightly larger, which is the same behaviour every pre-M49 style has.
 func (s *Service) SetQRSize(
 	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, in QRSizeInput,
 ) (*QRCode, qr.SizeFit, error) {
@@ -617,18 +621,32 @@ func (s *Service) SetQRSizeBySlug(
 	fit, err := qr.FitSize(code.Size, in.Size)
 	if err != nil {
 		if errors.Is(err, qr.ErrSizeOutOfRange) {
+			// **Two refusals wearing one code, and the second names a number the
+			// form cannot know** (D182). Outside [MinSize, MaxSize] is the
+			// control's own range; inside it but below what *this* symbol can
+			// hold is a floor that depends on the payload, so the sentence
+			// carries qr.MinSizeFor's answer rather than the constant.
+			message := fmt.Sprintf("a code is %d to %d pixels across; %d is not a size "+
+				"anything can be printed at", qr.MinSize, qr.MaxSize, in.Size)
+			if floor := qr.MinSizeFor(code.Size); in.Size >= qr.MinSize && in.Size < floor {
+				message = fmt.Sprintf("this code is %d modules across, so it needs at least "+
+					"%d pixels to leave a quiet zone anything can read; %d is below that",
+					code.Size, floor, in.Size)
+			}
 			return nil, qr.SizeFit{}, domain.ValidationErrors{{
-				Field: "style.size", Code: "out_of_range",
-				Message: fmt.Sprintf("a code is %d to %d pixels across; %d is not a size "+
-					"anything can be printed at", qr.MinSize, qr.MaxSize, in.Size),
+				Field: "style.size", Code: "out_of_range", Message: message,
 			}}
 		}
 		return nil, qr.SizeFit{}, fmt.Errorf("fit qr size for %s: %w", linkID, err)
 	}
 
+	// Margin as well as Size, and it is not redundant: the quiet zone in modules
+	// is what the drawing falls back to if this link's alias ever grows the
+	// symbol past what Size can hold, and a row that carried no fallback would
+	// draw at a zero quiet zone on that day.
 	stored, err := s.SetQRStyleBySlug(ctx, actor, linkID, slug, qr.Style{
 		Foreground: in.Foreground, Background: in.Background,
-		Level: current.Level, Margin: fit.Margin, Scale: fit.Scale,
+		Level: current.Level, Margin: qr.DefaultMargin, Scale: fit.Scale, Size: fit.Size,
 	})
 	if err != nil {
 		return nil, qr.SizeFit{}, err
@@ -700,6 +718,42 @@ func (s *Service) SetQRStyleBySlug(
 		normalized = normalized.ForLogo()
 		if blob, err = json.Marshal(normalized); err != nil {
 			return nil, fmt.Errorf("encode qr style: %w", err)
+		}
+	}
+	// **The size floor is the endpoint's to enforce, because a style does not
+	// carry a module count** (D182). `Normalize` range-checks `size` against
+	// [qr.MinSize] and [qr.MaxSize] and can do no more: the pixels a symbol needs
+	// are a property of the symbol, and the picture is the one thing a style has
+	// never known. Without this an API caller could store a size the symbol has
+	// outgrown at its own scale, `qr.Code.geometry` would fall back to the
+	// margin-and-scale arithmetic, and the drawing would measure something other
+	// than what was asked for. M49's claim is *the requested size is the size
+	// stored and drawn, exactly*, and it is false whichever door the style came
+	// through — so the refusal `SetQRSizeBySlug` gives the form is given to the
+	// API too.
+	//
+	// **[qr.MinSizeForStyle] rather than [qr.MinSizeFor], because this caller
+	// also set the scale.** The form's floor is the one over every module width,
+	// since the form picks the width; a style is `size` *and* `scale`, so what
+	// binds here is the floor at the scale that was actually sent. Both numbers
+	// are in the sentence, because lowering `scale` is the other way to satisfy
+	// it and a message naming one number would not say so. The size control's own
+	// writes arrive already fitted and never reach this.
+	if normalized.Size != 0 {
+		code, err := qr.Encode(QRContent(l.ShortURL, slug), normalized.Level)
+		if err != nil {
+			return nil, fmt.Errorf("encode qr for %s: %w", linkID, err)
+		}
+		if floor := qr.MinSizeForStyle(code.Size, normalized); normalized.Size < floor {
+			return nil, domain.ValidationErrors{{
+				Field: "style.size", Code: "out_of_range",
+				Message: fmt.Sprintf(
+					"this code is %d modules across, so at %d pixels a module it needs at "+
+						"least %d pixels to leave a quiet zone anything can read; %d is "+
+						"below that. Its floor at the narrowest module is %d",
+					code.Size, normalized.Scale, floor, normalized.Size,
+					qr.MinSizeFor(code.Size)),
+			}}
 		}
 	}
 	row, err := s.q.UpsertQRCode(ctx, dbgen.UpsertQRCodeParams{
@@ -903,7 +957,11 @@ func (s *Service) SetQRCodeLogo(
 // The style is returned unchanged but for the level when the fit cannot be made:
 // the target is clamped into the range qr.FitSize accepts, because a style
 // stored before M49 can describe a picture outside it, and a fit that fails must
-// not cost a logo that has already been written.
+// not cost a logo that has already been written. **Clamping is not enough on its
+// own since D182** — the level-H symbol may need more pixels than the picture it
+// is being fitted into, which is `qr.MinSizeFor`'s refusal — and that arm lands
+// here as the same "leave the style alone" answer, which draws a larger picture
+// rather than none.
 func refitForLogo(content string, style qr.Style) qr.Style {
 	out := style.ForLogo()
 	before, err := qr.Encode(content, style.Level)
@@ -914,12 +972,21 @@ func refitForLogo(content string, style qr.Style) qr.Style {
 	if err != nil {
 		return out
 	}
+	if after.Size <= before.Size {
+		// Nothing grew, so there is nothing to keep. Returning here rather than
+		// re-fitting to the same number is what makes "a style already at H comes
+		// back byte for byte" true of the struct and not only of the picture: a
+		// re-fit would rewrite a pre-M49 row into the newer form for no change a
+		// reader could see, and a row nobody asked to have rewritten is a row
+		// that should not be.
+		return out
+	}
 	want := min(max(qr.OutputSize(before.Size, style), qr.MinSize), qr.MaxSize)
 	fit, err := qr.FitSize(after.Size, want)
 	if err != nil {
 		return out
 	}
-	out.Margin, out.Scale = fit.Margin, fit.Scale
+	out.Margin, out.Scale, out.Size = qr.DefaultMargin, fit.Scale, fit.Size
 	return out
 }
 

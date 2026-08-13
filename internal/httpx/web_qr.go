@@ -201,28 +201,52 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 	in := link.QRSizeInput{
 		Foreground: strings.TrimSpace(r.PostFormValue("foreground")),
 		Background: strings.TrimSpace(r.PostFormValue("background")),
-		// No fallback that would make sense here: a size box submitted empty is
-		// somebody who cleared it, not somebody asking for the default, and -1
-		// is refused with a sentence naming the range.
-		Size: formInt(r.PostFormValue("size"), -1),
+		Size:       requestedQRSize(r),
 	}
-	_, fit, serr := h.Links.SetQRSizeBySlug(r.Context(), actor, id, slug, in)
-	if serr != nil {
+	if _, _, serr := h.Links.SetQRSizeBySlug(r.Context(), actor, id, slug, in); serr != nil {
 		h.finishQRAction(w, r, id, next, slug, serr)
 		return
 	}
+	// No `extra` any more. The size the form asked for is the size that is
+	// stored, so there is nothing for the far side to report (D182); the pair of
+	// numbers that travelled here was the snap, and the snap is gone.
+	seeOther(w, r, qrReturn(next, id, "styled", slug, nil))
+}
 
-	// Only when it moved. A redirect carrying "you asked for 300 and got 300"
-	// would put a sentence on the page for every save, which is how a message
-	// that matters stops being read.
-	var extra url.Values
-	if fit.Snapped() {
-		extra = url.Values{
-			"want": {strconv.Itoa(fit.Requested)},
-			"got":  {strconv.Itoa(fit.Size)},
-		}
+// requestedQRSize reads the size control, which is two inputs and a witness
+// since the second M49 reopening (D182).
+//
+// **A slider and a number for one value, and no script to keep them in step.**
+// The dashboard runs on htmx and nothing else, so nothing in the browser can
+// copy a dragged slider into the number beside it — and the milestone's own risk
+// names the failure that invites: the number becoming a second source of truth
+// for the same setting. The rule here is what stops it, and it is decided on the
+// server where it can be tested:
+//
+//	`size_shown` is the value the form was rendered with.
+//	The slider wins when it has moved off that; otherwise the number does.
+//
+// So dragging the slider and pressing save uses the slider, typing in the box
+// and pressing save uses the box, and moving both uses the slider — one rule,
+// stated, rather than whichever input the browser happened to serialise first.
+//
+// A form with no slider at all — an API-shaped post, or a page cached from
+// before this reopening — is the number alone, which is what M49 shipped.
+//
+// The fallback for an empty or unreadable box is -1 and not a default: a size
+// box submitted empty is somebody who cleared it, not somebody asking for the
+// default, and -1 is refused downstream with a sentence naming the range.
+func requestedQRSize(r *http.Request) int {
+	typed := formInt(r.PostFormValue("size"), -1)
+	raw := r.PostFormValue("size_slider")
+	if raw == "" {
+		return typed
 	}
-	seeOther(w, r, qrReturn(next, id, "styled", slug, extra))
+	slider := formInt(raw, -1)
+	if shown := formInt(r.PostFormValue("size_shown"), -1); slider != shown {
+		return slider
+	}
+	return typed
 }
 
 // LinkQRLogo stores an image against the code the panel is open on (M50.5).
@@ -291,8 +315,8 @@ func (h *Web) LinkQRLogo(w http.ResponseWriter, r *http.Request) {
 
 // dims writes a WxH pair for the query string, and dimsParam reads one back.
 //
-// Re-derived rather than echoed, exactly as sizeParam is and for the same
-// reason: these arrive in a URL anybody can edit, and a sentence assembled from
+// Re-derived rather than echoed, on the reason the size control's own pair used
+// to be: these arrive in a URL anybody can edit, and a sentence assembled from
 // a query string is a sentence somebody else can write. Anything that is not two
 // integers inside the bounds a stored logo actually has says nothing, which
 // leaves the ordinary "logo stored" message.
@@ -409,28 +433,17 @@ func formInt(raw string, fallback int) int {
 
 // qrNotice turns the ?qr= marker into a sentence.
 //
-// **The snap is reported here or nowhere.** m49.md requires the size actually
-// produced to appear beside the one that was asked for, and after the redirect
-// the form shows the produced size with nothing to say it is not the number the
-// reader typed. So the pair travels in the query and this is where it is spent.
-//
-// Both numbers are re-derived as integers rather than echoed: they arrive in a
-// URL anybody can edit, and a sentence built from a query string is a sentence
-// somebody else can write. A value that is not a number in range says nothing,
-// which leaves the ordinary "restyled" message.
+// **The snap had a sentence here and it is gone** (D182). M49 required the size
+// actually produced to appear beside the one that was asked for, because the two
+// could differ; the second reopening made them the same number at every value,
+// so the pair no longer travels in the query and there is nothing to spend it
+// on. A message explaining that 300px came out as 300px is the kind of sentence
+// that teaches readers to stop reading them.
 func qrNotice(q url.Values) string {
 	switch q.Get("qr") {
 	case "styled":
-		const unchanged = "The code says the same thing — a style changes how it is " +
-			"drawn, never what it encodes."
-		want, wok := sizeParam(q.Get("want"))
-		got, gok := sizeParam(q.Get("got"))
-		if !wok || !gok || want == got {
-			return "QR code restyled. " + unchanged
-		}
-		return fmt.Sprintf("QR code restyled, and drawn at %dpx rather than the %dpx you "+
-			"asked for: a code is a whole number of squares, and %dpx is the nearest size "+
-			"that keeps them whole. %s", got, want, got, unchanged)
+		return "QR code restyled. The code says the same thing — a style changes how it " +
+			"is drawn, never what it encodes."
 	case "reset":
 		// It says defaults rather than colours because the button does: M49 put
 		// a size on this form and reset clears that too, so the old sentence
@@ -476,19 +489,4 @@ func qrNotice(q url.Values) string {
 	default:
 		return ""
 	}
-}
-
-// sizeParam reads a pixel size out of the query string.
-//
-// Bounded above by what internal/qr will draw and below by one pixel rather than
-// by qr.MinSize: the *requested* size is inside the range, but the size it snaps
-// to can sit below the floor — the shortest code at the smallest scale is 58px,
-// and a request for 64 lands there. Refusing to mention that would suppress the
-// sentence in exactly the case it explains most.
-func sizeParam(raw string) (int, bool) {
-	n, err := strconv.Atoi(raw)
-	if err != nil || n < 1 || n > qr.MaxSize {
-		return 0, false
-	}
-	return n, true
 }

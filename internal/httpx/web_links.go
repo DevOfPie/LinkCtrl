@@ -638,10 +638,23 @@ type linkQRView struct {
 	// and QRMaxSize bound the input, passed in rather than written into the
 	// template so the numbers the form offers cannot drift from the ones
 	// internal/qr accepts.
+	//
+	// **QRMinSize is this code's floor and not the package's** (D182). The
+	// pixels a symbol needs are a property of the symbol — 64 draws a 25-module
+	// code and cannot draw an 89-module one — so `qr.MinSizeFor` answers it per
+	// code and the browser enforces the same number the server does. It never
+	// goes below qr.MinSize, which is the control's own floor.
 	QRSize    int
 	QRMinSize int
 	QRMaxSize int
-	QRStored  bool
+	// QRSizeStops are the marks the slider draws, owner-chosen: powers of two
+	// plus the three figures that matter at 300dpi (D182). They are suggestions
+	// and not the only reachable values — the slider is continuous between
+	// QRMinSize and QRMaxSize, which is what "the range ends reachable" means.
+	// A stop below this code's floor is dropped rather than drawn, because a
+	// mark the server would refuse is a mark that lies.
+	QRSizeStops []int
+	QRStored    bool
 	// QRDownload is the SVG and QRDownloadPNG the raster (M49). Both, because
 	// the vector is the right file for anything that will be resized again and
 	// the raster is the one every other program can open — which is the gap the
@@ -1066,7 +1079,20 @@ const qrThumbScale = 3
 // almost nothing — internal/qr resamples the image to the box it is drawn in,
 // and this box is three tenths of a 96-pixel drawing.
 func qrThumb(content string, style qr.Style, logo []byte) template.HTML {
-	style.Scale = qrThumbScale
+	// **The size has to be cleared as well as the scale, since D182.** A stored
+	// style carries a picture size in pixels now, and that size wins over the
+	// scale wherever both are set — so setting the scale alone would leave the
+	// thumbnail drawing at the reader's chosen 2048px with an enormous quiet
+	// zone, which is the exact opposite of what this function is for. Clearing it
+	// puts the drawing back on the margin-and-scale geometry, which is the one
+	// that answers to `qrThumbScale`.
+	style.Size, style.Scale = 0, qrThumbScale
+	if style.Margin == 0 || style.Margin > qr.DefaultMargin {
+		// And the quiet zone with it: a row from the old margin search can carry
+		// up to sixteen modules, which at three pixels each is most of a 96-pixel
+		// picture. The thumbnail is a picture of the code, so it takes the floor.
+		style.Margin = qr.DefaultMargin
+	}
 	svg, err := qr.RenderClassWithLogo(content, style, ui.QRThumbClass, logo)
 	if err != nil {
 		return ""
@@ -1092,6 +1118,7 @@ func (h *Web) linkQR(
 		QRSourceLabel:      domain.ClickSourceQR,
 		QRMinSize:          qr.MinSize,
 		QRMaxSize:          qr.MaxSize,
+		QRSizeStops:        qrSizeStops(qr.MinSize),
 		QRMaxCodes:         domain.MaxQRCodesPerLink,
 		QRMaxLabel:         domain.MaxQRCodeLabelLength,
 		QRMaxLogoBytes:     qr.MaxLogoUploadBytes,
@@ -1139,6 +1166,20 @@ func (h *Web) linkQR(
 		logo, _ = h.Links.QRCodeLogo(ctx, actor, l.ID, slug)
 	}
 
+	// This code's own size floor, and the stops that survive it. Encoded at the
+	// level the picture is *drawn* at rather than the one the row holds, which is
+	// the defence qrCodeFrom and SetQRSizeBySlug already make: a logo forces H,
+	// H is a larger symbol, and a symbol's module count is what its floor is
+	// derived from.
+	drawn := code.Style
+	if code.HasLogo {
+		drawn = drawn.ForLogo()
+	}
+	if encoded, eerr := qr.Encode(code.Content, drawn.Level); eerr == nil {
+		view.QRMinSize = max(qr.MinSize, qr.MinSizeFor(encoded.Size))
+		view.QRSizeStops = qrSizeStops(view.QRMinSize)
+	}
+
 	svg, err := qr.RenderWithLogo(code.Content, code.Style, logo)
 	if err != nil {
 		view.QRError = "The QR code could not be drawn."
@@ -1160,6 +1201,29 @@ func (h *Web) linkQR(
 		view.QRThumbSVG = qrThumb(def.Content, def.Style, defLogo)
 	}
 	return view
+}
+
+// qrSizeStopsAll is every mark the size slider can draw, owner-chosen (D182):
+// the powers of two between 128 and 2048, plus 300, 600 and 1200 — the three
+// figures that matter at 300dpi, being one inch, two and four.
+//
+// A package-level slice so the numbers exist in one place; qrSizeStops copies
+// out of it rather than handing it to a template, because a template that was
+// handed this would be handed something it could not be prevented from keeping.
+var qrSizeStopsAll = []int{128, 256, 300, 512, 600, 1024, 1200, 2048}
+
+// qrSizeStops is the marks at or above a code's own floor.
+//
+// A stop the server would refuse is a stop that lies: an 89-module code cannot
+// be drawn at 128px, so the mark at 128 would be an offer the save turns down.
+func qrSizeStops(floor int) []int {
+	out := make([]int, 0, len(qrSizeStopsAll))
+	for _, s := range qrSizeStopsAll {
+		if s >= floor && s <= qr.MaxSize {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // qrCodeExists says whether the list holds the slug the panel was opened on.
