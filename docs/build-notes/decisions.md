@@ -344,6 +344,7 @@ file. Append a row when you append an entry.
 | [M49, the exact-size claim gets an enforcement on the API](#2026-08-13--m49-the-exact-size-claim-gets-an-enforcement-on-the-api) | `PUT /links/{id}/qr` accepted a `size` the symbol had outgrown and served a picture that was not it, falsifying the reopening's first bullet on the door the dashboard's control does not guard. It refuses now, at `qr.MinSizeForStyle` — the floor at the caller's own `scale`, because an API caller sets both fields and `MinSizeFor` binds only when the scale is chosen too. Rejected: re-fitting `scale` server-side, which would silently rewrite a field the caller set. The logo re-fit's escape from *the drawn size is held* stays, and is now written down outside the code comment |
 | [M49, what the exact size falsified where nothing was looking](#2026-08-13--m49-what-the-exact-size-falsified-where-nothing-was-looking) | Four survivals of the snap, in files the change reached but did not rewrite: two comments on `QRSizeInput`/`SetQRSize` still describing a snap and a size derived on read, D181's corpus description in `composite.go` left at three stored sizes and 816 pictures, two integration assertions still allowing half a span, and two comments citing the deleted `want`/`got` pair as live. The assertions are the substance — sabotage measured both passing a 20px drift they are meant to catch. `composite.go` keeps its 816-picture figures rather than restating them, because the two styles that grew the corpus test the quiet zone and not the cap |
 | [M50.7's plan review, and the three records it caught before anything was built](#2026-08-13--m507s-plan-review-and-the-three-records-it-caught-before-anything-was-built) | Thirteen findings from planning.md §7's independent review. Three count sentences corrected, and W43 found breached by the very commit that added M50.7 — M57.9's *what the re-run owes* list never named either QR-tab report or the three decisions that came with them, the **third** time that paragraph has been caught short by a plan review. The sharpest finding is held open deliberately: M50.7 claims nothing it touches is defective and then deletes M49's shipped preview claim |
+| [Five owner answers, taken between milestones, before anything is built against them](#2026-08-13--five-owner-answers-taken-between-milestones-before-anything-is-built-against-them) | Carries no milestone number because none was under way. A stored size re-fits whenever the payload grows, silently unless the size itself must rise; the `N/20` counter and the tab badge are different quantities so both stand; M50.7 stays one milestone with the popover priced honestly; **QR generation stays on the server** — it is already not stored, and a client encoder would cost three shipped claims; and the preview paragraph **reopens M49 a third time** rather than being reversed from M50.7, the owner taking the strict route over the cheap one |
 | [M50 rebuilt: the default is a flag, and the untagged bucket is what makes that free](#2026-08-13--m50-rebuilt-the-default-is-a-flag-and-the-untagged-bucket-is-what-makes-that-free) | The build of D183, and the two things it left open. Promotion goes to the **oldest** code left, the only candidate that is a property of the data rather than of a surface. Today's default gains a slug **on its row**, and the redirect path is untouched: an untagged scan still records the bare `qr` and the breakdown folds that bucket onto the flag-holder, so no recorded scan is rewritten and no link's history splits. A code gains a slug when it **stops being alone**, because handing one out on a style write would falsify M41's *restyling never changes what a code says*. The statement that takes the empty slug off a row writes the flag in the same clause — for a row the previous release left behind the two are spellings of one fact — and the removal refusal counts the codes a link **has** rather than the rows it stores, because those differ by one on exactly that link |
 
 ---
@@ -28583,3 +28584,59 @@ statement and the next inside a single service call, which this repository has n
 hook for; the state the retry converges on is the ordinary multi-code case and is
 covered. `CreateQRCode` handles the mirror-image collision on `NameQRCode` the
 same way and for the same reason.
+
+## 2026-08-13 — Five owner answers, taken between milestones, before anything is built against them
+
+No milestone was under way. Prompted by two reviewers' findings on M50's
+reopening and by [M50.7](phase-details/m50.7.md)'s plan review, all put to the
+owner together.
+
+**One — a stored size that stops being exact when the payload grows
+([F225](deferred-findings.md), [F226](deferred-findings.md)).** Naming a code
+appends `&qrc=<slug>`, which pushes a 29-module symbol to 33, so a code stored at
+its own floor draws 70px before it gains a sibling and 82px after. **Re-fit the
+row whenever the payload changes**, the shape `refitForLogo` already uses when a
+logo forces level H — one rule for both, which is what F226 asked for. The owner
+added the part that makes it cheap: *"Raising the lower limit would have next to
+no affect on almost any use case unless it starts to go above a 128px minimum,
+which I expect people to rarely utilize. They are more likely to start around
+256px or 512px especially with their logos added."* And the notification rule:
+*"The user doesn't need to be notified unless we need to raise the currently
+selected size."* So a re-fit that keeps the size is silent; only a re-fit that
+must push the size **up** is reported.
+
+**Two — the `N/20` counter and the QR tab badge.** They are not the same
+quantity and the duplication objection does not hold: *"The badge count should
+only be the current number. This would be a second counter that provides the
+additional information of the maximum limit of codes, which is unnecessary
+information in the badge and a waste of limited space."* Badge keeps the bare
+count; the panel carries `N/20`.
+
+**Three — M50.7 stays one milestone**, with the popover's anchor-name plumbing
+and a kept browser spec priced into the plan and its risk section before a worker
+starts, rather than split at the seam its plan review drew.
+
+**Four — QR generation stays on the server.** The owner asked for it to move to
+the client and for the code to stop being stored. It is already not stored:
+`qr_codes` holds `style` jsonb and, if one was uploaded, a `logo` bytea — every
+SVG and PNG is generated per request. Put that way, with the three shipped claims
+a client-side encoder would cost — `ui` stays stdlib-only with no CDN and
+`script-src 'self'`; M49's *one arithmetic, two encoders*; and the API still
+needing a server encoder, so there would be two implementations to hold
+identical — the owner took **no change**.
+
+**Five — the preview paragraph reopens [M49](phase-details/m49.md) a third
+time.** Removing it is the owner's item 3B and it falsifies M49's *the
+stored-vs-drawn distinction is stated where the preview renders*, which is also
+[F213](deferred-findings.md)(a)'s closure with a test behind it. Offered the
+cheaper route — M50.7 removes it and names the reversal — the owner chose the
+strict one: the milestone that made the claim is the milestone that takes it
+back.
+
+**What that reopening carries** is both this answer and answer one, because both
+falsify the same milestone's claim and splitting them across two numbers is what
+reopening exists to avoid. The owner's own reading of the paragraph is the
+argument for deleting it: *"The message specifies that the stored size is X
+pixels, which is not an amount of data or a true representation of size of the
+image"* — the word **stored** means the size field on the style row, and it was
+read as bytes by the person who commissioned the sentence.
