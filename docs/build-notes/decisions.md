@@ -349,6 +349,7 @@ file. Append a row when you append an entry.
 | [M49, a size is fitted against a payload and a payload can change (D185)](#2026-08-13--m49-a-size-is-fitted-against-a-payload-and-a-payload-can-change-d185) | The third reopening, built. `CreateQRCode` is the one operation that changes what an *existing* code encodes, so it re-fits both rows: the size the reader set is kept wherever the larger symbol admits a scale — 512px keeps 512 and moves the scale — and rises to that code's own floor where none does, reported then and silent otherwise. `fitStyleTo` is the arithmetic shared with `refitForLogo`; the arm where nothing fits is **not** shared, because D174's number is one nobody chose. The preview paragraph and `TestTheQRPreviewSaysWhichSizeIsServed` are gone, with F213(a) re-pointed at the fixed frame. A link's alias and the read-only viewer's lost number are filed as F228 and F229 rather than taken |
 | [M50.6, the level is a rule and the tab does not print it (D186)](#2026-08-13--m506-the-level-is-a-rule-and-the-tab-does-not-print-it-d186) | D186 — the tab does not print the level and names it where it changes. D184's *weakest level* is read as the product default `M` rather than as `L`; the build's unset-only reading was offered and overruled by D187, so nothing is migrated and a stored `M` is inert. Where the floor cannot raise the symbol the module count is `M`'s, which is what carries M49's exact size through it — and where it can, every site that fits a size encodes through the rule |
 | [M50.6, the rule binds a level somebody named, and D187](#2026-08-13--m506-the-rule-binds-a-level-somebody-named-and-d187) | D187 — the free-level rule is a floor under every code, not a default for codes that named nothing. Owner-answered against the build's recommendation: the drawn level is the stronger of what the row names and what the rule gives, so a named `L` where `Q` is free is drawn at `Q`. The rule never lowers, which is what keeps `H` under a logo; the API's `level` is honoured upward and ignored downward |
+| [M50.7's plan, three answers taken before a worker exists](#2026-08-13--m507s-plan-three-answers-taken-before-a-worker-exists) | D188 — the QR tab's prose is bounded at **900** characters, over 1200 and 1500, with the cost of reaching it named and taken. The default control becomes a filled/empty icon on **every** row, which is neither shape offered — the state becomes readable without reading, at the price of an inert control on the default's own row and a radio group's semantics. Rename's server side stays when its button goes, commented as deliberately unreachable |
 
 ---
 
@@ -28996,3 +28997,52 @@ side of a trade the build recommended — [D182](../../Plan.md#phase-3-decisions
 was the first — and both times the recommendation was the one that would have
 cost the actor making it less work. That is worth recording as a pattern rather
 than as two coincidences.
+
+## 2026-08-13 — M50.7's plan, three answers taken before a worker exists
+
+Not a milestone's entry — nothing was under way. These are the owner's answers
+to the three things [planning.md §7](planning.md#7-review-it-before-anything-is-built-against-it)
+makes a prompt rather than a correction: each changes a definition of done in
+[m50.7.md](phase-details/m50.7.md), which the plan review's thirteen findings
+had left the orchestrator no way to fix silently.
+
+**D188 — the QR tab's prose is bounded at 900 characters**, over 1200 and 1500.
+The measurement and its method are in the milestone file: 1906 characters today
+across seven paragraphs, counted as text inside `<p>` with template actions and
+tags removed. 900 is below the 1081 the four obvious cuts reach, so it is a
+number the build has to work at.
+
+The option was offered with its cost named — reaching it means cutting into the
+size-and-contrast paragraph, whose *contrast* half explains a refusal that still
+exists and that no control on the tab states — and the owner took it anyway.
+That is recorded here rather than left in the question, because *we were told
+what this costs and chose it* is exactly the thing this project loses. The build
+keeps the contrast sentence and finds the characters elsewhere if it can, and
+says which explanation it dropped if it cannot.
+
+**The default control becomes a filled/empty icon on every row.** Owner-set, and
+**neither of the two shapes offered** — not a labelled button beside the download
+menu, not an entry inside it: *"an icon button on every row, it becomes filled in
+when the row is the default and empty when it isn't. It should update all the
+icons when any of the icons is changed."*
+
+What that buys is a list where *which code is the default* is readable without
+reading, and it is why the answer is better than either option: both of those
+put a control on the rows that are **not** the default and nothing on the one
+that is, so the state was legible only from the sentence in the meta line. The
+cost is that the default's row gains an inert control, and that an exclusive set
+of icons is a radio group whose semantics have to be drawn — one filled icon per
+list, always exactly one, since [D183](#2026-08-12--m50-the-default-code-becomes-a-property-rather-than-an-absence-and-d183)
+guarantees a link has a default.
+
+*Every icon updates when any one is clicked* costs nothing new: the control posts
+and the handler redirects, so the list re-renders whole. **No swap and no script
+are added**, which keeps `script-src 'self'` and the stdlib-only rule where they
+are. A build that finds it needs one has changed the bullet and owes a prompt.
+
+**Rename's server side stays** when its button goes, over deleting both. The
+branch becomes unreachable from the dashboard, so the milestone comments it as
+deliberately unreachable and names what still reaches the same write — the API's
+`PUT /links/{id}/qr/codes/{slug}`, which replaces a code's label and style whole.
+Deleting it would have been defensible; leaving it undocumented would not, and an
+unreachable branch with no comment is what the next reader removes on sight.
