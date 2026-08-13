@@ -346,6 +346,7 @@ file. Append a row when you append an entry.
 | [M50.7's plan review, and the three records it caught before anything was built](#2026-08-13--m507s-plan-review-and-the-three-records-it-caught-before-anything-was-built) | Thirteen findings from planning.md §7's independent review. Three count sentences corrected, and W43 found breached by the very commit that added M50.7 — M57.9's *what the re-run owes* list never named either QR-tab report or the three decisions that came with them, the **third** time that paragraph has been caught short by a plan review. The sharpest finding is held open deliberately: M50.7 claims nothing it touches is defective and then deletes M49's shipped preview claim |
 | [M50 rebuilt: the default is a flag, and the untagged bucket is what makes that free](#2026-08-13--m50-rebuilt-the-default-is-a-flag-and-the-untagged-bucket-is-what-makes-that-free) | The build of D183, and the two things it left open. Promotion goes to the **oldest** code left, the only candidate that is a property of the data rather than of a surface. Today's default gains a slug **on its row**, and the redirect path is untouched: an untagged scan still records the bare `qr` and the breakdown folds that bucket onto the flag-holder, so no recorded scan is rewritten and no link's history splits. A code gains a slug when it **stops being alone**, because handing one out on a style write would falsify M41's *restyling never changes what a code says*. The statement that takes the empty slug off a row writes the flag in the same clause — for a row the previous release left behind the two are spellings of one fact — and the removal refusal counts the codes a link **has** rather than the rows it stores, because those differ by one on exactly that link |
 | [Five owner answers, taken between milestones, before anything is built against them](#2026-08-13--five-owner-answers-taken-between-milestones-before-anything-is-built-against-them) | Carries no milestone number because none was under way. A stored size re-fits whenever the payload grows, silently unless the size itself must rise; the `N/20` counter and the tab badge are different quantities so both stand; M50.7 stays one milestone with the popover priced honestly; **QR generation stays on the server** — it is already not stored, and a client encoder would cost three shipped claims; and the preview paragraph **reopens M49 a third time** rather than being reversed from M50.7, the owner taking the strict route over the cheap one |
+| [M49, a size is fitted against a payload and a payload can change (D185)](#2026-08-13--m49-a-size-is-fitted-against-a-payload-and-a-payload-can-change-d185) | The third reopening, built. `CreateQRCode` is the one operation that changes what an *existing* code encodes, so it re-fits both rows: the size the reader set is kept wherever the larger symbol admits a scale — 512px keeps 512 and moves the scale — and rises to that code's own floor where none does, reported then and silent otherwise. `fitStyleTo` is the arithmetic shared with `refitForLogo`; the arm where nothing fits is **not** shared, because D174's number is one nobody chose. The preview paragraph and `TestTheQRPreviewSaysWhichSizeIsServed` are gone, with F213(a) re-pointed at the fixed frame. A link's alias and the read-only viewer's lost number are filed as F228 and F229 rather than taken |
 
 ---
 
@@ -28640,3 +28641,99 @@ argument for deleting it: *"The message specifies that the stored size is X
 pixels, which is not an amount of data or a true representation of size of the
 image"* — the word **stored** means the size field on the style row, and it was
 read as bytes by the person who commissioned the sentence.
+
+## 2026-08-13 — M49, a size is fitted against a payload and a payload can change (D185)
+
+The third reopening of [M49](phase-details/m49.md), built. The scheduling was
+[the owner's five answers](#2026-08-13--five-owner-answers-taken-between-milestones-before-anything-is-built-against-them)
+and is not re-decided here; what follows is what the build settled, and the two
+places it declined to go.
+
+**The defect in one sentence.** A size is resolved against a module count, and a
+module count is a property of what the picture encodes. `CreateQRCode` is the one
+operation that changes what an *existing* code encodes — it gives the link's
+default code a printed identity, because that is the moment there is something to
+tell it apart from — and `&qrc=` plus eight characters pushed the measured payload
+from 29 modules to 33. A row fitted at 70px then no longer held the larger symbol
+and its quiet zone, `fitGeometry` fell back to margin-and-scale, and the picture
+came out 82px against a row that said 70. That is
+[F225](deferred-findings.md#closed) on the created code and
+[F226](deferred-findings.md#closed) on the default one, and it is the second
+reopening's *the requested size is the size stored and drawn, exactly* made false
+by an operation nobody performed on the code it happened to.
+
+**The rule: re-fit the row, keep the number, raise only where the number cannot
+be kept.** `link.refitForPayload` holds it. The size the reader chose survives
+wherever the larger symbol admits any scale that draws it, which is nearly
+everywhere — 512px on the measured payload keeps 512 and moves the scale from 14
+to 12, and a scale is not a number anybody set. Where it cannot, the size rises
+to `qr.MinSizeFor` — that code's own floor, 78px on the measurement — and the
+rise is reported. Owner-set, both halves: *"Raising the lower limit would have
+next to no affect on almost any use case"*, and *"The user doesn't need to be
+notified unless we need to raise the currently selected size."*
+
+**The re-fit is asked for on every create, not only where the slug was written**,
+and the guard is what makes that free: `refitStoredQRCode` re-fits, compares, and
+runs no statement when nothing moved — which for a healthy row is always. Asking
+unconditionally is what repairs a row an *earlier* release left stale, which is
+every link that grew a second code before this rule existed, and it is what keeps
+the sentence the reader is shown true: the created code inherits the default's
+style, so a default left unrepaired would hand the new code a size the code it
+was copied from is not. `TestAStaleStoredSizeIsRepairedByTheNextCreate` is that
+case, seeded as the previous release wrote it.
+
+**One arithmetic, two callers, and the callers differ on purpose.**
+`link.fitStyleTo` is what `refitForLogo` and `refitForPayload` share, because a
+size that has stopped matching its payload is one defect with two doors — a logo
+raising the level, a slug lengthening the content — and two copies of it would be
+two answers. What is *not* shared is the arm where no scale fits. `refitForLogo`
+leaves the style alone there and draws a larger picture, which is D174's bargain:
+the number it holds is one nobody chose, and the re-fit was bought on moving the
+style no further than it must. `refitForPayload` raises and reports, because the
+number it holds is one somebody typed. **This is the reading of "one rule for
+both" the build took**, and the other reading was available: m49.md's bullet says
+*the shape `refitForLogo` already uses … and one rule for both, which is what
+F226 asked for*, and F226's own Reviewed cell says *one rule answers both* — of
+the two findings. Reading it as *one rule for the logo path and the payload path*
+would have changed M50.6's shipped upload behaviour inside M49's diff, for a
+corner neither finding is about.
+
+**A style carrying no size is left exactly as written**, which is the read-forward
+claim M49 has made since it shipped. Such a row is the pre-M49 form and the size
+it means has always been whatever its margin and scale multiply out to against
+the payload of the day: it grows with the payload by construction, so there is no
+number to keep and nothing to report. Re-fitting it would rewrite a row nobody
+asked to have rewritten into the newer form.
+
+**The notice, and where it is not.** The dashboard carries both numbers through
+the redirect and re-derives them on the far side, on `dimsParam`'s reason — a
+sentence assembled out of a query string is a sentence somebody else can write —
+and `sizeParam` refuses anything outside `[qr.MinSize, qr.MaxSize]`. The API
+answers `refit: {from, to}` on the create, present only when it happened, exactly
+as `resampled` is present only on an upload that was shrunk. It is **not** on the
+logo path, and that is the same declining as above rather than an omission.
+
+**The preview paragraph is gone, and this milestone is what took its own claim
+back.** The first reopening required *the stored-vs-drawn distinction is stated
+where the preview renders*; D182 then made the two one number, so the sentence
+had no distinction left to state, and the owner read *stored* in the sentence
+they had commissioned as an amount of data. `TestTheQRPreviewSaysWhichSizeIsServed`
+went with it and `TestThePreviewDoesNotCallASizeStored` stands in its place —
+deleting a test and asserting nothing leaves the removal indistinguishable from
+nobody having looked. The bullet in m49.md is marked reversed rather than edited,
+and [F213](deferred-findings.md#closed)'s Closed-by cell now says what limb (a)
+rests on, which is the fixed frame and its own test.
+
+**Two things this deliberately did not do**, both filed rather than taken:
+
+- **A link's alias is the other payload change**, and it is not re-fitted here.
+  Renaming a link into a longer alias grows every one of its codes' payloads by
+  the same mechanism, and `link.Service.Update` touches no `qr_codes` row. The
+  bullet's reach is *every path that lengthens a payload re-fits **the row it
+  touches***, and the reopening's own risk section names the reach as *wherever a
+  slug is written, promoted or cleared*. [F228](deferred-findings.md#open).
+- **The size number is now only in the style form**, which draws under
+  `links.update`. A reader with `links.read` alone saw it in the paragraph and
+  sees it nowhere. The owner's argument for deleting was *the slider prints it two
+  lines below*, which is true for an editor and not for a viewer — a case the
+  answer did not consider. [F229](deferred-findings.md#open).

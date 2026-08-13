@@ -564,6 +564,17 @@ migrations run at boot.
   there is something to tell it apart from — and until then it carries the
   picture it always had.
 
+  **Adding a code keeps every size exact, and says so on the one occasion it
+  cannot.** A printed identity makes what your original code encodes a little
+  longer, and a longer payload sometimes needs a bigger grid of squares. Both
+  codes are re-measured against what they now encode: almost always the size you
+  set is kept and only the squares behind it change, and there is nothing worth
+  saying. When that size is too small to hold the bigger grid with a margin
+  anything can read — which takes a code sitting at the very bottom of the size
+  control — it is raised to the smallest size that does, and you are told, with
+  both numbers. What is never allowed is a code that says one size and produces
+  another.
+
   A link carries up to twenty codes. Twenty is the number that keeps the panel a
   list and the analytics a chart rather than a wall.
 
@@ -688,10 +699,10 @@ migrations run at boot.
   form afterwards keeps whatever it was set to rather than resetting it.
 
   **The preview keeps its own size.** The frame beside the form is a fixed
-  square, and a code bigger than it is drawn scaled down to fit; the number under
-  the picture is the size that is *served*, which is what both downloads and the
-  API answer with — named as a stored size on a styled code and as the default on
-  one that is not. Setting 2048px changes the file rather than the page.
+  square, and a code bigger than it is drawn scaled down to fit, so setting
+  2048px changes the file rather than the page. The size itself is in the
+  control below it — in the box and on the slider — which is where somebody
+  setting it is looking.
 
   **The reset button says *Restore defaults*.** It used to say *Back to black on
   white*, which named the colours — it clears the size too.

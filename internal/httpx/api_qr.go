@@ -238,12 +238,24 @@ func (a *LinkAPI) CreateQRCode(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, r, err)
 		return
 	}
-	code, err := a.Links.CreateQRCode(r.Context(), IdentityFrom(r.Context()), id, req.Label)
+	code, rise, err := a.Links.CreateQRCode(r.Context(), IdentityFrom(r.Context()), id, req.Label)
 	if err != nil {
 		WriteError(w, r, err)
 		return
 	}
-	WriteJSON(w, http.StatusCreated, map[string]any{"code": code, "levels": qr.Levels})
+	body := map[string]any{"code": code, "levels": qr.Levels}
+	// **Present only when it happened**, on `resampled`'s terms (D185). This
+	// operation gives the link's existing default code a printed identity, which
+	// lengthens what that code encodes and can push it past what its stored
+	// `style.size` holds; the size then rises to the smallest one the larger
+	// symbol admits, on **both** rows. A `201` with no other difference would
+	// tell a client that a code it configured elsewhere is still the size it set
+	// it to. Absent means every size was kept, which is the usual answer — so a
+	// client that never sees this key is a client this never applied to.
+	if rise.Rose() {
+		body["refit"] = map[string]any{"from": rise.From, "to": rise.To}
+	}
+	WriteJSON(w, http.StatusCreated, body)
 }
 
 // GetQRCode answers with one named code.

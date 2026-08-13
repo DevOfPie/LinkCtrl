@@ -348,6 +348,16 @@ it has nothing to be told apart from, so it carries the picture it always had
 with nothing added to the payload; adding a second code is what gives it a
 `qrc` of its own, and from then on what you download carries it.
 
+**That makes what it encodes a little longer, and both codes are re-measured
+against it.** A longer payload sometimes needs a bigger grid of squares. Almost
+always the size you set is kept and only the squares behind it change, and there
+is nothing worth saying about it; when the size is too small to hold the bigger
+grid with a margin anything can read — which takes a code sitting at the very
+bottom of the size control — it is raised to the smallest size that does and you
+are told, with both numbers. Over the API the same rise comes back as `refit` on
+the create. What is never allowed is a code that says one size and produces
+another.
+
 **Nothing you have already printed changes what it counts as.** Every copy of the
 original code already printed, mounted or published carries no `qrc` at all, and
 a scan of one is counted against whichever code is the link's **default** — which
@@ -409,13 +419,13 @@ short link, more for a long one. The slider starts at that number rather than at
 64, and drops any stop below it.
 
 **The preview keeps its own size.** The frame beside the form is 18rem square
-whatever you set, and a code larger than that is drawn scaled down to fit it —
-the number under it is the size that is *served*, which is what both downloads
-and the API answer with. On a code you have styled that is the size you stored;
-on one you have not, the caption says so and gives you the default it is served
-at instead. Before this the frame grew with the setting until it hit the
-edge of the column, which made the largest size a page you had to scroll rather
-than a file you could print.
+whatever you set, and a code larger than that is drawn scaled down to fit it, so
+what you read the size off is the control rather than the picture. Before this
+the frame grew with the setting until it hit the edge of the column, which made
+the largest size a page you had to scroll rather than a file you could print.
+*(A caption under the picture repeated the served size until 2026-08-13; it
+called that number the "stored size", which reads as an amount of data rather
+than as a measurement of the image.)*
 
 **The size you set is the size you get, exactly.** Ask for 500 pixels and the
 file is 500 pixels across. A code is a grid of squares and an arbitrary pixel

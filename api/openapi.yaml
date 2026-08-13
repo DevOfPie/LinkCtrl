@@ -2052,6 +2052,19 @@ paths:
         with the PUT below; omitting it starts the code at the style the link is
         already drawing at, so a second poster looks like the first one.
 
+        **This is the one operation that changes what an existing code
+        encodes**, and it re-fits that code's stored size rather than letting
+        the drawing discover the change. A link whose only code has no slug
+        gains one here — that is the moment there is something to tell it apart
+        from — and `&qrc=<slug>` on the end of a payload can push it into a
+        larger symbol than its stored `style.size` holds with a quiet zone
+        anything can read. Both rows are re-fitted: nearly always the size is
+        kept and only `style.scale` moves, and where it cannot be kept the size
+        rises to the smallest one that works and the response carries `refit`
+        with both numbers. Nothing already printed changes what it says —
+        a picture carrying no `qrc` is still counted against whichever code is
+        the default.
+
         `422` when the link already holds the maximum number of codes.
       requestBody:
         required: false
@@ -5838,6 +5851,30 @@ components:
           type: integer
           description: The height, in pixels, of the image that is stored.
 
+    QRSizeRefit:
+      type: object
+      additionalProperties: false
+      required: [from, to]
+      description: >
+        A stored `style.size` that had to be **raised**, and what it was raised
+        from. **Present only on a create that could not keep a size** — adding a
+        code gives the link's existing default code a printed identity, which
+        makes what that code encodes longer and can push it into a larger symbol
+        than its stored size holds with a quiet zone anything can read. The size
+        then rises to the smallest one that does, on both the new code and the
+        one that gained the identity.
+
+        A create that kept every size omits this key, which is the usual
+        answer: a larger symbol at the same number of pixels is normally still
+        drawable, and only the pixels-per-module move.
+      properties:
+        from:
+          type: integer
+          description: The size, in pixels, that was stored before the create.
+        to:
+          type: integer
+          description: The size, in pixels, that is stored now.
+
     QRCodeResponse:
       type: object
       additionalProperties: false
@@ -5890,6 +5927,12 @@ components:
           description: >
             Only `PUT /links/{id}/qr/codes/{slug}/logo` ever sets this, and only
             when the image it stored is smaller than the one it was sent.
+        refit:
+          allOf: [{ $ref: "#/components/schemas/QRSizeRefit" }]
+          description: >
+            Only `POST /links/{id}/qr/codes` ever sets this, and only when
+            adding the code had to raise a stored `style.size`. Absent means
+            every size was kept, which is the usual answer.
 
     QRCodeRequest:
       type: object

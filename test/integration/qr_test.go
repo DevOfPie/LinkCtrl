@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"image"
 	_ "image/png" // registers the PNG decoder for the .png endpoint's assertions
 	"io"
@@ -1147,6 +1148,200 @@ func TestAPrintedPictureWithNoCodeStillLandsOnTheDefault(t *testing.T) {
 			"printed before it had a slug and the one printed after are the same "+
 			"code, and a reader who split them in two would see a poster's history "+
 			"halve on the day the link grew a second code (%v)", onDefault, stats.QRCodes)
+	}
+}
+
+// TestAddingACodeReFitsEveryRowItsPayloadChanged is M49's third reopening at the
+// one call site that changes a payload (F225, F226, D185).
+//
+// **The arithmetic is asserted in `internal/link`; what this asserts is that the
+// operation performs it, on both rows, through the surfaces a reader uses.** The
+// unit test measures `refitForPayload` over a payload it builds itself. Here the
+// slug is the one the product generates, the style goes in through the API and
+// comes back out of the drawing, and the number the picture measures is read off
+// the served SVG rather than recomputed — so a re-fit that stored the right
+// number and drew a different one still fails.
+//
+// The fixture puts the default code at **its own floor**, which is where both
+// findings measured the defect and the only place the size cannot be kept. A
+// code anywhere else on the slider keeps its size and moves only its scale,
+// which is what makes the notice worth reading; that half is the unit test's.
+func TestAddingACodeReFitsEveryRowItsPayloadChanged(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("refitted", "https://example.com/x")
+
+	// The floor for this link's untagged payload, at the narrowest module the
+	// product admits. Sent with `scale`, because an API caller sets both and the
+	// endpoint's floor is the one at the scale it was given.
+	before, err := qr.Encode(f.codeContent(t, id, ""), qr.DefaultLevel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	floor := qr.MinSizeFor(before.Size)
+	resp := f.putJSON("/api/v1/links/"+id.String()+"/qr",
+		fmt.Sprintf(`{"style":{"size":%d,"scale":%d}}`, floor, qr.MinScale))
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("storing the floor size answered %d: %s", resp.StatusCode, raw)
+	}
+	_ = resp.Body.Close()
+	if got := attrOf(t, f.qrSVG(id), `width="(\d+)"`); got != floor {
+		t.Fatalf("the code stored at its floor draws %dpx, want %d; the fixture is "+
+			"not at the floor and this test measures nothing", got, floor)
+	}
+
+	// Adding a code gives the default one a printed identity, which lengthens
+	// what it encodes. Both rows are re-fitted, and the response says so because
+	// this is the case where the size could not be kept.
+	body, err := json.Marshal(map[string]any{"label": "Autumn poster"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := f.postJSON("/api/v1/links/"+id.String()+"/qr/codes", string(body))
+	raw := readAll(t, created)
+	_ = created.Body.Close()
+	if created.StatusCode != http.StatusCreated {
+		t.Fatalf("creating a QR code answered %d: %s", created.StatusCode, raw)
+	}
+	var out struct {
+		Code  link.QRCode `json:"code"`
+		Refit *struct {
+			From int `json:"from"`
+			To   int `json:"to"`
+		} `json:"refit"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatal(err)
+	}
+
+	after, err := qr.Encode(out.Code.Content, qr.DefaultLevel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Size <= before.Size {
+		t.Fatalf("the tagged payload is %d modules and the untagged one %d; if the "+
+			"tag does not grow the symbol there is nothing here to re-fit",
+			after.Size, before.Size)
+	}
+	want := qr.MinSizeFor(after.Size)
+
+	if out.Refit == nil {
+		t.Fatalf("the create answered with no `refit` after raising a size from %d "+
+			"to %d. A client that configured this code to a size is told when the "+
+			"product could not keep it — that is the whole of what it is told",
+			floor, want)
+	}
+	if out.Refit.From != floor || out.Refit.To != want {
+		t.Errorf("`refit` reads %+v, want from %d to %d", *out.Refit, floor, want)
+	}
+
+	// Both codes: the row says one number and the picture measures the same one.
+	// The default is the code the reader already had and never touched, which is
+	// the half F226 is about.
+	def := f.qrCode(id)
+	for _, c := range []struct {
+		what  string
+		slug  string
+		style qr.Style
+		size  int
+	}{
+		{"the default code", def.Slug, def.Style, def.Size},
+		{"the code just created", out.Code.Slug, out.Code.Style, out.Code.Size},
+	} {
+		if c.style.Size != want || c.size != want {
+			t.Errorf("%s stores size %d and reports %d, want %d — the smallest size "+
+				"its own symbol can be drawn at now that its payload carries a tag",
+				c.what, c.style.Size, c.size, want)
+		}
+		svg := f.getBody("/api/v1/links/" + id.String() + "/qr/codes/" + c.slug + "/image.svg")
+		if got := attrOf(t, svg, `width="(\d+)"`); got != c.size {
+			t.Errorf("%s says %dpx and its picture is %dpx wide. A stored size that "+
+				"is not the drawn size is the defect the second reopening closed and "+
+				"this one closes again on the path that reopened it",
+				c.what, c.size, got)
+		}
+	}
+
+	// And nothing already printed changed what it says: the untagged picture is
+	// still a payload the redirect path resolves to this link.
+	if strings.Contains(f.codeContent(t, id, ""), domain.ClickCodeParam+"=") !=
+		(def.Slug != "") {
+		t.Errorf("the default code's payload and its slug disagree: %q against %q",
+			f.codeContent(t, id, ""), def.Slug)
+	}
+}
+
+// TestAStaleStoredSizeIsRepairedByTheNextCreate is the case the guard on the
+// re-fit exists for, and the one an instance upgrading into this release is
+// actually in (D185).
+//
+// **A row can already be stale**, because the rule this milestone adds did not
+// exist when the row was written: every link that grew a second code under the
+// previous release carries a default whose `size` was fitted before it had a
+// tag. Nothing raises it until something touches the codes, and the create is
+// the thing that does — so it re-fits the row it reads whether or not *this*
+// call is what changed the payload, and the write is skipped entirely when the
+// row is already right.
+//
+// Without that the code created here would inherit the stale number and be born
+// with the defect, which is F225 written exactly as F225 is written.
+func TestAStaleStoredSizeIsRepairedByTheNextCreate(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("stale", "https://example.com/x")
+
+	// A link with two codes, the shape the previous release left behind.
+	f.createQRCode(t, id, "First")
+	def := f.qrCode(id)
+	if def.Slug == "" {
+		t.Fatal("the default code gained no slug, so this fixture is not the shape")
+	}
+
+	// Now put its row back into the state that release wrote: a size fitted
+	// against the payload it had *before* the tag, at the narrowest module.
+	untagged, err := qr.Encode(link.QRContent(def.Content[:strings.Index(
+		def.Content, "&"+domain.ClickCodeParam+"=")], ""), qr.DefaultLevel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := qr.MinSizeFor(untagged.Size)
+	if _, err := f.pool.Exec(t.Context(),
+		`UPDATE qr_codes SET style = style || $2::jsonb WHERE link_id = $1 AND slug = $3`,
+		id, fmt.Sprintf(`{"size":%d,"scale":%d,"margin":%d}`,
+			stale, qr.MinScale, qr.DefaultMargin), def.Slug); err != nil {
+		t.Fatal(err)
+	}
+	tagged, err := qr.Encode(def.Content, qr.DefaultLevel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := qr.MinSizeFor(tagged.Size)
+	if want <= stale {
+		t.Fatalf("the tagged payload's floor is %d and the untagged one's %d; the "+
+			"row this seeds is not stale and the test measures nothing", want, stale)
+	}
+
+	// Adding a third code reads that row, finds it stale, and repairs it — and
+	// the code it creates is fitted rather than inheriting the number.
+	added := f.createQRCode(t, id, "Second")
+	if added.Style.Size != want || added.Size != want {
+		t.Errorf("the created code stores %d and reports %d, want %d. It copies the "+
+			"style the link is already drawing at, and copying a stale one is F225 "+
+			"in as many words", added.Style.Size, added.Size, want)
+	}
+	if now := f.qrCode(id); now.Style.Size != want || now.Size != want {
+		t.Errorf("the stale default row still stores %d and reports %d, want %d. The "+
+			"re-fit is asked for on every create precisely so a row left stale by an "+
+			"earlier release is repaired rather than waiting to be noticed",
+			now.Style.Size, now.Size, want)
+	}
+	for _, slug := range []string{def.Slug, added.Slug} {
+		svg := f.getBody("/api/v1/links/" + id.String() + "/qr/codes/" + slug + "/image.svg")
+		if got := attrOf(t, svg, `width="(\d+)"`); got != want {
+			t.Errorf("code %s draws %dpx against a stored %d", slug, got, want)
+		}
 	}
 }
 

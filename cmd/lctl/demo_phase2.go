@@ -1355,7 +1355,12 @@ func (s *demoSeeder) seedCampaigns(ctx context.Context, cat []demoLink, ids map[
 	// A second code on the same link (M50). One link, two codes, two names —
 	// because a feature whose whole value is telling two things apart shows
 	// nothing when only one of them exists.
-	second, err := s.link.CreateQRCode(ctx, s.owner, styled, demoQRSecondLabel)
+	// The re-fit is discarded rather than reported: the seeded size is 400px on a
+	// symbol whose floor is far below it, so the create keeps the number and
+	// moves only the scale (M49's third reopening, D185). A demo run that ever
+	// starts raising it is a demo whose seeded size has drifted to its own floor,
+	// which is a seeding change and not something to print here.
+	second, _, err := s.link.CreateQRCode(ctx, s.owner, styled, demoQRSecondLabel)
 	if err != nil {
 		return fmt.Errorf("add a second QR code to /%s: %w", demoQRStyled, err)
 	}

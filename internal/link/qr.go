@@ -293,6 +293,14 @@ func (s *Service) ListQRCodes(
 // is new, the label is what the caller asked for, and the two codes are
 // thereafter independent.
 //
+// **Both rows are re-fitted here, and the second return says when that cost the
+// reader a number** (M49's third reopening, F225, F226, D185). This is the one
+// operation that lengthens a payload: it gives the default a slug, and it copies
+// a style fitted against the untagged picture onto a code whose picture carries a
+// tag. Either half leaves a `size` the symbol has outgrown, which the drawing
+// answers by falling back to margin-and-scale and measuring something else. See
+// refitForPayload for what is kept and what is reported.
+//
 // **The link's default code gets its row here, and this is the moment it has to**
 // (D183). Until this reopening a link could carry a named row and a default that
 // was synthesised on every read, which is the state the owner reported: two
@@ -302,25 +310,25 @@ func (s *Service) ListQRCodes(
 // state, and this keeps new ones out of it.
 func (s *Service) CreateQRCode(
 	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, label string,
-) (*QRCode, error) {
+) (*QRCode, QRSizeRise, error) {
 	if !actor.Can(PermUpdate) {
-		return nil, fmt.Errorf(
+		return nil, QRSizeRise{}, fmt.Errorf(
 			"%w: adding a QR code requires %s", domain.ErrForbidden, PermUpdate)
 	}
 	l, err := s.Get(ctx, actor, linkID)
 	if err != nil {
-		return nil, err
+		return nil, QRSizeRise{}, err
 	}
 	label = strings.TrimSpace(label)
 	if errs := domain.QRCodeLabelErrors(label); len(errs) > 0 {
-		return nil, errs
+		return nil, QRSizeRise{}, errs
 	}
 
 	count, err := s.q.CountQRCodes(ctx, dbgen.CountQRCodesParams{
 		LinkID: linkID, WorkspaceID: actor.WorkspaceID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("count qr codes for %s: %w", linkID, err)
+		return nil, QRSizeRise{}, fmt.Errorf("count qr codes for %s: %w", linkID, err)
 	}
 	// The default code counts against the cap whether or not it has a row, so
 	// the check is against the number of codes the link *has* rather than the
@@ -328,14 +336,14 @@ func (s *Service) CreateQRCode(
 	// than the cap for as long as its default went unstyled.
 	def, defaulted, err := s.storedQRCode(ctx, actor.WorkspaceID, linkID, "")
 	if err != nil {
-		return nil, err
+		return nil, QRSizeRise{}, err
 	}
 	held := count
 	if !defaulted {
 		held++
 	}
 	if held >= domain.MaxQRCodesPerLink {
-		return nil, qrCapError()
+		return nil, QRSizeRise{}, qrCapError()
 	}
 
 	// **The link's default code gets a row and a slug here, and this is the one
@@ -352,7 +360,7 @@ func (s *Service) CreateQRCode(
 	// tag, and the two are the same code.
 	if !defaulted {
 		if def, err = s.materializeDefaultQRCode(ctx, actor.WorkspaceID, linkID); err != nil {
-			return nil, err
+			return nil, QRSizeRise{}, err
 		}
 	}
 	//
@@ -372,28 +380,61 @@ func (s *Service) CreateQRCode(
 			// than failing the create over a race about which code is the
 			// default, the way tag creation re-reads one.
 			if !pgerr.IsUniqueViolation(err) {
-				return nil, fmt.Errorf("name the default qr code on %s: %w", linkID, err)
+				return nil, QRSizeRise{}, fmt.Errorf(
+					"name the default qr code on %s: %w", linkID, err)
 			}
 			if def, _, err = s.storedQRCode(ctx, actor.WorkspaceID, linkID, ""); err != nil {
-				return nil, err
+				return nil, QRSizeRise{}, err
 			}
 		} else {
 			def.IsDefault = true
 		}
 	}
 
-	// The style the link is already drawing at, so a second code looks like the
-	// first one until somebody changes it.
-	blob, err := json.Marshal(decodeQRStyle(def.Style))
+	// **The default code's payload just grew, so its stored size is re-fitted
+	// here** (F226, D185). The tag written above is eight characters and a
+	// parameter name on top of what the picture said a moment ago, which is
+	// enough to push the symbol into the next version — measured, 29 modules to
+	// 33 — and a size fitted against the smaller one then no longer contains the
+	// larger one and its quiet zone. Without this the row goes on saying 70px
+	// while the drawing measures 82, which is the second reopening's claim made
+	// false by the create rather than by anything the reader did.
+	//
+	// **Not conditioned on the naming, though the naming is what makes it
+	// necessary.** A row whose payload has already outgrown its size — one
+	// written by the release before this rule existed, or by an alias change,
+	// which is F228 — is in exactly the state this repairs, and the guard below
+	// is what keeps that from costing anything: a row that is already fitted
+	// re-fits to itself and no statement runs. Skipping it on a link whose
+	// default already had a slug would also make the sentence the reader is shown
+	// untrue, because the code created below inherits this style and would come
+	// out at a size the code it was copied from is not.
+	def, rise, err := s.refitStoredQRCode(ctx, actor.WorkspaceID, linkID, l.ShortURL, def)
 	if err != nil {
-		return nil, fmt.Errorf("encode qr style: %w", err)
+		return nil, QRSizeRise{}, err
+	}
+
+	// The style the link is already drawing at, so a second code looks like the
+	// first one until somebody changes it — re-fitted against **this** code's own
+	// payload, which is the one it will be drawn from rather than the one it was
+	// copied from. The two are the same length once the default has a slug, so
+	// this normally repeats the answer above; it is the direct answer to F225,
+	// which is written about the copy rather than about the row copied from.
+	slug := domain.NewQRCodeSlug()
+	style, copied := refitForPayload(QRContent(l.ShortURL, slug), decodeQRStyle(def.Style))
+	if copied.Rose() && !rise.Rose() {
+		rise = copied
+	}
+	blob, err := json.Marshal(style)
+	if err != nil {
+		return nil, QRSizeRise{}, fmt.Errorf("encode qr style: %w", err)
 	}
 	row, err := s.q.UpsertQRCode(ctx, dbgen.UpsertQRCodeParams{
 		ID: uuid.Must(uuid.NewV7()), LinkID: linkID, WorkspaceID: actor.WorkspaceID,
-		Slug: domain.NewQRCodeSlug(), Label: label, Style: blob,
+		Slug: slug, Label: label, Style: blob,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("insert qr code: %w", err)
+		return nil, QRSizeRise{}, fmt.Errorf("insert qr code: %w", err)
 	}
 	// The redirect snapshot carries this link's slugs, so a new one has to reach
 	// every replica before a scan of it can be attributed. Until it does, a scan
@@ -402,7 +443,7 @@ func (s *Service) CreateQRCode(
 	// itself, so it is closed here rather than left to REDIRECT_TTL.
 	s.invalidateQRLink(ctx, actor, linkID)
 	code := qrCodeFrom(linkID, l.ShortURL, row.Slug, qrRowFromUpsert(row), true)
-	return &code, nil
+	return &code, rise, nil
 }
 
 // SetQRCodeLabel renames one of a link's codes.
@@ -1344,6 +1385,146 @@ func (s *Service) SetQRCodeLogo(
 	return &code, fit, nil
 }
 
+// refitStoredQRCode re-fits one stored row against the payload it now encodes,
+// writing it back only if the arithmetic moved (M49's third reopening, D185).
+//
+// **The guard is what makes this callable unconditionally**, which is how
+// CreateQRCode calls it: a row already fitted to its own payload re-fits to
+// itself, the comparison is false, and no statement runs. So the cost of asking
+// is an encode, and the benefit is that a row left stale by an earlier release —
+// or by any path this milestone did not close — is repaired the next time
+// something touches the link's codes rather than waiting for somebody to notice
+// the picture is the wrong size.
+//
+// The write is the upsert's conflict branch, which is the one statement in this
+// package that writes a style. `label` and `is_default` are outside its SET
+// list, so a re-fit cannot rename a code or move the flag; the row is read back
+// out of the statement rather than assembled here, on QRCode's own reasoning
+// that what a caller is told about is what the next reader will see.
+func (s *Service) refitStoredQRCode(
+	ctx context.Context, workspaceID, linkID uuid.UUID, shortURL string, row qrRow,
+) (qrRow, QRSizeRise, error) {
+	style := decodeQRStyle(row.Style)
+	// Fitted against the level the picture is *drawn* at rather than the one the
+	// row happens to hold — the same defence qrCodeFrom and SetQRSizeBySlug make
+	// (F190). A logo forces H, H is a larger symbol, and a symbol's module count
+	// is what every number below is derived from.
+	if row.HasLogo {
+		style = style.ForLogo()
+	}
+	refitted, rise := refitForPayload(QRContent(shortURL, row.Slug), style)
+	if refitted == style {
+		return row, QRSizeRise{}, nil
+	}
+	blob, err := json.Marshal(refitted)
+	if err != nil {
+		return row, QRSizeRise{}, fmt.Errorf("encode qr style: %w", err)
+	}
+	stored, err := s.q.UpsertQRCode(ctx, dbgen.UpsertQRCodeParams{
+		ID: uuid.Must(uuid.NewV7()), LinkID: linkID, WorkspaceID: workspaceID,
+		Slug: row.Slug, Label: row.Label, Style: blob, IsDefault: row.IsDefault,
+	})
+	if err != nil {
+		return row, QRSizeRise{}, fmt.Errorf("re-fit qr code %s: %w", row.ID, err)
+	}
+	return qrRowFromUpsert(stored), rise, nil
+}
+
+// QRSizeRise is a re-fit that had to push a stored size **up**, and it is the
+// only re-fit anybody is told about (M49's third reopening, D185).
+//
+// Owner-set, in the answer that reopened the milestone: *"The user doesn't need
+// to be notified unless we need to raise the currently selected size."* A re-fit
+// that keeps the number the reader chose is a scale change they cannot see and a
+// picture that measures what it always did, so a sentence about it is a sentence
+// that teaches readers to stop reading them. A re-fit that cannot keep it has
+// changed a number somebody typed, and that is not the product's to do quietly.
+//
+// The zero value is *nothing happened*, which is the common case: [QRSizeRise.Rose]
+// is what every caller branches on.
+type QRSizeRise struct {
+	// From is the size the row carried and To is the size it now carries.
+	From, To int
+}
+
+// Rose reports whether the size the reader chose had to be raised.
+func (r QRSizeRise) Rose() bool { return r.To > r.From }
+
+// refitForPayload re-fits a stored size onto a payload that has changed under it
+// (M49's third reopening, F225, F226, D185).
+//
+// **A stored size is fitted against a payload, and a payload can change.** The
+// size control resolves a requested number of pixels against *this code's*
+// module count, which is a property of what the picture encodes; naming a code
+// appends `&qrc=<slug>` and can push the symbol into the next version, at which
+// point the pixels the row holds no longer contain the symbol and its quiet zone.
+// [qr.Code.geometry] then falls back to the margin-and-scale arithmetic and the
+// picture measures something else — 70px stored, 82px drawn on the measurement
+// in F226 — which is exactly what the second reopening exists to have made
+// impossible.
+//
+// So the row is re-fitted where the payload changes, rather than the drawing
+// being left to discover the disagreement. The size the reader chose is kept
+// wherever the larger symbol still admits it, which is nearly everywhere: only
+// the scale moves, and the scale is not a number anybody set. Where it does not,
+// the size rises to [qr.MinSizeFor] — this code's own floor — and the second
+// return says so. **Raising the floor is acceptable and is not a prompt**, owner-set
+// in the same answer: *"Raising the lower limit would have next to no affect on
+// almost any use case unless it starts to go above a 128px minimum."*
+//
+// **A style carrying no size is left exactly as it is**, and that is not an
+// omission. Such a row is the pre-M49 form — a quiet zone in modules and a scale
+// in pixels — and the size it means has always been whatever those two multiply
+// out to against the payload of the day. It grows with the payload by
+// construction, so there is no number to keep and nothing to report; re-fitting
+// it would rewrite a row nobody asked to have rewritten into the newer form,
+// which is the trade refitForLogo declines below for the same reason.
+func refitForPayload(content string, style qr.Style) (qr.Style, QRSizeRise) {
+	if style.Size == 0 {
+		return style, QRSizeRise{}
+	}
+	code, err := qr.Encode(content, style.Level)
+	if err != nil {
+		// The payload cannot be drawn at all, which the renderers already report
+		// by their own means. Rewriting the row over it would be this function
+		// deciding a picture's size from a picture that does not exist.
+		return style, QRSizeRise{}
+	}
+	want := max(style.Size, qr.MinSizeFor(code.Size))
+	out, ok := fitStyleTo(code.Size, style, want)
+	if !ok {
+		return style, QRSizeRise{}
+	}
+	if out.Size == style.Size {
+		return out, QRSizeRise{}
+	}
+	return out, QRSizeRise{From: style.Size, To: out.Size}
+}
+
+// fitStyleTo is the arithmetic both re-fits share: `style` carrying the geometry
+// that draws a `modules`-module symbol at `want` pixels, or the style untouched
+// and false when no scale does.
+//
+// Separate from its two callers because a size that has stopped matching its
+// payload is one defect with two doors — a logo raising the level, and a slug
+// lengthening the content — and two copies of this would be two answers to it.
+// What the callers keep is the part that differs: which number is being held,
+// and what happens when it cannot be.
+//
+// The margin in modules is written back to [qr.DefaultMargin] rather than left
+// as it was, because it is the fallback the drawing uses if this row's payload
+// ever outgrows the size again, and a fallback carried over from an older fit is
+// a quiet zone nobody chose.
+func fitStyleTo(modules int, style qr.Style, want int) (qr.Style, bool) {
+	fit, err := qr.FitSize(modules, min(max(want, qr.MinSize), qr.MaxSize))
+	if err != nil {
+		return style, false
+	}
+	out := style
+	out.Margin, out.Scale, out.Size = qr.DefaultMargin, fit.Scale, fit.Size
+	return out, true
+}
+
 // refitForLogo is the style a code takes on when an image is put on it: level H,
 // and the margin and scale that keep the picture the size it already was (F171,
 // D174).
@@ -1367,13 +1548,21 @@ func (s *Service) SetQRCodeLogo(
 // happened to it.
 //
 // The style is returned unchanged but for the level when the fit cannot be made:
-// the target is clamped into the range qr.FitSize accepts, because a style
-// stored before M49 can describe a picture outside it, and a fit that fails must
-// not cost a logo that has already been written. **Clamping is not enough on its
-// own since D182** — the level-H symbol may need more pixels than the picture it
-// is being fitted into, which is `qr.MinSizeFor`'s refusal — and that arm lands
-// here as the same "leave the style alone" answer, which draws a larger picture
-// rather than none.
+// fitStyleTo clamps the target into the range qr.FitSize accepts, because a
+// style stored before M49 can describe a picture outside it, and a fit that
+// fails must not cost a logo that has already been written. **Clamping is not
+// enough on its own since D182** — the level-H symbol may need more pixels than
+// the picture it is being fitted into, which is `qr.MinSizeFor`'s refusal — and
+// that arm lands here as the same "leave the style alone" answer, which draws a
+// larger picture rather than none.
+//
+// **That is where this parts company with refitForPayload**, which shares the
+// arithmetic and not this answer (D185). There, the number being held is one the
+// reader typed into the size control and the row is written under an operation
+// they are watching, so a floor that has risen above it is raised to and
+// reported. Here the number is one nobody chose — the size the picture happened
+// to be before an upload — and D174 bought the whole re-fit on the promise that
+// it moves the style no further than it must.
 func refitForLogo(content string, style qr.Style) qr.Style {
 	out := style.ForLogo()
 	before, err := qr.Encode(content, style.Level)
@@ -1393,13 +1582,11 @@ func refitForLogo(content string, style qr.Style) qr.Style {
 		// that should not be.
 		return out
 	}
-	want := min(max(qr.OutputSize(before.Size, style), qr.MinSize), qr.MaxSize)
-	fit, err := qr.FitSize(after.Size, want)
-	if err != nil {
+	fitted, ok := fitStyleTo(after.Size, out, qr.OutputSize(before.Size, style))
+	if !ok {
 		return out
 	}
-	out.Margin, out.Scale, out.Size = qr.DefaultMargin, fit.Scale, fit.Size
-	return out
+	return fitted
 }
 
 // ClearQRCodeLogo removes the image from one of a link's codes. The empty slug

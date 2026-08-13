@@ -219,28 +219,23 @@
     <div class="flex h-72 w-72 max-w-full items-center justify-center rounded-md border border-line-strong p-2">
       {{if .QRSVG}}{{.QRSVG}}{{end}}
     </div>
-    {{/* Served, not drawn. The picture above is whatever fits the frame; the
-         number below is what both downloads serve and what the API answers
-         with. Saying it here is the reopening's own requirement — a preview
-         that silently stopped tracking the size would otherwise read as the
-         size setting having no effect.
+    {{/* **A paragraph stood here and this milestone is what took it away**
+         (M49's third reopening, D185). It named the served size under the
+         picture — "the stored size is N pixels" — because the first reopening
+         promised the stored-vs-drawn distinction would be stated where the
+         preview renders, and F213(a)'s closure rested on it.
 
-         **Two branches, because most links have no stored style.** The
-         unguarded sentence said "the stored size" on every code, and
-         `.QRSize` is `QROutputSize` over the *default* style whenever
-         `.QRStored` is false — which is every link but the one
-         `demo_phase2.go` seeds. Calling a default a stored size is the
-         opposite of the distinction this paragraph exists to draw, so the
-         branch names which of the two the number is. Both sentences carry the
-         served-vs-drawn split and the words "size is", which is what the test
-         reads. */}}
-    <p class="mt-2 text-xs text-subtle">
-      {{if .QRStored}}
-      Shown to fit this frame. The stored size is <strong class="font-medium text-ink">{{.QRSize}} pixels</strong> &mdash; what both downloads and the API serve.
-      {{else}}
-      Shown to fit this frame. No size is stored for this code, so its size is <strong class="font-medium text-ink">{{.QRSize}} pixels</strong> by default &mdash; what both downloads and the API serve until one is saved.
-      {{end}}
-    </p>
+         Two things ended it. D182 made the stored size and the drawn size one
+         number, so there was no distinction left to state; and the word
+         *stored* reads as bytes rather than as a field on a style row, which
+         is how the owner read their own commission: *"The message specifies
+         that the stored size is X pixels, which is not an amount of data or a
+         true representation of size of the image."*
+
+         The number is not lost — the size control below prints it in the box
+         and on the slider, which is where somebody setting it is looking. If a
+         reader ever needs the word *drawn* here, it is a label on that control
+         rather than this paragraph returning. */}}
     <p class="mt-2 break-all text-xs text-subtle">{{.QRContent}}</p>
     {{/* Two downloads since M49, and the PNG leads because it is the one the
          milestone exists for: before it, getting a file anything else could

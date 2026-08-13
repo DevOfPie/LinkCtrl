@@ -143,14 +143,27 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 	// back to, and no second surface for managing a list that lives inside this
 	// one.
 	if r.PostFormValue("add") != "" {
-		code, aerr := h.Links.CreateQRCode(r.Context(), actor, id, r.PostFormValue("label"))
+		code, rise, aerr := h.Links.CreateQRCode(r.Context(), actor, id, r.PostFormValue("label"))
 		if aerr != nil {
 			h.finishQRAction(w, r, id, next, slug, aerr)
 			return
 		}
+		// **Only when the size had to rise** (D185). Adding a code lengthens the
+		// payload of the code the reader already had, and a size fitted against
+		// the shorter one is usually still reachable — the scale moves and the
+		// number does not, which is nothing to say. Where it is not reachable the
+		// number somebody typed has changed, and the owner drew the line exactly
+		// there. Both sizes travel, because the page it lands on is a fresh
+		// request that never saw the create.
+		var extra url.Values
+		if rise.Rose() {
+			extra = url.Values{
+				"from": {strconv.Itoa(rise.From)}, "to": {strconv.Itoa(rise.To)},
+			}
+		}
 		// Landing on the code just made, because somebody who added one is about
 		// to style it or download it.
-		seeOther(w, r, qrReturn(next, id, "added", code.Slug, nil))
+		seeOther(w, r, qrReturn(next, id, "added", code.Slug, extra))
 		return
 	}
 	if r.PostFormValue("remove") != "" {
@@ -358,6 +371,18 @@ func (h *Web) LinkQRLogo(w http.ResponseWriter, r *http.Request) {
 // leaves the ordinary "logo stored" message.
 func dims(w, h int) string { return strconv.Itoa(w) + "x" + strconv.Itoa(h) }
 
+// sizeParam reads one output size back out of a redirect, or 0 for anything that
+// is not one this product could have produced. The bounds are internal/qr's own,
+// so a hand-edited URL cannot put a number in a sentence that the size control
+// would refuse.
+func sizeParam(raw string) int {
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < qr.MinSize || n > qr.MaxSize {
+		return 0
+	}
+	return n
+}
+
 func dimsParam(raw string) (int, int, bool) {
 	wRaw, hRaw, ok := strings.Cut(raw, "x")
 	if !ok {
@@ -492,9 +517,30 @@ func qrNotice(q url.Values) string {
 		return "This code restored to the default style — black on white, at the default " +
 			"size. Any logo on it is left alone; removing one is its own control."
 	case "added":
-		return "A second code, with a name and an identity of its own. It points at the " +
-			"same destination — what it changes is that a scan of this one is told apart " +
-			"from a scan of the others."
+		const added = "A second code, with a name and an identity of its own. It points " +
+			"at the same destination — what it changes is that a scan of this one is " +
+			"told apart from a scan of the others."
+		// The one thing about a create the reader is told, and only when it
+		// happened (D185). Giving the first code an identity lengthens what it
+		// encodes, which can push it into a larger grid of squares than the size
+		// it was set to can hold; the size then rises to the smallest one that
+		// holds it. A re-fit that kept the number says nothing, on the owner's
+		// rule: *"The user doesn't need to be notified unless we need to raise the
+		// currently selected size."*
+		//
+		// Re-derived rather than echoed, on `dimsParam`'s reason: these arrive in
+		// a URL anybody can edit. Anything that is not two sizes inside the range
+		// the product accepts, with the second above the first, says nothing —
+		// which leaves the ordinary sentence.
+		from, to := sizeParam(q.Get("from")), sizeParam(q.Get("to"))
+		if from == 0 || to <= from {
+			return added
+		}
+		return fmt.Sprintf("%s Both codes are now drawn at %dpx: giving the first one a "+
+			"printed identity made what it encodes longer, which needs a bigger grid "+
+			"of squares than %dpx could hold with a margin anything can read. The size "+
+			"was raised rather than the picture quietly coming out at some other "+
+			"number, and you can set a larger one from here.", added, to, from)
 	case "removed":
 		return "Code removed. What it already recorded stays in the breakdown; anything " +
 			"printed with it is counted as the link's default code from now on."

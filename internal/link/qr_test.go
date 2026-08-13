@@ -245,3 +245,112 @@ func TestTheReFitOnlyMovesTheSizeItHasTo(t *testing.T) {
 	// 7-byte capacity — so that input is a property of internal/qr this product
 	// never produces, not a missing assertion (F199).
 }
+
+// TestASizeSurvivesThePayloadGrowingUnderIt is M49's third reopening, at the
+// arithmetic (F225, F226, D185).
+//
+// **This is the measurement in both findings, run forward.** Alias `summer`
+// encodes to 29 modules untagged; the eight-character slug a code gains when it
+// stops being alone pushes the same payload to 33, and a size fitted against the
+// smaller symbol — 70px, which is that symbol's own floor — no longer holds the
+// larger one with a quiet zone anything can read. `fitGeometry` then falls back
+// to margin-and-scale and the picture measures 82px against a row that says 70,
+// which is the second reopening's *the requested size is the size stored and
+// drawn, exactly* made false by an operation nobody performed on that code.
+//
+// The fixture asserts its own module counts before it measures anything, because
+// every number below is that payload's rather than a property of the arithmetic.
+func TestASizeSurvivesThePayloadGrowingUnderIt(t *testing.T) {
+	const shortURL = "https://links.example/summer"
+	untagged := QRContent(shortURL, "")
+	tagged := QRContent(shortURL, strings.Repeat("a", domain.QRCodeSlugLength))
+
+	before, err := qr.Encode(untagged, qr.DefaultLevel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := qr.Encode(tagged, qr.DefaultLevel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Size != 29 || after.Size != 33 {
+		t.Fatalf("the payload is %d modules untagged and %d tagged; F225 and F226 "+
+			"were measured at 29 and 33, and every number in this test is that "+
+			"payload's", before.Size, after.Size)
+	}
+
+	// A code stored at its own floor, which is the bottom of the size control's
+	// range for this code and the case both findings name.
+	floor := qr.MinSizeFor(before.Size)
+	fit, err := qr.FitSize(before.Size, floor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, _ := qr.Style{Margin: qr.DefaultMargin, Scale: fit.Scale, Size: fit.Size}.Normalize()
+	if stored.Size != 70 {
+		t.Fatalf("the floor for a 29-module code is %d and the findings measured 70",
+			stored.Size)
+	}
+	if drawn := qr.OutputSize(after.Size, stored); drawn != 82 {
+		t.Fatalf("the un-re-fitted row draws %dpx on the tagged payload; the findings "+
+			"measured 82, and without that gap this test asserts nothing", drawn)
+	}
+
+	// The re-fit. The size rises, because at this one it has to — 78 is the
+	// tagged symbol's own floor — and the rise is reported, which is the whole of
+	// what the reader is told.
+	out, rise := refitForPayload(tagged, stored)
+	if got := qr.OutputSize(after.Size, out); got != out.Size {
+		t.Errorf("the row says %dpx and the drawing measures %dpx. A stored size that "+
+			"is not the drawn size is the defect this reopening exists to end, and "+
+			"moving it onto a different number does not fix it", out.Size, got)
+	}
+	if out.Size != qr.MinSizeFor(after.Size) {
+		t.Errorf("the re-fit raised the size to %dpx and this symbol's floor is %dpx. "+
+			"It rises to the smallest size that works and no further — the owner "+
+			"accepted a moving floor, not a size of the product's choosing",
+			out.Size, qr.MinSizeFor(after.Size))
+	}
+	if rise != (QRSizeRise{From: 70, To: 78}) {
+		t.Errorf("the re-fit reported %+v, want 70 → 78. The reader is told exactly "+
+			"when the size they set could not be kept, and both numbers are what "+
+			"makes the sentence say what happened", rise)
+	}
+	if !rise.Rose() {
+		t.Errorf("%+v does not report as a rise, so nothing tells the reader", rise)
+	}
+
+	// **And the common case is silent**, which is what makes the notice mean
+	// something. 512px on the same code has room for the larger symbol, so only
+	// the scale moves — a number nobody set — and the size the reader typed is
+	// still the size stored and drawn.
+	roomy, err := qr.FitSize(before.Size, 512)
+	if err != nil {
+		t.Fatal(err)
+	}
+	held, _ := qr.Style{Margin: qr.DefaultMargin, Scale: roomy.Scale, Size: roomy.Size}.Normalize()
+	kept, quiet := refitForPayload(tagged, held)
+	if kept.Size != 512 || quiet.Rose() {
+		t.Errorf("512px became %dpx and reported %+v. The size only moves where the "+
+			"larger symbol leaves no scale that draws it, and 512 on a 33-module "+
+			"code is not that case", kept.Size, quiet)
+	}
+	if kept.Scale == held.Scale {
+		t.Errorf("the scale stayed at %d across a symbol that went from %d modules to "+
+			"%d. If nothing moved, the row is still fitted against the payload it no "+
+			"longer draws", kept.Scale, before.Size, after.Size)
+	}
+	if got := qr.OutputSize(after.Size, kept); got != 512 {
+		t.Errorf("the silent re-fit draws %dpx against a stored 512. Silence is only "+
+			"honest while the number is kept", got)
+	}
+
+	// A style with no size at all is the pre-M49 form, and it is left exactly as
+	// written: it has no number to keep, it grows with the payload by
+	// construction, and rewriting it would change a row nobody asked about.
+	old, _ := qr.Style{Margin: 6, Scale: 9}.Normalize()
+	if got, r := refitForPayload(tagged, old); got != old || r.Rose() {
+		t.Errorf("a pre-M49 style %+v became %+v (%+v). Read-forward is M49's own "+
+			"claim: such a row renders as it always did", old, got, r)
+	}
+}

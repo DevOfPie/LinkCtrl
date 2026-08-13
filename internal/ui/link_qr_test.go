@@ -111,64 +111,34 @@ func TestTheQRPreviewKeepsAFixedFootprint(t *testing.T) {
 	}
 }
 
-// TestTheQRPreviewSaysWhichSizeIsServed is the other half of that bullet: once
-// the preview stops tracking the size 1:1, the page owes the reader the number.
+// TestThePreviewDoesNotCallASizeStored is what replaced
+// TestTheQRPreviewSaysWhichSizeIsServed at M49's third reopening (D185).
 //
-// Without it the size control reads as having no effect — the reader types 2000,
-// presses save, and the picture is the same size it was. The number under the
-// picture is what both downloads and the API serve, and that sentence is the
-// only place the page says so.
+// **The paragraph that test guarded is gone, and this is the assertion that it
+// stays gone.** It printed the served size under the picture and named it *the
+// stored size* on a styled code, because the first reopening required the
+// stored-vs-drawn distinction be stated where the preview renders. D182 then
+// made the two one number, so there was no distinction to state — and the owner,
+// reading the sentence they had commissioned, read *stored* as bytes: *"The
+// message specifies that the stored size is X pixels, which is not an amount of
+// data or a true representation of size of the image."*
 //
-// **Both states, because only one link in the product is in the first one.**
-// `linkQRView.QRSize` is the served size either way, but it is a *stored* size
-// only when `QRStored` is true; otherwise it is `QROutputSize` over the default
-// style. `cmd/lctl/demo_phase2.go` seeds exactly one styled link, so the
-// unstored branch is what almost every reader meets — a caption asserting "the
-// stored size" there states the opposite of the distinction the reopening
-// asked to have stated. Asserted in both directions: the word is present where
-// a style is stored and absent where none is.
-func TestTheQRPreviewSaysWhichSizeIsServed(t *testing.T) {
+// Deleting a test and asserting nothing would leave the removal indistinguishable
+// from nobody having looked, which is why this stands in its place. The number
+// itself is not asserted absent — the size control below the preview carries it
+// in a `value` attribute and must — only the words that made it a claim about
+// storage.
+func TestThePreviewDoesNotCallASizeStored(t *testing.T) {
 	for _, page := range qrPanelPages {
-		size, ok := pageData(t)[page].(map[string]any)["QRSize"].(int)
-		if !ok {
-			t.Fatalf("the %s fixture carries no QRSize; this test measures the "+
-				"number the page prints against the one it was given", page)
-		}
-		want := strconv.Itoa(size) + " pixels"
-
-		// A stored style: the number is the one the form wrote, and the page
-		// says so.
-		body := renderQRPanel(t, page)
-		if !strings.Contains(body, want) {
-			t.Errorf("%s never says %q. The preview is drawn to fit a fixed frame, "+
-				"so the size the form wrote is no longer readable off the picture "+
-				"and has to be stated (F213)", page, want)
-		}
-		if !strings.Contains(body, "stored size") {
-			t.Errorf("%s prints a size without saying it is the stored one. Drawn "+
-				"and stored are different numbers now, and the distinction is the "+
-				"reopening's requirement", page)
-		}
-
-		// No stored style — the common case. The number is still owed, because
-		// it is still what the downloads and the API serve; calling it stored
-		// is not.
-		body = mainOf(t, renderPage(t, page, map[string]any{"Tab": "qr", "QRStored": false}))
-		if !strings.Contains(body, want) {
-			t.Errorf("%s drops the size when no style is stored. The default is "+
-				"still the size both downloads and the API serve, and the reader "+
-				"has no other way to read it off a preview drawn to fit a frame", page)
-		}
-		if strings.Contains(body, "stored size") {
-			t.Errorf("%s calls the size stored on a link that has stored none. "+
-				"Every link but the one the demo seeds renders this branch, so "+
-				"this is the sentence most readers get (F213)", page)
-		}
-		if !strings.Contains(body, "by default") {
-			t.Errorf("%s prints a size on an unstyled code without saying it is "+
-				"the default. Stating the served-versus-drawn split is the "+
-				"reopening's requirement, and it is only stated if it is true "+
-				"in both states", page)
+		for _, stored := range []bool{true, false} {
+			body := mainOf(t, renderPage(t, page,
+				map[string]any{"Tab": "qr", "QRStored": stored}))
+			if strings.Contains(body, "stored size") {
+				t.Errorf("%s (QRStored=%v) calls a size stored. The stored size and "+
+					"the drawn size have been one number since D182, and the word "+
+					"reads as an amount of data — which is how the owner read it "+
+					"when they asked for the paragraph to go", page, stored)
+			}
 		}
 	}
 }
