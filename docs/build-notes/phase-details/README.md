@@ -33,8 +33,8 @@ reopened, and [M50.7](m50.7.md) added — then [M57.9](m57.9.md)'s reopened run,
 in its own session. The first report's three reopenings landed the same day at
 `ad28c5f`, `e244cf2` and `272f108`. 0.3.0 is written and not yet tagged.** Four work areas, chosen 2026-08-06: identity and account
 lifecycle, dashboard UI and UX, infrastructure and resilience, QR codes and
-campaigns. Twenty-one milestones — **twelve integers of work**, two adversarial
-reviews, one close, and **six insertions** (M50.5, M50.6, M46.5, M46.6, M47.5, M57.5) — against the size target in
+campaigns. **Twenty-two milestones** — **twelve integers of work**, two adversarial
+reviews, one close, and **seven insertions** (M50.5, M50.6, M46.5, M46.6, M47.5, M57.5, M50.7) — against the size target in
 [planning.md](../planning.md#the-size-target-a-phase-stays-under-sixteen-milestones).
 The phase was planned at **fifteen with every slot spent**. On 2026-08-07 it went
 to sixteen when [M50.5](m50.5.md) was added, and to seventeen when a review found

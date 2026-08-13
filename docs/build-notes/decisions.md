@@ -343,6 +343,7 @@ file. Append a row when you append an entry.
 | [M49, four amendments the second reopening forced](#2026-08-13--m49-four-amendments-the-second-reopening-forced) | Fact-level orchestrator amendments on milestone files. The quiet-zone floor is three modules, not the specification's four. **The first reopening's majority-code claim is given up** — an exact size and a majority-code guarantee are not simultaneously satisfiable, measured at 48% for an 89-module code at 256px — which is the second thing the owner's first report bought that their second one spends. The band bullet's either/or was an incomplete enumeration and the build took a third answer, a floor that moves per code. And `MaxScale` 68 → 75 corrected where M50.6 had written it |
 | [M49, the exact-size claim gets an enforcement on the API](#2026-08-13--m49-the-exact-size-claim-gets-an-enforcement-on-the-api) | `PUT /links/{id}/qr` accepted a `size` the symbol had outgrown and served a picture that was not it, falsifying the reopening's first bullet on the door the dashboard's control does not guard. It refuses now, at `qr.MinSizeForStyle` — the floor at the caller's own `scale`, because an API caller sets both fields and `MinSizeFor` binds only when the scale is chosen too. Rejected: re-fitting `scale` server-side, which would silently rewrite a field the caller set. The logo re-fit's escape from *the drawn size is held* stays, and is now written down outside the code comment |
 | [M49, what the exact size falsified where nothing was looking](#2026-08-13--m49-what-the-exact-size-falsified-where-nothing-was-looking) | Four survivals of the snap, in files the change reached but did not rewrite: two comments on `QRSizeInput`/`SetQRSize` still describing a snap and a size derived on read, D181's corpus description in `composite.go` left at three stored sizes and 816 pictures, two integration assertions still allowing half a span, and two comments citing the deleted `want`/`got` pair as live. The assertions are the substance — sabotage measured both passing a 20px drift they are meant to catch. `composite.go` keeps its 816-picture figures rather than restating them, because the two styles that grew the corpus test the quiet zone and not the cap |
+| [M50.7's plan review, and the three records it caught before anything was built](#2026-08-13--m507s-plan-review-and-the-three-records-it-caught-before-anything-was-built) | Thirteen findings from planning.md §7's independent review. Three count sentences corrected, and W43 found breached by the very commit that added M50.7 — M57.9's *what the re-run owes* list never named either QR-tab report or the three decisions that came with them, the **third** time that paragraph has been caught short by a plan review. The sharpest finding is held open deliberately: M50.7 claims nothing it touches is defective and then deletes M49's shipped preview claim |
 
 ---
 
@@ -28346,3 +28347,40 @@ pair and `qrNotice`'s snap branch, both gone with D182. The logo resize warning
 is the only such pair now, and the reasoning it was compared to is still good:
 it is the argument that deleted the snap sentence outright, and the warning
 survives it because two dimensions can still differ where two sizes cannot.
+
+## 2026-08-13 — M50.7's plan review, and the three records it caught before anything was built
+
+[planning.md §7](planning.md)'s independent plan review ran against
+[M50.7](phase-details/m50.7.md) and returned thirteen findings. Three are about
+the tree as it stands rather than about the plan, and are fixed here at the M49
+checkpoint rather than waiting for the milestone they were found from.
+
+**One — three count sentences.** `phase-details/README.md` and `Plan.md` said
+*twenty-one milestones* and *six insertions* while the table beside them listed
+twenty-two and seven; `Plan.md`'s Phase 3 lead still named the **first** report's
+three reopenings as the open set. [planning.md §6](planning.md) puts a count an
+addition makes false inside the addition, not after it, so the commit that added
+M50.7 should have carried these and did not.
+
+**Two — [W43](workflow-changes.md#made) was breached by the same commit.** Scope
+added after a review has run is numbered below it *and reopens it*. M57.9 was
+already reopened, so the status row was right; what was missing is that its own
+*What the re-run owes* list never named the new work. It now names both QR-tab
+reports in full, and the three decisions that came with them — each of which
+reverses or supersedes something this review has already read past. **This is the
+third time that paragraph has been caught short**, by three different plan
+reviews, and the entry says so rather than quietly fixing it a third time.
+
+**Three is not fixed here** because it is a change to what M50.7 asserts rather
+than a stale fact, and it is the sharpest finding of the thirteen: M50.7 says
+*"None of them is defective. Each does what its milestone claims"* and then
+deletes the preview paragraph, which is
+[M49](phase-details/m49.md)'s shipped claim and F213(a)'s closure, asserted by
+`TestTheQRPreviewSaysWhichSizeIsServed`. Both cannot be true. It is dispositioned
+with the other ten before M50.7 is built, and it is recorded now so that the
+milestone cannot be built against the version that contradicts itself.
+
+The review is worth its cost twice over on finding two alone: the rule it caught
+is one this repository wrote for itself after being caught by it, and it was
+breached again inside the commit that quoted the rule's own numbering
+convention.

@@ -513,9 +513,11 @@ per milestone lives in
 [phase-details/README.md](docs/build-notes/phase-details/README.md) and nowhere
 else; the plan below is the scope contract rather than a progress report.
 
-**Phase 3: planned on 2026-08-06. Three reopenings of 2026-08-12 are
-open — M49, M50.5 and M50.6, from the owner's QR-tab report — then M57.9's
-reopened run. 0.3.0 is written and not yet tagged.** Twenty-one
+**Phase 3: planned on 2026-08-06. The owner's second QR-tab report of
+2026-08-12 is open — M50 reopened and M50.7 added; M49 and M50.6 were reopened
+a second time and M49 has landed — then M57.9's reopened run. The first
+report's three reopenings landed on 2026-08-12. 0.3.0 is written and not yet
+tagged.** Twenty-two
 milestones, M46–M58,
 across four work areas; the plan is [below](#phase-3-build-plan). It was planned
 in full before its first milestone was built, on the owner's direction, so that
@@ -1047,9 +1049,10 @@ a row there is a pointer back to this list plus an area.
 
 ## Phase 3 build plan
 
-**Twenty-one milestones, M46–M58, continuing Phase 2's numbering.** **Twelve
+**Twenty-two milestones, M46–M58, continuing Phase 2's numbering.** **Twelve
 integers of work**, two adversarial reviews (`X.9`, as reserved), one close, and
-**six insertions** — M50.5 and M50.6 during the build on 2026-08-07, and M46.5,
+**seven insertions** — M50.5 and M50.6 during the build on 2026-08-07, M50.7 on
+2026-08-12, and M46.5,
 M47.5, [M57.5](docs/build-notes/phase-details/m57.5.md) and
 [M46.6](docs/build-notes/phase-details/m46.6.md) on 2026-08-11.
 12 + 2 + 1 + 6 = 21, which is the headline above under the reading [W40](docs/build-notes/workflow-changes.md#made)
